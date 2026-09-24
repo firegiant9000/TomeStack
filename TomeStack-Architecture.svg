@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="760" viewBox="0 0 1800 760">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#52667F"/></marker></defs>
+<rect width="1800" height="760" fill="#FAFBFD"/>
+<text x="70" y="69" font-family="Arial,sans-serif" font-size="34" font-weight="700" fill="#172238">TomeStack · system overview</text>
+<text x="70" y="94" font-family="Arial,sans-serif" font-size="16" fill="#53657D">Local Windows desktop · reviewed imports · edition-aware rules · user-owned data</text>
+<polyline points="320,180.0 540.0,180.0 540.0,335.0 753,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="320,335.0 365.0,335.0 365.0,335.0 403,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="675,335.0 717.5,335.0 717.5,335.0 753,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="320,490.0 540.0,490.0 540.0,335.0 753,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1025,335.0 1067.5,335.0 1067.5,335.0 1103,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1375,335.0 1415.0,335.0 1415.0,180.0 1448,180.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1375,335.0 1415.0,335.0 1415.0,335.0 1448,335.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1585.0,230 1585.0,257.5 1585.0,257.5 1585.0,278" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="892.5,385 892.5,460.0 892.5,460.0 892.5,528" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1025,585.0 1240.0,585.0 1240.0,585.0 1448,585.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1242.5,635 1242.5,460.0 1242.5,460.0 1242.5,278" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1375,585.0 1415.0,585.0 1415.0,180.0 1448,180.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<polyline points="1455,335.0 1240.0,335.0 1240.0,585.0 1032,585.0" fill="none" stroke="#52667F" stroke-width="2.3" marker-end="url(#arrow)"/>
+<rect x="70" y="130" rx="15" width="250" height="100" fill="#DCEBFF" stroke="#53657D" stroke-width="2"/>
+<text x="195.0" y="173" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">SRD 5.1 + 5.2.1</text>
+<text x="195.0" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Versioned licensed packs</text>
+<rect x="70" y="285" rx="15" width="250" height="100" fill="#E4F4E7" stroke="#53657D" stroke-width="2"/>
+<text x="195.0" y="328" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">User PDFs</text>
+<text x="195.0" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Whole book or selected pages</text>
+<rect x="70" y="440" rx="15" width="250" height="100" fill="#F8E9D5" stroke="#53657D" stroke-width="2"/>
+<text x="195.0" y="483" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Homebrew Studio</text>
+<text x="195.0" y="511" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Guided authoring + revisions</text>
+<rect x="410" y="285" rx="15" width="265" height="100" fill="#E4F4E7" stroke="#53657D" stroke-width="2"/>
+<text x="542.5" y="328" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Import &amp; review</text>
+<text x="542.5" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Extract → propose → confirm</text>
+<rect x="760" y="285" rx="15" width="265" height="100" fill="#EDE8FF" stroke="#53657D" stroke-width="2"/>
+<text x="892.5" y="328" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Source library</text>
+<text x="892.5" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Provenance + revision pins</text>
+<rect x="1110" y="285" rx="15" width="265" height="100" fill="#DCEBFF" stroke="#53657D" stroke-width="2"/>
+<text x="1242.5" y="328" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Rules core</text>
+<text x="1242.5" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Edition policy · effects · traces</text>
+<rect x="1455" y="130" rx="15" width="260" height="100" fill="#F8E9D5" stroke="#53657D" stroke-width="2"/>
+<text x="1585.0" y="173" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Character builder</text>
+<text x="1585.0" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Choices · leveling</text>
+<rect x="1455" y="285" rx="15" width="260" height="100" fill="#F8E9D5" stroke="#53657D" stroke-width="2"/>
+<text x="1585.0" y="328" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Play sheet</text>
+<text x="1585.0" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Rolls · rests · overrides</text>
+<rect x="1110" y="535" rx="15" width="265" height="100" fill="#EDE8FF" stroke="#53657D" stroke-width="2"/>
+<text x="1242.5" y="578" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Campaign profile</text>
+<text x="1242.5" y="606" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">Allowed sources + house rules</text>
+<rect x="760" y="535" rx="15" width="265" height="100" fill="#E4F4E7" stroke="#53657D" stroke-width="2"/>
+<text x="892.5" y="578" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Local storage</text>
+<text x="892.5" y="606" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">SQLite + PDF attachments</text>
+<rect x="1455" y="535" rx="15" width="260" height="100" fill="#E4F4E7" stroke="#53657D" stroke-width="2"/>
+<text x="1585.0" y="578" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#172238">Portable files</text>
+<text x="1585.0" y="606" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#394C65">JSON packs + backups</text>
+<text x="70" y="704" font-family="Arial,sans-serif" font-size="16" fill="#52667F">Accepted rules flow into the library; only pinned revisions affect characters. Imports remain drafts until reviewed.</text>
+</svg>
