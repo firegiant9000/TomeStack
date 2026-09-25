@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/AppService/">
+    <Project Path="src/AppService/TomeStack.AppService.csproj" />
+  </Folder>
+  <Folder Name="/src/DesktopShell/">
+    <Project Path="src/DesktopShell/TomeStack.DesktopShell.csproj" />
+  </Folder>
+  <Folder Name="/src/DevHost/">
+    <Project Path="src/DevHost/TomeStack.DevHost.csproj" />
+  </Folder>
+  <Folder Name="/src/ImportWorker/">
+    <Project Path="src/ImportWorker/TomeStack.ImportWorker.csproj" />
+  </Folder>
+  <Folder Name="/src/RulesCore/">
+    <Project Path="src/RulesCore/TomeStack.RulesCore.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/AppService.Tests/">
+    <Project Path="tests/AppService.Tests/TomeStack.AppService.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/RulesCore.Tests/">
+    <Project Path="tests/RulesCore.Tests/TomeStack.RulesCore.Tests.csproj" />
+  </Folder>
+</Solution>
