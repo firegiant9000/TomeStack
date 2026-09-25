@@ -25,12 +25,14 @@ public partial class MainWindow : Window
     private readonly Stopwatch _sinceStart = Stopwatch.StartNew();
     private readonly List<string> _smokeCommands = [];
     private readonly List<string> _blockedRequests = [];
+    private readonly int _charactersAtStart;
 
     public MainWindow(TomeStackApp tomeStack, ShellOptions options)
     {
         _tomeStack = tomeStack;
         _dispatcher = new CommandDispatcher(tomeStack, host: new ShellHostServices(this));
         _options = options;
+        _charactersAtStart = options.Smoke ? tomeStack.ListCharacters().Count : 0;
         InitializeComponent();
         Loaded += async (_, _) =>
         {
@@ -145,9 +147,57 @@ public partial class MainWindow : Window
             return;
         }
         _smokeCommands.Add(req.RootElement.GetProperty("command").GetString() ?? "");
-        if (_smokeCommands.Contains("app.info") && _smokeCommands.Contains("character.list"))
-            FinishSmoke(true, "ok");
+        if (!_smokeFinished && _smokeCommands.Contains("app.info") && _smokeCommands.Contains("character.list"))
+        {
+            try
+            {
+                var (ok, detail) = RunSmokeDataCheck();
+                FinishSmoke(ok, detail);
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or JsonException)
+            {
+                FinishSmoke(false, $"data-check-failed:{ex.GetType().Name}");
+            }
+        }
     }
+
+    /// <summary>
+    /// M0 exit gate in the shipped binary: fixture content is seeded, a character using it saves, and it exports to a
+    /// package that re-validates. Runs through the same dispatcher as the bridge. Persistence across restarts is shown
+    /// by running the smoke twice on one <c>--data-dir</c> and comparing <c>charactersAtStart</c>.
+    /// </summary>
+    private (bool Ok, string Detail) RunSmokeDataCheck()
+    {
+        var quickfoot = new { contentId = "5f0dc000-0000-4000-8000-000000000001", revisionId = "5f0de000-0000-4000-8000-000000000001" };
+        using var created = Command("character.create", new
+        {
+            name = "Smoke Test",
+            rulesFamily = "srd-5.1",
+            baseAbilities = new { str = 10, dex = 14, con = 10, @int = 10, wis = 10, cha = 10 },
+            pins = new[] { quickfoot },
+        });
+        if (!created.RootElement.GetProperty("ok").GetBoolean())
+            return (false, "data-check-failed:character.create");
+        var result = created.RootElement.GetProperty("result");
+        var id = result.GetProperty("character").GetProperty("id").GetString();
+        var initiative = result.GetProperty("sheet").GetProperty("fields")[0].GetProperty("value").GetInt32();
+        if (initiative != 3)
+            return (false, $"data-check-failed:initiative={initiative}");
+
+        using var exported = Command("package.export", new { characterIds = new[] { id } });
+        if (!exported.RootElement.GetProperty("ok").GetBoolean())
+            return (false, "data-check-failed:package.export");
+        var base64 = exported.RootElement.GetProperty("result").GetProperty("base64").GetString();
+        using var preview = Command("package.preview", new { base64 });
+        if (!preview.RootElement.GetProperty("ok").GetBoolean() || !preview.RootElement.GetProperty("result").GetProperty("canApply").GetBoolean())
+            return (false, "data-check-failed:package.preview");
+
+        _smokeCommands.AddRange(["character.create", "package.export", "package.preview"]);
+        return (true, "ok");
+    }
+
+    private JsonDocument Command(string command, object payload) =>
+        JsonDocument.Parse(_dispatcher.Dispatch(JsonSerializer.Serialize(new { id = "smoke", command, payload })));
 
     private bool _smokeFinished;
 
@@ -165,6 +215,9 @@ public partial class MainWindow : Window
             elapsedMs = _sinceStart.ElapsedMilliseconds,
             processStartToReadyMs = (long)(DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds,
             commands = _smokeCommands,
+            charactersAtStart = _charactersAtStart,
+            schemaVersion = _tomeStack.GetInfo().SchemaVersion,
+            appVersion = _tomeStack.GetInfo().Version,
             blockedRequests = _blockedRequests,
             webView2Runtime = TryGetRuntimeVersion(),
             dataDirectory = _tomeStack.DataDirectory,

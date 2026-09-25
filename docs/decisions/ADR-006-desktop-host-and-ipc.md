@@ -52,11 +52,27 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 - The app requires the Evergreen WebView2 Runtime. It is preinstalled on Windows 11, and the Evergreen Standalone Installer covers offline installs. The shell shows a clear message if the runtime is missing.
 - **Export uses a native Save dialog (2026-09-25).** The shell passes an `IHostServices` to the dispatcher. `package.saveAs` exports in-process, asks the user for a location with the WPF `SaveFileDialog` (marshalled to the UI thread), writes through a `.partial` file, and returns only the file name. The page never supplies a path, and the bytes never cross the bridge. Hosts without dialogs (DevHost) answer `unsupported`, and the UI then falls back to `package.export` plus a browser download. The dialog itself is covered by unit tests with a fake host. It is not driven automatically by the smoke.
 
+## Offline evidence (2026-09-25, same machine as above)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Smoke also proves the M0 exit gate | `scripts/smoke.ps1 -Exe <TomeStack.exe>` | Pass. Bridge round trip, then `character.create` with fixture content (initiative 3), `package.export` and `package.preview` (`canApply: true`); `blockedRequests: []` |
+| Persistence across restarts | `smoke.ps1 -DataDir <dir> -ExpectCharactersAtStart 0`, then again with `1` | Pass. The second run found the character saved by the first |
+| Missing WebView2 runtime (simulated) | `scripts/offline-check.ps1 -Mode MissingRuntime` | Pass. `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` pointing at an empty folder gives `webview2-runtime-missing`, exit 2, the in-window message, and no crash |
+| Network disabled | `scripts/offline-check.ps1 -Mode AssumeOffline` (turn on airplane mode first) | **Not run.** Running it would have disconnected the machine used for this work. The owner has to run it |
+
+An earlier draft of `offline-check.ps1` also disabled network adapters from the script. Windows Defender (AMSI) blocked it as malicious, so that mode was removed. Airplane mode plus `-Mode AssumeOffline` is the supported procedure.
+
 ## Not yet proven (keep open in M0)
 
-- Installer technology (MSIX vs. Velopack vs. WiX), per-user install, upgrade, and uninstall-preserves-data.
-- A clean-machine install, and a run with the network adapter disabled. The request filter and CSP are evidence, not a substitute.
-- Windows 10 and a missing-WebView2-runtime path on real hardware.
+- Installer technology, per-user install, upgrade, and uninstall-preserves-data. These are blocked on the owner's installer decision (ADR-008).
+- A run with the network actually disabled (procedure above; not yet executed).
+- **Clean VM only:**
+  - first launch on a machine that never had TomeStack or its data directory;
+  - a truly absent WebView2 Runtime. The simulation above swaps the loader path but does not remove the runtime, so it does not exercise the installer's runtime bootstrap;
+  - Windows 10 (support level is an open owner decision);
+  - a standard (non-admin) user account;
+  - behavior with the Evergreen Standalone Installer offline.
 - The smoke on GitHub-hosted runners. It is wired into CI as non-blocking until it passes there.
 
 Supersedes: none. Updates LIVING_SPECS D06.

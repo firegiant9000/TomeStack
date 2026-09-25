@@ -53,10 +53,13 @@ dotnet run --project src/DesktopShell
 
 Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`). Pass `--devtools` to enable WebView2 DevTools.
 
-**Self-test** (launches the shell, loads the UI, round-trips commands over the bridge, then exits 0/2 and writes a JSON report):
+**Self-test.** This launches the shell, loads the UI, round-trips commands over the bridge, creates a fixture character, exports it and previews the package. It then exits 0/2 and writes a JSON report:
 
 ```powershell
 src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-report smoke.json
+scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe       # same run, with the report checked
+scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime
+scripts/offline-check.ps1 -Mode AssumeOffline      # turn on airplane mode first
 ```
 
 **UI with hot reload in a browser** (two terminals):
