@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Ui/package-lock.json
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: UI install
+        working-directory: src/Ui
+        run: npm ci
+
+      - name: UI lint
+        working-directory: src/Ui
+        run: npm run lint
+
+      - name: UI unit tests
+        working-directory: src/Ui
+        run: npm test
+
+      - name: UI typecheck and build
+        working-directory: src/Ui
+        run: npm run build
+
+      - name: .NET build
+        run: dotnet build TomeStack.slnx -c Release
+
+      - name: .NET tests
+        run: dotnet test TomeStack.slnx -c Release --no-build
+
+      # Launches the real WPF + WebView2 shell, loads the bundled UI and round-trips commands over
+      # the message bridge. Not yet proven on hosted runners (needs a desktop session and the
+      # WebView2 runtime), so it does not block the build until it has passed there.
+      - name: Desktop shell smoke (non-blocking)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = "src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe"
+          $report = Join-Path $env:RUNNER_TEMP "smoke-result.json"
+          $p = Start-Process -FilePath $exe -ArgumentList @('--smoke', '--smoke-report', $report) -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report }
+          exit $p.ExitCode
