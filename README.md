@@ -85,4 +85,4 @@ No installer yet (see ADR-006, "Not yet proven").
 
 ## License
 
-Not yet chosen (LIVING_SPECS D07). Fixture content is original to this project.
+Code is licensed under the [Apache License 2.0](LICENSE). Fixture content is original to this project. SRD content, once added, will be used under CC-BY-4.0 with its required attribution (LIVING_SPECS D09). TomeStack is not affiliated with or endorsed by Wizards of the Coast.
