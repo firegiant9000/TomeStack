@@ -177,18 +177,25 @@ public static class CharacterCalculator
             && effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.Always
         select (item.Revision, item.Source, effect);
 
-    /// <summary>Until the formula evaluator lands (ADR-003, item 10), only integer literals in [-10, 10] are accepted.</summary>
+    /// <summary>
+    /// Parses and evaluates the effect's bounded formula (ADR-003). Any failure disables only this effect, with a
+    /// diagnostic naming the feature (SPEC C-03, Q-02). Identifiers resolve through the field graph (item 11); until
+    /// then, none are available.
+    /// </summary>
     private static bool TryAmount(ContentRevision revision, ModifierEffect effect, List<Diagnostic> warnings, out int amount)
     {
-        if (int.TryParse(effect.Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var value)
-            && value is >= -10 and <= 10)
-        {
-            amount = value;
-            return true;
-        }
-        warnings.Add(new("effect.invalid-amount", $"'{revision.Name}' effect '{effect.Id}' needs an amount between -10 and 10; it is ignored.", revision.Reference, effect.Id));
         amount = 0;
-        return false;
+        if (!Formula.TryParse(effect.Value, out var formula, out var error)
+            || !formula!.TryEvaluate(_ => null, out amount, out error))
+        {
+            warnings.Add(new(
+                "effect.invalid-formula",
+                $"'{revision.Name}' effect '{effect.Id}' is disabled: {error!.Message} ({error.Code})",
+                revision.Reference,
+                effect.Id));
+            return false;
+        }
+        return true;
     }
 
     private static TraceOrigin ContentOrigin(string family, ContentRevision revision, SourceRecord source, ModifierEffect effect) =>

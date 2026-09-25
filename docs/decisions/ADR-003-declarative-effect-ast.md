@@ -1,6 +1,6 @@
 # ADR-003: Declarative effect AST and bounded formulas
 
-Status: accepted (effect model, migration). The formula grammar below is implemented by `RulesCore/Formulas` (item 10).
+Status: accepted. The effect model and migration are implemented in `RulesCore/Effects.cs`, and the formula grammar in `RulesCore/Formulas.cs` (`tests/RulesCore.Tests/FormulaTests.cs`: explicit hostile cases, 20,000 fuzzed strings, 2,000 generated formulas, and feature isolation).
 Date: 2026-09-25
 
 ## Context
