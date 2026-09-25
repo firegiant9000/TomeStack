@@ -1,4 +1,4 @@
-# Portable package format v1
+# Portable package format (v2; v1 still importable)
 
 SPEC P-02 · status: implemented for characters (M0). Campaigns and assets are not yet included.
 
@@ -15,7 +15,7 @@ characters/<characterId>.json  Character choices, pins and overrides (no derived
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `1`. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `2` (v2: content entries use content schema v2 with typed effects, ADR-003). v1 packages still import, and their revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `characters` | Character IDs included. |
 | `entries[]` | `path`, `kind`, `sha256`, `size` for every non-manifest entry. |

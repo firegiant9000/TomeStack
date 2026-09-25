@@ -16,6 +16,7 @@
 - `ATTRIBUTION.md` lists the licenses of the third-party components that ship. ADR-007 (proposed) covers export and license policy. The SRD 5.1 and 5.2.1 CC-BY-4.0 attribution statements are drafted verbatim from the official documents for owner approval (`docs/licensing/srd-attribution-draft.md`). There is still no SRD content and no project `LICENSE` (D07 open).
 - `--smoke` also proves the M0 exit gate in the built app: it creates a character with fixture content, exports it and previews the package. The report includes `charactersAtStart`, so two runs on one data folder prove persistence. `scripts/smoke.ps1` checks the report, and `scripts/offline-check.ps1` covers a simulated missing WebView2 runtime and a manual airplane-mode run (ADR-006).
 - UI flow test (`npm run test:e2e`) drives create → sheet → override → export → import, plus keyboard-only access, against the real DevHost. It uses Vitest with Testing Library and jsdom, which are dev-only. It is part of the gate and CI. There is an accessibility checklist for the working-default target (formal target D05 still open): `docs/features/accessibility-checklist.md`.
+- ADR-003: a typed declarative effect model with explicit stacking (`stack` / `highestInGroup`), operations (`bonus` / `set` / `replace`) and timing, plus the bounded formula grammar (SPEC I-04, I-05, Q-02).
 - ADR-008 (installer and distribution, proposed; the technology is an owner decision) sets out the requirements and the options. It records two data-loss risks: Velopack's default install folder is the data folder, and MSIX virtualizes AppData. `scripts/installer-smoke.ps1` is an installer-neutral install → smoke → upgrade → smoke → uninstall harness. Only an Xcopy adapter exists so far.
 - ADR-001 (local-only Windows, accepted), ADR-004 (review before publish, accepted; evidence is the quarantine and draft tests) and ADR-005 (managed PDF copy vs. link, proposed and blocked on D02).
 - JSON Schemas for source, content revision, character and package manifest (v1) in `docs/schemas/`. A test validates every fixture and a real exported package against them.
@@ -42,3 +43,6 @@
 ### Migration
 
 - Database schema v1 (new). Package format v1 (new).
+- **Content schema v2 (ADR-003):** effects are a typed union (`modifier`, `grant`, `resource`, `choice`, `restriction`, `recovery`, `roll`). v1 `abilityScoreIncrease` and `initiativeBonus` map to `modifier` bonuses on read. Unknown effect types are kept byte-for-byte and stay reference-only.
+- **Database schema v2:** stored revisions are rewritten in the v2 representation, with new hashes and the original JSON in `legacy_json`. `tomestack.db.v1.bak` is written first. Without this, M0 data folders would have failed to open.
+- **Package format v2:** content entries are schema v2. v1 packages still import. Older builds refuse v2 packages with a clear message.

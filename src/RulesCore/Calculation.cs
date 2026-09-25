@@ -52,9 +52,7 @@ public sealed record CharacterSheet(
 /// </summary>
 public static class CharacterCalculator
 {
-    public const string InitiativeField = "initiative";
-
-    private static readonly HashSet<string> SupportedEffectTypes = [Effect.AbilityScoreIncrease, Effect.InitiativeBonus];
+    public const string InitiativeField = FieldIds.Initiative;
 
     public static CharacterSheet Calculate(Character character, IContentCatalog catalog)
     {
@@ -67,7 +65,7 @@ public static class CharacterCalculator
 
         foreach (var (revision, _) in active)
         {
-            foreach (var effect in revision.Effects.Where(e => !SupportedEffectTypes.Contains(e.Type)))
+            foreach (var effect in revision.Effects.OfType<UnknownEffect>())
             {
                 diagnostics.Add(new(
                     "effect.unsupported",
@@ -130,10 +128,8 @@ public static class CharacterCalculator
         var dex = character.BaseAbilities.Dex;
         trace.Add(new(order++, "base", "Dexterity score (character choice)", dex, dex, new(TraceOriginKind.CharacterChoice, family)));
 
-        foreach (var (revision, source, effect) in Effects(active, Effect.AbilityScoreIncrease))
+        foreach (var (revision, source, effect) in Bonuses(active, FieldIds.Score(Ability.Dex)))
         {
-            if (effect.Ability != Ability.Dex)
-                continue;
             if (revision.Kind != policy.AbilityIncreaseSource)
             {
                 warnings.Add(new(
@@ -153,7 +149,7 @@ public static class CharacterCalculator
         trace.Add(new(order++, "derive", "Dexterity modifier = floor((score - 10) / 2)", dex, modifier, new(TraceOriginKind.RulesPolicy, family)));
 
         var value = modifier;
-        foreach (var (revision, source, effect) in Effects(active, Effect.InitiativeBonus))
+        foreach (var (revision, source, effect) in Bonuses(active, FieldIds.Initiative))
         {
             if (!TryAmount(revision, effect, warnings, out var amount))
                 continue;
@@ -173,16 +169,19 @@ public static class CharacterCalculator
         return new DerivedValue(InitiativeField, "Initiative", value, computed, trace, warnings, AutomationStatus.Automatic, fieldOverride);
     }
 
-    private static IEnumerable<(ContentRevision Revision, SourceRecord Source, Effect Effect)> Effects(
-        List<(ContentRevision Revision, SourceRecord Source)> active, string type) =>
+    private static IEnumerable<(ContentRevision Revision, SourceRecord Source, ModifierEffect Effect)> Bonuses(
+        List<(ContentRevision Revision, SourceRecord Source)> active, string target) =>
         from item in active
-        from effect in item.Revision.Effects
-        where effect.Type == type && effect.Automation == AutomationStatus.Automatic
+        from effect in item.Revision.Effects.OfType<ModifierEffect>()
+        where effect.Target == target && effect.Operation == ModifierOperation.Bonus
+            && effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.Always
         select (item.Revision, item.Source, effect);
 
-    private static bool TryAmount(ContentRevision revision, Effect effect, List<Diagnostic> warnings, out int amount)
+    /// <summary>Until the formula evaluator lands (ADR-003, item 10), only integer literals in [-10, 10] are accepted.</summary>
+    private static bool TryAmount(ContentRevision revision, ModifierEffect effect, List<Diagnostic> warnings, out int amount)
     {
-        if (effect.Amount is { } value and >= -10 and <= 10)
+        if (int.TryParse(effect.Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            && value is >= -10 and <= 10)
         {
             amount = value;
             return true;
@@ -192,6 +191,6 @@ public static class CharacterCalculator
         return false;
     }
 
-    private static TraceOrigin ContentOrigin(string family, ContentRevision revision, SourceRecord source, Effect effect) =>
+    private static TraceOrigin ContentOrigin(string family, ContentRevision revision, SourceRecord source, ModifierEffect effect) =>
         new(TraceOriginKind.Content, family, revision.Reference, revision.Name, effect.Id, source.Id, source.Title, revision.Provenance.Page);
 }

@@ -1,6 +1,6 @@
 # ADR-002: Edition-aware content IDs and revision pins
 
-Status: accepted for M0 (effect model deferred to ADR-003)
+Status: accepted. The effect model is defined by [ADR-003](ADR-003-declarative-effect-ast.md), including the one sanctioned representation rewrite of stored revisions (database migration v2).
 Date: 2026-09-24
 
 ## Context

@@ -5,9 +5,11 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | File | Describes | Version field |
 | --- | --- | --- |
 | `source.v1.schema.json` | `SourceRecord` (SPEC S-01) | none (v1) |
-| `content-revision.v1.schema.json` | `ContentRevision` with M0 string-typed effects (ADR-002) | `schemaVersion` |
+| `content-revision.v1.schema.json` | `ContentRevision` with M0 string-typed effects (ADR-002). Read and upcast; no longer written | `schemaVersion` |
+| `content-revision.v2.schema.json` | `ContentRevision` with typed effects (ADR-003). Current | `schemaVersion` |
 | `character.v1.schema.json` | `Character`: choices, pins and overrides | `schemaVersion` |
-| `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)) | `formatVersion` |
+| `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
+| `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Current | `formatVersion` |
 
 The files are named `<kind>.v<version>.schema.json`. The test picks the schema from the document's own version field.
 

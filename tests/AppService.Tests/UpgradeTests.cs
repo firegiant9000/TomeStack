@@ -10,8 +10,8 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class UpgradeTests
 {
-    private static readonly string[] FutureMigrations =
-        [.. SqliteStore.Migrations, "ALTER TABLE characters ADD COLUMN simulated_future_column TEXT;"];
+    private static readonly SqliteStore.Migration[] FutureMigrations =
+        [.. SqliteStore.Migrations, new("ALTER TABLE characters ADD COLUMN simulated_future_column TEXT;")];
 
     private static string NewDirectory() => Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
 
@@ -94,6 +94,70 @@ public class UpgradeTests
         Assert.Contains("newer version of TomeStack", ex.Message, StringComparison.Ordinal);
         Assert.Equal(99, Scalar(database, "PRAGMA user_version;"));
         Assert.Empty(Directory.GetFiles(directory, "*.bak"));
+    }
+
+    /// <summary>
+    /// An M0 (schema v1) data folder stores revisions as v1 JSON, and its hashes are over those bytes. Opening it with a
+    /// build whose effect model is typed must neither trip the insert-only check when re-seeding fixtures nor lose
+    /// the original JSON.
+    /// </summary>
+    [Fact]
+    public void Schema_v1_data_folder_with_v1_revision_json_migrates_to_typed_effects()
+    {
+        var directory = NewDirectory();
+        Directory.CreateDirectory(directory);
+        var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
+        var pack = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "fixture-pack.json")));
+        var v1Rows = new Dictionary<string, string>();
+        using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            connection.Open();
+            void Run(string sql, params (string, object)[] parameters)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                foreach (var (name, value) in parameters)
+                    command.Parameters.AddWithValue(name, value);
+                command.ExecuteNonQuery();
+            }
+            Run(SqliteStore.Migrations[0].Sql);
+            Run("PRAGMA user_version = 1;");
+            foreach (var source in pack.RootElement.GetProperty("sources").EnumerateArray())
+                Run("INSERT INTO sources (id, json) VALUES ($id, $json);", ("$id", source.GetProperty("id").GetString()!), ("$json", source.GetRawText()));
+            foreach (var revision in pack.RootElement.GetProperty("revisions").EnumerateArray())
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(revision); // compact v1 JSON, as M0 stored it
+                v1Rows[revision.GetProperty("revisionId").GetString()!] = json;
+                Run(
+                    "INSERT INTO content_revisions (revision_id, content_id, status, sha256, json) VALUES ($rid, $cid, $status, $hash, $json);",
+                    ("$rid", revision.GetProperty("revisionId").GetString()!),
+                    ("$cid", revision.GetProperty("contentId").GetString()!),
+                    ("$status", revision.GetProperty("status").GetString() == "published" ? "Published" : "Draft"),
+                    ("$hash", SqliteStore.Sha256(json)),
+                    ("$json", json));
+            }
+        }
+
+        using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now)); // re-seeds the fixture pack
+
+        Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion);
+        Assert.True(File.Exists(SqliteStore.BackupPath(database, 1)));
+        var quickfoot = app.Store.ListRevisions().Single(r => r.Name == "Fixture Quickfoot");
+        var bonus = Assert.IsType<ModifierEffect>(Assert.Single(quickfoot.Effects));
+        Assert.Equal((ModifierOperation.Bonus, "ability.dex.score", "2"), (bonus.Operation, bonus.Target, bonus.Value));
+        Assert.Equal(ContentRevision.CurrentSchemaVersion, quickfoot.SchemaVersion);
+        Assert.Equal(SqliteStore.Sha256(SqliteStore.Serialize(quickfoot)), app.Store.RevisionHash(quickfoot.RevisionId));
+        Assert.Equal(v1Rows[quickfoot.RevisionId.ToString("D")], Text(database, $"SELECT legacy_json FROM content_revisions WHERE revision_id = '{quickfoot.RevisionId:D}';"));
+        Assert.Equal(4, app.SaveCharacter(Fixture()).Sheet.Field(CharacterCalculator.InitiativeField).Value);
+    }
+
+    private static string? Text(string databasePath, string sql)
+    {
+        using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar() as string;
     }
 
     [Fact]

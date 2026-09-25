@@ -20,7 +20,7 @@ public class PackageRoundTripTests
         RulesFamilies = [RulesFamilies.Srd51],
         Provenance = new(HomebrewSource, new PageRef(12)),
         Status = RevisionStatus.Published,
-        Effects = [new Effect { Id = "quick-draw-init", Type = Effect.InitiativeBonus, Amount = 2 }],
+        Effects = [new ModifierEffect { Id = "quick-draw-init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "2" }],
     };
 
     private static Character ExportableCharacter()

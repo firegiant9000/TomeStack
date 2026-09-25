@@ -45,6 +45,9 @@ Pending the owner. When decided, add an adapter for the chosen technology to `sc
 | `UpgradeTests.Backup_includes_committed_data_still_in_the_wal_after_a_crash` | Pass. **This found a bug and led to its fix:** the backup used to be a file copy of `tomestack.db` alone, and after a crash the WAL still held the committed data (here even the schema), so the backup would have been empty. It now uses SQLite's online backup API |
 | `UpgradeTests.Data_folder_from_a_newer_build_is_refused_and_left_untouched` | Pass. A clear "update TomeStack" message; nothing is changed and no backup is taken |
 | `scripts/installer-smoke.ps1 -Adapter Xcopy` (same build as old and new; harness plumbing) | Pass for steps 1, 2 and 4. Step 3 was skipped because the schema is unchanged |
+| `installer-smoke.ps1 -Adapter Xcopy`, **old = the item 1 commit (database schema 1, M0 effect model), new = the item 9 commit (database schema 2, typed effects)**, framework-dependent publishes | **Pass, all 4 steps.** The old build seeded v1 revisions and saved a character. The new build opened the same folder, migrated it (`charactersAtStart: 1`, `schemaVersion: 2`) and wrote `tomestack.db.v1.bak`, and the data folder survived "uninstall" |
+
+Both builds report app version 0.1.0 because `Directory.Build.props` was not bumped. Real installers (Velopack, MSIX) need a strictly increasing version, so versioning has to be decided with ADR-008.
 
 Xcopy is not an installer. It shows that the harness works and that binaries upgrade in place over the same data folder. It does **not** prove R1, R4, R5, R6 or R7 for any real installer.
 

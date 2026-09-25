@@ -116,6 +116,42 @@ public class SchemaTests
     }
 
     [Fact]
+    public void Format_v1_package_with_v1_effects_still_imports_and_calculates_the_same()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var v2 = origin.App.ExportCharacters([saved.Character.Id]).Content;
+        var v1 = PackageEditor.Edit(
+            v2,
+            path => path.StartsWith("content/", StringComparison.Ordinal),
+            node =>
+            {
+                node["schemaVersion"] = 1;
+                foreach (var effect in node["effects"]!.AsArray().ToList())
+                {
+                    var target = (string)effect!["target"]!;
+                    var legacy = new JsonObject { ["id"] = (string)effect["id"]!, ["amount"] = int.Parse((string)effect["value"]!, System.Globalization.CultureInfo.InvariantCulture) };
+                    if (target == FieldIds.Initiative)
+                        legacy["type"] = "initiativeBonus";
+                    else
+                        (legacy["type"], legacy["ability"]) = ("abilityScoreIncrease", target.Split('.')[1]);
+                    effect.ReplaceWith(legacy);
+                }
+            },
+            manifest => manifest["formatVersion"] = 1);
+
+        using var destination = new TempApp();
+        var preview = destination.App.PreviewImport(v1);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Equal(1, preview.Manifest!.FormatVersion);
+        // The fixture revisions already exist locally (seeded, v2). v1 bytes upcast to the same revision: unchanged, not a conflict.
+        Assert.All(preview.Items.Where(i => i.Kind == "contentRevision"), i => Assert.Equal(PackageItemAction.Unchanged, i.Action));
+        destination.App.ApplyImport(v1);
+        Assert.Equal(TempApp.Json(saved.Sheet), TempApp.Json(destination.App.GetCharacter(saved.Character.Id).Sheet));
+    }
+
+    [Fact]
     public void Newer_content_schema_is_isolated_by_the_calculator_and_newer_character_schema_fails_validation()
     {
         using var temp = new TempApp();
@@ -137,7 +173,7 @@ public class SchemaTests
 /// <summary>Rewrites package entries and re-signs the manifest so that only the edited content differs.</summary>
 internal static class PackageEditor
 {
-    public static byte[] Edit(byte[] package, Func<string, bool> select, Action<JsonNode> change)
+    public static byte[] Edit(byte[] package, Func<string, bool> select, Action<JsonNode> change, Action<JsonNode>? changeManifest = null)
     {
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         using (var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read))
@@ -161,6 +197,7 @@ internal static class PackageEditor
             listed["sha256"] = Convert.ToHexStringLower(SHA256.HashData(files[path]));
             listed["size"] = files[path].LongLength;
         }
+        changeManifest?.Invoke(manifest);
         files["manifest.json"] = Encoding.UTF8.GetBytes(manifest.ToJsonString(RulesJson.Options) + "\n");
 
         using var output = new MemoryStream();

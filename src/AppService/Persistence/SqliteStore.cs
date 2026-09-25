@@ -12,9 +12,12 @@ namespace TomeStack.AppService.Persistence;
 /// </summary>
 public sealed class SqliteStore : IContentCatalog, IDisposable
 {
-    internal static readonly string[] Migrations =
+    /// <summary>A numbered, forward-only migration: SQL, plus an optional data step in the same transaction.</summary>
+    internal sealed record Migration(string Sql, Action<SqliteStore>? Code = null);
+
+    internal static readonly Migration[] Migrations =
     [
-        """
+        new("""
         CREATE TABLE sources (
             id TEXT PRIMARY KEY,
             json TEXT NOT NULL
@@ -34,12 +37,15 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             updated_at TEXT NOT NULL,
             json TEXT NOT NULL
         );
-        """,
+        """),
+        // v2 (ADR-003): content revisions move to typed effects. Stored JSON and hashes are rewritten in the new
+        // representation so the insert-only check keeps working. The original bytes stay in legacy_json.
+        new("ALTER TABLE content_revisions ADD COLUMN legacy_json TEXT;", store => store.RewriteUpgradedRevisions()),
     ];
 
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
-    private readonly IReadOnlyList<string> _migrations;
+    private readonly IReadOnlyList<Migration> _migrations;
     private SqliteTransaction? _transaction;
 
     public SqliteStore(string databasePath)
@@ -48,7 +54,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     }
 
     /// <summary>Test seam: run a different migration list (for example, a simulated future schema).</summary>
-    internal SqliteStore(string databasePath, IReadOnlyList<string> migrations)
+    internal SqliteStore(string databasePath, IReadOnlyList<Migration> migrations)
     {
         DatabasePath = databasePath;
         _migrations = migrations;
@@ -230,9 +236,39 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         {
             InTransaction(() =>
             {
-                Execute(_migrations[version]);
+                Execute(_migrations[version].Sql);
+                _migrations[version].Code?.Invoke(this);
                 Execute($"PRAGMA user_version = {version + 1};");
             });
+        }
+    }
+
+    /// <summary>
+    /// The one sanctioned rewrite of published revisions: a lossless change of representation, not of content
+    /// (ADR-003 "Migration"). Runs inside the migration's transaction.
+    /// </summary>
+    private void RewriteUpgradedRevisions()
+    {
+        var rows = new List<(string Id, string Json)>();
+        lock (_gate)
+        {
+            using var command = Command("SELECT revision_id, json FROM content_revisions;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        foreach (var (id, json) in rows)
+        {
+            var revision = JsonSerializer.Deserialize<ContentRevision>(json, RulesJson.Compact)!;
+            if (revision.UpgradedFrom is null)
+                continue;
+            var upgraded = Serialize(revision);
+            Execute(
+                "UPDATE content_revisions SET json = $json, sha256 = $hash, legacy_json = $legacy WHERE revision_id = $id;",
+                ("$json", upgraded),
+                ("$hash", Sha256(upgraded)),
+                ("$legacy", json),
+                ("$id", id));
         }
     }
 

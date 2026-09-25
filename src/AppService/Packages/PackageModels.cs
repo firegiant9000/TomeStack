@@ -8,7 +8,12 @@ namespace TomeStack.AppService.Packages;
 public sealed record PackageManifest
 {
     public const string FormatName = "tomestack.package";
-    public const int CurrentFormatVersion = 1;
+
+    /// <summary>
+    /// v2 (ADR-003): content entries use content schemaVersion 2 (typed effects). v1 packages still import, and their
+    /// revisions are upcast. Builds that only know v1 refuse v2 with a clear message instead of misreading effects.
+    /// </summary>
+    public const int CurrentFormatVersion = 2;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
