@@ -6,17 +6,21 @@ export interface CommandError {
   code: string;
   message: string;
   diagnostics?: { code: string; message: string }[];
+  /** Set for unexpected failures; the details are only in the local error log. */
+  correlationId?: string;
 }
 
 export class TomeStackError extends Error {
   readonly code: string;
   readonly diagnostics: { code: string; message: string }[];
+  readonly correlationId?: string;
 
   constructor(error: CommandError) {
     super(error.message);
     this.name = 'TomeStackError';
     this.code = error.code;
     this.diagnostics = error.diagnostics ?? [];
+    this.correlationId = error.correlationId;
   }
 }
 

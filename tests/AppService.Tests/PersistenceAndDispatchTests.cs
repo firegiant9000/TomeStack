@@ -76,7 +76,56 @@ public class PersistenceAndDispatchTests
         Assert.Equal("content", initiative.GetProperty("trace")[1].GetProperty("origin").GetProperty("kind").GetString());
     }
 
+    [Fact]
+    public void Unexpected_failure_returns_a_generic_message_and_correlation_id_and_logs_details_locally()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
+        var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now));
+        var log = new RecordingErrorLog();
+        var dispatcher = new CommandDispatcher(app, log);
+        app.Dispose(); // Every store call now fails with an exception the dispatcher did not anticipate.
+
+        var json = dispatcher.Dispatch("""{"id":"9","command":"character.list"}""");
+        var error = JsonDocument.Parse(json).RootElement.GetProperty("error");
+
+        Assert.Equal("internal", error.GetProperty("code").GetString());
+        var correlationId = error.GetProperty("correlationId").GetString();
+        Assert.Matches("^[0-9A-F]{8}$", correlationId);
+        Assert.Contains(correlationId!, error.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(directory, json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tomestack.db", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(" at ", json, StringComparison.Ordinal);
+        var (loggedId, command, exception) = Assert.Single(log.Entries);
+        Assert.Equal(correlationId, loggedId);
+        Assert.Equal("character.list", command);
+        Assert.NotNull(exception.StackTrace);
+    }
+
+    [Fact]
+    public void File_error_log_writes_under_the_data_directory()
+    {
+        using var temp = new TempApp();
+        var log = (FileErrorLog)temp.App.ErrorLog;
+
+        log.Record("ABCD1234", "character.list", new InvalidOperationException("boom"));
+
+        var text = File.ReadAllText(log.FilePath);
+        Assert.StartsWith(temp.App.DataDirectory, log.FilePath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ABCD1234 command=character.list", text, StringComparison.Ordinal);
+        Assert.Contains("System.InvalidOperationException: boom", text, StringComparison.Ordinal);
+    }
+
+    private sealed class RecordingErrorLog : IErrorLog
+    {
+        public List<(string CorrelationId, string Command, Exception Exception)> Entries { get; } = [];
+
+        public void Record(string correlationId, string command, Exception exception) => Entries.Add((correlationId, command, exception));
+    }
+
     [Theory]
+    [InlineData("""{"id":"1","command":"content.list","payload":{"rulesFamily":"5e"}}""", "validation")]
+    [InlineData("""{"id":"1","command":"package.preview","payload":{"base64":"%%%"}}""", "bad-request")]
+    [InlineData("""{"id":"1","payload":{}}""", "bad-request")]
     [InlineData("""{"id":"1","command":"shell.exec","payload":{}}""", "bad-request")]
     [InlineData("""{"id":"1","command":"character.get"}""", "bad-request")]
     [InlineData("not json", "bad-request")]

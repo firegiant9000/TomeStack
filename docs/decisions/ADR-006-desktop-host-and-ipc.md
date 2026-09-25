@@ -42,6 +42,7 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 - The production bundle carries a CSP (`default-src 'self'`, no remote origins, `object-src 'none'`).
 - DevTools and the default context menu are off unless `--devtools` is passed. Autofill and password save are off.
 - The WebView2 user-data folder lives inside the TomeStack data directory.
+- Error responses carry only messages written for the UI. An unexpected exception becomes `internal` with a correlation id, and its details are written to the local `logs/errors.log` only, never across the bridge.
 
 ## Consequences
 

@@ -23,9 +23,13 @@ public sealed class TomeStackApp : IDisposable
         _time = time;
         _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
         _packages = new PackageService(_store, time);
+        ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
     }
 
     public string DataDirectory { get; }
+
+    /// <summary>Local-only log for unexpected failures (never sent to the UI).</summary>
+    public IErrorLog ErrorLog { get; }
 
     internal SqliteStore Store => _store;
 
@@ -53,7 +57,8 @@ public sealed class TomeStackApp : IDisposable
 
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
     {
-        RulesFamilies.Get(rulesFamily);
+        if (!RulesFamilies.IsKnown(rulesFamily))
+            throw new AppValidationException([new("rules-family.unknown", $"Rules family '{rulesFamily}' is not supported.")]);
         var sources = _store.ListSources().ToDictionary(s => s.Id);
         return
         [
