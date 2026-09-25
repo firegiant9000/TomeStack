@@ -65,7 +65,7 @@ An earlier draft of `offline-check.ps1` also disabled network adapters from the 
 
 ## Not yet proven (keep open in M0)
 
-- Installer technology, per-user install, upgrade, and uninstall-preserves-data. These are blocked on the owner's installer decision (ADR-008).
+- Installer technology, per-user install, upgrade, and uninstall-preserves-data. These are blocked on the owner's installer decision ([ADR-008](ADR-008-installer-and-distribution.md)). Installer-neutral upgrade evidence (backup before migration, refusing a newer data folder) is recorded there. Note: Velopack's default install folder is the same as our data folder, and MSIX virtualizes AppData. Both would delete user data on uninstall if adopted naively.
 - A run with the network actually disabled (procedure above; not yet executed).
 - **Clean VM only:**
   - first launch on a machine that never had TomeStack or its data directory;

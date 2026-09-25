@@ -12,7 +12,7 @@ namespace TomeStack.AppService.Persistence;
 /// </summary>
 public sealed class SqliteStore : IContentCatalog, IDisposable
 {
-    private static readonly string[] Migrations =
+    internal static readonly string[] Migrations =
     [
         """
         CREATE TABLE sources (
@@ -39,12 +39,20 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
+    private readonly IReadOnlyList<string> _migrations;
     private SqliteTransaction? _transaction;
 
     public SqliteStore(string databasePath)
+        : this(databasePath, Migrations)
+    {
+    }
+
+    /// <summary>Test seam: run a different migration list (for example, a simulated future schema).</summary>
+    internal SqliteStore(string databasePath, IReadOnlyList<string> migrations)
     {
         DatabasePath = databasePath;
-        BackupBeforeUpgrade(databasePath);
+        _migrations = migrations;
+        BackupBeforeUpgrade(databasePath, migrations.Count);
         _connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
@@ -185,32 +193,44 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     private static string Key(Guid id) => id.ToString("D");
 
-    /// <summary>ARCHITECTURE: migrations are numbered and the user database is backed up before upgrading.</summary>
-    private static void BackupBeforeUpgrade(string databasePath)
+    /// <summary>File name of the copy taken before migrating a database from schema <paramref name="version"/>.</summary>
+    public static string BackupPath(string databasePath, int version) => $"{databasePath}.v{version}.bak";
+
+    /// <summary>
+    /// ARCHITECTURE: migrations are numbered and the user database is backed up before upgrading. Uses SQLite's
+    /// online backup rather than a file copy: in WAL mode, committed data can still be in <c>-wal</c> after a crash,
+    /// and a copy of the main file alone would silently miss it.
+    /// </summary>
+    private static void BackupBeforeUpgrade(string databasePath, int latestVersion)
     {
         if (!File.Exists(databasePath))
             return;
+        using var probe = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        probe.Open();
         int version;
-        using (var probe = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False"))
+        using (var command = probe.CreateCommand())
         {
-            probe.Open();
-            using var command = probe.CreateCommand();
             command.CommandText = "PRAGMA user_version;";
             version = Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
         }
-        if (version > LatestSchemaVersion)
-            throw new InvalidOperationException($"Database schema v{version} is newer than this build supports (v{LatestSchemaVersion}).");
-        if (version is > 0 && version < LatestSchemaVersion)
-            File.Copy(databasePath, $"{databasePath}.v{version}.bak", overwrite: true);
+        if (version > latestVersion)
+            throw new NewerDatabaseException(version, latestVersion);
+        if (version is > 0 && version < latestVersion)
+        {
+            var backupPath = BackupPath(databasePath, version);
+            File.Delete(backupPath);
+            using var backup = new SqliteConnection($"Data Source={backupPath};Pooling=False");
+            probe.BackupDatabase(backup);
+        }
     }
 
     private void Migrate()
     {
-        for (var version = SchemaVersion; version < Migrations.Length; version++)
+        for (var version = SchemaVersion; version < _migrations.Count; version++)
         {
             InTransaction(() =>
             {
-                Execute(Migrations[version]);
+                Execute(_migrations[version]);
                 Execute($"PRAGMA user_version = {version + 1};");
             });
         }
@@ -259,6 +279,13 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             command.Parameters.AddWithValue(name, value);
         return command;
     }
+}
+
+/// <summary>The data folder was written by a newer TomeStack. Nothing is changed; the user must update the app.</summary>
+public sealed class NewerDatabaseException(int version, int supported)
+    : InvalidOperationException($"This data folder was created by a newer version of TomeStack (database schema v{version}; this version supports up to v{supported}). Update TomeStack to open it. Nothing was changed.")
+{
+    public int Version { get; } = version;
 }
 
 public sealed class ImmutableRevisionException(ContentReference reference)
