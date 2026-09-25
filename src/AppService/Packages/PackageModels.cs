@@ -35,7 +35,8 @@ public sealed record PackagePreview(
     IReadOnlyList<Diagnostic> Errors,
     IReadOnlyList<Diagnostic> Warnings);
 
-public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters);
+/// <param name="BackupFile">Path relative to the data directory of the pre-import backup, when characters were replaced.</param>
+public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters, string? BackupFile = null);
 
 public sealed record ExportResult(string FileName, byte[] Content, PackageManifest Manifest);
 

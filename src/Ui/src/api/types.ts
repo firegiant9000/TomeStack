@@ -176,4 +176,6 @@ export interface ImportResult {
   replaced: number;
   unchanged: number;
   characters: string[];
+  /** Relative to the data folder; set when a local character was replaced. Import it to restore. */
+  backupFile?: string;
 }

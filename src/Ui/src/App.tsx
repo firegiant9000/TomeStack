@@ -130,7 +130,11 @@ export function App() {
               await refresh();
               setMessage({
                 tone: 'status',
-                text: `Imported: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged.`,
+                text:
+                  `Imported: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged.` +
+                  (result.backupFile
+                    ? ` The replaced copy was backed up to ${result.backupFile} in your data folder; import that file to restore it.`
+                    : ''),
               });
               const first = result.characters[0];
               if (first) await open(first);

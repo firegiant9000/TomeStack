@@ -22,7 +22,7 @@ public sealed class TomeStackApp : IDisposable
         DataDirectory = dataDirectory;
         _time = time;
         _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
-        _packages = new PackageService(_store, time);
+        _packages = new PackageService(_store, time, Path.Combine(dataDirectory, PackageService.BackupFolderName));
         ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
     }
 

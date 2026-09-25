@@ -13,8 +13,10 @@ namespace TomeStack.AppService.Packages;
 /// through a preview step. Packages are untrusted input (SPEC Q-02): sizes, entry names and hashes
 /// are checked before anything is parsed or written, and apply re-validates from the bytes.
 /// </summary>
-public sealed partial class PackageService(SqliteStore store, TimeProvider time)
+public sealed partial class PackageService(SqliteStore store, TimeProvider time, string backupDirectory)
 {
+    public const string BackupFolderName = "backups";
+
     public const long MaxPackageBytes = 50L * 1024 * 1024;
     public const long MaxEntryBytes = 5L * 1024 * 1024;
     public const int MaxEntries = 2_000;
@@ -95,6 +97,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
         if (!preview.CanApply || parsed is null)
             throw new PackageException(preview.Errors);
 
+        // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
+        var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
+        var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
+
         int added = 0, replaced = 0, unchanged = 0;
         store.InTransaction(() =>
         {
@@ -112,7 +118,46 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
                 store.SaveCharacter(character);
             }
         });
-        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)]);
+        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
+    }
+
+    /// <summary>
+    /// Exports the local copies of <paramref name="characterIds"/> to <c>backups/</c> as an ordinary package, so
+    /// restoring is a normal import. Returns the path relative to the data directory.
+    /// </summary>
+    private string WriteBackup(IReadOnlyList<Guid> characterIds)
+    {
+        ExportResult backup;
+        try
+        {
+            backup = Export(characterIds);
+        }
+        catch (PackageException ex)
+        {
+            throw new PackageException(
+            [
+                new("package.backup-failed", "The local copy of a character this package would replace cannot be backed up, so nothing was imported. Repair or export that character first."),
+                .. ex.Errors,
+            ]);
+        }
+
+        Directory.CreateDirectory(backupDirectory);
+        var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        for (var attempt = 0; ; attempt++)
+        {
+            var name = attempt == 0 ? $"pre-import-{stamp}.tomestack.zip" : $"pre-import-{stamp}-{attempt}.tomestack.zip";
+            try
+            {
+                using var file = new FileStream(Path.Combine(backupDirectory, name), FileMode.CreateNew, FileAccess.Write);
+                file.Write(backup.Content);
+                file.Flush(flushToDisk: true);
+                return $"{BackupFolderName}/{name}";
+            }
+            catch (IOException) when (attempt < 100 && File.Exists(Path.Combine(backupDirectory, name)))
+            {
+                // Same second as an earlier backup; try the next suffix.
+            }
+        }
     }
 
     private sealed record ParsedPackage(
@@ -171,7 +216,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
             }
             var exists = store.FindCharacter(character.Id) is not null;
             if (exists)
-                warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy."));
+                warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy. The current copy is saved to the {BackupFolderName} folder in your data folder first, and you can restore it by importing that file."));
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
 

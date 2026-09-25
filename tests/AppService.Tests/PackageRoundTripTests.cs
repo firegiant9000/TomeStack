@@ -198,6 +198,69 @@ public class PackageRoundTripTests
     }
 
     [Fact]
+    public void Import_that_replaces_a_character_backs_up_the_local_copy_and_the_backup_restores_it()
+    {
+        using var origin = new TempApp();
+        var exported = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([exported.Character.Id]).Content;
+
+        using var local = new TempApp();
+        var localCopy = local.App.SaveCharacter(exported.Character with
+        {
+            Name = "Pell (edited locally)",
+            Overrides = [new FieldOverride(RulesCore.CharacterCalculator.InitiativeField, 11, "Local ruling")],
+        }).Character;
+
+        var preview = local.App.PreviewImport(package);
+        Assert.Contains(preview.Warnings, w => w.Code == "package.character-replace" && w.Message.Contains("backups", StringComparison.Ordinal));
+
+        var result = local.App.ApplyImport(package);
+
+        Assert.Equal(1, result.Replaced);
+        Assert.NotNull(result.BackupFile);
+        Assert.StartsWith("backups/pre-import-", result.BackupFile, StringComparison.Ordinal);
+        Assert.Equal(exported.Character.Name, local.App.GetCharacter(localCopy.Id).Character.Name);
+
+        // Restore: the backup is an ordinary package; importing it brings the local edit back.
+        var backup = File.ReadAllBytes(Path.Combine(local.App.DataDirectory, result.BackupFile));
+        Assert.True(local.App.PreviewImport(backup).CanApply);
+        var restore = local.App.ApplyImport(backup);
+
+        var restored = local.App.GetCharacter(localCopy.Id).Character;
+        Assert.Equal(TempApp.Json(localCopy), TempApp.Json(restored));
+        Assert.NotEqual(result.BackupFile, restore.BackupFile);
+    }
+
+    [Fact]
+    public void Import_that_adds_only_new_characters_takes_no_backup()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        using var destination = new TempApp();
+
+        var result = destination.App.ApplyImport(origin.App.ExportCharacters([saved.Character.Id]).Content);
+
+        Assert.Null(result.BackupFile);
+        Assert.False(Directory.Exists(Path.Combine(destination.App.DataDirectory, PackageService.BackupFolderName)));
+    }
+
+    [Fact]
+    public void Import_is_refused_when_the_local_copy_cannot_be_backed_up()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+
+        using var local = new TempApp();
+        var broken = local.App.SaveCharacter(saved.Character with { Pins = [new ContentReference(Guid.NewGuid(), Guid.NewGuid())] }).Character;
+
+        var ex = Assert.Throws<PackageException>(() => local.App.ApplyImport(package));
+
+        Assert.Equal("package.backup-failed", ex.Errors[0].Code);
+        Assert.Equal(TempApp.Json(broken), TempApp.Json(local.App.GetCharacter(broken.Id).Character));
+    }
+
+    [Fact]
     public void Missing_pinned_revision_blocks_export()
     {
         using var origin = new TempApp();
