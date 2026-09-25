@@ -43,4 +43,4 @@ JSON is indented UTF-8 with camelCase names and string enums, and entries are so
 
 ## Not yet decided
 
-Whether non-redistributable sources should be excluded from *shared* packages as opposed to personal backups (LIVING_SPECS D03). Today they are included and flagged `redistributable: false`.
+Whether non-redistributable sources should be excluded from *shared* packages as opposed to personal backups (LIVING_SPECS D03). Today they are included and flagged `redistributable: false`. [ADR-007](../decisions/ADR-007-export-package-and-license-policy.md) proposes separate `backup` and `share` purposes (manifest v2) for the owner to decide.

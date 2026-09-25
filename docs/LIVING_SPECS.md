@@ -50,11 +50,11 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 | --- | --- | --- | --- |
 | D01 | Which rests/recoveries auto-apply? | Preview deterministic deltas, ask for contextual choices | M2 UX rehearsal |
 | D02 | Copy or externally link a PDF by default? | Managed copy for reliable page links, removable attachment | M0 storage spike |
-| D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs | M2 export test |
+| D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs. **Proposed (ADR-007):** separate `backup` and `share` exports; `share` omits non-redistributable sources | M2 export test; owner decision |
 | D04 | How much multiclass/spellcasting in MVP? | SRD-supported paths under both editions | M1 fixture review |
 | D05 | What accessibility target? | Full keyboard use, text zoom, contrast check; formal target to set | M0 UI setup |
 | D06 | Which Windows shell/IPC? | **Decided (ADR-006):** WPF/WebView2 shell, in-process service, WebView2 message bridge; loopback host dev-only. Installer still open | M0 packaging spike (transport done; installer pending) |
-| D07 | License for the project's own code? | Open-source license to select after dependency/IP review | Before public repo release |
+| D07 | License for the project's own code? | Open-source license to select after dependency/IP review. The dependency review is done (`ATTRIBUTION.md`: MIT, BSD-3-Clause, Apache-2.0, public domain; all permissive). **Still open, and the repo is already public.** | Now (repo is public) |
 | D08 | Name availability and public branding? | TomeStack working name; trademark check before launch | Before public release |
 
 ## Change history
