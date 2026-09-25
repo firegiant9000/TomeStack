@@ -80,7 +80,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
-        "package.apply" => app.ApplyImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
+        "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
         _ => throw new UnknownCommandException(command),
     };
 
@@ -89,6 +89,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var export = app.ExportCharacters(payload.CharacterIds);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
+
+    private object ApplyImport(PackagePayload payload) =>
+        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices);
 
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element
@@ -109,5 +112,5 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds);
 
-    private sealed record PackagePayload(string Base64);
+    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
 }

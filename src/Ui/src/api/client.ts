@@ -10,6 +10,7 @@ import type {
   ImportResult,
   PackagePreview,
   RulesFamilyId,
+  SourceChoice,
 } from './types';
 
 /** Typed application client. Components use this, never the transport or fetch directly. */
@@ -24,7 +25,8 @@ export function createClient(transport: Transport) {
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     exportCharacters: (characterIds: string[]) => call<ExportedPackage>('package.export', { characterIds }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
-    applyImport: (base64: string) => call<ImportResult>('package.apply', { base64 }),
+    applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
+      call<ImportResult>('package.apply', { base64, sourceChoices }),
   };
 }
 

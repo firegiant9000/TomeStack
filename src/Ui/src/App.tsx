@@ -123,6 +123,7 @@ export function App() {
         )}
         {screen.kind === 'import' && (
           <ImportPreview
+            key={`${screen.fileName}-${screen.base64.length}`}
             {...screen}
             onError={onError}
             onCancel={() => setScreen({ kind: 'empty' })}

@@ -114,7 +114,8 @@ public sealed class TomeStackApp : IDisposable
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
-    public ImportResult ApplyImport(byte[] package) => _packages.Apply(package);
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
+        _packages.Apply(package, sourceChoices);
 
     public void Dispose() => _store.Dispose();
 

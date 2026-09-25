@@ -26,7 +26,14 @@ public sealed record LicenseNotice(Guid SourceId, string Title, string Publisher
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 
-public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemAction Action, string? Detail = null);
+/// <summary>One field that differs between the local record and the package's copy.</summary>
+public sealed record FieldChange(string Field, string? Local, string? Imported);
+
+/// <param name="Changes">For a source that differs from the local record: every differing field. Apply needs a <see cref="SourceChoice"/> for it.</param>
+public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemAction Action, string? Detail = null, IReadOnlyList<FieldChange>? Changes = null);
+
+/// <summary>What to do with a package source whose metadata (e.g. license) differs from the local record.</summary>
+public enum SourceChoice { KeepLocal, UseImported }
 
 public sealed record PackagePreview(
     bool CanApply,

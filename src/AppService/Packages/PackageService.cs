@@ -61,7 +61,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in sources.Values)
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source));
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null })); // machine-local path; may name the user
         foreach (var revision in revisions.Values)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         foreach (var character in characters)
@@ -91,11 +91,28 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     public PackagePreview Preview(byte[] package) => Read(package).Preview;
 
-    public ImportResult Apply(byte[] package)
+    /// <param name="sourceChoices">
+    /// Required for every package source whose metadata differs from the local record (preview items with
+    /// <see cref="PackageItem.Changes"/>). Local license metadata is never overwritten without an explicit choice.
+    /// </param>
+    public ImportResult Apply(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
     {
         var (preview, parsed) = Read(package);
         if (!preview.CanApply || parsed is null)
             throw new PackageException(preview.Errors);
+
+        var differing = preview.Items.Where(i => i.Kind == "source" && i.Action == PackageItemAction.Replace).ToList();
+        var missingChoices = differing.Where(i => sourceChoices is null || !sourceChoices.ContainsKey(i.Id)).ToList();
+        if (missingChoices.Count > 0)
+        {
+            throw new PackageException(
+            [
+                .. missingChoices.Select(i => new Diagnostic(
+                    "package.source-choice-required",
+                    $"Source '{i.Name}' in the package differs from your local record ({string.Join(", ", i.Changes!.Select(c => c.Field))}). Choose whether to keep your local version or use the imported one.")),
+            ]);
+        }
+        var keepLocal = differing.Where(i => sourceChoices![i.Id] == SourceChoice.KeepLocal).Select(i => i.Id).ToHashSet();
 
         // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
         var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
@@ -104,8 +121,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         int added = 0, replaced = 0, unchanged = 0;
         store.InTransaction(() =>
         {
-            foreach (var source in parsed.Sources)
-                store.UpsertSource(source);
+            foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
+            {
+                // A PDF reference is machine-local; an import never adds, changes or removes one.
+                store.UpsertSource(source with { PdfRef = store.FindSource(source.Id)?.PdfRef });
+            }
             foreach (var revision in parsed.Revisions)
             {
                 if (store.AddRevision(revision)) added++;
@@ -182,10 +202,16 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         foreach (var source in parsed.Sources)
         {
             var local = store.FindSource(source.Id);
+            var changes = local is null ? [] : SourceChanges(local, source);
             var action = local is null ? PackageItemAction.Add
-                : SqliteStore.Serialize(local) == SqliteStore.Serialize(source) ? PackageItemAction.Unchanged
+                : changes.Count == 0 ? PackageItemAction.Unchanged
                 : PackageItemAction.Replace;
-            items.Add(new("source", source.Id, source.Title, action, $"{source.License}; redistributable: {(source.Redistributable ? "yes" : "no")}"));
+            if (action == PackageItemAction.Replace)
+                warnings.Add(new("package.source-differs", $"Source '{source.Title}' differs from your local record ({string.Join(", ", changes.Select(c => c.Field))}). Choose which version to keep before importing."));
+            items.Add(new(
+                "source", source.Id, source.Title, action,
+                $"{source.License}; redistributable: {(source.Redistributable ? "yes" : "no")}",
+                action == PackageItemAction.Replace ? changes : null));
         }
 
         foreach (var revision in parsed.Revisions)
@@ -317,6 +343,20 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             }
         }
         return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters);
+    }
+
+    /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c>.</summary>
+    private static List<FieldChange> SourceChanges(SourceRecord local, SourceRecord imported)
+    {
+        var localNode = JsonSerializer.SerializeToNode(local, RulesJson.Compact)!.AsObject();
+        var importedNode = JsonSerializer.SerializeToNode(imported, RulesJson.Compact)!.AsObject();
+        return
+        [
+            .. localNode.Select(p => p.Key).Union(importedNode.Select(p => p.Key)).Order(StringComparer.Ordinal)
+                .Where(field => field != "pdfRef")
+                .Select(field => new FieldChange(field, localNode[field]?.ToJsonString(), importedNode[field]?.ToJsonString()))
+                .Where(change => change.Local != change.Imported),
+        ];
     }
 
     private static void ExpectId(string path, Guid expected, Guid actual, List<Diagnostic> errors)

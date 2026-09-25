@@ -155,13 +155,24 @@ export interface ExportedPackage {
 
 export type PackageItemAction = 'add' | 'unchanged' | 'replace' | 'conflict';
 
+/** Values are compact JSON of the field on each side. */
+export interface FieldChange {
+  field: string;
+  local?: string;
+  imported?: string;
+}
+
 export interface PackageItem {
   kind: 'source' | 'contentRevision' | 'character';
   id: string;
   name: string;
   action: PackageItemAction;
   detail?: string;
+  /** Set on a source that differs from the local record; apply needs a SourceChoice for it. */
+  changes?: FieldChange[];
 }
+
+export type SourceChoice = 'keepLocal' | 'useImported';
 
 export interface PackagePreview {
   canApply: boolean;
