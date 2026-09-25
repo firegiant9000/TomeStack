@@ -24,6 +24,10 @@ characters/<characterId>.json  Character choices, pins and overrides (no derived
 
 JSON is indented UTF-8 with camelCase names and string enums, and entries are sorted. The same data at the same time produces byte-identical packages, so diffs are readable.
 
+## Export
+
+`package.export` returns the package as base64 (used by browser development). In the desktop app, `package.saveAs` writes it where the user chooses in a native Save dialog, and returns only `{ saved, fileName }`.
+
 ## Import rules (untrusted input, SPEC Q-02)
 
 1. Packages over 50 MB, with more than 2,000 entries, or with an entry over 5 MB (checked while reading, not only from the header) are refused.

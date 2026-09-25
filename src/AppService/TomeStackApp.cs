@@ -156,8 +156,11 @@ public sealed record CharacterView(Character Character, CharacterSheet Sheet);
 
 public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
 
-public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems)
+/// <param name="code">Error code at the transport boundary: <c>validation</c>, or <c>unsupported</c> for a missing host capability.</param>
+public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems, string code = "validation")
     : Exception(string.Join(" ", problems.Select(p => p.Message)))
 {
     public IReadOnlyList<Diagnostic> Problems { get; } = problems;
+
+    public string Code { get; } = code;
 }

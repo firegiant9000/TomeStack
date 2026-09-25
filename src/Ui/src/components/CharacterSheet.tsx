@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { CharacterView, DerivedValue, TraceOrigin } from '../api/types';
 import { downloadBase64 } from '../files';
 
@@ -52,9 +53,10 @@ interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
+  onStatus: (text: string) => void;
 }
 
-export function CharacterSheet({ view, onChanged, onError }: Props) {
+export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
   const { character, sheet } = view;
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
@@ -78,10 +80,20 @@ export function CharacterSheet({ view, onChanged, onError }: Props) {
 
   async function exportCharacter() {
     try {
-      const exported = await client.exportCharacters([character.id]);
-      downloadBase64(exported.fileName, exported.base64);
+      const outcome = await client.saveExportAs([character.id]);
+      if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
     } catch (error) {
-      onError(error);
+      if (!(error instanceof TomeStackError && error.code === 'unsupported')) {
+        onError(error);
+        return;
+      }
+      // Browser development (DevHost) has no native dialog: fall back to a download.
+      try {
+        const exported = await client.exportCharacters([character.id]);
+        downloadBase64(exported.fileName, exported.base64);
+      } catch (fallbackError) {
+        onError(fallbackError);
+      }
     }
   }
 

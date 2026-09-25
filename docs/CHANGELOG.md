@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Export in the desktop app opens a native Save dialog provided by the shell (`package.saveAs`) instead of WebView2's download flow, which saved silently to Downloads. Browser development against DevHost still falls back to a download (ADR-006).
 - D06 resolved: the application service runs in-process behind the WebView2 message bridge instead of as a local ASP.NET Core service. The loopback host is development-only (ADR-006).
 - Spec documents moved into `docs/`, and the diagram into `docs/diagrams/`.
 

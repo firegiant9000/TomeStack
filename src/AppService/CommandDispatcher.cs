@@ -10,7 +10,7 @@ namespace TomeStack.AppService;
 /// <c>{ "id": "1", "ok": true, "result": ... }</c> or <c>{ "id": "1", "ok": false, "error": { "code", "message", "diagnostics", "correlationId" } }</c>.
 /// Unexpected failures return a generic message and a correlation id; details go to the local error log only.
 /// </summary>
-public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = null)
+public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = null, IHostServices? host = null)
 {
     private readonly IErrorLog _errorLog = errorLog ?? app.ErrorLog;
 
@@ -20,7 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "character.list", "character.get", "character.create", "character.save",
-        "package.export", "package.preview", "package.apply",
+        "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
     public string Dispatch(string requestJson)
@@ -41,7 +41,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         }
         catch (AppValidationException ex)
         {
-            return Error(id, "validation", ex.Message, ex.Problems);
+            return Error(id, ex.Code, ex.Message, ex.Problems);
         }
         catch (PackageException ex)
         {
@@ -79,6 +79,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
+        "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
         _ => throw new UnknownCommandException(command),
@@ -88,6 +89,39 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         var export = app.ExportCharacters(payload.CharacterIds);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
+    }
+
+    /// <summary>
+    /// Exports and writes the package where the user chooses in a native Save dialog. The page never supplies
+    /// a path and the package bytes never cross the bridge.
+    /// </summary>
+    private SaveOutcome SavePackageAs(ExportPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        var export = app.ExportCharacters(payload.CharacterIds);
+        var path = host.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
+        if (path is null)
+            return new SaveOutcome(false, null);
+
+        var temporary = path + ".partial";
+        try
+        {
+            File.WriteAllBytes(temporary, export.Content);
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            TryDelete(temporary);
+            throw new AppValidationException([new("package.save-failed", $"Could not save {Path.GetFileName(path)}. Check that the folder exists and is writable, then try again.")]);
+        }
+        return new SaveOutcome(true, Path.GetFileName(path));
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
     }
 
     private object ApplyImport(PackagePayload payload) =>

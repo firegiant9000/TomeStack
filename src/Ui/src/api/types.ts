@@ -153,6 +153,11 @@ export interface ExportedPackage {
   manifest: PackageManifest;
 }
 
+export interface SaveOutcome {
+  saved: boolean;
+  fileName?: string;
+}
+
 export type PackageItemAction = 'add' | 'unchanged' | 'replace' | 'conflict';
 
 /** Values are compact JSON of the field on each side. */

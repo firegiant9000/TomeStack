@@ -115,6 +115,7 @@ export function App() {
             key={screen.view.character.id}
             view={screen.view}
             onError={onError}
+            onStatus={(text) => setMessage({ tone: 'status', text })}
             onChanged={async (view) => {
               setScreen({ kind: 'sheet', view });
               await refresh();

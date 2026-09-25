@@ -10,6 +10,7 @@ import type {
   ImportResult,
   PackagePreview,
   RulesFamilyId,
+  SaveOutcome,
   SourceChoice,
 } from './types';
 
@@ -24,6 +25,8 @@ export function createClient(transport: Transport) {
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     exportCharacters: (characterIds: string[]) => call<ExportedPackage>('package.export', { characterIds }),
+    /** Native Save dialog in the shell; fails with code `unsupported` on hosts without one (DevHost). */
+    saveExportAs: (characterIds: string[]) => call<SaveOutcome>('package.saveAs', { characterIds }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices }),

@@ -48,9 +48,9 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 
 - There are no port conflicts, firewall prompts or tokens in production. Closing the window ends the process and the service with it.
 - Commands run off the UI thread (`Task.Run`) and are serialized with a semaphore. Long-running jobs (M4 imports) will need progress messages. The current protocol is request/response only.
-- Package bytes cross the bridge as base64 JSON. That is acceptable up to the 50 MB package limit. Revisit with native file dialogs in the shell, or WebView2 shared buffers, if packages grow or attachments are added.
+- Imported package bytes still cross the bridge as base64 JSON (the UI reads them from `<input type=file>`). That is acceptable up to the 50 MB package limit. Revisit with a native Open dialog, or WebView2 shared buffers, if packages grow or attachments are added.
 - The app requires the Evergreen WebView2 Runtime. It is preinstalled on Windows 11, and the Evergreen Standalone Installer covers offline installs. The shell shows a clear message if the runtime is missing.
-- Export currently uses WebView2's download flow, which saves to the Downloads folder. A native Save dialog belongs to M2.
+- **Export uses a native Save dialog (2026-09-25).** The shell passes an `IHostServices` to the dispatcher. `package.saveAs` exports in-process, asks the user for a location with the WPF `SaveFileDialog` (marshalled to the UI thread), writes through a `.partial` file, and returns only the file name. The page never supplies a path, and the bytes never cross the bridge. Hosts without dialogs (DevHost) answer `unsupported`, and the UI then falls back to `package.export` plus a browser download. The dialog itself is covered by unit tests with a fake host. It is not driven automatically by the smoke.
 
 ## Not yet proven (keep open in M0)
 

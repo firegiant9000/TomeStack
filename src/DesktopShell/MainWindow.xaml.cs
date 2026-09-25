@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     public MainWindow(TomeStackApp tomeStack, ShellOptions options)
     {
         _tomeStack = tomeStack;
-        _dispatcher = new CommandDispatcher(tomeStack);
+        _dispatcher = new CommandDispatcher(tomeStack, host: new ShellHostServices(this));
         _options = options;
         InitializeComponent();
         Loaded += async (_, _) =>
