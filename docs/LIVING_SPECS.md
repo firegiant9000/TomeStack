@@ -49,7 +49,7 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 | ID | Question | Working default | Decide by |
 | --- | --- | --- | --- |
 | D01 | Which rests/recoveries auto-apply? | Preview deterministic deltas, ask for contextual choices | M2 UX rehearsal |
-| D02 | Copy or externally link a PDF by default? | Managed copy for reliable page links, removable attachment | M0 storage spike |
+| D02 | Copy or externally link a PDF by default? | Managed copy for reliable page links, removable attachment. Options and the OneDrive/sync-root risk for the data directory are in ADR-005 (proposed) | M0 storage spike; owner decision |
 | D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs. **Proposed (ADR-007):** separate `backup` and `share` exports; `share` omits non-redistributable sources | M2 export test; owner decision |
 | D04 | How much multiclass/spellcasting in MVP? | SRD-supported paths under both editions | M1 fixture review |
 | D05 | What accessibility target? | Full keyboard use, text zoom, contrast check; formal target to set | M0 UI setup |
