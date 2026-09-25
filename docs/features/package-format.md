@@ -33,7 +33,7 @@ JSON is indented UTF-8 with camelCase names and string enums, and entries are so
 1. Packages over 50 MB, with more than 2,000 entries, or with an entry over 5 MB (checked while reading, not only from the header) are refused.
 2. Only the paths above are allowed; anything else, including `..` or absolute paths, is refused. There is no extraction to disk.
 3. Every entry must be listed in the manifest and match its SHA-256. Unlisted, missing or duplicate entries are refused.
-4. File names must match the IDs inside them.
+4. File names must match the IDs inside them. Entries with a `schemaVersion` newer than this build supports are refused (`package.schema-unsupported`). JSON Schemas for every entry kind and for the manifest are in [docs/schemas](../schemas/README.md).
 5. Every character pin and every revision's source must resolve within the package or the local store.
 6. A revision with the same ID but different content is a blocking conflict. Published revisions are immutable.
 7. **Preview first:** the user sees what will be added, left unchanged or replaced, plus warnings and license notices. **Apply** re-validates from the bytes and commits in one SQLite transaction.

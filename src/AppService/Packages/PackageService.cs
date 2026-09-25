@@ -334,10 +334,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     break;
                 case "content" when Deserialize<ContentRevision>(path, bytes, errors) is { } revision:
                     ExpectId(path, id, revision.RevisionId, errors);
+                    ExpectSchema(path, "content", revision.SchemaVersion, ContentRevision.CurrentSchemaVersion, errors);
                     revisions.Add(revision);
                     break;
                 case "characters" when Deserialize<Character>(path, bytes, errors) is { } character:
                     ExpectId(path, id, character.Id, errors);
+                    ExpectSchema(path, "character", character.SchemaVersion, Character.CurrentSchemaVersion, errors);
                     characters.Add(character);
                     break;
             }
@@ -357,6 +359,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 .Select(field => new FieldChange(field, localNode[field]?.ToJsonString(), importedNode[field]?.ToJsonString()))
                 .Where(change => change.Local != change.Imported),
         ];
+    }
+
+    /// <summary>Data from a newer TomeStack is refused rather than silently misread.</summary>
+    private static void ExpectSchema(string path, string kind, int version, int supported, List<Diagnostic> errors)
+    {
+        if (version < 1 || version > supported)
+            errors.Add(new("package.schema-unsupported", $"Entry '{path}' uses {kind} schema v{version}; this version of TomeStack supports v1 to v{supported}. Update TomeStack to import this package."));
     }
 
     private static void ExpectId(string path, Guid expected, Guid actual, List<Diagnostic> errors)

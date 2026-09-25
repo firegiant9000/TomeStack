@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/package-manifest.v1.schema.json",
+  "title": "TomeStack package manifest (formatVersion 1)",
+  "description": "manifest.json of a *.tomestack.zip package (SPEC P-02; docs/features/package-format.md).",
+  "type": "object",
+  "required": ["format", "formatVersion", "createdAt", "appVersion", "characters", "entries", "notices", "attachmentPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "tomestack.package" },
+    "formatVersion": { "const": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "appVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "characters": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "entries": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "pattern": "^(sources|content|characters)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$" },
+          "kind": { "enum": ["source", "contentRevision", "character"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 5242880 }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "redistributable"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "redistributable": { "type": "boolean" },
+          "attribution": { "type": "string" }
+        }
+      }
+    },
+    "attachmentPolicy": { "type": "string" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

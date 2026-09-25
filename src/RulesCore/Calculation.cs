@@ -93,6 +93,11 @@ public static class CharacterCalculator
                 diagnostics.Add(new("content.missing", $"Pinned revision {pin.RevisionId} of content {pin.ContentId} is not available.", pin));
                 continue;
             }
+            if (revision.SchemaVersion is < 1 or > ContentRevision.CurrentSchemaVersion)
+            {
+                diagnostics.Add(new("content.schema-unsupported", $"'{revision.Name}' uses content schema v{revision.SchemaVersion}; this version supports up to v{ContentRevision.CurrentSchemaVersion}. It is not applied.", pin));
+                continue;
+            }
             if (revision.Status != RevisionStatus.Published)
             {
                 diagnostics.Add(new("content.unpublished", $"'{revision.Name}' is a {revision.Status.ToString().ToLowerInvariant()} revision and is not active until it is reviewed and published.", pin));

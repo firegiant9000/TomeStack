@@ -27,6 +27,8 @@ public sealed record Character
     public IReadOnlyList<Diagnostic> Validate()
     {
         var problems = new List<Diagnostic>();
+        if (SchemaVersion is < 1 or > CurrentSchemaVersion)
+            problems.Add(new("character.schema-unsupported", $"Character data uses schema v{SchemaVersion}; this version of TomeStack supports v1 to v{CurrentSchemaVersion}. Update TomeStack to open it."));
         if (string.IsNullOrWhiteSpace(Name))
             problems.Add(new("character.name-required", "Character name is required."));
         if (!RulesFamilies.IsKnown(RulesFamily))
