@@ -18,7 +18,8 @@ SPEC S-02, S-03, C-01 and I-06 require that SRD 5.1 (2014) and SRD 5.2.1 (2024) 
 
 ## Consequences
 
-- Deliberate cross-family use (backlog B06) will need a recorded, per-character exception. There is no silent mixing today.
+- Deliberate cross-family use (backlog B06) needs a recorded, per-character exception: `Character.crossFamilyExceptions` (character schema v2). The content then applies under the character's own family policy with a `content.cross-family-exception` warning. There is still no silent mixing, and the UI to record an exception is not built yet.
+- Policy differences so far: `AbilityIncreaseSource` (origin content only) and `BackgroundGrantsFeat`. Both are fixture-tested side by side (`RulesFamilySideBySideTests`).
 - A revision's JSON hash is computed from the app's own serializer. Changing the serializer settings (for example property order) would make identical content look different, so treat them as a schema change.
 - Migration and update review between revisions (SPEC I-06) is not built yet.
 

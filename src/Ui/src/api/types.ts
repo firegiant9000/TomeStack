@@ -31,6 +31,7 @@ export interface Character {
   rulesFamily: RulesFamilyId;
   campaignId?: string;
   level: number;
+  crossFamilyExceptions: CrossFamilyException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
@@ -111,6 +112,14 @@ export interface RulesFamilyPolicy {
   id: RulesFamilyId;
   displayName: string;
   abilityIncreaseSource: ContentKind;
+  backgroundGrantsFeat: boolean;
+}
+
+/** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */
+export interface CrossFamilyException {
+  content: ContentReference;
+  reason: string;
+  recordedAt?: string;
 }
 
 export interface AppInfo {

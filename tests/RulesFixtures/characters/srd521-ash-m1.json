@@ -1,0 +1,15 @@
+{
+  "id": "5f1dca00-0000-4000-8000-000000000521",
+  "schemaVersion": 2,
+  "name": "Ash (2024 M1 fixture)",
+  "rulesFamily": "srd-5.2.1",
+  "level": 5,
+  "baseAbilities": { "str": 10, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 8 },
+  "pins": [
+    { "contentId": "5f1dc000-0000-4000-8000-000000000001", "revisionId": "5f1de000-0000-4000-8000-000000000001" },
+    { "contentId": "5f1dc000-0000-4000-8000-000000000004", "revisionId": "5f1de000-0000-4000-8000-000000000004" }
+  ],
+  "overrides": [],
+  "crossFamilyExceptions": [],
+  "updatedAt": "2026-09-25T00:00:00+00:00"
+}

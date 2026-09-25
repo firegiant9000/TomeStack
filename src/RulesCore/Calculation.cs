@@ -95,7 +95,7 @@ public static class CharacterCalculator
         var policy = RulesFamilies.Get(character.RulesFamily);
         var family = character.RulesFamily;
         var diagnostics = new List<Diagnostic>();
-        var active = ResolveActiveContent(character, catalog, diagnostics);
+        var active = ResolveActiveContent(character, catalog, policy, diagnostics);
         var warnings = Specs.ToDictionary(s => s.Id, _ => new List<Diagnostic>(), StringComparer.Ordinal);
 
         foreach (var item in active)
@@ -160,41 +160,96 @@ public static class CharacterCalculator
 
     // ---- content resolution ---------------------------------------------------------------------------------
 
-    private sealed record ActiveContent(ContentRevision Revision, SourceRecord Source);
+    /// <param name="GrantedBy">Set when a <c>grant</c> effect of another active revision brought this one in.</param>
+    private sealed record ActiveContent(ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null);
 
-    private static List<ActiveContent> ResolveActiveContent(Character character, IContentCatalog catalog, List<Diagnostic> diagnostics)
+    /// <summary>
+    /// Pins first, then content granted by pinned content, one level deep only: granted content's own content grants are
+    /// not followed, so user content cannot create chains or loops. Cross-family use needs a recorded exception (B06).
+    /// </summary>
+    private static List<ActiveContent> ResolveActiveContent(Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics)
     {
         var active = new List<ActiveContent>();
-        foreach (var pin in character.Pins)
+        var seen = new HashSet<ContentReference>();
+
+        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy)
         {
-            var revision = catalog.FindRevision(pin);
+            var prefix = grantedBy is null ? "" : $"Granted by '{grantedBy.Name}': ";
+            var revision = catalog.FindRevision(reference);
             if (revision is null)
             {
-                diagnostics.Add(new("content.missing", $"Pinned revision {pin.RevisionId} of content {pin.ContentId} is not available.", pin));
-                continue;
+                diagnostics.Add(new("content.missing", $"{prefix}Revision {reference.RevisionId} of content {reference.ContentId} is not available.", reference));
+                return null;
             }
             if (revision.SchemaVersion is < 1 or > ContentRevision.CurrentSchemaVersion)
             {
-                diagnostics.Add(new("content.schema-unsupported", $"'{revision.Name}' uses content schema v{revision.SchemaVersion}; this version supports up to v{ContentRevision.CurrentSchemaVersion}. It is not applied.", pin));
-                continue;
+                diagnostics.Add(new("content.schema-unsupported", $"{prefix}'{revision.Name}' uses content schema v{revision.SchemaVersion}; this version supports up to v{ContentRevision.CurrentSchemaVersion}. It is not applied.", reference));
+                return null;
             }
             if (revision.Status != RevisionStatus.Published)
             {
-                diagnostics.Add(new("content.unpublished", $"'{revision.Name}' is a {revision.Status.ToString().ToLowerInvariant()} revision and is not active until it is reviewed and published.", pin));
-                continue;
+                diagnostics.Add(new("content.unpublished", $"{prefix}'{revision.Name}' is a {revision.Status.ToString().ToLowerInvariant()} revision and is not active until it is reviewed and published.", reference));
+                return null;
             }
             if (!revision.RulesFamilies.Contains(character.RulesFamily))
             {
-                diagnostics.Add(new("content.rules-family-mismatch", $"'{revision.Name}' supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}; it is not applied.", pin));
-                continue;
+                var exception = grantedBy is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
+                if (exception is null)
+                {
+                    diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}; it is not applied.", reference));
+                    return null;
+                }
+                diagnostics.Add(new(
+                    "content.cross-family-exception",
+                    $"'{revision.Name}' is written for {string.Join(", ", revision.RulesFamilies)} but is used under {character.RulesFamily} by a recorded exception: {exception.Reason}. It follows {policy.DisplayName} rules.",
+                    reference));
             }
             var source = catalog.FindSource(revision.Provenance.SourceId);
             if (source is null)
             {
-                diagnostics.Add(new("content.source-missing", $"'{revision.Name}' has no known source record; it is not applied.", pin));
-                continue;
+                diagnostics.Add(new("content.source-missing", $"{prefix}'{revision.Name}' has no known source record; it is not applied.", reference));
+                return null;
             }
-            active.Add(new(revision, source));
+            return new(revision, source, grantedBy);
+        }
+
+        foreach (var pin in character.Pins)
+        {
+            if (seen.Add(pin) && Admit(pin, null) is { } item)
+                active.Add(item);
+        }
+
+        foreach (var exception in character.CrossFamilyExceptions.Where(e => !character.Pins.Contains(e.Content)))
+            diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin.", exception.Content));
+
+        foreach (var granter in active.ToList())
+        {
+            foreach (var grant in granter.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
+            {
+                if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                    continue;
+                var revision = granter.Revision;
+                if (grant.Content is not { } reference)
+                {
+                    diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
+                    continue;
+                }
+                if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat)
+                {
+                    diagnostics.Add(new(
+                        "policy.background-feat",
+                        $"'{revision.Name}' (background) cannot grant a feat under {policy.DisplayName}; the grant is ignored.",
+                        revision.Reference,
+                        grant.Id));
+                    continue;
+                }
+                if (seen.Add(reference) && Admit(reference, revision) is { } granted)
+                {
+                    active.Add(granted);
+                    foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
+                        diagnostics.Add(new("grant.nested-ignored", $"'{granted.Revision.Name}' was granted by '{revision.Name}'; its own content grant '{nested.Id}' is not followed (grants are one level deep).", granted.Revision.Reference, nested.Id));
+                }
+            }
         }
         return active;
     }
@@ -445,7 +500,7 @@ public static class CharacterCalculator
         }
 
         TraceOrigin Origin(Modifier m) => ContentOrigin(family, m.Content, m.Effect);
-        string Name(Modifier m) => $"{m.Content.Revision.Kind.ToString().ToLowerInvariant()} '{m.Content.Revision.Name}'";
+        string Name(Modifier m) => Describe(m.Content);
         IReadOnlyList<TraceInput>? Inputs(List<TraceInput> i) => i.Count > 0 ? i : null;
 
         var replacements = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Replace).ToList();
@@ -520,6 +575,13 @@ public static class CharacterCalculator
         return entries;
     }
 
+    private static string Describe(ActiveContent content)
+    {
+        var revision = content.Revision;
+        var granted = content.GrantedBy is { } by ? $" (granted by {by.Kind.ToString().ToLowerInvariant()} '{by.Name}')" : "";
+        return $"{revision.Kind.ToString().ToLowerInvariant()} '{revision.Name}'{granted}";
+    }
+
     private static Diagnostic InvalidFormula(ContentRevision revision, ModifierEffect effect, FormulaError error) =>
         new("effect.invalid-formula", $"'{revision.Name}' effect '{effect.Id}' is disabled: {error.Message} ({error.Code})", revision.Reference, effect.Id);
 
@@ -592,7 +654,7 @@ public static class CharacterCalculator
                 var amount = proficiency.Grant == GrantKind.Expertise ? pb * 2 : pb;
                 value += amount;
                 var what = proficiency.Grant == GrantKind.Expertise ? "Expertise (twice the proficiency bonus)" : "Proficiency bonus";
-                steps.Add(new(id, "add", $"{what} from {proficiency.Content.Revision.Kind.ToString().ToLowerInvariant()} '{proficiency.Content.Revision.Name}'", amount, value, ContentOrigin(c.Family, proficiency.Content, proficiency.Effect), [new(FieldIds.ProficiencyBonus, pb)]));
+                steps.Add(new(id, "add", $"{what} from {Describe(proficiency.Content)}", amount, value, ContentOrigin(c.Family, proficiency.Content, proficiency.Effect), [new(FieldIds.ProficiencyBonus, pb)]));
             }
             return value;
         });

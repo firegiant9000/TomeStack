@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tomestack.local/schemas/character.v2.schema.json",
   "title": "TomeStack character (schemaVersion 2)",
-  "description": "Stored character choices, pins and overrides. Derived values are never stored. Unknown properties round-trip. v2 adds level; v1 is read as level 1.",
+  "description": "Stored character choices, pins and overrides. Derived values are never stored. Unknown properties round-trip. v2 adds level and crossFamilyExceptions; v1 is read as level 1 with none.",
   "type": "object",
   "required": ["id", "schemaVersion", "name", "rulesFamily", "baseAbilities"],
   "properties": {
@@ -11,6 +11,20 @@
     "name": { "type": "string", "minLength": 1 },
     "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
     "level": { "type": "integer", "minimum": 1, "maximum": 20 },
+    "crossFamilyExceptions": {
+      "description": "BACKLOG B06: recorded, deliberate use of a pinned revision outside its rules families.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["content", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "content": { "$ref": "#/$defs/contentReference" },
+          "reason": { "type": "string", "minLength": 1 },
+          "recordedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
     "campaignId": { "$ref": "#/$defs/uuid" },
     "baseAbilities": {
       "type": "object",

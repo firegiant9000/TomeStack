@@ -9,7 +9,7 @@ namespace TomeStack.RulesCore;
 /// </summary>
 public sealed record Character : IJsonOnDeserialized
 {
-    /// <summary>v2 adds <see cref="Level"/>. v1 is upcast on read (level 1).</summary>
+    /// <summary>v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. v1 is upcast on read (level 1, none).</summary>
     public const int CurrentSchemaVersion = 2;
 
     public const int MinLevel = 1;
@@ -26,6 +26,13 @@ public sealed record Character : IJsonOnDeserialized
 
     /// <summary>Total character level (1–20). Drives the proficiency bonus.</summary>
     public int Level { get; init; } = MinLevel;
+
+    /// <summary>
+    /// BACKLOG B06 / ARCHITECTURE step 2: deliberate use of content from another rules family, each with a recorded
+    /// reason. Without a record, such content is never applied. With one, it applies under this character's own
+    /// family policy, with a warning.
+    /// </summary>
+    public IReadOnlyList<CrossFamilyException> CrossFamilyExceptions { get; init; } = [];
     public Guid? CampaignId { get; init; }
     public required AbilityScores BaseAbilities { get; init; }
     public IReadOnlyList<ContentReference> Pins { get; init; } = [];
@@ -46,6 +53,8 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.rules-family-unknown", $"Rules family '{RulesFamily}' is not supported."));
         if (Level is < MinLevel or > MaxLevel)
             problems.Add(new("character.level-out-of-range", $"Level {Level} must be between {MinLevel} and {MaxLevel}."));
+        foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
+            problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
         foreach (var ability in Enum.GetValues<Ability>())
         {
             var score = BaseAbilities.Get(ability);
@@ -76,6 +85,9 @@ public sealed record AbilityScores(int Str, int Dex, int Con, int Int, int Wis, 
         _ => throw new ArgumentOutOfRangeException(nameof(ability)),
     };
 }
+
+/// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
+public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);

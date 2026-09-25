@@ -1,0 +1,83 @@
+{
+  "packId": "tomestack-m1-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures for M1 rules-family comparisons. Names and effects are invented for testing and contain no SRD or third-party rules text. Test-only: not seeded into user data.",
+  "sources": [
+    {
+      "id": "5f0d5001-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: M1 Shared",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "editionVersion": "fixture-2",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000001",
+      "revisionId": "5f1de000-0000-4000-8000-000000000001",
+      "schemaVersion": 2,
+      "kind": "background",
+      "name": "Fixture Wayfarer",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 11 } },
+      "status": "published",
+      "summary": "A test background usable under both families. Its ability increase and its feat only apply where backgrounds may grant them.",
+      "effects": [
+        { "type": "modifier", "id": "wayfarer-wis", "operation": "bonus", "target": "ability.wis.score", "value": "1" },
+        { "type": "grant", "id": "wayfarer-stealth", "grant": "proficiency", "target": "skill.stealth" },
+        {
+          "type": "grant",
+          "id": "wayfarer-feat",
+          "grant": "content",
+          "content": { "contentId": "5f1dc000-0000-4000-8000-000000000002", "revisionId": "5f1de000-0000-4000-8000-000000000002" }
+        }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000002",
+      "revisionId": "5f1de000-0000-4000-8000-000000000002",
+      "schemaVersion": 2,
+      "kind": "feat",
+      "name": "Fixture Watchful",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 12 } },
+      "status": "published",
+      "summary": "A test feat that adds the proficiency bonus to initiative.",
+      "effects": [
+        { "type": "modifier", "id": "watchful-init", "operation": "bonus", "target": "initiative", "value": "PB" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000003",
+      "revisionId": "5f1de000-0000-4000-8000-000000000003",
+      "schemaVersion": 2,
+      "kind": "species",
+      "name": "Fixture Keen Senses",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "5f0d5100-0000-4000-8000-000000000001", "page": { "start": 13 } },
+      "status": "published",
+      "summary": "Deliberate cross-edition conflict, 2014 version: same name as the 2024 entry, different content ID and mechanics.",
+      "effects": [
+        { "type": "modifier", "id": "keen14-dex", "operation": "bonus", "target": "ability.dex.score", "value": "1" },
+        { "type": "modifier", "id": "keen14-stealth", "operation": "bonus", "target": "skill.stealth", "value": "1" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000004",
+      "revisionId": "5f1de000-0000-4000-8000-000000000004",
+      "schemaVersion": 2,
+      "kind": "species",
+      "name": "Fixture Keen Senses",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5210-0000-4000-8000-000000000001", "page": { "start": 14 } },
+      "status": "published",
+      "summary": "Deliberate cross-edition conflict, 2024 version: same name as the 2014 entry, different content ID and mechanics.",
+      "effects": [
+        { "type": "grant", "id": "keen24-stealth", "grant": "expertise", "target": "skill.stealth" }
+      ]
+    }
+  ]
+}
