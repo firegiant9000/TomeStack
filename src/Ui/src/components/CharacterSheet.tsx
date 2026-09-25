@@ -1,7 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CharacterView, DerivedValue, TraceOrigin } from '../api/types';
+import type { CharacterView, DerivedValue, FieldOverride, TraceOrigin } from '../api/types';
 import { downloadBase64 } from '../files';
 
 function describeOrigin(origin: TraceOrigin): string {
@@ -20,14 +20,25 @@ function describeOrigin(origin: TraceOrigin): string {
 }
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
 
-function TraceTable({ value }: { value: DerivedValue }) {
+/** Display groups for the calculated fields; the rules core decides what exists, this only orders it. */
+const groups: { title: string; match: (field: string) => boolean }[] = [
+  { title: 'Abilities', match: (f) => f.startsWith('ability.') },
+  { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
+  { title: 'Saving throws', match: (f) => f.startsWith('save.') },
+  { title: 'Skills', match: (f) => f.startsWith('skill.') },
+  { title: 'Combat', match: (f) => f === 'initiative' },
+];
+
+function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string, string> }) {
   return (
     <table className="trace">
       <caption>How {value.label.toLowerCase()} is calculated</caption>
       <thead>
         <tr>
           <th scope="col">#</th>
+          <th scope="col">Field</th>
           <th scope="col">Step</th>
           <th scope="col">Amount</th>
           <th scope="col">Result</th>
@@ -38,6 +49,7 @@ function TraceTable({ value }: { value: DerivedValue }) {
         {value.trace.map((entry) => (
           <tr key={entry.order} className={`op-${entry.operation}`}>
             <td>{entry.order}</td>
+            <td>{entry.field ? (labels.get(entry.field) ?? entry.field) : ''}</td>
             <td>{entry.description}</td>
             <td>{entry.amount === undefined ? '' : entry.operation === 'add' ? signed(entry.amount) : entry.amount}</td>
             <td>{entry.result}</td>
@@ -46,6 +58,66 @@ function TraceTable({ value }: { value: DerivedValue }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+interface FieldProps {
+  value: DerivedValue;
+  labels: Map<string, string>;
+  onOverride: (field: string, change: FieldOverride | undefined) => void;
+}
+
+/** One field: its own override form state, so fields never share input values. */
+function FieldCard({ value, labels, onOverride }: FieldProps) {
+  const [overrideValue, setOverrideValue] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const headingId = `field-${value.field}`;
+
+  function submit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const n = Number(overrideValue);
+    if (!Number.isInteger(n)) return;
+    onOverride(value.field, { field: value.field, value: n, reason: overrideReason || undefined });
+    setOverrideValue('');
+    setOverrideReason('');
+  }
+
+  return (
+    <section aria-labelledby={headingId} className="field-card">
+      <details>
+        <summary>
+          <h4 id={headingId}>
+            {value.label}: <span className="derived">{display(value, value.value)}</span>
+            {value.override && <span className="override-label"> overridden (calculated {display(value, value.computedValue)})</span>}
+            {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
+          </h4>
+        </summary>
+        <TraceTable value={value} labels={labels} />
+        {value.warnings.length > 0 && (
+          <ul className="warnings" aria-label={`${value.label} warnings`}>
+            {value.warnings.map((w) => (
+              <li key={`${w.code}-${w.content?.revisionId ?? ''}-${w.effectId ?? ''}`}>{w.message}</li>
+            ))}
+          </ul>
+        )}
+        <form className="override" onSubmit={submit}>
+          <label className="field">
+            Override value
+            <input type="number" value={overrideValue} onChange={(e) => setOverrideValue(e.target.value)} required />
+          </label>
+          <label className="field">
+            Reason (optional)
+            <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+          </label>
+          <button type="submit">Apply override</button>
+          {value.override && (
+            <button type="button" onClick={() => onOverride(value.field, undefined)}>
+              Remove override
+            </button>
+          )}
+        </form>
+      </details>
+    </section>
   );
 }
 
@@ -58,24 +130,15 @@ interface Props {
 
 export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
   const { character, sheet } = view;
-  const [overrideValue, setOverrideValue] = useState('');
-  const [overrideReason, setOverrideReason] = useState('');
+  const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
 
-  async function save(overrides: typeof character.overrides) {
+  async function changeOverride(field: string, change: FieldOverride | undefined) {
+    const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
     try {
       onChanged(await client.saveCharacter({ ...character, overrides }));
     } catch (error) {
       onError(error);
     }
-  }
-
-  async function applyOverride(event: SubmitEvent<HTMLFormElement>, field: string) {
-    event.preventDefault();
-    const value = Number(overrideValue);
-    if (!Number.isInteger(value)) return;
-    await save([...character.overrides.filter((o) => o.field !== field), { field, value, reason: overrideReason || undefined }]);
-    setOverrideValue('');
-    setOverrideReason('');
   }
 
   async function exportCharacter() {
@@ -102,48 +165,24 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
       <header className="sheet-header">
         <h2 id="sheet-heading">{character.name}</h2>
         <span className="tag">{character.rulesFamily}</span>
+        <span className="tag">Level {character.level}</span>
         <button type="button" onClick={exportCharacter}>
           Export package
         </button>
       </header>
 
-      {sheet.fields.map((field) => (
-        <section key={field.field} aria-labelledby={`field-${field.field}`}>
-          <h3 id={`field-${field.field}`}>
-            {field.label}: <output className="derived">{signed(field.value)}</output>
-            {field.override && (
-              <span className="override-label">
-                {' '}
-                overridden (calculated {signed(field.computedValue)})
-              </span>
-            )}
-          </h3>
-          <TraceTable value={field} />
-          {field.warnings.length > 0 && (
-            <ul className="warnings" aria-label={`${field.label} warnings`}>
-              {field.warnings.map((w) => (
-                <li key={`${w.code}-${w.effectId ?? ''}`}>{w.message}</li>
-              ))}
-            </ul>
-          )}
-          <form className="override" onSubmit={(e) => applyOverride(e, field.field)}>
-            <label className="field">
-              Override value
-              <input type="number" value={overrideValue} onChange={(e) => setOverrideValue(e.target.value)} required />
-            </label>
-            <label className="field">
-              Reason (optional)
-              <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
-            </label>
-            <button type="submit">Apply override</button>
-            {field.override && (
-              <button type="button" onClick={() => save(character.overrides.filter((o) => o.field !== field.field))}>
-                Remove override
-              </button>
-            )}
-          </form>
-        </section>
-      ))}
+      {groups.map((group) => {
+        const fields = sheet.fields.filter((f) => group.match(f.field));
+        if (fields.length === 0) return null;
+        return (
+          <section key={group.title} aria-label={group.title} className="field-group">
+            <h3>{group.title}</h3>
+            {fields.map((field) => (
+              <FieldCard key={field.field} value={field} labels={labels} onOverride={changeOverride} />
+            ))}
+          </section>
+        );
+      })}
 
       {sheet.diagnostics.length > 0 && (
         <section aria-labelledby="diagnostics-heading">

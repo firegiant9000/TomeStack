@@ -180,7 +180,8 @@ public partial class MainWindow : Window
             return (false, "data-check-failed:character.create");
         var result = created.RootElement.GetProperty("result");
         var id = result.GetProperty("character").GetProperty("id").GetString();
-        var initiative = result.GetProperty("sheet").GetProperty("fields")[0].GetProperty("value").GetInt32();
+        var initiative = result.GetProperty("sheet").GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("field").GetString() == "initiative").GetProperty("value").GetInt32();
         if (initiative != 3)
             return (false, $"data-check-failed:initiative={initiative}");
 

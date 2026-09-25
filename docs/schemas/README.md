@@ -7,7 +7,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `source.v1.schema.json` | `SourceRecord` (SPEC S-01) | none (v1) |
 | `content-revision.v1.schema.json` | `ContentRevision` with M0 string-typed effects (ADR-002). Read and upcast; no longer written | `schemaVersion` |
 | `content-revision.v2.schema.json` | `ContentRevision` with typed effects (ADR-003). Current | `schemaVersion` |
-| `character.v1.schema.json` | `Character`: choices, pins and overrides | `schemaVersion` |
+| `character.v1.schema.json` | `Character`: choices, pins and overrides. Read and upcast | `schemaVersion` |
+| `character.v2.schema.json` | Adds `level`. Current | `schemaVersion` |
 | `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Current | `formatVersion` |
 

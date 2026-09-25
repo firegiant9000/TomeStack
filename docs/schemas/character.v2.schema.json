@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/character.v2.schema.json",
+  "title": "TomeStack character (schemaVersion 2)",
+  "description": "Stored character choices, pins and overrides. Derived values are never stored. Unknown properties round-trip. v2 adds level; v1 is read as level 1.",
+  "type": "object",
+  "required": ["id", "schemaVersion", "name", "rulesFamily", "baseAbilities"],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": { "const": 2 },
+    "name": { "type": "string", "minLength": 1 },
+    "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
+    "level": { "type": "integer", "minimum": 1, "maximum": 20 },
+    "campaignId": { "$ref": "#/$defs/uuid" },
+    "baseAbilities": {
+      "type": "object",
+      "required": ["str", "dex", "con", "int", "wis", "cha"],
+      "additionalProperties": false,
+      "properties": {
+        "str": { "$ref": "#/$defs/score" },
+        "dex": { "$ref": "#/$defs/score" },
+        "con": { "$ref": "#/$defs/score" },
+        "int": { "$ref": "#/$defs/score" },
+        "wis": { "$ref": "#/$defs/score" },
+        "cha": { "$ref": "#/$defs/score" }
+      }
+    },
+    "pins": { "type": "array", "items": { "$ref": "#/$defs/contentReference" } },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "field": { "type": "string", "minLength": 1 },
+          "value": { "type": "integer" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "score": { "type": "integer", "minimum": 1, "maximum": 30 },
+    "contentReference": {
+      "type": "object",
+      "required": ["contentId", "revisionId"],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": { "$ref": "#/$defs/uuid" },
+        "revisionId": { "$ref": "#/$defs/uuid" }
+      }
+    }
+  }
+}

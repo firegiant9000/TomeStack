@@ -68,7 +68,12 @@ button.link[aria-current='page'] { font-weight: 700; }
 .sheet-header { display: flex; gap: 0.75rem; align-items: center; }
 .sheet-header h2 { margin: 0; }
 .sheet-header button { margin-left: auto; }
-.derived { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.derived { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.field-group h3 { margin: 0.75rem 0 0.25rem; }
+.field-card details { border-bottom: 1px solid var(--line); padding: 0.25rem 0; }
+.field-card summary { cursor: pointer; }
+.field-card summary h4 { display: inline; margin: 0; font-size: 1rem; font-weight: 600; }
+.warning-count { color: var(--warn); font-size: 0.9rem; }
 .override-label { font-size: 0.9rem; color: var(--warn); font-weight: 600; }
 .override { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-top: 0.75rem; }
 

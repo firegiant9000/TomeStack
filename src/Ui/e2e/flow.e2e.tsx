@@ -40,16 +40,18 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 
   // Sheet with a source-aware trace: Dex 14 + 2 (Fixture Quickfoot, species under 2014 rules) = 16 -> +3
   const sheet = await screen.findByRole('article', { name: 'E2E Pell' });
-  const initiative = within(sheet).getByRole('heading', { name: /Initiative/ });
-  expect(initiative.textContent).toContain('+3');
-  const trace = within(sheet).getByRole('table', { name: 'How initiative is calculated' });
+  const initiative = within(sheet).getByRole('region', { name: /^Initiative:/ });
+  expect(within(initiative).getByRole('heading').textContent).toContain('+3');
+  expect(within(sheet).getByRole('heading', { name: /^Dexterity score: 16/ })).toBeTruthy();
+  await user.click(within(initiative).getByRole('heading')); // expand the field (summary)
+  const trace = within(initiative).getByRole('table', { name: 'How initiative is calculated' });
   expect(within(trace).getByText(/TomeStack Fixtures: 2014 Family, p\. 1/)).toBeTruthy();
 
   // Override (labeled, keeps the computed value)
-  await user.type(within(sheet).getByRole('spinbutton', { name: 'Override value' }), '9');
-  await user.type(within(sheet).getByRole('textbox', { name: 'Reason (optional)' }), 'Table ruling');
-  await user.click(within(sheet).getByRole('button', { name: 'Apply override' }));
-  await waitFor(() => expect(screen.getByRole('heading', { name: /Initiative/ }).textContent).toContain('overridden (calculated +3)'));
+  await user.type(within(initiative).getByRole('spinbutton', { name: 'Override value' }), '9');
+  await user.type(within(initiative).getByRole('textbox', { name: 'Reason (optional)' }), 'Table ruling');
+  await user.click(within(initiative).getByRole('button', { name: 'Apply override' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await user.click(screen.getByRole('button', { name: 'Export package' }));
@@ -64,12 +66,11 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
 
-  // (<output> for derived values also has the implicit role "status", so find the message by its text.)
-  const status = await screen.findByText(/^Imported:/);
+  const status = await screen.findByRole('status');
   expect(status.getAttribute('role')).toBe('status');
   expect(status.textContent).toMatch(/1 replaced/);
   expect(status.textContent).toMatch(/backed up to backups\/pre-import-/);
-  await waitFor(() => expect(screen.getByRole('heading', { name: /Initiative/ }).textContent).toContain('overridden (calculated +3)'));
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

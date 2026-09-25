@@ -24,9 +24,10 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 7 | Errors are announced and described in text | 3.3.1, 4.1.3 | ✅ errors use `role="alert"`, status messages `role="status"` |
 | 8 | Status after import stays visible | 4.1.3 | 🔧 The import summary, including the backup location, was cleared immediately by opening the character. Found by the e2e test |
 | 9 | Focus moves sensibly after navigation (create → sheet, import → sheet) | 2.4.3 | ⚠️ Focus falls back to `body` when the form unmounts. Move focus to the sheet heading |
-| 10 | Derived values are not noisy for screen readers | 4.1.3 | ⚠️ `<output>` in each field heading has the implicit role `status` (a live region). Every recalculation may be announced. Decide on this deliberately once there are more fields |
+| 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 21 fields |
 | 11 | No action is silently ignored | 3.2.x | ⚠️ "New character" does nothing if clicked before `app.info` has loaded. Disable it until ready, or render the form with a loading state |
-| 12 | Override forms are independent per field | 3.3.2 | ⚠️ All fields' override inputs share one state. That is harmless with one field, but wrong now that the sheet shows several fields (item 11) |
+| 12 | Override forms are independent per field | 3.3.2 | 🔧 Each field card has its own override state (item 11) |
+| 17 | Expandable field cards work by keyboard and name their state | 2.1.1, 4.1.2 | ☐ Native `<details>`/`<summary>` with a heading inside the summary. Check Narrator's expanded/collapsed announcement |
 | 13 | Tables have captions and header cells | 1.3.1 | ✅ trace, package and diff tables have `caption` and `th scope` |
 | 14 | Colour is not the only signal | 1.4.1 | ✅ overrides say "overridden (calculated N)"; conflicts and warnings are text |
 | 15 | Screen reader pass (Narrator) on the sheet and the import preview | 4.1.2 | ☐ |

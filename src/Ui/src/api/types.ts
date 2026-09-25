@@ -30,6 +30,7 @@ export interface Character {
   name: string;
   rulesFamily: RulesFamilyId;
   campaignId?: string;
+  level: number;
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
@@ -58,13 +59,21 @@ export interface TraceOrigin {
   page?: PageRef;
 }
 
+export interface TraceInput {
+  name: string;
+  value: number;
+}
+
 export interface TraceEntry {
   order: number;
-  operation: 'base' | 'add' | 'derive' | 'override' | string;
+  operation: 'base' | 'add' | 'derive' | 'replace' | 'set' | 'ignored' | 'override' | string;
   description: string;
   amount?: number;
   result: number;
   origin: TraceOrigin;
+  /** The field this step belongs to; a field's trace includes the steps of the fields it reads. */
+  field?: string;
+  inputs?: TraceInput[];
 }
 
 export interface DerivedValue {
@@ -76,6 +85,7 @@ export interface DerivedValue {
   warnings: Diagnostic[];
   automation: AutomationStatus;
   override?: FieldOverride;
+  units: 'score' | 'modifier' | 'bonus' | string;
 }
 
 export interface CharacterSheet {

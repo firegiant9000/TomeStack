@@ -70,9 +70,10 @@ public class PersistenceAndDispatchTests
 
         Assert.Equal("7", response.GetProperty("id").GetString());
         Assert.True(response.GetProperty("ok").GetBoolean());
-        var initiative = response.GetProperty("result").GetProperty("sheet").GetProperty("fields")[0];
-        Assert.Equal("initiative", initiative.GetProperty("field").GetString());
+        var initiative = response.GetProperty("result").GetProperty("sheet").GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("field").GetString() == "initiative");
         Assert.Equal(3, initiative.GetProperty("value").GetInt32());
+        Assert.Equal("modifier", initiative.GetProperty("units").GetString());
         Assert.Equal("content", initiative.GetProperty("trace")[1].GetProperty("origin").GetProperty("kind").GetString());
     }
 
