@@ -11,7 +11,8 @@ npm test --prefix src/Ui
 npm run build --prefix src/Ui      # must precede the .NET build; the shell copies src/Ui/dist
 dotnet build TomeStack.slnx -c Release
 dotnet test TomeStack.slnx -c Release
-src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-report <path>   # Windows GUI smoke
+npm run test:e2e --prefix src/Ui   # after the .NET build: UI flow (Vitest + Testing Library) against the real DevHost
+scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # Windows GUI smoke (checks the report)
 ```
 
 ## Invariants
@@ -20,7 +21,7 @@ src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-repor
 - Keep `srd-5.1` and `srd-5.2.1` separate. Encode differences as fields on `RulesFamilyPolicy`, never by name.
 - Only `published` revisions affect calculations. Published revisions are insert-only; change content by adding a new revision.
 - Imported content (PDF candidates, packages) never executes code and never becomes active without review.
-- UI components call `src/Ui/src/api/client.ts` only. Only `transport.ts` may use `fetch` (lint-enforced).
+- UI components call `src/Ui/src/api/client.ts` only. Only `transport.ts` (and the e2e DevHost harness) may use `fetch` (lint-enforced).
 - The shipped app opens no listening socket (ADR-006). `src/DevHost` is dev-only.
 - Fixtures must be original. Add no SRD or third-party rules text without an attribution/license review (SPEC Q-03).
 - The repo is **public** on GitHub.

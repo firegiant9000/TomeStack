@@ -130,6 +130,10 @@ export function App() {
             onCancel={() => setScreen({ kind: 'empty' })}
             onApplied={async (result) => {
               await refresh();
+              // Open first: open() clears the message, which used to hide this summary and the backup location.
+              const first = result.characters[0];
+              if (first) await open(first);
+              else setScreen({ kind: 'empty' });
               setMessage({
                 tone: 'status',
                 text:
@@ -138,9 +142,6 @@ export function App() {
                     ? ` The replaced copy was backed up to ${result.backupFile} in your data folder; import that file to restore it.`
                     : ''),
               });
-              const first = result.characters[0];
-              if (first) await open(first);
-              else setScreen({ kind: 'empty' });
             }}
           />
         )}

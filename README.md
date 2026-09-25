@@ -39,6 +39,7 @@ npm test --prefix src/Ui
 npm run build --prefix src/Ui          # typecheck + production bundle -> src/Ui/dist
 dotnet build TomeStack.slnx -c Release
 dotnet test TomeStack.slnx -c Release
+npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs the Release build above)
 ```
 
 CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/workflows/ci.yml)).

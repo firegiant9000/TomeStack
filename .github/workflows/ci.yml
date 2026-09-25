@@ -48,6 +48,11 @@ jobs:
       - name: .NET tests
         run: dotnet test TomeStack.slnx -c Release --no-build
 
+      # Starts the Release DevHost on a free loopback port with a throwaway data folder; no GUI needed.
+      - name: UI flow against DevHost (e2e)
+        working-directory: src/Ui
+        run: npm run test:e2e
+
       # Evidence for ADR-006/ADR-008: the runner image lists Edge but not the WebView2 Runtime, and whether a
       # desktop session is available is unproven. Record what is there before trying the GUI smoke.
       - name: Probe WebView2 Runtime (evidence)

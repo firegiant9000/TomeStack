@@ -68,13 +68,14 @@ export function createBridgeTransport(bridge: WebViewBridge, timeoutMs = 30_000)
     });
 }
 
-export function createHttpTransport(endpoint = '/api/command'): Transport {
+/** `headers` lets tests call DevHost directly with its token; in the browser the Vite proxy adds it. */
+export function createHttpTransport(endpoint = '/api/command', headers: Record<string, string> = {}): Transport {
   let nextId = 1;
   return async (command, payload) => {
     const id = String(nextId++);
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, command, payload }),
     });
     if (!response.ok) {

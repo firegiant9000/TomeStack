@@ -18,7 +18,8 @@ export default defineConfig([
     },
   },
   {
-    files: ['src/api/transport.ts'],
+    // The transport, and the e2e harness that health-checks DevHost from Node, are the only fetch users.
+    files: ['src/api/transport.ts', 'e2e/devhost.setup.ts'],
     rules: { 'no-restricted-globals': 'off' },
   },
 ]);

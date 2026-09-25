@@ -5,9 +5,10 @@
   --fg: CanvasText;
   --muted: color-mix(in srgb, CanvasText 65%, Canvas);
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
-  --accent: #2f5fb3;
-  --warn: #9a5b00;
-  --error: #b3261e;
+  /* Text contrast on Canvas: light 6.2 / 5.4 / 6.5, dark 8.9 / 10.1 / 7.8 (docs/features/accessibility-checklist.md). */
+  --accent: light-dark(#2f5fb3, #8ab4f8);
+  --warn: light-dark(#9a5b00, #f0b35a);
+  --error: light-dark(#b3261e, #f28b82);
   font-family: system-ui, 'Segoe UI', sans-serif;
   font-size: 100%;
   line-height: 1.45;
