@@ -73,6 +73,6 @@ An earlier draft of `offline-check.ps1` also disabled network adapters from the 
   - Windows 10 (support level is an open owner decision);
   - a standard (non-admin) user account;
   - behavior with the Evergreen Standalone Installer offline.
-- The smoke on GitHub-hosted runners. It is wired into CI as non-blocking until it passes there.
+- The smoke on GitHub-hosted runners. **Decision (2026-09-25): it stays non-blocking.** Evidence: the `windows-2025` image README lists Microsoft Edge 153 and .NET SDK 10.0.x but **not** the WebView2 Runtime. Windows Server does not guarantee the runtime alongside Edge, and whether the job has a desktop session is undocumented. No hosted run has been observed yet (nothing has been pushed). CI now probes the runtime from the registry, logs the session, runs `scripts/smoke.ps1` and uploads the report. Promote the smoke to blocking after three consecutive green hosted runs. If the runtime is missing, install the Evergreen Standalone Runtime in CI first.
 
 Supersedes: none. Updates LIVING_SPECS D06.
