@@ -30,7 +30,15 @@ public sealed record SourceRecord
 
     public DateTimeOffset? ImportedAt { get; init; }
     public string? Sha256 { get; init; }
+
+    /// <summary>
+    /// Obsolete machine-local path (M0/M1). Database migration v3 (ADR-005) moves it to an attachment record and keeps
+    /// the old value in <c>sources.legacy_pdf_ref</c>. Never exported.
+    /// </summary>
     public string? PdfRef { get; init; }
+
+    /// <summary>ADR-005 (M2 item 6): the source's PDF attachment on this machine. Machine-local; never exported.</summary>
+    public Guid? AttachmentId { get; init; }
 }
 
 public sealed record PageRef(int Start, int? End = null)

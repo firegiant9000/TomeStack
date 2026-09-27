@@ -180,7 +180,18 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
   );
 }
 
-export function FeaturesPanel({ view, roll }: { view: CharacterView; roll: (target: RollTarget) => void }) {
+export function FeaturesPanel({
+  view,
+  roll,
+  pdfSources,
+  openPage,
+}: {
+  view: CharacterView;
+  roll: (target: RollTarget) => void;
+  /** Sources with an available PDF (ADR-005); their cited pages can be opened. */
+  pdfSources: ReadonlySet<string>;
+  openPage: (sourceId: string, page: number) => void;
+}) {
   const features = view.sheet.features ?? [];
   const [critical, setCritical] = useState(false);
   if (features.length === 0) return null;
@@ -193,14 +204,30 @@ export function FeaturesPanel({ view, roll }: { view: CharacterView; roll: (targ
       </label>
       <ul className="features">
         {features.map((feature) => (
-          <FeatureItem key={feature.content.revisionId} feature={feature} critical={critical} roll={roll} />
+          <FeatureItem
+            key={feature.content.revisionId}
+            feature={feature}
+            critical={critical}
+            roll={roll}
+            openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
+          />
         ))}
       </ul>
     </section>
   );
 }
 
-function FeatureItem({ feature, critical, roll }: { feature: FeatureEntry; critical: boolean; roll: (target: RollTarget) => void }) {
+function FeatureItem({
+  feature,
+  critical,
+  roll,
+  openPage,
+}: {
+  feature: FeatureEntry;
+  critical: boolean;
+  roll: (target: RollTarget) => void;
+  openPage?: (sourceId: string, page: number) => void;
+}) {
   const rolls = feature.effects.filter((e) => e.type === 'roll');
   const texts = feature.effects.filter((e) => e.text);
   return (
@@ -238,6 +265,11 @@ function FeatureItem({ feature, critical, roll }: { feature: FeatureEntry; criti
           Roll {effect.label ?? effect.id} ({effect.dice})
         </button>
       ))}
+      {openPage && feature.origin.sourceId && feature.origin.page && (
+        <button type="button" onClick={() => openPage(feature.origin.sourceId!, feature.origin.page!.start)}>
+          Open {feature.name}, {pageText(feature.origin.page)}
+        </button>
+      )}
     </li>
   );
 }

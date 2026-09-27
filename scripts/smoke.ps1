@@ -3,8 +3,9 @@
   Runs TomeStack.exe --smoke and checks its JSON report.
 .DESCRIPTION
   The smoke loads the bundled UI over the WebView2 virtual host, round-trips app.info and character.list over the
-  message bridge, then creates a fixture character, exports it and previews the package (M0 exit gate). It fails
-  if the UI attempted any network request. Exit code: 0 pass, 1 fail.
+  message bridge, then creates a fixture character, exports it and previews the package (M0 exit gate). Since M2
+  item 6 it also attaches a generated PDF to a throwaway homebrew source and opens page 2 in the offline PDF viewer
+  window (ADR-005). It fails if the UI or the viewer attempted any network request. Exit code: 0 pass, 1 fail.
 .EXAMPLE
   scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 .EXAMPLE

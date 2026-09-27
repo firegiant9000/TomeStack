@@ -352,6 +352,54 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
 });
 
+it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: a homebrew source, a published feat citing page 7, and a character using it.
+  const source = await client.createHomebrewSource('E2E Book', ['srd-5.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Cited Feat',
+    rulesFamilies: ['srd-5.1'],
+    provenance: { sourceId: source.id, page: { start: 7 } },
+    status: 'draft',
+    summary: 'A feat that cites page 7.',
+    effects: [],
+  });
+  const feat = (await client.publish(draft)).published;
+  await client.createCharacter({ name: 'E2E Reader', rulesFamily: 'srd-5.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const book = await screen.findByRole('listitem', { name: 'E2E Book' });
+  expect(within(book).getByText('No PDF attached.')).toBeTruthy();
+
+  // DevHost has no native Open dialog, so the browser file picker sends the bytes (a managed copy).
+  await user.click(within(book).getByRole('button', { name: 'Attach PDF…' }));
+  const pdf = new File([new TextEncoder().encode('%PDF-1.4\n% e2e\n%%EOF\n')], 'e2e-book.pdf', { type: 'application/pdf' });
+  await user.upload(screen.getByLabelText('PDF file'), pdf);
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy());
+
+  // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
+  await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
+  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' });
+  await user.click(open);
+  expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
+
+  // Removing says what breaks, and keeps the content.
+  await user.click(screen.getByRole('button', { name: 'Sources' }));
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Book' })).getByRole('button', { name: 'Remove PDF…' }));
+  const confirm = await screen.findByRole('alertdialog', { name: 'Remove e2e-book.pdf?' });
+  expect(confirm.textContent).toMatch(/1 entry cites pages in it \(E2E Cited Feat\)/);
+  await user.click(within(confirm).getByRole('button', { name: 'Remove PDF' }));
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText('No PDF attached.')).toBeTruthy());
+  await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
+  await screen.findByRole('article', { name: 'E2E Reader' });
+  expect(screen.queryByRole('button', { name: 'Open E2E Cited Feat, p. 7' })).toBeNull();
+  expect(screen.getByText('E2E Cited Feat')).toBeTruthy();
+});
+
 it('reaches the primary actions by keyboard alone', async () => {
   const user = userEvent.setup();
   render(<App />);

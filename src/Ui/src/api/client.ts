@@ -2,6 +2,9 @@ import { detectTransport, type CallOptions, type Transport } from './transport';
 import type {
   AffectedCharacter,
   AppInfo,
+  AttachmentInfo,
+  DetachPreview,
+  OpenPageOutcome,
   ContentRevision,
   PublishResult,
   SourceRecord,
@@ -48,6 +51,22 @@ export function createClient(transport: Transport) {
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
+    /** The source's PDF (no path), or `{ attached: false }`. */
+    attachment: async (sourceId: string) => {
+      const result = await call<AttachmentInfo | { attached: false }>('source.attachment', { sourceId });
+      return 'attachmentId' in result ? result : undefined;
+    },
+    /** Native Open dialog in the shell (fails with `unsupported` elsewhere). No timeout: it waits for the dialog. */
+    attachPdf: (sourceId: string, mode: 'managed' | 'linked') =>
+      call<{ attached: boolean; attachment?: AttachmentInfo }>('source.attachPdf', { sourceId, mode }, { timeoutMs: null }),
+    /** Browser development: the chosen file's bytes, copied into the managed library. */
+    attachPdfData: (sourceId: string, fileName: string, base64: string) =>
+      call<AttachmentInfo>('source.attachPdfData', { sourceId, fileName, base64 }, { timeoutMs: null }),
+    detachPreview: (sourceId: string) => call<DetachPreview>('source.detachPreview', { sourceId }),
+    /** Removes the PDF after the preview was shown; content stays (SPEC S-04). */
+    detach: (sourceId: string) => call<{ detached: boolean }>('source.detach', { sourceId, confirm: true }),
+    /** Opens the cited page in the shell's offline PDF viewer (fails with `unsupported` outside the desktop app). */
+    openPage: (sourceId: string, page: number) => call<OpenPageOutcome>('source.openPage', { sourceId, page }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),

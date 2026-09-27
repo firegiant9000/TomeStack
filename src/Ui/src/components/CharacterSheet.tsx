@@ -248,6 +248,31 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
   const [resting, setResting] = useState(false);
+  const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
+
+  // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
+  const citedSources = [...new Set((sheet.features ?? []).filter((f) => f.origin.page && f.origin.sourceId).map((f) => f.origin.sourceId!))].sort().join(',');
+  useEffect(() => {
+    if (!citedSources) return;
+    let current = true;
+    Promise.all(citedSources.split(',').map(async (id) => [id, await client.attachment(id)] as const))
+      .then((found) => {
+        if (current) setPdfSources(new Set(found.filter(([, a]) => a?.status === 'available' || a?.status === 'changed').map(([id]) => id)));
+      })
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+  }, [citedSources, onError]);
+
+  async function openPage(sourceId: string, page: number) {
+    try {
+      const outcome = await client.openPage(sourceId, page);
+      onStatus(outcome.warnings.length > 0 ? outcome.warnings.map((w) => w.message).join(' ') : `Opened page ${outcome.page}.`);
+    } catch (error) {
+      onError(error instanceof TomeStackError && error.code === 'unsupported' ? new Error('Opening a PDF page needs the TomeStack desktop app.') : error);
+    }
+  }
 
   async function changeOverride(field: string, change: FieldOverride | undefined) {
     const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
@@ -317,7 +342,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
         <RollResult record={lastRoll} resources={sheet.resources ?? []} act={act} />
       </section>
-      <FeaturesPanel view={view} roll={roll} />
+      <FeaturesPanel view={view} roll={roll} pdfSources={pdfSources} openPage={openPage} />
 
       {groups.map((group) => {
         const fields = sheet.fields.filter((f) => group.match(f.field));

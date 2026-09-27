@@ -156,7 +156,9 @@ public partial class MainWindow : Window
             try
             {
                 var (ok, detail) = RunSmokeDataCheck();
-                FinishSmoke(ok, detail);
+                // The PDF viewer check finishes the smoke when the viewer has loaded (or failed); see OpenPdfViewer.
+                if (!ok || !_awaitingViewer)
+                    FinishSmoke(ok, detail);
             }
             catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or JsonException)
             {
@@ -199,7 +201,47 @@ public partial class MainWindow : Window
             return (false, "data-check-failed:package.preview");
 
         _smokeCommands.AddRange(["character.create", "package.export", "package.preview"]);
+
+        // M2 item 6 (ADR-005, SPEC S-04): a managed PDF opens at a cited page in the offline viewer. The smoke attaches a
+        // generated two-page PDF to a throwaway homebrew source and opens page 2; the viewer's load finishes the smoke.
+        using var source = Command("source.createHomebrew", new { title = "Smoke PDF", rulesFamilies = new[] { "srd-5.1" } });
+        if (!source.RootElement.GetProperty("ok").GetBoolean())
+            return (false, "data-check-failed:source.createHomebrew");
+        var sourceId = source.RootElement.GetProperty("result").GetProperty("id").GetString();
+        using var attached = Command("source.attachPdfData", new { sourceId, fileName = "smoke.pdf", base64 = Convert.ToBase64String(SmokePdf.Create(pages: 2)) });
+        if (!attached.RootElement.GetProperty("ok").GetBoolean())
+            return (false, "data-check-failed:source.attachPdfData");
+        _awaitingViewer = true;
+        using var opened = Command("source.openPage", new { sourceId, page = 2 });
+        if (!opened.RootElement.GetProperty("ok").GetBoolean() || !opened.RootElement.GetProperty("result").GetProperty("opened").GetBoolean())
+        {
+            _awaitingViewer = false;
+            return (false, "data-check-failed:source.openPage");
+        }
+        _smokeCommands.AddRange(["source.createHomebrew", "source.attachPdfData", "source.openPage"]);
         return (true, "ok");
+    }
+
+    private bool _awaitingViewer;
+
+    /// <summary>ADR-005, SPEC S-04: opens a PDF at a page in its own offline viewer window. Called on the UI thread.</summary>
+    public bool OpenPdfViewer(string path, int page, string title)
+    {
+        if (WebView.CoreWebView2?.Environment is not { } environment)
+            return false;
+        Action<bool>? navigated = _options.Smoke
+            ? ok =>
+            {
+                if (!_awaitingViewer)
+                    return;
+                _awaitingViewer = false;
+                _smokeCommands.Add("pdf.viewer");
+                FinishSmoke(ok, ok ? "ok" : "pdf-viewer-failed");
+            }
+            : null;
+        var viewer = new PdfViewerWindow(environment, path, page, title, uri => _blockedRequests.Add(uri), navigated) { Owner = this };
+        viewer.Show();
+        return true;
     }
 
     private JsonDocument Command(string command, object payload) =>

@@ -6,12 +6,14 @@ import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilde
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
+import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
 
 type Screen =
   | { kind: 'empty' }
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio' }
+  | { kind: 'sources' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -96,6 +98,16 @@ export function App() {
           >
             Homebrew studio
           </button>
+          <button
+            type="button"
+            aria-current={screen.kind === 'sources' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'sources' });
+            }}
+          >
+            Sources
+          </button>
         </div>
         <ul className="character-list">
           {characters.map((c) => (
@@ -155,6 +167,7 @@ export function App() {
             }}
           />
         )}
+        {screen.kind === 'sources' && <SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
         {screen.kind === 'sheet' && (
           <CharacterSheet
             key={screen.view.character.id}

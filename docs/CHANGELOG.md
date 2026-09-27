@@ -15,12 +15,15 @@
 
 - **Homebrew studio (M2 item 5; SPEC I-04, I-06; `docs/features/homebrew-studio.md`):** create a personal homebrew source (not shareable by default), then author subclasses, features, feats and items with guided controls: modifiers, resources, recoveries, rolls and limited-use actions, granted features, armor, and reference-only text. Check, save drafts and publish. A homebrew subclass can be offered in an SRD class's subclass choice (content schema v4 `extendsChoice`). After publishing, the studio lists the characters on an older revision and opens a review (rule changes, values that change, overrides, open choices) with "Apply update". New commands: `source.list`, `source.createHomebrew`, `content.bySource`. `app.info` lists the calculated fields.
 
+- **PDF attachments and page navigation (M2 item 6; ADR-005; SPEC S-04; `docs/features/pdf-attachments.md`):** a Sources screen attaches a PDF to any source. It is copied into the data folder by default (read-only, stored once per content hash), or linked where it is with a hash check on open. A feature that cites a page gets "Open …, p. N", which opens that page in the desktop app's offline PDF viewer window. Removing a PDF first says which entries cite it, and keeps all content. Exports never include PDFs or attachment ids. `--smoke` now also opens a generated PDF in the viewer, offline.
+
 ### Changed
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
 
 ### Migration
 
+- **Database schema 3** (ADR-005): `tomestack.db.v2.bak` is written first. The migration adds the attachments table and turns each source's `pdfRef` into an attachment: a managed copy when the file is a readable PDF, otherwise linked and shown as missing. The old value stays in `sources.legacy_pdf_ref`. Opening a schema-3 data folder with an older build is refused with "update TomeStack", and nothing is changed.
 - **Content schema v4** (`docs/schemas/content-revision.v4.schema.json`) adds `extendsChoice`. New revisions are written as v4. v2 and v3 revisions, including the bundled SRD packs, keep their version and hashes, so there is no database migration. Older builds refuse v4 revisions.
 - **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play` and `equipment`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
 

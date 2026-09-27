@@ -46,7 +46,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var plan = Plan(characterIds, purpose);
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in plan.Sources)
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null })); // machine-local path; may name the user
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null, AttachmentId = null })); // machine-local; a path may name the user (ADR-005)
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         foreach (var character in plan.Characters)
@@ -190,7 +190,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
             {
                 // A PDF reference is machine-local; an import never adds, changes or removes one.
-                store.UpsertSource(source with { PdfRef = store.FindSource(source.Id)?.PdfRef });
+                store.UpsertSource(source with { PdfRef = store.FindSource(source.Id)?.PdfRef, AttachmentId = store.FindSource(source.Id)?.AttachmentId });
             }
             foreach (var revision in parsed.Revisions)
             {
@@ -472,7 +472,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters);
     }
 
-    /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c>.</summary>
+    /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>
     private static List<FieldChange> SourceChanges(SourceRecord local, SourceRecord imported)
     {
         var localNode = JsonSerializer.SerializeToNode(local, RulesJson.Compact)!.AsObject();
@@ -480,7 +480,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         return
         [
             .. localNode.Select(p => p.Key).Union(importedNode.Select(p => p.Key)).Order(StringComparer.Ordinal)
-                .Where(field => field != "pdfRef")
+                .Where(field => field is not ("pdfRef" or "attachmentId"))
                 .Select(field => new FieldChange(field, localNode[field]?.ToJsonString(), importedNode[field]?.ToJsonString()))
                 .Where(change => change.Local != change.Imported),
         ];

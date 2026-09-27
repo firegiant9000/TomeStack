@@ -500,6 +500,29 @@ export interface SourceRecord {
   redistributable: boolean;
 }
 
+/** ADR-005: a source's PDF, without any path. */
+export interface AttachmentInfo {
+  sourceId: string;
+  attachmentId: string;
+  originalFileName: string;
+  byteLength: number;
+  mode: 'managed' | 'linked';
+  status: 'available' | 'missing' | 'changed';
+}
+
+export interface DetachPreview {
+  sourceId: string;
+  originalFileName: string;
+  pageLinks: number;
+  contentNames: string[];
+}
+
+export interface OpenPageOutcome {
+  opened: boolean;
+  page: number;
+  warnings: Diagnostic[];
+}
+
 export interface StudioEntry {
   contentId: string;
   name: string;

@@ -31,7 +31,13 @@ internal sealed class TempApp : IDisposable
     public void Dispose()
     {
         App.Dispose();
-        try { System.IO.Directory.Delete(_directory, recursive: true); }
+        try
+        {
+            // Managed PDF copies are read-only (ADR-005); clear that so the folder can be deleted.
+            foreach (var file in System.IO.Directory.Exists(_directory) ? System.IO.Directory.GetFiles(_directory, "*", SearchOption.AllDirectories) : [])
+                File.SetAttributes(file, FileAttributes.Normal);
+            System.IO.Directory.Delete(_directory, recursive: true);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort on Windows file locks */ }
     }
 
