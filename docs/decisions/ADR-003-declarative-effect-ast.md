@@ -20,7 +20,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
 | `resource` | `resourceId`, `label`, `maximum` (formula) | sheet / commands (M2) |
 | `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
-| `restriction` | `field`, `minimum` | validation (M2) |
+| `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 

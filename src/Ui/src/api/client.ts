@@ -15,6 +15,7 @@ import type {
   RulesFamilyId,
   SaveOutcome,
   SourceChoice,
+  ValidationReport,
 } from './types';
 
 /** Typed application client. Components use this, never the transport or fetch directly. */
@@ -23,6 +24,8 @@ export function createClient(transport: Transport) {
   return {
     info: () => call<AppInfo>('app.info'),
     listContent: (rulesFamily: RulesFamilyId) => call<ContentOption[]>('content.list', { rulesFamily }),
+    /** Schema, reference, formula and cycle problems for a stored revision; writes nothing. */
+    validateContent: (reference: ContentReference) => call<ValidationReport>('content.validate', { reference }),
     listCharacters: () => call<CharacterSummary[]>('character.list'),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),

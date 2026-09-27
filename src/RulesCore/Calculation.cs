@@ -112,15 +112,89 @@ public static class CharacterCalculator
 
     public static IEnumerable<string> Fields => Specs.Select(s => s.Id);
 
+    public static bool IsField(string field) => SpecIndex.ContainsKey(field);
+
+    /// <summary>
+    /// Content validation (M1 item 3): the dependency cycles this revision's own modifiers would create with the base
+    /// field graph, as <c>effect.dependency-cycle</c> diagnostics. Effects that do not parse or target no field are
+    /// reported by <see cref="ContentValidator"/> instead, and are skipped here.
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> DependencyCycles(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        var source = new SourceRecord
+        {
+            Id = revision.Provenance.SourceId, Title = "", Publisher = "", RulesFamilies = revision.RulesFamilies,
+            EditionVersion = "", License = "", Redistributable = false,
+        };
+        var content = new ActiveContent(revision, source);
+        var modifiers = new List<Modifier>();
+        foreach (var effect in revision.Effects.OfType<ModifierEffect>())
+        {
+            if (SpecIndex.ContainsKey(effect.Target) && Formula.TryParse(effect.Value, out var formula, out _))
+                modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
+        }
+        var diagnostics = new List<Diagnostic>();
+        RemoveCycles(modifiers, diagnostics, Specs.ToDictionary(s => s.Id, _ => new List<Diagnostic>(), StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Calculates the sheet. Content with <c>restriction</c> effects (prerequisites such as "Strength 13 or higher") is
+    /// checked first against the sheet calculated without that content, so content cannot qualify itself (a feat that
+    /// raises Strength does not meet its own Strength prerequisite). Content whose prerequisite is not met is left out,
+    /// with a <c>restriction.unmet</c> diagnostic scoped to it; everything else still calculates (SPEC C-03). Checks use
+    /// the displayed values, so a user override counts (SPEC C-06), and the trace shows it.
+    /// </summary>
     public static CharacterSheet Calculate(Character character, IContentCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(catalog);
 
+        var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>());
+        var unmet = new List<(ContentReference Content, Diagnostic Diagnostic)>();
+        foreach (var restricted in first.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsEvaluated)))
+        {
+            var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference });
+            foreach (var restriction in restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsEvaluated))
+            {
+                if (!SpecIndex.TryGetValue(restriction.Field, out var index))
+                {
+                    unmet.Add((restricted.Revision.Reference, new(
+                        "effect.unknown-target",
+                        $"'{restricted.Revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
+                        restricted.Revision.Reference, restriction.Id)));
+                    continue;
+                }
+                var actual = without.Sheet.Field(restriction.Field).Value;
+                if (actual < restriction.Minimum)
+                {
+                    unmet.Add((restricted.Revision.Reference, new(
+                        "restriction.unmet",
+                        $"'{restricted.Revision.Name}' requires {Specs[index].Label} {restriction.Minimum} or higher; this character has {actual} without it. Its effects are not applied.",
+                        restricted.Revision.Reference, restriction.Id)));
+                }
+            }
+        }
+        if (unmet.Count == 0)
+            return first.Sheet;
+
+        var final = Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet());
+        return final.Sheet with { Diagnostics = [.. unmet.Select(u => u.Diagnostic), .. final.Sheet.Diagnostics] };
+    }
+
+    private static bool IsEvaluated(RestrictionEffect restriction) =>
+        restriction.Automation == AutomationStatus.Automatic && restriction.Timing == EffectTiming.Always;
+
+    private sealed record Calculation(CharacterSheet Sheet, IReadOnlyList<ActiveContent> Active);
+
+    /// <param name="excluded">Revisions left out (restriction checks); anything they would grant or offer is left out with them.</param>
+    private static Calculation Calculate(Character character, IContentCatalog catalog, IReadOnlySet<ContentReference> excluded)
+    {
         var policy = RulesFamilies.Get(character.RulesFamily);
         var family = character.RulesFamily;
         var diagnostics = new List<Diagnostic>();
-        var resolved = ResolveActiveContent(character, catalog, policy, diagnostics);
+        var resolved = ResolveActiveContent(character, catalog, policy, diagnostics, excluded);
         var active = resolved.Active;
         var warnings = Specs.ToDictionary(s => s.Id, _ => new List<Diagnostic>(), StringComparer.Ordinal);
 
@@ -184,7 +258,7 @@ public static class CharacterCalculator
                 spec.Units);
         }).ToList();
 
-        return new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices);
+        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices), active);
     }
 
     // ---- content resolution ---------------------------------------------------------------------------------
@@ -215,7 +289,8 @@ public static class CharacterCalculator
     /// <c>level</c> applies from that class level (character level outside a class). Every revision is admitted once, so
     /// selections cannot loop. Cross-family use needs a recorded exception (B06), which only pins can have.
     /// </summary>
-    private static ResolvedContent ResolveActiveContent(Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics)
+    private static ResolvedContent ResolveActiveContent(
+        Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, IReadOnlySet<ContentReference> excluded)
     {
         var active = new List<ActiveContent>();
         var seen = new HashSet<ContentReference>();
@@ -227,6 +302,8 @@ public static class CharacterCalculator
 
         ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null, ContentRevision? chosenFrom = null)
         {
+            if (excluded.Contains(reference))
+                return null; // left out by a restriction check; the caller reports why
             var prefix = grantedBy is not null ? $"Granted by '{grantedBy.Name}': " : chosenFrom is not null ? $"Chosen from '{chosenFrom.Name}': " : "";
             var revision = catalog.FindRevision(reference);
             if (revision is null)

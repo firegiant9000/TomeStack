@@ -81,6 +81,18 @@ public sealed class TomeStackApp : IDisposable
         ];
     }
 
+    /// <summary>
+    /// M1 item 3: schema, reference, formula and cycle problems for one revision, before it is published. Validates a
+    /// stored revision (by reference) or an unsaved one (inline). Nothing is written.
+    /// </summary>
+    public ValidationReport ValidateContent(ContentReference? reference, ContentRevision? revision)
+    {
+        var target = revision
+            ?? (reference is not null ? _store.FindRevision(reference) : null)
+            ?? throw new AppValidationException([new("content.not-found", reference is null ? "Name a revision to validate." : $"Revision {reference.RevisionId} is not installed.", reference)]);
+        return ContentValidator.Validate(target, _store);
+    }
+
     public IReadOnlyList<CharacterSummary> ListCharacters() =>
         [.. _store.ListCharacters().Select(c => new CharacterSummary(c.Id, c.Name, c.RulesFamily, c.UpdatedAt))];
 

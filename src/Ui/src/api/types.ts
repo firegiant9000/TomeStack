@@ -265,6 +265,13 @@ export interface PackagePreview {
   warnings: Diagnostic[];
 }
 
+export interface ValidationReport {
+  revision: ContentReference;
+  errors: Diagnostic[];
+  warnings: Diagnostic[];
+  canPublish: boolean;
+}
+
 export interface ImportResult {
   added: number;
   replaced: number;

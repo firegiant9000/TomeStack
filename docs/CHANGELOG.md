@@ -37,6 +37,9 @@
   - **All 18 skills.**
 
   Original fixtures "Fixture Warden" and "Fixture Scholar" cover multiclass hit points and level gates. D04 (multiclass and spellcasting scope for MVP) is recorded in LIVING_SPECS.
+- **Restrictions and validation (M1 item 3; `docs/features/validation-and-restrictions.md`):**
+  - `restriction` effects are prerequisites. Content whose prerequisite is not met is not applied, with a `restriction.unmet` diagnostic scoped to it. Prerequisites are checked without the content itself, so a feat cannot qualify itself.
+  - `content.validate` (`ContentValidator`) reports schema, reference, formula and dependency-cycle problems for a stored or unsaved revision before publish. Errors block publishing; warnings do not.
 - **Choices (M1 item 4, SPEC C-01; `docs/features/choices.md`):** characters store selections for `choice` effects. Counts are enforced, and options must be listed and usable under the character's rules family. Every offered choice appears on the sheet, and unresolved ones are flagged ("Choices to make"). Chosen content becomes active with a "chosen from" trace; a chosen subclass follows its class level. `character.choose` records a validated selection. A feature chosen from a species or background follows that origin's ability-increase policy.
 - JSON Schemas for source, content revision, character and package manifest (v1, plus v2 for content revisions, characters and manifests) in `docs/schemas/`. A test validates every fixture and a real exported package against them.
 

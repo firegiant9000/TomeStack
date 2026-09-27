@@ -308,6 +308,22 @@
       "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 28 } },
       "status": "published",
       "effects": [{ "type": "modifier", "id": "wis", "operation": "bonus", "target": "ability.wis.score", "value": "1" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000025",
+      "revisionId": "5f1de000-0000-4000-8000-000000000025",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Fixture Iron Grip",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 29 } },
+      "status": "published",
+      "summary": "A test feat with a prerequisite (Strength 13 or higher) that also raises Strength, so it must not qualify itself.",
+      "effects": [
+        { "type": "restriction", "id": "grip-prerequisite", "field": "ability.str.score", "minimum": 13, "text": "Prerequisite: Strength 13 or higher." },
+        { "type": "modifier", "id": "grip-str", "operation": "bonus", "target": "ability.str.score", "value": "1" },
+        { "type": "modifier", "id": "grip-init", "operation": "bonus", "target": "initiative", "value": "1" }
+      ]
     }
   ]
 }

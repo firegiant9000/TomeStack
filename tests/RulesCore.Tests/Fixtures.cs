@@ -35,6 +35,7 @@ internal static class Fixtures
     public static readonly ContentReference CrossroadsStr = M1Ref(22);
     public static readonly ContentReference CrossroadsDex = M1Ref(23);
     public static readonly ContentReference CrossroadsWis2014 = M1Ref(24);
+    public static readonly ContentReference IronGrip = M1Ref(25);
 
     public static ContentPack Pack() => Load<ContentPack>("fixture-pack.json");
 

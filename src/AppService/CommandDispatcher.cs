@@ -19,7 +19,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "character.list", "character.get", "character.create", "character.save", "character.choose",
+        "app.info", "content.list", "content.validate", "character.list", "character.get", "character.create", "character.save", "character.choose",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -74,6 +74,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         "app.info" => app.GetInfo(),
         "content.list" => app.ListContent(Payload<RulesFamilyPayload>(payload).RulesFamily),
+        "content.validate" => Validate(Payload<ContentPayload>(payload)),
         "character.list" => app.ListCharacters(),
         "character.get" => app.GetCharacter(Payload<IdPayload>(payload).Id),
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
@@ -86,6 +87,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
         _ => throw new UnknownCommandException(command),
     };
+
+    private object Validate(ContentPayload payload)
+    {
+        var report = app.ValidateContent(payload.Reference, payload.Revision);
+        return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
+    }
 
     private ExportPreview PreviewExport(ExportPayload payload) => app.PreviewExport(payload.CharacterIds, payload.Purpose);
 
@@ -147,6 +154,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RulesFamilyPayload(string RulesFamily);
 
     private sealed record IdPayload(Guid Id);
+
+    /// <summary>A stored revision by <paramref name="Reference"/>, or an unsaved one inline.</summary>
+    private sealed record ContentPayload(ContentReference? Reference = null, ContentRevision? Revision = null);
 
     /// <param name="Purpose">ADR-007: <c>backup</c> (default, everything) or <c>share</c> (leaves out non-redistributable sources).</param>
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
