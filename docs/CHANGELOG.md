@@ -58,6 +58,7 @@
 - Derived values always reported `automatic`, even when an effect on them was not applied.
 - The UI lint rule caught only a bare `fetch`. It now also blocks `window.fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` and `window.chrome` outside the transport.
 - `scripts/smoke.ps1` removes the throwaway data folder the app creates when no `-DataDir` is given.
+- The missing-runtime check (`offline-check.ps1 -Mode MissingRuntime`) failed on a hosted GitHub runner: the WebView2 loader ignored `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` there. It now uses a smoke-only shell flag, `--simulate-missing-webview2`, that takes the same not-found path on any machine. It is proven under Windows PowerShell 5.1 and pwsh 7. The loader-override variant stays as a local diagnostic (`-Mode MissingRuntimeLoader`), and the smoke report records which loader overrides the process saw (ADR-006).
 - Unexpected command failures no longer send the exception message to the UI, because it could contain file paths or internals. The UI gets a generic message and a correlation id. The details (including the stack) go only to `<data dir>/logs/errors.log`, which rolls over at 1 MB (SPEC Q-02).
 
 ### Migration

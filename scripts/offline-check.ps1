@@ -2,16 +2,20 @@
 .SYNOPSIS
   Offline evidence for ADR-001 / ADR-006 / ADR-008.
 .DESCRIPTION
-  -Mode MissingRuntime  (automated) Points the WebView2 loader at an empty folder via the documented
-                        WEBVIEW2_BROWSER_EXECUTABLE_FOLDER override. Expects the smoke to report
-                        'webview2-runtime-missing' (the shell shows its "runtime required" message) instead of crashing.
-                        This simulates a missing runtime; a clean machine without the runtime still needs a VM.
-  -Mode AssumeOffline   (manual) Turn on airplane mode or unplug the network first. The script checks that there is
-                        no default route and no DNS, then runs the smoke twice on one data folder (persistence).
+  -Mode MissingRuntime        (automated, CI) Runs the smoke with the test-only --simulate-missing-webview2 flag, which
+                              takes the shell's "runtime not found" path. Expects 'webview2-runtime-missing' (the
+                              in-window "runtime required" message, exit 2) instead of a crash. Deterministic on any
+                              machine, because it does not depend on WebView2 loader overrides.
+  -Mode MissingRuntimeLoader  (local diagnostic) Points the real WebView2 loader at an empty folder with the documented
+                              WEBVIEW2_BROWSER_EXECUTABLE_FOLDER override. Passes locally under Windows PowerShell 5.1
+                              and pwsh 7, but a hosted GitHub runner ignored the override (ADR-006), so CI does not use it.
+  -Mode AssumeOffline         (manual) Turn on airplane mode or unplug the network first. The script checks that there
+                              is no default route and no DNS, then runs the smoke twice on one data folder (persistence).
+  Neither missing-runtime mode removes the runtime; a truly absent runtime still needs a clean VM.
   Exit code: 0 pass, 1 fail.
 #>
 param(
-  [Parameter(Mandatory)] [ValidateSet('MissingRuntime', 'AssumeOffline')] [string] $Mode,
+  [Parameter(Mandatory)] [ValidateSet('MissingRuntime', 'MissingRuntimeLoader', 'AssumeOffline')] [string] $Mode,
   [string] $Exe
 )
 $ErrorActionPreference = 'Stop'
@@ -20,10 +24,17 @@ if (-not $Exe) { $Exe = Join-Path $PSScriptRoot '..\src\DesktopShell\bin\Release
 $smoke = Join-Path $PSScriptRoot 'smoke.ps1'
 
 if ($Mode -eq 'MissingRuntime') {
+  & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -ExtraArguments @('--simulate-missing-webview2')
+  exit $LASTEXITCODE
+}
+
+if ($Mode -eq 'MissingRuntimeLoader') {
   $empty = Join-Path ([IO.Path]::GetTempPath()) "tomestack-no-webview2-$([guid]::NewGuid().ToString('N'))"
   New-Item -ItemType Directory -Path $empty | Out-Null
   & $smoke -Exe $Exe -ExpectDetail 'webview2-runtime-missing' -Environment @{ WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $empty }
-  exit $LASTEXITCODE
+  $code = $LASTEXITCODE
+  Remove-Item -LiteralPath $empty -Force -ErrorAction SilentlyContinue
+  exit $code
 }
 
 $routes = @(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue)

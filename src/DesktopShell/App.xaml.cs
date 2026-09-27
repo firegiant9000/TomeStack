@@ -39,15 +39,21 @@ public partial class App : Application
     }
 }
 
-public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport)
+/// <param name="SimulateMissingRuntime">
+/// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
+/// <c>--smoke</c>, so a normal launch cannot be switched into it.
+/// </param>
+public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false)
 {
     public static ShellOptions Parse(string[] args)
     {
         string? Value(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        var smoke = args.Contains("--smoke");
         return new ShellOptions(
-            Smoke: args.Contains("--smoke"),
+            Smoke: smoke,
             DevTools: args.Contains("--devtools"),
             DataDirectory: Value("--data-dir"),
-            SmokeReport: Value("--smoke-report"));
+            SmokeReport: Value("--smoke-report"),
+            SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"));
     }
 }

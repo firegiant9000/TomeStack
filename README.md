@@ -59,7 +59,7 @@ Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `
 ```powershell
 src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-report smoke.json
 scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe       # same run, with the report checked
-scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime
+scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime (smoke-only flag)
 scripts/offline-check.ps1 -Mode AssumeOffline      # turn on airplane mode first
 ```
 

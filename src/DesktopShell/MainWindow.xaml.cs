@@ -56,6 +56,10 @@ public partial class MainWindow : Window
     {
         try
         {
+            // Test-only (smoke): the loader's own overrides proved unreliable on hosted runners (ADR-006), so the
+            // missing-runtime check forces the same handler the loader's exception reaches.
+            if (_options.SimulateMissingRuntime)
+                throw new WebView2RuntimeNotFoundException("Simulated by --simulate-missing-webview2.");
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
                 userDataFolder: Path.Combine(_tomeStack.DataDirectory, "WebView2"));
@@ -221,10 +225,23 @@ public partial class MainWindow : Window
             appVersion = _tomeStack.GetInfo().Version,
             blockedRequests = _blockedRequests,
             webView2Runtime = TryGetRuntimeVersion(),
+            simulatedMissingRuntime = _options.SimulateMissingRuntime,
+            // Evidence only (no paths): which WebView2 loader overrides this process could see.
+            webView2LoaderOverrides = new
+            {
+                environmentVariable = Environment.GetEnvironmentVariable("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER") is { Length: > 0 },
+                policy = HasBrowserFolderPolicy(Microsoft.Win32.Registry.LocalMachine) || HasBrowserFolderPolicy(Microsoft.Win32.Registry.CurrentUser),
+            },
             dataDirectory = _tomeStack.DataDirectory,
         });
         File.WriteAllText(_options.SmokeReport ?? Path.Combine(_tomeStack.DataDirectory, "smoke-result.json"), report);
         Application.Current.Shutdown(success ? 0 : 2);
+    }
+
+    private static bool HasBrowserFolderPolicy(Microsoft.Win32.RegistryKey root)
+    {
+        using var key = root.OpenSubKey(@"Software\Policies\Microsoft\Edge\WebView2\BrowserExecutableFolder");
+        return key is not null && key.ValueCount > 0;
     }
 
     private static string? TryGetRuntimeVersion()

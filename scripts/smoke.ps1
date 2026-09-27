@@ -19,11 +19,12 @@ param(
   [int] $ExpectCharactersAtStart = -1,
   [string] $ExpectDetail = 'ok',
   [int] $TimeoutSeconds = 60,
-  [hashtable] $Environment = @{}
+  [hashtable] $Environment = @{},
+  [string[]] $ExtraArguments = @()
 )
 $ErrorActionPreference = 'Stop'
 
-$arguments = @('--smoke', '--smoke-report', $Report)
+$arguments = @('--smoke', '--smoke-report', $Report) + $ExtraArguments
 if ($DataDir) { $arguments += @('--data-dir', $DataDir) }
 Remove-Item $Report -ErrorAction SilentlyContinue
 

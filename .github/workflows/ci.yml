@@ -63,6 +63,9 @@ jobs:
           $found = $keys | Where-Object { Test-Path $_ } | ForEach-Object { (Get-ItemProperty $_).pv }
           "WebView2 Runtime: $(if ($found) { $found -join ', ' } else { 'not found' })"
           "Session: $([Environment]::UserInteractive) / $env:SESSIONNAME"
+          # A hosted run ignored WEBVIEW2_BROWSER_EXECUTABLE_FOLDER; record loader policy overrides for the diagnosis.
+          $policy = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2', 'HKCU:\Software\Policies\Microsoft\Edge\WebView2' | Where-Object { Test-Path $_ }
+          "WebView2 loader policy keys: $(if ($policy) { $policy -join ', ' } else { 'none' })"
 
       # Launches the real WPF + WebView2 shell, loads the bundled UI, round-trips commands over the message bridge,
       # then creates, exports and previews a fixture character. Non-blocking until it has passed on hosted runners;
@@ -73,6 +76,7 @@ jobs:
         shell: pwsh
         run: scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe -Report "$env:RUNNER_TEMP/smoke-result.json"
 
+      # Uses the smoke-only --simulate-missing-webview2 flag; the loader env override was ignored on this runner.
       - name: Missing WebView2 runtime path (non-blocking)
         continue-on-error: true
         shell: pwsh
