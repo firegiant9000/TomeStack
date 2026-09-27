@@ -81,7 +81,7 @@ public sealed partial class TomeStackApp
                 : throw new AppValidationException([new("play.exhaustion-out-of-range", $"Exhaustion level {command.Amount} must be between 0 and {PlayState.MaxExhaustion}.")]),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
-        return SaveCharacter(character with { Play = play });
+        return SaveWithPlay(character with { Play = play });
     }
 
     private static PlayState Damage(PlayState play, HitPointState hp, int amount)

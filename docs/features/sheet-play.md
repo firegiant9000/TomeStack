@@ -40,6 +40,8 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 
 `character.play { characterId, action, confirm, amount?, contentId?, resourceId?, condition? }` makes one change and returns the recalculated view. Without `confirm: true` it is refused (`play.confirmation-required`) and nothing changes. The UI sends it only from a deliberate button press.
 
+`character.save` never changes the play state of a stored character. It keeps the stored `play`, whatever the payload carries, so a save for another reason (a name, an override, equipment), or one from a stale copy, cannot undo damage or spent uses. Only `character.play` and the confirmed `character.rest` write it. A new character keeps the play state it is first saved with (`PlayCommandTests.Saving_the_character_never_changes_its_play_state`; M2 review fix).
+
 | `action` | Does | Refused with |
 | --- | --- | --- |
 | `spend` / `regain` | Spends `amount` uses (at most what is left) or regains them (at most what is spent) | `resource.not-found`, `resource.untracked`, `resource.insufficient`, `resource.nothing-spent` |

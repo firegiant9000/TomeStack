@@ -40,7 +40,7 @@ public sealed partial class TomeStackApp
         if (request.Basis != Basis(character, plan))
             throw new AppValidationException([new("rest.preview-stale", "The character changed since this rest was previewed. Preview the rest again.")]);
         var skip = (request.Skip ?? []).Where(s => s is not null).ToHashSet(StringComparer.Ordinal);
-        return SaveCharacter(character with { Play = RestPlanner.Apply(character.Play, plan, skip) });
+        return SaveWithPlay(character with { Play = RestPlanner.Apply(character.Play, plan, skip) });
     }
 
     private (Character Character, RestPlan Plan) Plan(Guid characterId, RestPeriod kind)

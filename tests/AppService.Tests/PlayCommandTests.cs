@@ -57,6 +57,24 @@ public class PlayCommandTests
     }
 
     [Fact]
+    public void Saving_the_character_never_changes_its_play_state()
+    {
+        var (temp, id) = Brenna();
+        using var _ = temp;
+        var stale = temp.App.GetCharacter(id).Character; // for example, the copy an open screen holds
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 10));
+        temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, ContentId: RageContent, ResourceId: "rage"));
+
+        // A save for another reason (a name, an override, equipment) with a stale or edited play state keeps the stored one.
+        var saved = temp.App.SaveCharacter(stale with { Name = "Brenna Stonefist", Play = new PlayState { CurrentHitPoints = 1, Exhaustion = 6 } });
+
+        Assert.Equal("Brenna Stonefist", saved.Character.Name);
+        Assert.Equal((25, 0), (saved.Character.Play.CurrentHitPoints, saved.Character.Play.Exhaustion));
+        Assert.Equal(2, saved.Sheet.Resources!.Single(r => r.ResourceId == "rage").Current);
+        Assert.Equal(TempApp.Json(saved.Character.Play), TempApp.Json(temp.App.GetCharacter(id).Character.Play));
+    }
+
+    [Fact]
     public void Spending_and_regaining_uses_is_bounded_by_the_calculated_maximum()
     {
         var (temp, id) = Brenna();

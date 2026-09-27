@@ -138,7 +138,20 @@ public sealed partial class TomeStackApp : IDisposable
         });
     }
 
+    /// <summary>
+    /// <c>character.save</c>. SPEC C-05: the play state of a stored character is kept as stored, whatever the payload
+    /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
+    /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
+    /// play state it is saved with.
+    /// </summary>
     public CharacterView SaveCharacter(Character character)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play } : character);
+    }
+
+    /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
+    private CharacterView SaveWithPlay(Character character)
     {
         var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
