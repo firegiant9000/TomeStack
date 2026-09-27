@@ -1071,7 +1071,11 @@ public static class CharacterCalculator
         foreach (var modifier in skipped)
             steps.Add(new(field, "ignored", $"{Name(modifier)} not used: {modifier.SkipReason}", null, value, Origin(modifier)));
 
-        var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus).ToList();
+        // Ability scores: increases first (capped at 20 below), then penalties, so the result does not depend on the
+        // order of the content (19 + 2 - 2 is 18 either way). A stable sort keeps content order within each group.
+        var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus)
+            .OrderBy(e => IsAbilityScoreField(field) && e.Amount < 0)
+            .ToList();
         var winners = bonuses
             .Where(b => b.Modifier.Effect.Stacking == StackingRule.HighestInGroup)
             .GroupBy(b => b.Modifier.Effect.StackGroup, StringComparer.Ordinal)

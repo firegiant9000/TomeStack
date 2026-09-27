@@ -27,6 +27,7 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 ### Fixed (M2 review)
 
 - **`armor` is content schema v4 only (ADR-003).** A revision stored by 0.2.0 with a `"type": "armor"` effect (an unknown effect then) was read as typed armor. Its hash changed, so re-importing the same package failed (`package.revision-conflict`), and published content started changing Armor Class. In a v2 or v3 revision, armor now stays unknown, reference-only and byte for byte. Validation refuses armor below v4 (`validate.requires-v4`). The original fixture armor is republished as v4 revisions (new revision ids; the content ids are unchanged).
+- **The ability score cap no longer depends on effect order.** Increases apply first (capped at 20), then penalties. Before, 19 with +2 and −2 gave 18 or 19 depending on which effect came first; now it is 18 either way.
 
 ### Migration
 

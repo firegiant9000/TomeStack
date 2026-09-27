@@ -50,6 +50,14 @@ public class AbilityCapTests
     }
 
     [Fact]
+    public void The_cap_does_not_depend_on_effect_order_increases_first_then_penalties()
+    {
+        // 19 + 2 stops at 20, then -2 gives 18, whichever effect comes first in the content.
+        Assert.Equal(18, Strength(RulesFamilies.Srd521, 19, Bonus("up", 2), Bonus("down", -2)).Value);
+        Assert.Equal(18, Strength(RulesFamilies.Srd521, 19, Bonus("down", -2), Bonus("up", 2)).Value);
+    }
+
+    [Fact]
     public void Penalties_and_set_effects_are_not_capped()
     {
         var set = new ModifierEffect { Id = "set", Operation = ModifierOperation.Set, Target = FieldIds.Score(Ability.Str), Value = "23" };

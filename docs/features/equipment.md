@@ -40,7 +40,7 @@ Not modeled yet: armor proficiency, heavy armor's Strength requirement and speed
 Both SRDs say ability score increases cannot raise a score above 20. So in both families (a rules constant, not a policy field):
 
 - A **bonus** to an ability score stops at 20. The trace step says "capped: increases cannot raise an ability score above 20 (+4 would give 21)". If the score is already above 20 (a base score or a `set`), a bonus does not raise it and does not lower it.
-- Bonuses apply in content order, so the cap lands on whichever bonus crosses 20.
+- Increases apply first, in content order, so the cap lands on whichever increase crosses 20. Penalties (negative bonuses) apply after them. So the result does not depend on content order: 19 + 2 stops at 20, then − 2 gives 18, whichever effect is listed first (`AbilityCapTests.The_cap_does_not_depend_on_effect_order_increases_first_then_penalties`; M2 review fix).
 - `set` effects (for example magic items that set a score) and user overrides may exceed 20. Penalties are not capped.
 - A higher content-declared maximum (for example "up to 24") is not modeled yet.
 
