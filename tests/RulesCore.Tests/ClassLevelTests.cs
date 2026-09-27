@@ -77,7 +77,7 @@ public class ClassLevelTests
 
         var baseAc = plain.Field(FieldIds.ArmorClass);
         Assert.Equal(10 + 2, baseAc.Value);
-        Assert.Equal("Armor Class without armor = 10 + Dexterity modifier (armor is not modeled yet)", baseAc.Trace[^1].Description);
+        Assert.Equal("Armor Class without armor = 10 + Dexterity modifier", baseAc.Trace[^1].Description);
 
         var ac = guarded.Field(FieldIds.ArmorClass);
         Assert.Equal(10 + 2 + 3, ac.Value); // Warden Guard 15 beats Bracers 13

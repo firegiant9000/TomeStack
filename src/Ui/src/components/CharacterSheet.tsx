@@ -15,6 +15,7 @@ import type {
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ConditionsPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { EquipmentPanel } from './EquipmentPanel';
 import { RestPanel } from './RestPanel';
 
 function describeOrigin(origin: TraceOrigin): string {
@@ -309,6 +310,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
       <ConditionsPanel view={view} act={act} />
       <ResourcesPanel view={view} act={act} />
+      <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
       <section aria-labelledby="rolls-heading" className="play-panel">
         <h3 id="rolls-heading">Rolls</h3>
         <RollModePicker mode={rollMode} onChange={setRollMode} />

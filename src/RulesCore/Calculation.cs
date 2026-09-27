@@ -272,6 +272,7 @@ public static class CharacterCalculator
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
         var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
+        AddArmor(active, modifiers, diagnostics);
         var proficiencies = CollectProficiencies(active, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels));
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
@@ -555,6 +556,18 @@ public static class CharacterCalculator
             if (seen.Add(pin) && Admit(pin, null) is { } item)
                 active.Add(item);
         }
+        // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
+        foreach (var entry in character.Equipment.Where(e => e.Equipped))
+        {
+            if (!seen.Add(entry.Item) || Admit(entry.Item, null) is not { } item)
+                continue;
+            if (item.Revision.Kind != ContentKind.Item)
+            {
+                diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
+                continue;
+            }
+            active.Add(item);
+        }
 
         var classes = new List<ClassInfo>();
         foreach (var entry in character.Classes)
@@ -684,7 +697,57 @@ public static class CharacterCalculator
 
     // ---- effects --------------------------------------------------------------------------------------------
 
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields);
+    /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null);
+
+    /// <summary>
+    /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
+    /// Dex; medium: AC + Dex up to the cap; heavy: AC), and while it is worn every other Armor Class replacement is an
+    /// unarmored alternative that does not apply, traced as such. (All SRD alternatives, such as Unarmored Defense,
+    /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
+    /// count; extra ones get a diagnostic.
+    /// </summary>
+    private static void AddArmor(List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics)
+    {
+        var armor = active
+            .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
+                .Where(e => e.Automation == AutomationStatus.Automatic && e.Timing == EffectTiming.Always)
+                .Select(e => (Content: a, Effect: e)))
+            .ToList();
+        var body = armor.Where(a => a.Effect.Category != ArmorCategory.Shield).ToList();
+        var shields = armor.Where(a => a.Effect.Category == ArmorCategory.Shield).ToList();
+        foreach (var extra in body.Skip(1))
+            diagnostics.Add(new("equipment.multiple-armor", $"'{extra.Content.Revision.Name}' is armor, but '{body[0].Content.Revision.Name}' is already worn; only one armor counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+        foreach (var extra in shields.Skip(1))
+            diagnostics.Add(new("equipment.multiple-shields", $"'{extra.Content.Revision.Name}' is a shield, but '{shields[0].Content.Revision.Name}' is already used; only one shield counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+
+        if (body.Count > 0)
+        {
+            var (content, effect) = body[0];
+            var reason = $"it applies only while no armor is worn, and {Describe(content)} is worn";
+            for (var i = 0; i < modifiers.Count; i++)
+            {
+                if (modifiers[i].Effect.Target == FieldIds.ArmorClass && modifiers[i].Effect.Operation == ModifierOperation.Replace)
+                    modifiers[i] = modifiers[i] with { SkipReason = reason };
+            }
+            var value = effect.Category switch
+            {
+                ArmorCategory.Light => $"{effect.ArmorClass} + DEX.MOD",
+                ArmorCategory.Medium => $"{effect.ArmorClass} + min(DEX.MOD, {effect.DexterityCap ?? ArmorEffect.DefaultMediumDexterityCap})",
+                _ => $"{effect.ArmorClass}",
+            };
+            modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+        }
+        if (shields.Count > 0)
+            modifiers.Add(Synthetic(shields[0].Content, shields[0].Effect, ModifierOperation.Bonus, $"{shields[0].Effect.ArmorClass}"));
+    }
+
+    private static Modifier Synthetic(ActiveContent content, ArmorEffect armor, ModifierOperation operation, string value)
+    {
+        var effect = new ModifierEffect { Id = armor.Id, Operation = operation, Target = FieldIds.ArmorClass, Value = value, Text = armor.Text };
+        var formula = Formula.TryParse(value, out var parsed, out _) ? parsed! : throw new InvalidOperationException($"Armor formula '{value}' does not parse."); // built from integers above
+        return new(content, effect, formula, [.. formula.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]);
+    }
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
@@ -744,6 +807,12 @@ public static class CharacterCalculator
     // both families, so they are not restricted. A feature chosen from or granted by origin content, however many
     // features away, counts as that origin (a background's "+2 Str, +1 Con" option must not bypass the policy by being
     // a separate feature). Every operation counts, so `set` or `replace` cannot bypass it either.
+    /// <summary>SRD: ability score increases stop at 20 (both families, so a rules constant rather than a policy field).</summary>
+    public const int AbilityScoreIncreaseCap = 20;
+
+    private static bool IsAbilityScoreField(string field) =>
+        field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".score", StringComparison.Ordinal);
+
     private static bool IsAbilityScore(ModifierEffect effect) =>
         effect.Target.StartsWith("ability.", StringComparison.Ordinal) && effect.Target.EndsWith(".score", StringComparison.Ordinal);
 
@@ -946,8 +1015,14 @@ public static class CharacterCalculator
         Dictionary<string, int> values, string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
     {
         var evaluated = new List<(Modifier Modifier, int Amount, List<TraceInput> Inputs)>();
+        var skipped = new List<Modifier>();
         foreach (var modifier in modifiers)
         {
+            if (modifier.SkipReason is not null)
+            {
+                skipped.Add(modifier);
+                continue;
+            }
             var inputs = new List<TraceInput>();
             if (modifier.Formula.TryEvaluate(id => Resolve(id, modifier.Content, character, classLevels, values, inputs), out var amount, out var error))
                 evaluated.Add((modifier, amount, inputs));
@@ -971,6 +1046,8 @@ public static class CharacterCalculator
             foreach (var other in replacements.Where(r => r != best))
                 steps.Add(new(field, "ignored", $"Replacement from {Name(other.Modifier)} not used; the highest replacement applies", other.Amount, value, Origin(other.Modifier), Inputs(other.Inputs)));
         }
+        foreach (var modifier in skipped)
+            steps.Add(new(field, "ignored", $"{Name(modifier)} not used: {modifier.SkipReason}", null, value, Origin(modifier)));
 
         var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus).ToList();
         var winners = bonuses
@@ -997,6 +1074,16 @@ public static class CharacterCalculator
                     bonus.Modifier.Effect.Id));
                 manual.Add(field);
                 steps.Add(new(field, "ignored", $"Bonus from {Name(bonus.Modifier)} not applied; the result would be out of range", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                continue;
+            }
+            // SRD (both families, owner decision 2026-09-27): increases cannot raise an ability score above 20. A bonus
+            // stops at 20 (or at the score it started from, if that was already higher); set effects and overrides may
+            // exceed it. A higher content-declared maximum (for example 24) is not modeled yet.
+            if (IsAbilityScoreField(field) && bonus.Amount > 0 && next > Math.Max(AbilityScoreIncreaseCap, value))
+            {
+                var capped = Math.Max(AbilityScoreIncreaseCap, value);
+                steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}, capped: increases cannot raise an ability score above {AbilityScoreIncreaseCap} (+{bonus.Amount} would give {next})", capped - value, capped, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                value = capped;
                 continue;
             }
             value = (int)next;
@@ -1121,9 +1208,10 @@ public static class CharacterCalculator
         {
             var dex = c.Values[FieldIds.Modifier(Ability.Dex)];
             var value = 10 + dex;
-            // Armor and shields are not modeled yet (M2 equipment): this is the unarmored base. Alternatives such as
-            // Unarmored Defense are content `replace` effects; the highest replacement wins (ADR-003).
-            steps.Add(new(FieldIds.ArmorClass, "base", "Armor Class without armor = 10 + Dexterity modifier (armor is not modeled yet)", 10, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), dex)]));
+            // The unarmored base. Worn armor and alternatives such as Unarmored Defense are `replace` effects (armor is
+            // synthesized from equipped items, M2 item 4); the highest replacement wins, and while armor is worn only the
+            // armor replaces it (ADR-003). A shield is a bonus.
+            steps.Add(new(FieldIds.ArmorClass, "base", "Armor Class without armor = 10 + Dexterity modifier", 10, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), dex)]));
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));

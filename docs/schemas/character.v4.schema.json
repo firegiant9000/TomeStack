@@ -2,12 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tomestack.local/schemas/character.v4.schema.json",
   "title": "TomeStack character (schemaVersion 4)",
-  "description": "Stored character choices, pins, overrides and play state. Derived values are never stored. Unknown properties round-trip. v4 adds play (hit points, spent resources, conditions; SPEC C-05). v3 adds classes and choices. Older versions are read with the new data at its default (full hit points, nothing spent).",
+  "description": "Stored character choices, pins, overrides and play state. Derived values are never stored. Unknown properties round-trip. v4 adds play (hit points, spent resources, conditions; SPEC C-05) and equipment. v3 adds classes and choices. Older versions are read with the new data at its default (full hit points, nothing spent).",
   "type": "object",
   "required": ["id", "schemaVersion", "name", "rulesFamily", "baseAbilities"],
   "properties": {
     "id": { "$ref": "#/$defs/uuid" },
     "schemaVersion": { "const": 4 },
+    "equipment": {
+      "description": "Items carried (M2 item 4). Only equipped items apply; worn armor sets the Armor Class base.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item"],
+        "additionalProperties": false,
+        "properties": {
+          "item": { "$ref": "#/$defs/contentReference" },
+          "equipped": { "type": "boolean" },
+          "quantity": { "type": "integer", "minimum": 1, "maximum": 9999 }
+        }
+      }
+    },
     "play": {
       "description": "Mutable play state, changed only by the confirmed character.play command (and confirmed rests).",
       "type": "object",

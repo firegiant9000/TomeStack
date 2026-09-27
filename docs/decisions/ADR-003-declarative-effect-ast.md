@@ -18,6 +18,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `modifier` | `operation` (`bonus` / `set` / `replace`), `target` (field id), `value` (formula), `stacking` (`stack` / `highestInGroup`), `stackGroup` | calculator |
 | `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin), optional `level` (v3) | calculator (item 11–12; levels M1 item 5) |
 | `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
+| `armor` (M2 item 4; a new type, no version change) | `category` (`light` / `medium` / `heavy` / `shield`), `armorClass`, `dexterityCap?` | Armor Class of equipped items: body armor is a `replace` of the base, and while it is worn other Armor Class replacements do not apply; a shield is a `bonus` (`features/equipment.md`) |
 | `resource` | `resourceId`, `label`, `maximum` (formula) | sheet maximum with trace, and `character.play` spending (M2 item 2, `features/sheet-play.md`) |
 | `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
 | `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
@@ -31,7 +32,7 @@ Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability
 ### Stacking and order (per field)
 
 1. **base**: the character's choice or the rules' derivation. The highest `replace` substitutes for it, and the other replacements are traced as not applied.
-2. **bonus** in content order. `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack". A bonus that would take the running value outside ±1,000,000 is not applied (`effect.out-of-range`), so many bounded bonuses cannot overflow.
+2. **bonus** in content order. A bonus to an ability score stops at 20 (the SRD rule, since M2 item 4). `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack". A bonus that would take the running value outside ±1,000,000 is not applied (`effect.out-of-range`), so many bounded bonuses cannot overflow.
 3. The highest **set** (if any) replaces the running value.
 4. **Rounding:** any fraction rounds down at the end of a formula (the 5e default).
 5. **User override** last (SPEC C-06). The computed value and its trace are kept.

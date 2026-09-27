@@ -39,8 +39,9 @@ No art, logos, trade dress, product names or other publications. No monsters, sp
 
 ## Known limitations of the encoded rules
 
-- "None of these increases can raise a score above 20" (5.2.1 background ability scores) is not enforced by the calculator yet. It is shown in the choice text. It does not affect characters below 19 in a score.
+- "None of these increases can raise a score above 20" (5.2.1 background ability scores) is enforced since M2 item 4 (owner decision 2026-09-27): bonuses to ability scores stop at 20 in both families (`features/equipment.md`).
 - Rages use `min(2 + floor(CLASS_LEVEL / 3), 4)`, which matches both tables for levels 1–11. The slice is levels 1–3.
-- Unarmored Defense assumes no armor is worn, because armor is not modeled (M2 equipment). Its trace says so.
+- Unarmored Defense applies only while no armor is worn since M2 item 4: the calculator treats every Armor Class replacement as an unarmored alternative. Its effect text in the published revisions still says "armor is not modeled yet, so TomeStack assumes none". Published revisions are insert-only, so the note stays until a new SRD pack revision (the trace gives the current behavior).
+- No SRD armor or equipment is bundled. Adding the armor table needs this review extended (SPEC Q-03).
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
 - Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.

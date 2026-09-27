@@ -42,9 +42,17 @@ export interface Character {
   overrides: FieldOverride[];
   /** Character schema v4; absent in a draft means fresh (full hit points, nothing spent). */
   play?: PlayState;
+  /** Items carried; only equipped ones apply (M2 item 4). */
+  equipment?: EquipmentEntry[];
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
+}
+
+export interface EquipmentEntry {
+  item: ContentReference;
+  equipped: boolean;
+  quantity: number;
 }
 
 export interface ClassLevel {

@@ -10,13 +10,16 @@
 
 - **Long rest (M2 item 3; SPEC C-05; D01 decided: long rest only in M2; `docs/features/rests.md`):** "Long rest…" previews every change (hit points to maximum, temporary hit points cleared, each resource by its long-rest recovery, one exhaustion level). The player unticks what does not apply, then confirms. `character.restPreview` writes nothing, and `character.rest` needs `confirm` and the current preview (`rest.preview-stale` otherwise). Recoveries it cannot calculate, and spent resources without a recovery rule, are listed as manual steps instead of being skipped silently. A new rules-family difference: under 2014 rules, the exhaustion reduction needs food and drink (`RulesFamilyPolicy.LongRestExhaustionNeedsFoodAndDrink`).
 
+- **Equipment groundwork (M2 item 4; `docs/features/equipment.md`):** characters carry items and equip them (`equipment`, character schema v4). A new `armor` effect type covers light, medium and heavy armor and shields. Worn armor sets the Armor Class base, and while it is worn Unarmored Defense and other alternatives are traced as not used; a shield adds its bonus. The sheet has an Equipment panel. The SRD armor table is not bundled yet, because it needs the SRD pack review; development uses original fixture armor.
+- **Ability scores stop at 20 (owner decision 2026-09-27):** bonuses cannot raise an ability score above 20 in either family, and the trace says when a bonus was capped. `set` effects and overrides may exceed it.
+
 ### Changed
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
 
 ### Migration
 
-- **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
+- **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play` and `equipment`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
 
 ## 0.2.0 (M1 delivered)
 

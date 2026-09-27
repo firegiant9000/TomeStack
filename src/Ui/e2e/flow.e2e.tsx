@@ -225,6 +225,24 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   expect((await screen.findByRole('status')).textContent).toMatch(/Long rest finished: 1 change applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
+
+  // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Scale Vest' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Armor Class: 15/ })).toBeTruthy()); // 14 + Dex 1
+  const ac = screen.getByRole('region', { name: /^Armor Class:/ });
+  await user.click(within(ac).getByRole('heading'));
+  expect(within(ac).getByRole('table').textContent).toMatch(/Unarmored Defense.*not used: it applies only while no armor is worn/);
+
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Kite Shield/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Kite Shield' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Armor Class: 17/ })).toBeTruthy());
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip Fixture Scale Vest' })); // take the armor off
+  await waitFor(() => expect(screen.getByRole('heading', { name: /^Armor Class: 15/ })).toBeTruthy()); // Unarmored Defense 13 + shield 2
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

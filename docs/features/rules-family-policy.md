@@ -28,7 +28,8 @@ Origin is carried on the active content: species and background content is its o
 
 **Considered and not added:**
 
-- "Ability increases cannot raise a score above 20". Both SRDs have this rule, so it is not a difference. It is a calculation gap, recorded in `docs/licensing/srd-pack-review.md`.
+- "Ability increases cannot raise a score above 20". Both SRDs have this rule, so it is not a difference. Since M2 item 4 it is a rules constant (`CharacterCalculator.AbilityScoreIncreaseCap`, `AbilityCapTests` for both families).
+- Armor (M2 item 4): light, medium and heavy armor and shields work the same in both SRDs, so they are content (`armor` effects), not a field.
 - A per-family hit point rule. Both SRDs use "maximum at level 1, then the roll or the fixed value", so a field would encode nothing.
 
 Revisit this table whenever the SRD slice grows (spellcasting in M2 is the likely next difference). A new difference gets a named field and a side-by-side test before any content depends on it.

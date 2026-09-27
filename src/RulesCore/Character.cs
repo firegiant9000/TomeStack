@@ -10,7 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
-    /// v4 adds <see cref="Play"/> (M2 item 2). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
+    /// v4 adds <see cref="Play"/> (M2 item 2) and <see cref="Equipment"/> (M2 item 4). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
@@ -50,9 +50,9 @@ public sealed record Character : IJsonOnDeserialized
     /// </summary>
     public IReadOnlyList<ChoiceSelection> Choices { get; init; } = [];
 
-    /// <summary>Every content revision the character references: pins, classes and chosen options. Packages and updates use this.</summary>
+    /// <summary>Every content revision the character references: pins, classes, chosen options and equipment. Packages and updates use this.</summary>
     public IEnumerable<ContentReference> AllReferences() =>
-        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Distinct();
+        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Concat(Equipment.Select(e => e.Item)).Distinct();
 
     /// <summary>
     /// BACKLOG B06 / ARCHITECTURE step 2: deliberate use of content from another rules family, each with a recorded
@@ -70,6 +70,12 @@ public sealed record Character : IJsonOnDeserialized
     /// derived. Changed only by an explicit, confirmed command.
     /// </summary>
     public PlayState Play { get; init; } = new();
+
+    /// <summary>
+    /// SPEC C-05, M2 item 4 (character schema v4): items carried. Only equipped items apply, as active content like a
+    /// pin; worn armor sets the Armor Class base. Unequipped items are still referenced, so packages carry them.
+    /// </summary>
+    public IReadOnlyList<EquipmentEntry> Equipment { get; init; } = [];
 
     public DateTimeOffset UpdatedAt { get; init; }
 
@@ -91,6 +97,7 @@ public sealed record Character : IJsonOnDeserialized
             Classes = [.. Classes.Select(c => c with { Class = Swap(c.Class) })],
             Choices = [.. Choices.Select(c => c with { Source = Swap(c.Source), Selected = [.. c.Selected.Select(Swap)] })],
             CrossFamilyExceptions = [.. CrossFamilyExceptions.Select(e => e with { Content = Swap(e.Content) })],
+            Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item) })],
         };
     }
 
@@ -132,6 +139,10 @@ public sealed record Character : IJsonOnDeserialized
                 problems.Add(new("character.ability-out-of-range", $"{ability} score {score} must be between 1 and 30."));
         }
         problems.AddRange(Play.Validate());
+        foreach (var duplicate in Equipment.GroupBy(e => e.Item).Where(g => g.Count() > 1))
+            problems.Add(new("character.equipment-duplicate", "An item is recorded more than once; record one entry with its quantity.", duplicate.Key));
+        foreach (var entry in Equipment.Where(e => e.Quantity is < 1 or > EquipmentEntry.MaxQuantity))
+            problems.Add(new("character.equipment-quantity", $"Item quantity {entry.Quantity} must be between 1 and {EquipmentEntry.MaxQuantity}.", entry.Item));
         return problems;
     }
 
@@ -148,7 +159,8 @@ public sealed record Character : IJsonOnDeserialized
         Check("choices", Choices is null || Choices.Any(c => c?.Source is null || c.Selected is null || c.Selected.Any(s => s is null)));
         Check("cross-family exceptions", CrossFamilyExceptions is null || CrossFamilyExceptions.Any(e => e?.Content is null));
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
-        Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null));
+        Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
+        Check("play state",Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null));
         return problems;
     }
 
@@ -182,6 +194,12 @@ public sealed record ChoiceSelection(ContentReference Source, string ChoiceId, I
 
 /// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
 public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);
+
+/// <summary>One item carried: an exact pin to the item revision, whether it is equipped (worn or held), and how many.</summary>
+public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1)
+{
+    public const int MaxQuantity = 9_999;
+}
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);

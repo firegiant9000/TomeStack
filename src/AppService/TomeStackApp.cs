@@ -53,7 +53,10 @@ public sealed partial class TomeStackApp : IDisposable
         foreach (var pack in BundledPacks)
             app.Seed(pack);
         if (devFixtures)
+        {
             app.Seed("TomeStack.FixturePack.json");
+            app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
+        }
         return app;
     }
 
