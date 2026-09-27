@@ -30,9 +30,10 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   const user = userEvent.setup();
   render(<App />);
 
-  // Create
-  await user.click(await screen.findByRole('button', { name: 'New character' }));
-  // The form renders once app.info has loaded (an earlier click shows nothing; tracked as a UX follow-up).
+  // Create ("New character" is disabled until app.info has loaded, so a click is never silently ignored)
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Pell');
   await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
   await user.click(await screen.findByRole('checkbox', { name: /Fixture Quickfoot/ }));
@@ -40,6 +41,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 
   // Sheet with a source-aware trace: Dex 14 + 2 (Fixture Quickfoot, species under 2014 rules) = 16 -> +3
   const sheet = await screen.findByRole('article', { name: 'E2E Pell' });
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { level: 2, name: 'E2E Pell' })));
   const initiative = within(sheet).getByRole('region', { name: /^Initiative:/ });
   expect(within(initiative).getByRole('heading').textContent).toContain('+3');
   expect(within(sheet).getByRole('heading', { name: /^Dexterity score: 16/ })).toBeTruthy();
@@ -84,7 +86,8 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 it('reaches the primary actions by keyboard alone', async () => {
   const user = userEvent.setup();
   render(<App />);
-  await screen.findByRole('button', { name: 'New character' });
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
 
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New character' }));

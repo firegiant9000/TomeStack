@@ -63,6 +63,8 @@ scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 
 scripts/offline-check.ps1 -Mode AssumeOffline      # turn on airplane mode first
 ```
 
+Every script in `scripts/` runs under both Windows PowerShell 5.1 and pwsh 7 (checked 2026-09-26: `smoke`, `offline-check` in all modes, `installer-smoke` with both adapters, and `pack-installer`).
+
 **UI with hot reload in a browser** (two terminals):
 
 ```powershell

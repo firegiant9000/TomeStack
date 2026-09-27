@@ -1,4 +1,4 @@
-import { useState, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { CharacterView, DerivedValue, ExportPreview, ExportPurpose, FieldOverride, TraceOrigin } from '../api/types';
@@ -211,6 +211,11 @@ interface Props {
 export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
   const { character, sheet } = view;
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
+  // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
+  useEffect(() => heading.current?.focus(), []);
 
   async function changeOverride(field: string, change: FieldOverride | undefined) {
     const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
@@ -224,7 +229,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
   return (
     <article className="panel" aria-labelledby="sheet-heading">
       <header className="sheet-header">
-        <h2 id="sheet-heading" tabIndex={-1}>
+        <h2 id="sheet-heading" tabIndex={-1} ref={heading}>
           {character.name}
         </h2>
         <span className="tag">{character.rulesFamily}</span>
