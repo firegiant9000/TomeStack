@@ -78,6 +78,8 @@ The old build is the item 8 commit (`b476810`, database schema 1), packed as 0.1
 
 This proves R3, R4 and R6 for Velopack on this machine, and R1 as far as "no elevation prompt as this user" goes.
 
+**M1 upgrade (2026-09-26):** 0.1.1 (M0 closeout, which seeds the test fixtures) → 0.2.0 (M1, which seeds only the SRD packs), Windows PowerShell 5.1: all steps pass. The database schema is unchanged (2), because content schema v3 lives in the stored JSON and needs no migration, so step 3 is skipped as expected. The character created by 0.1.1 with fixture content is still there and still opens under 0.2.0.
+
 ## Clean VM only (cannot be proven on the development machine)
 
 A first install on a machine that never had TomeStack, a standard user without admin rights (R1), a truly absent WebView2 Runtime and the runtime bootstrap (R5), an offline install (R2), SmartScreen and antivirus behavior for the unsigned build (R7), the installed app on the real default data folder, and Windows 10 (best-effort).

@@ -9,6 +9,7 @@ All content here is **original** and was written for TomeStack tests. It contain
 | `characters/srd51-quickfoot.json`, `srd521-courier.json` | character v1 | no | M0 initiative traces |
 | `characters/srd51-ash-m1.json`, `srd521-ash-m1.json` | character v2 | no | Side-by-side: the same inputs under each family |
 | `characters/srd521-rook-exception.json` | character v2 | no | A recorded cross-family exception (BACKLOG B06) |
+| `characters/m1-acceptance-srd51-korga.json`, `m1-acceptance-srd521-brenna.json` | character v3 | no | M1 exit gate: level-3 characters built from the bundled SRD packs (they reference SRD content IDs; the files hold no rules text). See `docs/features/m1-acceptance.md` |
 
 ## Private fixtures (not in the repo)
 

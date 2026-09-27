@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## Unreleased (0.2.0: M1 delivered)
 
 ### Added
+
+- **M1 exit gate passed (ROADMAP M1; `docs/features/m1-acceptance.md`):** two level-3 SRD characters, Korga (SRD 5.1 Half-Orc Acolyte Barbarian, Berserker) and Brenna (SRD 5.2.1 Dwarf Soldier Barbarian, Berserker), calculate the expected values. Every major number explains itself: sources and pages, rules steps, and an override that keeps the calculated value. The executable acceptance test is `M1AcceptanceTests`. The version is 0.2.0 (ADR-008 policy: MINOR goes up at milestone delivery).
 
 - M0 foundation: repository layout, .NET 10 solution, React/TypeScript UI, CI workflow on Windows.
 - Rules core with the `srd-5.1` and `srd-5.2.1` rules-family IDs and an explicit policy difference: ability score increases come from species in 2014 rules and from background in 2024 rules (SPEC S-02, C-01).
