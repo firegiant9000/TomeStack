@@ -15,7 +15,7 @@ The studio authors subclasses, features, feats and items. Every control writes a
 | Control | Effect |
 | --- | --- |
 | Add modifier | `modifier`: a field from `app.info.fields`, bonus / replace / set, a value or formula |
-| Add resource | `resource`: a name and uses (formula, for example `PB`) |
+| Add resource | `resource`: a name and uses (formula, for example `PB`). Its `resourceId` is set once, when it is added, and never follows the name, so renaming keeps recoveries, rolls and spent uses linked (e2e "keeps a resource linked to its recovery…"; M2 review fix) |
 | Add recovery | `recovery`: a resource of this revision, long or short rest, `all` or a formula |
 | Add roll or action | `roll`: dice, optionally the resource it uses (a **limited-use action**) |
 | Grant a feature (subclass, feat) | `grant content` of a published feature from the same source, from a class level |

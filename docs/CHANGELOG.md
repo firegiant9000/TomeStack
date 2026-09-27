@@ -33,6 +33,7 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 - **Large libraries no longer slow every click.** Each calculation re-read the whole content table for every offered choice to find `extendsChoice` options: 4 table scans per calculation, and about 430 ms per play command with 5,000 revisions. The published extensions are now read once and kept in memory until a revision is added or a transaction rolls back, which brings a play command to about 5 ms. No database migration.
 - **The PDF viewer loads only the one PDF (ADR-005).** It mapped the PDF's folder to its own host and allowed anything there. A link inside a linked PDF could open other files next to it, such as an HTML page in Downloads, with scripts on. Now no folder is mapped: the window loads exactly `https://pdf.tomestack.localhost/document.pdf#page=N`, answers it with the PDF's bytes, and refuses and reports everything else.
 - **Changing the rules family drops picks that no longer fit.** In the builder, a species, background, class or other pin from the old family stayed checked but disabled, and was then silently not applied. In the campaign editor, allowed sources from the old family were hidden but still saved. Both are now dropped when the family changes, as the M1 form did.
+- **Renaming a resource in the homebrew studio no longer unlinks it.** Its id followed the name, so a recovery or roll added earlier pointed at the old id: the resource never recovered, and validation only warned. The id is now set once, when the resource is added.
 
 ### Migration
 

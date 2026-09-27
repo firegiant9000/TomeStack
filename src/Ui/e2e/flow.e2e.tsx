@@ -453,6 +453,33 @@ it('shows different allowed content for two campaign profiles, and records a rea
   expect(notes.textContent).toMatch(/Fixture Courier.*used by exception: DM approved/);
 });
 
+it('keeps a resource linked to its recovery when the resource is renamed in the studio', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Renames', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Renames/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Renames/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Renames' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Fury');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  const name = within(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })).getByRole('textbox', { name: 'Resource name' });
+  await user.type(name, 'Fury');
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' }));
+  // Renamed after the recovery points at it: the recovery must still restore this resource.
+  await user.type(name, ' points');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+
+  const results = await within(editor()).findByRole('region', { name: 'Check results' });
+  expect(results.textContent).not.toMatch(/does not define/);
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);

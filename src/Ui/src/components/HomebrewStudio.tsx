@@ -30,12 +30,6 @@ const automationChoices = [
   { value: 'reference', label: 'Reference only: text' },
 ] as const;
 
-const slug = (text: string) =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'resource';
-
 interface Props {
   info: AppInfo;
   onError: (error: unknown) => void;
@@ -359,7 +353,8 @@ function EntryEditor(props: {
       type === 'modifier'
         ? { type, id, operation: 'bonus', target: 'initiative', value: '1' }
         : type === 'resource'
-          ? { type, id, resourceId: `resource-${revision.effects.length + 1}`, label: '', maximum: 'PB' }
+          ? // Set once, never from the label: recoveries and rolls point at it, and spent uses are kept per resource id.
+            { type, id, resourceId: id, label: '', maximum: 'PB' }
           : type === 'recovery'
             ? { type, id, resourceId: resources[0]?.resourceId ?? '', on: 'longRest', amount: 'all', timing: 'onLongRest' }
             : type === 'roll'
@@ -590,7 +585,7 @@ function EffectEditor(props: {
         <>
           <label className="field">
             Resource name
-            <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value, resourceId: slug(e.target.value) })} />
+            <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
           <label className="field">
             Uses (a number or a formula such as PB or CLASS_LEVEL)
