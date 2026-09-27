@@ -19,7 +19,7 @@ An option is ordinary content: a feature that grants a skill proficiency, a subc
 - Every choice offered by an active revision whose level is reached appears in `sheet.choices`, with its options, what was selected and `resolved`.
 - An unresolved choice (fewer selections than `count`) is flagged with `choice.unresolved` and listed on the sheet ("Choices to make").
 - A selection not in the options is not applied (`choice.invalid-option`). Selections beyond `count` are not applied (`choice.too-many`).
-- An option must be usable under the character's rules family. Otherwise it is refused (`content.rules-family-mismatch`, message "Chosen from …"), and the choice stays unresolved. Cross-family exceptions (B06) apply to pins only, not to chosen content.
+- An option must be usable under the character's rules family. Otherwise it is refused (`content.rules-family-mismatch`, message "Chosen from …"), and the choice stays unresolved. A cross-family exception (B06) recorded for that exact option admits it, and the character's own policy then governs it. Content *granted* by another revision cannot have its own exception: it follows its granter.
 - Chosen content joins the active set as a root, like a pin. Its grants are followed (one level), its own choices are offered, and its trace says "chosen from class 'Barbarian'". A subclass chosen from a class belongs to that class, so its features follow the class level and can read `CLASS_LEVEL`.
 - A selection for a choice that is not offered (the revision is not active, or the level is not reached yet) is kept but not applied (`choice.orphaned`).
 - Every revision is admitted once, so selections that point back at each other cannot loop.

@@ -44,6 +44,7 @@
   - one feat (Grappler with its Strength 13 prerequisite / Savage Attacker).
 
   Every revision validates, and `SrdPackTests` checks the attribution against the approval page. `NOTICE` and `ATTRIBUTION.md` carry the statements.
+- **Rules-family review for the SRD slice (M1 item 6; `docs/features/rules-family-policy.md`):** the slice needs no new `RulesFamilyPolicy` field. Every difference it exercises is content, or already covered by `AbilityIncreaseSource` and `BackgroundGrantsFeat`. New side-by-side tests use real SRD content: Half-Orc Strength under 2014 vs. 2024 rules, the Soldier's ability option and feat, the Acolyte's feature, and same-named Barbarians never merged. A cross-family exception recorded for a chosen option now admits it too.
 - **Restrictions and validation (M1 item 3; `docs/features/validation-and-restrictions.md`):**
   - `restriction` effects are prerequisites. Content whose prerequisite is not met is not applied, with a `restriction.unmet` diagnostic scoped to it. Prerequisites are checked without the content itself, so a feat cannot qualify itself.
   - `content.validate` (`ContentValidator`) reports schema, reference, formula and dependency-cycle problems for a stored or unsaved revision before publish. Errors block publishing; warnings do not.

@@ -323,7 +323,8 @@ public static class CharacterCalculator
             }
             if (!revision.RulesFamilies.Contains(character.RulesFamily))
             {
-                var exception = grantedBy is null && chosenFrom is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
+                // A recorded exception names an exact revision the character pins or chose; granted content follows its granter.
+                var exception = grantedBy is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
                 if (exception is null)
                 {
                     diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}; it is not applied.", reference));
@@ -367,8 +368,9 @@ public static class CharacterCalculator
         foreach (var pinnedClass in active.Where(a => a.Revision.Kind == ContentKind.Class && !classLevels.ContainsKey(a.Revision.Reference)))
             diagnostics.Add(new("character.class-without-levels", $"'{pinnedClass.Revision.Name}' is pinned as content but no levels are recorded in it, so its level features and hit points do not apply.", pinnedClass.Revision.Reference));
 
-        foreach (var exception in character.CrossFamilyExceptions.Where(e => !character.Pins.Contains(e.Content)))
-            diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin.", exception.Content));
+        var referenced = character.AllReferences().ToHashSet();
+        foreach (var exception in character.CrossFamilyExceptions.Where(e => !referenced.Contains(e.Content)))
+            diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin or choose.", exception.Content));
 
         var pending = new Queue<ActiveContent>(active);
         while (pending.Count > 0)
