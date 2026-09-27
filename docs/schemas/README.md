@@ -10,7 +10,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `content-revision.v3.schema.json` | Adds `grant.level`, `hitDie`, and the `armorClass` / `hitPoints` targets (ADR-003 "Content schema v3"). Current | `schemaVersion` |
 | `character.v1.schema.json` | `Character`: choices, pins and overrides. Read and upcast | `schemaVersion` |
 | `character.v2.schema.json` | Adds `level` and `crossFamilyExceptions`. Read and upcast | `schemaVersion` |
-| `character.v3.schema.json` | Adds `classes` (levels per class). Current | `schemaVersion` |
+| `character.v3.schema.json` | Adds `classes` (levels per class) and `choices`. Read and upcast | `schemaVersion` |
+| `character.v4.schema.json` | Adds `play`: current and temporary hit points, spent resources, conditions, exhaustion (M2 item 2, SPEC C-05). Current | `schemaVersion` |
 | `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Still importable | `formatVersion` |
 | `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Current | `formatVersion` |

@@ -40,6 +40,8 @@ export interface Character {
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
+  /** Character schema v4; absent in a draft means fresh (full hit points, nothing spent). */
+  play?: PlayState;
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
@@ -117,12 +119,156 @@ export interface DerivedValue {
   units: 'score' | 'modifier' | 'bonus' | string;
 }
 
+export type RestPeriod = 'shortRest' | 'longRest';
+
+export interface RecoveryInfo {
+  effectId: string;
+  on: RestPeriod;
+  amount: string;
+  text?: string;
+}
+
+/** A limited-use resource; `maximum`/`current` are absent when it is tracked by hand. */
+export interface ResourceValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  resourceId: string;
+  label: string;
+  maximum?: number;
+  spent: number;
+  current?: number;
+  trace: TraceEntry[];
+  warnings: Diagnostic[];
+  automation: AutomationStatus;
+  recoveries: RecoveryInfo[];
+  text?: string;
+}
+
+export interface FeatureEffect {
+  id: string;
+  type: string;
+  automation: AutomationStatus;
+  text?: string;
+  label?: string;
+  dice?: string;
+  resourceId?: string;
+}
+
+/** SPEC I-05: an active revision with its text and automation status. */
+export interface FeatureEntry {
+  content: ContentReference;
+  name: string;
+  kind: ContentKind;
+  summary?: string;
+  via?: string;
+  origin: TraceOrigin;
+  automation: AutomationStatus;
+  effects: FeatureEffect[];
+  diagnostics: Diagnostic[];
+}
+
+export interface HitPointState {
+  maximum: number;
+  current: number;
+  temporary: number;
+}
+
 export interface CharacterSheet {
   characterId: string;
   rulesFamily: RulesFamilyId;
   fields: DerivedValue[];
   diagnostics: Diagnostic[];
   choices?: ChoiceStatus[];
+  active?: ContentReference[];
+  resources?: ResourceValue[];
+  features?: FeatureEntry[];
+  hitPoints?: HitPointState;
+}
+
+export interface ResourceUse {
+  contentId: string;
+  resourceId: string;
+  spent: number;
+}
+
+/** SPEC C-05, character schema v4: changed only by the confirmed `character.play` command. */
+export interface PlayState {
+  /** Absent or null: at the maximum. */
+  currentHitPoints?: number | null;
+  temporaryHitPoints: number;
+  resources: ResourceUse[];
+  conditions: string[];
+  exhaustion: number;
+}
+
+export type PlayActionKind =
+  | 'spend'
+  | 'regain'
+  | 'damage'
+  | 'heal'
+  | 'setTemporaryHitPoints'
+  | 'setHitPoints'
+  | 'addCondition'
+  | 'removeCondition'
+  | 'setExhaustion';
+
+export interface PlayAction {
+  action: PlayActionKind;
+  amount?: number;
+  contentId?: string;
+  resourceId?: string;
+  condition?: string;
+}
+
+export type RollMode = 'normal' | 'advantage' | 'disadvantage';
+
+export interface RollModifier {
+  label: string;
+  amount: number;
+  origin?: TraceOrigin;
+}
+
+export interface DieResult {
+  term: number;
+  sides: number;
+  value: number;
+  kept: boolean;
+  fromCritical: boolean;
+}
+
+export interface RollProvenance {
+  rollId: string;
+  label: string;
+  content?: ContentReference;
+  contentName?: string;
+  effectId?: string;
+  sourceId?: string;
+  sourceTitle?: string;
+  page?: PageRef;
+  linkedResourceId?: string;
+}
+
+/** SPEC C-04: a roll record. Rolling never changes the character. */
+export interface RollRecord {
+  formula: string;
+  mode: RollMode;
+  critical: boolean;
+  dice: DieResult[];
+  diceTotal: number;
+  expressionConstant: number;
+  modifiers: RollModifier[];
+  total: number;
+  provenance?: RollProvenance;
+}
+
+/** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
+export interface RollTarget {
+  content?: ContentReference;
+  effectId?: string;
+  field?: string;
+  mode?: RollMode;
+  critical?: boolean;
 }
 
 export interface CharacterView {

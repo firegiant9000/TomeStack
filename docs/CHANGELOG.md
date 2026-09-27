@@ -6,9 +6,15 @@
 
 - **Builder (M2 item 1; SPEC C-01, C-07; `docs/features/builder.md`):** create a character, level it up (in an existing class or a new one), and answer every choice it offers, including a subclass at its level. Every flow is a draft that the service previews (`character.preview`, `character.previewChoice`) without writing anything. It is saved in one step, or discarded with Cancel. Unresolved choices are flagged, and the sheet's "Choices to make" opens them in the builder. `character.create` also takes `classes` and `choices`.
 
+- **Sheet for play (M2 item 2; SPEC C-04, C-05, I-05; `docs/features/sheet-play.md`):** a features list with text, source and automation status (pure text is shown as reference only). Resources show current/maximum, with the maximum calculated in the rules core and traced (Rage 3 at Barbarian 3). Hit points, temporary hit points, spent uses, conditions and exhaustion are stored on the character and change only through the confirmed `character.play` command. Every check, save, skill and initiative can be rolled (normal, advantage, disadvantage), and so can feature rolls (with critical doubling). The roll record shows each die, modifier and the source. Rolling never spends a resource; a linked resource gets its own "Spend" button.
+
 ### Changed
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
+
+### Migration
+
+- **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
 
 ## 0.2.0 (M1 delivered)
 

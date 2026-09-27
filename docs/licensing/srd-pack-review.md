@@ -43,4 +43,4 @@ No art, logos, trade dress, product names or other publications. No monsters, sp
 - Rages use `min(2 + floor(CLASS_LEVEL / 3), 4)`, which matches both tables for levels 1–11. The slice is levels 1–3.
 - Unarmored Defense assumes no armor is worn, because armor is not modeled (M2 equipment). Its trace says so.
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
-- Advantage-granting features (Rage, Danger Sense, Reckless Attack) are text only until the sheet's roll UI (M2).
+- Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.

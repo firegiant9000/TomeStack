@@ -168,6 +168,46 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
   expect(within(sheet).getByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
   expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
+
+  // M2 item 2, play: resources with calculated maximums, explicit spending, hit points, conditions and rolls.
+  const resources = within(sheet).getByRole('region', { name: 'Resources' });
+  expect(within(resources).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
+  expect(within(resources).getByRole('heading', { name: 'Stonecunning: 2 of 2' })).toBeTruthy();
+  await user.click(within(resources).getByRole('button', { name: 'Spend 1 Rages' }));
+  await waitFor(() => expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy());
+
+  const hp = screen.getByRole('region', { name: /^Hit points:/ });
+  await user.type(within(hp).getByRole('spinbutton', { name: 'Amount' }), '5');
+  await user.click(within(hp).getByRole('button', { name: 'Set temporary hit points' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35, 5 temporary' })).toBeTruthy());
+  await user.type(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('spinbutton', { name: 'Amount' }), '12');
+  await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
+
+  await user.click(screen.getByRole('checkbox', { name: 'Poisoned' }));
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Poisoned' }).checked).toBe(true));
+
+  // A feature roll shows its record, and rolling spends nothing.
+  await user.click(screen.getByRole('checkbox', { name: /Critical hit/ }));
+  await user.click(screen.getByRole('button', { name: 'Roll Frenzy extra damage (Rage Damage +2: 2d6) (2d6)' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/));
+  expect(lastRoll.textContent).toMatch(/d6 \d \(critical\)/); // doubled dice are marked
+  expect(lastRoll.textContent).toMatch(/Frenzy \(System Reference Document 5\.2\.1, p\. \d+\)/);
+
+  // A d20 test with advantage keeps one die and drops the other.
+  await user.click(screen.getByRole('radio', { name: 'Advantage' }));
+  const strSave = screen.getByRole('region', { name: /^Strength saving throw:/ });
+  await user.click(within(strSave).getByRole('heading'));
+  await user.click(within(strSave).getByRole('button', { name: 'Roll Strength saving throw' }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Strength saving throw \(d20 test\): \d+ \(1d20, advantage\)/));
+  expect(lastRoll.textContent).toMatch(/\(dropped\)/);
+  expect(lastRoll.textContent).toMatch(/Strength saving throw \+5/);
+  expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
+
+  // Features list their automation status.
+  const features = screen.getByRole('region', { name: 'Features' });
+  expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/reference only|assisted/);
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

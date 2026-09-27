@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CharacterView, DerivedValue, ExportPreview, ExportPurpose, FieldOverride, TraceOrigin } from '../api/types';
+import type {
+  CharacterView,
+  DerivedValue,
+  ExportPreview,
+  ExportPurpose,
+  FieldOverride,
+  PlayAction,
+  RollMode,
+  RollRecord,
+  RollTarget,
+  TraceOrigin,
+} from '../api/types';
 import { downloadBase64 } from '../files';
+import { ConditionsPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 
 function describeOrigin(origin: TraceOrigin): string {
   switch (origin.kind) {
@@ -61,14 +73,19 @@ function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string
   );
 }
 
+/** Fields the `roll` command accepts as a d20 test: ability modifiers, saves, skills and initiative. */
+const isD20 = (field: string) =>
+  field === 'initiative' || field.startsWith('save.') || field.startsWith('skill.') || (field.startsWith('ability.') && field.endsWith('.mod'));
+
 interface FieldProps {
   value: DerivedValue;
   labels: Map<string, string>;
   onOverride: (field: string, change: FieldOverride | undefined) => void;
+  onRoll: (field: string) => void;
 }
 
 /** One field: its own override form state, so fields never share input values. */
-function FieldCard({ value, labels, onOverride }: FieldProps) {
+function FieldCard({ value, labels, onOverride, onRoll }: FieldProps) {
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const headingId = `field-${value.field}`;
@@ -92,6 +109,11 @@ function FieldCard({ value, labels, onOverride }: FieldProps) {
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
           </h4>
         </summary>
+        {isD20(value.field) && (
+          <button type="button" onClick={() => onRoll(value.field)}>
+            Roll {value.label}
+          </button>
+        )}
         <TraceTable value={value} labels={labels} />
         {value.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${value.label} warnings`}>
@@ -221,10 +243,29 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
   useEffect(() => heading.current?.focus(), []);
 
+  const [rollMode, setRollMode] = useState<RollMode>('normal');
+  const [lastRoll, setLastRoll] = useState<RollRecord>();
+
   async function changeOverride(field: string, change: FieldOverride | undefined) {
     const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
     try {
       onChanged(await client.saveCharacter({ ...character, overrides }));
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  async function act(action: PlayAction) {
+    try {
+      onChanged(await client.play(character.id, action));
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  async function roll(target: RollTarget) {
+    try {
+      setLastRoll(await client.roll(character.id, target));
     } catch (error) {
       onError(error);
     }
@@ -245,6 +286,17 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
+      <HitPointsPanel view={view} act={act} />
+      <ConditionsPanel view={view} act={act} />
+      <ResourcesPanel view={view} act={act} />
+      <section aria-labelledby="rolls-heading" className="play-panel">
+        <h3 id="rolls-heading">Rolls</h3>
+        <RollModePicker mode={rollMode} onChange={setRollMode} />
+        <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} act={act} />
+      </section>
+      <FeaturesPanel view={view} roll={roll} />
+
       {groups.map((group) => {
         const fields = sheet.fields.filter((f) => group.match(f.field));
         if (fields.length === 0) return null;
@@ -252,7 +304,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <section key={group.title} aria-label={group.title} className="field-group">
             <h3>{group.title}</h3>
             {fields.map((field) => (
-              <FieldCard key={field.field} value={field} labels={labels} onOverride={changeOverride} />
+              <FieldCard
+                key={field.field}
+                value={field}
+                labels={labels}
+                onOverride={changeOverride}
+                onRoll={(f) => roll({ field: f, mode: rollMode })}
+              />
             ))}
           </section>
         );

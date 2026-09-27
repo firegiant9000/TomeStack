@@ -384,7 +384,7 @@ function ChoicesStep(props: {
 function draftOf(basics: Basics, id: string, previous?: Character): Character {
   return {
     id,
-    schemaVersion: 3,
+    schemaVersion: 4,
     name: basics.name.trim(),
     rulesFamily: basics.rulesFamily,
     level: 1,

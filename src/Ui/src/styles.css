@@ -89,3 +89,17 @@ tr.action-conflict td { color: var(--error); }
 p.warn { color: var(--warn); border: 1px solid currentColor; border-radius: 6px; padding: 0.5rem 0.75rem; }
 .export-panel fieldset label { display: block; }
 p.status { color: var(--accent); }
+span.warn { color: var(--warn); }
+
+/* M2: builder choices and play panels */
+.choice-picker legend { font-weight: 600; }
+.play-panel { border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.play-panel h3 { margin: 0.25rem 0; }
+.inline-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
+.conditions { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+.resources, .features { list-style: none; padding: 0; margin: 0; }
+.resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
+.resource h4 { margin: 0; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.feature summary { cursor: pointer; }
+.feature button { margin: 0.25rem 0.5rem 0 0; }
+.roll-result { font-variant-numeric: tabular-nums; }

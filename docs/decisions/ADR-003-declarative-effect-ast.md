@@ -18,7 +18,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `modifier` | `operation` (`bonus` / `set` / `replace`), `target` (field id), `value` (formula), `stacking` (`stack` / `highestInGroup`), `stackGroup` | calculator |
 | `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin), optional `level` (v3) | calculator (item 11–12; levels M1 item 5) |
 | `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
-| `resource` | `resourceId`, `label`, `maximum` (formula) | sheet / commands (M2) |
+| `resource` | `resourceId`, `label`, `maximum` (formula) | sheet maximum with trace, and `character.play` spending (M2 item 2, `features/sheet-play.md`) |
 | `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
 | `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |

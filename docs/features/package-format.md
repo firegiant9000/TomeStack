@@ -8,7 +8,7 @@ A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 manifest.json
 sources/<sourceId>.json        SourceRecord, including license and redistribution flag
 content/<revisionId>.json      ContentRevision (immutable, pinned by characters)
-characters/<characterId>.json  Character choices, pins and overrides (no derived values)
+characters/<characterId>.json  Character choices, pins, overrides and play state (no derived values)
 ```
 
 `manifest.json`:

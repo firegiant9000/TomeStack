@@ -66,16 +66,68 @@ public sealed record ChoiceStatus(
     bool Resolved);
 
 /// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
+/// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
+/// <param name="Features">M2 item 2: every active revision with its text, automation status, effects and rolls, in resolution order.</param>
+/// <param name="HitPoints">M2 item 2: the displayed maximum with current and temporary hit points from the play state.</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
     IReadOnlyList<DerivedValue> Fields,
     IReadOnlyList<Diagnostic> Diagnostics,
     IReadOnlyList<ChoiceStatus>? Choices = null,
-    IReadOnlyList<ContentReference>? Active = null)
+    IReadOnlyList<ContentReference>? Active = null,
+    IReadOnlyList<ResourceValue>? Resources = null,
+    IReadOnlyList<FeatureEntry>? Features = null,
+    HitPointState? HitPoints = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>
+/// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's
+/// own context (<c>CLASS_LEVEL</c> is the level in its class), or <c>null</c> when it cannot be calculated (a reference-only
+/// resource, or a formula that fails, with a warning). <paramref name="Current"/> is the maximum less what is spent, never
+/// below 0. The key for spending is the content id and <paramref name="ResourceId"/>.
+/// </summary>
+public sealed record ResourceValue(
+    ContentReference Content,
+    string ContentName,
+    string EffectId,
+    string ResourceId,
+    string Label,
+    int? Maximum,
+    int Spent,
+    int? Current,
+    IReadOnlyList<TraceEntry> Trace,
+    IReadOnlyList<Diagnostic> Warnings,
+    AutomationStatus Automation,
+    IReadOnlyList<RecoveryInfo> Recoveries,
+    string? Text);
+
+/// <summary>A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.</summary>
+public sealed record RecoveryInfo(string EffectId, RestPeriod On, string Amount, string? Text);
+
+/// <summary>
+/// SPEC I-05: one active revision as the sheet lists it. <paramref name="Automation"/> is the least automated of its
+/// effects (<c>reference</c> when it has none, so pure text is never mistaken for automation), and at most
+/// <c>assisted</c> when a diagnostic names one of its effects. <paramref name="Diagnostics"/> are the problems scoped to it.
+/// </summary>
+public sealed record FeatureEntry(
+    ContentReference Content,
+    string Name,
+    ContentKind Kind,
+    string? Summary,
+    string? Via,
+    TraceOrigin Origin,
+    AutomationStatus Automation,
+    IReadOnlyList<FeatureEffect> Effects,
+    IReadOnlyList<Diagnostic> Diagnostics);
+
+/// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
+public sealed record FeatureEffect(string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null);
+
+/// <summary>Hit points for play: the displayed maximum (after any override), current (at most the maximum) and temporary.</summary>
+public sealed record HitPointState(int Maximum, int Current, int Temporary);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -260,7 +312,112 @@ public static class CharacterCalculator
                 spec.Units);
         }).ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)]), active);
+        var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)])).ToList();
+        var maximum = values[FieldIds.HitPoints];
+        var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+
+        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints), active);
+    }
+
+    // ---- resources and features (M2 item 2) -----------------------------------------------------------------
+
+    /// <summary>
+    /// Every resource of every active revision (the first definition of a resource id per revision). The maximum is the
+    /// formula evaluated like a modifier in the content's context; a reference-only resource is listed with no maximum,
+    /// and a failing formula disables only that resource, with a warning (SPEC C-03).
+    /// </summary>
+    private static List<ResourceValue> CollectResources(
+        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family)
+    {
+        var resources = new List<ResourceValue>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var effect in revision.Effects.OfType<ResourceEffect>())
+            {
+                if (!seen.Add(effect.ResourceId))
+                    continue; // validation refuses duplicates on publish; the first definition counts
+                var recoveries = revision.Effects.OfType<RecoveryEffect>()
+                    .Where(r => r.ResourceId == effect.ResourceId)
+                    .Select(r => new RecoveryInfo(r.Id, r.On, r.Amount, r.Text))
+                    .ToList();
+                var spent = character.Play.SpentOf(revision.ContentId, effect.ResourceId);
+                var origin = ContentOrigin(family, item, effect);
+                var warnings = new List<Diagnostic>();
+                int? maximum = null;
+                var trace = new List<TraceEntry>();
+                if (effect.Automation == AutomationStatus.Reference)
+                {
+                    trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
+                }
+                else if (!Formula.TryParse(effect.Maximum, out var formula, out var parseError))
+                {
+                    warnings.Add(InvalidFormula(revision, effect, parseError!));
+                }
+                else
+                {
+                    var inputs = new List<TraceInput>();
+                    if (formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, inputs), out var value, out var error))
+                    {
+                        maximum = Math.Max(value, 0);
+                        trace.Add(new(1, "derive", $"Maximum from {Describe(item)}: {formula.Source}", value, maximum.Value, origin, null, inputs.Count > 0 ? inputs : null));
+                    }
+                    else
+                    {
+                        warnings.Add(InvalidFormula(revision, effect, error!));
+                    }
+                }
+                var automation = maximum is null
+                    ? (effect.Automation == AutomationStatus.Reference ? AutomationStatus.Reference : AutomationStatus.Assisted)
+                    : effect.Automation;
+                resources.Add(new(
+                    revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text));
+            }
+        }
+        return resources;
+    }
+
+    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics)
+    {
+        var revision = item.Revision;
+        var effects = revision.Effects.Select(e => e switch
+        {
+            RollEffect roll => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId),
+            ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
+            RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
+            _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
+        }).ToList();
+        var automation = effects.Count == 0 ? AutomationStatus.Reference : effects.Max(e => e.Automation);
+        if (automation == AutomationStatus.Automatic && diagnostics.Any(d => d.EffectId is not null))
+            automation = AutomationStatus.Assisted;
+        var via = item.GrantedBy is { } by ? $"granted by {by.Kind.ToString().ToLowerInvariant()} '{by.Name}'"
+            : item.ChosenFrom is { } chooser ? $"chosen from {chooser.Kind.ToString().ToLowerInvariant()} '{chooser.Name}'"
+            : null;
+        var origin = new TraceOrigin(TraceOriginKind.Content, family, revision.Reference, revision.Name, null, item.Source.Id, item.Source.Title, revision.Provenance.Page);
+        return new(revision.Reference, revision.Name, revision.Kind, revision.Summary, via, origin, automation, effects, diagnostics);
+    }
+
+    /// <summary>
+    /// A formula identifier in the context of <paramref name="content"/>: <c>LEVEL</c>, <c>CLASS_LEVEL</c> (the level in the
+    /// class the content belongs to; unavailable outside a class) or a field value calculated so far. Records what it read.
+    /// </summary>
+    private static int? Resolve(
+        string identifier, ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<TraceInput> inputs)
+    {
+        int? resolved = identifier switch
+        {
+            FormulaIdentifiers.Level => character.TotalLevel,
+            FormulaIdentifiers.ClassLevel => content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
+            _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
+            _ => null,
+        };
+        if (resolved is { } r)
+            inputs.Add(new(identifier, r));
+        return resolved;
     }
 
     // ---- content resolution ---------------------------------------------------------------------------------
@@ -770,21 +927,7 @@ public static class CharacterCalculator
         foreach (var modifier in modifiers)
         {
             var inputs = new List<TraceInput>();
-            int? Resolve(string identifier)
-            {
-                int? resolved = identifier switch
-                {
-                    FormulaIdentifiers.Level => character.TotalLevel,
-                    // CLASS_LEVEL: the level in the class this content belongs to; unavailable outside a class.
-                    FormulaIdentifiers.ClassLevel => modifier.Content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
-                    _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
-                    _ => null,
-                };
-                if (resolved is { } r)
-                    inputs.Add(new(identifier, r));
-                return resolved;
-            }
-            if (modifier.Formula.TryEvaluate(Resolve, out var amount, out var error))
+            if (modifier.Formula.TryEvaluate(id => Resolve(id, modifier.Content, character, classLevels, values, inputs), out var amount, out var error))
                 evaluated.Add((modifier, amount, inputs));
             else
             {
@@ -892,7 +1035,7 @@ public static class CharacterCalculator
         return $"{revision.Kind.ToString().ToLowerInvariant()} '{revision.Name}'{from}";
     }
 
-    private static Diagnostic InvalidFormula(ContentRevision revision, ModifierEffect effect, FormulaError error) =>
+    private static Diagnostic InvalidFormula(ContentRevision revision, Effect effect, FormulaError error) =>
         new("effect.invalid-formula", $"'{revision.Name}' effect '{effect.Id}' is disabled: {error.Message} ({error.Code})", revision.Reference, effect.Id);
 
     private static TraceOrigin ContentOrigin(string family, ActiveContent content, Effect effect) =>

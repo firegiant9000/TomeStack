@@ -12,6 +12,9 @@ import type {
   ExportPurpose,
   ImportResult,
   PackagePreview,
+  PlayAction,
+  RollRecord,
+  RollTarget,
   RulesFamilyId,
   SaveOutcome,
   SourceChoice,
@@ -38,6 +41,10 @@ export function createClient(transport: Transport) {
     /** A choice answered on an unsaved draft, checked like `choose`; the result is the next draft. Writes nothing. */
     previewChoice: (draft: Character, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
+    /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
+    play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
+    /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
+    roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
     /** What an export would contain and leave out, without writing anything (ADR-007). */
     previewExport: (characterIds: string[], purpose: ExportPurpose) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose }),

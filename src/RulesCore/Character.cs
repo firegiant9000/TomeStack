@@ -10,10 +10,11 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
-    /// v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4). v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>.
-    /// Older versions are upcast on read with the new lists empty, which is exactly their meaning.
+    /// v4 adds <see cref="Play"/> (M2 item 2). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
+    /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
+    /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
@@ -63,6 +64,13 @@ public sealed record Character : IJsonOnDeserialized
     public required AbilityScores BaseAbilities { get; init; }
     public IReadOnlyList<ContentReference> Pins { get; init; } = [];
     public IReadOnlyList<FieldOverride> Overrides { get; init; } = [];
+
+    /// <summary>
+    /// SPEC C-05: mutable play state (hit points, spent resources, conditions), stored separately from choices and never
+    /// derived. Changed only by an explicit, confirmed command.
+    /// </summary>
+    public PlayState Play { get; init; } = new();
+
     public DateTimeOffset UpdatedAt { get; init; }
 
     [JsonExtensionData]
@@ -123,6 +131,7 @@ public sealed record Character : IJsonOnDeserialized
             if (score is < 1 or > 30)
                 problems.Add(new("character.ability-out-of-range", $"{ability} score {score} must be between 1 and 30."));
         }
+        problems.AddRange(Play.Validate());
         return problems;
     }
 
@@ -139,10 +148,11 @@ public sealed record Character : IJsonOnDeserialized
         Check("choices", Choices is null || Choices.Any(c => c?.Source is null || c.Selected is null || c.Selected.Any(s => s is null)));
         Check("cross-family exceptions", CrossFamilyExceptions is null || CrossFamilyExceptions.Any(e => e?.Content is null));
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
+        Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null));
         return problems;
     }
 
-    /// <summary>v1 has no level and v2 no classes; the defaults (level 1, none) are exactly their meaning.</summary>
+    /// <summary>v1 has no level, v2 no classes and v3 no play state; the defaults (level 1, none, full) are exactly their meaning.</summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
         if (_schemaVersion is >= 1 and < CurrentSchemaVersion)
