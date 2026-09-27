@@ -22,7 +22,7 @@ SPEC S-02, S-03, C-01 and I-06 require that SRD 5.1 (2014) and SRD 5.2.1 (2024) 
 - Policy differences so far: `AbilityIncreaseSource` (origin content only, including features chosen from or granted by it) and `BackgroundGrantsFeat`. Both are tested side by side with original fixtures (`RulesFamilySideBySideTests`) and with real SRD content (`SrdRulesFamilyTests`). The M1 review found that the SRD slice needs no further field ([features/rules-family-policy.md](../features/rules-family-policy.md)).
 - A recorded cross-family exception covers the exact revision it names, whether pinned or chosen. Granted content follows its granter.
 - A revision's JSON hash is computed from the app's own serializer. Changing the serializer settings (for example property order) would make identical content look different, so treat them as a schema change.
-- Migration and update review between revisions (SPEC I-06) is not built yet.
+- Publishing and update review between revisions (SPEC I-06) are built as commands (M1 item 2, [features/publishing-and-updates.md](../features/publishing-and-updates.md)). A publish inserts a new revision under the same content id. A character moves to it only through a reviewed, explicitly confirmed update that rewrites its pins, never the stored revisions.
 
 ## Alternatives considered
 

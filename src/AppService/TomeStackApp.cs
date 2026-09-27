@@ -9,7 +9,7 @@ namespace TomeStack.AppService;
 /// The application interface used by every transport (WebView2 bridge, loopback dev host, tests).
 /// Owns validation and transactions; delegates calculation to the rules core.
 /// </summary>
-public sealed class TomeStackApp : IDisposable
+public sealed partial class TomeStackApp : IDisposable
 {
     public const string DatabaseFileName = "tomestack.db";
 

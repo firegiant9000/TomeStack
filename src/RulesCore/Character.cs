@@ -68,6 +68,24 @@ public sealed record Character : IJsonOnDeserialized
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 
+    /// <summary>
+    /// SPEC I-06: the same character pinned to <paramref name="to"/> wherever it referenced <paramref name="from"/>: pins,
+    /// classes, choice sources and selections, and recorded exceptions. Levels, overrides and other choices are kept.
+    /// </summary>
+    public Character ReplaceReference(ContentReference from, ContentReference to)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+        ContentReference Swap(ContentReference r) => r == from ? to : r;
+        return this with
+        {
+            Pins = [.. Pins.Select(Swap)],
+            Classes = [.. Classes.Select(c => c with { Class = Swap(c.Class) })],
+            Choices = [.. Choices.Select(c => c with { Source = Swap(c.Source), Selected = [.. c.Selected.Select(Swap)] })],
+            CrossFamilyExceptions = [.. CrossFamilyExceptions.Select(e => e with { Content = Swap(e.Content) })],
+        };
+    }
+
     public IReadOnlyList<Diagnostic> Validate()
     {
         var problems = new List<Diagnostic>();

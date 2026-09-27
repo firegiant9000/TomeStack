@@ -19,7 +19,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.validate", "character.list", "character.get", "character.create", "character.save", "character.choose",
+        "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.reviewUpdate", "character.applyUpdate",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -75,6 +76,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "app.info" => app.GetInfo(),
         "content.list" => app.ListContent(Payload<RulesFamilyPayload>(payload).RulesFamily),
         "content.validate" => Validate(Payload<ContentPayload>(payload)),
+        "content.saveDraft" => app.SaveDraft(Payload<ContentPayload>(payload).Revision ?? throw new JsonException("content.saveDraft needs a revision.")),
+        "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
+        "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
+        "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
+        "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
+        "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
         "character.list" => app.ListCharacters(),
         "character.get" => app.GetCharacter(Payload<IdPayload>(payload).Id),
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
@@ -93,6 +100,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
     }
+
+    private UpdateReview ReviewUpdate(UpdatePayload payload) => app.ReviewUpdate(payload.CharacterId, payload.From, payload.To);
+
+    private CharacterView ApplyUpdate(UpdatePayload payload) => app.ApplyUpdate(payload.CharacterId, payload.From, payload.To, payload.Confirm);
 
     private ExportPreview PreviewExport(ExportPayload payload) => app.PreviewExport(payload.CharacterIds, payload.Purpose);
 
@@ -154,6 +165,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RulesFamilyPayload(string RulesFamily);
 
     private sealed record IdPayload(Guid Id);
+
+    private sealed record ContentIdPayload(Guid ContentId);
+
+    /// <param name="Confirm">Must be true to apply; the review never changes anything (SPEC I-06).</param>
+    private sealed record UpdatePayload(Guid CharacterId, ContentReference From, ContentReference To, bool Confirm = false);
 
     /// <summary>A stored revision by <paramref name="Reference"/>, or an unsaved one inline.</summary>
     private sealed record ContentPayload(ContentReference? Reference = null, ContentRevision? Revision = null);
