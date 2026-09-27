@@ -44,6 +44,7 @@
   - one feat (Grappler with its Strength 13 prerequisite / Savage Attacker).
 
   Every revision validates, and `SrdPackTests` checks the attribution against the approval page. `NOTICE` and `ATTRIBUTION.md` carry the statements.
+- **Roll command (M1 item 7, SPEC C-04; `docs/features/dice-engine.md`):** `roll` rolls a content roll effect that applies to the character, or a sheet field (ability check, save, skill, initiative) as a d20 test. It returns a roll record with formula, dice, modifiers with their origins, and provenance (revision, source, page). It never changes the character and never spends a linked resource. The sheet now lists its active revisions (`active`).
 - **Publishing and pin updates (M1 item 2, SPEC I-06; `docs/features/publishing-and-updates.md`):**
   - `content.saveDraft` stores an inactive draft. `content.publish` re-validates it and inserts a new immutable revision (same content id, new revision id), leaving the draft and older revisions untouched.
   - `content.revisions` lists a content id's history. `content.affected` lists the characters that use it, and how (pin, class, choice, or grant).

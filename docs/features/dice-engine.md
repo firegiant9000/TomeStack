@@ -1,6 +1,6 @@
 # Dice engine (skeleton)
 
-SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core skeleton (M1). There is no sheet UI or roll command yet.
+SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine and the `roll` command (M1 item 7). The sheet's roll UI is M2.
 
 `src/RulesCore/Dice.cs`, tested in `tests/RulesCore.Tests/DiceTests.cs`.
 
@@ -21,3 +21,13 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core skelet
 `{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance }`. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
 
 **Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command (M2).
+
+## The `roll` command (M1 item 7)
+
+`roll { characterId, content?, effectId?, field?, mode?, critical? }` (`src/AppService/Rolling.cs`, `tests/AppService.Tests/RollCommandTests.cs`) returns a roll record. It is transport-neutral: the WebView2 bridge, DevHost and tests all dispatch the same JSON.
+
+- **A content roll effect** (`content` + `effectId`): the revision must apply to the character (it is in the sheet's `active` list: pinned, class, granted or chosen). Otherwise the roll is refused (`roll.content-inactive`). The record cites the revision, effect, source and page, and the linked resource if any.
+- **A sheet field as a d20 test** (`field`): an ability modifier, saving throw, skill or initiative. The formula is `1d20`, and the field's displayed value (after any override) is the modifier. The modifier's origin is the step that set that value, and the provenance names the field. Other fields are refused (`roll.field-not-rollable`).
+- Advantage and disadvantage apply only to a d20 test, and critical doubling only to damage dice. Dice errors come back with their `dice.*` code.
+- **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
+- Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.

@@ -65,12 +65,14 @@ public sealed record ChoiceStatus(
     IReadOnlyList<ContentReference> Selected,
     bool Resolved);
 
+/// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
     IReadOnlyList<DerivedValue> Fields,
     IReadOnlyList<Diagnostic> Diagnostics,
-    IReadOnlyList<ChoiceStatus>? Choices = null)
+    IReadOnlyList<ChoiceStatus>? Choices = null,
+    IReadOnlyList<ContentReference>? Active = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -258,7 +260,7 @@ public static class CharacterCalculator
                 spec.Units);
         }).ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices), active);
+        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)]), active);
     }
 
     // ---- content resolution ---------------------------------------------------------------------------------
