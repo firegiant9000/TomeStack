@@ -221,6 +221,28 @@ export interface PlayAction {
   condition?: string;
 }
 
+export interface RestChange {
+  id: string;
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion';
+  label: string;
+  from: number;
+  to: number;
+  reason: string;
+  origin: TraceOrigin;
+  contentId?: string;
+  resourceId?: string;
+  /** Set when the change depends on the situation; the player decides. */
+  condition?: string;
+}
+
+/** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
+export interface RestPreview {
+  kind: RestPeriod;
+  changes: RestChange[];
+  manual: Diagnostic[];
+  basis: string;
+}
+
 export type RollMode = 'normal' | 'advantage' | 'disadvantage';
 
 export interface RollModifier {
@@ -288,6 +310,7 @@ export interface RulesFamilyPolicy {
   displayName: string;
   abilityIncreaseSource: ContentKind;
   backgroundGrantsFeat: boolean;
+  longRestExhaustionNeedsFoodAndDrink: boolean;
 }
 
 /** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */

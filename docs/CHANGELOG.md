@@ -8,6 +8,8 @@
 
 - **Sheet for play (M2 item 2; SPEC C-04, C-05, I-05; `docs/features/sheet-play.md`):** a features list with text, source and automation status (pure text is shown as reference only). Resources show current/maximum, with the maximum calculated in the rules core and traced (Rage 3 at Barbarian 3). Hit points, temporary hit points, spent uses, conditions and exhaustion are stored on the character and change only through the confirmed `character.play` command. Every check, save, skill and initiative can be rolled (normal, advantage, disadvantage), and so can feature rolls (with critical doubling). The roll record shows each die, modifier and the source. Rolling never spends a resource; a linked resource gets its own "Spend" button.
 
+- **Long rest (M2 item 3; SPEC C-05; D01 decided: long rest only in M2; `docs/features/rests.md`):** "Long rest…" previews every change (hit points to maximum, temporary hit points cleared, each resource by its long-rest recovery, one exhaustion level). The player unticks what does not apply, then confirms. `character.restPreview` writes nothing, and `character.rest` needs `confirm` and the current preview (`rest.preview-stale` otherwise). Recoveries it cannot calculate, and spent resources without a recovery rule, are listed as manual steps instead of being skipped silently. A new rules-family difference: under 2014 rules, the exhaustion reduction needs food and drink (`RulesFamilyPolicy.LongRestExhaustionNeedsFoodAndDrink`).
+
 ### Changed
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".

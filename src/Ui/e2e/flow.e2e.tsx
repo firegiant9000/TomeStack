@@ -208,6 +208,23 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   // Features list their automation status.
   const features = screen.getByRole('region', { name: 'Features' });
   expect(within(features).getByText('Danger Sense').closest('li')!.textContent).toMatch(/reference only|assisted/);
+
+  // M2 item 3, long rest (D01): preview first, cancel changes nothing, then confirm.
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  let rest = await screen.findByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Long rest' })));
+  expect(within(rest).getByRole('checkbox', { name: /^Hit points: 28 → 35/ })).toBeTruthy();
+  expect(within(rest).getByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
+  await user.click(within(rest).getByRole('button', { name: 'Cancel rest' }));
+  expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy();
+
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  rest = await screen.findByRole('region', { name: 'Long rest' });
+  await user.click(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })); // untick: keep Rages as they are
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Long rest finished: 1 change applied/);
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+  expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

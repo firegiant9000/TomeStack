@@ -21,7 +21,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     [
         "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
-        "character.play", "character.reviewUpdate","character.applyUpdate", "roll",
+        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -92,6 +92,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.preview" => app.Preview(Payload<Character>(payload)),
         "character.previewChoice" => app.PreviewChoice(Payload<PreviewChoiceRequest>(payload)),
         "character.play" => app.Play(Payload<PlayCommand>(payload)),
+        "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
+        "character.rest" => app.Rest(Payload<RestRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
@@ -105,6 +107,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
     }
+
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind);
 
     private UpdateReview ReviewUpdate(UpdatePayload payload) => app.ReviewUpdate(payload.CharacterId, payload.From, payload.To);
 
@@ -170,6 +174,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RulesFamilyPayload(string RulesFamily);
 
     private sealed record IdPayload(Guid Id);
+
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest);
 
     private sealed record ContentIdPayload(Guid ContentId);
 

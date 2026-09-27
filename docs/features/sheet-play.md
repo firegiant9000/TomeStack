@@ -1,6 +1,6 @@
 # Sheet for play: features, resources, rolls and play state
 
-SPEC C-03, C-04, C-05, I-05 · MVP "Sheet" · status: implemented (M2 item 2). Rests are M2 item 3.
+SPEC C-03, C-04, C-05, I-05 · MVP "Sheet" · status: implemented (M2 item 2). Rests: [rests.md](rests.md) (M2 item 3).
 
 Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and `src/RulesCore/PlayState.cs`. Service: `src/AppService/Play.cs`. UI: `src/Ui/src/components/PlayPanels.tsx`. Acceptance: `tests/RulesCore.Tests/ResourceAndFeatureTests.cs`, `tests/AppService.Tests/PlayCommandTests.cs`, and the play part of the e2e test "builds an SRD 5.2.1 Barbarian as drafts".
 
@@ -20,7 +20,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 - **A formula that fails** (does not parse, or reads `CLASS_LEVEL` outside a class) disables only that resource: no maximum, `assisted`, and an `effect.invalid-formula` warning. The rest of the sheet calculates (SPEC C-03).
 - **Reference-only** resources are listed as "tracked by hand" and cannot be spent through TomeStack.
 - **Current** = maximum − spent, never below 0 (a lower maximum after an update does not go negative).
-- **Recoveries:** the `recovery` effects of the same revision for that resource. They are listed only; rests (item 3) preview them.
+- **Recoveries:** the `recovery` effects of the same revision for that resource, with the amount evaluated (`value`) unless it is `all`. They are listed only; the long rest previews them ([rests.md](rests.md)).
 
 ## Play state (character schema v4)
 

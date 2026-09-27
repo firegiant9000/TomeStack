@@ -15,6 +15,7 @@ import type {
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ConditionsPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { RestPanel } from './RestPanel';
 
 function describeOrigin(origin: TraceOrigin): string {
   switch (origin.kind) {
@@ -245,6 +246,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
+  const [resting, setResting] = useState(false);
 
   async function changeOverride(field: string, change: FieldOverride | undefined) {
     const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
@@ -287,6 +289,24 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       <HitPointsPanel view={view} act={act} />
+      {resting ? (
+        <RestPanel
+          characterId={character.id}
+          onError={onError}
+          onCancel={() => setResting(false)}
+          onRested={(rested, applied) => {
+            setResting(false);
+            onChanged(rested);
+            onStatus(`Long rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+          }}
+        />
+      ) : (
+        <div className="actions">
+          <button type="button" onClick={() => setResting(true)}>
+            Long rest…
+          </button>
+        </div>
+      )}
       <ConditionsPanel view={view} act={act} />
       <ResourcesPanel view={view} act={act} />
       <section aria-labelledby="rolls-heading" className="play-panel">

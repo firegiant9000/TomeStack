@@ -33,7 +33,7 @@ No art, logos, trade dress, product names or other publications. No monsters, sp
 
 - `attribution` holds the approved statement **verbatim**. `SrdPackTests` compares it with the approval page.
 - `modificationNotice` is separate so the attribution stays unchanged. Both travel into package `notices[]`.
-- **Judgment call for the owner:** each SRD source's `publisher` is "SRD 5.1 (CC-BY-4.0)" or "SRD 5.2.1 (CC-BY-4.0)", not the rights holder's name. Both legal pages ask for "no other attribution" beyond the statement, so the rights holder is named only inside the statement. If the owner reads the request differently, only this field changes.
+- **Judgment call, decided (owner, 2026-09-27: keep):** each SRD source's `publisher` is "SRD 5.1 (CC-BY-4.0)" or "SRD 5.2.1 (CC-BY-4.0)", not the rights holder's name. Both legal pages ask for "no other attribution" beyond the statement, so the rights holder is named only inside the statement.
 - `ATTRIBUTION.md` and `NOTICE` carry both statements and the modification notice, and the installer ships them.
 - The in-app About / Sources screen is M2.
 

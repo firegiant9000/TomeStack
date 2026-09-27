@@ -104,8 +104,12 @@ public sealed record ResourceValue(
     IReadOnlyList<RecoveryInfo> Recoveries,
     string? Text);
 
-/// <summary>A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.</summary>
-public sealed record RecoveryInfo(string EffectId, RestPeriod On, string Amount, string? Text);
+/// <summary>
+/// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
+/// <paramref name="Value"/> is <paramref name="Amount"/> evaluated in the content's context, or <c>null</c> for <c>all</c>
+/// and for a formula that fails (with a warning on the resource), which the rest leaves to the player.
+/// </summary>
+public sealed record RecoveryInfo(string EffectId, RestPeriod On, string Amount, string? Text, int? Value = null, bool All = false);
 
 /// <summary>
 /// SPEC I-05: one active revision as the sheet lists it. <paramref name="Automation"/> is the least automated of its
@@ -340,13 +344,13 @@ public static class CharacterCalculator
             {
                 if (!seen.Add(effect.ResourceId))
                     continue; // validation refuses duplicates on publish; the first definition counts
+                var warnings = new List<Diagnostic>();
                 var recoveries = revision.Effects.OfType<RecoveryEffect>()
                     .Where(r => r.ResourceId == effect.ResourceId)
-                    .Select(r => new RecoveryInfo(r.Id, r.On, r.Amount, r.Text))
+                    .Select(r => Recovery(r, item, character, classLevels, values, warnings))
                     .ToList();
                 var spent = character.Play.SpentOf(revision.ContentId, effect.ResourceId);
                 var origin = ContentOrigin(family, item, effect);
-                var warnings = new List<Diagnostic>();
                 int? maximum = null;
                 var trace = new List<TraceEntry>();
                 if (effect.Automation == AutomationStatus.Reference)
@@ -379,6 +383,24 @@ public static class CharacterCalculator
             }
         }
         return resources;
+    }
+
+    /// <summary>A recovery amount: <c>all</c>, or its formula evaluated in the content's context (a failure is a warning).</summary>
+    private static RecoveryInfo Recovery(
+        RecoveryEffect recovery, ActiveContent item, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> warnings)
+    {
+        if (string.Equals(recovery.Amount.Trim(), "all", StringComparison.OrdinalIgnoreCase))
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, All: true);
+        if (recovery.Automation != AutomationStatus.Automatic)
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
+        FormulaError? failure;
+        if (Formula.TryParse(recovery.Amount, out var formula, out failure)
+            && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+        {
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
+        }
+        warnings.Add(InvalidFormula(item.Revision, recovery, failure!));
+        return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
     }
 
     private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics)
