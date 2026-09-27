@@ -21,7 +21,7 @@ The **Sources** screen lists every source with its license, whether it may be sh
 
 A feature whose source has an available PDF and whose revision cites a page gets **Open <name>, p. N** on the sheet. `source.openPage { sourceId, page }` asks the shell to open it. It does not depend on text extraction (ARCHITECTURE):
 
-- The shell opens a separate viewer window: WebView2's built-in PDF viewer, with the PDF's folder mapped to its own virtual host (`pdf.tomestack.localhost`, deny CORS), navigated to `…/<file>#page=N`.
+- The shell opens a separate viewer window: WebView2's built-in PDF viewer, navigated to `https://pdf.tomestack.localhost/document.pdf#page=N`. No folder is mapped. The window answers that one URL with the PDF's bytes (with delete sharing, so the attachment can still be removed while it is open). It refuses and reports every other request and navigation, so a link inside a linked PDF cannot reach the files next to it (`src/AppService/PdfViewerRequests.cs`, `PdfViewerRequestsTests`; M2 review fix). The file's name and path never appear in the URL.
 - Like the main window, it refuses every http(s) request outside that host and reports it. `--smoke` attaches a generated two-page PDF, opens page 2, and passes only when the viewer loaded it with no blocked request.
 - Hosts without a viewer (DevHost, tests without a host) report `unsupported`, and the UI says it needs the desktop app.
 

@@ -3,19 +3,20 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using TomeStack.AppService;
 
 namespace TomeStack.DesktopShell;
 
 /// <summary>
-/// ADR-005, SPEC S-04: shows one PDF at a page in WebView2's built-in PDF viewer, offline. The PDF's folder is mapped
-/// to its own virtual host for this window only (deny CORS); the page is the viewer's <c>#page=</c> open parameter.
-/// Every http(s) request outside that host is refused and reported, like the main window. The PDF is never parsed by
+/// ADR-005, SPEC S-04: shows one PDF at a page in WebView2's built-in PDF viewer, offline. No folder is mapped: the
+/// window loads exactly <see cref="PdfViewerRequests.DocumentUrl"/>, which this window answers with the PDF's bytes, so a
+/// link inside the PDF cannot reach other files next to a linked PDF. Every other request and navigation is refused and
+/// reported, like the main window. The page is the viewer's <c>#page=</c> open parameter. The PDF is never parsed by
 /// TomeStack, and no script is run on it.
 /// </summary>
 public sealed class PdfViewerWindow : Window
 {
-    private const string PdfHost = "pdf.tomestack.localhost";
-    private const string PdfOrigin = $"https://{PdfHost}/";
+    private readonly List<Stream> _served = [];
 
     public PdfViewerWindow(CoreWebView2Environment environment, string path, int page, string title, Action<string> blocked, Action<bool>? navigated = null)
     {
@@ -24,6 +25,12 @@ public sealed class PdfViewerWindow : Window
         Height = 1000;
         var view = new WebView2();
         Content = view;
+        Closed += (_, _) =>
+        {
+            foreach (var stream in _served)
+                stream.Dispose();
+            _served.Clear();
+        };
         Loaded += async (_, _) =>
         {
             try
@@ -40,24 +47,46 @@ public sealed class PdfViewerWindow : Window
             core.Settings.AreHostObjectsAllowed = false;
             core.Settings.IsWebMessageEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
-            core.SetVirtualHostNameToFolderMapping(PdfHost, Path.GetDirectoryName(Path.GetFullPath(path))!, CoreWebView2HostResourceAccessKind.DenyCors);
             core.NavigationStarting += (_, e) =>
             {
-                if (!e.Uri.StartsWith(PdfOrigin, StringComparison.OrdinalIgnoreCase))
-                    e.Cancel = true;
+                if (PdfViewerRequests.IsAllowed(e.Uri))
+                    return;
+                e.Cancel = true;
+                blocked(e.Uri);
             };
             core.NewWindowRequested += (_, e) => e.Handled = true;
             core.AddWebResourceRequestedFilter("http://*", CoreWebView2WebResourceContext.All);
             core.AddWebResourceRequestedFilter("https://*", CoreWebView2WebResourceContext.All);
             core.WebResourceRequested += (_, e) =>
             {
-                if (e.Request.Uri.StartsWith(PdfOrigin, StringComparison.OrdinalIgnoreCase))
+                if (!PdfViewerRequests.IsAllowed(e.Request.Uri))
+                {
+                    blocked(e.Request.Uri);
+                    e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
                     return;
-                blocked(e.Request.Uri);
-                e.Response = core.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+                }
+                e.Response = Serve(core.Environment, path);
             };
             core.NavigationCompleted += (_, e) => navigated?.Invoke(e.IsSuccess);
-            core.Navigate($"{PdfOrigin}{Uri.EscapeDataString(Path.GetFileName(path))}#page={page}");
+            core.Navigate(PdfViewerRequests.Url(page));
         };
+    }
+
+    /// <summary>
+    /// The PDF's bytes. Delete sharing lets the user remove or replace the attachment while it is open (ADR-005). The
+    /// stream stays open while the viewer reads it and is disposed when the window closes.
+    /// </summary>
+    private CoreWebView2WebResourceResponse Serve(CoreWebView2Environment environment, string path)
+    {
+        try
+        {
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            _served.Add(stream);
+            return environment.CreateWebResourceResponse(stream, 200, "OK", "Content-Type: application/pdf");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return environment.CreateWebResourceResponse(null, 404, "Not Found", "");
+        }
     }
 }
