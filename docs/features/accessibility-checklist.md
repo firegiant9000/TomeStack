@@ -14,6 +14,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 - M2 item 2: the same test spends a resource, sets temporary hit points, takes damage, toggles a condition and rolls (feature and d20 with advantage), all by role and name. Panels are regions named by their headings. The roll result is a polite live region (`aria-live`), not `role="status"`, so it does not compete with the app's status line. Its announcement by Narrator is not checked yet (item 15).
 - M2 items 3–5: the long-rest proposal, the equipment panel, the homebrew studio (source form, editor, rule groups named "Rule N: …", Check results) and the update review (captioned tables) are driven by role and name in the e2e tests. The rest proposal, editor and review move focus to their headings. The studio editor is long; a keyboard walkthrough of it is an owner check.
 - M2 item 6: the Sources screen names each source's list item, and removal asks in an `alertdialog` named "Remove <file>?". The PDF viewer window is WebView2's own viewer; its accessibility is Microsoft's, and a Narrator check of it is still open.
+- M2 item 7: the campaign form (named "Campaign"), the builder's "Campaign sources" group and the disabled options, which say "not allowed in this campaign" in text rather than only greyed out (1.4.1), are driven by role and name in the e2e test.
 
 ## Checklist
 

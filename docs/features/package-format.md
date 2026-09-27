@@ -1,6 +1,6 @@
-# Portable package format (v3; v1 and v2 still importable)
+# Portable package format (v4; v1 to v3 still importable)
 
-SPEC P-02 · status: implemented for characters (M0). Campaigns and assets are not yet included.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7). Assets (PDFs) are never included (ADR-005, ADR-007).
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -9,13 +9,14 @@ manifest.json
 sources/<sourceId>.json        SourceRecord, including license and redistribution flag
 content/<revisionId>.json      ContentRevision (immutable, pinned by characters)
 characters/<characterId>.json  Character choices, pins, overrides and play state (no derived values)
+campaigns/<campaignId>.json    Campaign profile of an exported character (v4; SPEC P-01)
 ```
 
 `manifest.json`:
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `3` (v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `4` (v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |

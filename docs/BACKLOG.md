@@ -8,14 +8,14 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B02 | Homebrew debugger | M5 | Missing references, invalid formulas and dead resources have diagnostics |
 | B03 | Character sandbox | M5 | Preview a draft subclass at chosen levels without changing a saved character |
 | B04 | Before/after tests | M5 | Compare two revisions on fixture characters |
-| B05 | PDF source-page links | M2 | Open cited page offline |
+| B05 | PDF source-page links | M2 | Open cited page offline. **Implemented (M2 item 6, `features/pdf-attachments.md`)**; the owner check of the landed page is open |
 | B06 | Rules-family compatibility checker | M1/M2 | Warn and record exception for deliberate mix |
 | B07 | Homebrew diff viewer | M3/M5 | Compare revisions by mechanics and text |
 | B08 | Character snapshots | M3/M5 | Restore an earlier state with a preview |
 | B09 | Command palette | M6 | Search a command and execute it from keyboard |
 | B10 | PDF full-text search | M7 | Search imported text and open matching page |
 | B11 | Tags/folders/collections | M6 | Filter content and characters by custom labels |
-| B12 | Local campaign profiles | M2 | Filter sources and rule choices per campaign |
+| B12 | Local campaign profiles | M2 | Filter sources and rule choices per campaign. **Implemented (M2 item 7, `features/campaigns.md`)** |
 | B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely |
 | B14 | Spell/item/feature cards | M7 | Produce readable quick-reference cards |
 | B15 | Homebrew templates | M5 | Start a resource, transformation or class pattern |

@@ -28,7 +28,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     private const int ValidatedOnPublishSchemaVersion = 3;
     private const string ManifestPath = "manifest.json";
 
-    [GeneratedRegex("^(sources|content|characters)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(sources|content|characters|campaigns)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
     private static partial Regex EntryPathPattern();
 
     private sealed record ExportPlan(
@@ -51,6 +51,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         foreach (var character in plan.Characters)
             files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
+        // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text).
+        foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
+            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -197,6 +200,14 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 if (store.AddRevision(revision)) added++;
                 else unchanged++;
             }
+            foreach (var campaign in parsed.Campaigns)
+            {
+                var local = store.FindCampaign(campaign.Id);
+                if (local is null) added++;
+                else if (Json(local).AsSpan().SequenceEqual(Json(campaign))) { unchanged++; continue; }
+                else replaced++;
+                store.SaveCampaign(campaign);
+            }
             foreach (var character in parsed.Characters)
             {
                 if (store.FindCharacter(character.Id) is null) added++;
@@ -250,7 +261,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         PackageManifest Manifest,
         IReadOnlyList<SourceRecord> Sources,
         IReadOnlyList<ContentRevision> Revisions,
-        IReadOnlyList<Character> Characters);
+        IReadOnlyList<Character> Characters,
+        IReadOnlyList<Campaign> Campaigns);
 
     private (PackagePreview Preview, ParsedPackage? Parsed) Read(byte[] package)
     {
@@ -322,6 +334,19 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 else
                     warnings.Add(Named(problem));
             }
+        }
+
+        foreach (var campaign in parsed.Campaigns)
+        {
+            foreach (var problem in campaign.Validate())
+                errors.Add(problem with { Message = $"Campaign '{campaign.Name}': {problem.Message}" });
+            var local = store.FindCampaign(campaign.Id);
+            var action = local is null ? PackageItemAction.Add
+                : Json(local).AsSpan().SequenceEqual(Json(campaign)) ? PackageItemAction.Unchanged
+                : PackageItemAction.Replace;
+            if (action == PackageItemAction.Replace)
+                warnings.Add(new("package.campaign-replace", $"Campaign '{campaign.Name}' differs from your local copy (allowed sources, rules family or house rules); the imported copy replaces it."));
+            items.Add(new("campaign", campaign.Id, campaign.Name, action, $"{campaign.RulesFamily} · {campaign.AllowedSources.Count} allowed source(s)"));
         }
 
         // ADR-007: a share package may leave out non-redistributable content, but only content its manifest names.
@@ -448,6 +473,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var sources = new List<SourceRecord>();
         var revisions = new List<ContentRevision>();
         var characters = new List<Character>();
+        var campaigns = new List<Campaign>();
         foreach (var (path, bytes) in files.Where(f => f.Key != ManifestPath).OrderBy(f => f.Key, StringComparer.Ordinal))
         {
             var id = Guid.Parse(Path.GetFileNameWithoutExtension(path));
@@ -467,9 +493,17 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     ExpectSchema(path, "character", character.SchemaVersion, Character.CurrentSchemaVersion, errors);
                     characters.Add(character);
                     break;
+                case "campaigns" when Deserialize<Campaign>(path, bytes, errors) is { } campaign:
+                    ExpectId(path, id, campaign.Id, errors);
+                    ExpectSchema(path, "campaign", campaign.SchemaVersion, Campaign.CurrentSchemaVersion, errors);
+                    if (campaign.AllowedSources is null)
+                        errors.Add(new("package.invalid-json", $"Entry '{path}' has no allowed-sources list."));
+                    else
+                        campaigns.Add(campaign);
+                    break;
             }
         }
-        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters);
+        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns);
     }
 
     /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>

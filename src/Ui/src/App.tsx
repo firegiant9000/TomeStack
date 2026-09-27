@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { client } from './api/client';
 import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
+import { CampaignsPanel } from './components/CampaignsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
@@ -14,6 +15,7 @@ type Screen =
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio' }
   | { kind: 'sources' }
+  | { kind: 'campaigns' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -108,6 +110,17 @@ export function App() {
           >
             Sources
           </button>
+          <button
+            type="button"
+            disabled={!info}
+            aria-current={screen.kind === 'campaigns' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'campaigns' });
+            }}
+          >
+            Campaigns
+          </button>
         </div>
         <ul className="character-list">
           {characters.map((c) => (
@@ -167,7 +180,10 @@ export function App() {
             }}
           />
         )}
-        {screen.kind === 'sources' && <SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
+        {screen.kind === 'campaigns' && info && (
+          <CampaignsPanel rulesFamilies={info.rulesFamilies} onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />
+        )}
+        {screen.kind === 'sources' &&<SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
         {screen.kind === 'sheet' && (
           <CharacterSheet
             key={screen.view.character.id}

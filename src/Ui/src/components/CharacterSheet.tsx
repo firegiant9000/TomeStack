@@ -307,10 +307,22 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </h2>
         <span className="tag">{character.rulesFamily}</span>
         <span className="tag">Level {character.level}</span>
+        {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
       </header>
+
+      {view.campaign && view.campaign.warnings.length > 0 && (
+        <section aria-labelledby="campaign-heading">
+          <h3 id="campaign-heading">Campaign: {view.campaign.name}</h3>
+          <ul className="warnings">
+            {view.campaign.warnings.map((w) => (
+              <li key={`${w.code}-${w.content?.revisionId ?? ''}`}>{w.message}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 

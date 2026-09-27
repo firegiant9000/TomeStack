@@ -37,6 +37,8 @@ export interface Character {
   /** Selections for choice effects (character schema v3). */
   choices: ChoiceSelection[];
   crossFamilyExceptions: CrossFamilyException[];
+  /** Content used although the campaign does not allow its source, each with a reason (SPEC P-01). */
+  campaignExceptions?: CampaignException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
@@ -301,9 +303,34 @@ export interface RollTarget {
   critical?: boolean;
 }
 
+/** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */
+export interface Campaign {
+  id: string;
+  schemaVersion?: number;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  allowedSources: string[];
+  houseRules?: string;
+  updatedAt?: string;
+}
+
+export interface CampaignStatus {
+  campaignId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  warnings: Diagnostic[];
+}
+
+export interface CampaignException {
+  content: ContentReference;
+  reason: string;
+  recordedAt?: string;
+}
+
 export interface CharacterView {
   character: Character;
   sheet: CharacterSheet;
+  campaign?: CampaignStatus;
 }
 
 export interface CharacterSummary {
@@ -348,6 +375,8 @@ export interface ContentOption {
   sourceTitle: string;
   page?: string;
   summary?: string;
+  /** Set when listed for a campaign: whether it allows this option's source. */
+  allowedInCampaign?: boolean;
 }
 
 export interface CreateCharacterRequest {
@@ -359,6 +388,8 @@ export interface CreateCharacterRequest {
   classes?: ClassLevel[];
   /** Choices answered in the builder draft. */
   choices?: ChoiceSelection[];
+  campaignId?: string;
+  campaignExceptions?: CampaignException[];
 }
 
 export interface LicenseNotice {

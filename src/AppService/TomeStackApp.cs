@@ -76,10 +76,14 @@ public sealed partial class TomeStackApp : IDisposable
         _warnings,
         CharacterCalculator.FieldInfos);
 
-    public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
+    /// <param name="campaignId">SPEC P-01: when set, each option says whether the campaign allows its source (<see cref="ContentOption.AllowedInCampaign"/>).</param>
+    public IReadOnlyList<ContentOption> ListContent(string rulesFamily, Guid? campaignId = null)
     {
         if (!RulesFamilies.IsKnown(rulesFamily))
             throw new AppValidationException([new("rules-family.unknown", $"Rules family '{rulesFamily}' is not supported.")]);
+        HashSet<Guid>? allowed = null;
+        if (campaignId is { } id)
+            allowed = (_store.FindCampaign(id) ?? throw new AppValidationException([new("campaign.not-found", $"Campaign {id} does not exist.")])).AllowedSources.ToHashSet();
         var sources = _store.ListSources().ToDictionary(s => s.Id);
         return
         [
@@ -90,7 +94,8 @@ public sealed partial class TomeStackApp : IDisposable
                     var source = sources.GetValueOrDefault(r.Provenance.SourceId);
                     return new ContentOption(
                         r.Reference, r.Kind, r.Name, r.RulesFamilies, r.RulesFamilies.Contains(rulesFamily),
-                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary);
+                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary,
+                        allowed?.Contains(r.Provenance.SourceId));
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -128,6 +133,8 @@ public sealed partial class TomeStackApp : IDisposable
             Pins = request.Pins ?? [],
             Classes = request.Classes ?? [],
             Choices = request.Choices ?? [],
+            CampaignId = request.CampaignId,
+            CampaignExceptions = request.CampaignExceptions ?? [],
         });
     }
 
@@ -206,7 +213,11 @@ public sealed partial class TomeStackApp : IDisposable
 
     public void Dispose() => _store.Dispose();
 
-    private CharacterView View(Character character) => new(character, CharacterCalculator.Calculate(character, _store));
+    private CharacterView View(Character character)
+    {
+        var sheet = CharacterCalculator.Calculate(character, _store);
+        return new(character, sheet, CampaignOf(character, sheet));
+    }
 
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
     public static ContentPack LoadBundledPack(string resourceName)
@@ -243,11 +254,13 @@ public sealed record ContentOption(
     Guid SourceId,
     string SourceTitle,
     string? Page,
-    string? Summary);
+    string? Summary,
+    bool? AllowedInCampaign = null);
 
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
-public sealed record CharacterView(Character Character, CharacterSheet Sheet);
+/// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
@@ -259,7 +272,9 @@ public sealed record CreateCharacterRequest(
     AbilityScores BaseAbilities,
     IReadOnlyList<ContentReference>? Pins,
     IReadOnlyList<ClassLevel>? Classes = null,
-    IReadOnlyList<ChoiceSelection>? Choices = null);
+    IReadOnlyList<ChoiceSelection>? Choices = null,
+    Guid? CampaignId = null,
+    IReadOnlyList<CampaignException>? CampaignExceptions = null);
 
 /// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
 public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);

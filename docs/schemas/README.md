@@ -12,10 +12,12 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `character.v1.schema.json` | `Character`: choices, pins and overrides. Read and upcast | `schemaVersion` |
 | `character.v2.schema.json` | Adds `level` and `crossFamilyExceptions`. Read and upcast | `schemaVersion` |
 | `character.v3.schema.json` | Adds `classes` (levels per class) and `choices`. Read and upcast | `schemaVersion` |
-| `character.v4.schema.json` | Adds `play`: current and temporary hit points, spent resources, conditions, exhaustion (M2 item 2, SPEC C-05), and `equipment` (M2 item 4). Current | `schemaVersion` |
+| `character.v4.schema.json` | Adds `play`: current and temporary hit points, spent resources, conditions, exhaustion (M2 item 2, SPEC C-05), `equipment` (M2 item 4) and `campaignExceptions` (M2 item 7). Current | `schemaVersion` |
 | `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Still importable | `formatVersion` |
-| `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Current | `formatVersion` |
+| `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Still importable | `formatVersion` |
+| `package-manifest.v4.schema.json` | Adds `campaigns/` entries (M2 item 7); entries may be content and character schema v4. Current | `formatVersion` |
+| `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules. Current | `schemaVersion` |
 
 The files are named `<kind>.v<version>.schema.json`. The test picks the schema from the document's own version field.
 

@@ -58,6 +58,14 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         ALTER TABLE sources ADD COLUMN attachment_id TEXT;
         ALTER TABLE sources ADD COLUMN legacy_pdf_ref TEXT;
         """, store => store.MigratePdfReferences()),
+        // v4 (SPEC P-01, BACKLOG B12, M2 item 7): local campaign profiles.
+        new("""
+        CREATE TABLE campaigns (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        """),
     ];
 
     private readonly SqliteConnection _connection;
@@ -136,6 +144,24 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$json", Serialize(source)),
             ("$attachment", source.AttachmentId is { } a ? Key(a) : DBNull.Value));
     }
+
+    // ---- campaigns (SPEC P-01) ----
+
+    public void SaveCampaign(Campaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        Execute(
+            "INSERT INTO campaigns (id, name, json) VALUES ($id, $name, $json) ON CONFLICT(id) DO UPDATE SET name = excluded.name, json = excluded.json;",
+            ("$id", Key(campaign.Id)),
+            ("$name", campaign.Name),
+            ("$json", Serialize(campaign)));
+    }
+
+    public Campaign? FindCampaign(Guid id) => QuerySingle<Campaign>("SELECT json FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<Campaign> ListCampaigns() => Query<Campaign>("SELECT json FROM campaigns ORDER BY name, id;");
+
+    public void DeleteCampaign(Guid id) => Execute("DELETE FROM campaigns WHERE id = $id;", ("$id", Key(id)));
 
     // ---- attachments (ADR-005) ----
 

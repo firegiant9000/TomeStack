@@ -3,6 +3,7 @@ import type {
   AffectedCharacter,
   AppInfo,
   AttachmentInfo,
+  Campaign,
   DetachPreview,
   OpenPageOutcome,
   ContentRevision,
@@ -36,7 +37,12 @@ export function createClient(transport: Transport) {
   const call = <T>(command: string, payload?: unknown, options?: CallOptions) => transport(command, payload, options) as Promise<T>;
   return {
     info: () => call<AppInfo>('app.info'),
-    listContent: (rulesFamily: RulesFamilyId) => call<ContentOption[]>('content.list', { rulesFamily }),
+    /** With a campaign, every option says whether the campaign allows its source (SPEC P-01). */
+    listContent: (rulesFamily: RulesFamilyId, campaignId?: string) => call<ContentOption[]>('content.list', { rulesFamily, campaignId }),
+    listCampaigns: () => call<Campaign[]>('campaign.list'),
+    /** Creates (empty id) or updates a campaign profile. */
+    saveCampaign: (campaign: Campaign) => call<Campaign>('campaign.save', campaign),
+    deleteCampaign: (id: string) => call<{ deleted: boolean }>('campaign.delete', { id }),
     /** Schema, reference, formula and cycle problems for a stored revision; writes nothing. */
     validateContent: (reference: ContentReference) => call<ValidationReport>('content.validate', { reference }),
     /** The same checks for an unsaved revision (the studio's "Check"). */

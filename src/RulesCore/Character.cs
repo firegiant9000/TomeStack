@@ -60,7 +60,15 @@ public sealed record Character : IJsonOnDeserialized
     /// family policy, with a warning.
     /// </summary>
     public IReadOnlyList<CrossFamilyException> CrossFamilyExceptions { get; init; } = [];
+
+    /// <summary>SPEC P-01, BACKLOG B12: the local campaign profile this character plays in (allowed sources, rules family).</summary>
     public Guid? CampaignId { get; init; }
+
+    /// <summary>
+    /// SPEC P-01 (character schema v4, M2 item 7): content the player deliberately uses although the campaign does not
+    /// allow its source, each with a reason. Campaign rules never change calculation; they only warn.
+    /// </summary>
+    public IReadOnlyList<CampaignException> CampaignExceptions { get; init; } = [];
     public required AbilityScores BaseAbilities { get; init; }
     public IReadOnlyList<ContentReference> Pins { get; init; } = [];
     public IReadOnlyList<FieldOverride> Overrides { get; init; } = [];
@@ -98,6 +106,7 @@ public sealed record Character : IJsonOnDeserialized
             Choices = [.. Choices.Select(c => c with { Source = Swap(c.Source), Selected = [.. c.Selected.Select(Swap)] })],
             CrossFamilyExceptions = [.. CrossFamilyExceptions.Select(e => e with { Content = Swap(e.Content) })],
             Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item) })],
+            CampaignExceptions = [.. CampaignExceptions.Select(e => e with { Content = Swap(e.Content) })],
         };
     }
 
@@ -132,6 +141,8 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.choice-duplicate", $"Choice '{duplicate.Key.ChoiceId}' is recorded more than once; record all selections in one entry.", duplicate.Key.Source));
         foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
             problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
+        foreach (var exception in CampaignExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
+            problems.Add(new("character.exception-reason-required", "A campaign exception needs a reason.", exception.Content));
         foreach (var ability in Enum.GetValues<Ability>())
         {
             var score = BaseAbilities.Get(ability);
@@ -160,6 +171,7 @@ public sealed record Character : IJsonOnDeserialized
         Check("cross-family exceptions", CrossFamilyExceptions is null || CrossFamilyExceptions.Any(e => e?.Content is null));
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
         Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
+        Check("campaign exceptions", CampaignExceptions is null || CampaignExceptions.Any(e => e?.Content is null));
         Check("play state",Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null));
         return problems;
     }
@@ -191,6 +203,9 @@ public sealed record ClassLevel(ContentReference Class, int Level);
 
 /// <summary>The options a character picked for one choice: <paramref name="Source"/> is the revision offering it.</summary>
 public sealed record ChoiceSelection(ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference> Selected);
+
+/// <summary>A recorded decision to use one revision whose source the character's campaign does not allow (SPEC P-01).</summary>
+public sealed record CampaignException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);
 
 /// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
 public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);

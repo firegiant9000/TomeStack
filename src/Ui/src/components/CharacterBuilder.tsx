@@ -3,6 +3,8 @@ import { client } from '../api/client';
 import type {
   Ability,
   AbilityScores,
+  Campaign,
+  CampaignException,
   Character,
   CharacterView,
   ChoiceStatus,
@@ -46,6 +48,7 @@ interface Basics {
   background?: ContentReference;
   startingClass?: ContentReference;
   other: ContentReference[];
+  campaignId?: string;
 }
 
 interface Props {
@@ -56,12 +59,15 @@ interface Props {
   onError: (error: unknown) => void;
 }
 
-function sourceLine(option: ContentOption) {
+/** An option as the builder shows it: outside the campaign counts as unavailable until the player gives a reason. */
+type Shown = ContentOption & { outsideCampaign?: boolean };
+
+function sourceLine(option: Shown) {
   return (
     <span className="option-source">
       {option.sourceTitle}
       {option.page ? `, ${option.page}` : ''} · {option.rulesFamilies.join(', ')}
-      {!option.compatible && ' · not available for this rules family'}
+      {option.outsideCampaign ? ' · not allowed in this campaign' : !option.compatible && ' · not available for this rules family'}
     </span>
   );
 }
@@ -100,6 +106,7 @@ function SinglePick(props: {
 function BasicsStep(props: {
   basics: Basics;
   rulesFamilies: RulesFamilyPolicy[];
+  campaigns: Campaign[];
   options: ContentOption[];
   onChange: (basics: Basics) => void;
   onNext: () => void;
@@ -129,6 +136,27 @@ function BasicsStep(props: {
         Name
         <input required value={basics.name} onChange={(e) => onChange({ ...basics, name: e.target.value })} autoFocus />
       </label>
+
+      {props.campaigns.length > 0 && (
+        <label className="field">
+          Campaign
+          <select
+            value={basics.campaignId ?? ''}
+            onChange={(e) => {
+              const campaign = props.campaigns.find((c) => c.id === e.target.value);
+              // A campaign names its rules family; the character follows it (it can still be changed below, with a warning).
+              onChange({ ...basics, campaignId: campaign?.id, rulesFamily: campaign?.rulesFamily ?? basics.rulesFamily });
+            }}
+          >
+            <option value="">No campaign</option>
+            {props.campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.rulesFamily})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <fieldset>
         <legend>Rules family</legend>
@@ -392,6 +420,8 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
     // Answers survive going back to the basics; ones that no longer apply are flagged by the rules core.
     choices: previous?.choices ?? [],
     crossFamilyExceptions: [],
+    campaignId: basics.campaignId,
+    campaignExceptions: previous?.campaignExceptions ?? [],
     baseAbilities: basics.scores,
     pins: [basics.species, basics.background, ...basics.other].filter((p): p is ContentReference => !!p),
     overrides: [],
@@ -409,24 +439,50 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   });
   const [draftId] = useState(() => crypto.randomUUID());
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
-  const [options, setOptions] = useState<ContentOption[]>([]);
+  const [listed, setListed] = useState<ContentOption[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [outside, setOutside] = useState({ allow: false, reason: '' });
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
 
   const family = mode.kind === 'create' ? basics.rulesFamily : mode.view.character.rulesFamily;
+  const campaignId = mode.kind === 'create' ? basics.campaignId : mode.view.character.campaignId;
+  const campaign = campaigns.find((c) => c.id === campaignId);
+
+  useEffect(() => {
+    client.listCampaigns().then(setCampaigns).catch(onError);
+  }, [onError]);
 
   useEffect(() => {
     let current = true;
     client
-      .listContent(family)
+      .listContent(family, campaignId)
       .then((result) => {
-        if (current) setOptions(result);
+        if (current) setListed(result);
       })
       .catch(onError);
     return () => {
       current = false;
     };
-  }, [family, onError]);
+  }, [family, campaignId, onError]);
+
+  // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
+  const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
+  const options: Shown[] = listed.map((o) =>
+    o.allowedInCampaign === false && !outsideAllowed ? { ...o, compatible: false, outsideCampaign: true } : o,
+  );
+
+  /** Exceptions for every referenced revision the campaign does not allow, with the player's reason. */
+  function withExceptions(draft: Character): Character {
+    if (!outsideAllowed) return draft; // without a reason nothing is recorded; the sheet then warns about outside content
+    const known = draft.campaignExceptions ?? [];
+    const references = [...draft.pins, ...draft.classes.map((c) => c.class), ...draft.choices.flatMap((c) => c.selected)];
+    const added: CampaignException[] = references
+      .filter((r) => listed.find((o) => sameRef(o.reference, r))?.allowedInCampaign === false)
+      .filter((r) => !known.some((e) => sameRef(e.content, r)))
+      .map((content) => ({ content, reason: outside.reason.trim(), recordedAt: new Date().toISOString() }));
+    return { ...draft, campaignExceptions: [...known, ...added] };
+  }
 
   // WCAG 2.4.3: each step change moves focus to the builder heading, so keyboard and screen reader users start at the top.
   useEffect(() => {
@@ -459,7 +515,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     if (!view) return;
     setBusy(true);
     try {
-      const draft = view.character;
+      const draft = withExceptions(view.character);
       onCommitted(
         mode.kind === 'create'
           ? await client.createCharacter({
@@ -469,6 +525,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               pins: draft.pins,
               classes: draft.classes,
               choices: draft.choices,
+              campaignId: draft.campaignId,
+              campaignExceptions: draft.campaignExceptions,
             })
           : await client.saveCharacter(draft),
       );
@@ -489,10 +547,28 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       </h2>
       <p className="hint">Nothing is saved until you press the last button. Cancel discards this draft.</p>
 
+      {campaign && (
+        <fieldset aria-label="Campaign sources">
+          <legend>Campaign: {campaign.name}</legend>
+          <p className="hint">Only content from the campaign&apos;s sources can be picked.</p>
+          <label className="choice">
+            <input type="checkbox" checked={outside.allow} onChange={(e) => setOutside({ ...outside, allow: e.target.checked })} />
+            Use content from outside the campaign
+          </label>
+          {outside.allow && (
+            <label className="field">
+              Reason (recorded with each exception)
+              <input value={outside.reason} onChange={(e) => setOutside({ ...outside, reason: e.target.value })} />
+            </label>
+          )}
+        </fieldset>
+      )}
+
       {step === 'basics' && (
         <BasicsStep
           basics={basics}
           rulesFamilies={rulesFamilies}
+          campaigns={campaigns}
           options={options}
           onChange={setBasics}
           onNext={() => preview(draftOf(basics, draftId, view?.character))}

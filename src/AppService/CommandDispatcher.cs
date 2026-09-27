@@ -19,7 +19,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
         "content.bySource", "source.list", "source.createHomebrew",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
@@ -77,7 +77,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object Execute(string command, JsonElement? payload) => command switch
     {
         "app.info" => app.GetInfo(),
-        "content.list" => app.ListContent(Payload<RulesFamilyPayload>(payload).RulesFamily),
+        "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
+        "campaign.list" => app.ListCampaigns(),
+        "campaign.save" => app.SaveCampaign(Payload<Campaign>(payload)),
+        "campaign.delete" => DeleteCampaign(Payload<IdPayload>(payload)),
         "content.validate" => Validate(Payload<ContentPayload>(payload)),
         "content.saveDraft" => app.SaveDraft(Payload<ContentPayload>(payload).Revision ?? throw new JsonException("content.saveDraft needs a revision.")),
         "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
@@ -117,6 +120,14 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
+    }
+
+    private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);
+
+    private object DeleteCampaign(IdPayload payload)
+    {
+        app.DeleteCampaign(payload.Id);
+        return new { deleted = true };
     }
 
     private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind);
@@ -202,7 +213,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record CommandRequest(string Id, string Command, JsonElement? Payload);
 
-    private sealed record RulesFamilyPayload(string RulesFamily);
+    private sealed record RulesFamilyPayload(string RulesFamily, Guid? CampaignId = null);
 
     private sealed record IdPayload(Guid Id);
 

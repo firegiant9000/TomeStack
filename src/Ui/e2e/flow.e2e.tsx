@@ -400,6 +400,59 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   expect(screen.getByText('E2E Cited Feat')).toBeTruthy();
 });
 
+it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const campaignsButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Campaigns' });
+  await waitFor(() => expect(campaignsButton.disabled).toBe(false));
+  await user.click(campaignsButton);
+
+  async function createCampaign(name: string, sources: RegExp[]) {
+    await user.click(await screen.findByRole('button', { name: 'New campaign' }));
+    const form = screen.getByRole('form', { name: 'Campaign' });
+    await user.type(within(form).getByRole('textbox', { name: 'Campaign name' }), name);
+    await user.click(within(form).getByRole('radio', { name: /SRD 5\.2\.1/ }));
+    for (const source of sources) await user.click(within(form).getByRole('checkbox', { name: source }));
+    await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Saved the campaign ${name}.`));
+  }
+  await createCampaign('E2E Strict', [/^System Reference Document 5\.2\.1/]);
+  await createCampaign('E2E Open', [/^System Reference Document 5\.2\.1/, /^TomeStack Fixtures: 2024 Family/]);
+
+  await user.click(screen.getByRole('button', { name: 'New character' }));
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Campaigner');
+  const campaignSelect = screen.getByRole('combobox', { name: 'Campaign' });
+  const courier = () => screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Courier/ });
+  const soldier = () => screen.getAllByRole<HTMLInputElement>('radio', { name: /^Soldier/ }).find((r) => !r.disabled);
+
+  // Profile 1: SRD only. The fixture background is listed but not allowed; the SRD one is.
+  await user.selectOptions(campaignSelect, 'E2E Strict (srd-5.2.1)');
+  await waitFor(() => expect(courier().disabled).toBe(true));
+  expect(courier().closest('label')!.textContent).toMatch(/not allowed in this campaign/);
+  expect(soldier()).toBeTruthy();
+
+  // Profile 2: SRD and the 2024 fixtures. The same background is allowed.
+  await user.selectOptions(campaignSelect, 'E2E Open (srd-5.2.1)');
+  await waitFor(() => expect(courier().disabled).toBe(false));
+
+  // Back to profile 1, with a deliberate exception: a reason is required before outside content can be picked.
+  await user.selectOptions(campaignSelect, 'E2E Strict (srd-5.2.1)');
+  await waitFor(() => expect(courier().disabled).toBe(true));
+  const sources = screen.getByRole('group', { name: 'Campaign sources' });
+  await user.click(within(sources).getByRole('checkbox', { name: 'Use content from outside the campaign' }));
+  expect(courier().disabled).toBe(true); // no reason yet
+  await user.type(within(sources).getByRole('textbox', { name: /^Reason/ }), 'DM approved');
+  await waitFor(() => expect(courier().disabled).toBe(false));
+  await user.click(courier());
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Campaigner' });
+  expect(within(sheet).getByText('Campaign: E2E Strict', { selector: '.tag' })).toBeTruthy();
+  const notes = within(sheet).getByRole('region', { name: 'Campaign: E2E Strict' });
+  expect(notes.textContent).toMatch(/Fixture Courier.*used by exception: DM approved/);
+});
+
 it('reaches the primary actions by keyboard alone', async () => {
   const user = userEvent.setup();
   render(<App />);

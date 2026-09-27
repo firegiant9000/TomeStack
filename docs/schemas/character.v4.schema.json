@@ -8,6 +8,20 @@
   "properties": {
     "id": { "$ref": "#/$defs/uuid" },
     "schemaVersion": { "const": 4 },
+    "campaignExceptions": {
+      "description": "SPEC P-01 (M2 item 7): content used although the campaign does not allow its source, each with a reason.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["content", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "content": { "$ref": "#/$defs/contentReference" },
+          "reason": { "type": "string", "minLength": 1 },
+          "recordedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
     "equipment": {
       "description": "Items carried (M2 item 4). Only equipped items apply; worn armor sets the Armor Class base.",
       "type": "array",
