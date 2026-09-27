@@ -40,6 +40,12 @@ public sealed record PageRef(int Start, int? End = null)
 
 public sealed record Provenance(Guid SourceId, PageRef? Page = null);
 
+/// <summary>
+/// Names a choice by the content that offers it (any of its revisions) and the <c>choiceId</c>, for
+/// <see cref="ContentRevision.ExtendsChoice"/>.
+/// </summary>
+public sealed record ChoiceExtension(Guid ContentId, string ChoiceId);
+
 /// <summary>An exact pin to one immutable content revision (ARCHITECTURE: ContentReference).</summary>
 public sealed record ContentReference(Guid ContentId, Guid RevisionId);
 
@@ -54,8 +60,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v1 revisions are upcast to v2 on read (<see cref="UpgradedFrom"/>). v2 revisions are not upcast: v2 is a subset
     /// of v3, and keeping the written version keeps their serialized form, and so their hashes, unchanged (ADR-002).
     /// Older builds refuse v3 revisions (<c>content.schema-unsupported</c>) instead of ignoring the level gates.
+    /// v4 (M2 item 5) adds <see cref="ExtendsChoice"/>; v2 and v3 revisions are not upcast, for the same reason.
     /// </summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;
@@ -76,6 +83,13 @@ public sealed record ContentRevision : IJsonOnDeserialized
     public required Provenance Provenance { get; init; }
     public required RevisionStatus Status { get; init; }
     public string? Summary { get; init; }
+
+    /// <summary>
+    /// Content schema v4 (M2 item 5): this revision is an additional option of another content's choice, for example a
+    /// homebrew subclass for the SRD Barbarian's subclass choice. Published revisions only; never matched by name.
+    /// </summary>
+    public ChoiceExtension? ExtendsChoice { get; init; }
+
     public IReadOnlyList<Effect> Effects { get; init; } = [];
 
     [JsonExtensionData]

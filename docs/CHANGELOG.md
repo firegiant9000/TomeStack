@@ -13,12 +13,15 @@
 - **Equipment groundwork (M2 item 4; `docs/features/equipment.md`):** characters carry items and equip them (`equipment`, character schema v4). A new `armor` effect type covers light, medium and heavy armor and shields. Worn armor sets the Armor Class base, and while it is worn Unarmored Defense and other alternatives are traced as not used; a shield adds its bonus. The sheet has an Equipment panel. The SRD armor table is not bundled yet, because it needs the SRD pack review; development uses original fixture armor.
 - **Ability scores stop at 20 (owner decision 2026-09-27):** bonuses cannot raise an ability score above 20 in either family, and the trace says when a bonus was capped. `set` effects and overrides may exceed it.
 
+- **Homebrew studio (M2 item 5; SPEC I-04, I-06; `docs/features/homebrew-studio.md`):** create a personal homebrew source (not shareable by default), then author subclasses, features, feats and items with guided controls: modifiers, resources, recoveries, rolls and limited-use actions, granted features, armor, and reference-only text. Check, save drafts and publish. A homebrew subclass can be offered in an SRD class's subclass choice (content schema v4 `extendsChoice`). After publishing, the studio lists the characters on an older revision and opens a review (rule changes, values that change, overrides, open choices) with "Apply update". New commands: `source.list`, `source.createHomebrew`, `content.bySource`. `app.info` lists the calculated fields.
+
 ### Changed
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
 
 ### Migration
 
+- **Content schema v4** (`docs/schemas/content-revision.v4.schema.json`) adds `extendsChoice`. New revisions are written as v4. v2 and v3 revisions, including the bundled SRD packs, keep their version and hashes, so there is no database migration. Older builds refuse v4 revisions.
 - **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play` and `equipment`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
 
 ## 0.2.0 (M1 delivered)

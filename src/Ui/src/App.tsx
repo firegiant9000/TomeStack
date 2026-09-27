@@ -4,12 +4,14 @@ import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
+import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
 import { readFileAsBase64 } from './files';
 
 type Screen =
   | { kind: 'empty' }
   | { kind: 'builder'; mode: BuilderMode }
+  | { kind: 'studio' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -83,6 +85,17 @@ export function App() {
             Import package…
           </button>
           <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="Package file" />
+          <button
+            type="button"
+            disabled={!info}
+            aria-current={screen.kind === 'studio' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'studio' });
+            }}
+          >
+            Homebrew studio
+          </button>
         </div>
         <ul className="character-list">
           {characters.map((c) => (
@@ -129,6 +142,16 @@ export function App() {
               setMessage(undefined);
               await refresh();
               setScreen({ kind: 'sheet', view });
+            }}
+          />
+        )}
+        {screen.kind === 'studio' && info && (
+          <HomebrewStudio
+            info={info}
+            onError={onError}
+            onStatus={(text) => {
+              setMessage({ tone: 'status', text });
+              void refresh();
             }}
           />
         )}

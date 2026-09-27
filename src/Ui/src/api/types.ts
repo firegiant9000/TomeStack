@@ -334,6 +334,8 @@ export interface AppInfo {
   rulesFamilies: RulesFamilyPolicy[];
   /** Startup warnings, e.g. `data-dir.sync-root` when the data folder is inside OneDrive (ADR-005). */
   warnings: Diagnostic[];
+  /** Every calculated field and its label (homebrew studio targets). */
+  fields: FieldInfo[];
 }
 
 export interface ContentOption {
@@ -446,6 +448,107 @@ export interface PackagePreview {
   items: PackageItem[];
   errors: Diagnostic[];
   warnings: Diagnostic[];
+}
+
+// ---- homebrew studio (M2 item 5) ----
+
+export type EffectTiming = 'always' | 'whileActive' | 'onRoll' | 'onShortRest' | 'onLongRest';
+
+interface EffectBase {
+  id: string;
+  automation?: AutomationStatus;
+  timing?: EffectTiming;
+  text?: string;
+}
+
+export type Effect =
+  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string })
+  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number })
+  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
+  | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
+  | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
+  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number });
+
+export interface ChoiceExtension {
+  contentId: string;
+  choiceId: string;
+}
+
+export interface ContentRevision {
+  contentId: string;
+  revisionId: string;
+  schemaVersion?: number;
+  kind: ContentKind;
+  name: string;
+  rulesFamilies: RulesFamilyId[];
+  provenance: { sourceId: string; page?: PageRef };
+  status: 'draft' | 'published';
+  summary?: string;
+  extendsChoice?: ChoiceExtension;
+  effects: Effect[];
+  [extension: string]: unknown;
+}
+
+export interface SourceRecord {
+  id: string;
+  title: string;
+  publisher: string;
+  rulesFamilies: RulesFamilyId[];
+  editionVersion: string;
+  license: string;
+  redistributable: boolean;
+}
+
+export interface StudioEntry {
+  contentId: string;
+  name: string;
+  kind: ContentKind;
+  revisions: ContentRevision[];
+  latest: ContentRevision;
+  latestPublished?: ContentRevision;
+}
+
+export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment';
+
+export interface AffectedCharacter {
+  characterId: string;
+  name: string;
+  pinned: ContentReference;
+  role: ReferenceRole;
+  via?: string;
+}
+
+export interface PublishResult {
+  draft: ContentReference;
+  published: ContentReference;
+  report: ValidationReport;
+  affected: AffectedCharacter[];
+}
+
+export interface EffectChange {
+  effectId: string;
+  change: 'added' | 'removed' | 'changed';
+  type?: string;
+  before?: string;
+  after?: string;
+}
+
+export interface UpdateReview {
+  characterId: string;
+  from: ContentReference;
+  to: ContentReference;
+  mechanics: { properties: { property: string; before?: string; after?: string }[]; effects: EffectChange[] };
+  fields: { field: string; label: string; before: number; after: number }[];
+  newDiagnostics: Diagnostic[];
+  resolvedDiagnostics: Diagnostic[];
+  unresolvedChoices: ChoiceStatus[];
+  affectedOverrides: FieldOverride[];
+}
+
+export interface FieldInfo {
+  id: string;
+  label: string;
 }
 
 export interface ValidationReport {

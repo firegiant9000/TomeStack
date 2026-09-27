@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
+import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
 
 vi.mock('../src/api/client', async (importOriginal) => {
@@ -243,6 +244,112 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Armor Class: 17/ })).toBeTruthy());
   await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip Fixture Scale Vest' })); // take the armor off
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Armor Class: 15/ })).toBeTruthy()); // Unarmored Defense 13 + shield 2
+});
+
+const srd = (n: number) => ({
+  contentId: `52c00000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+  revisionId: `52e00000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+});
+
+it('authors a homebrew subclass in the studio, plays it, and reviews an update', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: an SRD 5.2.1 Barbarian 3 without a subclass (the builder test covers building one).
+  await client.createCharacter({
+    name: 'E2E Storm',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 15, dex: 13, con: 14, int: 8, wis: 12, cha: 10 },
+    pins: [srd(1), srd(2)],
+    classes: [{ class: srd(11), level: 3 }],
+    choices: [
+      { source: srd(2), choiceId: 'soldier-ability-scores', selected: [srd(4)] },
+      { source: srd(11), choiceId: 'barbarian-skills', selected: [srd(21), srd(22)] },
+      { source: srd(25), choiceId: 'primal-knowledge-skill', selected: [srd(17)] },
+    ],
+  });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  // A homebrew source for 2024 rules.
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Homebrew');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Homebrew' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
+  async function publish(name: string) {
+    await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Published ${name}.`));
+  }
+
+  // Feature 1: a class resource, its long-rest recovery, and a limited-use action that spends it.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Storm Ward');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(within(rule(/^Rule 1: Resource/)).getByRole('textbox', { name: 'Resource name' }), 'Storm charges');
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll or action' }));
+  const action = rule(/^Rule 3: Roll or action/);
+  await user.type(within(action).getByRole('textbox', { name: 'Roll name' }), 'Storm bolt');
+  await user.clear(within(action).getByRole('textbox', { name: /^Dice/ }));
+  await user.type(within(action).getByRole('textbox', { name: /^Dice/ }), '1d8 + 2');
+  await user.selectOptions(within(action).getByRole('combobox', { name: /Uses a resource/ }), 'Storm charges');
+  await publish('E2E Storm Ward');
+
+  // Feature 2: reference-only text.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Sky Lore');
+  await user.type(within(editor()).getByRole('textbox', { name: /^Description/ }), 'You can read tomorrow’s weather.');
+  await publish('E2E Sky Lore');
+
+  // The subclass: offered in the SRD Barbarian's subclass choice, a modifier, and both features at level 3.
+  await user.click(screen.getByRole('button', { name: 'New subclass' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'Path of the E2E Storm');
+  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  await waitFor(() => expect(within(offered).getByRole('option', { name: /^Barbarian: Level 3: Barbarian Subclass/ })).toBeTruthy());
+  await user.selectOptions(offered, within(offered).getByRole('option', { name: /^Barbarian: Level 3: Barbarian Subclass/ }));
+  await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
+  await user.click(within(editor()).getByRole('button', { name: 'Grant a feature' }));
+  await user.selectOptions(within(rule(/^Rule 2: Granted feature/)).getByRole('combobox', { name: 'Feature' }), 'E2E Storm Ward (published)');
+  await user.click(within(editor()).getByRole('button', { name: 'Grant a feature' }));
+  await user.selectOptions(within(rule(/^Rule 3: Granted feature/)).getByRole('combobox', { name: 'Feature' }), 'E2E Sky Lore (published)');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect(await within(editor()).findByText('No problems found. It can be published.')).toBeTruthy();
+  await publish('Path of the E2E Storm');
+
+  // Play it: the homebrew subclass is an option of the SRD choice.
+  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  let sheet = await screen.findByRole('article', { name: 'E2E Storm' });
+  await user.click(within(sheet).getByRole('button', { name: 'Make choices' }));
+  await pick(user, /^Barbarian: choose 1/, /^Path of the E2E Storm/);
+  await user.click(await screen.findByRole('button', { name: 'Save choices' }));
+  sheet = await screen.findByRole('article', { name: 'E2E Storm' });
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, homebrew +1
+  const resources = within(sheet).getByRole('region', { name: 'Resources' });
+  expect(within(resources).getByRole('heading', { name: 'Storm charges: 2 of 2' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Features' })).getByText('E2E Sky Lore').closest('li')!.textContent).toMatch(/reference only/);
+  await user.click(within(sheet).getByRole('button', { name: 'Roll Storm bolt (1d8 + 2)' }));
+  await user.click(await screen.findByRole('button', { name: 'Spend 1 Storm charges (2 left)' }));
+  await waitFor(() => expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Storm charges: 1 of 2' })).toBeTruthy());
+
+  // Republish with +3 initiative: the character keeps +2 until the reviewed update is applied.
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  await user.click(await screen.findByRole('button', { name: 'Edit Path of the E2E Storm' }));
+  const modifier = rule(/^Rule 1: Modifier/);
+  await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));
+  await user.type(within(modifier).getByRole('textbox', { name: /^Value/ }), '3');
+  await publish('Path of the E2E Storm');
+  await user.click(await screen.findByRole('button', { name: 'Review update for E2E Storm' }));
+  const review = await screen.findByRole('region', { name: 'Update E2E Storm: Path of the E2E Storm' });
+  const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
+  expect(values.textContent).toMatch(/Initiative24/);
+  await user.click(within(review).getByRole('button', { name: 'Apply update' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Updated E2E Storm/);
+  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

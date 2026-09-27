@@ -20,4 +20,9 @@ public sealed class InMemoryContentCatalog(IEnumerable<SourceRecord> sources, IE
     public ContentRevision? FindRevision(ContentReference reference) => _revisions.GetValueOrDefault(reference);
 
     public SourceRecord? FindSource(Guid sourceId) => _sources.GetValueOrDefault(sourceId);
+
+    public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) =>
+        _revisions.Values.Where(r => r.Status == RevisionStatus.Published && r.ExtendsChoice == new ChoiceExtension(contentId, choiceId));
+
+    public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => _revisions.Values.Where(r => r.ContentId == contentId);
 }

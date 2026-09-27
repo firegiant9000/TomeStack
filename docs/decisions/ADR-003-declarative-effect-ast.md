@@ -73,6 +73,13 @@ NUMBER  := [0-9]+
 - **No upcast from v2.** v2 is a subset of v3, so v2 revisions keep `schemaVersion: 2` and their serialized form, which means their hashes do not change and no database migration is needed. v1 still upcasts to exactly v2. New revisions are written as v3.
 - **Why a version and not an extension field:** a v2-only build would read `level` as an unknown extension and apply a level-3 feature at level 1. Refusing v3 (`content.schema-unsupported`, `package.schema-unsupported`) is safer than silently calculating differently. New effect *types*, by contrast, are forward-compatible (they become `UnknownEffect`), but new *fields* on existing types are not.
 
+## Content schema v4 (M2 item 5, 2026-09-27)
+
+- **Adds** `extendsChoice: { contentId, choiceId }` on a revision: it is also an option of that content's choice (a homebrew subclass for an SRD class; `features/homebrew-studio.md`). The calculator offers published extensions after the declared options, looked up through `IContentCatalog.ChoiceExtensions`.
+- **No upcast**, as for v3: v2 and v3 revisions keep their version and serialized form, so their hashes and the bundled SRD packs are unchanged and no database migration is needed. New revisions are written as v4.
+- **Why a version:** a v3 build would read `extendsChoice` as an unknown extension. It would then refuse the character's selection of the homebrew subclass (`choice.invalid-option`) instead of saying it needs a newer build. Refusing v4 (`content.schema-unsupported`) is clearer.
+- `armor` (M2 item 4) is a new effect *type* and needed no version.
+
 ## Consequences
 
 - Revision hashes now come from the v2 representation. Any future change to effect serialization is a schema change and needs the same kind of migration (ADR-002 consequence).

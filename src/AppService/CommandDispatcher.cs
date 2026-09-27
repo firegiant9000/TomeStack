@@ -20,6 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "content.bySource", "source.list", "source.createHomebrew",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
@@ -81,6 +82,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
         "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
         "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
+        "content.bySource" => app.ContentBySource(Payload<SourceIdPayload>(payload).SourceId),
+        "source.list" => app.ListSources(),
+        "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
         "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
         "roll" => app.Roll(Payload<RollCommand>(payload)),
@@ -178,6 +182,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest);
 
     private sealed record ContentIdPayload(Guid ContentId);
+
+    private sealed record SourceIdPayload(Guid SourceId);
 
     /// <param name="Confirm">Must be true to apply; the review never changes anything (SPEC I-06).</param>
     private sealed record UpdatePayload(Guid CharacterId, ContentReference From, ContentReference To, bool Confirm = false);

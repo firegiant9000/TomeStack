@@ -163,6 +163,20 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$cid", Key(reference.ContentId)));
     }
 
+    /// <summary>
+    /// Published revisions that extend one choice. The LIKE pre-filter keeps calculation from reading every revision;
+    /// the typed comparison afterwards is the real test.
+    /// </summary>
+    public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) =>
+        Query<ContentRevision>("SELECT json FROM content_revisions WHERE status = 'Published' AND json LIKE '%\"extendsChoice\"%' ORDER BY rowid;")
+            .Where(r => r.ExtendsChoice == new ChoiceExtension(contentId, choiceId));
+
+    public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => ListRevisions(contentId);
+
+    /// <summary>Every stored revision in the order it was added (the homebrew studio's history).</summary>
+    public IReadOnlyList<ContentRevision> ListRevisionsInOrder() =>
+        Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY rowid;");
+
     public IReadOnlyList<ContentRevision> ListRevisions() =>
         Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
 

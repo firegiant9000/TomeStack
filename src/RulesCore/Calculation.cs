@@ -5,6 +5,12 @@ public interface IContentCatalog
 {
     ContentRevision? FindRevision(ContentReference reference);
     SourceRecord? FindSource(Guid sourceId);
+
+    /// <summary>Published revisions that declare themselves an option of the choice (content schema v4, M2 item 5).</summary>
+    IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => [];
+
+    /// <summary>Every stored revision of one content id, any status (validation of <see cref="ContentRevision.ExtendsChoice"/>).</summary>
+    IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => [];
 }
 
 public sealed record Diagnostic(string Code, string Message, ContentReference? Content = null, string? EffectId = null);
@@ -130,6 +136,9 @@ public sealed record FeatureEntry(
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
 public sealed record FeatureEffect(string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null);
 
+/// <summary>A calculated field id and its display label.</summary>
+public sealed record FieldInfo(string Id, string Label);
+
 /// <summary>Hit points for play: the displayed maximum (after any override), current (at most the maximum) and temporary.</summary>
 public sealed record HitPointState(int Maximum, int Current, int Temporary);
 
@@ -169,6 +178,9 @@ public static class CharacterCalculator
         Specs.Select((s, i) => (s.Id, i)).ToDictionary(p => p.Id, p => p.i, StringComparer.Ordinal);
 
     public static IEnumerable<string> Fields => Specs.Select(s => s.Id);
+
+    /// <summary>Every calculated field with its label, for authoring UIs (modifier targets, restrictions).</summary>
+    public static IReadOnlyList<FieldInfo> FieldInfos { get; } = [.. Specs.Select(s => new FieldInfo(s.Id, s.Label))];
 
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
@@ -643,10 +655,20 @@ public static class CharacterCalculator
                     continue;
                 }
                 var selected = character.Choices.LastOrDefault(c => c.Source == revision.Reference && c.ChoiceId == choice.ChoiceId)?.Selected ?? [];
+                // Content schema v4: published revisions that name this choice (by content id, any revision of it) are
+                // options too, after the declared ones; for example a homebrew subclass for the SRD Barbarian.
+                IReadOnlyList<ContentReference> options =
+                [
+                    .. choice.Options,
+                    .. catalog.ChoiceExtensions(revision.ContentId, choice.ChoiceId)
+                        .OrderBy(r => r.Name, StringComparer.Ordinal).ThenBy(r => r.RevisionId)
+                        .Select(r => r.Reference)
+                        .Where(r => !choice.Options.Contains(r)),
+                ];
                 var applied = new List<ContentReference>();
                 foreach (var option in selected.Distinct())
                 {
-                    if (!choice.Options.Contains(option))
+                    if (!options.Contains(option))
                     {
                         diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}' choice '{choice.ChoiceId}': revision {option.RevisionId} is not one of its options; it is not applied.", option, choice.Id));
                         continue;
@@ -682,7 +704,7 @@ public static class CharacterCalculator
                         revision.Reference,
                         choice.Id));
                 }
-                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, choice.Options, applied, resolved));
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved));
             }
         }
 

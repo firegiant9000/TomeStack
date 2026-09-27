@@ -143,10 +143,24 @@ public static class ContentValidator
             Warn("validate.hit-die-missing", "This class declares no hit die, so it adds no hit points.");
         if (needsV3 && revision.SchemaVersion < 3)
             Error("validate.requires-v3", $"This revision uses content schema v3 features (levels, hitDie, armorClass or hitPoints) but declares v{revision.SchemaVersion}; a v2 build would misread it.");
+        if (revision.ExtendsChoice is not null && revision.SchemaVersion < 4)
+            Error("validate.requires-v4", $"This revision extends a choice (content schema v4) but declares v{revision.SchemaVersion}; a v3 build would ignore it.");
 
         // ---- references ----
         if (catalog.FindSource(revision.Provenance.SourceId) is null)
             Error("validate.source-missing", $"Source {revision.Provenance.SourceId} is not installed.");
+        if (revision.ExtendsChoice is { } extends)
+        {
+            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.Values.Where(r => r.ContentId == extends.ContentId)).ToList();
+            if (extends.ContentId == revision.ContentId)
+                Error("validate.self-reference", "A revision cannot add itself to one of its own choices.");
+            else if (targets.Count == 0)
+                Warn("validate.extends-choice-missing", $"The content {extends.ContentId} whose choice '{extends.ChoiceId}' this extends is not installed; the option appears once it is.");
+            else if (!targets.Any(t => t.Effects.OfType<ChoiceEffect>().Any(c => c.ChoiceId == extends.ChoiceId)))
+                Error("validate.extends-choice-unknown", $"'{targets[^1].Name}' offers no choice '{extends.ChoiceId}'.");
+            else if (!targets.Any(t => t.RulesFamilies.Intersect(revision.RulesFamilies).Any()))
+                Error("validate.reference-family", $"'{targets[^1].Name}' supports {string.Join(", ", targets[^1].RulesFamilies)}, none of this revision's families.");
+        }
 
         // ---- cycles ----
         foreach (var cycle in CharacterCalculator.DependencyCycles(revision))

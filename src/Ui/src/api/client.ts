@@ -1,6 +1,12 @@
 import { detectTransport, type CallOptions, type Transport } from './transport';
 import type {
+  AffectedCharacter,
   AppInfo,
+  ContentRevision,
+  PublishResult,
+  SourceRecord,
+  StudioEntry,
+  UpdateReview,
   Character,
   CharacterSummary,
   CharacterView,
@@ -30,6 +36,24 @@ export function createClient(transport: Transport) {
     listContent: (rulesFamily: RulesFamilyId) => call<ContentOption[]>('content.list', { rulesFamily }),
     /** Schema, reference, formula and cycle problems for a stored revision; writes nothing. */
     validateContent: (reference: ContentReference) => call<ValidationReport>('content.validate', { reference }),
+    /** The same checks for an unsaved revision (the studio's "Check"). */
+    validateRevision: (revision: ContentRevision) => call<ValidationReport>('content.validate', { revision }),
+    /** Stores an inactive draft under a new revision id (drafts are insert-only too). */
+    saveDraft: (revision: ContentRevision) => call<ContentReference>('content.saveDraft', { revision }),
+    /** Validates again and publishes a new immutable revision; no character changes (SPEC I-06). */
+    publish: (reference: ContentReference) => call<PublishResult>('content.publish', { reference }),
+    contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
+    affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
+    contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
+    listSources: () => call<SourceRecord[]>('source.list'),
+    createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
+      call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
+    /** What moving a character to another revision would change; writes nothing. */
+    reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
+      call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),
+    /** Applies a reviewed update; only the "Apply update" button calls this. */
+    applyUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
+      call<CharacterView>('character.applyUpdate', { characterId, from, to, confirm: true }),
     listCharacters: () => call<CharacterSummary[]>('character.list'),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),

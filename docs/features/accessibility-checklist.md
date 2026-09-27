@@ -12,6 +12,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 - The same file checks keyboard-only access: Tab reaches "New character" and "Import package…", and Enter opens the form with focus on Name.
 - M2 item 1: the builder test drives create → choices → cancelled level-up → level-up to 3 → "Make choices" by role and name only (radio groups, choice groups named by their legends), and asserts focus on the builder heading after a step change (2.4.3). Keyboard-only and Narrator passes of the builder are still owner checks (items 3 and 15).
 - M2 item 2: the same test spends a resource, sets temporary hit points, takes damage, toggles a condition and rolls (feature and d20 with advantage), all by role and name. Panels are regions named by their headings. The roll result is a polite live region (`aria-live`), not `role="status"`, so it does not compete with the app's status line. Its announcement by Narrator is not checked yet (item 15).
+- M2 items 3–5: the long-rest proposal, the equipment panel, the homebrew studio (source form, editor, rule groups named "Rule N: …", Check results) and the update review (captioned tables) are driven by role and name in the e2e tests. The rest proposal, editor and review move focus to their headings. The studio editor is long; a keyboard walkthrough of it is an owner check.
 
 ## Checklist
 

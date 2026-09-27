@@ -73,7 +73,8 @@ public sealed partial class TomeStackApp : IDisposable
         typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
         _store.SchemaVersion,
         RulesFamilies.All,
-        _warnings);
+        _warnings,
+        CharacterCalculator.FieldInfos);
 
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
     {
@@ -230,7 +231,8 @@ public sealed partial class TomeStackApp : IDisposable
 }
 
 /// <param name="Warnings">Startup warnings for the user, such as a data folder inside a sync root (<c>data-dir.sync-root</c>).</param>
-public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings);
+/// <param name="Fields">Every calculated field and its label, for the homebrew studio (M2 item 5).</param>
+public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings, IReadOnlyList<FieldInfo> Fields);
 
 public sealed record ContentOption(
     ContentReference Reference,

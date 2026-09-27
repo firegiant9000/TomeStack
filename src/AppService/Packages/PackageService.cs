@@ -570,6 +570,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         public ContentRevision? FindRevision(ContentReference reference) => revisions.GetValueOrDefault(reference) ?? local.FindRevision(reference);
 
         public SourceRecord? FindSource(Guid sourceId) => sources.GetValueOrDefault(sourceId) ?? local.FindSource(sourceId);
+
+        public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) =>
+            revisions.Values
+                .Where(r => r.Status == RevisionStatus.Published && r.ExtendsChoice == new ChoiceExtension(contentId, choiceId))
+                .Concat(local.ChoiceExtensions(contentId, choiceId))
+                .DistinctBy(r => r.Reference);
+
+        public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) =>
+            revisions.Values.Where(r => r.ContentId == contentId).Concat(local.RevisionsOf(contentId)).DistinctBy(r => r.Reference);
     }
 
     private sealed class EntryTooLargeException(string path)
