@@ -53,7 +53,7 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 | D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs. **Proposed (ADR-007):** separate `backup` and `share` exports; `share` omits non-redistributable sources | M2 export test; owner decision |
 | D04 | How much multiclass/spellcasting in MVP? | SRD-supported paths under both editions | M1 fixture review |
 | D05 | What accessibility target? | Full keyboard use, text zoom, contrast check; formal target to set. The checklist is mapped to WCAG 2.2 criteria in `features/accessibility-checklist.md` | M0 UI setup; owner decision |
-| D06 | Which Windows shell/IPC? | **Decided (ADR-006):** WPF/WebView2 shell, in-process service, WebView2 message bridge; loopback host dev-only. Installer still open | M0 packaging spike (transport done; installer pending) |
+| D06 | Which Windows shell/IPC? | **Decided (ADR-006):** WPF/WebView2 shell, in-process service, WebView2 message bridge; loopback host dev-only. **Installer decided (ADR-008, 2026-09-26):** Velopack, per-user, self-contained, pack id `TomeStack.App` | Done (clean-VM checks open) |
 | D07 | License for the project's own code? | **Decided (owner, 2026-09-26): Apache-2.0.** `LICENSE` and `NOTICE` are at the repo root. The dependency review (`ATTRIBUTION.md`: MIT, BSD-3-Clause, Apache-2.0, public domain) found nothing incompatible | Done |
 | D08 | Name availability and public branding? | TomeStack working name; trademark check before launch | Before public release |
 
@@ -61,4 +61,4 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 
 - **2026-09-24 · v0.1:** Initial product specification, Windows-first architecture proposal, two-rule-family MVP, accepted 20-item backlog, milestone plan and editable diagram. No implementation is claimed.
 - **2026-09-24 · M0 foundation:** Documents moved to `docs/`. The desktop spike resolved D06: in-process service over the WebView2 message bridge instead of a local ASP.NET Core service ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)). Content IDs and pins are recorded in [ADR-002](decisions/ADR-002-edition-aware-ids-and-revision-pins.md), and package format v1 in [features/package-format.md](features/package-format.md). The first vertical slice (initiative with trace, local save, export/import) is implemented against original fixtures; see [CHANGELOG.md](CHANGELOG.md). The functional overview diagram (`diagrams/TomeStack-Architecture.svg`) does not depict process topology, so ADR-006 needs no diagram change. The repo has no editable `.drawio` source yet.
-- **2026-09-26 · owner decisions:** D07 decided (Apache-2.0).
+- **2026-09-26 · owner decisions:** D07 decided (Apache-2.0). D06 completed: the installer is Velopack, per-user and self-contained ([ADR-008](decisions/ADR-008-installer-and-distribution.md), accepted), with a version-bump policy.

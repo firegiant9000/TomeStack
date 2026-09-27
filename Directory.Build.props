@@ -3,7 +3,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.0</Version>
+    <!-- Single source of the app and installer version. Velopack needs it to strictly increase; see ADR-008 "Versioning". -->
+    <Version>0.1.1</Version>
     <Company>TomeStack</Company>
     <Product>TomeStack</Product>
   </PropertyGroup>

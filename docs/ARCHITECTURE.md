@@ -1,6 +1,6 @@
 # Architecture · v0.1
 
-**Status:** proposed technical design. The desktop host and transport are decided by the M0 spike ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)); installer technology is still open.
+**Status:** proposed technical design. The desktop host and transport are decided by the M0 spike ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)); the installer is Velopack ([ADR-008](decisions/ADR-008-installer-and-distribution.md)).
 
 ## Boundaries
 
@@ -13,7 +13,7 @@
 | Import worker | PDF extraction/OCR adapters, candidate detection, quarantined drafts | Automatic publication |
 | SQLite store | Sources, immutable content revisions, character events/state, drafts, PDF index, migrations | Business rules |
 
-**Packaging (ADR-006, 2026-09-24):** a WPF + WebView2 Windows shell hosts the React UI and runs the .NET application service **in-process**, with SQLite for storage. The UI is served from the app folder through a WebView2 virtual host (`https://app.tomestack.localhost/`). It talks to the service over the **WebView2 message bridge** using a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens no listening socket. A development-only loopback host (`src/DevHost`: 127.0.0.1 only, per-launch token, origin allowlist) exposes the same dispatcher for browser development under Vite. The shell refuses any http(s) request outside the app origin. The spike superseded the originally proposed local ASP.NET Core service. Installer behavior (MSIX/Velopack/WiX, upgrade, clean-machine install) is still to be proven in M0. The domain core remains UI independent.
+**Packaging (ADR-006, 2026-09-24):** a WPF + WebView2 Windows shell hosts the React UI and runs the .NET application service **in-process**, with SQLite for storage. The UI is served from the app folder through a WebView2 virtual host (`https://app.tomestack.localhost/`). It talks to the service over the **WebView2 message bridge** using a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens no listening socket. A development-only loopback host (`src/DevHost`: 127.0.0.1 only, per-launch token, origin allowlist) exposes the same dispatcher for browser development under Vite. The shell refuses any http(s) request outside the app origin. The spike superseded the originally proposed local ASP.NET Core service. The installer is a per-user, self-contained Velopack package (pack id `TomeStack.App`, installed to `%LOCALAPPDATA%\TomeStack.App`, separate from the data folder). Upgrade and uninstall are proven on the development machine; the clean-machine install is still open (ADR-008). The domain core remains UI independent.
 
 ## Core entities and identity
 

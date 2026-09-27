@@ -78,7 +78,15 @@ The dev host writes a fresh token to `<data dir>/devhost.token` at each launch, 
 dotnet publish src/DesktopShell -c Release -r win-x64 --self-contained true -o artifacts/publish
 ```
 
-No installer yet (see ADR-006, "Not yet proven").
+**Installer** (Velopack, per-user, self-contained, unsigned; [ADR-008](docs/decisions/ADR-008-installer-and-distribution.md)). Build the UI first. `vpk` is a repo-local tool, so run `dotnet tool restore` once:
+
+```powershell
+dotnet tool restore
+scripts/pack-installer.ps1        # -> artifacts/installer/<version>/TomeStack.App-win-Setup.exe
+scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/<old> -NewBuild artifacts/installer/<new>
+```
+
+It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that folder, never the data folder. The version comes from `Directory.Build.props` and must go up with every build you hand out.
 
 ## Safety defaults
 

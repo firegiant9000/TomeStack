@@ -19,8 +19,9 @@ Checked on 2026-09-25 from `npm ls --omit=dev` and `dotnet list src/DesktopShell
 | Microsoft.Data.Sqlite / .Core | 10.0.12 | MIT | Microsoft Corporation |
 | SQLitePCLRaw (`core`, `bundle_e_sqlite3`, `provider.e_sqlite3`, `lib.e_sqlite3`) | 2.1.12 | Apache-2.0 | SourceGear, LLC |
 | SQLite (native `e_sqlite3`, via SQLitePCLRaw) | bundled | Public domain | D. Richard Hipp and contributors |
-| .NET runtime, WPF (only in a self-contained publish) | 10.0 | MIT | .NET Foundation and contributors |
+| .NET runtime, WPF (self-contained publish and the installer) | 10.0 | MIT | .NET Foundation and contributors |
+| Velopack (library, plus the installer's `Setup.exe` and `Update.exe`) | 1.2.158 | MIT | Velopack Ltd. |
 
 The Microsoft Edge WebView2 **Runtime** is not redistributed. It is a system component that is preinstalled on Windows 11 or installed by the user. The UI uses system fonts and ships no fonts or icon sets.
 
-The installer (ADR-008, pending) must include these notices, plus the full license texts where a license requires that (BSD-3-Clause, Apache-2.0 and MIT all require the notice to be kept).
+The Velopack installer (ADR-008) installs this file, `LICENSE` and `NOTICE` next to `TomeStack.exe` (checked by `scripts/installer-smoke.ps1`). BSD-3-Clause, Apache-2.0 and MIT all require the notice to be kept. Velopack's `Setup.exe` and `Update.exe` are compiled from Rust and statically include third-party crates; their individual notices have not been reviewed yet (open item before public release).

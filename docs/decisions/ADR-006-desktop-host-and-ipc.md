@@ -1,6 +1,6 @@
 # ADR-006: Desktop host and UI ↔ service transport
 
-Status: accepted (transport and hosting). Installer choice remains open; see "Not yet proven".
+Status: accepted (transport and hosting). The installer is Velopack (ADR-008); clean-VM checks remain open, see "Not yet proven".
 Date: 2026-09-24
 
 ## Context
@@ -66,12 +66,12 @@ An earlier draft of `offline-check.ps1` also disabled network adapters from the 
 
 ## Not yet proven (keep open in M0)
 
-- Installer technology, per-user install, upgrade, and uninstall-preserves-data. These are blocked on the owner's installer decision ([ADR-008](ADR-008-installer-and-distribution.md)). Installer-neutral upgrade evidence (backup before migration, refusing a newer data folder) is recorded there. Note: Velopack's default install folder is the same as our data folder, and MSIX virtualizes AppData. Both would delete user data on uninstall if adopted naively.
+- ~~Installer technology, per-user install, upgrade, and uninstall-preserves-data.~~ **Proven on the development machine (2026-09-26):** Velopack per-user install, upgrade from a schema-1 build with `tomestack.db.v1.bak`, and uninstall that keeps the data folder ([ADR-008](ADR-008-installer-and-distribution.md), pack id `TomeStack.App` so uninstall cannot delete `%LOCALAPPDATA%\TomeStack`). The clean-VM parts below are still open.
 - A run with the network actually disabled (procedure above; not yet executed).
 - **Clean VM only:**
   - first launch on a machine that never had TomeStack or its data directory;
   - a truly absent WebView2 Runtime. The simulation above swaps the loader path but does not remove the runtime, so it does not exercise the installer's runtime bootstrap;
-  - Windows 10 (support level is an open owner decision);
+  - Windows 10 (best-effort, owner decision 2026-09-26);
   - a standard (non-admin) user account;
   - behavior with the Evergreen Standalone Installer offline.
 - The smoke on GitHub-hosted runners. **Decision (2026-09-25): it stays non-blocking.** Evidence: the `windows-2025` image README lists Microsoft Edge 153 and .NET SDK 10.0.x but **not** the WebView2 Runtime. Windows Server does not guarantee the runtime alongside Edge, and whether the job has a desktop session is undocumented. **Green hosted run 1 of 3: PR #2, run 36275477994 (2026-09-26), WebView2 Runtime 153.0.4234.48 present, interactive session.** The missing-runtime step failed in that run; see the offline evidence table above. The replacement flag has not had a hosted run yet (nothing pushed since). CI now probes the runtime from the registry, logs the session, runs `scripts/smoke.ps1` and uploads the report. Promote the smoke to blocking after three consecutive green hosted runs. If the runtime is missing, install the Evergreen Standalone Runtime in CI first.

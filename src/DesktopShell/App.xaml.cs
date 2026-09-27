@@ -1,12 +1,26 @@
 using System.IO;
 using System.Windows;
 using TomeStack.AppService;
+using Velopack;
 
 namespace TomeStack.DesktopShell;
 
 public partial class App : Application
 {
     private TomeStackApp? _tomeStack;
+
+    /// <summary>
+    /// Velopack runs its install/update/uninstall hooks here and exits when launched for one (ADR-008). It makes no
+    /// network call: TomeStack never creates an <c>UpdateManager</c> (ADR-001, no update check).
+    /// </summary>
+    [STAThread]
+    private static void Main()
+    {
+        VelopackApp.Build().Run();
+        var app = new App();
+        app.InitializeComponent();
+        app.Run();
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
