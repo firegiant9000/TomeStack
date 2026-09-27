@@ -1,7 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { CharacterView, DerivedValue, FieldOverride, TraceOrigin } from '../api/types';
+import type { CharacterView, DerivedValue, ExportPreview, ExportPurpose, FieldOverride, TraceOrigin } from '../api/types';
 import { downloadBase64 } from '../files';
 
 function describeOrigin(origin: TraceOrigin): string {
@@ -121,6 +121,86 @@ function FieldCard({ value, labels, onOverride }: FieldProps) {
   );
 }
 
+interface ExportProps {
+  characterId: string;
+  onError: (error: unknown) => void;
+  onStatus: (text: string) => void;
+}
+
+/** ADR-007: choose backup or share; a share first lists everything it will leave out. */
+function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
+  const [purpose, setPurpose] = useState<ExportPurpose>('backup');
+  const [preview, setPreview] = useState<ExportPreview>();
+
+  async function choose(next: ExportPurpose) {
+    setPurpose(next);
+    setPreview(undefined);
+    if (next !== 'share') return;
+    try {
+      setPreview(await client.previewExport([characterId], next));
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  async function exportCharacter() {
+    try {
+      const outcome = await client.saveExportAs([characterId], purpose);
+      if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
+    } catch (error) {
+      if (!(error instanceof TomeStackError && error.code === 'unsupported')) {
+        onError(error);
+        return;
+      }
+      // Browser development (DevHost) has no native dialog: fall back to a download.
+      try {
+        const exported = await client.exportCharacters([characterId], purpose);
+        downloadBase64(exported.fileName, exported.base64);
+      } catch (fallbackError) {
+        onError(fallbackError);
+      }
+    }
+  }
+
+  return (
+    <section aria-labelledby="export-heading" className="export-panel">
+      <h3 id="export-heading">Export</h3>
+      <fieldset>
+        <legend>What is this package for?</legend>
+        <label>
+          <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
+          Personal backup: includes everything. Do not share it.
+        </label>
+        <label>
+          <input type="radio" name="export-purpose" checked={purpose === 'share'} onChange={() => choose('share')} />
+          Share with someone: leaves out content you may not share
+        </label>
+      </fieldset>
+      {purpose === 'share' && preview && (
+        <div role="region" aria-label="Left out of the shared package">
+          {preview.omitted.length === 0 ? (
+            <p>Nothing is left out: every source this character uses may be shared.</p>
+          ) : (
+            <>
+              <p>These are left out. The receiver sees them as missing until they install the source themselves:</p>
+              <ul>
+                {preview.omitted.map((source) => (
+                  <li key={source.sourceId}>
+                    {source.title} ({source.publisher}, {source.license}): {source.revisions.map((r) => r.name).join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+      <button type="button" onClick={exportCharacter} disabled={purpose === 'share' && !preview}>
+        Export package
+      </button>
+    </section>
+  );
+}
+
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
@@ -141,35 +221,17 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
     }
   }
 
-  async function exportCharacter() {
-    try {
-      const outcome = await client.saveExportAs([character.id]);
-      if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
-    } catch (error) {
-      if (!(error instanceof TomeStackError && error.code === 'unsupported')) {
-        onError(error);
-        return;
-      }
-      // Browser development (DevHost) has no native dialog: fall back to a download.
-      try {
-        const exported = await client.exportCharacters([character.id]);
-        downloadBase64(exported.fileName, exported.base64);
-      } catch (fallbackError) {
-        onError(fallbackError);
-      }
-    }
-  }
-
   return (
     <article className="panel" aria-labelledby="sheet-heading">
       <header className="sheet-header">
-        <h2 id="sheet-heading">{character.name}</h2>
+        <h2 id="sheet-heading" tabIndex={-1}>
+          {character.name}
+        </h2>
         <span className="tag">{character.rulesFamily}</span>
         <span className="tag">Level {character.level}</span>
-        <button type="button" onClick={exportCharacter}>
-          Export package
-        </button>
       </header>
+
+      <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       {groups.map((group) => {
         const fields = sheet.fields.filter((f) => group.match(f.field));

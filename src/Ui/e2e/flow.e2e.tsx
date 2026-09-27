@@ -57,7 +57,15 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(1));
   const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[0]!;
-  expect(fileName).toBe('E2E-Pell.tomestack.zip');
+  expect(fileName).toBe('E2E-Pell-personal-backup.tomestack.zip'); // default purpose: personal backup (ADR-007)
+
+  // Share: the preview says what is left out (nothing here: the fixture sources may be shared), then exports.
+  await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
+  const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
+  expect(leftOut.textContent).toMatch(/Nothing is left out/);
+  await user.click(screen.getByRole('button', { name: 'Export package' }));
+  await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
 
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });

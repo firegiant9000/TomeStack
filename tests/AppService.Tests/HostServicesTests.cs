@@ -34,7 +34,7 @@ public class HostServicesTests
         Assert.True(response.GetProperty("result").GetProperty("saved").GetBoolean());
         Assert.Equal("Pell.tomestack.zip", response.GetProperty("result").GetProperty("fileName").GetString());
         Assert.DoesNotContain(temp.App.DataDirectory, response.ToString(), StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("Pell--2014-fixture.tomestack.zip", host.Suggested);
+        Assert.Equal("Pell--2014-fixture-personal-backup.tomestack.zip", host.Suggested); // default purpose: backup (ADR-007)
         Assert.True(temp.App.PreviewImport(File.ReadAllBytes(target)).CanApply);
         Assert.False(File.Exists(target + ".partial"));
     }

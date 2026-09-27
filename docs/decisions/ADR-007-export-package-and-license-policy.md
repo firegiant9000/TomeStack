@@ -1,7 +1,7 @@
 # ADR-007: Export package and license policy
 
-Status: proposed. Parts marked **accepted** describe behavior already implemented and tested. D03 and the SRD route are owner decisions that are still open.
-Date: 2026-09-25
+Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26). Items 1–7 and 9 are implemented and tested. Item 8 is decided; the SRD packs follow in M1 item 1.
+Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context
 
@@ -17,17 +17,19 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 4. An import never overwrites local license metadata silently. A differing source needs an explicit `keepLocal` or `useImported` choice (`package.source-choice-required`; see the tests in `PackageRoundTripTests`).
 5. Imported content never executes code and is never activated without review. Drafts stay drafts (ADR-004).
 
-**Proposed (D03, owner decision needed):**
+**Accepted and implemented (D03, owner, 2026-09-26):**
 
-6. Split export into two explicit purposes, recorded as a new manifest field `purpose`: `backup` or `share` (manifest `formatVersion` 2).
-   - **backup:** today's behavior. Everything is included, including sources with `redistributable: false`. The preview and the file name say "personal backup, do not share".
-   - **share:** revisions from `redistributable: false` sources are **left out**. The export preview lists every omitted item and the affected characters. On import, the receiver sees `content.missing` diagnostics and the omitted source's title and publisher, so they can obtain it themselves.
+6. Export has two explicit purposes, recorded in the manifest field `purpose`: `backup` or `share` (manifest `formatVersion` **3**; v2 was already taken by typed effects, ADR-003).
+   - **backup** (the default): everything is included, including sources with `redistributable: false`. The file name ends in `-personal-backup.tomestack.zip`, and the UI labels it "Personal backup: includes everything. Do not share it." Pre-import backups are backups.
+   - **share:** revisions from `redistributable: false` sources, and those sources, are **left out**. Characters keep their pins. The manifest's `omitted[]` lists each left-out source (title, publisher, license) with its revisions and the characters that pin them. `package.exportPreview` returns the same list before anything is written, and the UI shows it when "Share" is chosen.
+   - **Import:** a pin that is neither in the package nor installed is still refused (`package.pin-missing`), unless a v3 share manifest lists it in `omitted[]`. Then it is a warning (`package.content-omitted`) that names the source and publisher. After import, the character shows the content as `content.missing` until the receiver installs the source. v1 and v2 manifests cannot claim to be shares.
    - The alternative, refusing a share export when anything is non-redistributable, is simpler but blocks sharing a character that uses one homebrew note.
-7. Until D03 is decided, the current behavior stands: non-redistributable sources are included and flagged `redistributable: false` in `notices[]`.
+   - Evidence: `ExportPurposeTests` (backup keeps everything; share omits and lists; the preview writes nothing; import on a clean machine with the warning and `content.missing`; unlisted pins still refused; older formats cannot claim share; malformed `omitted` rejected; v3 schema), plus the e2e share step.
+7. (Superseded by 6.) Before D03, every export included non-redistributable sources.
 
-**Proposed (SRD route, owner decision needed):**
+**Accepted (SRD route, owner, 2026-09-26):**
 
-8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under CC-BY-4.0. Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the verbatim statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) once it is approved. No SRD text enters the repository before that approval.
+8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under **CC-BY-4.0** (not OGL 1.0a for SRD 5.1). Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the approved statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) (approved by Arlo Kharod, 2026-09-26). SRD text enters the repository only after that page's remaining checks are complete.
 
 **Accepted (D07, owner, 2026-09-26):**
 
@@ -37,7 +39,7 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 
 - Attribution follows content automatically. A shared SRD-based character carries the CC notice.
 - A `share` export makes some characters incomplete on the receiving machine. That is intended, and the preview must make it obvious.
-- Adding `purpose` is a manifest format change (v2). Older builds refuse v2 packages with a clear message (`package.unsupported-format`).
+- Adding `purpose` is a manifest format change (v3). Older builds refuse v3 packages with a clear message (`package.unsupported-format`). That is intended: they would reject a share package's omitted pins anyway.
 
 ## Alternatives considered
 
@@ -49,4 +51,4 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 - `tests/AppService.Tests/PackageRoundTripTests.cs` covers notices, the attachment policy, source-choice diffs and `pdfRef` stripping.
 - The SRD legal pages were checked on 2026-09-25 (hashes are in the attribution draft).
 
-Supersedes: none. Addresses LIVING_SPECS D03 (proposed) and D07 (decided).
+Supersedes: none. Resolves LIVING_SPECS D03 and D07.

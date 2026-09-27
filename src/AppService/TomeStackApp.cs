@@ -17,10 +17,13 @@ public sealed class TomeStackApp : IDisposable
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
 
-    private TomeStackApp(string dataDirectory, TimeProvider time)
+    private readonly IReadOnlyList<Diagnostic> _warnings;
+
+    private TomeStackApp(string dataDirectory, TimeProvider time, IReadOnlyList<Diagnostic> warnings)
     {
         DataDirectory = dataDirectory;
         _time = time;
+        _warnings = warnings;
         _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
         _packages = new PackageService(_store, time, Path.Combine(dataDirectory, PackageService.BackupFolderName));
         ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
@@ -33,17 +36,19 @@ public sealed class TomeStackApp : IDisposable
 
     internal SqliteStore Store => _store;
 
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null)
+    /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null)
     {
         Directory.CreateDirectory(dataDirectory);
-        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System);
+        var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
+        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]);
         app.SeedFixturePack();
         return app;
     }
 
     /// <summary>
-    /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c>.
-    /// Final location policy is pending (LIVING_SPECS D02).
+    /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
+    /// A folder inside a cloud sync root is allowed but warned about in <see cref="AppInfo.Warnings"/>.
     /// </summary>
     public static string DefaultDataDirectory(string folderName = "TomeStack") =>
         Environment.GetEnvironmentVariable("TOMESTACK_DATA_DIR") is { Length: > 0 } configured
@@ -53,7 +58,8 @@ public sealed class TomeStackApp : IDisposable
     public AppInfo GetInfo() => new(
         typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
         _store.SchemaVersion,
-        RulesFamilies.All);
+        RulesFamilies.All,
+        _warnings);
 
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
     {
@@ -110,7 +116,10 @@ public sealed class TomeStackApp : IDisposable
         return View(saved);
     }
 
-    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds) => _packages.Export(characterIds);
+    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
+        _packages.Export(characterIds, purpose);
+
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
@@ -137,7 +146,8 @@ public sealed class TomeStackApp : IDisposable
     }
 }
 
-public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies);
+/// <param name="Warnings">Startup warnings for the user, such as a data folder inside a sync root (<c>data-dir.sync-root</c>).</param>
+public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings);
 
 public sealed record ContentOption(
     ContentReference Reference,

@@ -56,4 +56,4 @@ Full custom base classes, large-book mechanics recognition, homebrew monsters/DM
 
 ## Open behavioral decisions
 
-These are tracked in [LIVING_SPECS.md](LIVING_SPECS.md): exact rest automation by rule/context; whether linked PDF is copied or linked by default; inclusion of character-scoped source copies in exported packs; release-level scope of multiclassing and spellcasting; exact accessibility target. Current defaults above are proposals for testing, not silently settled user preferences.
+These are tracked in [LIVING_SPECS.md](LIVING_SPECS.md): exact rest automation by rule/context and release-level scope of multiclassing and spellcasting. Decided on 2026-09-26: PDFs are managed copies by default (D02), shared packages leave out non-redistributable sources while backups keep everything (D03), and the accessibility target is WCAG 2.2 AA for the sheet and builder (D05). Current defaults above are proposals for testing, not silently settled user preferences.

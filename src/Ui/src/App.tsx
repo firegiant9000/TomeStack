@@ -94,6 +94,11 @@ export function App() {
       </nav>
 
       <main className="content">
+        {info?.warnings.map((w) => (
+          <p key={w.code} role="note" className="warn">
+            {w.message}
+          </p>
+        ))}
         {message && (
           <p role={message.tone === 'error' ? 'alert' : 'status'} className={message.tone}>
             {message.text}

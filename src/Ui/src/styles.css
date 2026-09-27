@@ -86,4 +86,6 @@ tr.action-conflict td { color: var(--error); }
 
 .warnings li { color: var(--warn); }
 .errors li, p.error { color: var(--error); }
+p.warn { color: var(--warn); border: 1px solid currentColor; border-radius: 6px; padding: 0.5rem 0.75rem; }
+.export-panel fieldset label { display: block; }
 p.status { color: var(--accent); }

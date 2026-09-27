@@ -22,6 +22,9 @@ errors.log
 errors.log.1
 devhost.token
 
+# Private rules material (Stardust Guardian and any other homebrew or third-party text). Never commit; the repo is public.
+tests/RulesFixtures/local/
+
 # OS / editors
 .DS_Store
 Thumbs.db

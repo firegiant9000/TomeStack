@@ -126,6 +126,8 @@ export interface AppInfo {
   version: string;
   schemaVersion: number;
   rulesFamilies: RulesFamilyPolicy[];
+  /** Startup warnings, e.g. `data-dir.sync-root` when the data folder is inside OneDrive (ADR-005). */
+  warnings: Diagnostic[];
 }
 
 export interface ContentOption {
@@ -156,14 +158,42 @@ export interface LicenseNotice {
   attribution?: string;
 }
 
+/** ADR-007: a backup includes everything and is not for sharing; a share leaves out non-redistributable sources. */
+export type ExportPurpose = 'backup' | 'share';
+
+export interface OmittedRevision {
+  reference: ContentReference;
+  name: string;
+  characters: string[];
+}
+
+export interface OmittedSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
+  revisions: OmittedRevision[];
+}
+
 export interface PackageManifest {
   format: string;
   formatVersion: number;
   createdAt: string;
   appVersion: string;
+  /** Absent before format v3 (always a backup). */
+  purpose?: ExportPurpose;
   characters: string[];
   notices: LicenseNotice[];
+  omitted?: OmittedSource[];
   attachmentPolicy: string;
+}
+
+export interface ExportPreview {
+  purpose: ExportPurpose;
+  fileName: string;
+  characters: string[];
+  included: LicenseNotice[];
+  omitted: OmittedSource[];
 }
 
 export interface ExportedPackage {

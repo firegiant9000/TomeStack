@@ -10,6 +10,10 @@ All content here is **original** and was written for TomeStack tests. It contain
 | `characters/srd51-ash-m1.json`, `srd521-ash-m1.json` | character v2 | no | Side-by-side: the same inputs under each family |
 | `characters/srd521-rook-exception.json` | character v2 | no | A recorded cross-family exception (BACKLOG B06) |
 
+## Private fixtures (not in the repo)
+
+Material that may not be published, starting with the owner's **Stardust Guardian** homebrew (MVP definition of done 3, M3), goes in `tests/RulesFixtures/local/`. That folder is gitignored, because the repository is public. Nothing in the gate reads from it, so the gate passes without it. A test that needs it must skip when the folder is absent and must never copy its contents into a committed file, a log or a snapshot. Before committing, `git status` must not show anything under `local/`.
+
 ## Acceptance example (level 5, PB +3; base Dex 14, Wis 13)
 
 Executable in `tests/RulesCore.Tests/RulesFamilySideBySideTests.cs`.

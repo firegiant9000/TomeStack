@@ -15,20 +15,23 @@ internal sealed class TempApp : IDisposable
 
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
 
-    public TempApp() => App = TomeStackApp.Open(_directory, new FixedTime(Now));
+    // No sync roots: tests must not depend on this machine's OneDrive or registry (DataFolderTests covers discovery).
+    public TempApp() => App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: []);
 
     public TomeStackApp App { get; private set; }
+
+    public string Directory => _directory;
 
     public void Reopen()
     {
         App.Dispose();
-        App = TomeStackApp.Open(_directory, new FixedTime(Now));
+        App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: []);
     }
 
     public void Dispose()
     {
         App.Dispose();
-        try { Directory.Delete(_directory, recursive: true); }
+        try { System.IO.Directory.Delete(_directory, recursive: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort on Windows file locks */ }
     }
 

@@ -10,24 +10,45 @@ public sealed record PackageManifest
     public const string FormatName = "tomestack.package";
 
     /// <summary>
-    /// v2 (ADR-003): content entries use content schemaVersion 2 (typed effects). v1 packages still import, and their
-    /// revisions are upcast. Builds that only know v1 refuse v2 with a clear message instead of misreading effects.
+    /// v3 (ADR-007, D03): <see cref="Purpose"/> and <see cref="Omitted"/>. A share package may leave out pinned
+    /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
+    /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
     /// </summary>
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
     public required DateTimeOffset CreatedAt { get; init; }
     public required string AppVersion { get; init; }
+
+    /// <summary>Absent in v1/v2 packages, which were always complete: read as <see cref="ExportPurpose.Backup"/>.</summary>
+    public ExportPurpose Purpose { get; init; } = ExportPurpose.Backup;
+
     public IReadOnlyList<Guid> Characters { get; init; } = [];
     public IReadOnlyList<PackageEntry> Entries { get; init; } = [];
     public IReadOnlyList<LicenseNotice> Notices { get; init; } = [];
+
+    /// <summary>Share packages only: every source whose content was left out, and what it would have provided.</summary>
+    public IReadOnlyList<OmittedSource> Omitted { get; init; } = [];
+
     public string AttachmentPolicy { get; init; } = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
 }
+
+/// <summary>ADR-007 (D03). A backup includes everything and must not be shared; a share leaves out non-redistributable sources.</summary>
+public enum ExportPurpose { Backup, Share }
 
 public sealed record PackageEntry(string Path, string Kind, string Sha256, long Size);
 
 public sealed record LicenseNotice(Guid SourceId, string Title, string Publisher, string License, bool Redistributable, string? Attribution);
+
+/// <summary>A source left out of a share package, so the receiver knows what to obtain themselves.</summary>
+public sealed record OmittedSource(Guid SourceId, string Title, string Publisher, string License, IReadOnlyList<OmittedRevision> Revisions);
+
+/// <param name="Characters">The exported characters that pin this revision.</param>
+public sealed record OmittedRevision(ContentReference Reference, string Name, IReadOnlyList<Guid> Characters);
+
+/// <summary>What an export with a given purpose would contain, before anything is written (<c>package.exportPreview</c>).</summary>
+public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted);
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 
