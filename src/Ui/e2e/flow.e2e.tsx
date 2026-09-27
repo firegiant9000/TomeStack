@@ -453,6 +453,40 @@ it('shows different allowed content for two campaign profiles, and records a rea
   expect(notes.textContent).toMatch(/Fixture Courier.*used by exception: DM approved/);
 });
 
+it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+
+  // Builder: an SRD 5.1 species, then SRD 5.2.1. The 5.1 pick is cleared instead of staying checked but disabled.
+  await user.click(newCharacter);
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  const species = screen.getByRole('group', { name: 'Species' });
+  const halfOrc = () => within(species).getByRole<HTMLInputElement>('radio', { name: /^Half-Orc/ });
+  await waitFor(() => expect(halfOrc().disabled).toBe(false));
+  await user.click(halfOrc());
+  expect(halfOrc().checked).toBe(true);
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await waitFor(() => expect(halfOrc().disabled).toBe(true));
+  expect(halfOrc().checked).toBe(false);
+  expect(within(species).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  // Campaign: an SRD 5.1 source, then SRD 5.2.1. The hidden 5.1 source is not saved with the campaign.
+  await user.click(screen.getByRole('button', { name: 'Campaigns' }));
+  await user.click(await screen.findByRole('button', { name: 'New campaign' }));
+  const form = screen.getByRole('form', { name: 'Campaign' });
+  await user.type(within(form).getByRole('textbox', { name: 'Campaign name' }), 'E2E Switched');
+  await user.click(within(form).getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(within(form).getByRole('checkbox', { name: /^System Reference Document 5\.1/ }));
+  await user.click(within(form).getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(within(form).getByRole('button', { name: 'Save campaign' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Saved the campaign E2E Switched.'));
+  const saved = screen.getAllByRole('listitem').find((li) => li.textContent?.startsWith('E2E Switched'))!;
+  expect(saved.textContent).toMatch(/0 allowed sources/);
+});
+
 it('reaches the primary actions by keyboard alone', async () => {
   const user = userEvent.setup();
   render(<App />);

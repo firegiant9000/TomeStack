@@ -458,7 +458,17 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     client
       .listContent(family, campaignId)
       .then((result) => {
-        if (current) setListed(result);
+        if (!current) return;
+        setListed(result);
+        // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
+        const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
+        setBasics((b) => ({
+          ...b,
+          species: fits(b.species) ? b.species : undefined,
+          background: fits(b.background) ? b.background : undefined,
+          startingClass: fits(b.startingClass) ? b.startingClass : undefined,
+          other: b.other.filter(fits),
+        }));
       })
       .catch(onError);
     return () => {

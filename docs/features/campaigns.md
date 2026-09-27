@@ -6,7 +6,7 @@ Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` pack
 
 ## The profile
 
-`{ id, name, rulesFamily, allowedSources[], houseRules? }` (`docs/schemas/campaign.v1.schema.json`), stored in the `campaigns` table. `campaign.save` creates (empty id) or updates it. Every allowed source must be installed (`campaign.source-missing`), each listed once, and the name is 1–200 characters. `campaign.delete` is refused while characters are in it (`campaign.in-use`). House rules are free text and never interpreted.
+`{ id, name, rulesFamily, allowedSources[], houseRules? }` (`docs/schemas/campaign.v1.schema.json`), stored in the `campaigns` table. `campaign.save` creates (empty id) or updates it. Every allowed source must be installed (`campaign.source-missing`), each listed once, and the name is 1–200 characters. `campaign.delete` is refused while characters are in it (`campaign.in-use`). House rules are free text and never interpreted. The editor lists only the sources of the campaign's rules family. Changing the family drops checked sources that do not support the new one, so a hidden source is never saved (M2 review fix).
 
 ## What a campaign changes
 

@@ -19,7 +19,7 @@ A draft lives in the UI only. It does not survive closing the app: an interrupte
 
 ## Flows
 
-1. **New character:** name, rules family, base scores, then one species, one background and one starting class (radio groups with "None"), plus other content. Every option shows its source, page and families, and the other family's options are listed but disabled (SPEC S-02). "Next: choices" previews the draft.
+1. **New character:** name, rules family, base scores, then one species, one background and one starting class (radio groups with "None"), plus other content. Every option shows its source, page and families, and the other family's options are listed but disabled (SPEC S-02). Changing the rules family (or picking a campaign that changes it) drops any pick that no longer fits, so nothing stays checked but disabled and is then silently not applied (as in the M1 form; e2e "drops picks that do not fit when the rules family changes…"; M2 review fix). "Next: choices" previews the draft.
 2. **Level up** (sheet button): pick the class that gains the level: an existing class, or a new one at level 1 (the multiclass path). Hit points use the fixed value. A rolled total is recorded as an override on the sheet.
 3. **Make choices** (on the sheet's "Choices to make"): the draft is the saved character, and only its choices are shown.
 

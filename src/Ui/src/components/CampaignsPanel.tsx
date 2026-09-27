@@ -87,7 +87,14 @@ export function CampaignsPanel({ rulesFamilies, onError, onStatus }: Props) {
                   type="radio"
                   name="campaign-family"
                   checked={editing.rulesFamily === f.id}
-                  onChange={() => setEditing({ ...editing, rulesFamily: f.id })}
+                  onChange={() =>
+                    // Sources of the other family are hidden below, so they are dropped rather than saved unseen.
+                    setEditing({
+                      ...editing,
+                      rulesFamily: f.id,
+                      allowedSources: editing.allowedSources.filter((id) => sources.some((s) => s.id === id && s.rulesFamilies.includes(f.id))),
+                    })
+                  }
                 />
                 {f.displayName}
               </label>
