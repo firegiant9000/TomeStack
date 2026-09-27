@@ -145,6 +145,52 @@ public class FieldGraphTests
     }
 
     [Fact]
+    public void An_effect_that_only_repeats_a_base_dependency_is_not_disabled_by_a_cycle_elsewhere()
+    {
+        // "parallel" reads DEX.SCORE into the Dex modifier, which already depends on the score, so it cannot close a
+        // cycle. Only "loop" (score reads its own modifier) is cyclic.
+        var content = Content(
+            "Fixture Parallel", ContentKind.Feat,
+            Bonus("parallel", FieldIds.Modifier(Ability.Dex), "floor(DEX.SCORE / 10)"),
+            Bonus("loop", FieldIds.Score(Ability.Dex), "DEX.MOD"));
+
+        var sheet = Sheet(Fixtures.Srd51Character(), content);
+
+        Assert.Equal(["loop"], sheet.Diagnostics.Where(d => d.Code == "effect.dependency-cycle").Select(d => d.EffectId));
+        Assert.Equal((17, 3 + 1), (sheet.Field(FieldIds.Score(Ability.Dex)).Value, sheet.Field(FieldIds.Modifier(Ability.Dex)).Value));
+        Assert.Equal(3 + 1 + 1, sheet.Field(FieldIds.Initiative).Value);
+    }
+
+    [Fact]
+    public void Many_bounded_bonuses_cannot_overflow_the_running_value()
+    {
+        var flood = Content("Fixture Flood", ContentKind.Feat, [.. Enumerable.Range(0, 2_200).Select(i => (Effect)Bonus($"f{i}", FieldIds.Initiative, "10000 * 50"))]);
+
+        var initiative = Sheet(Fixtures.Srd51Character(), flood).Field(FieldIds.Initiative);
+
+        Assert.Equal(4 + 500_000, initiative.Value);
+        Assert.Equal(2_199, initiative.Warnings.Count(w => w.Code == "effect.out-of-range"));
+        Assert.Equal(AutomationStatus.Assisted, initiative.Automation);
+    }
+
+    [Fact]
+    public void Fields_whose_effects_are_not_all_applied_are_assisted_and_so_are_their_dependents()
+    {
+        var manual = Content(
+            "Fixture Manual", ContentKind.Feat,
+            new ModifierEffect { Id = "manual", Operation = ModifierOperation.Bonus, Target = FieldIds.Score(Ability.Dex), Value = "2", Automation = AutomationStatus.Assisted });
+
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var sheet = Sheet(Fixtures.Srd51Character(), manual);
+
+        Assert.All(plain.Fields, f => Assert.Equal(AutomationStatus.Automatic, f.Automation));
+        Assert.Equal(
+            [FieldIds.Score(Ability.Dex), FieldIds.Modifier(Ability.Dex), FieldIds.Save(Ability.Dex), FieldIds.Skill("stealth"), FieldIds.Initiative],
+            sheet.Fields.Where(f => f.Automation == AutomationStatus.Assisted).Select(f => f.Field));
+        Assert.Equal(17, sheet.Field(FieldIds.Score(Ability.Dex)).Value);
+    }
+
+    [Fact]
     public void Bonuses_in_the_same_group_do_not_stack_and_the_trace_says_so()
     {
         var ring = Content("Fixture Ring", ContentKind.Item, Bonus("ring", FieldIds.Initiative, "2", StackingRule.HighestInGroup, "luck"));

@@ -91,10 +91,15 @@ public sealed class DiceExpression
         if (source.Length > DiceLimits.MaxLength)
             return Fail("dice.too-long", $"The dice expression is {source.Length} characters; the limit is {DiceLimits.MaxLength}.", out error);
 
-        var text = source.Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
+        var text = string.Concat(source.Where(c => !char.IsWhiteSpace(c))).ToLowerInvariant();
         var terms = new List<DiceTerm>();
         var i = 0;
         var sign = 1;
+        if (text.Length > 0 && text[0] is '+' or '-')
+        {
+            sign = text[0] == '+' ? 1 : -1;
+            i++;
+        }
         var totalDice = 0;
         while (true)
         {
@@ -215,6 +220,12 @@ public static class DiceRoller
         record = null;
         if (!DiceExpression.TryParse(request.Formula, out var expression, out error))
             return false;
+        if (request.Mode != RollMode.Normal && request.Critical)
+        {
+            // Advantage belongs to a d20 test and critical doubling to its damage roll: they are separate rolls.
+            error = new("dice.critical-with-advantage", "A roll cannot use advantage or disadvantage and critical doubling together; roll the d20 test and the damage separately.");
+            return false;
+        }
         if (request.Mode != RollMode.Normal && !expression!.IsD20Test)
         {
             error = new("dice.advantage-requires-d20", $"Advantage and disadvantage apply to a single d20 roll, not '{request.Formula}'.");

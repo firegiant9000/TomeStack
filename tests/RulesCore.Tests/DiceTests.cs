@@ -31,6 +31,9 @@ public class DiceTests
     [InlineData("2d6", 2, 6, 0)]
     [InlineData("1D8 - 1", 1, 8, -1)]
     [InlineData(" 3d4 + 10 ", 3, 4, 10)]
+    [InlineData("1d6\t+\t2", 1, 6, 2)]
+    [InlineData("+1d4", 1, 4, 0)]
+    [InlineData("-2+1d12", 1, 12, -2)]
     public void Parses_NdM_plus_K(string source, int count, int sides, int constant)
     {
         Assert.True(DiceExpression.TryParse(source, out var expression, out _));
@@ -75,6 +78,16 @@ public class DiceTests
         Assert.Equal("dice.advantage-requires-d20", error!.Code);
         Assert.False(DiceRoller.TryRoll(new RollRequest("2d20", RollMode.Disadvantage), new SeededRandomSource(1), out _, out error));
         Assert.Equal("dice.advantage-requires-d20", error!.Code);
+    }
+
+    [Theory]
+    [InlineData(RollMode.Advantage)]
+    [InlineData(RollMode.Disadvantage)]
+    public void Advantage_and_critical_together_are_refused_instead_of_dropping_the_critical(RollMode mode)
+    {
+        Assert.False(DiceRoller.TryRoll(new RollRequest("1d20+4", mode, Critical: true), new SeededRandomSource(1), out var record, out var error));
+        Assert.Null(record);
+        Assert.Equal("dice.critical-with-advantage", error!.Code);
     }
 
     [Fact]

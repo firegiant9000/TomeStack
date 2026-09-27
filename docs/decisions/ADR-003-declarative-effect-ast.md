@@ -23,17 +23,21 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 
-**Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON byte-for-byte, writes it back unchanged, and is always reference-only (`effect.unsupported`). A *known* type with a malformed body degrades the same way instead of failing the whole revision.
+**Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON and writes it back with the same properties, order and values (whitespace and string escaping are normalized), and is always reference-only (`effect.unsupported`). A *known* type with a malformed body, including wrong value kinds such as a numeric `id`, degrades the same way instead of failing the whole revision. Only an effect that is not a JSON object fails its revision.
 
 Field ids: `initiative`, `proficiencyBonus`, `ability.<abl>.score`, `ability.<abl>.mod`, `save.<abl>`, `skill.<name>`.
 
 ### Stacking and order (per field)
 
 1. **base**: the character's choice or the rules' derivation. The highest `replace` substitutes for it, and the other replacements are traced as not applied.
-2. **bonus** in content order. `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack".
+2. **bonus** in content order. `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack". A bonus that would take the running value outside ±1,000,000 is not applied (`effect.out-of-range`), so many bounded bonuses cannot overflow.
 3. The highest **set** (if any) replaces the running value.
 4. **Rounding:** any fraction rounds down at the end of a formula (the 5e default).
 5. **User override** last (SPEC C-06). The computed value and its trace are kept.
+
+**Cycles:** an effect is disabled (`effect.dependency-cycle`) when its dependency edge lies inside a strongly connected component of the field graph, or reads its own target. An edge that base inputs already imply (for example a Dex modifier effect reading `DEX.SCORE`) is exempt: it adds no reachability, so it cannot close a cycle.
+
+**Automation per field:** a field is `assisted` when it or any field it reads has an effect the calculator did not apply (not `automatic`, not `always`, an invalid formula, a cycle or out of range), because the user may have to account for it by hand. Effects ignored by rules-family policy do not count: the rules say they do not apply.
 
 ### Timing
 
@@ -56,7 +60,7 @@ NUMBER  := [0-9]+
 
 ## Migration (schemaVersion 1 → 2)
 
-- **Read:** `abilityScoreIncrease {ability, amount}` becomes `modifier bonus ability.<abl>.score value "<amount>"`. `initiativeBonus {amount}` becomes `modifier bonus initiative`. Unmapped v1 fields become extensions, and other v1 types become `UnknownEffect`. The revision is upcast to `schemaVersion: 2`, and `UpgradedFrom` records 1.
+- **Read:** `abilityScoreIncrease {ability, amount}` becomes `modifier bonus ability.<abl>.score value "<amount>"`. `initiativeBonus {amount}` becomes `modifier bonus initiative`. Unmapped v1 fields become extensions, and other v1 types become `UnknownEffect`. A v1 effect the v1 build could not have written (no string `id`, a missing or non-integer `amount`, a missing or unknown `ability`) also becomes `UnknownEffect`, so the mapping never drops data. This keeps imports of v1 packages lossless, where there is no `legacy_json`. The revision is upcast to `schemaVersion: 2`, and `UpgradedFrom` records 1.
 - **Database migration v2** rewrites each upgraded row's `json` and `sha256` in the new representation and keeps the original bytes in `legacy_json`. This is the one sanctioned rewrite of published revisions: a lossless change of representation, not of content. Without it, every M0 data folder would fail to open, because re-seeding the fixtures would hit the insert-only hash check (`UpgradeTests.Schema_v1_data_folder_with_v1_revision_json_migrates_to_typed_effects` first failed with `ImmutableRevisionException`). The pre-upgrade backup (`tomestack.db.v1.bak`) is taken first.
 - **Packages:** `formatVersion` 2. v1 packages still import and are upcast. Builds that only know v1 refuse v2 with `package.unsupported-format` instead of misreading typed effects.
 - Calculation is proven identical before and after (`EffectModelTests.Calculation_is_identical_before_and_after_the_v1_to_v2_migration`).

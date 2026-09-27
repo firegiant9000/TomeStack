@@ -19,6 +19,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     public const long MaxPackageBytes = 50L * 1024 * 1024;
     public const long MaxEntryBytes = 5L * 1024 * 1024;
+
+    /// <summary>Total decompressed size of all entries; bounds memory against archives that expand far beyond their size.</summary>
+    public const long MaxTotalBytes = 64L * 1024 * 1024;
     public const int MaxEntries = 2_000;
     private const string ManifestPath = "manifest.json";
 
@@ -267,16 +270,24 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            // Names are checked for every entry before any entry is decompressed.
+            foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName)))
+                errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
+            if (errors.Count > 0)
+                return null;
+            long remaining = MaxTotalBytes;
             foreach (var entry in zip.Entries)
             {
-                if (entry.FullName != ManifestPath && !EntryPathPattern().IsMatch(entry.FullName))
-                {
-                    errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
-                    continue;
-                }
-                if (!files.TryAdd(entry.FullName, ReadBounded(entry)))
+                var bytes = ReadBounded(entry, remaining);
+                remaining -= bytes.LongLength;
+                if (!files.TryAdd(entry.FullName, bytes))
                     errors.Add(new("package.entry-duplicate", $"Entry '{entry.FullName}' appears more than once."));
             }
+        }
+        catch (TotalTooLargeException ex)
+        {
+            errors.Add(new("package.content-too-large", ex.Message));
+            return null;
         }
         catch (InvalidDataException ex)
         {
@@ -386,13 +397,24 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             errors.Add(new("package.invalid-json", $"Entry '{path}' is not valid: {ex.Message}"));
             return null;
         }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or KeyNotFoundException or FormatException or ArgumentException)
+        {
+            // Package bytes are untrusted: a reader bug must surface as a rejected entry, not an internal error.
+            errors.Add(new("package.invalid-json", $"Entry '{path}' is not valid."));
+            return null;
+        }
     }
 
-    /// <summary>Reads at most <see cref="MaxEntryBytes"/>; does not trust the declared entry length.</summary>
-    private static byte[] ReadBounded(ZipArchiveEntry entry)
+    /// <summary>
+    /// Reads at most <see cref="MaxEntryBytes"/>, and at most <paramref name="remaining"/> of the package-wide
+    /// <see cref="MaxTotalBytes"/>. Does not trust the declared entry length.
+    /// </summary>
+    private static byte[] ReadBounded(ZipArchiveEntry entry, long remaining)
     {
         if (entry.Length > MaxEntryBytes)
             throw new EntryTooLargeException(entry.FullName);
+        if (entry.Length > remaining)
+            throw new TotalTooLargeException();
         using var stream = entry.Open();
         using var output = new MemoryStream();
         var buffer = new byte[81920];
@@ -402,6 +424,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             output.Write(buffer, 0, read);
             if (output.Length > MaxEntryBytes)
                 throw new EntryTooLargeException(entry.FullName);
+            if (output.Length > remaining)
+                throw new TotalTooLargeException();
         }
         return output.ToArray();
     }
@@ -426,4 +450,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     private sealed class EntryTooLargeException(string path)
         : Exception($"Entry '{path}' exceeds the {MaxEntryBytes}-byte limit.");
+
+    private sealed class TotalTooLargeException()
+        : Exception($"The package's contents exceed {MaxTotalBytes} bytes when unpacked.");
 }

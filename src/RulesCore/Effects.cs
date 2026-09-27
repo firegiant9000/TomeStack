@@ -176,8 +176,8 @@ public sealed record RollEffect : Effect
 }
 
 /// <summary>
-/// An effect type this build does not know. The original JSON is kept byte-for-byte and written back unchanged, and
-/// it is never automated.
+/// An effect type this build does not know. The original JSON is kept and written back with the same properties,
+/// order and values (whitespace and string escaping are normalized), and it is never automated.
 /// </summary>
 public sealed record UnknownEffect : Effect
 {
@@ -229,9 +229,10 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or FormatException)
         {
             // A known type with a malformed body stays reference-only and visible rather than breaking the revision.
+            // JsonElement accessors throw InvalidOperationException on a wrong value kind, not JsonException.
             return UnknownEffect.From(element);
         }
     }
@@ -258,20 +259,30 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         writer.WriteEndObject();
     }
 
-    /// <summary>schemaVersion 1 <c>{ id, type, ability?, amount?, automation?, text? }</c> to a typed bonus.</summary>
+    /// <summary>
+    /// schemaVersion 1 <c>{ id, type, ability?, amount?, automation?, text? }</c> to a typed bonus. Anything the v1
+    /// build could not have written (no string id, a non-integer amount, an unknown ability) throws, so the effect is
+    /// kept unchanged as <see cref="UnknownEffect"/> instead of being mapped with data dropped.
+    /// </summary>
     private static ModifierEffect FromSchemaVersion1(JsonElement element, string type, JsonSerializerOptions options)
     {
-        var id = element.GetProperty("id").GetString() ?? throw new JsonException("Effect id is required.");
+        var id = element.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String
+            ? i.GetString()!
+            : throw new JsonException("Effect id is required.");
         var automation = element.TryGetProperty("automation", out var a)
             ? a.Deserialize<AutomationStatus>(options)
             : AutomationStatus.Automatic;
         var text = element.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : null;
-        var amount = element.TryGetProperty("amount", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetRawText() : "";
+        var amount = element.TryGetProperty("amount", out var n) && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out var value)
+            ? value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : throw new JsonException("Effect amount must be an integer.");
         var target = type == LegacyInitiativeBonus
             ? FieldIds.Initiative
             : element.TryGetProperty("ability", out var ab) && ab.ValueKind == JsonValueKind.String
-                ? $"ability.{ab.GetString()}.score"
-                : "";
+                && ab.GetString() is { Length: > 0 } name && name.All(char.IsAsciiLetter)
+                && Enum.TryParse<Ability>(name, ignoreCase: true, out var ability)
+                ? FieldIds.Score(ability)
+                : throw new JsonException("Effect ability is missing or unknown.");
 
         var extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var property in element.EnumerateObject())

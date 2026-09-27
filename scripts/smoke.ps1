@@ -44,6 +44,12 @@ if (-not (Test-Path $Report)) { Write-Output "FAIL: exit $($process.ExitCode), n
 $result = Get-Content $Report -Raw | ConvertFrom-Json
 Write-Output (Get-Content $Report -Raw)
 
+# Without -DataDir the app used a throwaway folder under %TEMP%\tomestack-smoke; remove it. Only that folder is touched.
+$throwawayRoot = Join-Path ([IO.Path]::GetTempPath()) 'tomestack-smoke'
+if (-not $DataDir -and $result.dataDirectory -and ([IO.Path]::GetFullPath($result.dataDirectory)).StartsWith($throwawayRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+  Remove-Item -LiteralPath $result.dataDirectory -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $problems = @()
 if ($result.detail -ne $ExpectDetail) { $problems += "detail '$($result.detail)' (expected '$ExpectDetail')" }
 if ($ExpectDetail -eq 'ok' -and $process.ExitCode -ne 0) { $problems += "exit code $($process.ExitCode)" }

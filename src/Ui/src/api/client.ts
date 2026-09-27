@@ -1,4 +1,4 @@
-import { detectTransport, type Transport } from './transport';
+import { detectTransport, type CallOptions, type Transport } from './transport';
 import type {
   AppInfo,
   Character,
@@ -16,7 +16,7 @@ import type {
 
 /** Typed application client. Components use this, never the transport or fetch directly. */
 export function createClient(transport: Transport) {
-  const call = <T>(command: string, payload?: unknown) => transport(command, payload) as Promise<T>;
+  const call = <T>(command: string, payload?: unknown, options?: CallOptions) => transport(command, payload, options) as Promise<T>;
   return {
     info: () => call<AppInfo>('app.info'),
     listContent: (rulesFamily: RulesFamilyId) => call<ContentOption[]>('content.list', { rulesFamily }),
@@ -25,8 +25,11 @@ export function createClient(transport: Transport) {
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     exportCharacters: (characterIds: string[]) => call<ExportedPackage>('package.export', { characterIds }),
-    /** Native Save dialog in the shell; fails with code `unsupported` on hosts without one (DevHost). */
-    saveExportAs: (characterIds: string[]) => call<SaveOutcome>('package.saveAs', { characterIds }),
+    /**
+     * Native Save dialog in the shell; fails with code `unsupported` on hosts without one (DevHost). No timeout: the
+     * response waits for the user to close the dialog.
+     */
+    saveExportAs: (characterIds: string[]) => call<SaveOutcome>('package.saveAs', { characterIds }, { timeoutMs: null }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices }),

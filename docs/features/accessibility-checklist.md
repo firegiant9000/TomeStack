@@ -15,7 +15,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 
 | # | Check | WCAG 2.2 | Status |
 | --- | --- | --- | --- |
-| 1 | Every form control has a visible, programmatic label | 1.3.1, 3.3.2, 4.1.2 | ✅ e2e test finds every control by role and name |
+| 1 | Every form control has a visible, programmatic label | 1.3.1, 3.3.2, 4.1.2 | ✅ partial: the e2e test finds every control on its path by role and name. Controls off that path (for example the source keep/use choice in the import preview) are covered by code review only |
 | 2 | Radio groups and checkbox lists are grouped with a legend | 1.3.1 | ✅ code review (`fieldset`/`legend` in the builder and the import choice) |
 | 3 | All actions work from the keyboard; no keyboard traps | 2.1.1, 2.1.2 | ✅ partial: the e2e keyboard test covers the primary actions. The full walkthrough is below (☐) |
 | 4 | A visible focus indicator | 2.4.7, 2.4.11 | ✅ `:focus-visible` 3 px outline; accent contrast is 6.2:1 (light) and 8.9:1 (dark) |
@@ -27,11 +27,11 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 21 fields |
 | 11 | No action is silently ignored | 3.2.x | ⚠️ "New character" does nothing if clicked before `app.info` has loaded. Disable it until ready, or render the form with a loading state |
 | 12 | Override forms are independent per field | 3.3.2 | 🔧 Each field card has its own override state (item 11) |
-| 17 | Expandable field cards work by keyboard and name their state | 2.1.1, 4.1.2 | ☐ Native `<details>`/`<summary>` with a heading inside the summary. Check Narrator's expanded/collapsed announcement |
 | 13 | Tables have captions and header cells | 1.3.1 | ✅ trace, package and diff tables have `caption` and `th scope` |
 | 14 | Colour is not the only signal | 1.4.1 | ✅ overrides say "overridden (calculated N)"; conflicts and warnings are text |
 | 15 | Screen reader pass (Narrator) on the sheet and the import preview | 4.1.2 | ☐ |
 | 16 | Windows High Contrast / forced colours | 1.4.11 | ☐ the system colours `Canvas`/`CanvasText` should adapt; not checked |
+| 17 | Expandable field cards work by keyboard and name their state | 2.1.1, 4.1.2 | ☐ Native `<details>`/`<summary>` with a heading inside the summary. Check Narrator's expanded/collapsed announcement |
 
 ## Manual keyboard walkthrough
 

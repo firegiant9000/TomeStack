@@ -97,6 +97,52 @@ public class EffectModelTests
         Assert.Equal(1, revision.UpgradedFrom);
     }
 
+    private static ContentRevision V1RevisionWithEffect(string effectJson) =>
+        JsonSerializer.Deserialize<ContentRevision>($$"""
+            {"contentId":"11111111-0000-4000-8000-000000000001","revisionId":"11111111-0000-4000-8000-000000000002",
+             "schemaVersion":1,"kind":"species","name":"Old","rulesFamilies":["srd-5.1"],
+             "provenance":{"sourceId":"5f0d5000-0000-4000-8000-000000000001"},"status":"published",
+             "effects":[{{effectJson}}]}
+            """, RulesJson.Options)!;
+
+    [Theory]
+    [InlineData("""{"type":"initiativeBonus","amount":2}""")]
+    [InlineData("""{"id":5,"type":"initiativeBonus","amount":2}""")]
+    [InlineData("""{"id":null,"type":"initiativeBonus","amount":2}""")]
+    [InlineData("""{"id":"a","type":"initiativeBonus"}""")]
+    [InlineData("""{"id":"a","type":"initiativeBonus","amount":"2"}""")]
+    [InlineData("""{"id":"a","type":"initiativeBonus","amount":2.5}""")]
+    [InlineData("""{"id":"a","type":"abilityScoreIncrease","amount":2}""")]
+    [InlineData("""{"id":"a","type":"abilityScoreIncrease","ability":"luck","amount":2}""")]
+    [InlineData("""{"id":"a","type":"abilityScoreIncrease","ability":"1","amount":2}""")]
+    [InlineData("""{"id":"a","type":"abilityScoreIncrease","ability":"dex,str","amount":2}""")]
+    [InlineData("""{"id":"a","type":"abilityScoreIncrease","ability":7,"amount":2}""")]
+    [InlineData("""{"id":"a","type":"initiativeBonus","amount":2,"automation":"sometimes"}""")]
+    public void Malformed_schema_v1_effects_are_kept_unchanged_as_reference_only(string effect)
+    {
+        var revision = V1RevisionWithEffect(effect);
+
+        var unknown = Assert.IsType<UnknownEffect>(Assert.Single(revision.Effects));
+        Assert.Equal(AutomationStatus.Reference, unknown.Automation);
+        Assert.Equal(JsonNode.Parse(effect)!.ToJsonString(), JsonNode.Parse(Json(revision))!["effects"]![0]!.ToJsonString());
+    }
+
+    [Fact]
+    public void Schema_v1_ability_names_are_normalized_like_the_v1_reader()
+    {
+        var effect = Assert.IsType<ModifierEffect>(Assert.Single(V1RevisionWithEffect("""{"id":"a","type":"abilityScoreIncrease","ability":"DEX","amount":-1}""").Effects));
+
+        Assert.Equal(("ability.dex.score", "-1"), (effect.Target, effect.Value));
+    }
+
+    [Fact]
+    public void Known_type_with_wrong_value_kinds_degrades_instead_of_throwing()
+    {
+        var revision = RevisionWithEffects("""[{"id":7,"type":"modifier","operation":"bonus","target":"initiative","value":"1"},{"id":"g","type":"grant","grant":"content","content":"nope"}]""");
+
+        Assert.All(revision.Effects, e => Assert.IsType<UnknownEffect>(e));
+    }
+
     [Fact]
     public void Calculation_is_identical_before_and_after_the_v1_to_v2_migration()
     {

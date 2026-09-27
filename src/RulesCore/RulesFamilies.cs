@@ -28,6 +28,7 @@ public static class RulesFamilies
 /// </summary>
 /// <param name="AbilityIncreaseSource">
 /// Which origin content kind may grant ability score increases: species under 2014 rules, background under 2024 rules.
+/// Applies to every modifier operation on an ability score, so origin content cannot bypass it with <c>set</c> or <c>replace</c>.
 /// </param>
 /// <param name="BackgroundGrantsFeat">
 /// Whether a background may grant a feat (a <c>grant</c> effect of kind <c>content</c>): no under 2014 rules, yes under 2024 rules.

@@ -110,9 +110,12 @@ public static class CharacterCalculator
             }
         }
 
-        var modifiers = CollectModifiers(active, policy, diagnostics, warnings);
-        var proficiencies = CollectProficiencies(active, diagnostics);
-        RemoveCycles(modifiers, diagnostics, warnings);
+        // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
+        // account for it by hand, so the field and its dependents are only assisted.
+        var manual = new HashSet<string>(StringComparer.Ordinal);
+        var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
+        var proficiencies = CollectProficiencies(active, diagnostics, manual);
+        RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -124,7 +127,7 @@ public static class CharacterCalculator
             var steps = new List<Step>();
             var context = new BaseContext(character, family, values, proficiencies);
             var value = spec.Base(context, steps);
-            value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, values, family, steps, warnings[id]);
+            value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, values, family, steps, warnings[id], manual);
 
             var computed = value;
             var fieldOverride = character.Overrides.LastOrDefault(o => o.Field == id);
@@ -150,7 +153,7 @@ public static class CharacterCalculator
                 Flatten(closure, ownSteps, order),
                 // A field explains itself with its inputs' warnings too, e.g. an ignored Dex increase explains initiative.
                 [.. order.Where(closure.Contains).SelectMany(id => warnings[id]).Distinct()],
-                AutomationStatus.Automatic,
+                closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
                 spec.Units);
         }).ToList();
@@ -234,7 +237,8 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
                     continue;
                 }
-                if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat)
+                // Only feats are restricted: a 2014 background may still grant other content, such as its feature.
+                if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat && catalog.FindRevision(reference)?.Kind == ContentKind.Feat)
                 {
                     diagnostics.Add(new(
                         "policy.background-feat",
@@ -259,7 +263,8 @@ public static class CharacterCalculator
     private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields);
 
     private static List<Modifier> CollectModifiers(
-        List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings)
+        List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
+        HashSet<string> manual)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -268,7 +273,11 @@ public static class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
                 if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                {
+                    if (SpecIndex.ContainsKey(effect.Target))
+                        manual.Add(effect.Target);
                     continue;
+                }
                 if (!SpecIndex.ContainsKey(effect.Target))
                 {
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
@@ -278,7 +287,7 @@ public static class CharacterCalculator
                 {
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
-                        $"'{revision.Name}' ({revision.Kind}) cannot grant ability score increases under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The increase is ignored.",
+                        $"'{revision.Name}' ({revision.Kind}) cannot change ability scores under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
                         revision.Reference,
                         effect.Id));
                     continue;
@@ -286,11 +295,13 @@ public static class CharacterCalculator
                 if (effect.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(effect.StackGroup))
                 {
                     warnings[effect.Target].Add(new("effect.stack-group-missing", $"'{revision.Name}' effect '{effect.Id}' uses highest-in-group stacking without a stackGroup; it is ignored.", revision.Reference, effect.Id));
+                    manual.Add(effect.Target);
                     continue;
                 }
                 if (!Formula.TryParse(effect.Value, out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
+                    manual.Add(effect.Target);
                     continue;
                 }
                 var reads = formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
@@ -302,25 +313,31 @@ public static class CharacterCalculator
 
     /// <summary>
     /// SPEC C-01 / RulesFamilyPolicy: which *origin* content (species or background) may raise ability scores differs by
-    /// family. Feats and class features may raise scores in both families, so they are not restricted here.
+    /// family. Feats and class features may raise scores in both families, so they are not restricted here. Every
+    /// operation counts: origin content must not bypass the policy with <c>set</c> or <c>replace</c>.
     /// </summary>
     private static bool IsOriginAbilityIncrease(ContentRevision revision, ModifierEffect effect) =>
-        effect.Operation == ModifierOperation.Bonus
-        && revision.Kind is ContentKind.Species or ContentKind.Background
+        revision.Kind is ContentKind.Species or ContentKind.Background
         && effect.Target.StartsWith("ability.", StringComparison.Ordinal)
         && effect.Target.EndsWith(".score", StringComparison.Ordinal);
 
     private sealed record Proficiency(GrantKind Grant, ActiveContent Content, GrantEffect Effect);
 
-    private static Dictionary<string, Proficiency> CollectProficiencies(List<ActiveContent> active, List<Diagnostic> diagnostics)
+    private static Dictionary<string, Proficiency> CollectProficiencies(List<ActiveContent> active, List<Diagnostic> diagnostics, HashSet<string> manual)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
         {
             foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
             {
-                if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always || grant.Grant == GrantKind.Content)
+                if (grant.Grant == GrantKind.Content)
                     continue;
+                if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                {
+                    if (grant.Target is { } pending && SpecIndex.ContainsKey(pending))
+                        manual.Add(pending);
+                    continue;
+                }
                 var target = grant.Target ?? "";
                 if (!SpecIndex.ContainsKey(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                 {
@@ -357,9 +374,11 @@ public static class CharacterCalculator
 
     /// <summary>
     /// Tarjan SCC. Base edges are acyclic by construction, so every cycle runs through at least one effect edge. Disable
-    /// every effect whose edge lies inside a strongly connected component (or reads its own target).
+    /// every effect whose edge lies inside a strongly connected component (or reads its own target), except an edge
+    /// that base edges already imply (for example a Dex modifier effect reading the Dex score): it adds no
+    /// reachability, so it cannot close a cycle, and the graph stays acyclic without it.
     /// </summary>
-    private static void RemoveCycles(List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings)
+    private static void RemoveCycles(List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings, HashSet<string> manual)
     {
         var edges = Edges(modifiers).ToList();
         var adjacency = Specs.ToDictionary(s => s.Id, _ => new List<string>(), StringComparer.Ordinal);
@@ -368,7 +387,7 @@ public static class CharacterCalculator
 
         var component = StronglyConnectedComponents(adjacency);
         var cyclic = edges
-            .Where(e => e.Via is not null && (e.From == e.To || (component[e.From] == component[e.To] && ComponentSize(component, component[e.From]) > 1)))
+            .Where(e => e.Via is not null && (e.From == e.To || (component[e.From] == component[e.To] && ComponentSize(component, component[e.From]) > 1 && !BaseReaches(e.From, e.To))))
             .Select(e => e.Via!)
             .Distinct()
             .ToList();
@@ -385,11 +404,31 @@ public static class CharacterCalculator
                 modifier.Effect.Id);
             diagnostics.Add(diagnostic);
             warnings[modifier.Effect.Target].Add(diagnostic);
+            manual.Add(modifier.Effect.Target);
             modifiers.Remove(modifier);
         }
     }
 
     private static int ComponentSize(Dictionary<string, int> component, int id) => component.Count(c => c.Value == id);
+
+    /// <summary>True if <paramref name="to"/> depends on <paramref name="from"/> through base inputs alone (a path of length ≥ 1).</summary>
+    private static bool BaseReaches(string from, string to)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>([from]);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            foreach (var dependent in Specs.Where(s => s.Reads.Contains(current, StringComparer.Ordinal)).Select(s => s.Id))
+            {
+                if (dependent == to)
+                    return true;
+                if (seen.Add(dependent))
+                    pending.Push(dependent);
+            }
+        }
+        return false;
+    }
 
     private static Dictionary<string, int> StronglyConnectedComponents(Dictionary<string, List<string>> adjacency)
     {
@@ -475,7 +514,7 @@ public static class CharacterCalculator
     /// <summary>ADR-003 order: highest replace, then bonuses (stack / highest in group), then highest set.</summary>
     private static int ApplyModifiers(
         string field, int value, List<Modifier> modifiers, Character character, Dictionary<string, int> values,
-        string family, List<Step> steps, List<Diagnostic> warnings)
+        string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
     {
         var evaluated = new List<(Modifier Modifier, int Amount, List<TraceInput> Inputs)>();
         foreach (var modifier in modifiers)
@@ -496,7 +535,10 @@ public static class CharacterCalculator
             if (modifier.Formula.TryEvaluate(Resolve, out var amount, out var error))
                 evaluated.Add((modifier, amount, inputs));
             else
+            {
                 warnings.Add(InvalidFormula(modifier.Content.Revision, modifier.Effect, error!));
+                manual.Add(field);
+            }
         }
 
         TraceOrigin Origin(Modifier m) => ContentOrigin(family, m.Content, m.Effect);
@@ -526,7 +568,21 @@ public static class CharacterCalculator
                 steps.Add(new(field, "ignored", $"Bonus from {Name(bonus.Modifier)} does not stack with a higher '{bonus.Modifier.Effect.StackGroup}' bonus", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
                 continue;
             }
-            value += bonus.Amount;
+            // Each formula is bounded, but their number is not: bound the running value too, so it cannot overflow.
+            var next = (long)value + bonus.Amount;
+            if (Math.Abs(next) > FormulaLimits.MaxMagnitude)
+            {
+                var revision = bonus.Modifier.Content.Revision;
+                warnings.Add(new(
+                    "effect.out-of-range",
+                    $"'{revision.Name}' effect '{bonus.Modifier.Effect.Id}' is disabled: it would take {field} outside ±{FormulaLimits.MaxMagnitude:0}.",
+                    revision.Reference,
+                    bonus.Modifier.Effect.Id));
+                manual.Add(field);
+                steps.Add(new(field, "ignored", $"Bonus from {Name(bonus.Modifier)} not applied; the result would be out of range", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                continue;
+            }
+            value = (int)next;
             steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
         }
 

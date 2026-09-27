@@ -106,6 +106,62 @@ public class RulesFamilySideBySideTests
     }
 
     [Fact]
+    public void A_2014_background_may_still_grant_content_that_is_not_a_feat()
+    {
+        var catalog = Fixtures.M1Catalog();
+        var feature = catalog.FindRevision(Fixtures.Watchful)! with
+        {
+            ContentId = Guid.Parse("5f1dc000-0000-4000-8000-0000000000fd"),
+            RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000fd"),
+            Kind = ContentKind.Feature,
+            Name = "Fixture Road Sense",
+        };
+        var background = catalog.FindRevision(Fixtures.Wayfarer)! with
+        {
+            RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000fc"),
+            Effects = [new GrantEffect { Id = "feature", Grant = GrantKind.Content, Content = feature.Reference }],
+        };
+        var pack = Fixtures.M1Pack();
+        var withFeature = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. pack.Sources], [.. Fixtures.Pack().Revisions, .. pack.Revisions, feature, background]);
+        var character = Fixtures.Load("srd51-ash-m1.json") with { Pins = [background.Reference] };
+
+        var sheet = CharacterCalculator.Calculate(character, withFeature);
+
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "policy.background-feat");
+        var step = sheet.Field(FieldIds.Initiative).Trace[^1];
+        Assert.Equal(("add", feature.Reference), (step.Operation, step.Origin.Content));
+        Assert.Equal(sheet.Field(FieldIds.ProficiencyBonus).Value, step.Amount);
+    }
+
+    [Fact]
+    public void Origin_content_cannot_bypass_the_ability_policy_with_set_or_replace()
+    {
+        var catalog = Fixtures.M1Catalog();
+        var species = catalog.FindRevision(Fixtures.KeenSenses2024)! with
+        {
+            RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000fb"),
+            Effects =
+            [
+                new ModifierEffect { Id = "set-str", Operation = ModifierOperation.Set, Target = FieldIds.Score(Ability.Str), Value = "19" },
+                new ModifierEffect { Id = "replace-con", Operation = ModifierOperation.Replace, Target = FieldIds.Score(Ability.Con), Value = "19" },
+            ],
+        };
+        var pack = Fixtures.M1Pack();
+        var withSpecies = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. pack.Sources], [.. Fixtures.Pack().Revisions, .. pack.Revisions, species]);
+        var character = Fixtures.Load("srd521-ash-m1.json");
+        var before = CharacterCalculator.Calculate(character with { Pins = [] }, withSpecies);
+
+        var sheet = CharacterCalculator.Calculate(character with { Pins = [species.Reference] }, withSpecies);
+
+        foreach (var (ability, effect) in new[] { (Ability.Str, "set-str"), (Ability.Con, "replace-con") })
+        {
+            var field = sheet.Field(FieldIds.Score(ability));
+            Assert.Equal(before.Field(FieldIds.Score(ability)).Value, field.Value);
+            Assert.Contains(field.Warnings, w => w.Code == "policy.ability-increase-source" && w.EffectId == effect);
+        }
+    }
+
+    [Fact]
     public void Policy_differences_are_named_fields_not_inferred()
     {
         var p2014 = RulesFamilies.Get(RulesFamilies.Srd51);
