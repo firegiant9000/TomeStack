@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tomestack.local/schemas/content-revision.v4.schema.json",
   "title": "TomeStack content revision (schemaVersion 4)",
-  "description": "One immutable revision of a content entity (ADR-002) with typed declarative effects (ADR-003). v4 (M2 item 5) adds extendsChoice: the revision is an extra option of another content's choice. v3 added level-gated grants and choices, the hitDie effect, and the armorClass and hitPoints fields. v2 and v3 revisions keep their version (not upcast). Unknown properties round-trip. An effect whose type is not listed here is kept and is reference-only.",
+  "description": "One immutable revision of a content entity (ADR-002) with typed declarative effects (ADR-003). v4 (M2 items 4 and 5) adds the armor effect and extendsChoice: the revision is an extra option of another content's choice. v3 added level-gated grants and choices, the hitDie effect, and the armorClass and hitPoints fields. v2 and v3 revisions keep their version (not upcast). Unknown properties round-trip. An effect whose type is not listed here is kept and is reference-only.",
   "type": "object",
   "required": ["contentId", "revisionId", "schemaVersion", "kind", "name", "rulesFamilies", "provenance", "status"],
   "properties": {
@@ -149,7 +149,7 @@
           "required": ["die"]
         },
         {
-          "description": "M2 item 4: body armor (light, medium, heavy) or a shield on an item. A new effect type, so no schema version change (ADR-003): older builds keep it as an unknown, reference-only effect.",
+          "description": "M2 item 4: body armor (light, medium, heavy) or a shield on an item. Content v4 only (ADR-003): in a v2 or v3 revision an armor effect is unknown and reference-only, kept byte for byte, so revisions stored by 0.2.0 keep their hash and meaning.",
           "properties": {
             "type": { "const": "armor" },
             "category": { "enum": ["light", "medium", "heavy", "shield"] },

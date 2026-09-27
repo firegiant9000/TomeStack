@@ -17,8 +17,8 @@
   "revisions": [
     {
       "contentId": "5f4dc000-0000-4000-8000-000000000001",
-      "revisionId": "5f4de000-0000-4000-8000-000000000001",
-      "schemaVersion": 3,
+      "revisionId": "5f4de000-0000-4000-8000-000000000011",
+      "schemaVersion": 4,
       "kind": "item",
       "name": "Fixture Padded Jerkin",
       "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
@@ -31,8 +31,8 @@
     },
     {
       "contentId": "5f4dc000-0000-4000-8000-000000000002",
-      "revisionId": "5f4de000-0000-4000-8000-000000000002",
-      "schemaVersion": 3,
+      "revisionId": "5f4de000-0000-4000-8000-000000000012",
+      "schemaVersion": 4,
       "kind": "item",
       "name": "Fixture Scale Vest",
       "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
@@ -45,8 +45,8 @@
     },
     {
       "contentId": "5f4dc000-0000-4000-8000-000000000003",
-      "revisionId": "5f4de000-0000-4000-8000-000000000003",
-      "schemaVersion": 3,
+      "revisionId": "5f4de000-0000-4000-8000-000000000013",
+      "schemaVersion": 4,
       "kind": "item",
       "name": "Fixture Iron Harness",
       "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
@@ -59,8 +59,8 @@
     },
     {
       "contentId": "5f4dc000-0000-4000-8000-000000000004",
-      "revisionId": "5f4de000-0000-4000-8000-000000000004",
-      "schemaVersion": 3,
+      "revisionId": "5f4de000-0000-4000-8000-000000000014",
+      "schemaVersion": 4,
       "kind": "item",
       "name": "Fixture Kite Shield",
       "rulesFamilies": ["srd-5.1", "srd-5.2.1"],

@@ -24,12 +24,16 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 
 - The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
 
+### Fixed (M2 review)
+
+- **`armor` is content schema v4 only (ADR-003).** A revision stored by 0.2.0 with a `"type": "armor"` effect (an unknown effect then) was read as typed armor. Its hash changed, so re-importing the same package failed (`package.revision-conflict`), and published content started changing Armor Class. In a v2 or v3 revision, armor now stays unknown, reference-only and byte for byte. Validation refuses armor below v4 (`validate.requires-v4`). The original fixture armor is republished as v4 revisions (new revision ids; the content ids are unchanged).
+
 ### Migration
 
 - **Database schema 4** (M2 item 7): adds the `campaigns` table. An M1 data folder (schema 2) upgrades through 3 and 4 in one start, after one backup, `tomestack.db.v2.bak`.
 - **Package format v4**: `campaigns/` entries. Older builds refuse v4 packages.
 - **Database schema 3** (ADR-005): `tomestack.db.v2.bak` is written first. The migration adds the attachments table and turns each source's `pdfRef` into an attachment: a managed copy when the file is a readable PDF, otherwise linked and shown as missing. The old value stays in `sources.legacy_pdf_ref`. Opening a schema-3 data folder with an older build is refused with "update TomeStack", and nothing is changed.
-- **Content schema v4** (`docs/schemas/content-revision.v4.schema.json`) adds `extendsChoice`. New revisions are written as v4. v2 and v3 revisions, including the bundled SRD packs, keep their version and hashes, so there is no database migration. Older builds refuse v4 revisions.
+- **Content schema v4** (`docs/schemas/content-revision.v4.schema.json`) adds the `armor` effect and `extendsChoice`. New revisions are written as v4. v2 and v3 revisions, including the bundled SRD packs, keep their version and hashes, so there is no database migration. Older builds refuse v4 revisions.
 - **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play` and `equipment`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
 
 ## 0.2.0 (M1 delivered)

@@ -139,18 +139,8 @@
           "required": ["die"]
         },
         {
-          "description": "M2 item 4: body armor (light, medium, heavy) or a shield on an item. A new effect type, so no schema version change (ADR-003): older builds keep it as an unknown, reference-only effect.",
-          "properties": {
-            "type": { "const": "armor" },
-            "category": { "enum": ["light", "medium", "heavy", "shield"] },
-            "armorClass": { "type": "integer", "minimum": 0, "maximum": 30 },
-            "dexterityCap": { "type": "integer", "minimum": 0, "maximum": 10 }
-          },
-          "required": ["category", "armorClass"]
-        },
-        {
-          "description": "Unknown effect type: kept, reference-only.",
-          "properties": { "type": { "not": { "enum": ["modifier", "grant", "resource", "choice", "restriction", "recovery", "roll", "hitDie", "armor"] } } }
+          "description": "Unknown effect type: kept, reference-only. This includes armor, which is typed only from content v4 (ADR-003).",
+          "properties": { "type": { "not": { "enum": ["modifier", "grant", "resource", "choice", "restriction", "recovery", "roll", "hitDie"] } } }
         }
       ]
     }

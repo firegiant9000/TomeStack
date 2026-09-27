@@ -98,7 +98,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// </summary>
     public ChoiceExtension? ExtendsChoice { get; init; }
 
-    public IReadOnlyList<Effect> Effects { get; init; } = [];
+    public IReadOnlyList<Effect> Effects { get => _effects; init => _effects = value; }
+
+    private IReadOnlyList<Effect> _effects = [];
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
@@ -109,7 +111,8 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>
     /// ADR-003 migration: schemaVersion 1 differs only in the effect shape, which <see cref="EffectJsonConverter"/>
     /// already mapped while reading. Record the upcast to v2. Versions newer than supported are left as they are, so
-    /// callers refuse them with a diagnostic.
+    /// callers refuse them with a diagnostic. An <c>armor</c> effect is typed only in a v4 (or newer) revision
+    /// (<see cref="ArmorEffect"/>); in an older one it stays unknown and is written back unchanged.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
@@ -118,5 +121,7 @@ public sealed record ContentRevision : IJsonOnDeserialized
             UpgradedFrom = _schemaVersion;
             _schemaVersion = TypedEffectsSchemaVersion;
         }
+        if (_schemaVersion >= ArmorEffect.SchemaVersion && _effects.Any(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName }))
+            _effects = [.. _effects.Select(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName } armor ? ArmorEffect.FromUnknown(armor) : e)];
     }
 }

@@ -12,7 +12,7 @@ The sheet's **Equipment** panel adds an item from the character's rules family, 
 
 ## The `armor` effect
 
-`{ type: "armor", id, category: light | medium | heavy | shield, armorClass, dexterityCap? }` on an item. This is a new effect type, so older builds keep it as an unknown, reference-only effect (ADR-003), and no content schema version change is needed. The rules are the same in both SRDs:
+`{ type: "armor", id, category: light | medium | heavy | shield, armorClass, dexterityCap? }` on an item, in a **content schema v4** revision. In a v2 or v3 revision an `armor` effect stays unknown, reference-only and byte for byte, because 0.2.0 stored it that way; typing it would change its hash and its meaning (ADR-003 "Content schema v4"). Validation refuses armor below v4 (`validate.requires-v4`). Older builds keep it as an unknown, reference-only effect. The rules are the same in both SRDs:
 
 | Category | Armor Class |
 | --- | --- |

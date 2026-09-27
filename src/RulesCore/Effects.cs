@@ -203,12 +203,29 @@ public enum ArmorCategory { Light, Medium, Heavy, Shield }
 /// <summary>
 /// M2 item 4: armor on an item. Body armor (light, medium, heavy) sets the Armor Class base while the item is equipped:
 /// <see cref="ArmorClass"/> plus the Dexterity modifier (light), capped at <see cref="DexterityCap"/> (medium, default 2),
-/// or none (heavy). A shield adds <see cref="ArmorClass"/>. The same in both SRDs. A new effect type, so older builds keep
-/// it as an unknown, reference-only effect (ADR-003) and no content schema bump is needed.
+/// or none (heavy). A shield adds <see cref="ArmorClass"/>. The same in both SRDs. Content schema v4 only: in an older
+/// revision an <c>armor</c> effect stays an <see cref="UnknownEffect"/>, byte for byte, because a 0.2.0 build stored it that
+/// way and typing it would change both its hash and its meaning (ADR-003).
 /// </summary>
 public sealed record ArmorEffect : Effect
 {
     public const string TypeName = "armor";
+
+    /// <summary>The content schema version that introduced this effect type.</summary>
+    public const int SchemaVersion = 4;
+
+    /// <summary>An <c>armor</c> effect read from a v4 revision; a malformed body stays reference-only.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown)
+    {
+        try
+        {
+            return unknown.Raw.Deserialize<ArmorEffect>(RulesJson.Compact) ?? (Effect)unknown;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return unknown;
+        }
+    }
 
     public const int DefaultMediumDexterityCap = 2;
 
@@ -274,7 +291,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RecoveryEffect.TypeName => element.Deserialize<RecoveryEffect>(options),
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
-                ArmorEffect.TypeName => element.Deserialize<ArmorEffect>(options),
+                // Typed only in content v4 revisions (ContentRevision.OnDeserialized); older ones keep it as written.
+                ArmorEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

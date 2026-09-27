@@ -42,4 +42,18 @@ public class ArmorValidationTests
         Assert.Contains(Validate(ContentKind.Item, Armor(ArmorCategory.Light, 11), Armor(ArmorCategory.Heavy, 16, id: "b")).Errors, e => e.Code == "validate.armor-duplicate");
         Assert.Contains(Validate(ContentKind.Feat, Armor(ArmorCategory.Light, 11)).Warnings, w => w.Code == "validate.armor-kind");
     }
+
+    [Fact]
+    public void Armor_requires_content_schema_v4()
+    {
+        var pack = Fixtures.Pack();
+        var revision = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = 3, Kind = ContentKind.Item, Name = "Old Armor",
+            RulesFamilies = [RulesFamilies.Srd51], Provenance = new(Fixtures.SourceShared), Status = RevisionStatus.Draft,
+            Effects = [Armor(ArmorCategory.Light, 11)],
+        };
+
+        Assert.Contains(ContentValidator.Validate(revision, new InMemoryContentCatalog(pack.Sources, pack.Revisions)).Errors, e => e.Code == "validate.requires-v4");
+    }
 }

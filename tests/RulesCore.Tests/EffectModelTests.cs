@@ -12,12 +12,11 @@ public class EffectModelTests
         JsonSerializer.Deserialize<ContentRevision>(Json(revision), RulesJson.Compact)!;
 
     private static ContentRevision RevisionWithEffects(string effectsJson) =>
-        JsonSerializer.Deserialize<ContentRevision>($$"""
-            {"contentId":"11111111-0000-4000-8000-000000000001","revisionId":"11111111-0000-4000-8000-000000000002",
-             "schemaVersion":2,"kind":"feat","name":"Test","rulesFamilies":["srd-5.1"],
-             "provenance":{"sourceId":"5f0d5000-0000-4000-8000-000000000001"},"status":"published",
-             "effects":{{effectsJson}}}
-            """, RulesJson.Options)!;
+        JsonSerializer.Deserialize<ContentRevision>(RevisionJson(effectsJson, 2), RulesJson.Options)!;
+
+    /// <summary>A revision in the stored (compact) form, with the effects exactly as given.</summary>
+    private static string RevisionJson(string effectsJson, int schemaVersion) =>
+        $$"""{"contentId":"11111111-0000-4000-8000-000000000001","revisionId":"11111111-0000-4000-8000-000000000002","schemaVersion":{{schemaVersion}},"kind":"feat","name":"Test","rulesFamilies":["srd-5.1"],"provenance":{"sourceId":"5f0d5000-0000-4000-8000-000000000001"},"status":"published","effects":{{effectsJson}}}""";
 
     [Fact]
     public void Schema_v1_fixture_revisions_are_upcast_to_typed_effects()
@@ -51,6 +50,32 @@ public class EffectModelTests
         var revision = RevisionWithEffects("""[{"id":"broken","type":"modifier","operation":"bonus"}]""");
 
         Assert.IsType<UnknownEffect>(Assert.Single(revision.Effects));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Armor_in_a_revision_older_than_v4_stays_unknown_and_byte_for_byte(int schemaVersion)
+    {
+        // A 0.2.0 build stored "armor" as an unknown effect, verbatim. Reading it as typed armor would reorder it (so
+        // its hash, and re-import, break) and start changing Armor Class for published content (ADR-003).
+        const string armor = """{"id":"robe","type":"armor","armorClass":12,"category":"light"}""";
+        var stored = RevisionJson($"[{armor}]", schemaVersion);
+        var revision = JsonSerializer.Deserialize<ContentRevision>(stored, RulesJson.Compact)!;
+
+        var effect = Assert.IsType<UnknownEffect>(Assert.Single(revision.Effects));
+        Assert.Equal(AutomationStatus.Reference, effect.Automation);
+        Assert.Equal(stored, Json(revision));
+    }
+
+    [Fact]
+    public void Armor_in_a_v4_revision_is_typed()
+    {
+        const string armor = """{"id":"robe","type":"armor","armorClass":12,"category":"light"}""";
+        var stored = RevisionJson($"[{armor}]", 4);
+
+        var effect = Assert.IsType<ArmorEffect>(Assert.Single(JsonSerializer.Deserialize<ContentRevision>(stored, RulesJson.Compact)!.Effects));
+        Assert.Equal((ArmorCategory.Light, 12), (effect.Category, effect.ArmorClass));
     }
 
     [Fact]

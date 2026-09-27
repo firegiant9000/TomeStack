@@ -8,13 +8,14 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class EquipmentTests
 {
-    private static ContentReference Fixture(int n) => new(Guid.Parse($"5f4dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f4de000-0000-4000-8000-{n:D12}"));
+    /// <param name="revision">The armor fixtures are content v4 revisions (armor is typed only from v4), numbered 11 to 14.</param>
+    private static ContentReference Fixture(int n, int revision) => new(Guid.Parse($"5f4dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f4de000-0000-4000-8000-{revision:D12}"));
 
-    private static readonly ContentReference Jerkin = Fixture(1);
-    private static readonly ContentReference ScaleVest = Fixture(2);
-    private static readonly ContentReference IronHarness = Fixture(3);
-    private static readonly ContentReference KiteShield = Fixture(4);
-    private static readonly ContentReference TomeOfMight = Fixture(5);
+    private static readonly ContentReference Jerkin = Fixture(1, 11);
+    private static readonly ContentReference ScaleVest = Fixture(2, 12);
+    private static readonly ContentReference IronHarness = Fixture(3, 13);
+    private static readonly ContentReference KiteShield = Fixture(4, 14);
+    private static readonly ContentReference TomeOfMight = Fixture(5, 5);
 
     private static CharacterSheet Brenna(TempApp temp, params EquipmentEntry[] equipment) =>
         temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Equipment = equipment }).Sheet;
@@ -27,7 +28,7 @@ public class EquipmentTests
     {
         using var temp = new TempApp();
 
-        var ac = Brenna(temp, new EquipmentEntry(Fixture(item), Equipped: true)).Field(FieldIds.ArmorClass);
+        var ac = Brenna(temp, new EquipmentEntry(Fixture(item, item + 10), Equipped: true)).Field(FieldIds.ArmorClass);
 
         Assert.Equal(expected, ac.Value);
         Assert.Equal(AutomationStatus.Automatic, ac.Automation);
@@ -93,6 +94,31 @@ public class EquipmentTests
         var capped = Assert.Single(strength.Trace, t => t.Description.Contains("capped", StringComparison.Ordinal));
         Assert.Equal(20, capped.Result);
         Assert.Contains("above 20", capped.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_v3_armor_revision_stored_by_0_2_0_re_adds_unchanged_and_stays_reference_only()
+    {
+        using var temp = new TempApp();
+        // 0.2.0 stored "armor" as an unknown effect, verbatim (not in the typed writer's type-first order).
+        var reference = new ContentReference(Guid.Parse("5f4dc000-0000-4000-8000-0000000000bb"), Guid.Parse("5f4de000-0000-4000-8000-0000000000bb"));
+        var stored = $$"""{"contentId":"{{reference.ContentId:D}}","revisionId":"{{reference.RevisionId:D}}","schemaVersion":3,"kind":"item","name":"Old Robe","rulesFamilies":["srd-5.2.1"],"provenance":{"sourceId":"5f4d5000-0000-4000-8000-000000000001"},"status":"published","effects":[{"id":"robe","type":"armor","armorClass":18,"category":"heavy"}]}""";
+        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={temp.App.Store.DatabasePath};Pooling=False"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO content_revisions (revision_id, content_id, status, sha256, json) VALUES ($rid, $cid, 'Published', $hash, $json);";
+            command.Parameters.AddWithValue("$rid", reference.RevisionId.ToString("D"));
+            command.Parameters.AddWithValue("$cid", reference.ContentId.ToString("D"));
+            command.Parameters.AddWithValue("$hash", Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(stored))));
+            command.Parameters.AddWithValue("$json", stored);
+            command.ExecuteNonQuery();
+        }
+
+        // Re-importing the same package (or re-seeding) must be a no-op, not an ImmutableRevisionException.
+        Assert.False(temp.App.Store.AddRevision(System.Text.Json.JsonSerializer.Deserialize<ContentRevision>(stored, RulesJson.Compact)!));
+        // Its meaning does not change either: it is reference only, so Unarmored Defense still applies.
+        Assert.Equal(13, Brenna(temp, new EquipmentEntry(reference, Equipped: true)).Field(FieldIds.ArmorClass).Value);
     }
 
     [Fact]
