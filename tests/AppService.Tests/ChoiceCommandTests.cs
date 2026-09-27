@@ -73,6 +73,22 @@ public class ChoiceCommandTests
     }
 
     [Fact]
+    public void An_option_already_chosen_for_another_choice_is_refused()
+    {
+        // SRD 5.2.1 Barbarian: Primal Knowledge (level 3) picks "another skill" from the same list as the class skills.
+        static ContentReference Srd(int n) => new(Guid.Parse($"52c00000-0000-4000-8000-{n:D12}"), Guid.Parse($"52e00000-0000-4000-8000-{n:D12}"));
+        using var temp = new TempApp();
+        var character = TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [], Classes = [new(Srd(11), 3)] };
+        var id = temp.App.SaveCharacter(character).Character.Id;
+        temp.App.Choose(new(id, Srd(11), "barbarian-skills", [Srd(18), Srd(22)])); // Athletics, Survival
+
+        var response = Choose(temp, id, Srd(25), "primal-knowledge-skill", Srd(18));
+
+        Assert.Contains("choice.option-already-chosen", Codes(response));
+        Assert.True(Choose(temp, id, Srd(25), "primal-knowledge-skill", Srd(21)).GetProperty("ok").GetBoolean()); // Perception
+    }
+
+    [Fact]
     public void Chosen_content_travels_in_packages()
     {
         var (temp, id) = Setup();

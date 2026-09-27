@@ -4,7 +4,15 @@ TomeStack's own code is licensed under the Apache License 2.0 ([LICENSE](LICENSE
 
 ## Rules content
 
-TomeStack ships **no SRD or third-party rules text** today. The only bundled content is the original test fixtures in `tests/RulesFixtures/`, which were written for this project (SPEC Q-03). SRD 5.1 and SRD 5.2.1 content will be added only after the owner approves the attribution statements in [docs/licensing/srd-attribution-draft.md](docs/licensing/srd-attribution-draft.md) (ADR-007).
+TomeStack bundles a slice of two System Reference Documents under the Creative Commons Attribution 4.0 International License (ADR-007; review in [docs/licensing/srd-pack-review.md](docs/licensing/srd-pack-review.md)):
+
+**SRD 5.1:** This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
+**SRD 5.2.1:** This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
+
+Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.
+
+No other third-party rules text is bundled. The test fixtures in `tests/RulesFixtures/` are original to this project (SPEC Q-03) and are not seeded into user data by the shipped app.
 
 ## Third-party components in the shipped app
 

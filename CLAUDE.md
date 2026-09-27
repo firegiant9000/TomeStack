@@ -23,5 +23,5 @@ scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.ex
 - Imported content (PDF candidates, packages) never executes code and never becomes active without review.
 - UI components call `src/Ui/src/api/client.ts` only. Only `transport.ts` (and the e2e DevHost harness) may use `fetch` (lint-enforced).
 - The shipped app opens no listening socket (ADR-006). `src/DevHost` is dev-only.
-- Fixtures must be original. Add no SRD or third-party rules text without an attribution/license review (SPEC Q-03).
+- Fixtures must be original. SRD text lives only in `src/AppService/Content/` (CC-BY-4.0, reviewed in `docs/licensing/srd-pack-review.md`); add no more SRD or any third-party rules text without updating that review (SPEC Q-03).
 - The repo is **public** on GitHub.

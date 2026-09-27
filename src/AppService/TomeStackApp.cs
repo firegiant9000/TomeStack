@@ -36,13 +36,24 @@ public sealed class TomeStackApp : IDisposable
 
     internal SqliteStore Store => _store;
 
+    /// <summary>The bundled SRD packs (M1 item 1): always seeded. They are insert-only, so re-seeding is a no-op.</summary>
+    public static IReadOnlyList<string> BundledPacks { get; } = ["TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json"];
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null)
+    /// <param name="devFixtures">
+    /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
+    /// shipped app has real SRD content, so fixtures stay out of user data (owner decision, 2026-09-26). Data folders
+    /// that already contain fixture content keep it (published revisions are never deleted).
+    /// </param>
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false)
     {
         Directory.CreateDirectory(dataDirectory);
         var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
         var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]);
-        app.SeedFixturePack();
+        foreach (var pack in BundledPacks)
+            app.Seed(pack);
+        if (devFixtures)
+            app.Seed("TomeStack.FixturePack.json");
         return app;
     }
 
@@ -153,6 +164,11 @@ public sealed class TomeStackApp : IDisposable
             problems.Add(new("choice.too-many", $"'{offered.SourceName}' choice '{offered.ChoiceId}' allows {offered.Count} selection(s), not {selected.Count}.", request.Source));
         foreach (var option in selected.Where(o => !offered.Options.Contains(o)))
             problems.Add(new("choice.invalid-option", $"Revision {option.RevisionId} is not an option of '{offered.SourceName}' choice '{offered.ChoiceId}'.", option));
+        // One option answers one choice: SRD wording such as "another skill" means a second choice over the same list
+        // must pick something new.
+        var chosenElsewhere = without.Choices.SelectMany(c => c.Selected).ToHashSet();
+        foreach (var option in selected.Where(chosenElsewhere.Contains))
+            problems.Add(new("choice.option-already-chosen", $"Revision {option.RevisionId} is already selected for another choice.", option));
         foreach (var option in selected.Where(offered.Options.Contains))
         {
             var revision = _store.FindRevision(option);
@@ -181,12 +197,18 @@ public sealed class TomeStackApp : IDisposable
 
     private CharacterView View(Character character) => new(character, CharacterCalculator.Calculate(character, _store));
 
-    private void SeedFixturePack()
+    /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
+    public static ContentPack LoadBundledPack(string resourceName)
     {
-        using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream("TomeStack.FixturePack.json")
-            ?? throw new InvalidOperationException("Embedded fixture pack is missing.");
-        var pack = JsonSerializer.Deserialize<ContentPack>(stream, RulesJson.Options)
-            ?? throw new InvalidOperationException("Embedded fixture pack is empty.");
+        using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");
+        return JsonSerializer.Deserialize<ContentPack>(stream, RulesJson.Options)
+            ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is empty.");
+    }
+
+    private void Seed(string resourceName)
+    {
+        var pack = LoadBundledPack(resourceName);
         _store.InTransaction(() =>
         {
             foreach (var source in pack.Sources.Where(s => _store.FindSource(s.Id) is null))

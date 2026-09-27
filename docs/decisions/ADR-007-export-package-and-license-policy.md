@@ -1,6 +1,6 @@
 # ADR-007: Export package and license policy
 
-Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26). Items 1–7 and 9 are implemented and tested. Item 8 is decided; the SRD packs follow in M1 item 1.
+Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26). Items 1–9 are implemented and tested. The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
 Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context
@@ -29,7 +29,7 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 
 **Accepted (SRD route, owner, 2026-09-26):**
 
-8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under **CC-BY-4.0** (not OGL 1.0a for SRD 5.1). Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the approved statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) (approved by Arlo Kharod, 2026-09-26). SRD text enters the repository only after that page's remaining checks are complete.
+8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under **CC-BY-4.0** (not OGL 1.0a for SRD 5.1). Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the approved statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) (approved by Arlo Kharod, 2026-09-26), plus a CC-BY §3 `modificationNotice`, which also travels in package `notices[]`. **Implemented (M1 item 1):** `src/AppService/Content/srd-5.1.json` and `srd-5.2.1.json`, seeded into every data folder; checked by `SrdPackTests`.
 
 **Accepted (D07, owner, 2026-09-26):**
 

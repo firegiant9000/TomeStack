@@ -71,7 +71,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         return new ExportResult(plan.FileName, buffer.ToArray(), manifest);
     }
 
-    private static LicenseNotice Notice(SourceRecord s) => new(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution);
+    private static LicenseNotice Notice(SourceRecord s) => new(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution, s.ModificationNotice);
 
     /// <summary>
     /// Resolves characters, their pinned revisions and those revisions' sources. For <see cref="ExportPurpose.Share"/>,

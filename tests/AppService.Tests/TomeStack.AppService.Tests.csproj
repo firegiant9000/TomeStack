@@ -25,6 +25,8 @@
   <ItemGroup>
     <None Include="..\RulesFixtures\**\*.json" LinkBase="RulesFixtures" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\AppService\Content\*.json" LinkBase="Content" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\docs\licensing\*.md" LinkBase="licensing" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

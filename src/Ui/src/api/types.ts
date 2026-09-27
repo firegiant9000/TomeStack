@@ -185,6 +185,8 @@ export interface LicenseNotice {
   license: string;
   redistributable: boolean;
   attribution?: string;
+  /** CC-BY-4.0 §3: how the material was modified (SRD packs). */
+  modificationNotice?: string;
 }
 
 /** ADR-007: a backup includes everything and is not for sharing; a share leaves out non-redistributable sources. */

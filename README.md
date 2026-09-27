@@ -2,7 +2,7 @@
 
 A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
 
-> **Status: M0 foundation.** You can create a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules, see its initiative with a source-aware calculation trace, override it, save it locally, and export/import a portable package. The only content is original test fixtures. No SRD text ships yet (pending attribution review, SPEC Q-03).
+> **Status: M1 rules core in progress.** You can create a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules and see every calculated field with a source-aware trace. You can override it, save it locally, and export or import a portable package (a personal backup, or a share that leaves out content you may not share). The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). There is no builder UI yet (M2).
 
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 
@@ -52,7 +52,7 @@ CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/w
 dotnet run --project src/DesktopShell
 ```
 
-Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`). Pass `--devtools` to enable WebView2 DevTools.
+Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). Pass `--devtools` to enable WebView2 DevTools. The app seeds the bundled SRD packs. Set `TOMESTACK_DEV_FIXTURES=1` to also seed the original test fixtures (DevHost always does).
 
 **Self-test.** This launches the shell, loads the UI, round-trips commands over the bridge, creates a fixture character, exports it and previews the package. It then exits 0/2 and writes a JSON report:
 

@@ -37,6 +37,13 @@
   - **All 18 skills.**
 
   Original fixtures "Fixture Warden" and "Fixture Scholar" cover multiclass hit points and level gates. D04 (multiclass and spellcasting scope for MVP) is recorded in LIVING_SPECS.
+- **SRD packs (M1 item 1, SPEC S-02, Q-03; ADR-007; `docs/licensing/srd-pack-review.md`):** SRD 5.1 and SRD 5.2.1 ship as two separate CC-BY-4.0 source packs, with separate sources, content IDs and revisions. Each source carries the approved attribution verbatim, a CC-BY §3 `modificationNotice` (which also travels in package notices) and the checked PDF's SHA-256. The slice per family:
+  - one species (Half-Orc / Dwarf);
+  - one background (Acolyte / Soldier, with its ability options and origin feat);
+  - the Barbarian at levels 1–3, with its skill choices, level-gated features and the Path of the Berserker;
+  - one feat (Grappler with its Strength 13 prerequisite / Savage Attacker).
+
+  Every revision validates, and `SrdPackTests` checks the attribution against the approval page. `NOTICE` and `ATTRIBUTION.md` carry the statements.
 - **Restrictions and validation (M1 item 3; `docs/features/validation-and-restrictions.md`):**
   - `restriction` effects are prerequisites. Content whose prerequisite is not met is not applied, with a `restriction.unmet` diagnostic scoped to it. Prerequisites are checked without the content itself, so a feat cannot qualify itself.
   - `content.validate` (`ContentValidator`) reports schema, reference, formula and dependency-cycle problems for a stored or unsaved revision before publish. Errors block publishing; warnings do not.
@@ -44,6 +51,9 @@
 - JSON Schemas for source, content revision, character and package manifest (v1, plus v2 for content revisions, characters and manifests) in `docs/schemas/`. A test validates every fixture and a real exported package against them.
 
 ### Changed
+
+- The shipped app seeds the bundled SRD packs and **no longer seeds the original test fixtures**. DevHost and tests still do, and `TOMESTACK_DEV_FIXTURES=1` enables them in the shell. Data folders that already have fixture content keep it. The GUI smoke now checks SRD content (a Half-Orc's Strength +2).
+- `character.choose` refuses an option that is already selected for another choice (`choice.option-already-chosen`), as SRD wording such as "another skill" requires.
 
 - Trace shape (ARCHITECTURE step 5): a field's trace now includes the steps of every field it reads, in dependency order. Each entry names its `field` and the `inputs` it read, and each value has `units`. Initiative gains an explicit "starts at the Dexterity modifier" step. A field's warnings include its inputs' warnings, so an ignored Dex increase still explains initiative. Overrides stay the final layer, and dependents read the overridden value.
 - The ability-increase policy now restricts only *origin* content (species and background). Feats and class features may raise scores under both rules families; M0 blocked them by mistake. For origin content it covers every operation, so a `set` or `replace` on an ability score cannot bypass it.

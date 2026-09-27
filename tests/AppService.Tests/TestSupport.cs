@@ -16,7 +16,7 @@ internal sealed class TempApp : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
 
     // No sync roots: tests must not depend on this machine's OneDrive or registry (DataFolderTests covers discovery).
-    public TempApp() => App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: []);
+    public TempApp() => App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: [], devFixtures: true);
 
     public TomeStackApp App { get; private set; }
 
@@ -25,7 +25,7 @@ internal sealed class TempApp : IDisposable
     public void Reopen()
     {
         App.Dispose();
-        App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: []);
+        App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: [], devFixtures: true);
     }
 
     public void Dispose()

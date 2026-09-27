@@ -33,7 +33,8 @@ public partial class App : Application
 
         try
         {
-            _tomeStack = TomeStackApp.Open(dataDirectory);
+            // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1).
+            _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES") == "1");
         }
         catch (Exception ex) when (!options.Smoke)
         {

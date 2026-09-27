@@ -24,6 +24,10 @@ public sealed record SourceRecord
     public required string License { get; init; }
     public required bool Redistributable { get; init; }
     public string? Attribution { get; init; }
+
+    /// <summary>CC-BY-4.0 §3(a)(1)(B): how this source's material was modified. Travels with <see cref="Attribution"/> into package notices.</summary>
+    public string? ModificationNotice { get; init; }
+
     public DateTimeOffset? ImportedAt { get; init; }
     public string? Sha256 { get; init; }
     public string? PdfRef { get; init; }

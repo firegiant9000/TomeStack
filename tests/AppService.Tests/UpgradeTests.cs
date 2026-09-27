@@ -30,7 +30,7 @@ public class UpgradeTests
     public void Upgrading_the_schema_backs_up_the_database_first_and_keeps_the_data()
     {
         var directory = NewDirectory();
-        using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now)))
+        using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true))
             app.SaveCharacter(Fixture());
         var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
 
@@ -52,7 +52,7 @@ public class UpgradeTests
         var live = NewDirectory();
         var crashed = NewDirectory();
         Directory.CreateDirectory(crashed);
-        var app = TomeStackApp.Open(live, new FixedTime(TempApp.Now));
+        var app = TomeStackApp.Open(live, new FixedTime(TempApp.Now), devFixtures: true);
         try
         {
             app.SaveCharacter(Fixture());
@@ -79,7 +79,7 @@ public class UpgradeTests
     public void Data_folder_from_a_newer_build_is_refused_and_left_untouched()
     {
         var directory = NewDirectory();
-        using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now))) { }
+        using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true)) { }
         var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
         using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
         {
@@ -89,7 +89,7 @@ public class UpgradeTests
             command.ExecuteNonQuery();
         }
 
-        var ex = Assert.Throws<NewerDatabaseException>(() => TomeStackApp.Open(directory, new FixedTime(TempApp.Now)));
+        var ex = Assert.Throws<NewerDatabaseException>(() => TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true));
 
         Assert.Contains("newer version of TomeStack", ex.Message, StringComparison.Ordinal);
         Assert.Equal(99, Scalar(database, "PRAGMA user_version;"));
@@ -138,7 +138,7 @@ public class UpgradeTests
             }
         }
 
-        using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now)); // re-seeds the fixture pack
+        using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true); // re-seeds the fixture pack
 
         Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion);
         Assert.True(File.Exists(SqliteStore.BackupPath(database, 1)));

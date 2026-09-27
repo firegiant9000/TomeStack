@@ -13,7 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- M0 seeds the original test fixture pack so a fresh install has content to pick. -->
+    <!-- The SRD packs (CC-BY-4.0; docs/licensing/srd-pack-review.md) are seeded into every data folder. -->
+    <EmbeddedResource Include="Content\srd-5.1.json" LogicalName="TomeStack.Content.srd-5.1.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1.json" LogicalName="TomeStack.Content.srd-5.2.1.json" />
+    <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack.json" LogicalName="TomeStack.FixturePack.json" />
   </ItemGroup>
 

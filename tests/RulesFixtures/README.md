@@ -1,10 +1,10 @@
 # Rules fixtures
 
-All content here is **original** and was written for TomeStack tests. It contains no SRD or third-party rules text (SPEC Q-03). Names start with "Fixture".
+All content here is **original** and was written for TomeStack tests. It contains no SRD or third-party rules text (SPEC Q-03). Names start with "Fixture". The bundled SRD content is separate, in `src/AppService/Content/` ([license review](../../docs/licensing/srd-pack-review.md)).
 
 | File | Schema | Seeded into user data | Purpose |
 | --- | --- | --- | --- |
-| `fixture-pack.json` | content v1 (upcast on read) | yes (embedded in AppService; the seeding decision is open) | M0: ability-increase policy, draft isolation, an unknown effect type |
+| `fixture-pack.json` | content v1 (upcast on read) | development only (DevHost, tests, `TOMESTACK_DEV_FIXTURES=1`); the shipped app seeds the SRD packs instead (owner decision 2026-09-26) | M0: ability-increase policy, draft isolation, an unknown effect type |
 | `fixture-pack-m1.json` | content v2 and v3 | no, tests only | M1: the second policy difference, a cross-edition conflict, grants; classes "Fixture Warden" (d10) and "Fixture Scholar" (d6) with level-gated features, a hit point feat and an armor class item (item 5); choices: Warden skills (2 of 3) and a level-3 path, and the background "Fixture Crossroads" with a chosen ability increase (item 4) |
 | `characters/srd51-quickfoot.json`, `srd521-courier.json` | character v1 | no | M0 initiative traces |
 | `characters/srd51-ash-m1.json`, `srd521-ash-m1.json` | character v2 | no | Side-by-side: the same inputs under each family |

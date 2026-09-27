@@ -40,7 +40,8 @@
           "publisher": { "type": "string" },
           "license": { "type": "string" },
           "redistributable": { "type": "boolean" },
-          "attribution": { "type": "string" }
+          "attribution": { "type": "string" },
+          "modificationNotice": { "type": "string" }
         }
       }
     },

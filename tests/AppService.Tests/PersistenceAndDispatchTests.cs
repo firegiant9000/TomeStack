@@ -81,7 +81,7 @@ public class PersistenceAndDispatchTests
     public void Unexpected_failure_returns_a_generic_message_and_correlation_id_and_logs_details_locally()
     {
         var directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
-        var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now));
+        var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), devFixtures: true);
         var log = new RecordingErrorLog();
         var dispatcher = new CommandDispatcher(app, log);
         app.Dispose(); // Every store call now fails with an exception the dispatcher did not anticipate.

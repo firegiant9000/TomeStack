@@ -1,0 +1,268 @@
+{
+  "packId": "srd-5.1",
+  "formatVersion": 1,
+  "notice": "M1 slice of the System Reference Document 5.1 (CC-BY-4.0): one species, one background, one class at levels 1-3 with its subclass, and one feat. Text is taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": ["srd-5.1"],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000001",
+      "revisionId": "51e00000-0000-4000-8000-000000000001",
+      "schemaVersion": 3,
+      "kind": "species",
+      "name": "Half-Orc",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 7 } },
+      "status": "published",
+      "summary": "Your half-orc character has certain traits deriving from your orc ancestry. Size. Your size is Medium. Speed. Your base walking speed is 30 feet. Darkvision. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. Savage Attacks. When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage of the critical hit. Languages. You can speak, read, and write Common and Orc.",
+      "effects": [
+        { "type": "modifier", "id": "half-orc-str", "operation": "bonus", "target": "ability.str.score", "value": "2", "text": "Ability Score Increase. Your Strength score increases by 2, and your Constitution score increases by 1." },
+        { "type": "modifier", "id": "half-orc-con", "operation": "bonus", "target": "ability.con.score", "value": "1" },
+        { "type": "grant", "id": "menacing", "grant": "proficiency", "target": "skill.intimidation", "text": "Menacing. You gain proficiency in the Intimidation skill." },
+        { "type": "resource", "id": "relentless-endurance", "automation": "assisted", "resourceId": "relentless-endurance", "label": "Relentless Endurance", "maximum": "1", "text": "Relentless Endurance. When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this feature again until you finish a long rest." },
+        { "type": "recovery", "id": "relentless-endurance-rest", "timing": "onLongRest", "resourceId": "relentless-endurance", "on": "longRest", "amount": "all" }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000002",
+      "revisionId": "51e00000-0000-4000-8000-000000000002",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Acolyte",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 60, "end": 61 } },
+      "status": "published",
+      "summary": "You have spent your life in the service of a temple to a specific god or pantheon of gods. Skill Proficiencies: Insight, Religion. Languages: Two of your choice. Equipment: A holy symbol (a gift to you when you entered the priesthood), a prayer book or prayer wheel, 5 sticks of incense, vestments, a set of common clothes, and a pouch containing 15 gp.",
+      "effects": [
+        { "type": "grant", "id": "acolyte-insight", "grant": "proficiency", "target": "skill.insight" },
+        { "type": "grant", "id": "acolyte-religion", "grant": "proficiency", "target": "skill.religion" },
+        { "type": "grant", "id": "acolyte-feature", "grant": "content", "content": { "contentId": "51c00000-0000-4000-8000-000000000017", "revisionId": "51e00000-0000-4000-8000-000000000017" } }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000017",
+      "revisionId": "51e00000-0000-4000-8000-000000000017",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Shelter of the Faithful",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 61 } },
+      "status": "published",
+      "summary": "As an acolyte, you command the respect of those who share your faith, and you can perform the religious ceremonies of your deity. You and your adventuring companions can expect to receive free healing and care at a temple, shrine, or other established presence of your faith, though you must provide any material components needed for spells. Those who share your religion will support you (but only you) at a modest lifestyle."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000003",
+      "revisionId": "51e00000-0000-4000-8000-000000000003",
+      "schemaVersion": 3,
+      "kind": "class",
+      "name": "Barbarian",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8, "end": 9 } },
+      "status": "published",
+      "summary": "Hit Dice: 1d12 per barbarian level. Hit Points at 1st Level: 12 + your Constitution modifier. Hit Points at Higher Levels: 1d12 (or 7) + your Constitution modifier per barbarian level after 1st. Armor: Light armor, medium armor, shields. Weapons: Simple weapons, martial weapons. Tools: None. Saving Throws: Strength, Constitution. Skills: Choose two from Animal Handling, Athletics, Intimidation, Nature, Perception, and Survival. TomeStack slice: levels 1-3.",
+      "effects": [
+        { "type": "hitDie", "id": "barbarian-hit-die", "die": 12 },
+        { "type": "grant", "id": "barbarian-save-str", "grant": "proficiency", "target": "save.str" },
+        { "type": "grant", "id": "barbarian-save-con", "grant": "proficiency", "target": "save.con" },
+        {
+          "type": "choice",
+          "id": "barbarian-skills",
+          "choiceId": "barbarian-skills",
+          "count": 2,
+          "text": "Skills: Choose two from Animal Handling, Athletics, Intimidation, Nature, Perception, and Survival.",
+          "options": [
+            { "contentId": "51c00000-0000-4000-8000-000000000008", "revisionId": "51e00000-0000-4000-8000-000000000008" },
+            { "contentId": "51c00000-0000-4000-8000-000000000009", "revisionId": "51e00000-0000-4000-8000-000000000009" },
+            { "contentId": "51c00000-0000-4000-8000-000000000010", "revisionId": "51e00000-0000-4000-8000-000000000010" },
+            { "contentId": "51c00000-0000-4000-8000-000000000011", "revisionId": "51e00000-0000-4000-8000-000000000011" },
+            { "contentId": "51c00000-0000-4000-8000-000000000012", "revisionId": "51e00000-0000-4000-8000-000000000012" },
+            { "contentId": "51c00000-0000-4000-8000-000000000013", "revisionId": "51e00000-0000-4000-8000-000000000013" }
+          ]
+        },
+        { "type": "grant", "id": "rage", "grant": "content", "level": 1, "content": { "contentId": "51c00000-0000-4000-8000-000000000004", "revisionId": "51e00000-0000-4000-8000-000000000004" } },
+        { "type": "grant", "id": "unarmored-defense", "grant": "content", "level": 1, "content": { "contentId": "51c00000-0000-4000-8000-000000000005", "revisionId": "51e00000-0000-4000-8000-000000000005" } },
+        { "type": "grant", "id": "reckless-attack", "grant": "content", "level": 2, "content": { "contentId": "51c00000-0000-4000-8000-000000000006", "revisionId": "51e00000-0000-4000-8000-000000000006" } },
+        { "type": "grant", "id": "danger-sense", "grant": "content", "level": 2, "content": { "contentId": "51c00000-0000-4000-8000-000000000007", "revisionId": "51e00000-0000-4000-8000-000000000007" } },
+        {
+          "type": "choice",
+          "id": "primal-path",
+          "choiceId": "primal-path",
+          "count": 1,
+          "level": 3,
+          "text": "Primal Path. At 3rd level, you choose a path that shapes the nature of your rage. (The SRD 5.1 includes the Path of the Berserker.)",
+          "options": [
+            { "contentId": "51c00000-0000-4000-8000-000000000014", "revisionId": "51e00000-0000-4000-8000-000000000014" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000004",
+      "revisionId": "51e00000-0000-4000-8000-000000000004",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Rage",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "summary": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you gain the following benefits if you aren't wearing heavy armor: You have advantage on Strength checks and Strength saving throws. When you make a melee weapon attack using Strength, you gain a bonus to the damage roll that increases as you gain levels as a barbarian, as shown in the Rage Damage column of the Barbarian table (+2 at levels 1-3). You have resistance to bludgeoning, piercing, and slashing damage. Your rage lasts for 1 minute. Once you have raged the number of times shown for your barbarian level in the Rages column of the Barbarian table, you must finish a long rest before you can rage again.",
+      "effects": [
+        { "type": "resource", "id": "rages", "resourceId": "rage", "label": "Rages", "maximum": "min(2 + floor(CLASS_LEVEL / 3), 4)", "text": "Rages column: 2 at levels 1-2, 3 at levels 3-5, 4 at levels 6-11. The formula matches the table for levels 1-11." },
+        { "type": "recovery", "id": "rages-long-rest", "timing": "onLongRest", "resourceId": "rage", "on": "longRest", "amount": "all" }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000005",
+      "revisionId": "51e00000-0000-4000-8000-000000000005",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Unarmored Defense",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "summary": "While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.",
+      "effects": [
+        { "type": "modifier", "id": "unarmored-defense-ac", "operation": "replace", "target": "armorClass", "value": "10 + DEX.MOD + CON.MOD", "text": "Applies while not wearing armor; armor is not modeled yet, so TomeStack assumes none." }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000006",
+      "revisionId": "51e00000-0000-4000-8000-000000000006",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Reckless Attack",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 9 } },
+      "status": "published",
+      "summary": "Starting at 2nd level, you can throw aside all concern for defense to attack with fierce desperation. When you make your first attack on your turn, you can decide to attack recklessly. Doing so gives you advantage on melee weapon attack rolls using Strength during this turn, but attack rolls against you have advantage until your next turn."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000007",
+      "revisionId": "51e00000-0000-4000-8000-000000000007",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Danger Sense",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 9 } },
+      "status": "published",
+      "summary": "At 2nd level, you gain an uncanny sense of when things nearby aren't as they should be, giving you an edge when you dodge away from danger. You have advantage on Dexterity saving throws against effects that you can see, such as traps and spells. To gain this benefit, you can't be blinded, deafened, or incapacitated."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000008",
+      "revisionId": "51e00000-0000-4000-8000-000000000008",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Animal Handling",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.animalHandling" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000009",
+      "revisionId": "51e00000-0000-4000-8000-000000000009",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Athletics",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.athletics" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000010",
+      "revisionId": "51e00000-0000-4000-8000-000000000010",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Intimidation",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.intimidation" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000011",
+      "revisionId": "51e00000-0000-4000-8000-000000000011",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Nature",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.nature" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000012",
+      "revisionId": "51e00000-0000-4000-8000-000000000012",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Perception",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.perception" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000013",
+      "revisionId": "51e00000-0000-4000-8000-000000000013",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Barbarian Skill: Survival",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 8 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.survival" }]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000014",
+      "revisionId": "51e00000-0000-4000-8000-000000000014",
+      "schemaVersion": 3,
+      "kind": "subclass",
+      "name": "Path of the Berserker",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 9 } },
+      "status": "published",
+      "summary": "For some barbarians, rage is a means to an end, that end being violence. The Path of the Berserker is a path of untrammeled fury, slick with blood. TomeStack slice: the 3rd-level feature.",
+      "effects": [
+        { "type": "grant", "id": "frenzy", "grant": "content", "level": 3, "content": { "contentId": "51c00000-0000-4000-8000-000000000015", "revisionId": "51e00000-0000-4000-8000-000000000015" } }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000015",
+      "revisionId": "51e00000-0000-4000-8000-000000000015",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Frenzy",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 9 } },
+      "status": "published",
+      "summary": "Starting when you choose this path at 3rd level, you can go into a frenzy when you rage. If you do so, for the duration of your rage you can make a single melee weapon attack as a bonus action on each of your turns after this one. When your rage ends, you suffer one level of exhaustion."
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000016",
+      "revisionId": "51e00000-0000-4000-8000-000000000016",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Grappler",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "51500000-0000-4000-8000-000000000001", "page": { "start": 75 } },
+      "status": "published",
+      "summary": "You've developed the skills necessary to hold your own in close-quarters grappling. You gain the following benefits: You have advantage on attack rolls against a creature you are grappling. You can use your action to try to pin a creature grappled by you. To do so, make another grapple check. If you succeed, you and the creature are both restrained until the grapple ends.",
+      "effects": [
+        { "type": "restriction", "id": "grappler-prerequisite", "field": "ability.str.score", "minimum": 13, "text": "Prerequisite: Strength 13 or higher. If your Strength is reduced below 13, you can't benefit from the Grappler feat until your Strength is restored." }
+      ]
+    }
+  ]
+}

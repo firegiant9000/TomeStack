@@ -166,28 +166,29 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// M0 exit gate in the shipped binary: fixture content is seeded, a character using it saves, and it exports to a
-    /// package that re-validates. Runs through the same dispatcher as the bridge. Persistence across restarts is shown
+    /// Exit gate in the shipped binary: the bundled SRD content is seeded, a character using it saves, and it exports to
+    /// a package that re-validates. Runs through the same dispatcher as the bridge. Persistence across restarts is shown
     /// by running the smoke twice on one <c>--data-dir</c> and comparing <c>charactersAtStart</c>.
     /// </summary>
     private (bool Ok, string Detail) RunSmokeDataCheck()
     {
-        var quickfoot = new { contentId = "5f0dc000-0000-4000-8000-000000000001", revisionId = "5f0de000-0000-4000-8000-000000000001" };
+        var halfOrc = new { contentId = "51c00000-0000-4000-8000-000000000001", revisionId = "51e00000-0000-4000-8000-000000000001" };
         using var created = Command("character.create", new
         {
             name = "Smoke Test",
             rulesFamily = "srd-5.1",
-            baseAbilities = new { str = 10, dex = 14, con = 10, @int = 10, wis = 10, cha = 10 },
-            pins = new[] { quickfoot },
+            baseAbilities = new { str = 15, dex = 14, con = 10, @int = 10, wis = 10, cha = 10 },
+            pins = new[] { halfOrc },
         });
         if (!created.RootElement.GetProperty("ok").GetBoolean())
             return (false, "data-check-failed:character.create");
         var result = created.RootElement.GetProperty("result");
         var id = result.GetProperty("character").GetProperty("id").GetString();
-        var initiative = result.GetProperty("sheet").GetProperty("fields").EnumerateArray()
-            .Single(f => f.GetProperty("field").GetString() == "initiative").GetProperty("value").GetInt32();
-        if (initiative != 3)
-            return (false, $"data-check-failed:initiative={initiative}");
+        // SRD 5.1 Half-Orc: Strength +2 (species ability increases apply under 2014 rules).
+        var strength = result.GetProperty("sheet").GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("field").GetString() == "ability.str.score").GetProperty("value").GetInt32();
+        if (strength != 17)
+            return (false, $"data-check-failed:strength={strength}");
 
         using var exported = Command("package.export", new { characterIds = new[] { id } });
         if (!exported.RootElement.GetProperty("ok").GetBoolean())

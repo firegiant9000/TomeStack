@@ -39,7 +39,7 @@ public enum ExportPurpose { Backup, Share }
 
 public sealed record PackageEntry(string Path, string Kind, string Sha256, long Size);
 
-public sealed record LicenseNotice(Guid SourceId, string Title, string Publisher, string License, bool Redistributable, string? Attribution);
+public sealed record LicenseNotice(Guid SourceId, string Title, string Publisher, string License, bool Redistributable, string? Attribution, string? ModificationNotice = null);
 
 /// <summary>A source left out of a share package, so the receiver knows what to obtain themselves.</summary>
 public sealed record OmittedSource(Guid SourceId, string Title, string Publisher, string License, IReadOnlyList<OmittedRevision> Revisions);
