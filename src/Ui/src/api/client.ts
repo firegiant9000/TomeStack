@@ -33,6 +33,11 @@ export function createClient(transport: Transport) {
     /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */
     choose: (characterId: string, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
       call<CharacterView>('character.choose', { characterId, source, choiceId, selected }),
+    /** The sheet of an unsaved builder draft, checked like a save; writes nothing (SPEC C-07). */
+    preview: (draft: Character) => call<CharacterView>('character.preview', draft),
+    /** A choice answered on an unsaved draft, checked like `choose`; the result is the next draft. Writes nothing. */
+    previewChoice: (draft: Character, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
+      call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
     /** What an export would contain and leave out, without writing anything (ADR-007). */
     previewExport: (characterIds: string[], purpose: ExportPurpose) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose }),

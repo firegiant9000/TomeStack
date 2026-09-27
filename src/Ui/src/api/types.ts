@@ -176,6 +176,10 @@ export interface CreateCharacterRequest {
   rulesFamily: RulesFamilyId;
   baseAbilities: AbilityScores;
   pins: ContentReference[];
+  /** The starting class and any further levels from the builder draft (SPEC C-07). */
+  classes?: ClassLevel[];
+  /** Choices answered in the builder draft. */
+  choices?: ChoiceSelection[];
 }
 
 export interface LicenseNotice {

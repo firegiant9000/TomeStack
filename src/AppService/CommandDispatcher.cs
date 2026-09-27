@@ -20,7 +20,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.reviewUpdate", "character.applyUpdate", "roll",
+        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
+        "character.reviewUpdate", "character.applyUpdate", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -88,6 +89,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
         "character.choose" => app.Choose(Payload<ChooseRequest>(payload)),
+        "character.preview" => app.Preview(Payload<Character>(payload)),
+        "character.previewChoice" => app.PreviewChoice(Payload<PreviewChoiceRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),

@@ -206,9 +206,13 @@ interface Props {
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  /** Opens the builder on a level-up draft of this character (SPEC C-07). */
+  onLevelUp: () => void;
+  /** Opens the builder on this character's open choices, as a draft. */
+  onMakeChoices: () => void;
 }
 
-export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
+export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, onMakeChoices }: Props) {
   const { character, sheet } = view;
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
@@ -234,6 +238,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
         </h2>
         <span className="tag">{character.rulesFamily}</span>
         <span className="tag">Level {character.level}</span>
+        <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
+          Level up
+        </button>
       </header>
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
@@ -263,6 +270,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
                 </li>
               ))}
           </ul>
+          <button type="button" onClick={onMakeChoices}>
+            Make choices
+          </button>
         </section>
       )}
 

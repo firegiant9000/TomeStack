@@ -10,6 +10,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 
 - `src/Ui/e2e/flow.e2e.tsx` (Vitest + Testing Library against the real DevHost) drives create → sheet → override → export → import **only through accessible roles and names**. A control without a usable label would fail the test.
 - The same file checks keyboard-only access: Tab reaches "New character" and "Import package…", and Enter opens the form with focus on Name.
+- M2 item 1: the builder test drives create → choices → cancelled level-up → level-up to 3 → "Make choices" by role and name only (radio groups, choice groups named by their legends), and asserts focus on the builder heading after a step change (2.4.3). Keyboard-only and Narrator passes of the builder are still owner checks (items 3 and 15).
 
 ## Checklist
 

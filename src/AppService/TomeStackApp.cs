@@ -122,23 +122,14 @@ public sealed partial class TomeStackApp : IDisposable
             RulesFamily = request.RulesFamily,
             BaseAbilities = request.BaseAbilities,
             Pins = request.Pins ?? [],
+            Classes = request.Classes ?? [],
+            Choices = request.Choices ?? [],
         });
     }
 
     public CharacterView SaveCharacter(Character character)
     {
-        ArgumentNullException.ThrowIfNull(character);
-        // With classes recorded, the level is their sum: keep the stored value in step rather than reject a stale one.
-        // (An empty entry is left for Validate to report.)
-        if (character.Classes is { Count: > 0 } classes && classes.All(c => c is not null))
-            character = character with { Level = classes.Sum(c => c.Level) };
-        var problems = character.Validate().ToList();
-        if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
-            problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));
-        if (problems.Count > 0)
-            throw new AppValidationException(problems);
-
-        var saved = character with { UpdatedAt = _time.GetUtcNow() };
+        var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
@@ -156,9 +147,19 @@ public sealed partial class TomeStackApp : IDisposable
         ArgumentNullException.ThrowIfNull(request);
         var character = _store.FindCharacter(request.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
-        var selected = request.Selected ?? [];
-        if (request.Source is null || selected.Any(o => o is null))
+        return SaveCharacter(WithChoice(character, request.Source, request.ChoiceId, request.Selected));
+    }
+
+    /// <summary>
+    /// The character with one choice answered (or cleared), after the checks <see cref="Choose"/> documents. Shared by
+    /// <see cref="Choose"/> (saved) and <see cref="PreviewChoice"/> (a builder draft, never saved).
+    /// </summary>
+    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull)
+    {
+        var selected = selectedOrNull ?? [];
+        if (source is null || selected.Any(o => o is null))
             throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
+        var request = (Source: source, ChoiceId: choiceId);
         var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
         var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
             ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
@@ -184,9 +185,9 @@ public sealed partial class TomeStackApp : IDisposable
         if (problems.Count > 0)
             throw new AppValidationException(problems);
 
-        return SaveCharacter(selected.Count == 0
+        return selected.Count == 0
             ? without
-            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] });
+            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] };
     }
 
     public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
@@ -245,7 +246,18 @@ public sealed record CharacterView(Character Character, CharacterSheet Sheet);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
-public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
+/// <param name="Classes">The starting class (and any further levels) from the builder draft (SPEC C-07).</param>
+/// <param name="Choices">Choices answered in the builder draft; the sheet flags any that are no longer valid.</param>
+public sealed record CreateCharacterRequest(
+    string Name,
+    string RulesFamily,
+    AbilityScores BaseAbilities,
+    IReadOnlyList<ContentReference>? Pins,
+    IReadOnlyList<ClassLevel>? Classes = null,
+    IReadOnlyList<ChoiceSelection>? Choices = null);
+
+/// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
+public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
 /// <param name="code">Error code at the transport boundary: <c>validation</c>, or <c>unsupported</c> for a missing host capability.</param>
 public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems, string code = "validation")

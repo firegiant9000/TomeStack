@@ -39,7 +39,7 @@ Each slice includes data migration strategy and an executable acceptance example
 
 Done since v0.1: SRD fixtures for both families with a cross-edition conflict (M1 item 1; spellcasting is scoped by D04), the data directory and PDF default (D02, ADR-005), the shell and transport (ADR-006), and the typed effect and formula schemas (ADR-003).
 
-- Builder UI over the M1 API: class levels, `character.choose`, and a level-up draft (SPEC C-01, C-07).
+- ~~Builder UI over the M1 API: class levels, `character.choose`, and a level-up draft (SPEC C-01, C-07).~~ Done (M2 item 1, [features/builder.md](features/builder.md)); multiclass prerequisites remain.
 - Sheet UI: features list with text, resources, the `roll` command, and the "Choices to make" answers.
 - Authoring and update-review UI over `content.saveDraft` / `publish` / `affected` / `reviewUpdate` (SPEC I-04, I-06).
 - PDF attachments and the `pdfRef` → attachment migration (ADR-005), with page navigation (SPEC S-04, B05).

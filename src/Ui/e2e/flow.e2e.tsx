@@ -36,7 +36,9 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Pell');
   await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
-  await user.click(await screen.findByRole('checkbox', { name: /Fixture Quickfoot/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(await screen.findByText('Nothing to choose at this level.')).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create and save' }));
 
   // Sheet with a source-aware trace: Dex 14 + 2 (Fixture Quickfoot, species under 2014 rules) = 16 -> +3
@@ -81,6 +83,91 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   expect(status.textContent).toMatch(/1 replaced/);
   expect(status.textContent).toMatch(/backed up to backups\/pre-import-/);
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
+});
+
+/** Ticks one option of the choice whose legend starts with `legend`. */
+async function pick(user: ReturnType<typeof userEvent.setup>, legend: RegExp, option: RegExp) {
+  const group = await screen.findByRole('group', { name: legend });
+  await user.click(within(group).getByRole('checkbox', { name: option }));
+}
+
+it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+
+  // Basics: the M1 acceptance character Brenna (Str 15, Dex 13, Con 14, Int 8, Wis 12, Cha 10)
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Brenna');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  const scores = screen.getByRole('group', { name: 'Base ability scores' });
+  for (const [label, value] of [['Strength', 15], ['Dexterity', 13], ['Constitution', 14], ['Intelligence', 8], ['Wisdom', 12], ['Charisma', 10]] as const) {
+    const input = within(scores).getByRole('spinbutton', { name: label });
+    await user.clear(input);
+    await user.type(input, String(value));
+  }
+  // Both families' options are listed (SPEC S-02); the SRD 5.1 ones are disabled here.
+  const enabledRadio = (name: RegExp) => screen.getAllByRole<HTMLInputElement>('radio', { name }).find((r) => !r.disabled)!;
+  await screen.findByRole('radio', { name: /^Dwarf/ });
+  await user.click(enabledRadio(/^Dwarf/));
+  await user.click(enabledRadio(/^Soldier/));
+  await user.click(enabledRadio(/^Barbarian/));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+
+  // Level-1 choices are offered and flagged until answered; the subclass (level 3) is not offered yet.
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' })));
+  expect(await screen.findByText(/2 choices still to make/)).toBeTruthy();
+  expect(screen.queryByRole('group', { name: /^Barbarian: choose 1/ })).toBeNull();
+  await pick(user, /^Soldier: choose 1/, /^Soldier Ability Scores: Strength \+2, Constitution \+1/);
+  await pick(user, /^Barbarian: choose 2/, /^Barbarian Skill: Perception/);
+  await pick(user, /^Barbarian: choose 2/, /^Barbarian Skill: Survival/);
+  expect(await screen.findByText('All choices are made.')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Create and save' }));
+
+  let sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).getByRole('heading', { name: /^Strength score: 17/ })).toBeTruthy();
+  expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
+
+  // A cancelled level-up draft changes nothing.
+  await user.click(within(sheet).getByRole('button', { name: 'Level up' }));
+  await user.click(await screen.findByRole('radio', { name: /Barbarian \(level 1 → 2\)/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(await screen.findByText('All choices are made.')).toBeTruthy(); // level 2 offers no new choice
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Draft discarded/);
+  sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).getByText('Level 1')).toBeTruthy();
+
+  // Level 2, then 3: the subclass and Primal Knowledge choices appear at level 3.
+  for (const next of [2, 3]) {
+    await user.click(within(await screen.findByRole('article', { name: 'E2E Brenna' })).getByRole('button', { name: 'Level up' }));
+    await user.click(await screen.findByRole('radio', { name: new RegExp(`Barbarian \\(level ${next - 1} → ${next}\\)`) }));
+    await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+    if (next === 3) {
+      await pick(user, /^Barbarian: choose 1/, /^Path of the Berserker/);
+      // Leave Primal Knowledge open: the save is allowed and the sheet flags it.
+      expect(await screen.findByText(/1 choice still to make/)).toBeTruthy();
+    }
+    await user.click(await screen.findByRole('button', { name: 'Save level-up' }));
+  }
+
+  sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).getByText('Level 3')).toBeTruthy();
+  const open = within(sheet).getByRole('heading', { name: 'Choices to make' }).parentElement!;
+  expect(open.textContent).toMatch(/Primal Knowledge: choose 1 \(0 chosen\)/);
+
+  // Answer it from the sheet: Survival is already chosen elsewhere, so pick Animal Handling.
+  await user.click(within(open).getByRole('button', { name: 'Make choices' }));
+  await pick(user, /^Primal Knowledge: choose 1/, /^Barbarian Skill: Animal Handling/);
+  await user.click(await screen.findByRole('button', { name: 'Save choices' }));
+
+  // The M1 acceptance values for Brenna (m1-acceptance.md): AC 13, HP 35, Animal Handling +3.
+  sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
+  expect(within(sheet).getByRole('heading', { name: /^Armor Class: 13/ })).toBeTruthy();
+  expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 35/ })).toBeTruthy();
+  expect(within(sheet).getByRole('heading', { name: /^Animal Handling: \+3/ })).toBeTruthy();
+  expect(within(sheet).queryByRole('heading', { name: 'Choices to make' })).toBeNull();
 });
 
 it('reaches the primary actions by keyboard alone', async () => {

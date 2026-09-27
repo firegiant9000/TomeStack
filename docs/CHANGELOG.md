@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased (0.2.0: M1 delivered)
+## Unreleased (M2 in progress)
+
+### Added
+
+- **Builder (M2 item 1; SPEC C-01, C-07; `docs/features/builder.md`):** create a character, level it up (in an existing class or a new one), and answer every choice it offers, including a subclass at its level. Every flow is a draft that the service previews (`character.preview`, `character.previewChoice`) without writing anything. It is saved in one step, or discarded with Cancel. Unresolved choices are flagged, and the sheet's "Choices to make" opens them in the builder. `character.create` also takes `classes` and `choices`.
+
+### Changed
+
+- The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
+
+## 0.2.0 (M1 delivered)
 
 ### Added
 
