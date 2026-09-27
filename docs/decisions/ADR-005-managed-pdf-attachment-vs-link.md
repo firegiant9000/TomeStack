@@ -45,6 +45,7 @@ A numbered database migration, so the pre-upgrade backup `tomestack.db.v<old>.ba
 ### Implementation (M2 item 6, 2026-09-27)
 
 - As planned: the attachment record and table, managed copies at `attachments/<sha256>.pdf` (read-only, de-duplicated), linked files with a hash check on open, removal with a preview of the page links it breaks, and migration v3 with `tomestack.db.v2.bak` and `legacy_pdf_ref`. The tests from step 5 are in `AttachmentTests`.
+- M2 review fix (2026-09-27): deleting an unused managed copy is best effort, after the commit. A file held open elsewhere stays until the next start, which deletes unused `<sha256>.pdf` copies and `.partial` leftovers (including any from a rolled-back migration v3). Before this, detaching such a file committed the change but replied with an internal error.
 - **Deviation from step 3:** the source record gained `attachmentId` next to the obsolete `pdfRef`, without a source `schemaVersion`. Both fields are machine-local and stripped from every export, so the *exported* source document is unchanged. A version bump would have forced a package format change for nothing.
 - **Page navigation:** a separate shell window with WebView2's built-in PDF viewer, the PDF's folder on its own virtual host, and `#page=N`. The same request blocking as the main window, so no listening socket and no network (ADR-006). A linked PDF exposes its folder to that viewer window only.
 - Size limit 1 GiB. Only the `%PDF-` signature is checked; TomeStack never parses the PDF.

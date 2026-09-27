@@ -149,6 +149,36 @@ public class AttachmentTests
     }
 
     [Fact]
+    public void Removing_or_replacing_a_pdf_that_is_open_elsewhere_succeeds_and_the_file_is_removed_later()
+    {
+        using var temp = new TempApp();
+        var (a, b) = (Homebrew(temp), Homebrew(temp));
+        temp.App.AttachPdf(a.Id, "book.pdf", Pdf);
+        temp.App.AttachPdf(b.Id, "old.pdf", OtherPdf);
+        var attachments = Path.Combine(temp.Directory, "attachments");
+
+        // The viewer, antivirus or a sync client holds the files open without delete sharing.
+        using (new FileStream(AttachmentFiles.ManagedPath(temp.App.Store, Hash(Pdf)), FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (new FileStream(AttachmentFiles.ManagedPath(temp.App.Store, Hash(OtherPdf)), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var detached = Dispatch(temp, null, "source.detach", new { sourceId = a.Id, confirm = true });
+            Assert.True(detached.GetProperty("ok").GetBoolean(), detached.GetRawText()); // the reply matches what happened
+            Assert.Null(temp.App.GetAttachment(a.Id));
+
+            temp.App.AttachPdf(b.Id, "new.pdf", Pdf); // replacing frees the old file, which is still open
+            Assert.Equal("new.pdf", temp.App.GetAttachment(b.Id)!.OriginalFileName);
+        }
+        Assert.Equal(2, Directory.GetFiles(attachments, "*.pdf").Length); // the unused copy could not be deleted yet
+
+        temp.Reopen(); // the next start removes managed copies that no attachment uses
+
+        Assert.Equal(Hash(Pdf) + ".pdf", Path.GetFileName(Assert.Single(Directory.GetFiles(attachments))));
+        Assert.Equal("available", temp.App.GetAttachment(b.Id)!.Status);
+    }
+
+    private static string Hash(byte[] content) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(content));
+
+    [Fact]
     public void A_shared_pdf_stays_until_its_last_source_lets_it_go()
     {
         using var temp = new TempApp();

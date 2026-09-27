@@ -29,6 +29,7 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 - **`armor` is content schema v4 only (ADR-003).** A revision stored by 0.2.0 with a `"type": "armor"` effect (an unknown effect then) was read as typed armor. Its hash changed, so re-importing the same package failed (`package.revision-conflict`), and published content started changing Armor Class. In a v2 or v3 revision, armor now stays unknown, reference-only and byte for byte. Validation refuses armor below v4 (`validate.requires-v4`). The original fixture armor is republished as v4 revisions (new revision ids; the content ids are unchanged).
 - **The ability score cap no longer depends on effect order.** Increases apply first (capped at 20), then penalties. Before, 19 with +2 and −2 gave 18 or 19 depending on which effect came first; now it is 18 either way.
 - **`character.save` no longer writes the play state (SPEC C-05).** It took the payload's `play` as is, so any save, including one from a stale copy, could change hit points, spent uses or conditions without a confirmation. It now keeps the stored play state; only the confirmed `character.play` and `character.rest` change it.
+- **Removing or replacing a PDF that is open elsewhere now succeeds (ADR-005).** The change was committed, but the reply was an internal error and the unused copy was left behind. The file is now deleted best effort, and the next start deletes managed copies that no attachment uses, plus leftover `.partial` files.
 
 ### Migration
 

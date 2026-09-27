@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace TomeStack.AppService.Persistence;
 
@@ -13,7 +14,7 @@ public sealed class AttachmentException(string code, string message) : Exception
 /// read-only. Files are untrusted input (SPEC Q-02): only the PDF signature and the size are checked here, and the PDF is
 /// never parsed or executed; the shell's viewer renders it.
 /// </summary>
-public static class AttachmentFiles
+public static partial class AttachmentFiles
 {
     /// <summary>Largest PDF TomeStack copies or links (a whole rulebook fits; the size is shown before copying).</summary>
     public const long MaxPdfBytes = 1L << 30;
@@ -108,17 +109,53 @@ public static class AttachmentFiles
         return CopyChecked(stream, Stream.Null);
     }
 
-    /// <summary>Deletes a managed file when no attachment record uses its hash any more.</summary>
+    /// <summary>
+    /// Deletes a managed file when no attachment record uses its hash any more. Best effort: it runs after the database
+    /// change has committed, and the file may be open elsewhere (the viewer, antivirus, a sync client). Then it stays,
+    /// read-only, and <see cref="DeleteUnusedManagedFiles"/> removes it at a later start.
+    /// </summary>
     public static void DeleteManagedIfUnused(SqliteStore store, string sha256)
     {
+        ArgumentNullException.ThrowIfNull(store);
         if (store.AttachmentsWithHash(sha256) > 0)
             return;
         var path = ManagedPath(store, sha256);
         if (!File.Exists(path))
             return;
-        File.SetAttributes(path, FileAttributes.Normal);
-        File.Delete(path);
+        try
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            try { File.SetAttributes(path, FileAttributes.ReadOnly); }
+            catch (Exception again) when (again is IOException or UnauthorizedAccessException) { /* best effort */ }
+        }
     }
+
+    /// <summary>
+    /// At startup: removes managed copies (<c>&lt;sha256&gt;.pdf</c>) that no attachment record uses, and copies left
+    /// half-written (<c>.partial</c>). They remain when a delete failed because the file was open, or when a migration
+    /// that had copied files rolled back. Only files named like managed copies are touched.
+    /// </summary>
+    public static void DeleteUnusedManagedFiles(SqliteStore store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (!Directory.Exists(store.AttachmentsDirectory))
+            return;
+        foreach (var path in Directory.EnumerateFiles(store.AttachmentsDirectory))
+        {
+            var name = Path.GetFileName(path);
+            if (name.EndsWith(".partial", StringComparison.Ordinal))
+                TryDelete(path);
+            else if (ManagedFileName().IsMatch(name))
+                DeleteManagedIfUnused(store, name[..^4]);
+        }
+    }
+
+    [GeneratedRegex("^[0-9a-f]{64}\\.pdf$", RegexOptions.CultureInvariant)]
+    private static partial Regex ManagedFileName();
 
     private static (string Sha256, long Length) CopyChecked(Stream input, Stream output)
     {

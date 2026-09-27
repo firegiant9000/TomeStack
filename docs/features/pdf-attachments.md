@@ -15,7 +15,7 @@ The **Sources** screen lists every source with its license, whether it may be sh
 
 ## Removing (SPEC S-04)
 
-**Remove PDF…** first shows `source.detachPreview`: how many entries cite pages in that source, and which ones. Their "Open page" links will stop working, and all content stays. `source.detach` needs `confirm`. A managed file is deleted only when no attachment record uses the same PDF any more.
+**Remove PDF…** first shows `source.detachPreview`: how many entries cite pages in that source, and which ones. Their "Open page" links will stop working, and all content stays. `source.detach` needs `confirm`. A managed file is deleted only when no attachment record uses the same PDF any more. The file is deleted after the database change commits, and only on a best-effort basis. If the file is open elsewhere (the viewer, antivirus, a sync client), removing or replacing the PDF still succeeds and says so. The unused copy stays read-only until the next start, which deletes managed copies that no attachment uses, and leftover `.partial` files (`AttachmentTests.Removing_or_replacing_a_pdf_that_is_open_elsewhere_succeeds_and_the_file_is_removed_later`; M2 review fix).
 
 ## Opening a cited page
 

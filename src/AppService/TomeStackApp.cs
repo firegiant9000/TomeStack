@@ -57,6 +57,7 @@ public sealed partial class TomeStackApp : IDisposable
             app.Seed("TomeStack.FixturePack.json");
             app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
         }
+        AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
         return app;
     }
 
