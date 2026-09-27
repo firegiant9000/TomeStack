@@ -94,12 +94,27 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
 
         var revisions = new Dictionary<Guid, ContentRevision>();
-        foreach (var pin in characters.SelectMany(c => c.Pins))
+        foreach (var pin in characters.SelectMany(c => c.AllReferences()))
         {
             if (store.FindRevision(pin) is { } revision)
                 revisions[revision.RevisionId] = revision;
             else
                 errors.Add(new("export.revision-missing", $"Pinned revision {pin.RevisionId} is missing; repair the character before exporting.", pin));
+        }
+        // Content granted by included content (class features, a background's feat) is needed to calculate the same
+        // sheet on the receiving machine. Follow grants transitively; a granted revision missing here is already shown
+        // as missing on this machine's sheet, so it is skipped rather than failing the export.
+        var pending = new Queue<ContentRevision>(revisions.Values);
+        while (pending.Count > 0)
+        {
+            foreach (var grant in pending.Dequeue().Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content && g.Content is not null))
+            {
+                if (!revisions.ContainsKey(grant.Content!.RevisionId) && store.FindRevision(grant.Content) is { } granted)
+                {
+                    revisions[granted.RevisionId] = granted;
+                    pending.Enqueue(granted);
+                }
+            }
         }
 
         var sources = new Dictionary<Guid, SourceRecord>();
@@ -123,7 +138,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 omitted.Add(new(source.Id, source.Title, source.Publisher, source.License,
                 [
                     .. left.Select(r => new OmittedRevision(
-                        r.Reference, r.Name, [.. characters.Where(c => c.Pins.Contains(r.Reference)).Select(c => c.Id)])),
+                        r.Reference, r.Name, [.. characters.Where(c => c.AllReferences().Contains(r.Reference)).Select(c => c.Id)])),
                 ]));
                 foreach (var revision in left)
                     revisions.Remove(revision.RevisionId);
@@ -293,7 +308,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         {
             foreach (var problem in character.Validate())
                 errors.Add(problem with { Message = $"'{character.Name}': {problem.Message}" });
-            foreach (var pin in character.Pins)
+            foreach (var pin in character.AllReferences())
             {
                 if (packageRevisions.ContainsKey(pin) || store.FindRevision(pin) is not null)
                     continue;

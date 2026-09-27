@@ -9,8 +9,11 @@ namespace TomeStack.RulesCore;
 /// </summary>
 public sealed record Character : IJsonOnDeserialized
 {
-    /// <summary>v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. v1 is upcast on read (level 1, none).</summary>
-    public const int CurrentSchemaVersion = 2;
+    /// <summary>
+    /// v3 adds <see cref="Classes"/> (M1 item 5). v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>.
+    /// Older versions are upcast on read with the new lists empty, which is exactly their meaning.
+    /// </summary>
+    public const int CurrentSchemaVersion = 3;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
@@ -24,8 +27,24 @@ public sealed record Character : IJsonOnDeserialized
     public required string Name { get; init; }
     public required string RulesFamily { get; init; }
 
-    /// <summary>Total character level (1–20). Drives the proficiency bonus.</summary>
+    /// <summary>
+    /// Total character level (1–20). With <see cref="Classes"/> recorded it must equal their sum (the service keeps it
+    /// in step on save); use <see cref="TotalLevel"/> for rules.
+    /// </summary>
     public int Level { get; init; } = MinLevel;
+
+    /// <summary>
+    /// Levels per class, in the order taken: the first entry is the starting class (maximum hit points at level 1).
+    /// Each class reference is an active pin of its own; it need not be repeated in <see cref="Pins"/>.
+    /// </summary>
+    public IReadOnlyList<ClassLevel> Classes { get; init; } = [];
+
+    /// <summary>The level rules use: the sum of <see cref="Classes"/>, or <see cref="Level"/> when no class is recorded.</summary>
+    [JsonIgnore]
+    public int TotalLevel => Classes.Count > 0 ? Classes.Sum(c => Math.Max(c.Level, 0)) : Level;
+
+    /// <summary>Every content revision the character references: pins and classes. Packages and updates use this.</summary>
+    public IEnumerable<ContentReference> AllReferences() => Pins.Concat(Classes.Select(c => c.Class)).Distinct();
 
     /// <summary>
     /// BACKLOG B06 / ARCHITECTURE step 2: deliberate use of content from another rules family, each with a recorded
@@ -53,6 +72,16 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.rules-family-unknown", $"Rules family '{RulesFamily}' is not supported."));
         if (Level is < MinLevel or > MaxLevel)
             problems.Add(new("character.level-out-of-range", $"Level {Level} must be between {MinLevel} and {MaxLevel}."));
+        foreach (var entry in Classes.Where(c => c.Level is < MinLevel or > MaxLevel))
+            problems.Add(new("character.class-level-out-of-range", $"Class level {entry.Level} must be between {MinLevel} and {MaxLevel}.", entry.Class));
+        foreach (var duplicate in Classes.GroupBy(c => c.Class.ContentId).Where(g => g.Count() > 1))
+            problems.Add(new("character.class-duplicate", "A class is recorded more than once; record one entry with the total level in that class.", duplicate.First().Class));
+        if (Classes.Count > 0 && Classes.Sum(c => c.Level) is var sum && (sum > MaxLevel || sum != Level))
+        {
+            problems.Add(sum > MaxLevel
+                ? new("character.level-out-of-range", $"Class levels add up to {sum}; the total must be at most {MaxLevel}.")
+                : new("character.level-mismatch", $"Level {Level} does not match the class levels, which add up to {sum}."));
+        }
         foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
             problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
         foreach (var ability in Enum.GetValues<Ability>())
@@ -64,7 +93,7 @@ public sealed record Character : IJsonOnDeserialized
         return problems;
     }
 
-    /// <summary>v1 has no level; the default (level 1) is exactly its meaning.</summary>
+    /// <summary>v1 has no level and v2 no classes; the defaults (level 1, none) are exactly their meaning.</summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
         if (_schemaVersion is >= 1 and < CurrentSchemaVersion)
@@ -85,6 +114,9 @@ public sealed record AbilityScores(int Str, int Dex, int Con, int Int, int Wis, 
         _ => throw new ArgumentOutOfRangeException(nameof(ability)),
     };
 }
+
+/// <summary>Levels in one class: an exact pin to the class revision, and the number of levels taken in it.</summary>
+public sealed record ClassLevel(ContentReference Class, int Level);
 
 /// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
 public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);

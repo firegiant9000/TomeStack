@@ -45,8 +45,16 @@ public sealed record ContentReference(Guid ContentId, Guid RevisionId);
 /// </summary>
 public sealed record ContentRevision : IJsonOnDeserialized
 {
-    /// <summary>v2: typed effects (ADR-003). v1 revisions are upcast on read; see <see cref="UpgradedFrom"/>.</summary>
-    public const int CurrentSchemaVersion = 2;
+    /// <summary>
+    /// v3: level-gated grants and choices, and the <c>hitDie</c> effect (M1 item 5). v2: typed effects (ADR-003).
+    /// v1 revisions are upcast to v2 on read (<see cref="UpgradedFrom"/>). v2 revisions are not upcast: v2 is a subset
+    /// of v3, and keeping the written version keeps their serialized form, and so their hashes, unchanged (ADR-002).
+    /// Older builds refuse v3 revisions (<c>content.schema-unsupported</c>) instead of ignoring the level gates.
+    /// </summary>
+    public const int CurrentSchemaVersion = 3;
+
+    /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
+    public const int TypedEffectsSchemaVersion = 2;
 
     private int _schemaVersion = CurrentSchemaVersion;
 
@@ -74,15 +82,15 @@ public sealed record ContentRevision : IJsonOnDeserialized
 
     /// <summary>
     /// ADR-003 migration: schemaVersion 1 differs only in the effect shape, which <see cref="EffectJsonConverter"/>
-    /// already mapped while reading. Record the upcast. Versions newer than supported are left as they are, so
+    /// already mapped while reading. Record the upcast to v2. Versions newer than supported are left as they are, so
     /// callers refuse them with a diagnostic.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
-        if (_schemaVersion is >= 1 and < CurrentSchemaVersion)
+        if (_schemaVersion is >= 1 and < TypedEffectsSchemaVersion)
         {
             UpgradedFrom = _schemaVersion;
-            _schemaVersion = CurrentSchemaVersion;
+            _schemaVersion = TypedEffectsSchemaVersion;
         }
     }
 }

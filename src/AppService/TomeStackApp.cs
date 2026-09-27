@@ -105,6 +105,9 @@ public sealed class TomeStackApp : IDisposable
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
+        // With classes recorded, the level is their sum: keep the stored value in step rather than reject a stale one.
+        if (character.Classes.Count > 0)
+            character = character with { Level = character.Classes.Sum(c => c.Level) };
         var problems = character.Validate().ToList();
         if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
             problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));

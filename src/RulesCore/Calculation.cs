@@ -70,7 +70,6 @@ public static class CharacterCalculator
 {
     public const string InitiativeField = FieldIds.Initiative;
 
-    /// <summary>The one skill modeled in M1 groundwork.</summary>
     public const string Stealth = "stealth";
 
     // Declared before Specs: static initializers run in textual order and BuildSpecs reads this.
@@ -79,6 +78,17 @@ public static class CharacterCalculator
         [Ability.Str] = "Strength", [Ability.Dex] = "Dexterity", [Ability.Con] = "Constitution",
         [Ability.Int] = "Intelligence", [Ability.Wis] = "Wisdom", [Ability.Cha] = "Charisma",
     };
+
+    /// <summary>The 18 skills of both SRDs and the ability each uses. Field ids are <c>skill.&lt;key&gt;</c>. Before Specs, like AbilityNames.</summary>
+    public static IReadOnlyList<(string Key, string Label, Ability Ability)> Skills { get; } =
+    [
+        ("acrobatics", "Acrobatics", Ability.Dex), ("animalHandling", "Animal Handling", Ability.Wis), ("arcana", "Arcana", Ability.Int),
+        ("athletics", "Athletics", Ability.Str), ("deception", "Deception", Ability.Cha), ("history", "History", Ability.Int),
+        ("insight", "Insight", Ability.Wis), ("intimidation", "Intimidation", Ability.Cha), ("investigation", "Investigation", Ability.Int),
+        ("medicine", "Medicine", Ability.Wis), ("nature", "Nature", Ability.Int), ("perception", "Perception", Ability.Wis),
+        ("performance", "Performance", Ability.Cha), ("persuasion", "Persuasion", Ability.Cha), ("religion", "Religion", Ability.Int),
+        ("sleightOfHand", "Sleight of Hand", Ability.Dex), (Stealth, "Stealth", Ability.Dex), ("survival", "Survival", Ability.Wis),
+    ];
 
     private static readonly IReadOnlyList<FieldSpec> Specs = BuildSpecs();
 
@@ -95,7 +105,8 @@ public static class CharacterCalculator
         var policy = RulesFamilies.Get(character.RulesFamily);
         var family = character.RulesFamily;
         var diagnostics = new List<Diagnostic>();
-        var active = ResolveActiveContent(character, catalog, policy, diagnostics);
+        var resolved = ResolveActiveContent(character, catalog, policy, diagnostics);
+        var active = resolved.Active;
         var warnings = Specs.ToDictionary(s => s.Id, _ => new List<Diagnostic>(), StringComparer.Ordinal);
 
         foreach (var item in active)
@@ -114,7 +125,7 @@ public static class CharacterCalculator
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
         var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
-        var proficiencies = CollectProficiencies(active, diagnostics, manual);
+        var proficiencies = CollectProficiencies(active, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels));
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
 
@@ -125,9 +136,9 @@ public static class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual);
             var value = spec.Base(context, steps);
-            value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, values, family, steps, warnings[id], manual);
+            value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
 
             var computed = value;
             var fieldOverride = character.Overrides.LastOrDefault(o => o.Field == id);
@@ -164,18 +175,31 @@ public static class CharacterCalculator
     // ---- content resolution ---------------------------------------------------------------------------------
 
     /// <param name="GrantedBy">Set when a <c>grant</c> effect of another active revision brought this one in.</param>
-    private sealed record ActiveContent(ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null);
+    /// <param name="ClassRoot">
+    /// The class this content belongs to: itself for a class, or the class that granted it. It gives <c>CLASS_LEVEL</c>
+    /// and the level that gates its grants.
+    /// </param>
+    private sealed record ActiveContent(ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null, ContentReference? ClassRoot = null);
+
+    /// <summary>A class the character has levels in, with its hit die when the class declares one.</summary>
+    private sealed record ClassInfo(ActiveContent Content, int Level, HitDieEffect? Die);
+
+    private sealed record ResolvedContent(List<ActiveContent> Active, List<ClassInfo> Classes, Dictionary<ContentReference, int> ClassLevels);
 
     /// <summary>
-    /// Pins first, then content granted by pinned content, one level deep only: granted content's own content grants are
-    /// not followed, so user content cannot create chains or loops. Cross-family use needs a recorded exception (B06).
+    /// Pins and classes first, then content granted by them, one level deep only: granted content's own content grants
+    /// are not followed, so user content cannot create chains or loops. A grant with a <c>level</c> applies from that
+    /// class level (character level outside a class). Cross-family use needs a recorded exception (B06).
     /// </summary>
-    private static List<ActiveContent> ResolveActiveContent(Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics)
+    private static ResolvedContent ResolveActiveContent(Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics)
     {
         var active = new List<ActiveContent>();
         var seen = new HashSet<ContentReference>();
+        var classLevels = new Dictionary<ContentReference, int>();
+        foreach (var entry in character.Classes)
+            classLevels.TryAdd(entry.Class, entry.Level);
 
-        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy)
+        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null)
         {
             var prefix = grantedBy is null ? "" : $"Granted by '{grantedBy.Name}': ";
             var revision = catalog.FindRevision(reference);
@@ -213,14 +237,32 @@ public static class CharacterCalculator
                 diagnostics.Add(new("content.source-missing", $"{prefix}'{revision.Name}' has no known source record; it is not applied.", reference));
                 return null;
             }
-            return new(revision, source, grantedBy);
+            return new(revision, source, grantedBy, revision.Kind == ContentKind.Class ? reference : classRoot);
         }
 
-        foreach (var pin in character.Pins)
+        foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
         {
             if (seen.Add(pin) && Admit(pin, null) is { } item)
                 active.Add(item);
         }
+
+        var classes = new List<ClassInfo>();
+        foreach (var entry in character.Classes)
+        {
+            var item = active.FirstOrDefault(a => a.Revision.Reference == entry.Class);
+            if (item is null)
+                continue; // already explained by Admit (missing, draft, wrong family, ...)
+            if (item.Revision.Kind != ContentKind.Class)
+            {
+                diagnostics.Add(new("character.class-not-a-class", $"'{item.Revision.Name}' is recorded as a class level but is {item.Revision.Kind.ToString().ToLowerInvariant()} content; it gives no class levels.", entry.Class));
+                continue;
+            }
+            if (classes.Any(c => c.Content.Revision.Reference == entry.Class))
+                continue;
+            classes.Add(new(item, entry.Level, item.Revision.Effects.OfType<HitDieEffect>().FirstOrDefault(d => d.Automation == AutomationStatus.Automatic)));
+        }
+        foreach (var pinnedClass in active.Where(a => a.Revision.Kind == ContentKind.Class && !classLevels.ContainsKey(a.Revision.Reference)))
+            diagnostics.Add(new("character.class-without-levels", $"'{pinnedClass.Revision.Name}' is pinned as content but no levels are recorded in it, so its level features and hit points do not apply.", pinnedClass.Revision.Reference));
 
         foreach (var exception in character.CrossFamilyExceptions.Where(e => !character.Pins.Contains(e.Content)))
             diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin.", exception.Content));
@@ -231,6 +273,8 @@ public static class CharacterCalculator
             {
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
                     continue;
+                if (grant.Level is { } needed && GateLevel(granter, character, classLevels) < needed)
+                    continue; // not reached yet: a level-3 feature at class level 2 is simply not there
                 var revision = granter.Revision;
                 if (grant.Content is not { } reference)
                 {
@@ -247,7 +291,7 @@ public static class CharacterCalculator
                         grant.Id));
                     continue;
                 }
-                if (seen.Add(reference) && Admit(reference, revision) is { } granted)
+                if (seen.Add(reference) && Admit(reference, revision, granter.ClassRoot) is { } granted)
                 {
                     active.Add(granted);
                     foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
@@ -255,8 +299,12 @@ public static class CharacterCalculator
                 }
             }
         }
-        return active;
+        return new(active, classes, classLevels);
     }
+
+    /// <summary>The level that gates <paramref name="content"/>'s grants: its class's level, or the character level.</summary>
+    private static int GateLevel(ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels) =>
+        content.ClassRoot is { } root ? classLevels.GetValueOrDefault(root) : character.TotalLevel;
 
     // ---- effects --------------------------------------------------------------------------------------------
 
@@ -323,7 +371,8 @@ public static class CharacterCalculator
 
     private sealed record Proficiency(GrantKind Grant, ActiveContent Content, GrantEffect Effect);
 
-    private static Dictionary<string, Proficiency> CollectProficiencies(List<ActiveContent> active, List<Diagnostic> diagnostics, HashSet<string> manual)
+    private static Dictionary<string, Proficiency> CollectProficiencies(
+        List<ActiveContent> active, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -331,6 +380,8 @@ public static class CharacterCalculator
             foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
             {
                 if (grant.Grant == GrantKind.Content)
+                    continue;
+                if (grant.Level is { } needed && gateLevel(item) < needed)
                     continue;
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
                 {
@@ -513,8 +564,8 @@ public static class CharacterCalculator
 
     /// <summary>ADR-003 order: highest replace, then bonuses (stack / highest in group), then highest set.</summary>
     private static int ApplyModifiers(
-        string field, int value, List<Modifier> modifiers, Character character, Dictionary<string, int> values,
-        string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
+        string field, int value, List<Modifier> modifiers, Character character, Dictionary<ContentReference, int> classLevels,
+        Dictionary<string, int> values, string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
     {
         var evaluated = new List<(Modifier Modifier, int Amount, List<TraceInput> Inputs)>();
         foreach (var modifier in modifiers)
@@ -524,7 +575,9 @@ public static class CharacterCalculator
             {
                 int? resolved = identifier switch
                 {
-                    FormulaIdentifiers.Level => character.Level,
+                    FormulaIdentifiers.Level => character.TotalLevel,
+                    // CLASS_LEVEL: the level in the class this content belongs to; unavailable outside a class.
+                    FormulaIdentifiers.ClassLevel => modifier.Content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
                     _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
                     _ => null,
                 };
@@ -646,7 +699,11 @@ public static class CharacterCalculator
 
     // ---- field definitions ----------------------------------------------------------------------------------
 
-    private sealed record BaseContext(Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies);
+    /// <param name="Warnings">This field's warnings; a base derivation may add to them.</param>
+    /// <param name="Manual">Fields that are only assisted; a base derivation that cannot complete adds its field.</param>
+    private sealed record BaseContext(
+        Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies,
+        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual);
 
     private sealed record FieldSpec(string Id, string Label, string Units, IReadOnlyList<string> Reads, Func<BaseContext, List<Step>, int> Base);
 
@@ -679,21 +736,87 @@ public static class CharacterCalculator
         }
         specs.Add(new(FieldIds.ProficiencyBonus, "Proficiency bonus", "bonus", [], (c, steps) =>
         {
-            var level = c.Character.Level;
+            var level = c.Character.TotalLevel;
             var value = 2 + ((level - 1) / 4);
             steps.Add(new(FieldIds.ProficiencyBonus, "derive", $"Proficiency bonus by character level {level} = 2 + floor((level - 1) / 4)", level, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FormulaIdentifiers.Level, level)]));
             return value;
         }));
         foreach (var ability in Enum.GetValues<Ability>())
             specs.Add(Proficient(FieldIds.Save(ability), $"{AbilityNames[ability]} saving throw", ability));
-        specs.Add(Proficient(FieldIds.Skill(Stealth), "Stealth", Ability.Dex));
+        foreach (var (key, label, ability) in Skills)
+            specs.Add(Proficient(FieldIds.Skill(key), label, ability));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {
             var value = c.Values[FieldIds.Modifier(Ability.Dex)];
             steps.Add(new(FieldIds.Initiative, "base", "Initiative starts at the Dexterity modifier", value, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), value)]));
             return value;
         }));
+        specs.Add(new(FieldIds.ArmorClass, "Armor Class", "score", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
+        {
+            var dex = c.Values[FieldIds.Modifier(Ability.Dex)];
+            var value = 10 + dex;
+            // Armor and shields are not modeled yet (M2 equipment): this is the unarmored base. Alternatives such as
+            // Unarmored Defense are content `replace` effects; the highest replacement wins (ADR-003).
+            steps.Add(new(FieldIds.ArmorClass, "base", "Armor Class without armor = 10 + Dexterity modifier (armor is not modeled yet)", 10, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), dex)]));
+            return value;
+        }));
+        specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));
         return specs;
+    }
+
+    /// <summary>
+    /// SRD hit points: the starting class's hit die maximum at level 1, the fixed value (half the die plus 1) for every
+    /// other class level, and the Constitution modifier once per character level. Rolled hit points are recorded as an
+    /// override. Without a class there is nothing to derive, so the field is assisted with a warning.
+    /// </summary>
+    private static int HitPoints(BaseContext c, List<Step> steps)
+    {
+        const string field = FieldIds.HitPoints;
+        var policy = new TraceOrigin(TraceOriginKind.RulesPolicy, c.Family);
+        if (c.Classes.Count == 0)
+        {
+            steps.Add(new(field, "base", "No class levels are recorded, so hit points cannot be derived; record a class or override the value", 0, 0, policy));
+            c.Warnings.Add(new("hit-points.no-class", "Hit points need at least one class level. Record the character's class, or override the value."));
+            c.Manual.Add(field);
+            return 0;
+        }
+
+        var value = 0;
+        for (var i = 0; i < c.Classes.Count; i++)
+        {
+            var (content, level, hitDie) = c.Classes[i];
+            var name = content.Revision.Name;
+            if (hitDie is null)
+            {
+                c.Warnings.Add(new("class.hit-die-missing", $"'{name}' declares no hit die, so its {level} level(s) add no hit points.", content.Revision.Reference));
+                c.Manual.Add(field);
+                continue;
+            }
+            var die = hitDie.Die;
+            var origin = ContentOrigin(c.Family, content, hitDie);
+            var fixedValue = (die / 2) + 1;
+            var fromLevel = 1;
+            if (i == 0)
+            {
+                value += die;
+                steps.Add(new(field, "add", $"{name} level 1: the hit die maximum (d{die})", die, value, origin));
+                fromLevel = 2;
+            }
+            var remaining = level - fromLevel + 1;
+            if (remaining > 0)
+            {
+                var amount = remaining * fixedValue;
+                value += amount;
+                var levels = remaining == 1 ? $"level {fromLevel}" : $"levels {fromLevel}–{level}";
+                steps.Add(new(field, "add", $"{name} {levels}: {remaining} × {fixedValue} (fixed value for d{die})", amount, value, origin));
+            }
+        }
+
+        var con = c.Values[FieldIds.Modifier(Ability.Con)];
+        var total = c.Character.TotalLevel;
+        value += con * total;
+        steps.Add(new(field, "add", $"Constitution modifier ({(con >= 0 ? "+" : "")}{con}) × {total} character level(s)", con * total, value, policy, [new(FieldIds.Modifier(Ability.Con), con), new(FormulaIdentifiers.Level, total)]));
+        return value;
     }
 
     /// <summary>A saving throw or skill: ability modifier, plus the proficiency bonus (doubled for expertise) if granted.</summary>

@@ -31,6 +31,12 @@
 - **Backup vs. share export (ADR-007, SPEC P-02, Q-03):** the sheet's export asks what the package is for. A *personal backup* includes everything and is named `…-personal-backup.tomestack.zip`. A *share* leaves out content from non-redistributable sources and lists what it left out before exporting (`package.exportPreview`) and in the manifest (`omitted[]`). The receiver gets a `package.content-omitted` warning naming the source and publisher, and the sheet shows that content as missing.
 - **Sync-root warning (ADR-005):** if the data folder is inside OneDrive or another cloud sync root, the app shows a warning at the top of the window (`app.info` `warnings`, code `data-dir.sync-root`).
 - Private homebrew fixtures (the owner's Stardust Guardian material) go in the gitignored `tests/RulesFixtures/local/`.
+- **Levels and classes (M1 item 5, SPEC C-01, C-02, C-03; `docs/features/levels-and-classes.md`):** characters record levels per class. The total level is their sum and drives the proficiency bonus. `CLASS_LEVEL` resolves to the level in the class that content belongs to. Grants can apply from a class level (`grant.level`), so a level-3 feature is absent at level 2. New fields, each with a full trace:
+  - **Hit points:** the starting class's hit die maximum, then the fixed value per level, plus Constitution × level. Traces cite the class, source and page.
+  - **Armor class:** 10 + Dex, with `replace` alternatives; the highest wins.
+  - **All 18 skills.**
+
+  Original fixtures "Fixture Warden" and "Fixture Scholar" cover multiclass hit points and level gates. D04 (multiclass and spellcasting scope for MVP) is recorded in LIVING_SPECS.
 - JSON Schemas for source, content revision, character and package manifest (v1, plus v2 for content revisions, characters and manifests) in `docs/schemas/`. A test validates every fixture and a real exported package against them.
 
 ### Changed
@@ -76,4 +82,7 @@
 - **Database schema v2:** stored revisions are rewritten in the v2 representation, with new hashes and the original JSON in `legacy_json`. `tomestack.db.v1.bak` is written first. Without this, M0 data folders would have failed to open.
 - **Character schema v2:** adds `level` (1–20) and `crossFamilyExceptions`. v1 characters are read as level 1 with no exceptions.
 - **Package format v2:** content entries are schema v2. v1 packages still import. Older builds refuse v2 packages with a clear message.
+- **Character schema v3:** adds `classes` (levels per class). v1 and v2 characters are read with no classes, which changes nothing.
+- **Content schema v3 (ADR-003):** adds `grant.level`, the `hitDie` effect, and the `armorClass` and `hitPoints` targets. v2 revisions are **not** upcast (v2 is a subset of v3), so stored hashes are unchanged and no database migration is needed. v1 still upcasts to v2. Builds that know only v2 refuse v3 revisions.
+- Exports now also include content that included content grants (for example class features or a background's feat), so the receiving machine calculates the same sheet. Before, a granted revision that the receiver lacked showed as missing.
 - **Package format v3 (ADR-007):** the manifest adds `purpose` (`backup` / `share`) and `omitted[]`. v1 and v2 packages import as backups. Older builds refuse v3. Export file names change: a backup is `<name>-personal-backup.tomestack.zip`.

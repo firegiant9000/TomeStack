@@ -30,7 +30,10 @@ export interface Character {
   name: string;
   rulesFamily: RulesFamilyId;
   campaignId?: string;
+  /** Total level; with classes recorded it is their sum (the service keeps it in step). */
   level: number;
+  /** Levels per class, in the order taken (character schema v3). */
+  classes: ClassLevel[];
   crossFamilyExceptions: CrossFamilyException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
@@ -38,6 +41,11 @@ export interface Character {
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
+}
+
+export interface ClassLevel {
+  class: ContentReference;
+  level: number;
 }
 
 export interface Diagnostic {

@@ -28,7 +28,7 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
-  { title: 'Combat', match: (f) => f === 'initiative' },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' },
 ];
 
 function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string, string> }) {

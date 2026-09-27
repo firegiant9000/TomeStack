@@ -20,6 +20,12 @@ internal static class Fixtures
     public static readonly ContentReference Watchful = M1Ref(2);
     public static readonly ContentReference KeenSenses2014 = M1Ref(3);
     public static readonly ContentReference KeenSenses2024 = M1Ref(4);
+    public static readonly ContentReference Warden = M1Ref(10);
+    public static readonly ContentReference WardenGuard = M1Ref(11);
+    public static readonly ContentReference WardenStride = M1Ref(12);
+    public static readonly ContentReference Scholar = M1Ref(13);
+    public static readonly ContentReference Hardy = M1Ref(14);
+    public static readonly ContentReference Bracers = M1Ref(15);
 
     public static ContentPack Pack() => Load<ContentPack>("fixture-pack.json");
 
@@ -41,7 +47,7 @@ internal static class Fixtures
     public static Character Load(string characterFile) => Load<Character>($"characters/{characterFile}");
 
     private static ContentReference M1Ref(int n) =>
-        new(Guid.Parse($"5f1dc000-0000-4000-8000-00000000000{n}"), Guid.Parse($"5f1de000-0000-4000-8000-00000000000{n}"));
+        new(Guid.Parse($"5f1dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f1de000-0000-4000-8000-{n:D12}"));
 
     private static ContentReference Ref(int n) =>
         new(Guid.Parse($"5f0dc000-0000-4000-8000-00000000000{n}"), Guid.Parse($"5f0de000-0000-4000-8000-00000000000{n}"));

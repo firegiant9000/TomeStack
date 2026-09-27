@@ -145,7 +145,7 @@ public class UpgradeTests
         var quickfoot = app.Store.ListRevisions().Single(r => r.Name == "Fixture Quickfoot");
         var bonus = Assert.IsType<ModifierEffect>(Assert.Single(quickfoot.Effects));
         Assert.Equal((ModifierOperation.Bonus, "ability.dex.score", "2"), (bonus.Operation, bonus.Target, bonus.Value));
-        Assert.Equal(ContentRevision.CurrentSchemaVersion, quickfoot.SchemaVersion);
+        Assert.Equal(ContentRevision.TypedEffectsSchemaVersion, quickfoot.SchemaVersion); // v1 upcasts to v2, never further
         Assert.Equal(SqliteStore.Sha256(SqliteStore.Serialize(quickfoot)), app.Store.RevisionHash(quickfoot.RevisionId));
         Assert.Equal(v1Rows[quickfoot.RevisionId.ToString("D")], Text(database, $"SELECT legacy_json FROM content_revisions WHERE revision_id = '{quickfoot.RevisionId:D}';"));
         Assert.Equal(4, app.SaveCharacter(Fixture()).Sheet.Field(CharacterCalculator.InitiativeField).Value);

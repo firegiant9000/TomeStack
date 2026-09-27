@@ -78,6 +78,96 @@
       "effects": [
         { "type": "grant", "id": "keen24-stealth", "grant": "expertise", "target": "skill.stealth" }
       ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000010",
+      "revisionId": "5f1de000-0000-4000-8000-000000000010",
+      "schemaVersion": 3,
+      "kind": "class",
+      "name": "Fixture Warden",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 20 } },
+      "status": "published",
+      "summary": "A test class (d10) with features at class levels 1, 2 and 3.",
+      "effects": [
+        { "type": "hitDie", "id": "warden-hit-die", "die": 10 },
+        { "type": "grant", "id": "warden-save-str", "grant": "proficiency", "target": "save.str" },
+        { "type": "grant", "id": "warden-save-wis", "grant": "proficiency", "target": "save.wis" },
+        { "type": "grant", "id": "warden-guard", "grant": "content", "content": { "contentId": "5f1dc000-0000-4000-8000-000000000011", "revisionId": "5f1de000-0000-4000-8000-000000000011" }, "level": 1 },
+        { "type": "grant", "id": "warden-stride", "grant": "content", "content": { "contentId": "5f1dc000-0000-4000-8000-000000000012", "revisionId": "5f1de000-0000-4000-8000-000000000012" }, "level": 2 },
+        { "type": "grant", "id": "warden-lookout", "grant": "proficiency", "target": "skill.perception", "level": 3 }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000011",
+      "revisionId": "5f1de000-0000-4000-8000-000000000011",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Warden Guard",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 21 } },
+      "status": "published",
+      "summary": "Level 1: an alternative Armor Class formula (a replace-type alternative).",
+      "effects": [
+        { "type": "modifier", "id": "guard-ac", "operation": "replace", "target": "armorClass", "value": "10 + DEX.MOD + WIS.MOD" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000012",
+      "revisionId": "5f1de000-0000-4000-8000-000000000012",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Warden Stride",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 22 } },
+      "status": "published",
+      "summary": "Level 2: an initiative bonus that scales with the Warden level.",
+      "effects": [
+        { "type": "modifier", "id": "stride-init", "operation": "bonus", "target": "initiative", "value": "floor(CLASS_LEVEL / 2)" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000013",
+      "revisionId": "5f1de000-0000-4000-8000-000000000013",
+      "schemaVersion": 3,
+      "kind": "class",
+      "name": "Fixture Scholar",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 23 } },
+      "status": "published",
+      "summary": "A second test class (d6) for multiclass hit points.",
+      "effects": [
+        { "type": "hitDie", "id": "scholar-hit-die", "die": 6 },
+        { "type": "grant", "id": "scholar-save-int", "grant": "proficiency", "target": "save.int" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000014",
+      "revisionId": "5f1de000-0000-4000-8000-000000000014",
+      "schemaVersion": 3,
+      "kind": "feat",
+      "name": "Fixture Hardy",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 24 } },
+      "status": "published",
+      "summary": "One extra hit point per character level.",
+      "effects": [
+        { "type": "modifier", "id": "hardy-hp", "operation": "bonus", "target": "hitPoints", "value": "LEVEL" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000015",
+      "revisionId": "5f1de000-0000-4000-8000-000000000015",
+      "schemaVersion": 3,
+      "kind": "item",
+      "name": "Fixture Bracers",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 25 } },
+      "status": "published",
+      "summary": "A flat Armor Class alternative; the highest replacement wins.",
+      "effects": [
+        { "type": "modifier", "id": "bracers-ac", "operation": "replace", "target": "armorClass", "value": "13" }
+      ]
     }
   ]
 }

@@ -24,7 +24,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 7 | Errors are announced and described in text | 3.3.1, 4.1.3 | ✅ errors use `role="alert"`, status messages `role="status"` |
 | 8 | Status after import stays visible | 4.1.3 | 🔧 The import summary, including the backup location, was cleared immediately by opening the character. Found by the e2e test |
 | 9 | Focus moves sensibly after navigation (create → sheet, import → sheet) | 2.4.3 | 🔧 Focus used to fall back to `body` when the form unmounted. Opening a sheet now focuses its heading (`tabIndex=-1`); the e2e flow asserts it after create |
-| 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 21 fields |
+| 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 40 fields (M1 item 5) |
 | 11 | No action is silently ignored | 3.2.x | 🔧 "New character" did nothing if clicked before `app.info` had loaded. It is now disabled until then; both e2e tests wait for it to become enabled |
 | 12 | Override forms are independent per field | 3.3.2 | 🔧 Each field card has its own override state (item 11) |
 | 13 | Tables have captions and header cells | 1.3.1 | ✅ trace, package and diff tables have `caption` and `th scope` |

@@ -100,6 +100,33 @@ public class PackageRoundTripTests
     }
 
     [Fact]
+    public void Class_levels_travel_with_the_character_including_the_class_revisions_and_their_granted_features()
+    {
+        var m1 = TempApp.LoadFixture<ContentPack>("fixture-pack-m1.json");
+        var warden = m1.Revisions.Single(r => r.Name == "Fixture Warden");
+        using var origin = new TempApp();
+        foreach (var source in m1.Sources)
+            origin.App.Store.UpsertSource(source);
+        foreach (var revision in m1.Revisions)
+            origin.App.Store.AddRevision(revision);
+        var character = TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [], Classes = [new(warden.Reference, 3)], Level = 1 };
+
+        var saved = origin.App.SaveCharacter(character);
+        var export = origin.App.ExportCharacters([saved.Character.Id]);
+
+        Assert.Equal(3, saved.Character.Level); // the service keeps the level in step with the class levels
+        Assert.Contains(export.Manifest.Entries, e => e.Path == $"content/{warden.RevisionId:D}.json");
+        // Granted features are not referenced by the character, but the export includes them so the sheet is identical.
+        foreach (var granted in warden.Effects.OfType<GrantEffect>().Where(g => g.Content is not null))
+            Assert.Contains(export.Manifest.Entries, e => e.Path == $"content/{granted.Content!.RevisionId:D}.json");
+        using var destination = new TempApp();
+        destination.App.ApplyImport(export.Content);
+        var imported = destination.App.GetCharacter(saved.Character.Id);
+        Assert.Equal(TempApp.Json(saved.Sheet), TempApp.Json(imported.Sheet));
+        Assert.Equal(10 + (2 * 6) + 3, imported.Sheet.Field(FieldIds.HitPoints).Value); // d10 Warden 3, Con +1
+    }
+
+    [Fact]
     public void Export_is_deterministic_for_the_same_data_and_time()
     {
         using var origin = new TempApp();
