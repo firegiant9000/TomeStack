@@ -73,6 +73,9 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     private readonly IReadOnlyList<Migration> _migrations;
     private SqliteTransaction? _transaction;
 
+    /// <summary>Published choice extensions by the choice they extend; null until read or after a change (see <see cref="ChoiceExtensions"/>).</summary>
+    private Dictionary<ChoiceExtension, ContentRevision[]>? _choiceExtensions;
+
     public SqliteStore(string databasePath)
         : this(databasePath, Migrations)
     {
@@ -127,6 +130,11 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             {
                 action();
                 transaction.Commit();
+            }
+            catch
+            {
+                _choiceExtensions = null; // it may hold a revision the rollback removes
+                throw;
             }
             finally
             {
@@ -263,6 +271,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 ("$status", revision.Status.ToString()),
                 ("$hash", hash),
                 ("$json", json));
+            _choiceExtensions = null;
             return true;
         }
     }
@@ -280,12 +289,28 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     }
 
     /// <summary>
-    /// Published revisions that extend one choice. The LIKE pre-filter keeps calculation from reading every revision;
-    /// the typed comparison afterwards is the real test.
+    /// Published revisions that extend one choice. Every calculation asks this for every offered choice, so the table
+    /// is read once (a LIKE pre-filter, then the typed test) and kept in memory. Revisions are insert-only, so the copy
+    /// is dropped only when a revision is added and when a transaction rolls back.
     /// </summary>
-    public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) =>
-        Query<ContentRevision>("SELECT json FROM content_revisions WHERE status = 'Published' AND json LIKE '%\"extendsChoice\"%' ORDER BY rowid;")
-            .Where(r => r.ExtendsChoice == new ChoiceExtension(contentId, choiceId));
+    public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId)
+    {
+        lock (_gate)
+        {
+            if (_choiceExtensions is null)
+            {
+                ChoiceExtensionScans++;
+                _choiceExtensions = Query<ContentRevision>("SELECT json FROM content_revisions WHERE status = 'Published' AND json LIKE '%\"extendsChoice\"%' ORDER BY rowid;")
+                    .Where(r => r.ExtendsChoice is not null)
+                    .GroupBy(r => r.ExtendsChoice!)
+                    .ToDictionary(g => g.Key, g => g.ToArray());
+            }
+            return _choiceExtensions.TryGetValue(new(contentId, choiceId), out var extensions) ? extensions : [];
+        }
+    }
+
+    /// <summary>Test seam: how often <see cref="ChoiceExtensions"/> read the table.</summary>
+    internal int ChoiceExtensionScans { get; private set; }
 
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => ListRevisions(contentId);
 

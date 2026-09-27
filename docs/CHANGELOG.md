@@ -30,6 +30,7 @@ The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to 
 - **The ability score cap no longer depends on effect order.** Increases apply first (capped at 20), then penalties. Before, 19 with +2 and −2 gave 18 or 19 depending on which effect came first; now it is 18 either way.
 - **`character.save` no longer writes the play state (SPEC C-05).** It took the payload's `play` as is, so any save, including one from a stale copy, could change hit points, spent uses or conditions without a confirmation. It now keeps the stored play state; only the confirmed `character.play` and `character.rest` change it.
 - **Removing or replacing a PDF that is open elsewhere now succeeds (ADR-005).** The change was committed, but the reply was an internal error and the unused copy was left behind. The file is now deleted best effort, and the next start deletes managed copies that no attachment uses, plus leftover `.partial` files.
+- **Large libraries no longer slow every click.** Each calculation re-read the whole content table for every offered choice to find `extendsChoice` options: 4 table scans per calculation, and about 430 ms per play command with 5,000 revisions. The published extensions are now read once and kept in memory until a revision is added or a transaction rolls back, which brings a play command to about 5 ms. No database migration.
 
 ### Migration
 

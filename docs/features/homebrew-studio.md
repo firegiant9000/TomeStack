@@ -30,6 +30,8 @@ A class's choice options are exact pins in a published revision, so the SRD Barb
 
 Validation: the target content must offer that choice (`validate.extends-choice-unknown`) and share a rules family (`validate.reference-family`). A target that is not installed is a warning (`validate.extends-choice-missing`). A revision cannot extend its own choice. `extendsChoice` needs `schemaVersion` 4 (`validate.requires-v4`).
 
+Performance: every calculation looks up the extensions of every offered choice, and a request may calculate several times. The store reads the published extensions once and keeps them in memory. Revisions are insert-only, so it drops that copy only when a revision is added or a transaction rolls back (`HomebrewStudioTests.Choice_extensions_are_read_from_the_database_once_and_follow_new_and_rolled_back_revisions`; M2 review fix). With 5,000 revisions in the library, a play command went from about 430 ms to about 5 ms.
+
 The studio's subclass form offers "Offered in the choice" with every choice of every class for the source's family.
 
 ## Publishing and updating characters (SPEC I-06)

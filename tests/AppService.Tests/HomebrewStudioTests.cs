@@ -104,6 +104,38 @@ public class HomebrewStudioTests
     }
 
     [Fact]
+    public void Choice_extensions_are_read_from_the_database_once_and_follow_new_and_rolled_back_revisions()
+    {
+        using var temp = new TempApp();
+        var authored = Author(temp.App);
+        var id = Brenna(temp.App);
+        temp.App.GetCharacter(id);
+        var scans = temp.App.Store.ChoiceExtensionScans;
+
+        // Every calculation asks for the extensions of every offered choice; the store answers from memory.
+        for (var i = 0; i < 3; i++)
+        {
+            temp.App.GetCharacter(id);
+            temp.App.Play(new(id, PlayActionKind.Heal, Confirm: true, Amount: 1));
+        }
+        Assert.Equal(scans, temp.App.Store.ChoiceExtensionScans);
+
+        // A newly published extension is offered at once (revisions are insert-only, so adding one is the only change).
+        var second = Publish(temp.App, PathDraft(authored.Source, Guid.NewGuid(), authored.Ward, authored.Lore, initiative: 2) with { Name = "Path of the Second Test Storm" });
+        Assert.Contains(second, temp.App.GetCharacter(id).Sheet.Choices!.Single(c => c.ChoiceId == "barbarian-subclass").Options);
+
+        // One added in a transaction that rolls back is not.
+        var rolledBack = PathDraft(authored.Source, Guid.NewGuid(), authored.Ward, authored.Lore, initiative: 3) with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Published };
+        Assert.Throws<InvalidOperationException>(() => temp.App.Store.InTransaction(() =>
+        {
+            temp.App.Store.AddRevision(rolledBack);
+            Assert.Contains(rolledBack.Reference, temp.App.GetCharacter(id).Sheet.Choices!.Single(c => c.ChoiceId == "barbarian-subclass").Options);
+            throw new InvalidOperationException("roll back");
+        }));
+        Assert.DoesNotContain(rolledBack.Reference, temp.App.GetCharacter(id).Sheet.Choices!.Single(c => c.ChoiceId == "barbarian-subclass").Options);
+    }
+
+    [Fact]
     public void An_extension_is_not_offered_until_published_and_never_to_another_family()
     {
         using var temp = new TempApp();
