@@ -5,6 +5,7 @@ import type {
   CharacterSummary,
   CharacterView,
   ContentOption,
+  ContentReference,
   CreateCharacterRequest,
   ExportedPackage,
   ExportPreview,
@@ -26,6 +27,9 @@ export function createClient(transport: Transport) {
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
+    /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */
+    choose: (characterId: string, source: ContentReference, choiceId: string, selected: ContentReference[]) =>
+      call<CharacterView>('character.choose', { characterId, source, choiceId, selected }),
     /** What an export would contain and leave out, without writing anything (ADR-007). */
     previewExport: (characterIds: string[], purpose: ExportPurpose) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose }),

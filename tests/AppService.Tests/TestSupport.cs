@@ -35,6 +35,20 @@ internal sealed class TempApp : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort on Windows file locks */ }
     }
 
+    /// <summary>Installs a fixture pack (sources and revisions) into this data folder, as if it had been imported.</summary>
+    public ContentPack AddPack(string relativePath)
+    {
+        var pack = LoadFixture<ContentPack>(relativePath);
+        App.Store.InTransaction(() =>
+        {
+            foreach (var source in pack.Sources)
+                App.Store.UpsertSource(source);
+            foreach (var revision in pack.Revisions)
+                App.Store.AddRevision(revision);
+        });
+        return pack;
+    }
+
     public static T LoadFixture<T>(string relativePath) =>
         JsonSerializer.Deserialize<T>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", relativePath)), RulesJson.Options)!;
 

@@ -95,7 +95,30 @@
         { "type": "grant", "id": "warden-save-wis", "grant": "proficiency", "target": "save.wis" },
         { "type": "grant", "id": "warden-guard", "grant": "content", "content": { "contentId": "5f1dc000-0000-4000-8000-000000000011", "revisionId": "5f1de000-0000-4000-8000-000000000011" }, "level": 1 },
         { "type": "grant", "id": "warden-stride", "grant": "content", "content": { "contentId": "5f1dc000-0000-4000-8000-000000000012", "revisionId": "5f1de000-0000-4000-8000-000000000012" }, "level": 2 },
-        { "type": "grant", "id": "warden-lookout", "grant": "proficiency", "target": "skill.perception", "level": 3 }
+        { "type": "grant", "id": "warden-lookout", "grant": "proficiency", "target": "skill.perception", "level": 3 },
+        {
+          "type": "choice",
+          "id": "warden-skills",
+          "choiceId": "warden-skills",
+          "count": 2,
+          "text": "Choose two skills.",
+          "options": [
+            { "contentId": "5f1dc000-0000-4000-8000-000000000016", "revisionId": "5f1de000-0000-4000-8000-000000000016" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000017", "revisionId": "5f1de000-0000-4000-8000-000000000017" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000018", "revisionId": "5f1de000-0000-4000-8000-000000000018" }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "warden-path",
+          "choiceId": "warden-path",
+          "count": 1,
+          "level": 3,
+          "text": "Choose a Warden path.",
+          "options": [
+            { "contentId": "5f1dc000-0000-4000-8000-000000000019", "revisionId": "5f1de000-0000-4000-8000-000000000019" }
+          ]
+        }
       ]
     },
     {
@@ -168,6 +191,123 @@
       "effects": [
         { "type": "modifier", "id": "bracers-ac", "operation": "replace", "target": "armorClass", "value": "13" }
       ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000016",
+      "revisionId": "5f1de000-0000-4000-8000-000000000016",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Warden Skill: Athletics",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 20 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.athletics" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000017",
+      "revisionId": "5f1de000-0000-4000-8000-000000000017",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Warden Skill: Survival",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 20 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.survival" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000018",
+      "revisionId": "5f1de000-0000-4000-8000-000000000018",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Warden Skill: Nature",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 20 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "skill", "grant": "proficiency", "target": "skill.nature" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000019",
+      "revisionId": "5f1de000-0000-4000-8000-000000000019",
+      "schemaVersion": 3,
+      "kind": "subclass",
+      "name": "Fixture Path of Thorns",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 26 } },
+      "status": "published",
+      "summary": "A test subclass chosen at Warden level 3; it grants a feature at that level.",
+      "effects": [
+        { "type": "grant", "id": "thorns", "grant": "content", "content": { "contentId": "5f1dc000-0000-4000-8000-000000000020", "revisionId": "5f1de000-0000-4000-8000-000000000020" }, "level": 3 }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000020",
+      "revisionId": "5f1de000-0000-4000-8000-000000000020",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Thorns",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 27 } },
+      "status": "published",
+      "effects": [
+        { "type": "modifier", "id": "thorns-ac", "operation": "bonus", "target": "armorClass", "value": "floor(CLASS_LEVEL / 3)" }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000021",
+      "revisionId": "5f1de000-0000-4000-8000-000000000021",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Fixture Crossroads",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 28 } },
+      "status": "published",
+      "summary": "A test background whose ability increase is a choice between features; only backgrounds that may grant increases apply it.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "crossroads-ability",
+          "choiceId": "crossroads-ability",
+          "count": 1,
+          "options": [
+            { "contentId": "5f1dc000-0000-4000-8000-000000000022", "revisionId": "5f1de000-0000-4000-8000-000000000022" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000023", "revisionId": "5f1de000-0000-4000-8000-000000000023" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000024", "revisionId": "5f1de000-0000-4000-8000-000000000024" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000022",
+      "revisionId": "5f1de000-0000-4000-8000-000000000022",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Crossroads: +1 Strength",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 28 } },
+      "status": "published",
+      "effects": [{ "type": "modifier", "id": "str", "operation": "bonus", "target": "ability.str.score", "value": "1" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000023",
+      "revisionId": "5f1de000-0000-4000-8000-000000000023",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Crossroads: +1 Dexterity",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 28 } },
+      "status": "published",
+      "effects": [{ "type": "modifier", "id": "dex", "operation": "bonus", "target": "ability.dex.score", "value": "1" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000024",
+      "revisionId": "5f1de000-0000-4000-8000-000000000024",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Crossroads: +1 Wisdom (2014 only)",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000001", "page": { "start": 28 } },
+      "status": "published",
+      "effects": [{ "type": "modifier", "id": "wis", "operation": "bonus", "target": "ability.wis.score", "value": "1" }]
     }
   ]
 }

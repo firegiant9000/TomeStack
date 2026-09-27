@@ -119,6 +119,42 @@ public sealed class TomeStackApp : IDisposable
         return View(saved);
     }
 
+    /// <summary>
+    /// SPEC C-01: records the options picked for one choice (an empty list clears it). The choice must be offered to the
+    /// character now (its revision active, its level reached), every option must be one of its options and usable under
+    /// the character's rules family, and the count must not be exceeded. Nothing else about the character changes.
+    /// </summary>
+    public CharacterView Choose(ChooseRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var character = _store.FindCharacter(request.CharacterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
+        var selected = request.Selected ?? [];
+        var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
+        var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
+            ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
+
+        var problems = new List<Diagnostic>();
+        if (selected.Distinct().Count() != selected.Count)
+            problems.Add(new("choice.duplicate-option", "The same option is selected more than once.", request.Source));
+        if (selected.Count > offered.Count)
+            problems.Add(new("choice.too-many", $"'{offered.SourceName}' choice '{offered.ChoiceId}' allows {offered.Count} selection(s), not {selected.Count}.", request.Source));
+        foreach (var option in selected.Where(o => !offered.Options.Contains(o)))
+            problems.Add(new("choice.invalid-option", $"Revision {option.RevisionId} is not an option of '{offered.SourceName}' choice '{offered.ChoiceId}'.", option));
+        foreach (var option in selected.Where(offered.Options.Contains))
+        {
+            var revision = _store.FindRevision(option);
+            if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))
+                problems.Add(new("choice.option-unavailable", $"Option {revision?.Name ?? option.RevisionId.ToString()} is not a published revision for {character.RulesFamily}.", option));
+        }
+        if (problems.Count > 0)
+            throw new AppValidationException(problems);
+
+        return SaveCharacter(selected.Count == 0
+            ? without
+            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] });
+    }
+
     public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
         _packages.Export(characterIds, purpose);
 
@@ -166,6 +202,8 @@ public sealed record ContentOption(
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
 public sealed record CharacterView(Character Character, CharacterSheet Sheet);
+
+public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
 public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
 

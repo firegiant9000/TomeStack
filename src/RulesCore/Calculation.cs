@@ -51,11 +51,26 @@ public sealed record DerivedValue(
     FieldOverride? Override,
     string Units = "");
 
+/// <summary>
+/// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
+/// it is resolved. The sheet flags unresolved choices; the builder (M2) will answer them.
+/// </summary>
+public sealed record ChoiceStatus(
+    ContentReference Source,
+    string SourceName,
+    string ChoiceId,
+    string? Text,
+    int Count,
+    IReadOnlyList<ContentReference> Options,
+    IReadOnlyList<ContentReference> Selected,
+    bool Resolved);
+
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
     IReadOnlyList<DerivedValue> Fields,
-    IReadOnlyList<Diagnostic> Diagnostics)
+    IReadOnlyList<Diagnostic> Diagnostics,
+    IReadOnlyList<ChoiceStatus>? Choices = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -169,27 +184,36 @@ public static class CharacterCalculator
                 spec.Units);
         }).ToList();
 
-        return new CharacterSheet(character.Id, family, fields, diagnostics);
+        return new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices);
     }
 
     // ---- content resolution ---------------------------------------------------------------------------------
 
     /// <param name="GrantedBy">Set when a <c>grant</c> effect of another active revision brought this one in.</param>
     /// <param name="ClassRoot">
-    /// The class this content belongs to: itself for a class, or the class that granted it. It gives <c>CLASS_LEVEL</c>
-    /// and the level that gates its grants.
+    /// The class this content belongs to: itself for a class, or the class that granted it or offered the choice it was
+    /// chosen from. It gives <c>CLASS_LEVEL</c> and the level that gates its grants and choices.
     /// </param>
-    private sealed record ActiveContent(ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null, ContentReference? ClassRoot = null);
+    /// <param name="ChosenFrom">Set when the character picked this revision for a choice offered by another active revision.</param>
+    private sealed record ActiveContent(
+        ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null, ContentReference? ClassRoot = null, ContentRevision? ChosenFrom = null)
+    {
+        /// <summary>Pins, classes and chosen content are roots: their grants are followed (one level).</summary>
+        public bool IsRoot => GrantedBy is null;
+    }
 
     /// <summary>A class the character has levels in, with its hit die when the class declares one.</summary>
     private sealed record ClassInfo(ActiveContent Content, int Level, HitDieEffect? Die);
 
-    private sealed record ResolvedContent(List<ActiveContent> Active, List<ClassInfo> Classes, Dictionary<ContentReference, int> ClassLevels);
+    private sealed record ResolvedContent(
+        List<ActiveContent> Active, List<ClassInfo> Classes, Dictionary<ContentReference, int> ClassLevels, List<ChoiceStatus> Choices);
 
     /// <summary>
-    /// Pins and classes first, then content granted by them, one level deep only: granted content's own content grants
-    /// are not followed, so user content cannot create chains or loops. A grant with a <c>level</c> applies from that
-    /// class level (character level outside a class). Cross-family use needs a recorded exception (B06).
+    /// Pins and classes first. Then, in a worklist: content granted by a root (one level deep only: granted content's own
+    /// content grants are not followed, so user content cannot create chains or loops), and the character's selections
+    /// for every choice an active revision offers. Chosen content is a root, like a pin. A grant or choice with a
+    /// <c>level</c> applies from that class level (character level outside a class). Every revision is admitted once, so
+    /// selections cannot loop. Cross-family use needs a recorded exception (B06), which only pins can have.
     /// </summary>
     private static ResolvedContent ResolveActiveContent(Character character, IContentCatalog catalog, RulesFamilyPolicy policy, List<Diagnostic> diagnostics)
     {
@@ -198,10 +222,12 @@ public static class CharacterCalculator
         var classLevels = new Dictionary<ContentReference, int>();
         foreach (var entry in character.Classes)
             classLevels.TryAdd(entry.Class, entry.Level);
+        var choices = new List<ChoiceStatus>();
+        var answered = new HashSet<(ContentReference, string)>();
 
-        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null)
+        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null, ContentRevision? chosenFrom = null)
         {
-            var prefix = grantedBy is null ? "" : $"Granted by '{grantedBy.Name}': ";
+            var prefix = grantedBy is not null ? $"Granted by '{grantedBy.Name}': " : chosenFrom is not null ? $"Chosen from '{chosenFrom.Name}': " : "";
             var revision = catalog.FindRevision(reference);
             if (revision is null)
             {
@@ -220,7 +246,7 @@ public static class CharacterCalculator
             }
             if (!revision.RulesFamilies.Contains(character.RulesFamily))
             {
-                var exception = grantedBy is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
+                var exception = grantedBy is null && chosenFrom is null ? character.CrossFamilyExceptions.LastOrDefault(e => e.Content == reference) : null;
                 if (exception is null)
                 {
                     diagnostics.Add(new("content.rules-family-mismatch", $"{prefix}'{revision.Name}' supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}; it is not applied.", reference));
@@ -237,7 +263,7 @@ public static class CharacterCalculator
                 diagnostics.Add(new("content.source-missing", $"{prefix}'{revision.Name}' has no known source record; it is not applied.", reference));
                 return null;
             }
-            return new(revision, source, grantedBy, revision.Kind == ContentKind.Class ? reference : classRoot);
+            return new(revision, source, grantedBy, revision.Kind == ContentKind.Class ? reference : classRoot, chosenFrom);
         }
 
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
@@ -267,39 +293,96 @@ public static class CharacterCalculator
         foreach (var exception in character.CrossFamilyExceptions.Where(e => !character.Pins.Contains(e.Content)))
             diagnostics.Add(new("character.exception-unused", $"A cross-family exception is recorded for revision {exception.Content.RevisionId}, which this character does not pin.", exception.Content));
 
-        foreach (var granter in active.ToList())
+        var pending = new Queue<ActiveContent>(active);
+        while (pending.Count > 0)
         {
-            foreach (var grant in granter.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
+            var item = pending.Dequeue();
+            var revision = item.Revision;
+            if (item.IsRoot)
             {
-                if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
-                    continue;
-                if (grant.Level is { } needed && GateLevel(granter, character, classLevels) < needed)
-                    continue; // not reached yet: a level-3 feature at class level 2 is simply not there
-                var revision = granter.Revision;
-                if (grant.Content is not { } reference)
+                foreach (var grant in revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
                 {
-                    diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
-                    continue;
-                }
-                // Only feats are restricted: a 2014 background may still grant other content, such as its feature.
-                if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat && catalog.FindRevision(reference)?.Kind == ContentKind.Feat)
-                {
-                    diagnostics.Add(new(
-                        "policy.background-feat",
-                        $"'{revision.Name}' (background) cannot grant a feat under {policy.DisplayName}; the grant is ignored.",
-                        revision.Reference,
-                        grant.Id));
-                    continue;
-                }
-                if (seen.Add(reference) && Admit(reference, revision, granter.ClassRoot) is { } granted)
-                {
-                    active.Add(granted);
-                    foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
-                        diagnostics.Add(new("grant.nested-ignored", $"'{granted.Revision.Name}' was granted by '{revision.Name}'; its own content grant '{nested.Id}' is not followed (grants are one level deep).", granted.Revision.Reference, nested.Id));
+                    if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                        continue;
+                    if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                        continue; // not reached yet: a level-3 feature at class level 2 is simply not there
+                    if (grant.Content is not { } reference)
+                    {
+                        diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
+                        continue;
+                    }
+                    // Only feats are restricted: a 2014 background may still grant other content, such as its feature.
+                    if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat && catalog.FindRevision(reference)?.Kind == ContentKind.Feat)
+                    {
+                        diagnostics.Add(new(
+                            "policy.background-feat",
+                            $"'{revision.Name}' (background) cannot grant a feat under {policy.DisplayName}; the grant is ignored.",
+                            revision.Reference,
+                            grant.Id));
+                        continue;
+                    }
+                    if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot) is { } granted)
+                    {
+                        active.Add(granted);
+                        pending.Enqueue(granted);
+                        foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
+                            diagnostics.Add(new("grant.nested-ignored", $"'{granted.Revision.Name}' was granted by '{revision.Name}'; its own content grant '{nested.Id}' is not followed (grants are one level deep).", granted.Revision.Reference, nested.Id));
+                    }
                 }
             }
+
+            foreach (var choice in revision.Effects.OfType<ChoiceEffect>())
+            {
+                if (choice.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                    continue; // not offered yet, so not unresolved either
+                var key = (revision.Reference, choice.ChoiceId);
+                if (!answered.Add(key))
+                    continue;
+                var selected = character.Choices.LastOrDefault(c => c.Source == revision.Reference && c.ChoiceId == choice.ChoiceId)?.Selected ?? [];
+                var applied = new List<ContentReference>();
+                foreach (var option in selected.Distinct())
+                {
+                    if (!choice.Options.Contains(option))
+                    {
+                        diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}' choice '{choice.ChoiceId}': revision {option.RevisionId} is not one of its options; it is not applied.", option, choice.Id));
+                        continue;
+                    }
+                    if (applied.Count == choice.Count)
+                    {
+                        diagnostics.Add(new("choice.too-many", $"'{revision.Name}' choice '{choice.ChoiceId}' allows {choice.Count} selection(s); the extra selection {option.RevisionId} is not applied.", option, choice.Id));
+                        continue;
+                    }
+                    // Only an option that is actually active answers the choice: one refused by Admit (wrong family,
+                    // missing, draft) leaves it unresolved, with Admit's diagnostic saying why.
+                    if (seen.Add(option))
+                    {
+                        if (Admit(option, null, item.ClassRoot, revision) is not { } chosen)
+                            continue;
+                        active.Add(chosen);
+                        pending.Enqueue(chosen);
+                    }
+                    else if (!active.Any(a => a.Revision.Reference == option))
+                    {
+                        continue;
+                    }
+                    applied.Add(option);
+                }
+                var resolved = applied.Count >= choice.Count;
+                if (!resolved)
+                {
+                    diagnostics.Add(new(
+                        "choice.unresolved",
+                        $"'{revision.Name}' offers a choice ('{choice.ChoiceId}') of {choice.Count}; {applied.Count} selected.{(choice.Text is { } text ? $" {text}" : "")}",
+                        revision.Reference,
+                        choice.Id));
+                }
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, choice.Options, applied, resolved));
+            }
         }
-        return new(active, classes, classLevels);
+
+        foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
+            diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
+        return new(active, classes, classLevels, choices);
     }
 
     /// <summary>The level that gates <paramref name="content"/>'s grants: its class's level, or the character level.</summary>
@@ -331,11 +414,12 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (IsOriginAbilityIncrease(revision, effect) && revision.Kind != policy.AbilityIncreaseSource)
+                if (OriginKind(item) is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
                 {
+                    var via = origin == revision.Kind ? "" : $", from {origin.ToString().ToLowerInvariant()} '{(item.ChosenFrom ?? item.GrantedBy)!.Name}'";
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
-                        $"'{revision.Name}' ({revision.Kind}) cannot change ability scores under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
+                        $"'{revision.Name}' ({revision.Kind}{via}) cannot change ability scores under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
                         revision.Reference,
                         effect.Id));
                     continue;
@@ -361,13 +445,19 @@ public static class CharacterCalculator
 
     /// <summary>
     /// SPEC C-01 / RulesFamilyPolicy: which *origin* content (species or background) may raise ability scores differs by
-    /// family. Feats and class features may raise scores in both families, so they are not restricted here. Every
-    /// operation counts: origin content must not bypass the policy with <c>set</c> or <c>replace</c>.
+    /// family. Feats and class features may raise scores in both families, so they are not restricted here. A feature
+    /// chosen from or granted by origin content counts as that origin (a background's "+2 Str, +1 Con" option must not
+    /// bypass the policy by being a separate feature). Every operation counts, so <c>set</c> or <c>replace</c> cannot
+    /// bypass it either.
     /// </summary>
-    private static bool IsOriginAbilityIncrease(ContentRevision revision, ModifierEffect effect) =>
-        revision.Kind is ContentKind.Species or ContentKind.Background
-        && effect.Target.StartsWith("ability.", StringComparison.Ordinal)
-        && effect.Target.EndsWith(".score", StringComparison.Ordinal);
+    private static ContentKind? OriginKind(ActiveContent content) =>
+        content.Revision.Kind is ContentKind.Species or ContentKind.Background ? content.Revision.Kind
+        : content.Revision.Kind == ContentKind.Feature && (content.ChosenFrom ?? content.GrantedBy)?.Kind is { } parent
+            && parent is ContentKind.Species or ContentKind.Background ? parent
+        : null;
+
+    private static bool IsAbilityScore(ModifierEffect effect) =>
+        effect.Target.StartsWith("ability.", StringComparison.Ordinal) && effect.Target.EndsWith(".score", StringComparison.Ordinal);
 
     private sealed record Proficiency(GrantKind Grant, ActiveContent Content, GrantEffect Effect);
 
@@ -687,8 +777,10 @@ public static class CharacterCalculator
     private static string Describe(ActiveContent content)
     {
         var revision = content.Revision;
-        var granted = content.GrantedBy is { } by ? $" (granted by {by.Kind.ToString().ToLowerInvariant()} '{by.Name}')" : "";
-        return $"{revision.Kind.ToString().ToLowerInvariant()} '{revision.Name}'{granted}";
+        var from = content.GrantedBy is { } by ? $" (granted by {by.Kind.ToString().ToLowerInvariant()} '{by.Name}')"
+            : content.ChosenFrom is { } chooser ? $" (chosen from {chooser.Kind.ToString().ToLowerInvariant()} '{chooser.Name}')"
+            : "";
+        return $"{revision.Kind.ToString().ToLowerInvariant()} '{revision.Name}'{from}";
     }
 
     private static Diagnostic InvalidFormula(ContentRevision revision, ModifierEffect effect, FormulaError error) =>

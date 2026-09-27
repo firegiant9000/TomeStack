@@ -19,7 +19,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "character.list", "character.get", "character.create", "character.save",
+        "app.info", "content.list", "character.list", "character.get", "character.create", "character.save", "character.choose",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -78,6 +78,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.get" => app.GetCharacter(Payload<IdPayload>(payload).Id),
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
+        "character.choose" => app.Choose(Payload<ChooseRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),

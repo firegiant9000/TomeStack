@@ -251,6 +251,21 @@ export function CharacterSheet({ view, onChanged, onError, onStatus }: Props) {
         );
       })}
 
+      {sheet.choices?.some((c) => !c.resolved) && (
+        <section aria-labelledby="choices-heading">
+          <h3 id="choices-heading">Choices to make</h3>
+          <ul className="warnings">
+            {sheet.choices
+              .filter((c) => !c.resolved)
+              .map((c) => (
+                <li key={`${c.source.revisionId}-${c.choiceId}`}>
+                  {c.sourceName}: choose {c.count} ({c.selected.length} chosen){c.text ? `. ${c.text}` : ''}
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
+
       {sheet.diagnostics.length > 0 && (
         <section aria-labelledby="diagnostics-heading">
           <h3 id="diagnostics-heading">Content not applied</h3>

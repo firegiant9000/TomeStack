@@ -10,7 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
-    /// v3 adds <see cref="Classes"/> (M1 item 5). v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>.
+    /// v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4). v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>.
     /// Older versions are upcast on read with the new lists empty, which is exactly their meaning.
     /// </summary>
     public const int CurrentSchemaVersion = 3;
@@ -43,8 +43,15 @@ public sealed record Character : IJsonOnDeserialized
     [JsonIgnore]
     public int TotalLevel => Classes.Count > 0 ? Classes.Sum(c => Math.Max(c.Level, 0)) : Level;
 
-    /// <summary>Every content revision the character references: pins and classes. Packages and updates use this.</summary>
-    public IEnumerable<ContentReference> AllReferences() => Pins.Concat(Classes.Select(c => c.Class)).Distinct();
+    /// <summary>
+    /// SPEC C-01: the character's selections for <see cref="ChoiceEffect"/>s, keyed by the revision that offers the choice
+    /// and its <c>choiceId</c>. Chosen content becomes active like a pin, with a "chosen from" trace.
+    /// </summary>
+    public IReadOnlyList<ChoiceSelection> Choices { get; init; } = [];
+
+    /// <summary>Every content revision the character references: pins, classes and chosen options. Packages and updates use this.</summary>
+    public IEnumerable<ContentReference> AllReferences() =>
+        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Distinct();
 
     /// <summary>
     /// BACKLOG B06 / ARCHITECTURE step 2: deliberate use of content from another rules family, each with a recorded
@@ -82,6 +89,10 @@ public sealed record Character : IJsonOnDeserialized
                 ? new("character.level-out-of-range", $"Class levels add up to {sum}; the total must be at most {MaxLevel}.")
                 : new("character.level-mismatch", $"Level {Level} does not match the class levels, which add up to {sum}."));
         }
+        foreach (var choice in Choices.Where(c => string.IsNullOrWhiteSpace(c.ChoiceId)))
+            problems.Add(new("character.choice-id-required", "A recorded choice needs the id of the choice it answers.", choice.Source));
+        foreach (var duplicate in Choices.GroupBy(c => (c.Source, c.ChoiceId)).Where(g => g.Count() > 1))
+            problems.Add(new("character.choice-duplicate", $"Choice '{duplicate.Key.ChoiceId}' is recorded more than once; record all selections in one entry.", duplicate.Key.Source));
         foreach (var exception in CrossFamilyExceptions.Where(e => string.IsNullOrWhiteSpace(e.Reason)))
             problems.Add(new("character.exception-reason-required", "A cross-family exception needs a reason.", exception.Content));
         foreach (var ability in Enum.GetValues<Ability>())
@@ -117,6 +128,9 @@ public sealed record AbilityScores(int Str, int Dex, int Con, int Int, int Wis, 
 
 /// <summary>Levels in one class: an exact pin to the class revision, and the number of levels taken in it.</summary>
 public sealed record ClassLevel(ContentReference Class, int Level);
+
+/// <summary>The options a character picked for one choice: <paramref name="Source"/> is the revision offering it.</summary>
+public sealed record ChoiceSelection(ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference> Selected);
 
 /// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
 public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);

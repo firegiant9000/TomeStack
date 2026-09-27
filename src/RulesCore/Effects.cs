@@ -148,6 +148,9 @@ public sealed record ChoiceEffect : Effect
     public int Count { get; init; } = 1;
 
     public IReadOnlyList<ContentReference> Options { get; init; } = [];
+
+    /// <summary>Content schema v3: the choice is made from this level on (class level inside a class; see <see cref="GrantEffect.Level"/>).</summary>
+    public int? Level { get; init; }
 }
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>

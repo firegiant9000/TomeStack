@@ -19,7 +19,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin), optional `level` (v3) | calculator (item 11–12; levels M1 item 5) |
 | `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
 | `resource` | `resourceId`, `label`, `maximum` (formula) | sheet / commands (M2) |
-| `choice` | `choiceId`, `count`, `options[]` (pins) | builder (M2) |
+| `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
 | `restriction` | `field`, `minimum` | validation (M2) |
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
@@ -68,7 +68,7 @@ NUMBER  := [0-9]+
 
 ## Content schema v3 (M1, 2026-09-26)
 
-- **Adds** `grant.level`, the `hitDie` effect type, and the `armorClass` and `hitPoints` targets. `CLASS_LEVEL` now resolves: it is the level in the class the content belongs to (`features/levels-and-classes.md`).
+- **Adds** `grant.level`, `choice.level`, the `hitDie` effect type, and the `armorClass` and `hitPoints` targets. `CLASS_LEVEL` now resolves: it is the level in the class the content belongs to (`features/levels-and-classes.md`).
 - **No upcast from v2.** v2 is a subset of v3, so v2 revisions keep `schemaVersion: 2` and their serialized form, which means their hashes do not change and no database migration is needed. v1 still upcasts to exactly v2. New revisions are written as v3.
 - **Why a version and not an extension field:** a v2-only build would read `level` as an unknown extension and apply a level-3 feature at level 1. Refusing v3 (`content.schema-unsupported`, `package.schema-unsupported`) is safer than silently calculating differently. New effect *types*, by contrast, are forward-compatible (they become `UnknownEffect`), but new *fields* on existing types are not.
 

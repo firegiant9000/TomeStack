@@ -26,6 +26,15 @@ internal static class Fixtures
     public static readonly ContentReference Scholar = M1Ref(13);
     public static readonly ContentReference Hardy = M1Ref(14);
     public static readonly ContentReference Bracers = M1Ref(15);
+    public static readonly ContentReference WardenAthletics = M1Ref(16);
+    public static readonly ContentReference WardenSurvival = M1Ref(17);
+    public static readonly ContentReference WardenNature = M1Ref(18);
+    public static readonly ContentReference PathOfThorns = M1Ref(19);
+    public static readonly ContentReference Thorns = M1Ref(20);
+    public static readonly ContentReference Crossroads = M1Ref(21);
+    public static readonly ContentReference CrossroadsStr = M1Ref(22);
+    public static readonly ContentReference CrossroadsDex = M1Ref(23);
+    public static readonly ContentReference CrossroadsWis2014 = M1Ref(24);
 
     public static ContentPack Pack() => Load<ContentPack>("fixture-pack.json");
 

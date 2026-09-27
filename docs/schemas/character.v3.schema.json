@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tomestack.local/schemas/character.v3.schema.json",
   "title": "TomeStack character (schemaVersion 3)",
-  "description": "Stored character choices, pins and overrides. Derived values are never stored. Unknown properties round-trip. v3 adds classes (levels per class; the sum is the character level). v1 and v2 are read with the new lists empty.",
+  "description": "Stored character choices, pins and overrides. Derived values are never stored. Unknown properties round-trip. v3 adds classes (levels per class; the sum is the character level) and choices (selections for choice effects). v1 and v2 are read with the new lists empty.",
   "type": "object",
   "required": ["id", "schemaVersion", "name", "rulesFamily", "baseAbilities"],
   "properties": {
@@ -21,6 +21,20 @@
         "properties": {
           "class": { "$ref": "#/$defs/contentReference" },
           "level": { "type": "integer", "minimum": 1, "maximum": 20 }
+        }
+      }
+    },
+    "choices": {
+      "description": "SPEC C-01: selections for choice effects. source is the revision offering the choice; selected pins must be among its options.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "choiceId", "selected"],
+        "additionalProperties": false,
+        "properties": {
+          "source": { "$ref": "#/$defs/contentReference" },
+          "choiceId": { "type": "string", "minLength": 1 },
+          "selected": { "type": "array", "items": { "$ref": "#/$defs/contentReference" } }
         }
       }
     },

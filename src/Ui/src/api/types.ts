@@ -34,6 +34,8 @@ export interface Character {
   level: number;
   /** Levels per class, in the order taken (character schema v3). */
   classes: ClassLevel[];
+  /** Selections for choice effects (character schema v3). */
+  choices: ChoiceSelection[];
   crossFamilyExceptions: CrossFamilyException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
@@ -46,6 +48,24 @@ export interface Character {
 export interface ClassLevel {
   class: ContentReference;
   level: number;
+}
+
+export interface ChoiceSelection {
+  source: ContentReference;
+  choiceId: string;
+  selected: ContentReference[];
+}
+
+/** A choice an active revision offers; unresolved ones are flagged on the sheet (SPEC C-01). */
+export interface ChoiceStatus {
+  source: ContentReference;
+  sourceName: string;
+  choiceId: string;
+  text?: string;
+  count: number;
+  options: ContentReference[];
+  selected: ContentReference[];
+  resolved: boolean;
 }
 
 export interface Diagnostic {
@@ -102,6 +122,7 @@ export interface CharacterSheet {
   rulesFamily: RulesFamilyId;
   fields: DerivedValue[];
   diagnostics: Diagnostic[];
+  choices?: ChoiceStatus[];
 }
 
 export interface CharacterView {
