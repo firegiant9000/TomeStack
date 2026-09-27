@@ -1,6 +1,6 @@
 # Attribution and third-party notices
 
-TomeStack's own license is **not chosen yet** (LIVING_SPECS D07). Until a `LICENSE` file is added, no license is granted for the project's own code.
+TomeStack's own code is licensed under the Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE); LIVING_SPECS D07, decided 2026-09-26). Every third-party license below is compatible with it.
 
 ## Rules content
 

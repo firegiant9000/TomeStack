@@ -29,9 +29,9 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 
 8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under CC-BY-4.0. Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the verbatim statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) once it is approved. No SRD text enters the repository before that approval.
 
-**Blocked (D07):**
+**Accepted (D07, owner, 2026-09-26):**
 
-9. The license for the project's own code is not chosen, so there is no `LICENSE` file yet. `ATTRIBUTION.md` lists the third-party components that ship.
+9. The project's own code is Apache-2.0 (`LICENSE`, `NOTICE`). `ATTRIBUTION.md` lists the third-party components that ship.
 
 ## Consequences
 
@@ -49,4 +49,4 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 - `tests/AppService.Tests/PackageRoundTripTests.cs` covers notices, the attachment policy, source-choice diffs and `pdfRef` stripping.
 - The SRD legal pages were checked on 2026-09-25 (hashes are in the attribution draft).
 
-Supersedes: none. Addresses LIVING_SPECS D03 (proposed) and D07 (blocked).
+Supersedes: none. Addresses LIVING_SPECS D03 (proposed) and D07 (decided).
