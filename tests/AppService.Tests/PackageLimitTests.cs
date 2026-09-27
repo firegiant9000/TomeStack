@@ -175,6 +175,61 @@ public class PackageLimitTests
             Package([(Path("characters", CharacterId), CharacterJson(c => c["pins"] = new JsonArray(new JsonObject { ["contentId"] = Guid.NewGuid(), ["revisionId"] = Guid.NewGuid() })))]),
             "package.pin-missing");
 
+    [Theory]
+    [InlineData("pins")]
+    [InlineData("overrides")]
+    public void Character_with_an_empty_list_entry_is_rejected(string list) =>
+        AssertRejected(Package([(Path("characters", CharacterId), CharacterJson(c => c[list] = new JsonArray((JsonNode?)null)))]), "character.empty-entry");
+
+    [Fact]
+    public void Revision_with_an_empty_effect_is_rejected()
+    {
+        var id = Guid.NewGuid();
+        var revision = $$"""{"contentId":"{{id}}","revisionId":"{{id}}","schemaVersion":2,"kind":"feat","name":"Hollow","rulesFamilies":["srd-5.1"],"provenance":{"sourceId":"{{SeededSource}}"},"status":"published","effects":[null]}""";
+        AssertRejected(Package([(Path("content", id), Utf8(revision))]), "validate.empty-entry");
+    }
+
+    [Theory]
+    [InlineData("""{"type":"hitDie","id":"hd","die":1000000}""", "validate.hit-die")]
+    [InlineData("""{"type":"choice","id":"pick","choiceId":"pick","count":-1,"options":[{"contentId":"5f0dc000-0000-4000-8000-000000000001","revisionId":"5f0de000-0000-4000-8000-000000000001"}]}""", "validate.choice-count")]
+    [InlineData("""{"type":"modifier","id":"bad","operation":"bonus","target":"initiative","value":"2 +"}""", "validate.formula-invalid")]
+    public void Published_v3_revision_that_fails_validation_is_rejected(string effect, string code)
+    {
+        var id = Guid.NewGuid();
+        var revision = $$"""{"contentId":"{{id}}","revisionId":"{{id}}","schemaVersion":3,"kind":"class","name":"Forged","rulesFamilies":["srd-5.1"],"provenance":{"sourceId":"{{SeededSource}}"},"status":"published","effects":[{{effect}}]}""";
+        AssertRejected(Package([(Path("content", id), Utf8(revision))]), code);
+    }
+
+    [Fact]
+    public void Published_v2_revision_that_fails_validation_imports_with_a_warning()
+    {
+        // Published by v0.1, before validation existed: still importable, with the problem shown in the preview.
+        var id = Guid.NewGuid();
+        var revision = $$"""{"contentId":"{{id}}","revisionId":"{{id}}","schemaVersion":2,"kind":"feat","name":"Legacy","rulesFamilies":["srd-5.1"],"provenance":{"sourceId":"{{SeededSource}}"},"status":"published","effects":[{"type":"choice","id":"pick","choiceId":"pick","count":0,"options":[{"contentId":"5f0dc000-0000-4000-8000-000000000001","revisionId":"5f0de000-0000-4000-8000-000000000001"}]}]}""";
+        var package = Package([(Path("content", id), Utf8(revision))]);
+        using var app = new TempApp();
+
+        var preview = app.App.PreviewImport(package);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Contains(preview.Warnings, w => w.Code == "validate.choice-count" && w.Message.StartsWith("'Legacy': ", StringComparison.Ordinal));
+        Assert.Equal(1, app.App.ApplyImport(package).Added);
+    }
+
+    [Fact]
+    public void Published_revision_referencing_content_missing_here_imports_with_a_warning()
+    {
+        // A share package may leave referenced content out (ADR-007); the sheet shows it as missing.
+        var id = Guid.NewGuid();
+        var revision = $$$"""{"contentId":"{{{id}}}","revisionId":"{{{id}}}","schemaVersion":3,"kind":"feat","name":"Pointer","rulesFamilies":["srd-5.1"],"provenance":{"sourceId":"{{{SeededSource}}}"},"status":"published","effects":[{"type":"grant","id":"g","grant":"content","content":{"contentId":"{{{Guid.NewGuid()}}}","revisionId":"{{{Guid.NewGuid()}}}"}}]}""";
+        using var app = new TempApp();
+
+        var preview = app.App.PreviewImport(Package([(Path("content", id), Utf8(revision))]));
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        Assert.Contains(preview.Warnings, w => w.Code == "validate.reference-missing");
+    }
+
     [Fact]
     public void Malformed_schema_v1_effect_is_imported_as_reference_only_instead_of_failing()
     {

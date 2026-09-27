@@ -26,3 +26,15 @@ Each restricted revision is checked with the other restricted revisions present.
 | Cycles | Modifiers that would create a dependency cycle with the base field graph (`effect.dependency-cycle`) | |
 
 Revisions validated together (`batch`) may reference each other. Every fixture revision validates without errors (`ContentValidatorTests`).
+
+Empty (null) list entries in the effects, the rules families or choice options are reported first and alone (`validate.empty-entry`), because nothing else can be checked safely (SPEC Q-02). `content.saveDraft` refuses them too: a draft may be incomplete, but not malformed.
+
+## Validation on import
+
+A package's published revisions become active on import, so each new one is validated like `content.publish`, against the package's own revisions and sources plus this machine's (`PackageService`, `PackageLimitTests`). Its problems appear in the import preview, prefixed with the revision's name.
+
+- **Content schema v3:** TomeStack validates before it publishes, so a v3 revision with errors was not published by TomeStack. Its errors block the import.
+- **Older revisions (v1, v2):** they were published before validation existed (v0.1), so their errors are preview warnings. The calculator isolates what it cannot apply (SPEC C-03), for example `choice.invalid-count` and `class.hit-die-invalid`.
+- **A reference to content missing on this machine** is a warning in both cases. A share package may leave it out (ADR-007), and the sheet shows it as missing.
+
+Revisions already installed with the same hash are not validated again, and drafts stay inactive (ADR-004).

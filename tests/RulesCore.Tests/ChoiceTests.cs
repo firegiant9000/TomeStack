@@ -15,6 +15,26 @@ public class ChoiceTests
 
     private static CharacterSheet Sheet(Character character) => CharacterCalculator.Calculate(character, Fixtures.M1Catalog());
 
+    /// <summary>An original test revision usable under both families, from the M1 shared fixture source.</summary>
+    internal static ContentRevision Homebrew(int n, ContentKind kind, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"5f1dc000-0000-4000-8000-0000000001{n:D2}"),
+        RevisionId = Guid.Parse($"5f1de000-0000-4000-8000-0000000001{n:D2}"),
+        Kind = kind,
+        Name = $"Fixture Homebrew {n}",
+        RulesFamilies = [RulesFamilies.Srd51, RulesFamilies.Srd521],
+        Provenance = new(Guid.Parse("5f0d5001-0000-4000-8000-000000000001")),
+        Status = RevisionStatus.Published,
+        Effects = effects,
+    };
+
+    /// <summary>The M0 and M1 fixture catalogs plus <paramref name="extra"/>.</summary>
+    internal static CharacterSheet SheetWith(Character character, params ContentRevision[] extra)
+    {
+        var (m0, m1) = (Fixtures.Pack(), Fixtures.M1Pack());
+        return CharacterCalculator.Calculate(character, new InMemoryContentCatalog([.. m0.Sources, .. m1.Sources], [.. m0.Revisions, .. m1.Revisions, .. extra]));
+    }
+
     [Fact]
     public void Unresolved_choices_are_flagged_and_choices_above_the_class_level_are_not_offered_yet()
     {
@@ -125,6 +145,72 @@ public class ChoiceTests
             Assert.Contains("from background 'Fixture Crossroads'", warning!.Message, StringComparison.Ordinal);
         else
             Assert.Contains("chosen from background 'Fixture Crossroads'", str.Trace[^1].Description, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51, false)]
+    [InlineData(RulesFamilies.Srd521, true)]
+    public void A_feat_offered_by_a_background_choice_follows_the_background_feat_policy(string family, bool applies)
+    {
+        var background = Homebrew(1, ContentKind.Background, new ChoiceEffect { Id = "feat", ChoiceId = "feat", Options = [Fixtures.Watchful] });
+        var character = Fixtures.Load("srd521-ash-m1.json") with
+        {
+            RulesFamily = family,
+            Pins = [background.Reference],
+            Choices = [new(background.Reference, "feat", [Fixtures.Watchful])],
+        };
+
+        var sheet = SheetWith(character, background);
+
+        Assert.Equal(applies, sheet.Field(FieldIds.Initiative).Trace.Any(t => t.Origin.Content == Fixtures.Watchful));
+        Assert.Equal(applies, Assert.Single(sheet.Choices!).Resolved);
+        var refused = sheet.Diagnostics.SingleOrDefault(d => d.Code == "policy.background-feat");
+        Assert.Equal(!applies, refused is not null);
+        if (!applies)
+            Assert.Contains("'Fixture Homebrew 1' (background) cannot offer a feat under SRD 5.1", refused!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_feat_granted_by_a_feature_chosen_from_a_background_is_still_refused_under_srd_5_1()
+    {
+        var feature = Homebrew(2, ContentKind.Feature, new GrantEffect { Id = "feat", Grant = GrantKind.Content, Content = Fixtures.Watchful });
+        var background = Homebrew(3, ContentKind.Background, new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [feature.Reference] });
+        var character = Fixtures.Load("srd521-ash-m1.json") with
+        {
+            RulesFamily = RulesFamilies.Srd51,
+            Pins = [background.Reference],
+            Choices = [new(background.Reference, "pick", [feature.Reference])],
+        };
+
+        var sheet = SheetWith(character, feature, background);
+
+        Assert.DoesNotContain(Fixtures.Watchful, sheet.Active!);
+        Assert.Contains("(feature from a background) cannot grant a feat", Assert.Single(sheet.Diagnostics, d => d.Code == "policy.background-feat").Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51, 0)]
+    [InlineData(RulesFamilies.Srd521, 2)]
+    public void An_ability_increase_several_features_away_from_a_background_still_counts_as_the_background(string family, int increase)
+    {
+        // Background grants a feature; that feature offers a choice; the chosen feature raises Strength.
+        var boost = Homebrew(4, ContentKind.Feature, new ModifierEffect { Id = "str", Operation = ModifierOperation.Bonus, Target = FieldIds.Score(Ability.Str), Value = "2" });
+        var offer = Homebrew(5, ContentKind.Feature, new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [boost.Reference] });
+        var background = Homebrew(6, ContentKind.Background, new GrantEffect { Id = "offer", Grant = GrantKind.Content, Content = offer.Reference });
+        var character = Fixtures.Load("srd521-ash-m1.json") with
+        {
+            RulesFamily = family,
+            Pins = [background.Reference],
+            Choices = [new(offer.Reference, "pick", [boost.Reference])],
+        };
+
+        var str = SheetWith(character, boost, offer, background).Field(FieldIds.Score(Ability.Str));
+
+        Assert.Equal(10 + increase, str.Value);
+        var warning = str.Warnings.SingleOrDefault(w => w.Code == "policy.ability-increase-source");
+        Assert.Equal(increase == 0, warning is not null);
+        if (warning is not null)
+            Assert.Contains("from background content via feature 'Fixture Homebrew 5'", warning.Message, StringComparison.Ordinal);
     }
 
     [Fact]

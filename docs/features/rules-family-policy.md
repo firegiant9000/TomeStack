@@ -8,8 +8,10 @@ Differences between SRD 5.1 (2014 rules) and SRD 5.2.1 (2024 rules) are either *
 
 | Field | 2014 (`srd-5.1`) | 2024 (`srd-5.2.1`) | Tests |
 | --- | --- | --- | --- |
-| `AbilityIncreaseSource`: which origin content may change ability scores (every operation; a feature chosen from or granted by that origin counts as it) | species | background | `RulesFamilySideBySideTests`, `ChoiceTests`, `SrdRulesFamilyTests` |
-| `BackgroundGrantsFeat`: whether a background may grant a feat (other granted content is allowed under both) | no | yes | `RulesFamilySideBySideTests`, `SrdRulesFamilyTests` |
+| `AbilityIncreaseSource`: which origin content may change ability scores (every operation; a feature chosen from or granted by that origin, through any chain of features, counts as it) | species | background | `RulesFamilySideBySideTests`, `ChoiceTests`, `SrdRulesFamilyTests` |
+| `BackgroundGrantsFeat`: whether a background, or a feature that comes from one, may bring in a feat, by a grant or as a choice option (other content is allowed under both) | no | yes | `RulesFamilySideBySideTests`, `SrdRulesFamilyTests`, `ChoiceTests` |
+
+Origin is carried on the active content: species and background content is its own origin, a feature inherits the origin of whatever granted or offered it, and a feat or class starts none. A policy therefore holds however the content is reached.
 
 ## M1 item 6 review: does the SRD slice need more?
 

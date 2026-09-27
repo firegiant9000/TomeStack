@@ -271,8 +271,14 @@ public static class CharacterCalculator
     /// chosen from. It gives <c>CLASS_LEVEL</c> and the level that gates its grants and choices.
     /// </param>
     /// <param name="ChosenFrom">Set when the character picked this revision for a choice offered by another active revision.</param>
+    /// <param name="Origin">
+    /// The origin content (species or background) this revision counts as for <see cref="RulesFamilyPolicy"/>: its own
+    /// kind for species and background, and inherited along any chain of features granted or chosen from origin
+    /// content. Feats, classes and other kinds start no origin and pass none on.
+    /// </param>
     private sealed record ActiveContent(
-        ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null, ContentReference? ClassRoot = null, ContentRevision? ChosenFrom = null)
+        ContentRevision Revision, SourceRecord Source, ContentRevision? GrantedBy = null, ContentReference? ClassRoot = null, ContentRevision? ChosenFrom = null,
+        ContentKind? Origin = null)
     {
         /// <summary>Pins, classes and chosen content are roots: their grants are followed (one level).</summary>
         public bool IsRoot => GrantedBy is null;
@@ -302,7 +308,8 @@ public static class CharacterCalculator
         var choices = new List<ChoiceStatus>();
         var answered = new HashSet<(ContentReference, string)>();
 
-        ActiveContent? Admit(ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null, ContentRevision? chosenFrom = null)
+        ActiveContent? Admit(
+            ContentReference reference, ContentRevision? grantedBy, ContentReference? classRoot = null, ContentRevision? chosenFrom = null, ContentKind? parentOrigin = null)
         {
             if (excluded.Contains(reference))
                 return null; // left out by a restriction check; the caller reports why
@@ -343,7 +350,25 @@ public static class CharacterCalculator
                 diagnostics.Add(new("content.source-missing", $"{prefix}'{revision.Name}' has no known source record; it is not applied.", reference));
                 return null;
             }
-            return new(revision, source, grantedBy, revision.Kind == ContentKind.Class ? reference : classRoot, chosenFrom);
+            var origin = revision.Kind is ContentKind.Species or ContentKind.Background ? revision.Kind
+                : revision.Kind == ContentKind.Feature ? parentOrigin
+                : null;
+            return new(revision, source, grantedBy, revision.Kind == ContentKind.Class ? reference : classRoot, chosenFrom, origin);
+        }
+
+        // SRD 5.1: a background (or a feature that comes from one) may not bring in a feat, whether it grants the feat
+        // or offers it as a choice.
+        bool BackgroundFeatRefused(ActiveContent offering, ContentReference target, string effectId, string verb)
+        {
+            if (offering.Origin != ContentKind.Background || policy.BackgroundGrantsFeat || catalog.FindRevision(target)?.Kind != ContentKind.Feat)
+                return false;
+            var what = offering.Revision.Kind == ContentKind.Background ? "background" : $"{offering.Revision.Kind.ToString().ToLowerInvariant()} from a background";
+            diagnostics.Add(new(
+                "policy.background-feat",
+                $"'{offering.Revision.Name}' ({what}) cannot {verb} a feat under {policy.DisplayName}; the {(verb == "grant" ? "grant" : "selection")} is ignored.",
+                offering.Revision.Reference,
+                effectId));
+            return true;
         }
 
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
@@ -365,7 +390,14 @@ public static class CharacterCalculator
             }
             if (classes.Any(c => c.Content.Revision.Reference == entry.Class))
                 continue;
-            classes.Add(new(item, entry.Level, item.Revision.Effects.OfType<HitDieEffect>().FirstOrDefault(d => d.Automation == AutomationStatus.Automatic)));
+            var hitDie = item.Revision.Effects.OfType<HitDieEffect>().FirstOrDefault(d => d.Automation == AutomationStatus.Automatic);
+            if (hitDie is not null && !HitDieEffect.AllowedDice.Contains(hitDie.Die))
+            {
+                // Validation refuses this on publish and import; stored content from elsewhere is isolated here (SPEC C-03).
+                diagnostics.Add(new("class.hit-die-invalid", $"'{item.Revision.Name}' declares a d{hitDie.Die} hit die, which is not one of d6, d8, d10 or d12; it is ignored.", entry.Class, hitDie.Id));
+                hitDie = null;
+            }
+            classes.Add(new(item, entry.Level, hitDie));
         }
         foreach (var pinnedClass in active.Where(a => a.Revision.Kind == ContentKind.Class && !classLevels.ContainsKey(a.Revision.Reference)))
             diagnostics.Add(new("character.class-without-levels", $"'{pinnedClass.Revision.Name}' is pinned as content but no levels are recorded in it, so its level features and hit points do not apply.", pinnedClass.Revision.Reference));
@@ -393,16 +425,9 @@ public static class CharacterCalculator
                         continue;
                     }
                     // Only feats are restricted: a 2014 background may still grant other content, such as its feature.
-                    if (revision.Kind == ContentKind.Background && !policy.BackgroundGrantsFeat && catalog.FindRevision(reference)?.Kind == ContentKind.Feat)
-                    {
-                        diagnostics.Add(new(
-                            "policy.background-feat",
-                            $"'{revision.Name}' (background) cannot grant a feat under {policy.DisplayName}; the grant is ignored.",
-                            revision.Reference,
-                            grant.Id));
+                    if (BackgroundFeatRefused(item, reference, grant.Id, "grant"))
                         continue;
-                    }
-                    if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot) is { } granted)
+                    if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot, parentOrigin: item.Origin) is { } granted)
                     {
                         active.Add(granted);
                         pending.Enqueue(granted);
@@ -419,6 +444,12 @@ public static class CharacterCalculator
                 var key = (revision.Reference, choice.ChoiceId);
                 if (!answered.Add(key))
                     continue;
+                if (choice.Count < 1)
+                {
+                    // Validation refuses this on publish and import; a count below 1 would otherwise accept any number of selections.
+                    diagnostics.Add(new("choice.invalid-count", $"'{revision.Name}' choice '{choice.ChoiceId}' asks for {choice.Count} selection(s); it is not offered and nothing selected for it is applied.", revision.Reference, choice.Id));
+                    continue;
+                }
                 var selected = character.Choices.LastOrDefault(c => c.Source == revision.Reference && c.ChoiceId == choice.ChoiceId)?.Selected ?? [];
                 var applied = new List<ContentReference>();
                 foreach (var option in selected.Distinct())
@@ -428,16 +459,18 @@ public static class CharacterCalculator
                         diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}' choice '{choice.ChoiceId}': revision {option.RevisionId} is not one of its options; it is not applied.", option, choice.Id));
                         continue;
                     }
-                    if (applied.Count == choice.Count)
+                    if (applied.Count >= choice.Count)
                     {
                         diagnostics.Add(new("choice.too-many", $"'{revision.Name}' choice '{choice.ChoiceId}' allows {choice.Count} selection(s); the extra selection {option.RevisionId} is not applied.", option, choice.Id));
                         continue;
                     }
+                    if (BackgroundFeatRefused(item, option, choice.Id, "offer"))
+                        continue;
                     // Only an option that is actually active answers the choice: one refused by Admit (wrong family,
                     // missing, draft) leaves it unresolved, with Admit's diagnostic saying why.
                     if (seen.Add(option))
                     {
-                        if (Admit(option, null, item.ClassRoot, revision) is not { } chosen)
+                        if (Admit(option, null, item.ClassRoot, revision, item.Origin) is not { } chosen)
                             continue;
                         active.Add(chosen);
                         pending.Enqueue(chosen);
@@ -495,9 +528,12 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (OriginKind(item) is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
+                if (item.Origin is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
                 {
-                    var via = origin == revision.Kind ? "" : $", from {origin.ToString().ToLowerInvariant()} '{(item.ChosenFrom ?? item.GrantedBy)!.Name}'";
+                    var parent = (item.ChosenFrom ?? item.GrantedBy)!;
+                    var via = origin == revision.Kind ? ""
+                        : parent.Kind == origin ? $", from {origin.ToString().ToLowerInvariant()} '{parent.Name}'"
+                        : $", from {origin.ToString().ToLowerInvariant()} content via {parent.Kind.ToString().ToLowerInvariant()} '{parent.Name}'";
                     warnings[effect.Target].Add(new(
                         "policy.ability-increase-source",
                         $"'{revision.Name}' ({revision.Kind}{via}) cannot change ability scores under {policy.DisplayName}; only {policy.AbilityIncreaseSource} content can. The effect is ignored.",
@@ -524,19 +560,11 @@ public static class CharacterCalculator
         return modifiers;
     }
 
-    /// <summary>
-    /// SPEC C-01 / RulesFamilyPolicy: which *origin* content (species or background) may raise ability scores differs by
-    /// family. Feats and class features may raise scores in both families, so they are not restricted here. A feature
-    /// chosen from or granted by origin content counts as that origin (a background's "+2 Str, +1 Con" option must not
-    /// bypass the policy by being a separate feature). Every operation counts, so <c>set</c> or <c>replace</c> cannot
-    /// bypass it either.
-    /// </summary>
-    private static ContentKind? OriginKind(ActiveContent content) =>
-        content.Revision.Kind is ContentKind.Species or ContentKind.Background ? content.Revision.Kind
-        : content.Revision.Kind == ContentKind.Feature && (content.ChosenFrom ?? content.GrantedBy)?.Kind is { } parent
-            && parent is ContentKind.Species or ContentKind.Background ? parent
-        : null;
-
+    // SPEC C-01 / RulesFamilyPolicy: which *origin* content (species or background) may raise ability scores differs by
+    // family; ActiveContent.Origin says which origin content counts as. Feats and class features may raise scores in
+    // both families, so they are not restricted. A feature chosen from or granted by origin content, however many
+    // features away, counts as that origin (a background's "+2 Str, +1 Con" option must not bypass the policy by being
+    // a separate feature). Every operation counts, so `set` or `replace` cannot bypass it either.
     private static bool IsAbilityScore(ModifierEffect effect) =>
         effect.Target.StartsWith("ability.", StringComparison.Ordinal) && effect.Target.EndsWith(".score", StringComparison.Ordinal);
 

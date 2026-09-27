@@ -41,6 +41,9 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(revision);
         if (revision.Status != RevisionStatus.Draft)
             throw new AppValidationException([new("content.draft-required", "Only a draft can be saved. Publish it with content.publish, which validates it first.", revision.Reference)]);
+        // A draft may be incomplete, but not malformed: validation and publishing must be able to read it.
+        if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
+            throw new AppValidationException(empty);
         var draft = revision.RevisionId == Guid.Empty ? revision with { RevisionId = Guid.NewGuid() } : revision;
         try
         {

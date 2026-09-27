@@ -22,6 +22,8 @@ public static class ContentValidator
         var errors = new List<Diagnostic>();
         var warnings = new List<Diagnostic>();
         var reference = revision.Reference;
+        if (EmptyEntries(revision) is { Count: > 0 } empty)
+            return new ValidationReport(reference, empty, []); // nothing else can be checked safely
         var local = (batch ?? []).ToDictionary(r => r.Reference);
         void Error(string code, string message, string? effectId = null) => errors.Add(new(code, message, reference, effectId));
         void Warn(string code, string message, string? effectId = null) => warnings.Add(new(code, message, reference, effectId));
@@ -172,5 +174,24 @@ public static class ContentValidator
             if (!found.RulesFamilies.Intersect(revision.RulesFamilies).Any())
                 Error("validate.reference-family", $"Effect '{effectId}': {what} '{found.Name}' supports {string.Join(", ", found.RulesFamilies)}, none of this revision's families.", effectId);
         }
+    }
+
+    /// <summary>
+    /// Empty (null) list items, which untrusted JSON can carry past nullable annotations (SPEC Q-02): in the effects,
+    /// the rules families, and choice options. Even a draft must be free of them (<c>content.saveDraft</c>).
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> EmptyEntries(ContentRevision revision)
+    {
+        ArgumentNullException.ThrowIfNull(revision);
+        var problems = new List<Diagnostic>();
+        void Check(string list, bool empty)
+        {
+            if (empty)
+                problems.Add(new("validate.empty-entry", $"The revision's {list} list contains an empty entry.", revision.Reference));
+        }
+        Check("effects", revision.Effects is null || revision.Effects.Any(e => e is null));
+        Check("rulesFamilies", revision.RulesFamilies is null || revision.RulesFamilies.Any(f => f is null));
+        Check("choice options", revision.Effects?.OfType<ChoiceEffect>().Any(c => c.Options is null || c.Options.Any(o => o is null)) == true);
+        return problems;
     }
 }

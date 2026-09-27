@@ -88,6 +88,10 @@ public sealed record Character : IJsonOnDeserialized
 
     public IReadOnlyList<Diagnostic> Validate()
     {
+        // Untrusted JSON (SPEC Q-02) can carry null list items, which nullable annotations do not reject. Nothing else
+        // can be checked safely until they are gone, so they are reported alone.
+        if (EmptyEntries() is { Count: > 0 } empty)
+            return empty;
         var problems = new List<Diagnostic>();
         if (SchemaVersion is < 1 or > CurrentSchemaVersion)
             problems.Add(new("character.schema-unsupported", $"Character data uses schema v{SchemaVersion}; this version of TomeStack supports v1 to v{CurrentSchemaVersion}. Update TomeStack to open it."));
@@ -119,6 +123,22 @@ public sealed record Character : IJsonOnDeserialized
             if (score is < 1 or > 30)
                 problems.Add(new("character.ability-out-of-range", $"{ability} score {score} must be between 1 and 30."));
         }
+        return problems;
+    }
+
+    private List<Diagnostic> EmptyEntries()
+    {
+        var problems = new List<Diagnostic>();
+        void Check(string list, bool empty)
+        {
+            if (empty)
+                problems.Add(new("character.empty-entry", $"The character's {list} list contains an empty entry."));
+        }
+        Check("pins", Pins is null || Pins.Any(p => p is null));
+        Check("classes", Classes is null || Classes.Any(c => c?.Class is null));
+        Check("choices", Choices is null || Choices.Any(c => c?.Source is null || c.Selected is null || c.Selected.Any(s => s is null)));
+        Check("cross-family exceptions", CrossFamilyExceptions is null || CrossFamilyExceptions.Any(e => e?.Content is null));
+        Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
         return problems;
     }
 

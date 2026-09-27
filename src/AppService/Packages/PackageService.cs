@@ -23,6 +23,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     /// <summary>Total decompressed size of all entries; bounds memory against archives that expand far beyond their size.</summary>
     public const long MaxTotalBytes = 64L * 1024 * 1024;
     public const int MaxEntries = 2_000;
+
+    /// <summary>The first content schema whose published revisions were always validated before publishing (M1 item 3).</summary>
+    private const int ValidatedOnPublishSchemaVersion = 3;
     private const string ManifestPath = "manifest.json";
 
     [GeneratedRegex("^(sources|content|characters)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
@@ -261,6 +264,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var items = new List<PackageItem>();
         var packageRevisions = parsed.Revisions.ToDictionary(r => r.Reference);
         var packageSources = parsed.Sources.ToDictionary(s => s.Id);
+        var catalog = new PackageCatalog(packageRevisions, packageSources, store);
 
         foreach (var source in parsed.Sources)
         {
@@ -292,6 +296,32 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 warnings.Add(new("package.revision-draft", $"'{revision.Name}' is a draft and stays inactive after import.", revision.Reference));
             var families = string.Join(", ", revision.RulesFamilies);
             items.Add(new("contentRevision", revision.RevisionId, revision.Name, action, $"{revision.Kind} · {families} · {revision.Status}"));
+
+            Diagnostic Named(Diagnostic d) => d with { Message = $"'{revision.Name}': {d.Message}" };
+            if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
+            {
+                errors.AddRange(empty.Select(Named));
+                continue;
+            }
+            // ADR-004: a published revision in a package becomes active on import, so it gets the same validation as
+            // content.publish, shown in the preview. Installed copies were checked when they arrived; drafts stay inactive.
+            if (action != PackageItemAction.Add || revision.Status != RevisionStatus.Published)
+                continue;
+            // Builds that write content schema v3 validate before publishing, so a v3 revision that fails was not
+            // published by TomeStack and is refused. Older revisions were published before validation existed (v0.1):
+            // their problems are shown as warnings, and the calculator isolates what it cannot apply (SPEC C-03).
+            var blocking = revision.SchemaVersion >= ValidatedOnPublishSchemaVersion;
+            foreach (var problem in ContentValidator.Validate(revision, catalog).Errors)
+            {
+                if (problem.Code == "validate.source-missing")
+                    continue; // reported above as package.source-missing
+                // A share package may leave out referenced content (ADR-007), and a backup skips a granted revision that
+                // is already missing locally; the sheet shows either as missing content, so it does not block import.
+                if (blocking && problem.Code != "validate.reference-missing")
+                    errors.Add(Named(problem));
+                else
+                    warnings.Add(Named(problem));
+            }
         }
 
         // ADR-007: a share package may leave out non-redistributable content, but only content its manifest names.
@@ -306,9 +336,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
         foreach (var character in parsed.Characters)
         {
-            foreach (var problem in character.Validate())
+            var problems = character.Validate();
+            foreach (var problem in problems)
                 errors.Add(problem with { Message = $"'{character.Name}': {problem.Message}" });
-            foreach (var pin in character.AllReferences())
+            var malformed = problems.Any(p => p.Code == "character.empty-entry"); // its references cannot be read
+            foreach (var pin in malformed ? Enumerable.Empty<ContentReference>() : character.AllReferences())
             {
                 if (packageRevisions.ContainsKey(pin) || store.FindRevision(pin) is not null)
                     continue;
@@ -528,6 +560,16 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     {
         var cleaned = new string([.. name.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')]).Trim('-');
         return cleaned.Length == 0 ? "character" : cleaned[..Math.Min(cleaned.Length, 60)];
+    }
+
+    /// <summary>The package's revisions and sources first, then this machine's: what content in the package can refer to.</summary>
+    private sealed class PackageCatalog(
+        IReadOnlyDictionary<ContentReference, ContentRevision> revisions, IReadOnlyDictionary<Guid, SourceRecord> sources, IContentCatalog local)
+        : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => revisions.GetValueOrDefault(reference) ?? local.FindRevision(reference);
+
+        public SourceRecord? FindSource(Guid sourceId) => sources.GetValueOrDefault(sourceId) ?? local.FindSource(sourceId);
     }
 
     private sealed class EntryTooLargeException(string path)

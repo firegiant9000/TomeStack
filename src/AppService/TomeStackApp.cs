@@ -129,8 +129,9 @@ public sealed partial class TomeStackApp : IDisposable
     {
         ArgumentNullException.ThrowIfNull(character);
         // With classes recorded, the level is their sum: keep the stored value in step rather than reject a stale one.
-        if (character.Classes.Count > 0)
-            character = character with { Level = character.Classes.Sum(c => c.Level) };
+        // (An empty entry is left for Validate to report.)
+        if (character.Classes is { Count: > 0 } classes && classes.All(c => c is not null))
+            character = character with { Level = classes.Sum(c => c.Level) };
         var problems = character.Validate().ToList();
         if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
             problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));
@@ -138,8 +139,11 @@ public sealed partial class TomeStackApp : IDisposable
             throw new AppValidationException(problems);
 
         var saved = character with { UpdatedAt = _time.GetUtcNow() };
+        // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
+        // character that cannot be opened).
+        var view = View(saved);
         _store.InTransaction(() => _store.SaveCharacter(saved));
-        return View(saved);
+        return view;
     }
 
     /// <summary>
@@ -153,6 +157,8 @@ public sealed partial class TomeStackApp : IDisposable
         var character = _store.FindCharacter(request.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
         var selected = request.Selected ?? [];
+        if (request.Source is null || selected.Any(o => o is null))
+            throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
         var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
         var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
             ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
