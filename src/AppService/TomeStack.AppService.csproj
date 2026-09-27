@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RulesCore\TomeStack.RulesCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- M0 seeds the original test fixture pack so a fresh install has content to pick. -->
+    <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack.json" LogicalName="TomeStack.FixturePack.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TomeStack.AppService.Tests" />
+  </ItemGroup>
+
+</Project>

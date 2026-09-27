@@ -1,6 +1,6 @@
 # Architecture · v0.1
 
-**Status:** proposed technical design, subject to an early desktop packaging spike.
+**Status:** proposed technical design. The desktop host and transport are decided by the M0 spike ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)); installer technology is still open.
 
 ## Boundaries
 
@@ -8,12 +8,12 @@
 | --- | --- | --- |
 | Windows shell | Install/update, window, native file dialogs, open PDF page, controlled local host lifetime | Rule calculations |
 | React + TypeScript UI | Builder, sheet, editor, import review, trace display | Trusted rule truth |
-| .NET application service | Commands, validation, transactions, import/export orchestration | User-facing layout |
+| .NET application service (in-process in the shell) | Commands, validation, transactions, import/export orchestration | User-facing layout |
 | Rules core (.NET library) | Edition policy, formulas, modifiers, choices, dependency graph, derived state and traces | Persistence or Windows APIs |
 | Import worker | PDF extraction/OCR adapters, candidate detection, quarantined drafts | Automatic publication |
 | SQLite store | Sources, immutable content revisions, character events/state, drafts, PDF index, migrations | Business rules |
 
-**Packaging proposal:** a WPF + WebView2 Windows shell hosting the React UI and a local ASP.NET Core application service, using .NET and SQLite. An early spike must prove offline packaging, process lifetime, installer behavior and local transport. Prefer a private in-process bridge or loopback endpoint with per-launch token and strict origin binding; never expose a service on all interfaces. If the local host adds needless complexity, switch to a WebView2 message bridge behind the same application interface. The domain core must remain UI independent.
+**Packaging (ADR-006, 2026-09-24):** a WPF + WebView2 Windows shell hosts the React UI and runs the .NET application service **in-process**, with SQLite for storage. The UI is served from the app folder through a WebView2 virtual host (`https://app.tomestack.localhost/`). It talks to the service over the **WebView2 message bridge** using a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens no listening socket. A development-only loopback host (`src/DevHost`: 127.0.0.1 only, per-launch token, origin allowlist) exposes the same dispatcher for browser development under Vite. The shell refuses any http(s) request outside the app origin. The spike superseded the originally proposed local ASP.NET Core service. Installer behavior (MSIX/Velopack/WiX, upgrade, clean-machine install) is still to be proven in M0. The domain core remains UI independent.
 
 ## Core entities and identity
 

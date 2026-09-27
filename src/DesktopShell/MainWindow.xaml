@@ -1,0 +1,10 @@
+<Window x:Class="TomeStack.DesktopShell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="TomeStack" Height="820" Width="1200" MinHeight="480" MinWidth="720">
+    <Grid>
+        <wv2:WebView2 x:Name="WebView" />
+        <TextBlock x:Name="StartupError" Visibility="Collapsed" TextWrapping="Wrap" Margin="24" FontSize="14" />
+    </Grid>
+</Window>

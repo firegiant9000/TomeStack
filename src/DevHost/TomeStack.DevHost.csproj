@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Development-only loopback host for running the UI in a browser. Not shipped (ADR-006). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AppService\TomeStack.AppService.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+artifacts/
+
+# UI
+node_modules/
+src/Ui/dist/
+*.tsbuildinfo
+
+# Local data and secrets
+.env.local
+*.db
+*.db-wal
+*.db-shm
+devhost.token
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/

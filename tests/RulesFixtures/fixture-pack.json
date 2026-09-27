@@ -1,0 +1,128 @@
+{
+  "packId": "tomestack-m0-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures. Names and effects are invented for testing and contain no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "5f0d5100-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: 2014 Family",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    },
+    {
+      "id": "5f0d5210-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: 2024 Family",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    },
+    {
+      "id": "5f0d5000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Shared",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000001",
+      "revisionId": "5f0de000-0000-4000-8000-000000000001",
+      "schemaVersion": 1,
+      "kind": "species",
+      "name": "Fixture Quickfoot",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "5f0d5100-0000-4000-8000-000000000001", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A nimble test species.",
+      "effects": [
+        { "id": "quickfoot-dex", "type": "abilityScoreIncrease", "ability": "dex", "amount": 2 }
+      ]
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000002",
+      "revisionId": "5f0de000-0000-4000-8000-000000000002",
+      "schemaVersion": 1,
+      "kind": "background",
+      "name": "Fixture Courier",
+      "rulesFamilies": ["srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5210-0000-4000-8000-000000000001", "page": { "start": 2 } },
+      "status": "published",
+      "summary": "A test background for messengers.",
+      "effects": [
+        { "id": "courier-dex", "type": "abilityScoreIncrease", "ability": "dex", "amount": 2 }
+      ]
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000003",
+      "revisionId": "5f0de000-0000-4000-8000-000000000003",
+      "schemaVersion": 1,
+      "kind": "species",
+      "name": "Fixture Wanderer",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5000-0000-4000-8000-000000000001", "page": { "start": 3, "end": 4 } },
+      "status": "published",
+      "summary": "A test species usable under both families; its ability increase only applies where species grant them.",
+      "effects": [
+        { "id": "wanderer-dex", "type": "abilityScoreIncrease", "ability": "dex", "amount": 1 }
+      ]
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000004",
+      "revisionId": "5f0de000-0000-4000-8000-000000000004",
+      "schemaVersion": 1,
+      "kind": "feat",
+      "name": "Fixture Keen Reflexes",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5000-0000-4000-8000-000000000001", "page": { "start": 5 } },
+      "status": "published",
+      "summary": "A test feat granting a small initiative bonus.",
+      "effects": [
+        { "id": "keen-init", "type": "initiativeBonus", "amount": 1 }
+      ]
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000005",
+      "revisionId": "5f0de000-0000-4000-8000-000000000005",
+      "schemaVersion": 1,
+      "kind": "feature",
+      "name": "Fixture Unreviewed Trick",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5000-0000-4000-8000-000000000001", "page": { "start": 6 } },
+      "status": "draft",
+      "summary": "A draft candidate standing in for unreviewed imported content. It must never affect calculations.",
+      "effects": [
+        { "id": "trick-init", "type": "initiativeBonus", "amount": 5 }
+      ]
+    },
+    {
+      "contentId": "5f0dc000-0000-4000-8000-000000000006",
+      "revisionId": "5f0de000-0000-4000-8000-000000000006",
+      "schemaVersion": 1,
+      "kind": "feature",
+      "name": "Fixture Star Sense",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5000-0000-4000-8000-000000000001", "page": { "start": 7 } },
+      "status": "published",
+      "summary": "A test feature whose mechanic is not modeled yet.",
+      "effects": [
+        {
+          "id": "star-sense-adv",
+          "type": "advantageOnInitiative",
+          "automation": "reference",
+          "text": "When you roll initiative under starlight, roll twice and keep the higher result."
+        }
+      ]
+    }
+  ]
+}

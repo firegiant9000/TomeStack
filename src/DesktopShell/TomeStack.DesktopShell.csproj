@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>TomeStack</AssemblyName>
+    <RootNamespace>TomeStack.DesktopShell</RootNamespace>
+    <UiDist>$(MSBuildThisFileDirectory)..\Ui\dist\</UiDist>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AppService\TomeStack.AppService.csproj" />
+  </ItemGroup>
+
+  <!-- The shell serves the prebuilt React bundle from its own folder via a WebView2 virtual host. -->
+  <ItemGroup>
+    <Content Include="$(UiDist)**\*" LinkBase="wwwroot" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="RequireUiBundle" BeforeTargets="Build">
+    <Error Condition="!Exists('$(UiDist)index.html')"
+           Text="UI bundle not found at $(UiDist). Run 'npm ci' and 'npm run build' in src/Ui before building the desktop shell." />
+  </Target>
+
+</Project>
