@@ -100,22 +100,48 @@ public class WorkerProcessTests
     }
 
     [Fact]
-    public async Task A_decompression_bomb_fails_only_its_own_run()
+    public async Task The_worker_runs_under_the_heap_cap_the_app_sets()
+    {
+        // ADR-009 (c): the child reports its managed-heap limit before it parses anything, and the app refuses to go on
+        // unless the cap applies (worker.limits). Review 2026-09-28: nothing showed DOTNET_GCHeapHardLimit took effect.
+        long reported = 0;
+        const long cap = 256L << 20;
+        var extractor = new WorkerProcessExtractor(Worker, new ExtractionLimits { HeapHardLimit = cap }) { HeapLimitReported = limit => reported = limit };
+        await foreach (var _ in extractor.ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
+        {
+        }
+        Assert.InRange(reported, 1, cap);
+    }
+
+    [Fact]
+    public async Task A_decompression_bomb_fails_only_its_own_run_and_never_succeeds()
     {
         // 512 MB of spaces in about half a megabyte of Flate data, against a 64 MB heap cap in the child. Measured
-        // 2026-09-28: PdfPig does not inflate it all at once (the heap cap never trips); it churns through it until the
-        // page timeout stops the child. The test uses a 5 s page timeout instead of the default 60 s.
+        // 2026-09-28: PdfPig does not inflate it all at once, so the heap cap does not trip; it churns until the page
+        // timeout stops the child. The test uses a 5 s page timeout instead of the default 60 s. The run must fail with
+        // one of the worker limits (review 2026-09-28: the test used to accept a success too).
         using var file = FixturePdfs.Write(FixturePdfs.Bomb(512 << 20));
         var limits = new ExtractionLimits { HeapHardLimit = 64 << 20, PageTimeout = TimeSpan.FromSeconds(5) };
+        var pid = 0;
 
-        var outcome = await Record.ExceptionAsync(() => Run(file.Path, limits));
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(file.Path, limits, started: id => pid = id));
 
-        // Out of memory (crashed or killed), too slow (stopped), or the page unreadable: only this run fails.
-        if (outcome is ExtractionException refused)
-            Assert.True(new[] { "worker.crashed", "worker.memory", "worker.page-timeout", "pdf.unreadable" }.Contains(refused.Code), $"unexpected code {refused.Code}");
-        else
-            Assert.Null(outcome);
-        Assert.Equal(FixturePdfs.ImportPageCount, Assert.IsType<DocumentOpened>((await Run(FixturePdfs.ImportPath))[0]).PageCount);
+        Assert.Contains(refused.Code, new[] { "worker.page-timeout", "worker.memory", "worker.crashed" });
+        Assert.True(Gone(pid), "the worker process ended");
+    }
+
+    [Fact]
+    public async Task A_line_longer_than_the_limit_is_refused_before_it_is_held()
+    {
+        // The app reads worker lines of bounded length only; ReadLineAsync would hold a line of any length.
+        var reader = new BoundedLineReader(new StringReader("{\"type\":\"done\"}\r\n" + new string('x', 200_000) + "\nlast"), 100_000);
+        Assert.Equal("{\"type\":\"done\"}", await reader.ReadLineAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => reader.ReadLineAsync(CancellationToken.None));
+
+        var partial = new BoundedLineReader(new StringReader("a\nb"), 10);
+        Assert.Equal("a", await partial.ReadLineAsync(CancellationToken.None));
+        Assert.Equal("b", await partial.ReadLineAsync(CancellationToken.None));
+        Assert.Null(await partial.ReadLineAsync(CancellationToken.None));
     }
 
     [Fact]

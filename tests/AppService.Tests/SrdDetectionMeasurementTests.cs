@@ -34,6 +34,22 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// Floors a little under the 2026-09-28 measurement (<c>m4-acceptance.md</c>), so a detection regression fails the run
+    /// instead of only changing its output (review 2026-09-28). Precision is null where the packs are partial truth.
+    /// </summary>
+    private static readonly Dictionary<(string Version, ContentKind Kind), (double? Precision, double Recall)> Floors = new()
+    {
+        [("5.1", ContentKind.Spell)] = (0.99, 0.99),
+        [("5.2.1", ContentKind.Spell)] = (0.99, 0.99),
+        [("5.1", ContentKind.Item)] = (0.95, 0.99),
+        [("5.2.1", ContentKind.Item)] = (0.95, 0.99),
+        [("5.1", ContentKind.Class)] = (0.70, 0.99),
+        [("5.2.1", ContentKind.Class)] = (0.70, 0.99),
+        [("5.1", ContentKind.Feature)] = (null, 0.85),
+        [("5.2.1", ContentKind.Feature)] = (null, 0.99),
+    };
+
     private sealed record Truth(ContentKind Kind, string Name, int Start, int End, SpellEffect? Spell, WeaponEffect? Weapon);
 
     private static IEnumerable<Truth> GroundTruth(string version)
@@ -59,6 +75,7 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
     public async Task Detection_is_measured_against_the_bundled_SRD_packs()
     {
         var report = new StringBuilder();
+        var belowFloor = new List<string>();
         foreach (var (family, file, sha, version) in Pdfs)
         {
             var path = Path.Combine(Folder!, file);
@@ -99,10 +116,23 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
                 var precision = proposed.Count == 0 ? 0 : (double)matched.Count / proposed.Count;
                 var recall = expected.Count == 0 ? 0 : (double)matched.Count / expected.Count;
                 var line = $"{version} {kind}: truth {expected.Count}, candidates {proposed.Count}, matched {matched.Count}, precision {(complete ? $"{precision:P1}" : "n/a (partial truth)")}, recall {recall:P1}";
+                var levelsRight = matched.Count(m => m.Candidate.ProposedEffects.OfType<SpellEffect>().FirstOrDefault()?.Level == m.Truth.Spell?.Level);
+                var damageRight = matched.Count(m => m.Candidate.ProposedEffects.OfType<WeaponEffect>().FirstOrDefault()?.Damage == m.Truth.Weapon?.Damage);
                 if (kind == ContentKind.Spell && matched.Count > 0)
-                    line += $", level correct {matched.Count(m => m.Candidate.ProposedEffects.OfType<SpellEffect>().FirstOrDefault()?.Level == m.Truth.Spell?.Level):D}/{matched.Count}";
+                    line += $", level correct {levelsRight:D}/{matched.Count}";
                 if (kind == ContentKind.Item && matched.Count > 0)
-                    line += $", damage correct {matched.Count(m => m.Candidate.ProposedEffects.OfType<WeaponEffect>().FirstOrDefault()?.Damage == m.Truth.Weapon?.Damage):D}/{matched.Count}";
+                    line += $", damage correct {damageRight:D}/{matched.Count}";
+                if (Floors.TryGetValue((version, kind), out var floor))
+                {
+                    if (floor.Precision is { } p && precision < p)
+                        belowFloor.Add($"{version} {kind} precision {precision:P1} < {p:P0}");
+                    if (recall < floor.Recall)
+                        belowFloor.Add($"{version} {kind} recall {recall:P1} < {floor.Recall:P0}");
+                    if (kind == ContentKind.Spell && levelsRight < matched.Count)
+                        belowFloor.Add($"{version} spell levels {levelsRight}/{matched.Count}");
+                    if (kind == ContentKind.Item && damageRight < matched.Count)
+                        belowFloor.Add($"{version} weapon damage {damageRight}/{matched.Count}");
+                }
                 output.WriteLine(line);
                 report.AppendLine(line);
                 report.AppendLine($"  missed: {string.Join("; ", unmatched.Select(t => $"{t.Name} p{t.Start}"))}");
@@ -114,5 +144,6 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
         }
         if (Environment.GetEnvironmentVariable("TOMESTACK_MEASURE_OUT") is { Length: > 0 } outFile)
             await File.WriteAllTextAsync(outFile, report.ToString());
+        Assert.True(belowFloor.Count == 0, string.Join("; ", belowFloor)); // counts only, never names
     }
 }

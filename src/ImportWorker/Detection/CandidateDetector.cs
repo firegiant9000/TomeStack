@@ -32,7 +32,8 @@ public static partial class CandidateDetector
 
     private sealed record Row(int Page, double Y, List<TextLine> Cells);
 
-    public static IReadOnlyList<DraftCandidate> Detect(IReadOnlyList<DetectionPage> pages, DetectionContext context)
+    /// <param name="cancellationToken">Checked between passes and pages: cancelling an import also stops its detection.</param>
+    public static IReadOnlyList<DraftCandidate> Detect(IReadOnlyList<DetectionPage> pages, DetectionContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(context);
@@ -40,11 +41,15 @@ public static partial class CandidateDetector
         var units = Units(pages, boilerplate);
         var body = BodySize(units);
         var found = new List<DraftCandidate>();
+        cancellationToken.ThrowIfCancellationRequested();
         found.AddRange(Spells(units, context, body));
+        cancellationToken.ThrowIfCancellationRequested();
         found.AddRange(Feats(units, context, body));
+        cancellationToken.ThrowIfCancellationRequested();
         found.AddRange(Features(units, context, body));
         foreach (var page in pages)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var lines = PageLines(page, boilerplate);
             found.AddRange(Weapons(page, lines, context));
             found.AddRange(Armor(page, lines, context));

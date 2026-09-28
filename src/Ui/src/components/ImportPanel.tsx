@@ -114,7 +114,10 @@ export function ImportPanel({ source, onError, onStatus }: Props) {
         <ul className="resources" aria-label={`Imports of ${source.title}`}>
           {jobs.map((job) => (
             <li key={job.id} className="resource">
-              <p role={active(job) ? 'status' : undefined}>{progress(job)}</p>
+              {/* Live whatever the state: a region added with the last change ("completed") is often not announced. */}
+              <p aria-live="polite" aria-atomic="true">
+                {progress(job)}
+              </p>
               <div className="actions">
                 {active(job) && (
                   <button type="button" onClick={() => act(() => client.cancelImport(job.id), 'Import cancelled. The pages read so far are kept.')}>

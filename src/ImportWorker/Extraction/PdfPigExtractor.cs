@@ -88,7 +88,15 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
         {
             if (ocr is { Available: true })
             {
-                blocks = await ocr.RecognizeAsync(path, number, page.Width, page.Height, cancellationToken).ConfigureAwait(false) ?? [];
+                try
+                {
+                    blocks = await ocr.RecognizeAsync(path, number, page.Width, page.Height, cancellationToken).ConfigureAwait(false) ?? [];
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
+                {
+                    // A page the renderer or OCR cannot read fails alone; the other pages still extract (review 2026-09-28).
+                    return new ExtractedPage(number, "", false, Width: page.Width, Height: page.Height, Error: "page.ocr-failed");
+                }
                 fromOcr = true;
                 if (blocks.Count == 0)
                     warnings.Add("page.no-text");
@@ -98,18 +106,74 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
                 warnings.Add(ocr is null ? "page.no-text" : "ocr.unavailable");
             }
         }
-        if (blocks.Count > _limits.MaxBlocksPerPage)
-        {
-            blocks = [.. blocks.Take(_limits.MaxBlocksPerPage)];
-            warnings.Add("page.blocks-truncated");
-        }
+        blocks = Bounded(blocks, warnings);
         var text = string.Join("\n\n", blocks.Select(b => b.Text));
         if (text.Length > _limits.MaxTextPerPage)
         {
             text = text[.._limits.MaxTextPerPage];
-            warnings.Add("page.text-truncated");
+            if (!warnings.Contains("page.text-truncated"))
+                warnings.Add("page.text-truncated");
         }
         return new ExtractedPage(number, text, fromOcr, blocks, page.Width, page.Height, warnings);
+    }
+
+    /// <summary>
+    /// ADR-009 (c): at most <see cref="ExtractionLimits.MaxBlocksPerPage"/> blocks and <see cref="ExtractionLimits.MaxLinesPerPage"/>
+    /// lines, and at most <see cref="ExtractionLimits.MaxTextPerPage"/> characters of block text and as many of line text,
+    /// so what a page sends to the app is bounded, not only its joined text.
+    /// </summary>
+    private IReadOnlyList<TextBlock> Bounded(IReadOnlyList<TextBlock> blocks, List<string> warnings)
+    {
+        var budget = _limits.MaxTextPerPage;
+        var kept = new List<TextBlock>(Math.Min(blocks.Count, _limits.MaxBlocksPerPage));
+        int blockChars = 0, lineChars = 0, lineCount = 0;
+        bool tooManyBlocks = false, textCut = false;
+        foreach (var block in blocks)
+        {
+            if (kept.Count == _limits.MaxBlocksPerPage)
+            {
+                tooManyBlocks = true;
+                break;
+            }
+            if (blockChars >= budget)
+            {
+                textCut = true;
+                break;
+            }
+            var text = Cut(block.Text, budget - blockChars, ref textCut);
+            blockChars += text.Length;
+            List<TextLine>? lines = null;
+            if (block.Lines is { } source)
+            {
+                lines = new(Math.Min(source.Count, _limits.MaxLinesPerPage - lineCount));
+                foreach (var line in source)
+                {
+                    if (lineCount == _limits.MaxLinesPerPage || lineChars >= budget)
+                    {
+                        textCut = true;
+                        break;
+                    }
+                    var lineText = Cut(line.Text, budget - lineChars, ref textCut);
+                    lineChars += lineText.Length;
+                    lineCount++;
+                    lines.Add(ReferenceEquals(lineText, line.Text) ? line : line with { Text = lineText });
+                }
+            }
+            kept.Add(ReferenceEquals(text, block.Text) && lines?.Count == block.Lines?.Count ? block : block with { Text = text, Lines = lines });
+        }
+        if (tooManyBlocks)
+            warnings.Add("page.blocks-truncated");
+        if (textCut)
+            warnings.Add("page.text-truncated");
+        return kept;
+    }
+
+    private static string Cut(string text, int room, ref bool cut)
+    {
+        if (text.Length <= room)
+            return text;
+        cut = true;
+        return text[..room];
     }
 
     private static IReadOnlyList<TextBlock> Blocks(Page page)

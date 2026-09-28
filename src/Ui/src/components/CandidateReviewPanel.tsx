@@ -33,8 +33,16 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [filter, setFilter] = useState<CandidateFilter>({ status: 'pending' });
   const [candidates, setCandidates] = useState<StoredCandidate[]>();
   const [selected, setSelected] = useState<string>();
+  const heading = useRef<HTMLHeadingElement>(null);
 
-  const load = useCallback(() => client.candidates(job.id, filter).then(setCandidates), [job.id, filter]);
+  const load = useCallback(
+    () =>
+      client.candidates(job.id, filter).then((list) => {
+        setCandidates(list);
+        return list;
+      }),
+    [job.id, filter],
+  );
 
   useEffect(() => {
     load().catch(onError);
@@ -44,7 +52,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
   return (
     <section aria-label={`Candidates from ${source.title}`} className="play-panel">
-      <h5>Candidates from {source.title}</h5>
+      <h5 ref={heading} tabIndex={-1}>
+        Candidates from {source.title}
+      </h5>
       <fieldset>
         <legend>Show</legend>
         <div className="inline-form">
@@ -121,7 +131,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           onError={onError}
           onChanged={async (text) => {
             onStatus(text);
-            await load();
+            const list = await load();
+            // WCAG 2.4.3: a reviewed candidate can leave the filtered list, and its details with it; focus goes back to the list.
+            if (!list.some((c) => c.id === current.id)) {
+              setSelected(undefined);
+              heading.current?.focus();
+            }
           }}
         />
       )}

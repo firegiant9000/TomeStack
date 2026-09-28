@@ -94,13 +94,38 @@ public class ExtractionTests
     }
 
     [Fact]
-    public async Task Page_text_and_blocks_are_capped()
+    public async Task Every_copy_of_a_pages_text_is_capped()
     {
-        var page = (await Extract(FixturePdfs.ImportPath, new(2, 2), new ExtractionLimits { MaxTextPerPage = 40, MaxBlocksPerPage = 2 })).OfType<ExtractedPage>().Single();
-        Assert.Equal(40, page.Text.Length);
-        Assert.Equal(2, page.Blocks!.Count);
+        // The page text, the blocks' text and the lines' text each stay within the limit (review 2026-09-28: capping the
+        // joined text alone left the blocks and lines, which the app also stores, unbounded).
+        var page = (await Extract(FixturePdfs.ImportPath, new(2, 2), new ExtractionLimits { MaxTextPerPage = 40 })).OfType<ExtractedPage>().Single();
+        Assert.True(page.Text.Length <= 40);
+        Assert.True(page.Blocks!.Sum(b => b.Text.Length) <= 40);
+        Assert.True(page.Blocks!.Sum(b => b.Lines?.Sum(l => l.Text.Length) ?? 0) <= 40);
         Assert.Contains("page.text-truncated", page.Warnings!);
-        Assert.Contains("page.blocks-truncated", page.Warnings!);
+        Assert.Single(page.Warnings!, w => w == "page.text-truncated");
+    }
+
+    [Fact]
+    public async Task Blocks_and_lines_per_page_are_capped()
+    {
+        var blocks = (await Extract(FixturePdfs.ImportPath, new(2, 2), new ExtractionLimits { MaxBlocksPerPage = 2 })).OfType<ExtractedPage>().Single();
+        Assert.Equal(2, blocks.Blocks!.Count);
+        Assert.Contains("page.blocks-truncated", blocks.Warnings!);
+
+        var lines = (await Extract(FixturePdfs.ImportPath, new(2, 2), new ExtractionLimits { MaxLinesPerPage = 3 })).OfType<ExtractedPage>().Single();
+        Assert.Equal(3, lines.Blocks!.Sum(b => b.Lines?.Count ?? 0));
+        Assert.Contains("page.text-truncated", lines.Warnings!);
+    }
+
+    [Fact]
+    public async Task A_page_the_OCR_cannot_read_fails_alone()
+    {
+        // Review 2026-09-28: an exception from the renderer or OCR ended the whole worker, and resuming hit the same page.
+        var pages = (await Extract(FixturePdfs.ImportPath, ocr: new BrokenOcr())).OfType<ExtractedPage>().ToList();
+        Assert.Equal(FixturePdfs.ImportPageCount, pages.Count);
+        Assert.Equal("page.ocr-failed", pages.Single(p => p.PageNumber == 6).Error);
+        Assert.All(pages.Where(p => p.PageNumber != 6), p => Assert.Null(p.Error));
     }
 
     // ---- malformed input (SPEC Q-02, Q-04) ----
@@ -176,6 +201,14 @@ public class ExtractionTests
         var events = await Extract(file.Path);
         var page = events.OfType<ExtractedPage>().Single();
         Assert.True(page.Error == "page.unreadable" || page.Text.Length == 0);
+    }
+
+    private sealed class BrokenOcr : IOcrEngine
+    {
+        public bool Available => true;
+
+        public Task<IReadOnlyList<TextBlock>?> RecognizeAsync(string path, int pageNumber, double pageWidth, double pageHeight, CancellationToken cancellationToken) =>
+            throw new System.Runtime.InteropServices.COMException("The renderer failed.");
     }
 
     private sealed class NoLanguageOcr : IOcrEngine

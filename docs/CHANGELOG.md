@@ -30,6 +30,19 @@
 
 - **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
 
+### Fixed
+
+- **Import review fixes (M4, independent review 2026-09-28; ADR-009, `docs/features/pdf-import.md`):**
+  - A page that crashes the worker, runs out of time or memory, or cannot be read by OCR now fails alone: it is marked unreadable and the rest of the book is read. Resuming used to stop on the same page every time. After 5 such pages in one run the import stops, and "Resume" continues after them.
+  - What one page can send to the app is now bounded: the character limit covers its blocks and lines too, and the app refuses any worker message longer than a page can hold. The app also checks that the worker really runs under its memory cap before it reads the PDF, watches committed memory as well as the working set, and a worker left behind by a crashed app now exits.
+  - Finding candidates holds a bounded amount of text in memory. A job past it detects its first pages and says so in its audit; import the rest as a page range.
+  - Cancelling an import, or removing its PDF, now also stops candidate detection.
+  - Accepting a candidate saves the draft and marks the candidate accepted together, so a crash cannot lead to a duplicate draft.
+  - Importing the same PDF into the same source again no longer proposes entries you already accepted or ignored.
+  - A linked PDF that changed on disk is caught when a run starts, not only when it is resumed.
+- **Accessibility (import review):** after you accept or ignore a candidate, focus returns to the candidate list instead of being lost, and the final import status ("completed") is announced.
+- **Builder choices and spells:** ticking two options quickly (two skills of a choice, or two spells) could drop the first one. Each tick now applies to the latest draft. This also made an end-to-end test flaky.
+
 ### Migration
 
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.

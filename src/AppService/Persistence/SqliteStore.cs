@@ -286,6 +286,37 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    /// <summary>
+    /// Pages <paramref name="first"/> to <paramref name="last"/> for detection: blocks and lines only (detection never reads
+    /// the joined text), in page order, until their stored size passes <paramref name="maxChars"/>. <paramref name="stoppedBefore"/>
+    /// is the first page left out, or null when every page fits. This bounds what detection holds in the app's memory.
+    /// </summary>
+    public IReadOnlyList<StoredPage> ListImportPagesForDetection(string sha256, int first, int last, long maxChars, out int? stoppedBefore)
+    {
+        stoppedBefore = null;
+        lock (_gate)
+        {
+            using var command = Command(
+                "SELECT page, json FROM import_pages WHERE sha256 = $sha AND page >= $first AND page <= $last ORDER BY page;",
+                [("$sha", sha256), ("$first", first), ("$last", last)]);
+            using var reader = command.ExecuteReader();
+            var pages = new List<StoredPage>();
+            long used = 0;
+            while (reader.Read())
+            {
+                var json = reader.GetString(1);
+                used += json.Length;
+                if (used > maxChars)
+                {
+                    stoppedBefore = reader.GetInt32(0);
+                    break;
+                }
+                pages.Add(JsonSerializer.Deserialize<StoredPage>(json, RulesJson.Compact)!);
+            }
+            return pages;
+        }
+    }
+
     /// <summary>SPEC I-03: pages of one PDF whose text contains <paramref name="query"/> (case-insensitive for ASCII), in page order.</summary>
     public IReadOnlyList<(int Page, string Text)> SearchImportPages(string sha256, string query, int limit)
     {

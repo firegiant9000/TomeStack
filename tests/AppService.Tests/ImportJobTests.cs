@@ -310,4 +310,88 @@ public class ImportJobTests
         Assert.Contains("Ember", Call("import.page", new { sourceId, page = 2 }).GetProperty("result").GetProperty("text").GetString(), StringComparison.Ordinal);
         Assert.Equal("import.not-resumable", Call("import.resume", new { jobId }).GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
     }
+
+    /// <summary>A worker that dies on some pages, as a hostile page kills the real one. Other pages are short original text.</summary>
+    private sealed class DyingExtractor(int pageCount, IReadOnlySet<int> deadly) : IDocumentExtractor
+    {
+        public List<int> Starts { get; } = [];
+
+        public async IAsyncEnumerable<ExtractionEvent> ExtractAsync(string path, PageScope scope, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            var (first, last) = scope.Resolve(pageCount);
+            Starts.Add(first);
+            yield return new DocumentOpened(pageCount);
+            for (var number = first; number <= last; number++)
+            {
+                if (deadly.Contains(number))
+                    throw new ExtractionException("worker.crashed", "The import worker stopped unexpectedly (exit code 1).");
+                yield return new ExtractedPage(number, $"Original test page {number}.", false, [], 612, 792);
+            }
+        }
+    }
+
+    [Fact]
+    public void A_page_that_kills_the_worker_fails_alone_and_the_rest_of_the_book_is_read()
+    {
+        // Review 2026-09-28: a page that crashed the worker failed the job, and resuming started on that same page again.
+        var worker = new DyingExtractor(6, new HashSet<int> { 3 });
+        using var temp = new TempApp(worker);
+        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
+
+        Assert.Equal(ImportJobStatus.Completed, job.Status);
+        Assert.Equal((6, 1), (job.PagesDone, job.PagesFailed));
+        Assert.Equal("worker.crashed", temp.App.Store.FindImportPage(job.Sha256, 3)!.Error);
+        Assert.Equal([1, 4], worker.Starts); // a fresh worker continued after the page
+        Assert.Contains(temp.App.ImportAudit(job.Id), e => e.Event == "page-skipped" && e.Detail == "page 3: worker.crashed");
+    }
+
+    [Fact]
+    public void After_too_many_pages_that_kill_the_worker_the_run_fails_and_resume_continues_after_them()
+    {
+        using var temp = new TempApp(new DyingExtractor(6, new HashSet<int> { 1, 2, 3, 4, 5, 6 }));
+        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
+
+        Assert.Equal(ImportJobStatus.Failed, job.Status);
+        Assert.Equal("worker.crashed", job.FailureCode);
+        Assert.Equal((TomeStackApp.MaxSkippedPagesPerRun, TomeStackApp.MaxSkippedPagesPerRun + 1), (job.PagesFailed, job.NextPage));
+
+        temp.App.ResumeImport(job.Id);
+        job = Settle(temp, job.Id);
+        Assert.Equal(ImportJobStatus.Completed, job.Status);
+        Assert.Equal((6, 6), (job.PagesDone, job.PagesFailed));
+    }
+
+    [Fact]
+    public void A_second_import_of_the_same_PDF_does_not_propose_what_was_already_reviewed()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var first = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        var ignored = temp.App.ListCandidates(new(first.Id))[0];
+        temp.App.IgnoreCandidate(ignored.Id);
+
+        var second = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+
+        Assert.Equal(first.Candidates - 1, second.Candidates);
+        Assert.DoesNotContain(temp.App.ListCandidates(new(second.Id)), c => c.Candidate.ProposedName == ignored.Candidate.ProposedName && c.Candidate.Page.Start == ignored.Candidate.Page.Start);
+    }
+
+    [Fact]
+    public void Detection_reads_blocks_only_up_to_its_memory_budget_and_says_where_it_stopped()
+    {
+        using var temp = new TempApp();
+        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
+
+        var all = temp.App.Store.ListImportPagesForDetection(job.Sha256, 1, int.MaxValue, long.MaxValue, out var none);
+        Assert.Equal(6, all.Count);
+        Assert.Null(none);
+        Assert.All(all, p => Assert.Equal("", p.Text)); // detection never needs the joined text
+
+        var range = temp.App.Store.ListImportPagesForDetection(job.Sha256, 2, 5, long.MaxValue, out _);
+        Assert.Equal([2, 3, 4, 5], range.Select(p => p.Page));
+        var over = temp.App.Store.ListImportPagesForDetection(job.Sha256, 2, 5, 1, out var stopped);
+        Assert.Empty(over);
+        Assert.Equal(2, stopped);
+    }
 }

@@ -25,7 +25,7 @@ M4 "Import intelligence" (ROADMAP) is page and whole-book extraction, an OCR fal
 | License | **Apache-2.0** (the package's `licenseExpression`), the same as TomeStack |
 | Maintenance | 0.1.16 released 2026-08-22, after 0.1.15 (2026-06-25) and 0.1.14 (2026-03-22); last push 2026-09-28; not archived; about 2,600 stars |
 | Dependencies | none for net8.0 or net9.0 (pure managed code, no native binaries) |
-| Behavior | Reads text, letters and words with bounding boxes (`page.GetWords()`, `BoundingBox`) in PDF coordinates. It never executes JavaScript and never fetches remote resources, because it has no scripting engine and no network code. Encrypted documents without a password throw `PdfDocumentEncryptedException`. Its `PdfDocumentBuilder` also writes PDFs, which the tests use to generate the **original** fixture PDF at test time (no binary in the repo) |
+| Behavior | Reads text, letters and words with bounding boxes (`page.GetWords()`, `BoundingBox`) in PDF coordinates. It never executes JavaScript and never fetches remote resources, because it has no scripting engine and no network code. Encrypted documents without a password throw `PdfDocumentEncryptedException`. Its `PdfDocumentBuilder` also writes PDFs, which the tests use to generate the **original** fixture PDF. The generated file is committed (`tests/RulesFixtures/pdf/fixture-import.pdf`, about 5 KB) so the e2e run and the smoke can read it, and a test checks it against the generator |
 
 Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `ParsingOptions` (lenient parsing on by default, `Password`), `GetWords`, `NumberOfPages`.
 
@@ -41,11 +41,12 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 - **Limits:**
   - at most 1 GiB (the attachment limit) and **5,000 pages** per document;
   - **60 s per page** without output, and **60 min per run**;
-  - a managed-heap cap for the child (`DOTNET_GCHeapHardLimit`, 1 GiB), plus a parent watchdog that kills the child above **1.5 GiB** working set;
-  - at most **200,000 characters of text per page**, truncated with a warning.
+  - a managed-heap cap for the child (`DOTNET_GCHeapHardLimit`, 1 GiB), which the child reports before it parses anything and the parent checks (`worker.limits` otherwise), plus a parent watchdog that kills the child above **1.5 GiB** of working set or private bytes;
+  - at most **200,000 characters per page in each copy of its text** (the page text, the blocks' text, the lines' text), 5,000 blocks and 20,000 lines, truncated with a warning;
+  - a length limit on every line the parent reads, derived from the page limits and checked before the line is held (`worker.message-too-large`). The parent also refuses pages out of order or outside the scope (`worker.protocol`).
   
-  A decompression bomb therefore ends as an out-of-memory failure or a kill of the child, never of the app.
-- **Cancel kills the child** (the whole process tree). A killed or crashed child fails only its job: pages already extracted stay, and `import.resume` continues from the next page.
+  A decompression bomb therefore ends as an out-of-memory failure or a kill of the child, never of the app. Detection, which runs in the app, reads at most 64 million stored characters per job (about 4,000 typical pages), so the app's memory stays bounded too.
+- **Cancel kills the child** (the whole process tree), and the child exits when the app does. A child that crashes, times out, runs out of memory or sends too much on a page fails **only that page**: it is stored as unreadable, and a fresh child continues with the next page, up to 5 such pages per run. Then the job fails, and `import.resume` continues after them.
 - **Detection stays in the service process.** The detectors read already extracted text (strings, not PDF bytes), with bounded regular expressions (`RegexOptions.NonBacktracking` or a match timeout), and produce only `DraftCandidate`s (ADR-004).
 - Error messages and the local audit log carry codes, page numbers and counts, **never extracted text** (SPEC "errors and logs never quote user or third-party text").
 
@@ -97,6 +98,17 @@ Apache-2.0 covers only TomeStack's own code, so it is compatible as long as the 
 | The published worker runs self-contained from the app folder (`TomeStack.ImportWorker.Host.runtimeconfig.json` lists `includedFrameworks`) | Pass: a request on stdin gave `document`, two `page` lines and `done` for the fixture book |
 | `tests/ImportWorker.Tests` (`ExtractionTests`, `WorkerProcessTests`, `OcrTests`) | 24 pass on this machine; the OCR tests skip where Windows has no OCR language |
 | The decompression bomb (512 MB of whitespace in about 0.5 MB of Flate data, with a 64 MB heap cap) | PdfPig does not inflate it at once, so the heap cap never trips. It churns until the **page timeout** stops the child (`worker.page-timeout`), and only that run fails |
+
+## Review fixes (2026-09-28, before any release)
+
+An independent review of M4 found gaps in (c). Each is fixed, with its test:
+
+| Gap | Fix | Evidence |
+| --- | --- | --- |
+| The 200,000-character cap covered the joined page text only. Blocks and lines, also sent and stored, were unbounded, and the parent read lines of any length. Detection then loaded every page of the job into the app. A 5,000-page hostile PDF could exhaust the **app's** memory | The cap covers every copy of the text, plus block and line counts; parent line limit; detection budget | `ExtractionTests.Every_copy_of_a_pages_text_is_capped`, `…Blocks_and_lines_per_page_are_capped`, `WorkerProcessTests.A_line_longer_than_the_limit_is_refused_before_it_is_held`, `ImportJobTests.Detection_reads_blocks_only_up_to_its_memory_budget…` |
+| An OCR or render exception crashed the worker, and a page that crashed or timed out failed the job. Resume restarted on the same page, so one bad page stopped the rest of the book for good | `page.ocr-failed` per page; the service skips a page that kills the worker and continues | `ExtractionTests.A_page_the_OCR_cannot_read_fails_alone`, `ImportJobTests.A_page_that_kills_the_worker_fails_alone…`, `…After_too_many_pages_that_kill_the_worker…` |
+| Nothing showed the heap cap applied, and the bomb test also passed on success | The child reports its heap limit, and the parent checks it; the bomb test must fail with a worker limit | `WorkerProcessTests.The_worker_runs_under_the_heap_cap_the_app_sets`, `…A_decompression_bomb_fails_only_its_own_run_and_never_succeeds` |
+| The watchdog read the working set only; a worker outlived a crashed app | The larger of working set and private bytes; the child watches the app's process | (the memory-watchdog test; by inspection for the parent watch) |
 
 Later evidence: `docs/features/pdf-import.md` and `docs/features/m4-acceptance.md`.
 

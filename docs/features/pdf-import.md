@@ -6,7 +6,7 @@ ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-
 
 UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on the **Sources** screen, for each of the user's own sources with a PDF. Acceptance: the e2e test "reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio", run against the real DevHost and worker.
 
-- **Read the text and find candidates:** "Read these pages" (from and to) or "Read the whole document" starts a job. Its line shows progress while it runs (a `status` live region, polled), with Cancel and Resume. When it completes, it shows "Review N candidates".
+- **Read the text and find candidates:** "Read these pages" (from and to) or "Read the whole document" starts a job. Its line shows progress while it runs, with Cancel and Resume. The line is a polite live region whatever the job's state, so the final status ("completed, …") is announced too. When it completes, it shows "Review N candidates".
 - **Search the text of <source>** (SPEC I-03): pages with a snippet and "Open page N".
 - **Candidates from <source>:** filters for page, kind, confidence (unsure first: below 80 %) and status (to review by default). Each candidate shows its name, kind, page, confidence and status.
 - **A candidate** (a region named "Candidate: <name>", focused when chosen) shows:
@@ -20,6 +20,7 @@ UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on t
   - the **check** (blockers, the validator's problems, what it depends on);
   - **Accept as a draft**, which is disabled until the check passes;
   - **Accept as reference** and **Ignore**.
+- **Focus (WCAG 2.4.3):** a candidate that leaves the filtered list once reviewed (the default filter shows those to review) takes its details with it, so focus goes back to the "Candidates from <source>" heading.
 - **Publishing** is the homebrew studio's, with its own validation: an accepted candidate is a draft in the source, listed there like any other.
 
 ## D4: dependency and confidence validation (SPEC I-02, ADR-004)
@@ -34,6 +35,7 @@ Service: `src/AppService/ImportCandidates.cs`. Acceptance: `tests/AppService.Tes
 | `import.candidate.ignore` | `{ candidateId }` | Sets it aside; nothing is created |
 
 - **Accepting never activates anything.** The draft is inactive (`content.unpublished`). Every effect is forced to `reference` by the quarantine, and the calculator never applies a draft. Making an effect automatic, and publishing, happen in the homebrew studio. Publishing is the existing, re-validating `content.publish`.
+- **Accepting is one transaction:** the draft and the candidate's "accepted" status are saved together, so a crash cannot leave a draft behind a candidate that could then be accepted again.
 - **Reviewed candidates stay reviewed** (`candidate.already-reviewed`), and each review step is in the job's audit log (`candidate-edited`, `candidate-accepted`, `candidate-accepted-as-reference`, `candidate-ignored`), without text.
 - **Error messages never quote the PDF's text.** A blocker counts the unresolved references instead of naming them; the review shows the names from the candidate itself.
 - **Fixed during D4, before any release (ADR-004):** effect types added after content v3 (spell, weapon, armor) are typed only inside a revision of their schema version (ADR-003). A candidate read from storage, or sent by the UI, therefore carried them as unknown effects. The quarantine's "force to reference" did not reach their raw JSON, and the draft, once read back, had an **automatic** weapon or armor effect. The quarantine now reads the draft back before forcing every effect to reference, and stored candidates are typed on read. `ImportQuarantineTests.A_stored_candidates_versioned_effects_stay_reference_only_in_the_draft_and_after_it_is_read_back` covers it, through publish.
@@ -55,14 +57,17 @@ Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it whe
 
 - **Every candidate** carries an excerpt (at most 4,000 characters), its page or page range, the proposed kind, name and rules family, the proposed effects, a confidence (0.05 to 0.99), uncertainties, the fields it read, **low-confidence fields**, and **unresolved references**: names it refers to that are neither installed (published content of the source's families) nor another candidate of the job. For example, "Fixture Stormcall" casts "Fixture Thunder Word".
 - **Rules family:** the layout suggests one (the 2014 or 2024 style), within the source's declared families. A layout the source does not declare falls back to the source's families, with an uncertainty.
-- **Running headers and footers** (the same text, digits ignored, on at least a third of the pages) are ignored.
-- **Nothing becomes content:** candidates are stored per job for review (`import_candidates`, local only). A re-run replaces only candidates still pending.
+- **Running headers and footers** (the same text, digits ignored, on at least a third of the pages) are ignored. **Known limit:** a heading printed on that many pages (for example a chapter title repeated on each of its pages) is ignored as well. No test covers that case yet.
+- **Nothing becomes content:** candidates are stored per job for review (`import_candidates`, local only). A re-run replaces only candidates still pending. A later import of the **same PDF into the same source** does not propose again what an earlier import's review accepted or ignored (same kind, name and page; `ImportJobTests.A_second_import_of_the_same_PDF_does_not_propose_what_was_already_reviewed`).
+- **Bounded in the app's memory:** detection reads the stored blocks and lines, not the joined text, up to 64 million stored characters (about 4,000 typical pages; `TomeStackApp.MaxDetectionChars`). A job past that detects its first pages only, and its audit says where it stopped (`detection-limited`); importing the rest as a page range detects them.
+- **Cancellable:** detection stops when its job is cancelled, its PDF is removed or the app closes, and the job is `cancelled` or `interrupted`. Resuming it detects again.
+- **A pattern that times out** fails the job with `detect.timeout`. The pages stay stored and searchable.
 
 `import.candidates { jobId, page?, kind?, minConfidence?, maxConfidence?, status? }` lists them in page order and writes nothing.
 
 ### Precision and recall on the SRDs (measured 2026-09-28)
 
-`SrdDetectionMeasurementTests` extracts both SRD PDFs, the same files whose hashes `licensing/srd-pack-review.md` records (the test checks them), and compares the candidates with the bundled packs. A match is the same kind, the same name (case, spacing and apostrophes aside), and a page within one of the pack's. The PDFs stay outside the repository, and the test skips without `TOMESTACK_SRD_PDF_DIR`.
+`SrdDetectionMeasurementTests` extracts both SRD PDFs, the same files whose hashes `licensing/srd-pack-review.md` records (the test checks them), and compares the candidates with the bundled packs. A match is the same kind, the same name (case, spacing and apostrophes aside), and a page within one of the pack's. The PDFs stay outside the repository, and the test skips without `TOMESTACK_SRD_PDF_DIR`. When it runs, it fails below floors set a little under the numbers below: precision 99 % and recall 99 % for spells, 95 % and 99 % for weapons, 70 % and 99 % for classes, and class-feature recall 85 % (5.1) and 99 % (5.2.1). Every matched spell's level and weapon's damage must be right.
 
 | Kind | SRD 5.1: candidates / truth, precision, recall | SRD 5.2.1: candidates / truth, precision, recall | Notes |
 | --- | --- | --- | --- |
@@ -86,13 +91,14 @@ Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`.
 | `import.list` | `{ sourceId? }` | Jobs, newest first |
 | `import.cancel` | `{ jobId }` | Stops the running job (the worker is killed). Pages already extracted stay |
 | `import.resume` | `{ jobId }` | Continues a cancelled, failed or interrupted job at `nextPage`, on the same PDF (`import.pdf-changed` otherwise) |
-| `import.audit` | `{ jobId }` | The local audit log: `created`, `started`, `resumed`, `cancelled`, `interrupted`, `failed` (with the code) and `completed` (with counts). **Codes and counts only, never text from the PDF** |
+| `import.audit` | `{ jobId }` | The local audit log: `created`, `started`, `resumed`, `page-skipped` (page and code), `detection-limited`, `cancelled`, `interrupted`, `failed` (with the code) and `completed` (with counts). **Codes, page numbers and counts only, never text from the PDF** |
 | `import.search` | `{ sourceId, query }` | SPEC I-03: pages of the source's PDF whose extracted text contains the query (2 to 100 characters, case-insensitive), with a snippet, at most 50. Only within one source; search across sources is M7 (BACKLOG B10) |
 | `import.page` | `{ sourceId, page }` | One extracted page: text, blocks, warnings and error |
 
 - **Progress and resume:** each page is stored as it arrives, in the same transaction as the job's counts. A cancelled or failed job resumes where it stopped. A job that was running when the app closed (or crashed) is `interrupted` at the next start, and resumes the same way. This is page-granular.
+- **A page that kills the worker fails alone:** when the worker crashes, times out on a page, runs out of memory or sends more than a page can hold (`worker.crashed`, `worker.page-timeout`, `worker.memory`, `worker.message-too-large`), that page is stored as unreadable with the code as its error, and a fresh worker continues with the next page. After 5 such pages in one run (`TomeStackApp.MaxSkippedPagesPerRun`), the job fails with the last code, and `import.resume` continues after them. A failure before the document opens (for example `pdf.encrypted`) still fails the job. Acceptance: `ImportJobTests.A_page_that_kills_the_worker_fails_alone_and_the_rest_of_the_book_is_read` and `…After_too_many_pages_that_kill_the_worker…`.
 - **Limits:** the extraction limits of ADR-009 (c), per run.
-- **The PDF is pinned by hash:** pages are stored per PDF (SHA-256 and page), so a re-import of the same file replaces them. Removing the PDF first stops a job that reads it.
+- **The PDF is pinned by hash:** pages are stored per PDF (SHA-256 and page), so a re-import of the same file replaces them. Each run hashes the file before it starts, so a linked PDF that changed on disk fails with `import.pdf-changed` instead of storing its pages under the old hash. A change *during* a run is not detected. Removing the PDF first stops a job that reads it.
 - **Page navigation does not depend on it (ARCHITECTURE):** a failed or cancelled job leaves the attachment, "Open page", page import as reference and the removal preview as they were.
 - **Never exported (ADR-009 (d)):** `import_jobs`, `import_pages`, `import_candidates` and `import_audit` are local. No backup or share contains them, and `ImportJobTests.Extracted_text_is_never_exported_in_a_backup_or_a_share` checks both. After a restore on another machine, attach the PDF and import again.
 
@@ -112,18 +118,20 @@ Code: `src/ImportWorker/Extraction/` (`PdfPigExtractor`, `WorkerProtocol`, `Work
   - `width` and `height`;
   - `fromOcr`;
   - `warnings`: `page.no-text`, `ocr.unavailable`, `page.text-truncated`, `page.blocks-truncated`;
-  - `error`: `page.unreadable`, a code only, never text.
+  - `error`: `page.unreadable`, or `page.ocr-failed` when the renderer or OCR throws on the page; a code only, never text.
 - **Document-level failures** are an `ExtractionException` with a stable code, and the message never quotes the document:
   - `pdf.missing`, `pdf.not-a-pdf`, `pdf.too-large`, `pdf.encrypted`, `pdf.unreadable`, `pdf.too-many-pages`;
-  - from the worker: `worker.missing`, `worker.page-timeout`, `worker.timeout`, `worker.memory`, `worker.crashed`, `worker.protocol`.
+  - from the worker: `worker.missing`, `worker.limits` (its heap cap did not apply), `worker.page-timeout`, `worker.timeout`, `worker.memory`, `worker.crashed`, `worker.message-too-large`, `worker.protocol` (a malformed message, or pages out of order or outside the scope).
 - **OCR:** a page with no letters is rendered by Windows.Data.Pdf and read by Windows.Media.Ocr (`fromOcr: true`). Each recognized line is a block, with font size 0 because OCR has none. Without an OCR language, the page is reported with `ocr.unavailable` and stays empty. TomeStack never invents text.
 - **Isolation:** the app never parses a PDF itself. `WorkerProcessExtractor` starts `TomeStack.ImportWorker.Host.exe` and sends one JSON request line on stdin; the worker answers with JSON lines on stdout. There is no socket (ADR-006). The parent enforces:
   - at most 1 GiB and 5,000 pages;
-  - at most 200,000 characters and 5,000 blocks per page;
+  - per page, at most 5,000 blocks and 20,000 lines, and at most 200,000 characters in each copy of its text: the page text, the blocks' text and the lines' text;
+  - a length limit on every line the app reads from the worker, derived from the page limits (about 10 million characters by default), checked before the line is held;
   - 60 s per page, 60 min per run;
-  - a 1 GiB managed-heap cap in the child, and a 1.5 GiB working-set watchdog.
+  - a 1 GiB managed-heap cap in the child, which the child reports before it parses anything (the app refuses to go on otherwise), and a 1.5 GiB watchdog on the larger of its working set and private bytes;
+  - pages in order and inside the requested scope, and `done` only after all of them.
   
-  Cancelling, or stopping early, kills the child's process tree. What the child writes to stderr is discarded, never logged.
+  Cancelling, or stopping early, kills the child's process tree. The child also exits when the app does, so a crashed app leaves no worker behind. What the child writes to stderr is discarded, never logged.
 - **Shipping:** the shell references the worker, so `TomeStack.ImportWorker.Host.exe` and its assemblies sit next to `TomeStack.exe`. They are published self-contained with it. The shell now targets `net10.0-windows10.0.19041.0` and keeps its output folder `bin/<config>/net10.0-windows/`.
 
 ### The original fixture book
@@ -148,5 +156,8 @@ Code: `src/ImportWorker/Extraction/` (`PdfPigExtractor`, `WorkerProtocol`, `Work
 | 5,001 pages (or more than a configured limit) | `pdf.too-many-pages`, before any page is read |
 | A page tree whose `/Count` claims 900 million pages | no hang, no crash |
 | A content stream that is not valid Flate data | a page error, not a failed book |
-| A decompression bomb (512 MB of whitespace in about 0.5 MB) | only its own run fails. Measured: the page timeout stops the child |
+| A decompression bomb (512 MB of whitespace in about 0.5 MB) | the run must fail with a worker limit (`worker.page-timeout`, `worker.memory` or `worker.crashed`), and the child ends. Measured: the page timeout stops it. In an import, that page alone fails |
 | The worker over its memory limit, silent past the page timeout, cancelled, stopped early, missing, or sent a malformed request | `worker.memory`, `worker.page-timeout`, the child killed, `worker.missing`, `worker.bad-request` |
+| The worker's heap cap | reported by the child and checked by the app (`WorkerProcessTests.The_worker_runs_under_the_heap_cap_the_app_sets`) |
+| A worker line longer than the limit | refused before it is held (`worker.message-too-large`) |
+| A page the OCR cannot read | `page.ocr-failed` for that page; the others extract |

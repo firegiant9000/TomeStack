@@ -281,43 +281,52 @@ public sealed partial class TomeStackApp
             });
             var source = _store.FindSource(job.SourceId);
             var attachment = source?.AttachmentId is { } attachmentId ? _store.FindAttachment(attachmentId) : null;
-            if (attachment?.Sha256 != job.Sha256)
+            if (source is null || attachment?.Sha256 != job.Sha256)
                 throw new ExtractionException("import.pdf-changed", "The source's PDF changed or was removed since this import started.");
+            // The file itself, not only its record: a linked PDF can change on disk, and its pages are stored under this hash.
+            var info = Info(source.Id, attachment, checkHash: true);
+            if (info.Status == "changed")
+                throw new ExtractionException("import.pdf-changed", "The source's PDF changed since this import started. Start a new import instead.");
             var path = AttachmentFiles.PathOf(_store, attachment);
-            if (!File.Exists(path))
+            if (info.Status != "available" || !File.Exists(path))
                 throw new ExtractionException("attachment.missing", "The PDF is missing. Attach it again.");
 
-            await foreach (var item in Extractor.ExtractAsync(path, new PageScope(job.NextPage ?? job.FirstPage, job.LastPage), cancellationToken).ConfigureAwait(false))
+            var skipped = 0;
+            while (true)
             {
-                switch (item)
+                var opened = false;
+                try
                 {
-                    case DocumentOpened opened:
-                        job = job with { PageCount = opened.PageCount, UpdatedAt = _time.GetUtcNow() };
-                        if (job.FirstPage > opened.PageCount)
-                            throw new ExtractionException("source.page-range-invalid", $"The PDF has {opened.PageCount} pages.");
-                        _store.InTransaction(() => _store.SaveImportJob(job));
-                        break;
-                    case ExtractedPage page:
-                        var stored = new StoredPage(page.PageNumber, page.Text, page.FromOcr, page.Width, page.Height, page.Blocks ?? [], page.Warnings ?? [], page.Error);
-                        job = job with
+                    await foreach (var item in Extractor.ExtractAsync(path, new PageScope(job.NextPage ?? job.FirstPage, job.LastPage), cancellationToken).ConfigureAwait(false))
+                    {
+                        switch (item)
                         {
-                            NextPage = page.PageNumber + 1,
-                            PagesDone = job.PagesDone + 1,
-                            PagesFailed = job.PagesFailed + (page.Error is null ? 0 : 1),
-                            PagesFromOcr = job.PagesFromOcr + (page.FromOcr ? 1 : 0),
-                            PagesWithoutText = job.PagesWithoutText + (page.Error is null && page.Text.Length == 0 ? 1 : 0),
-                            UpdatedAt = _time.GetUtcNow(),
-                        };
-                        var snapshot = job;
-                        _store.InTransaction(() =>
-                        {
-                            _store.SaveImportPage(snapshot.Sha256, stored);
-                            _store.SaveImportJob(snapshot);
-                        });
+                            case DocumentOpened document:
+                                opened = true;
+                                job = job with { PageCount = document.PageCount, UpdatedAt = _time.GetUtcNow() };
+                                if (job.FirstPage > document.PageCount)
+                                    throw new ExtractionException("source.page-range-invalid", $"The PDF has {document.PageCount} pages.");
+                                _store.InTransaction(() => _store.SaveImportJob(job));
+                                break;
+                            case ExtractedPage page:
+                                job = SavePage(job, new StoredPage(page.PageNumber, page.Text, page.FromOcr, page.Width, page.Height, page.Blocks ?? [], page.Warnings ?? [], page.Error));
+                                break;
+                        }
+                    }
+                    break;
+                }
+                catch (ExtractionException ex) when (opened && PageFailures.Contains(ex.Code) && skipped < MaxSkippedPagesPerRun && job.NextPage is { } bad && bad <= (job.ScopeEnd ?? bad))
+                {
+                    // The worker died on this page (a crash, a timeout, too much memory or output). Only the page fails:
+                    // it is stored as unreadable, and a fresh worker continues with the next one (review 2026-09-28).
+                    skipped++;
+                    job = SavePage(job, new StoredPage(bad, "", false, 0, 0, [], [], ex.Code));
+                    _store.AddImportAudit(job.Id, _time.GetUtcNow(), "page-skipped", $"page {bad.ToString(System.Globalization.CultureInfo.InvariantCulture)}: {ex.Code}");
+                    if (job.ScopeEnd is { } end && job.NextPage > end)
                         break;
                 }
             }
-            job = OnPagesExtracted(job);
+            job = OnPagesExtracted(job, cancellationToken);
             Finish(job with { NextPage = null }, ImportJobStatus.Completed, "completed",
                 $"{job.PagesDone} pages, {job.PagesFailed} unreadable, {job.PagesFromOcr} by OCR, {job.PagesWithoutText} without text, {job.Candidates} candidates", null);
         }
@@ -328,6 +337,11 @@ public sealed partial class TomeStackApp
         catch (ExtractionException ex)
         {
             Finish(job, ImportJobStatus.Failed, "failed", ex.Code, (ex.Code, ex.Message));
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // A detection pattern ran out of time on some page's text. The pages stay stored and searchable.
+            Finish(job, ImportJobStatus.Failed, "failed", "detect.timeout", ("detect.timeout", "Finding entries in the text took too long. The pages were read and stay searchable; try importing a smaller page range."));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -348,8 +362,34 @@ public sealed partial class TomeStackApp
         }
     }
 
-    /// <summary>After extraction, before the job completes: candidate detection (M4 D3).</summary>
-    private ImportJobRecord OnPagesExtracted(ImportJobRecord job) => DetectCandidates(job);
+    /// <summary>Worker failures that end one page, not the job: a fresh worker continues with the next page.</summary>
+    private static readonly HashSet<string> PageFailures = new(StringComparer.Ordinal) { "worker.page-timeout", "worker.crashed", "worker.memory", "worker.message-too-large" };
+
+    /// <summary>After this many pages that killed the worker, the run fails; <c>import.resume</c> continues after them.</summary>
+    public const int MaxSkippedPagesPerRun = 5;
+
+    /// <summary>Stores one page and the job's progress past it, in one transaction.</summary>
+    private ImportJobRecord SavePage(ImportJobRecord job, StoredPage page)
+    {
+        var next = job with
+        {
+            NextPage = page.Page + 1,
+            PagesDone = job.PagesDone + 1,
+            PagesFailed = job.PagesFailed + (page.Error is null ? 0 : 1),
+            PagesFromOcr = job.PagesFromOcr + (page.FromOcr ? 1 : 0),
+            PagesWithoutText = job.PagesWithoutText + (page.Error is null && page.Text.Length == 0 ? 1 : 0),
+            UpdatedAt = _time.GetUtcNow(),
+        };
+        _store.InTransaction(() =>
+        {
+            _store.SaveImportPage(next.Sha256, page);
+            _store.SaveImportJob(next);
+        });
+        return next;
+    }
+
+    /// <summary>After extraction, before the job completes: candidate detection (M4 D3), which stops when the job is cancelled.</summary>
+    private ImportJobRecord OnPagesExtracted(ImportJobRecord job, CancellationToken cancellationToken) => DetectCandidates(job, cancellationToken);
 
     private void Finish(ImportJobRecord job, ImportJobStatus status, string eventName, string? detail, (string Code, string Message)? failure)
     {

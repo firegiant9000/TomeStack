@@ -10,7 +10,7 @@ Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2
 | --- | --- | --- |
 | Page and whole-book extraction (text, layout, page coordinates) | `ExtractionTests`, `WorkerProcessTests`; the smoke imports a PDF through the shipped worker | ✅ |
 | OCR fallback | `OcrTests` (Windows OCR on an image-only page, in the process and in the worker) | ✅ on this machine (it has an OCR language); skipped where Windows has none |
-| Isolation and limits (SPEC Q-02) | `WorkerProcessTests` (page and run timeouts, memory watchdog, heap cap, killed on cancel); the malformed-input suite in `ExtractionTests` | ✅ |
+| Isolation and limits (SPEC Q-02) | `WorkerProcessTests` (page and run timeouts, memory watchdog, the heap cap reported and checked, line limit, killed on cancel, the bomb must fail); the malformed-input suite and the per-page caps in `ExtractionTests`; `ImportJobTests` (a page that kills the worker fails alone; the detection budget). Review fixes: ADR-009 "Review fixes" | ✅ |
 | Cancellable, resumable jobs with progress and a local audit log, surviving a restart | `ImportJobTests` | ✅ |
 | Searchable page text within one source (SPEC I-03) | `ImportJobTests.Imported_text_is_searchable_within_its_source`; the e2e search step | ✅ |
 | Candidate and entity recognition | `DetectionTests`; `SrdDetectionMeasurementTests` (local, below) | ✅ |
@@ -40,7 +40,7 @@ Every accepted candidate is a draft, and every effect in it is reference-only.
 
 ## Precision and recall (D3)
 
-Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-review.md`, against the bundled packs (`SrdDetectionMeasurementTests`; the PDFs stay outside the repository). Details and the match rule are in `pdf-import.md`.
+Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-review.md`, against the bundled packs (`SrdDetectionMeasurementTests`; the PDFs stay outside the repository). Details and the match rule are in `pdf-import.md`. The test now fails below floors set a little under these numbers. The floors were added after this measurement and have not run yet: the PDFs were not on the machine when they were added.
 
 | Kind | SRD 5.1 precision / recall | SRD 5.2.1 precision / recall |
 | --- | --- | --- |

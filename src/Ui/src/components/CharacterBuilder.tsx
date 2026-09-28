@@ -329,7 +329,8 @@ function ChoicePicker(props: {
   optionOf: (ref: ContentReference) => ContentOption | undefined;
   /** False until `content.list` answers: options are then "loading", not "missing". */
   optionsLoaded: boolean;
-  onChange: (selected: ContentReference[]) => void;
+  /** Ticks (`add`) or unticks one option; the builder applies it to the latest draft. */
+  onChange: (ref: ContentReference, add: boolean) => void;
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
@@ -363,7 +364,7 @@ function ChoicePicker(props: {
                 type="checkbox"
                 checked={checked}
                 disabled={!checked && (full || unavailable)}
-                onChange={() => props.onChange(checked ? choice.selected.filter((s) => !sameRef(s, ref)) : [...choice.selected, ref])}
+                onChange={() => props.onChange(ref, !checked)}
               />
               <label htmlFor={id}>
                 <span className="option-name">{option?.name ?? `Missing content ${ref.revisionId}`}</span>
@@ -387,7 +388,8 @@ function SpellPicker(props: {
   entry: SpellcastingEntry;
   spells: ContentOption[];
   recorded: KnownSpell[];
-  onChange: (spells: KnownSpell[]) => void;
+  /** Records (`add`) or removes one spell of this caster; the builder applies it to the latest draft. */
+  onChange: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
 }) {
   const { entry } = props;
   const highest = entry.slots.reduce((top, count, i) => (count > 0 ? i + 1 : top), 0);
@@ -401,12 +403,7 @@ function SpellPicker(props: {
   ].filter(Boolean);
 
   function toggle(option: ContentOption) {
-    const has = mine.some((s) => sameRef(s.spell, option.reference));
-    props.onChange(
-      has
-        ? props.recorded.filter((s) => !(s.caster === entry.content.contentId && sameRef(s.spell, option.reference)))
-        : [...props.recorded, { caster: entry.content.contentId, spell: option.reference, prepared: true }],
-    );
+    props.onChange(entry.content.contentId, option.reference, !mine.some((s) => sameRef(s.spell, option.reference)));
   }
 
   return (
@@ -445,8 +442,8 @@ function ChoicesStep(props: {
   optionOf: (ref: ContentReference) => ContentOption | undefined;
   optionsLoaded: boolean;
   spellOptions: ContentOption[];
-  onChoose: (choice: ChoiceStatus, selected: ContentReference[]) => void;
-  onSpells: (spells: KnownSpell[]) => void;
+  onChoose: (choice: ChoiceStatus, ref: ContentReference, add: boolean) => void;
+  onSpells: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
   onBack?: () => void;
   onCommit: () => void;
   onCancel: () => void;
@@ -472,7 +469,7 @@ function ChoicesStep(props: {
           choice={choice}
           optionOf={props.optionOf}
           optionsLoaded={props.optionsLoaded}
-          onChange={(selected) => props.onChoose(choice, selected)}
+          onChange={(ref, add) => props.onChoose(choice, ref, add)}
         />
       ))}
       {casters.map((entry) => (
@@ -610,13 +607,43 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     }
   }
 
-  async function choose(choice: ChoiceStatus, selected: ContentReference[]) {
-    if (!view) return;
-    try {
-      setView(await client.previewChoice(view.character, choice.source, choice.choiceId, selected));
-    } catch (error) {
-      onError(error);
-    }
+  // Ticks can come faster than character.previewChoice answers. Each one waits for the previous answer and applies to the
+  // draft it returned; built from the rendered selection, a second quick tick would drop the first.
+  const latest = useRef(view);
+  useEffect(() => {
+    latest.current = view;
+  }, [view]);
+  const choosing = useRef<Promise<void>>(Promise.resolve());
+
+  function choose(choice: ChoiceStatus, ref: ContentReference, add: boolean) {
+    choosing.current = choosing.current.then(async () => {
+      const current = latest.current;
+      if (!current) return;
+      const now = (current.sheet.choices ?? []).find((c) => sameRef(c.source, choice.source) && c.choiceId === choice.choiceId) ?? choice;
+      const others = now.selected.filter((s) => !sameRef(s, ref));
+      try {
+        const next = await client.previewChoice(current.character, choice.source, choice.choiceId, add ? [...others, ref] : others);
+        latest.current = next;
+        setView(next);
+      } catch (error) {
+        onError(error);
+      }
+    });
+  }
+
+  function toggleSpell(caster: KnownSpell['caster'], spell: ContentReference, add: boolean) {
+    choosing.current = choosing.current.then(async () => {
+      const current = latest.current;
+      if (!current) return;
+      const others = (current.character.spells ?? []).filter((s) => !(s.caster === caster && sameRef(s.spell, spell)));
+      try {
+        const next = await client.preview({ ...current.character, spells: add ? [...others, { caster, spell, prepared: true }] : others });
+        latest.current = next;
+        setView(next);
+      } catch (error) {
+        onError(error);
+      }
+    });
   }
 
   async function commit() {
@@ -701,7 +728,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           optionsLoaded={listedFor === `${family}|${campaignId ?? ''}`}
           spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
-          onSpells={(spells) => view && preview({ ...view.character, spells })}
+          onSpells={toggleSpell}
           onBack={mode.kind === 'create' ? () => setStep('basics') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
           onCancel={onCancel}

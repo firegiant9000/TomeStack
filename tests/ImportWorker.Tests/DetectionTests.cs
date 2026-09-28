@@ -27,6 +27,20 @@ public class DetectionTests
     private static DraftCandidate Named(IReadOnlyList<DraftCandidate> found, string name) => Assert.Single(found, c => c.ProposedName == name);
 
     [Fact]
+    public async Task Detection_stops_when_its_import_is_cancelled()
+    {
+        // Review 2026-09-28: cancelling an import during detection used to be ignored, and the job completed anyway.
+        var pages = new List<DetectionPage>();
+        await foreach (var item in new PdfPigExtractor().ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
+        {
+            if (item is ExtractedPage page)
+                pages.Add(new(page.PageNumber, "", page.Blocks ?? [], page.FromOcr));
+        }
+        Assert.NotEmpty(CandidateDetector.Detect(pages, new(Source, [RulesFamilies.Srd521], _ => false))); // the text is not needed
+        Assert.ThrowsAny<OperationCanceledException>(() => CandidateDetector.Detect(pages, new(Source, [RulesFamilies.Srd521], _ => false), new CancellationToken(canceled: true)));
+    }
+
+    [Fact]
     public async Task The_fixture_book_gives_one_candidate_per_block_and_nothing_else()
     {
         var found = await Detect();

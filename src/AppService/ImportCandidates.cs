@@ -79,29 +79,43 @@ public sealed record ImportCandidatesRequest(Guid JobId, int? Page = null, Conte
 public sealed partial class TomeStackApp
 {
     /// <summary>
-    /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
-    /// Candidates already reviewed stay; pending ones are replaced. Nothing becomes content here (ADR-004).
+    /// What detection may hold in the app's memory, in stored characters (about 4,000 typical pages). A job past it detects
+    /// its first pages only and says so in its audit; importing the rest as a page range detects them (review 2026-09-28:
+    /// extraction is bounded per page, and a 5,000-page PDF at the per-page limit would otherwise exhaust the app).
     /// </summary>
-    private ImportJobRecord DetectCandidates(ImportJobRecord job)
+    public const long MaxDetectionChars = 64_000_000;
+
+    /// <summary>
+    /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
+    /// Candidates already reviewed stay; pending ones are replaced. A candidate reviewed in an earlier import of the same
+    /// PDF into the same source is not proposed again. Nothing becomes content here (ADR-004).
+    /// </summary>
+    private ImportJobRecord DetectCandidates(ImportJobRecord job, CancellationToken cancellationToken)
     {
         var source = _store.FindSource(job.SourceId);
         if (source is null)
             return job;
-        var end = job.ScopeEnd ?? int.MaxValue;
-        var pages = _store.ListImportPages(job.Sha256)
-            .Where(p => p.Page >= job.FirstPage && p.Page <= end && p.Error is null)
-            .Select(p => new DetectionPage(p.Page, p.Text, p.Blocks, p.FromOcr))
-            .ToList();
+        var stored = _store.ListImportPagesForDetection(job.Sha256, job.FirstPage, job.ScopeEnd ?? int.MaxValue, MaxDetectionChars, out var stoppedBefore);
+        if (stoppedBefore is { } page)
+            _store.AddImportAudit(job.Id, _time.GetUtcNow(), "detection-limited", $"pages {job.FirstPage}-{page - 1} detected; import pages {page} on as a range to detect them");
+        var pages = stored.Where(p => p.Error is null).Select(p => new DetectionPage(p.Page, "", p.Blocks, p.FromOcr)).ToList();
         var installed = _store.ListRevisions()
             .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(source.RulesFamilies.Contains))
             .Select(r => CandidateDetector.Key(r.Name))
             .ToHashSet(StringComparer.Ordinal);
-        var detected = CandidateDetector.Detect(pages, new(source.Id, source.RulesFamilies, name => installed.Contains(CandidateDetector.Key(name))));
+        var detected = CandidateDetector.Detect(pages, new(source.Id, source.RulesFamilies, name => installed.Contains(CandidateDetector.Key(name))), cancellationToken);
 
-        var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending)
-            .Select(c => (c.Candidate.ProposedKind, CandidateDetector.Key(c.Candidate.ProposedName), c.Candidate.Page.Start)).ToHashSet();
+        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+        var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).Select(c => Identity(c.Candidate)).ToHashSet();
+        var reviewedBefore = _store.ListImportJobs()
+            .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+            .SelectMany(j => _store.ListImportCandidates(j.Id))
+            .Where(c => c.Status != CandidateStatus.Pending)
+            .Select(c => Identity(c.Candidate))
+            .ToHashSet();
         var now = _time.GetUtcNow();
-        var fresh = detected.Where(c => !reviewed.Contains((c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start))).ToList();
+        var fresh = detected.Where(c => !reviewed.Contains(Identity(c)) && !reviewedBefore.Contains(Identity(c))).ToList();
+        cancellationToken.ThrowIfCancellationRequested();
         _store.InTransaction(() =>
         {
             _store.DeletePendingImportCandidates(job.Id);
@@ -174,19 +188,20 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.validation-failed", $"This candidate has {check.Report.Errors.Count} problem(s)."), .. check.Report.Errors]);
 
         var draft = DraftOf(stored, request.AsReference);
-        var reference = SaveDraft(draft);
-        var accepted = stored with
-        {
-            Status = request.AsReference ? CandidateStatus.AcceptedAsReference : CandidateStatus.Accepted,
-            Draft = reference,
-            UpdatedAt = _time.GetUtcNow(),
-        };
+        StoredCandidate? accepted = null;
+        // One transaction: a draft never exists without its candidate marked accepted, so a crash cannot lead to a second draft.
         _store.InTransaction(() =>
         {
+            accepted = stored with
+            {
+                Status = request.AsReference ? CandidateStatus.AcceptedAsReference : CandidateStatus.Accepted,
+                Draft = SaveDraft(draft),
+                UpdatedAt = _time.GetUtcNow(),
+            };
             _store.SaveImportCandidate(accepted);
             _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), request.AsReference ? "candidate-accepted-as-reference" : "candidate-accepted", stored.Current.ProposedKind.ToString().ToLowerInvariant());
         });
-        return accepted;
+        return accepted!;
     }
 
     /// <summary><c>import.candidate.ignore</c>: sets a pending candidate aside. Nothing is created.</summary>

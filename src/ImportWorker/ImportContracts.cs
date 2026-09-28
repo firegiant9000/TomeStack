@@ -52,8 +52,14 @@ public sealed record ExtractionLimits
 {
     public long MaxBytes { get; init; } = 1L << 30;
     public int MaxPages { get; init; } = 5_000;
+
+    /// <summary>
+    /// Characters per page, for each copy of the text a page carries: its text, its blocks' text, and their lines' text
+    /// (review 2026-09-28: a cap on the page text alone left the blocks unbounded).
+    /// </summary>
     public int MaxTextPerPage { get; init; } = 200_000;
     public int MaxBlocksPerPage { get; init; } = 5_000;
+    public int MaxLinesPerPage { get; init; } = 20_000;
     public TimeSpan PageTimeout { get; init; } = TimeSpan.FromSeconds(60);
     public TimeSpan RunTimeout { get; init; } = TimeSpan.FromMinutes(60);
     /// <summary>The child's managed heap cap (<c>DOTNET_GCHeapHardLimit</c>).</summary>
