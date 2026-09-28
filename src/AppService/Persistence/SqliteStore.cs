@@ -66,6 +66,15 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             json TEXT NOT NULL
         );
         """),
+        // v5 (M3 B3): session gap notes. Local only; they leave the machine only inside a personal backup.
+        new("""
+        CREATE TABLE gap_notes (
+            id TEXT PRIMARY KEY,
+            character_id TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX ix_gap_notes_character_id ON gap_notes (character_id);
+        """),
     ];
 
     private readonly SqliteConnection _connection;
@@ -170,6 +179,25 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<Campaign> ListCampaigns() => Query<Campaign>("SELECT json FROM campaigns ORDER BY name, id;");
 
     public void DeleteCampaign(Guid id) => Execute("DELETE FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- gap notes (M3 B3) ----
+
+    public void SaveGapNote(GapNote note)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+        Execute(
+            "INSERT INTO gap_notes (id, character_id, json) VALUES ($id, $character, $json) ON CONFLICT(id) DO UPDATE SET character_id = excluded.character_id, json = excluded.json;",
+            ("$id", Key(note.Id)),
+            ("$character", Key(note.CharacterId)),
+            ("$json", Serialize(note)));
+    }
+
+    public GapNote? FindGapNote(Guid id) => QuerySingle<GapNote>("SELECT json FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<GapNote> ListGapNotes(Guid characterId) =>
+        Query<GapNote>("SELECT json FROM gap_notes WHERE character_id = $character ORDER BY rowid;", ("$character", Key(characterId)));
+
+    public void DeleteGapNote(Guid id) => Execute("DELETE FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
 
     // ---- attachments (ADR-005) ----
 

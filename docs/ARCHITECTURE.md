@@ -49,7 +49,7 @@ Store page coordinates when extractable; do not make page navigation depend on s
 
 - SQLite transactions cover creation, leveling, rest, revision publication and import commits. Migrations are numbered and backed up before upgrading a user database.
 - Keep PDFs/files outside the database, referenced through managed IDs and content hashes; prohibit archive path traversal. Allow choosing a data directory before large imports.
-- Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
+- Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, `gaps/` (backups only), optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
 - Export is deterministic enough for human inspection and useful diffs. Document compatibility and round-trip unknown extension fields.
 - Backups are local, discoverable and restorable on a clean installation; do not confuse an export with a complete backup when PDF attachments were omitted.
 

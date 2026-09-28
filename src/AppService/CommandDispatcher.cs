@@ -24,6 +24,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.mechanics", "roll",
+        "gap.list", "gap.add", "gap.setStatus", "gap.delete",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -110,6 +111,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
         "character.rest" => app.Rest(Payload<RestRequest>(payload)),
         "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
+        "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
+        "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
+        "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
+        "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
@@ -129,6 +134,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object DeleteCampaign(IdPayload payload)
     {
         app.DeleteCampaign(payload.Id);
+        return new { deleted = true };
+    }
+
+    private object DeleteGapNote(DeleteGapNoteRequest payload)
+    {
+        app.DeleteGapNote(payload);
         return new { deleted = true };
     }
 
@@ -218,6 +229,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RulesFamilyPayload(string RulesFamily, Guid? CampaignId = null);
 
     private sealed record IdPayload(Guid Id);
+
+    private sealed record CharacterIdPayload(Guid CharacterId);
 
     private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 

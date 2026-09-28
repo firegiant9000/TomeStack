@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/package-manifest.v5.schema.json",
+  "title": "TomeStack package manifest (formatVersion 5)",
+  "description": "manifest.json of a *.tomestack.zip package (SPEC P-02; docs/features/package-format.md). v5 (M3 B3) adds gaps/ entries (session gap notes, gap-note.v1.schema.json), in backups only: a share package never has them and an import refuses one that does. v4 (M2) added campaigns/ entries (SPEC P-01). v3 added purpose (backup | share) and omitted (ADR-007, D03).",
+  "type": "object",
+  "required": ["format", "formatVersion", "createdAt", "appVersion", "purpose", "characters", "entries", "notices", "omitted", "attachmentPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "tomestack.package" },
+    "formatVersion": { "const": 5 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "appVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "purpose": { "enum": ["backup", "share"] },
+    "characters": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "entries": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "pattern": "^(sources|content|characters|campaigns|gaps)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$" },
+          "kind": { "enum": ["source", "contentRevision", "character", "campaign", "gapNote"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 5242880 }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "redistributable"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "redistributable": { "type": "boolean" },
+          "attribution": { "type": "string" },
+          "modificationNotice": { "type": "string" }
+        }
+      }
+    },
+    "omitted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "revisions"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reference", "name", "characters"],
+              "additionalProperties": false,
+              "properties": {
+                "reference": {
+                  "type": "object",
+                  "required": ["contentId", "revisionId"],
+                  "additionalProperties": false,
+                  "properties": { "contentId": { "$ref": "#/$defs/uuid" }, "revisionId": { "$ref": "#/$defs/uuid" } }
+                },
+                "name": { "type": "string" },
+                "characters": { "type": "array", "items": { "$ref": "#/$defs/uuid" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "attachmentPolicy": { "type": "string" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

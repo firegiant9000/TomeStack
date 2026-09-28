@@ -21,7 +21,9 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Still importable | `formatVersion` |
 | `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Still importable | `formatVersion` |
-| `package-manifest.v4.schema.json` | Adds `campaigns/` entries (M2 item 7); entries may be content and character schema v4. Current | `formatVersion` |
+| `package-manifest.v4.schema.json` | Adds `campaigns/` entries (M2 item 7); entries may be content and character schema v4. Still imported | `formatVersion` |
+| `package-manifest.v5.schema.json` | Adds `gaps/` entries, backups only (M3 B3). Current | `formatVersion` |
+| `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Current | `schemaVersion` |
 | `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules. Current | `schemaVersion` |
 
 The files are named `<kind>.v<version>.schema.json`. The test picks the schema from the document's own version field.

@@ -17,6 +17,7 @@ import type {
 import { downloadBase64 } from '../files';
 import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
+import { GapNotesPanel } from './GapNotesPanel';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
 
@@ -199,11 +200,11 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
         <legend>What is this package for?</legend>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
-          Personal backup: includes everything. Do not share it.
+          Personal backup: includes everything, your gap notes too. Do not share it.
         </label>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'share'} onChange={() => choose('share')} />
-          Share with someone: leaves out content you may not share
+          Share with someone: leaves out content you may not share, and never includes gap notes
         </label>
       </fieldset>
       {purpose === 'share' && preview && (
@@ -380,6 +381,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </section>
       <ActionsPanel view={view} roll={roll} act={act} />
       <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} />
+      <GapNotesPanel view={view} onError={onError} onStatus={onStatus} />
 
       {groups.map((group) => {
         const caster = (sheet.spellcasting ?? []).length > 0;

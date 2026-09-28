@@ -601,6 +601,33 @@ export interface ExportPreview {
   characters: string[];
   included: LicenseNotice[];
   omitted: OmittedSource[];
+  /** Gap notes the package would carry: all of the characters' notes in a backup, 0 in a share (M3 B3). */
+  gapNotes: number;
+}
+
+export type GapTargetKind = 'feature' | 'field';
+
+export type GapNoteStatus = 'open' | 'resolved';
+
+/** What a gap note is about. `label` is filled in by the service from the sheet. */
+export interface GapTarget {
+  kind: GapTargetKind;
+  contentId?: string | null;
+  effectId?: string | null;
+  fieldId?: string | null;
+  label?: string | null;
+}
+
+/** M3 B3: a local session feedback note. Never transmitted; it leaves the machine only in a personal backup. */
+export interface GapNote {
+  id: string;
+  schemaVersion: number;
+  characterId: string;
+  target: GapTarget;
+  text: string;
+  status: GapNoteStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ExportedPackage {

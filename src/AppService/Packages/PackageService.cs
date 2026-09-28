@@ -28,7 +28,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     private const int ValidatedOnPublishSchemaVersion = 3;
     private const string ManifestPath = "manifest.json";
 
-    [GeneratedRegex("^(sources|content|characters|campaigns)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(sources|content|characters|campaigns|gaps)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
     private static partial Regex EntryPathPattern();
 
     private sealed record ExportPlan(
@@ -38,7 +38,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose)
     {
         var plan = Plan(characterIds, purpose);
-        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted);
+        var gapNotes = purpose == ExportPurpose.Backup ? plan.Characters.Sum(c => store.ListGapNotes(c.Id).Count) : 0;
+        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted, gapNotes);
     }
 
     public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup)
@@ -54,6 +55,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text).
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
             files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
+        // M3 B3: gap notes are the player's own session feedback. They go in a backup, and never in a share.
+        if (purpose == ExportPurpose.Backup)
+        {
+            foreach (var note in plan.Characters.SelectMany(c => store.ListGapNotes(c.Id)))
+                files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
+        }
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -214,6 +221,14 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 else replaced++;
                 store.SaveCharacter(character);
             }
+            foreach (var note in parsed.GapNotes)
+            {
+                var local = store.FindGapNote(note.Id);
+                if (local is null) added++;
+                else if (Json(local).AsSpan().SequenceEqual(Json(note))) { unchanged++; continue; }
+                else replaced++;
+                store.SaveGapNote(note);
+            }
         });
         return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
     }
@@ -262,7 +277,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         IReadOnlyList<SourceRecord> Sources,
         IReadOnlyList<ContentRevision> Revisions,
         IReadOnlyList<Character> Characters,
-        IReadOnlyList<Campaign> Campaigns);
+        IReadOnlyList<Campaign> Campaigns,
+        IReadOnlyList<GapNote> GapNotes);
 
     private (PackagePreview Preview, ParsedPackage? Parsed) Read(byte[] package)
     {
@@ -380,6 +396,27 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
 
+        // M3 B3: gap notes travel only in a v5+ backup, and only with their character.
+        if (parsed.GapNotes.Count > 0 && (parsed.Manifest.FormatVersion < 5 || parsed.Manifest.Purpose != ExportPurpose.Backup))
+            errors.Add(new("package.gap-notes-not-allowed", "This package carries gap notes, which only a personal backup may contain."));
+        var packageCharacters = parsed.Characters.ToDictionary(c => c.Id);
+        foreach (var note in parsed.GapNotes)
+        {
+            // The messages never quote the note's text: it may describe private homebrew.
+            foreach (var problem in note.Validate())
+                errors.Add(problem with { Message = $"Gap note {note.Id}: {problem.Message}" });
+            if (!packageCharacters.TryGetValue(note.CharacterId, out var owner))
+            {
+                errors.Add(new("package.gap-note-orphan", $"Gap note {note.Id} belongs to a character that is not in the package."));
+                continue;
+            }
+            var local = store.FindGapNote(note.Id);
+            var action = local is null ? PackageItemAction.Add
+                : Json(local).AsSpan().SequenceEqual(Json(note)) ? PackageItemAction.Unchanged
+                : PackageItemAction.Replace;
+            items.Add(new("gapNote", note.Id, note.Target?.Label ?? "(gap note)", action, $"{owner.Name} · {note.Status}"));
+        }
+
         return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings), parsed);
     }
 
@@ -474,6 +511,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var revisions = new List<ContentRevision>();
         var characters = new List<Character>();
         var campaigns = new List<Campaign>();
+        var gapNotes = new List<GapNote>();
         foreach (var (path, bytes) in files.Where(f => f.Key != ManifestPath).OrderBy(f => f.Key, StringComparer.Ordinal))
         {
             var id = Guid.Parse(Path.GetFileNameWithoutExtension(path));
@@ -501,9 +539,14 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     else
                         campaigns.Add(campaign);
                     break;
+                case "gaps" when Deserialize<GapNote>(path, bytes, errors) is { } note:
+                    ExpectId(path, id, note.Id, errors);
+                    ExpectSchema(path, "gap note", note.SchemaVersion, GapNote.CurrentSchemaVersion, errors);
+                    gapNotes.Add(note);
+                    break;
             }
         }
-        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns);
+        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes);
     }
 
     /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>

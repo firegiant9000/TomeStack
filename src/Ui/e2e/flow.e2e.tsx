@@ -447,7 +447,7 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
   await screen.findByRole('article', { name: 'E2E Reader' });
   expect(screen.queryByRole('button', { name: 'Open E2E Cited Feat, p. 7' })).toBeNull();
-  expect(screen.getByText('E2E Cited Feat')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Features' })).getByText('E2E Cited Feat')).toBeTruthy();
 });
 
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
@@ -658,6 +658,55 @@ it('switches a toggled effect on and off, spends a chosen amount, and a long res
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
   await waitFor(() => expect(armorClass()).toBe(before));
   expect(within(actions()).getByRole<HTMLInputElement>('checkbox', { name: /^Radiant stance/ }).checked).toBe(false);
+});
+
+it('records a gap note on a field and a feature, resolves one, and deletes one after confirming', async () => {
+  // M3 B3: session feedback, stored locally and never changing the character.
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Gaps');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Gaps' });
+  const armorClass = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
+
+  const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
+  expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
+  const form = within(gaps()).getByRole('form', { name: 'New gap note' });
+  const about = within(form).getByRole('combobox', { name: /^About/ });
+  const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ });
+
+  await user.selectOptions(about, within(about).getByRole('option', { name: 'Armor Class' }));
+  await user.type(text, 'The table grants a cover bonus here.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Gap note saved for Armor Class.'));
+  expect(within(gaps()).getByText('The table grants a cover bonus here.')).toBeTruthy();
+
+  await user.selectOptions(about, within(about).getByRole('option', { name: 'Fixture Quickfoot' }));
+  await user.type(text, 'Speed bonus should apply while unarmored only.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 2 open'));
+
+  await user.click(within(gaps()).getByRole('button', { name: 'Mark resolved: Armor Class' }));
+  await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 1 open'));
+  expect(within(gaps()).getByRole('button', { name: 'Reopen: Armor Class' })).toBeTruthy();
+
+  // Deleting asks first; "Keep note" leaves it.
+  const quickfootNote = () => within(gaps()).getByText('Speed bonus should apply while unarmored only.').closest('li')!;
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete…' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Keep note' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete…' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete note' }));
+  await waitFor(() => expect(within(gaps()).queryByText('Speed bonus should apply while unarmored only.')).toBeNull());
+  expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 0 open');
+
+  // Notes never change the character's sheet.
+  expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClass);
 });
 
 it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {

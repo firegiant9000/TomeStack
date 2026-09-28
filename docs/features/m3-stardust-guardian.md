@@ -29,11 +29,11 @@ The mechanics of the homebrew sources come from the calculated sheet, so the inv
 
 ## `character.mechanics`
 
-`{ characterId, sourceIds? }` returns `{ mechanics[], unsupported[], hasModifier, hasResource, hasLimitedUseAction, hasReferenceOnlyFeature }`. By default it covers every source made in TomeStack (the user's own homebrew). It writes nothing. The session gap notes (M3 B3) attach to these mechanics.
+`{ characterId, sourceIds? }` returns `{ mechanics[], unsupported[], hasModifier, hasResource, hasLimitedUseAction, hasReferenceOnlyFeature }`. By default it covers every source made in TomeStack (the user's own homebrew). It writes nothing. Session gap notes ([gap-notes.md](gap-notes.md)) are written on these features and on fields.
 
 ## M3 exit gate: what is still needed
 
 - The material in the local folder, and a passing run with the owner's `expectations.json`.
 - B2 is done for the expected gaps ([m3-effects.md](m3-effects.md): toggles, shared resources, variable costs). Any other gap the run finds gets the same treatment.
-- A whole session played with the character, recording gaps as notes (B3), then fixing or accepting each.
+- A whole session played with the character, recording gaps as notes ([gap-notes.md](gap-notes.md), B3), then fixing or accepting each.
 - Printable backup and multiclass slot combination (D04's M3 part), if the character needs them.

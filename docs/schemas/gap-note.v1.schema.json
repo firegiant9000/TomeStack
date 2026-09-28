@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/gap-note.v1.schema.json",
+  "title": "TomeStack gap note (schemaVersion 1)",
+  "description": "A session feedback note (M3 B3; docs/features/gap-notes.md): stored in the local database, gaps/<id>.json in a personal backup only. Never transmitted.",
+  "type": "object",
+  "required": ["id", "schemaVersion", "characterId", "target", "text", "status", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": { "const": 1 },
+    "characterId": { "$ref": "#/$defs/uuid" },
+    "target": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["feature", "field"] },
+        "contentId": { "$ref": "#/$defs/uuid" },
+        "effectId": { "type": "string", "maxLength": 200 },
+        "fieldId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "label": { "type": "string", "maxLength": 200 }
+      },
+      "oneOf": [
+        { "properties": { "kind": { "const": "feature" } }, "required": ["contentId"], "not": { "required": ["fieldId"] } },
+        { "properties": { "kind": { "const": "field" } }, "required": ["fieldId"], "not": { "anyOf": [{ "required": ["contentId"] }, { "required": ["effectId"] }] } }
+      ]
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "status": { "enum": ["open", "resolved"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

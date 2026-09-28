@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Session gap notes (M3 B3; `docs/features/gap-notes.md`):** in the sheet's "Gap notes" panel, the player writes down where TomeStack fell short on a feature or field, then marks each note resolved or deletes it after confirming.
+  - Notes are stored only on this computer and never sent anywhere. A personal backup includes them; a share never does.
+  - No error message or log quotes a note's text.
+
 - **Toggled effects, shared resources and variable costs (M3 B2; `docs/features/m3-effects.md`):**
   - **Toggles:** content can declare a toggle (a stance, an aura) that the player switches on and off in "Attacks and actions". Turning it on can spend a use, in the same confirmed change. Modifiers bound to it apply only while it is on: for example +2 Armor Class, traced and still automatic. The long rest proposes switching active toggles off.
   - **Shared resources:** an action can spend another feature's resource.
@@ -18,6 +22,8 @@
 
 - **Content schema v6** (`docs/schemas/content-revision.v6.schema.json`) adds the `toggle` effect, `modifier.toggle`, and roll `resourceContent`, `cost` and `variableCost`. They are typed only in v6 revisions, and the new fields are absent by default, so older revisions are unchanged. 0.2.2 refuses v6 revisions.
 - **Character schema v7** (`docs/schemas/character.v7.schema.json`) adds `play.toggles`. v1–v6 characters are upcast with every toggle off. There is no database migration.
+- **Database schema 5** adds the `gap_notes` table. The data folder is backed up first (`tomestack.db.v4.bak`), as for every upgrade. After the upgrade, 0.2.2 refuses the data folder (`NewerDatabaseException`); restore that backup to go back.
+- **Package format v5** (`docs/schemas/package-manifest.v5.schema.json`, `gap-note.v1.schema.json`) adds `gaps/` entries, in backups only. 0.2.2 refuses v5 packages.
 
 ## 0.2.2 (M2 exit candidate)
 

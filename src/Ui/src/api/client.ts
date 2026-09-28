@@ -20,6 +20,9 @@ import type {
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
+  GapNote,
+  GapNoteStatus,
+  GapTarget,
   ImportResult,
   HitDieRoll,
   PackagePreview,
@@ -106,6 +109,13 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, confirm: true }),
     /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
+    /** The character's gap notes, open first (M3 B3). Stored locally; never sent anywhere. */
+    listGapNotes: (characterId: string) => call<GapNote[]>('gap.list', { characterId }),
+    /** Only the note's "Save note" button calls this. */
+    addGapNote: (characterId: string, target: GapTarget, text: string) => call<GapNote>('gap.add', { characterId, target, text }),
+    setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
+    /** Only the "Delete note" confirmation calls this. */
+    deleteGapNote: (id: string) => call<{ deleted: boolean }>('gap.delete', { id, confirm: true }),
     /** What an export would contain and leave out, without writing anything (ADR-007). */
     previewExport: (characterIds: string[], purpose: ExportPurpose) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose }),

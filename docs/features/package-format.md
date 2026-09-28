@@ -1,4 +1,4 @@
-# Portable package format (v4; v1 to v3 still importable)
+# Portable package format (v5; v1 to v4 still importable)
 
 SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7). Assets (PDFs) are never included (ADR-005, ADR-007).
 
@@ -10,13 +10,14 @@ sources/<sourceId>.json        SourceRecord, including license and redistributio
 content/<revisionId>.json      ContentRevision (immutable, pinned by characters)
 characters/<characterId>.json  Character choices, pins, overrides and play state (no derived values)
 campaigns/<campaignId>.json    Campaign profile of an exported character (v4; SPEC P-01)
+gaps/<noteId>.json             Session gap note of an exported character (v5; backups only, gap-notes.md)
 ```
 
 `manifest.json`:
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `4` (v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `5` (v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |
@@ -31,10 +32,10 @@ JSON is indented UTF-8 with camelCase names and string enums, and entries are so
 
 Every export has a `purpose` (ADR-007, D03), and the UI asks for it:
 
-- **`backup`** (default): characters, every pinned revision and every source, including `redistributable: false` ones. File name `<name>-personal-backup.tomestack.zip`.
-- **`share`**: revisions from non-redistributable sources, and those sources, are left out and listed in `omitted[]`. Characters keep their pins. File name `<name>.tomestack.zip`.
+- **`backup`** (default): characters, every pinned revision and every source, including `redistributable: false` ones, and the characters' gap notes ([gap-notes.md](gap-notes.md)). File name `<name>-personal-backup.tomestack.zip`.
+- **`share`**: revisions from non-redistributable sources, and those sources, are left out and listed in `omitted[]`. Characters keep their pins. Gap notes are never included, and an import refuses a share package that has them (`package.gap-notes-not-allowed`). File name `<name>.tomestack.zip`.
 
-`package.exportPreview { characterIds, purpose }` returns `{ purpose, fileName, characters, included[], omitted[] }` without writing anything. The UI shows the omitted list before a share export. `package.export` returns the package as base64 (used by browser development). In the desktop app, `package.saveAs` writes it where the user chooses in a native Save dialog, and returns only `{ saved, fileName }`. The UI waits for it without a timeout, because the response only comes once the user closes the dialog. Both take `purpose` (default `backup`).
+`package.exportPreview { characterIds, purpose }` returns `{ purpose, fileName, characters, included[], omitted[], gapNotes }` without writing anything. The UI shows the omitted list before a share export. `package.export` returns the package as base64 (used by browser development). In the desktop app, `package.saveAs` writes it where the user chooses in a native Save dialog, and returns only `{ saved, fileName }`. The UI waits for it without a timeout, because the response only comes once the user closes the dialog. Both take `purpose` (default `backup`).
 
 Every limit and check below has its own test in `tests/AppService.Tests/PackageLimitTests.cs`.
 
