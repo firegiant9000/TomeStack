@@ -467,7 +467,10 @@ export function RollResult({
   features: FeatureEntry[];
   act: Act;
 }) {
-  const [amount, setAmount] = useState('');
+  // The typed amount belongs to the roll it was typed for, so a new roll never inherits it.
+  const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
+  const amount = typed.record === record ? typed.value : '';
+  const setAmount = (value: string) => setTyped({ record, value });
   if (!record) return <div role="region" aria-label="Last roll" aria-live="polite" />;
   const p = record.provenance;
   // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
@@ -504,7 +507,7 @@ export function RollResult({
       {linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={linked.current < cost}
+          disabled={cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
           onClick={() => act({ action: 'spend', amount: cost, contentId: linked.content.contentId, resourceId: linked.resourceId })}
         >
           Spend {cost} {linked.label} ({linked.current} left)

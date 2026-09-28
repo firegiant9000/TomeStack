@@ -18,6 +18,11 @@
   - **Without the material,** it is skipped. A synthetic stand-in runs the same pipeline in the gate.
   - **`character.mechanics`:** a new command that returns that inventory for any character.
 
+### Fixed
+
+- A new roll no longer inherits the amount typed for the previous roll's variable spend.
+- "Spend" is disabled when an action's cost evaluates to 0, instead of failing with `play.amount-out-of-range` (review of #7).
+
 ### Migration
 
 - **Content schema v6** (`docs/schemas/content-revision.v6.schema.json`) adds the `toggle` effect, `modifier.toggle`, and roll `resourceContent`, `cost` and `variableCost`. They are typed only in v6 revisions, and the new fields are absent by default, so older revisions are unchanged. 0.2.2 refuses v6 revisions.
