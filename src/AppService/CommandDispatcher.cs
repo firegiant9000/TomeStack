@@ -23,7 +23,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.bySource", "source.list", "source.createHomebrew",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
-        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
+        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.mechanics", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -109,6 +109,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.play" => app.Play(Payload<PlayCommand>(payload)),
         "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
         "character.rest" => app.Rest(Payload<RestRequest>(payload)),
+        "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),

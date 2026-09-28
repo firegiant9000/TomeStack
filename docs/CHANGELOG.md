@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (M3)
+
+### Added
+
+- **The Stardust Guardian acceptance (M3 B1; MVP definition of done 3; `docs/features/m3-stardust-guardian.md`):**
+  - **The test:** it imports the owner's private backup of the character from the gitignored `tests/RulesFixtures/local/stardust-guardian/`. It checks the four DoD 3 mechanics and lists every mechanic as automatic, assisted or reference, with its manual step. It compares them with the owner's optional expectations, and writes the full report only inside that local folder.
+  - **Without the material,** it is skipped. A synthetic stand-in runs the same pipeline in the gate.
+  - **`character.mechanics`:** a new command that returns that inventory for any character.
+
 ## 0.2.2 (M2 exit candidate)
 
 The build for the M2 owner checks (ADR-008: PATCH for a build given to a user; 0.3.0 once every MVP.md check passes on an installed build). Evidence per check: `docs/features/m2-acceptance.md`.
