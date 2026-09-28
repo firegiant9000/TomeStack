@@ -17,7 +17,7 @@ import type {
 import { downloadBase64 } from '../files';
 import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
-import { GapNotesPanel } from './GapNotesPanel';
+import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
@@ -92,10 +92,11 @@ interface FieldProps {
   labels: Map<string, string>;
   onOverride: (field: string, change: FieldOverride | undefined) => void;
   onRoll: (field: string) => void;
+  onReportGap: (field: string) => void;
 }
 
 /** One field: its own override form state, so fields never share input values. */
-function FieldCard({ value, labels, onOverride, onRoll }: FieldProps) {
+function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProps) {
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const headingId = `field-${value.field}`;
@@ -148,6 +149,9 @@ function FieldCard({ value, labels, onOverride, onRoll }: FieldProps) {
             </button>
           )}
         </form>
+        <button type="button" onClick={() => onReportGap(value.field)}>
+          Report a gap: {value.label}
+        </button>
       </details>
     </section>
   );
@@ -258,6 +262,14 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [lastRoll, setLastRoll] = useState<RollRecord>();
   const [resting, setResting] = useState<RestPeriod>();
   const [printing, setPrinting] = useState(false);
+  const [gapAbout, setGapAbout] = useState('');
+  const gapText = useRef<HTMLTextAreaElement>(null);
+
+  /** M3 C5: "Report a gap" pre-fills the gap note form and moves focus to its text box. */
+  function reportGap(about: string) {
+    setGapAbout(about);
+    gapText.current?.focus();
+  }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -397,8 +409,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
       </section>
       <ActionsPanel view={view} roll={roll} act={act} />
-      <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} />
-      <GapNotesPanel view={view} onError={onError} onStatus={onStatus} />
+      <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
+      <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
 
       {groups.map((group) => {
         const caster = (sheet.spellcasting ?? []).length > 0;
@@ -415,6 +427,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
                 labels={labels}
                 onOverride={changeOverride}
                 onRoll={(f) => roll({ field: f, mode: rollMode })}
+                onReportGap={(f) => reportGap(gapAboutField(f))}
               />
             ))}
           </section>

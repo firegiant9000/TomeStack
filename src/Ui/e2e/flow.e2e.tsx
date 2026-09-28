@@ -687,7 +687,11 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Gap note saved for Armor Class.'));
   expect(within(gaps()).getByText('The table grants a cover bonus here.')).toBeTruthy();
 
-  await user.selectOptions(about, within(about).getByRole('option', { name: 'Fixture Quickfoot' }));
+  // M3 C5: "Report a gap" on a feature pre-fills the picker and moves focus to the note's text.
+  const features = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: 'Features' });
+  await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
+  expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
+  expect(document.activeElement).toBe(text);
   await user.type(text, 'Speed bonus should apply while unarmored only.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 2 open'));
@@ -695,6 +699,24 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(gaps()).getByRole('button', { name: 'Mark resolved: Armor Class' }));
   await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 1 open'));
   expect(within(gaps()).getByRole('button', { name: 'Reopen: Armor Class' })).toBeTruthy();
+
+  // "Report a gap" on a field works the same way (the field's details hold the button).
+  const armor = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: /^Armor Class:/ });
+  await user.click(within(armor).getByRole('heading'));
+  await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
+  expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
+  expect(document.activeElement).toBe(text);
+
+  // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
+  await user.click(screen.getByRole('button', { name: 'Gap notes' }));
+  const all = await screen.findByRole('region', { name: /^Gap notes of all characters/ });
+  const allList = await within(all).findByRole('list', { name: 'Gap notes of all characters' });
+  const mine = () => within(allList).getAllByRole('listitem').filter((li: HTMLElement) => li.textContent!.startsWith('E2E Gaps'));
+  expect(mine().map((li: HTMLElement) => li.textContent)).toEqual([expect.stringContaining('Speed bonus should apply while unarmored only.')]);
+  await user.click(within(all).getByRole('checkbox', { name: 'Show resolved notes' }));
+  await waitFor(() => expect(mine()).toHaveLength(2));
+  await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
+  await screen.findByRole('article', { name: 'E2E Gaps' });
 
   // Deleting asks first; "Keep note" leaves it.
   const quickfootNote = () => within(gaps()).getByText('Speed bonus should apply while unarmored only.').closest('li')!;

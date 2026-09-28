@@ -44,6 +44,28 @@ public class GapNoteTests
     }
 
     [Fact]
+    public void Notes_of_every_character_list_together_with_their_names_open_first_and_the_list_writes_nothing()
+    {
+        // M3 C5: gap.listAll, the list across characters.
+        var (temp, brenna) = Brenna();
+        using var _ = temp;
+        var korga = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd51-korga.json"));
+        var resolved = temp.App.AddGapNote(new(brenna.Character.Id, new(GapTargetKind.Field, FieldId: FieldIds.ArmorClass), "First note."));
+        temp.App.SetGapNoteStatus(new(resolved.Id, GapNoteStatus.Resolved));
+        var open = temp.App.AddGapNote(new(korga.Character.Id, FeatureOf(korga), "Second note."));
+        var before = TempApp.Json(temp.App.ListCharacters());
+
+        var listed = temp.App.ListAllGapNotes();
+        var response = JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch("""{"id":"1","command":"gap.listAll","payload":{}}""")).RootElement;
+
+        Assert.Equal([(open.Id, korga.Character.Name), (resolved.Id, brenna.Character.Name)], listed.Select(l => (l.Note.Id, l.CharacterName)));
+        Assert.Equal([GapNoteStatus.Open, GapNoteStatus.Resolved], listed.Select(l => l.Note.Status));
+        Assert.True(response.GetProperty("ok").GetBoolean());
+        Assert.Equal(korga.Character.Name, response.GetProperty("result")[0].GetProperty("characterName").GetString());
+        Assert.Equal(before, TempApp.Json(temp.App.ListCharacters()));
+    }
+
+    [Fact]
     public void A_note_on_an_effect_names_the_feature_and_the_effect()
     {
         var (temp, view) = Brenna();

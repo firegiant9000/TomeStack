@@ -65,6 +65,9 @@ public sealed record AddGapNoteRequest(Guid CharacterId, GapTarget Target, strin
 
 public sealed record GapNoteStatusRequest(Guid Id, GapNoteStatus Status);
 
+/// <summary><c>gap.listAll</c>: a note with the name of its character.</summary>
+public sealed record GapNoteListing(GapNote Note, string CharacterName);
+
 /// <param name="Confirm">Must be true: deleting a note cannot be undone.</param>
 public sealed record DeleteGapNoteRequest(Guid Id, bool Confirm = false);
 
@@ -76,6 +79,22 @@ public sealed partial class TomeStackApp
         if (_store.FindCharacter(characterId) is null)
             throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
         return [.. _store.ListGapNotes(characterId).OrderBy(n => n.Status).ThenByDescending(n => n.CreatedAt).ThenBy(n => n.Id)];
+    }
+
+    /// <summary>
+    /// <c>gap.listAll</c> (M3 C5): every character's notes with the character's name, open first, then newest first.
+    /// Writes nothing. A note whose character is not in the store (characters are never deleted today) is skipped.
+    /// </summary>
+    public IReadOnlyList<GapNoteListing> ListAllGapNotes()
+    {
+        var names = _store.ListCharacters().ToDictionary(c => c.Id, c => c.Name);
+        return
+        [
+            .. _store.ListAllGapNotes()
+                .Where(n => names.ContainsKey(n.CharacterId))
+                .OrderBy(n => n.Status).ThenByDescending(n => n.CreatedAt).ThenBy(n => n.Id)
+                .Select(n => new GapNoteListing(n, names[n.CharacterId])),
+        ];
     }
 
     /// <summary>

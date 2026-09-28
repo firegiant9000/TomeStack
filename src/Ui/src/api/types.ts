@@ -630,6 +630,12 @@ export interface GapNote {
   updatedAt: string;
 }
 
+/** `gap.listAll` (M3 C5): a note with its character's name. */
+export interface GapNoteListing {
+  note: GapNote;
+  characterName: string;
+}
+
 export interface ExportedPackage {
   fileName: string;
   base64: string;

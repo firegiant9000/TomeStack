@@ -197,6 +197,8 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<GapNote> ListGapNotes(Guid characterId) =>
         Query<GapNote>("SELECT json FROM gap_notes WHERE character_id = $character ORDER BY rowid;", ("$character", Key(characterId)));
 
+    public IReadOnlyList<GapNote> ListAllGapNotes() => Query<GapNote>("SELECT json FROM gap_notes ORDER BY rowid;");
+
     public void DeleteGapNote(Guid id) => Execute("DELETE FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
 
     // ---- attachments (ADR-005) ----

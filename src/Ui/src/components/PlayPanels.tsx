@@ -390,11 +390,14 @@ export function FeaturesPanel({
   view,
   pdfSources,
   openPage,
+  reportGap,
 }: {
   view: CharacterView;
   /** Sources with an available PDF (ADR-005); their cited pages can be opened. */
   pdfSources: ReadonlySet<string>;
   openPage: (sourceId: string, page: number) => void;
+  /** M3 C5: pre-fills the gap note form with this feature. */
+  reportGap?: (contentId: string) => void;
 }) {
   const features = view.sheet.features ?? [];
   if (features.length === 0) return null;
@@ -407,6 +410,7 @@ export function FeaturesPanel({
             key={feature.content.revisionId}
             feature={feature}
             openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
+            reportGap={reportGap}
           />
         ))}
       </ul>
@@ -414,7 +418,15 @@ export function FeaturesPanel({
   );
 }
 
-function FeatureItem({ feature, openPage }: { feature: FeatureEntry; openPage?: (sourceId: string, page: number) => void }) {
+function FeatureItem({
+  feature,
+  openPage,
+  reportGap,
+}: {
+  feature: FeatureEntry;
+  openPage?: (sourceId: string, page: number) => void;
+  reportGap?: (contentId: string) => void;
+}) {
   const texts = feature.effects.filter((e) => e.text);
   return (
     <li className="feature">
@@ -449,6 +461,11 @@ function FeatureItem({ feature, openPage }: { feature: FeatureEntry; openPage?: 
       {openPage && feature.origin.sourceId && feature.origin.page && (
         <button type="button" onClick={() => openPage(feature.origin.sourceId!, feature.origin.page!.start)}>
           Open {feature.name}, {pageText(feature.origin.page)}
+        </button>
+      )}
+      {reportGap && (
+        <button type="button" onClick={() => reportGap(feature.content.contentId)}>
+          Report a gap: {feature.name}
         </button>
       )}
     </li>

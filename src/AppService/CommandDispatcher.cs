@@ -24,7 +24,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.mechanics", "roll",
-        "gap.list", "gap.add", "gap.setStatus", "gap.delete",
+        "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -112,6 +112,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.rest" => app.Rest(Payload<RestRequest>(payload)),
         "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
+        "gap.listAll" => app.ListAllGapNotes(),
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),

@@ -21,6 +21,7 @@ import type {
   ExportPreview,
   ExportPurpose,
   GapNote,
+  GapNoteListing,
   GapNoteStatus,
   GapTarget,
   ImportResult,
@@ -111,6 +112,8 @@ export function createClient(transport: Transport) {
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
     /** The character's gap notes, open first (M3 B3). Stored locally; never sent anywhere. */
     listGapNotes: (characterId: string) => call<GapNote[]>('gap.list', { characterId }),
+    /** Every character's notes with the character's name, open first (M3 C5). Writes nothing. */
+    listAllGapNotes: () => call<GapNoteListing[]>('gap.listAll'),
     /** Only the note's "Save note" button calls this. */
     addGapNote: (characterId: string, target: GapTarget, text: string) => call<GapNote>('gap.add', { characterId, target, text }),
     setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
