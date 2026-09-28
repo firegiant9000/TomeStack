@@ -26,6 +26,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
+        "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -124,6 +125,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.search" => app.SearchImportedText(Payload<ImportSearchRequest>(payload)),
         "import.page" => app.ImportedPage(Payload<ImportPageRequest>(payload)),
         "import.candidates" => app.ListCandidates(Payload<ImportCandidatesRequest>(payload)),
+        "import.candidate.check" => app.CheckCandidate(Payload<CandidateRequest>(payload).CandidateId),
+        "import.candidate.edit" => app.EditCandidate(Payload<CandidateEditRequest>(payload)),
+        "import.candidate.accept" => app.AcceptCandidate(Payload<CandidateAcceptRequest>(payload)),
+        "import.candidate.ignore" => app.IgnoreCandidate(Payload<CandidateRequest>(payload).CandidateId),
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),

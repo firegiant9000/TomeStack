@@ -313,10 +313,18 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$json", Serialize(candidate)));
     }
 
-    public StoredCandidate? FindImportCandidate(Guid id) => QuerySingle<StoredCandidate>("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id)));
+    public StoredCandidate? FindImportCandidate(Guid id) =>
+        QuerySingle<StoredCandidate>("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id))) is { } found ? Typed(found) : null;
 
     public IReadOnlyList<StoredCandidate> ListImportCandidates(Guid jobId) =>
-        Query<StoredCandidate>("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId)));
+        [.. Query<StoredCandidate>("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId))).Select(Typed)];
+
+    /// <summary>Versioned effect types are typed only inside a revision, so a stored candidate's effects are typed on read (ADR-003).</summary>
+    private static StoredCandidate Typed(StoredCandidate stored) => stored with
+    {
+        Candidate = ImportWorker.CandidateQuarantine.WithTypedEffects(stored.Candidate),
+        Edited = stored.Edited is { } edited ? ImportWorker.CandidateQuarantine.WithTypedEffects(edited) : null,
+    };
 
     /// <summary>Candidates still pending review are replaced when a job detects again; reviewed ones stay.</summary>
     public void DeletePendingImportCandidates(Guid jobId) =>

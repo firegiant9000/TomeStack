@@ -1,6 +1,22 @@
 # M4: PDF import (extraction, jobs, candidates, review)
 
-ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction, D2 import jobs and D3 candidate detection implemented**; acceptance validation (D4) and the review UI (D5) follow in this document.
+ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction, D2 import jobs, D3 candidate detection and D4 acceptance validation implemented**; the review UI (D5) follows in this document.
+
+## D4: dependency and confidence validation (SPEC I-02, ADR-004)
+
+Service: `src/AppService/ImportCandidates.cs`. Acceptance: `tests/AppService.Tests/CandidateReviewTests.cs`, `ImportQuarantineTests`.
+
+| Command | Payload | Does |
+| --- | --- | --- |
+| `import.candidate.check` | `{ candidateId }` | **Writes nothing.** Builds the draft the candidate would become (through `CandidateQuarantine.ToDraftRevision`, the only conversion) and runs `ContentValidator` on it: schema, references, formulas and cycles. It also lists **dependencies**: the source, installed content it grants or offers (by name and pin), content it names that is missing, and unresolved names. And it lists **blockers**: each low-confidence field and unresolved reference. The result is `canAccept` and `canAcceptAsReference` |
+| `import.candidate.edit` | `{ candidateId, name?, kind?, rulesFamilies?, summary?, effects?, dismissReferences? }` | Saves the reviewer's version next to the detected one, which stays unchanged. Saving clears the low-confidence flags: the reviewer has seen the fields. References go only when dismissed by name, or when content of that name is installed. It is still a proposal |
+| `import.candidate.accept` | `{ candidateId, asReference?, confirm: true }` | Creates a **draft** revision in the source. Refused without `confirm` (`candidate.confirmation-required`), while any blocker remains (`candidate.needs-review`), or when validation reports an error (`candidate.validation-failed`, with the validator's errors). **As reference:** the text and page without the proposed effects; blockers do not apply, and validation still runs |
+| `import.candidate.ignore` | `{ candidateId }` | Sets it aside; nothing is created |
+
+- **Accepting never activates anything.** The draft is inactive (`content.unpublished`). Every effect is forced to `reference` by the quarantine, and the calculator never applies a draft. Making an effect automatic, and publishing, happen in the homebrew studio. Publishing is the existing, re-validating `content.publish`.
+- **Reviewed candidates stay reviewed** (`candidate.already-reviewed`), and each review step is in the job's audit log (`candidate-edited`, `candidate-accepted`, `candidate-accepted-as-reference`, `candidate-ignored`), without text.
+- **Error messages never quote the PDF's text.** A blocker counts the unresolved references instead of naming them; the review shows the names from the candidate itself.
+- **Fixed during D4, before any release (ADR-004):** effect types added after content v3 (spell, weapon, armor) are typed only inside a revision of their schema version (ADR-003). A candidate read from storage, or sent by the UI, therefore carried them as unknown effects. The quarantine's "force to reference" did not reach their raw JSON, and the draft, once read back, had an **automatic** weapon or armor effect. The quarantine now reads the draft back before forcing every effect to reference, and stored candidates are typed on read. `ImportQuarantineTests.A_stored_candidates_versioned_effects_stay_reference_only_in_the_draft_and_after_it_is_read_back` covers it, through publish.
 
 ## D3: candidate detection
 

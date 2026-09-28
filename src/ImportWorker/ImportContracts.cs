@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TomeStack.RulesCore;
 
 namespace TomeStack.ImportWorker;
@@ -131,7 +132,7 @@ public static class CandidateQuarantine
     public static ContentRevision ToDraftRevision(DraftCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        return new ContentRevision
+        var draft = new ContentRevision
         {
             ContentId = Guid.NewGuid(),
             RevisionId = Guid.NewGuid(),
@@ -141,7 +142,29 @@ public static class CandidateQuarantine
             Provenance = new Provenance(candidate.SourceId, candidate.Page),
             Status = RevisionStatus.Draft,
             Summary = candidate.Summary ?? candidate.Excerpt,
-            Effects = [.. candidate.ProposedEffects.Select(e => e with { Automation = AutomationStatus.Reference })],
+            Effects = candidate.ProposedEffects,
         };
+        // Effect types added after v3 (spell, weapon, armor, …) are typed only inside a revision of their schema version
+        // (ADR-003). A candidate stored or sent outside one carries them as unknown effects, whose "automation" lives in
+        // their raw JSON, where "with" cannot reach it. Read the draft back so they are typed, then force every effect to
+        // reference (M4 D4 review: without this, an imported weapon became automatic once its draft was re-read).
+        var typed = JsonSerializer.Deserialize<ContentRevision>(JsonSerializer.Serialize(draft, RulesJson.Compact), RulesJson.Compact)!;
+        return typed with { Effects = [.. typed.Effects.Select(e => e with { Automation = AutomationStatus.Reference })] };
+    }
+
+    /// <summary>The candidate with its effects typed as a current revision would type them (for review; still a proposal).</summary>
+    public static DraftCandidate WithTypedEffects(DraftCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (!candidate.ProposedEffects.OfType<UnknownEffect>().Any())
+            return candidate;
+        var holder = new ContentRevision
+        {
+            ContentId = Guid.Empty, RevisionId = Guid.Empty, Kind = candidate.ProposedKind, Name = candidate.ProposedName,
+            RulesFamilies = candidate.RulesFamilies, Provenance = new Provenance(candidate.SourceId), Status = RevisionStatus.Draft,
+            Effects = candidate.ProposedEffects,
+        };
+        var typed = JsonSerializer.Deserialize<ContentRevision>(JsonSerializer.Serialize(holder, RulesJson.Compact), RulesJson.Compact)!;
+        return candidate with { ProposedEffects = typed.Effects };
     }
 }

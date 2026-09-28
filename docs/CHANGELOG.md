@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Reviewing candidates (M4 D4; `docs/features/pdf-import.md`):** before a candidate is accepted, TomeStack checks the entry it would become (rules, references, formulas) and shows what it depends on. It stays blocked while a field is unsure or a name it refers to is missing, until you edit it or accept it as a reference entry only. Accepting creates a draft; nothing applies until you publish it in the studio.
+
 - **Candidate detection (M4 D3; `docs/features/pdf-import.md`):** an import proposes candidates found in the book's text: spells, feats, class features, weapon and armor table rows, and class feature tables. Each has its excerpt, page, proposed rules, a confidence and what it is unsure of, and the names it mentions that are not installed. Nothing becomes content until you review it. Measured on the two SRDs: every spell is found with its level, and every bundled weapon and class is found.
 
 - **Import jobs (M4 D2; `docs/features/pdf-import.md`):** extracting a PDF runs as a job you can cancel and resume. It survives closing the app and keeps a local audit log with no text from the book. Extracted text is searchable within its source. Imported text stays on this computer: no backup or share includes it.
