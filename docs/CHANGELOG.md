@@ -1,8 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (M2 exit candidate)
+
+The build for the M2 owner checks (ADR-008: PATCH for a build given to a user; 0.3.0 once every MVP.md check passes on an installed build). Evidence per check: `docs/features/m2-acceptance.md`.
 
 ### Added
+
+- **M2 acceptance evidence (`docs/features/m2-acceptance.md`):** every MVP.md check is mapped to its executable acceptance, plus the owner checks and what could not be verified here. A new `M2AcceptanceTests` plays a scripted encounter with an SRD Wizard in each family (damage, a cantrip attack, a weapon attack, a spell slot, a short rest with a hit die, a long rest), then round-trips it through a backup to a clean data folder.
 
 - **The SRD spellcasting classes, levels 1–20, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):**
   - **Classes:** Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard. Each has every class feature from level 1 to 20, its SRD subclass, its spellcasting tables, and its multiclass prerequisites and proficiencies.
