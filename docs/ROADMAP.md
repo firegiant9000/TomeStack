@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | M0 Foundation | Repo, CI, license/attribution review, desktop packaging spike, source/data schemas, test fixtures, first diagram and ADRs | Windows offline shell opens; fixture content persists and exports | None |
 | M1 Rules core | Edition packs, revisioned content, effect AST, validation, trace, choices, dice engine | Two rules-family fixture characters calculate and explain outputs. **Delivered 2026-09-26 (v0.2.0):** `M1AcceptanceTests` passes ([features/m1-acceptance.md](features/m1-acceptance.md)) | M0 |
-| M2 Usable MVP | Builder, sheet, homebrew subclass studio, PDF attachment/page links, manual content entry, rests, backup/import/export, campaign source policy | All [MVP.md](MVP.md) checks pass on an installed Windows build. **Exit candidate (v0.2.2):** every automated check passes ([features/m2-acceptance.md](features/m2-acceptance.md)); the owner checks on the installed build are pending, and 0.3.0 follows them | M1 |
+| M2 Usable MVP | Builder, sheet, homebrew subclass studio, PDF attachment/page links, manual content entry, rests, backup/import/export, campaign source policy | All [MVP.md](MVP.md) checks pass on an installed Windows build. **Delivered 2026-09-28 (v0.3.0):** every automated check passed on 0.2.2, and the owner checks passed on the installed 0.2.2, including a clean-VM install ([features/m2-acceptance.md](features/m2-acceptance.md)) | M1 |
 | M3 Personal replacement | Stardust Guardian migration; complex resource/action mechanics, multiclass/spellcasting polish, source updates and session feedback | Arlo plays that character end to end without D&D Beyond. **Started:** B1, the acceptance ([features/m3-stardust-guardian.md](features/m3-stardust-guardian.md)), waiting for the owner's material; B2, toggles, shared resources and variable costs ([features/m3-effects.md](features/m3-effects.md)); B3, session gap notes ([features/gap-notes.md](features/gap-notes.md)) | M2 |
 | M4 Import intelligence | Page and whole-book extraction, OCR fallback, candidate/entity recognition, review UI, confidence and dependency validation | A third-party test PDF produces reviewable candidates; no unapproved active rules | M2; may run alongside M3 |
 | M5 Creation power | Full custom base classes, arbitrary progression, sandbox/diff/debugger, templates, design feedback toggle | A nonstandard class levels and multiclasses without code edits | M1–M4 |
@@ -45,7 +45,11 @@ Done since v0.1: SRD fixtures for both families with a cross-edition conflict (M
 - ~~PDF attachments and the `pdfRef` → attachment migration (ADR-005), with page navigation (SPEC S-04, B05).~~ Done (M2 item 6, [features/pdf-attachments.md](features/pdf-attachments.md)); owner check: the viewer lands on the cited page.
 - Make the Stardust Guardian acceptance fixture (in the gitignored `tests/RulesFixtures/local/`) with at least one mechanic that cannot be fully automated. *(The test is ready (M3 B1); the owner puts a backup export there, see [features/m3-stardust-guardian.md](features/m3-stardust-guardian.md).)*
 
-## M2 status (2026-09-27, v0.2.2: exit candidate)
+## M2 status (2026-09-28: delivered as 0.3.0)
+
+The owner checks on the installed 0.2.2 passed on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal. By owner decision, the synthetic stand-in meets DoD 3 for M2, and the real Stardust Guardian is the M3 gate.
+
+### Earlier status (2026-09-27, v0.2.2: exit candidate)
 
 All M2 slices are done and every automated MVP check passes ([features/m2-acceptance.md](features/m2-acceptance.md)). What remains are the owner checks on the installed 0.2.2: the installer upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, and the real Stardust Guardian. The clean-VM checks cannot be done on the development machine. The notes below record how the slices went.
 

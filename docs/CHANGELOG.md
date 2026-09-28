@@ -2,6 +2,10 @@
 
 ## Unreleased (M3)
 
+## 0.3.0 (M2 delivered)
+
+M2 "Usable MVP" is delivered (ADR-008: MINOR for a delivered milestone). The owner checks passed on the installed 0.2.2 on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal (`docs/features/m2-acceptance.md`). This build also carries M3 B1–B3 below.
+
 ### Added
 
 - **Session gap notes (M3 B3; `docs/features/gap-notes.md`):** in the sheet's "Gap notes" panel, the player writes down where TomeStack fell short on a feature or field, then marks each note resolved or deletes it after confirming.
