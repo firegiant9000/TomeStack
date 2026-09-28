@@ -109,10 +109,13 @@ public sealed partial class TomeStackApp
             var revision = _store.FindRevision(reference)!;
             var effect = revision.Effects.OfType<RollEffect>().FirstOrDefault(e => e.Id == command.EffectId)
                 ?? throw new AppValidationException([new("roll.effect-not-found", $"'{revision.Name}' has no roll effect '{command.EffectId}'.", reference, command.EffectId)]);
-            // Content v8 (M2.2): the roll's bonus formula, as the sheet evaluated it for this character (a flat modifier).
+            // Content v8 (M2.2): the roll's bonus formula, as the sheet evaluated it for this character (a flat modifier,
+            // with its sign). A bonus that could not be evaluated refuses the roll: rolling without it would be wrong.
+            if (sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effect.Id) is { } failed)
+                throw new AppValidationException([new("roll.bonus-invalid", $"'{effect.Label}' cannot be rolled: its bonus could not be calculated. {failed.Message}", reference, effect.Id)]);
             var bonus = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id)?.Bonus;
             IReadOnlyList<RollModifier>? modifiers = bonus is { } amount && amount != 0
-                ? [new RollModifier($"{effect.Label} bonus ({effect.Bonus})", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
+                ? [new RollModifier($"{effect.Label} bonus", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
                 : null;
             request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical, modifiers);
         }

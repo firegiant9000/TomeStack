@@ -146,7 +146,10 @@ public sealed record FeatureEntry(
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
 /// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
 /// <param name="Cost">Content v6: uses the action spends (its formula evaluated), or the most it may spend when <paramref name="VariableCost"/>.</param>
-/// <param name="Bonus">Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level), added to the dice.</param>
+/// <param name="Bonus">
+/// Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level, or a negative
+/// Strength modifier), added to the dice. Null when the roll has none, or when it failed (a diagnostic; the roll is refused).
+/// </param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
@@ -490,12 +493,14 @@ public static class CharacterCalculator
         }).ToList();
 
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        int? Evaluate(ActiveContent item, string source) =>
+        // A roll's cost is a number of uses, so never negative.
+        int? Cost(ActiveContent item, string source) =>
             Formula.TryParse(source, out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
                 ? Math.Max(value, 0)
                 : null;
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Evaluate)).ToList();
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
                 item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
@@ -866,15 +871,42 @@ public static class CharacterCalculator
         return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
     }
 
-    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> evaluate)
+    /// <summary>
+    /// Content v8 (M2.2): each roll's <c>bonus</c> formula for this character, with its sign (a Strength 8 bonus is −1).
+    /// A formula that fails is a content diagnostic (<c>effect.invalid-formula</c>), and the roll is refused rather than
+    /// rolled without it. A revision below v8 has no roll bonus (<see cref="IgnoresV8"/>).
+    /// </summary>
+    private static Dictionary<(ContentReference, string), int> RollBonuses(
+        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var bonuses = new Dictionary<(ContentReference, string), int>();
+        foreach (var item in active.Where(a => !IgnoresV8(a.Revision)))
+        {
+            foreach (var roll in item.Revision.Effects.OfType<RollEffect>())
+            {
+                if (roll.Bonus is not { } source)
+                    continue;
+                FormulaError? failure;
+                if (Formula.TryParse(source, out var formula, out failure)
+                    && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+                    bonuses[(item.Revision.Reference, roll.Id)] = value;
+                else
+                    diagnostics.Add(InvalidFormula(item.Revision, roll, failure!));
+            }
+        }
+        return bonuses;
+    }
+
+    private static FeatureEntry Feature(
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses)
     {
         var revision = item.Revision;
         var effects = revision.Effects.Select(e => e switch
         {
             RollEffect roll => new FeatureEffect(
                 e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
-                roll.Bonus is { } bonus ? evaluate(item, bonus) : null),
+                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),

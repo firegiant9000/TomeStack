@@ -1039,7 +1039,8 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   // Second Wind rolls 1d10 plus the Fighter level; spending it is a separate, confirmed press.
   await user.click(within(sheet).getByRole('button', { name: 'Roll Second Wind healing (1d10 + 3)' }));
   const lastRoll = screen.getByRole('region', { name: 'Last roll' });
-  await waitFor(() => expect(lastRoll.textContent).toMatch(/Second Wind healing bonus \(CLASS_LEVEL\) \+3/));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Second Wind healing bonus \+3/));
+  expect(lastRoll.textContent).not.toMatch(/CLASS_LEVEL/); // the label names the roll, not its formula
   await user.click(await screen.findByRole('button', { name: 'Spend 1 Second Wind (2 left)' }));
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 1 of 2' })).toBeTruthy());
   await user.click(within(screen.getByRole('article', { name: 'E2E Warden' })).getByRole('button', { name: 'Roll Star burst (2d6)' }));
