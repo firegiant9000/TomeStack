@@ -25,6 +25,7 @@ SPEC I-06 · ADR-002, ADR-004 · status: API implemented and tested (M1 item 2).
 - When a class revision is replaced, choice selections carry over to the new revision by `choiceId`. A choice the new revision no longer offers shows up in the review as unresolved, and on the sheet as `choice.orphaned`.
 - Overrides stay the displayed value (SPEC C-06), and the review lists every override whose calculated value would change, so the user can decide whether to keep it.
 - Published revisions are never rewritten. `ListRevisions` shows the whole history of a content id, including drafts.
+- **New picks get the newest revision (M2).** `content.list` marks every older published revision of a content `superseded`. The builder's pickers and the equipment "Add" list leave those out, while saved characters still show the names of the revisions they pin. Bundled SRD content follows the same rule, for example the content v5 Barbarian revision (`licensing/srd-pack-review.md`).
 
 ## Packages
 

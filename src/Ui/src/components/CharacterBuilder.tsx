@@ -594,6 +594,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     if (step !== 'basics') heading.current?.focus();
   }, [step]);
 
+  // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
+  const pickable = options.filter((o) => !o.superseded);
   const byRevision = new Map(options.map((o) => [o.reference.revisionId, o]));
   const optionOf = (ref: ContentReference) => byRevision.get(ref.revisionId);
   const nameOf = (ref: ContentReference) => optionOf(ref)?.name ?? ref.revisionId;
@@ -675,7 +677,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           basics={basics}
           rulesFamilies={rulesFamilies}
           campaigns={campaigns}
-          options={options}
+          options={pickable}
           onChange={setBasics}
           onNext={() => preview(draftOf(basics, draftId, view?.character))}
           onCancel={onCancel}
@@ -684,7 +686,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
           character={mode.view.character}
-          options={options}
+          options={pickable}
           nameOf={nameOf}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes })}
           onCancel={onCancel}
@@ -696,7 +698,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           commitLabel={mode.kind === 'create' ? 'Create and save' : mode.kind === 'levelUp' ? 'Save level-up' : 'Save choices'}
           optionOf={optionOf}
           optionsLoaded={listedFor === `${family}|${campaignId ?? ''}`}
-          spellOptions={options.filter((o) => o.kind === 'spell')}
+          spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={(spells) => view && preview({ ...view.character, spells })}
           onBack={mode.kind === 'create' ? () => setStep('basics') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}

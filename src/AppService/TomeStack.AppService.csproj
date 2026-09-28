@@ -18,6 +18,10 @@
     <EmbeddedResource Include="Content\srd-5.2.1.json" LogicalName="TomeStack.Content.srd-5.2.1.json" />
     <EmbeddedResource Include="Content\srd-5.1-spells.json" LogicalName="TomeStack.Content.srd-5.1-spells.json" />
     <EmbeddedResource Include="Content\srd-5.2.1-spells.json" LogicalName="TomeStack.Content.srd-5.2.1-spells.json" />
+    <EmbeddedResource Include="Content\srd-5.1-equipment.json" LogicalName="TomeStack.Content.srd-5.1-equipment.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-equipment.json" LogicalName="TomeStack.Content.srd-5.2.1-equipment.json" />
+    <EmbeddedResource Include="Content\srd-5.1-classes.json" LogicalName="TomeStack.Content.srd-5.1-classes.json" />
+    <EmbeddedResource Include="Content\srd-5.2.1-classes.json" LogicalName="TomeStack.Content.srd-5.2.1-classes.json" />
     <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack.json" LogicalName="TomeStack.FixturePack.json" />
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2.json" LogicalName="TomeStack.FixturePackM2.json" />

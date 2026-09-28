@@ -4,6 +4,10 @@
 
 ### Added
 
+- **The SRD weapon tables and the Barbarian's multiclass data (`docs/licensing/srd-pack-review.md`):**
+  - **Weapons:** the 37 SRD 5.1 and 38 SRD 5.2.1 weapons are items with their damage, properties and range (and the 2024 mastery property's name), ready to equip and attack with.
+  - **Barbarian:** a new revision of the SRD Barbarian in each family records its weapon proficiencies, its multiclass prerequisite (Strength 13) and its multiclass proficiencies. Under 2024 rules, a later-class Barbarian gains martial weapons but not simple ones.
+  - **Pickers:** the builder and the equipment list offer only the newest revision of each content. Older revisions stay for the characters that use them.
 - **The SRD spells, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):** all 319 SRD 5.1 spells and all 339 SRD 5.2.1 spells ship as content (CC-BY-4.0, attributed like the other SRD content). Each has its level, school, casting time, range, components, duration, class lists, attack or save, base dice and full description, with its page. They are in two new bundled packs that share each family's source record. A caster lists them in the builder once the SRD caster classes are bundled (next).
 
 - **Short rest, hit dice, death saves and inspiration (D01 follow-up, owner 2026-09-27: SRD rules, previewed; SPEC C-05; `docs/features/rests.md`, `docs/features/sheet-play.md`):**

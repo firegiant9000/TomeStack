@@ -1,6 +1,6 @@
 # Multiclass prerequisites, proficiency subsets, weapons and attacks
 
-SPEC C-01, C-02, C-04 · LIVING_SPECS D04 · MVP "Builder" (multiclass path), "Sheet" (attacks, damage) · status: **engine implemented (M2); the SRD weapon table and the SRD classes' multiclass data are not bundled yet** (the SRD content commits, SPEC Q-03).
+SPEC C-01, C-02, C-04 · LIVING_SPECS D04 · MVP "Builder" (multiclass path), "Sheet" (attacks, damage) · status: **engine implemented (M2). The SRD weapon tables and the SRD Barbarian's multiclass data are bundled; the SRD casters' data comes with them** (SPEC Q-03, `licensing/srd-pack-review.md`).
 
 Rules core: `RestrictionEffect.Multiclass`/`Group`, `GrantEffect.OnlyAs`, `ChoiceEffect.OnlyAs`, `RollEffect.Activation` and `WeaponEffect` in `src/RulesCore/Effects.cs`. The calculator is in `src/RulesCore/Calculation.cs` (`Unmet`, `EntryApplies`, `CollectAttacks`). Service: weapon rolls in `src/AppService/Rolling.cs`. UI: the "Attacks and actions" panel in `src/Ui/src/components/PlayPanels.tsx`. Acceptance: `tests/RulesCore.Tests/MulticlassAndAttackTests.cs`, `tests/AppService.Tests/AttackCommandTests.cs`, and the e2e test "equips a weapon…". Fixtures: `tests/RulesFixtures/fixture-pack-m2-combat.json` (the invented "Fixture Duelist" and three weapons).
 
@@ -46,5 +46,6 @@ Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 ## Not yet
 
-- The SRD weapon table, the SRD classes' multiclass prerequisites, proficiency subsets and weapon proficiencies (the SRD content commits; the SRD Barbarian gets new revisions, and characters are offered the update as usual).
+- The SRD casters' multiclass data (with the SRD caster classes). Bundled already: the weapon tables (`srd-<family>-equipment.json`) and a content v5 revision of the SRD Barbarian (`srd-<family>-classes.json`). Characters that pin the M1 Barbarian revision keep it. Pickers offer the newest revision (`ContentOption.Superseded`), and moving a saved character to it is the reviewed update (SPEC I-06).
+- The net and the blowgun: text only, because their damage is not a dice roll.
 - Armor proficiency and its penalties, ammunition tracking, Weapon Mastery effects (text only), fighting styles, two-weapon fighting and bonus damage from features.

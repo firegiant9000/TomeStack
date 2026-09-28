@@ -14,8 +14,12 @@ public class SrdPackTests
     private static readonly ContentPack Base521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1.json");
     private static readonly ContentPack Spells51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-spells.json");
     private static readonly ContentPack Spells521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-spells.json");
-    private static readonly ContentPack Srd51 = Merge(Base51, Spells51);
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521);
+    private static readonly ContentPack Equipment51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-equipment.json");
+    private static readonly ContentPack Equipment521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-equipment.json");
+    private static readonly ContentPack Classes51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");
+    private static readonly ContentPack Classes521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-classes.json");
+    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
@@ -36,8 +40,67 @@ public class SrdPackTests
     [Fact]
     public void A_familys_packs_carry_the_identical_source_record()
     {
-        Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(Spells51.Sources));
-        Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(Spells521.Sources));
+        foreach (var pack in new[] { Spells51, Equipment51, Classes51 })
+            Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521 })
+            Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
+    }
+
+    [Fact]
+    public void The_weapon_tables_are_items_with_weapons_and_differ_by_family_as_content()
+    {
+        Assert.Equal(37, Equipment51.Revisions.Count); // SRD 5.1 p. 66
+        Assert.Equal(38, Equipment521.Revisions.Count); // SRD 5.2.1 p. 91: adds the musket and the pistol, no net
+        Assert.All(Equipment51.Revisions.Concat(Equipment521.Revisions), r => Assert.Equal(ContentKind.Item, r.Kind));
+        // Text only: the net has no damage, and the blowgun's flat 1 damage is not a dice roll.
+        Assert.Equal(["Blowgun", "Net"], Equipment51.Revisions.Where(r => !r.Effects.OfType<WeaponEffect>().Any()).Select(r => r.Name));
+        Assert.Equal(["Blowgun"], Equipment521.Revisions.Where(r => !r.Effects.OfType<WeaponEffect>().Any()).Select(r => r.Name));
+        WeaponEffect Weapon(ContentPack pack, string name) => pack.Revisions.Single(r => r.Name == name).Effects.OfType<WeaponEffect>().Single();
+
+        // The trident is 1d6 (versatile 1d8) in 2014 and 1d8 (versatile 1d10) in 2024; only 2024 has mastery properties.
+        Assert.Equal(("1d6", "1d8", null), (Weapon(Equipment51, "Trident").Damage, Weapon(Equipment51, "Trident").Versatile, Weapon(Equipment51, "Trident").Mastery));
+        Assert.Equal(("1d8", "1d10", "Topple"), (Weapon(Equipment521, "Trident").Damage, Weapon(Equipment521, "Trident").Versatile, Weapon(Equipment521, "Trident").Mastery));
+        Assert.Equal(("light-crossbow", "light-crossbow"), (Weapon(Equipment51, "Crossbow, light").WeaponKey, Weapon(Equipment521, "Light Crossbow").WeaponKey));
+        Assert.Equal(["finesse", "light", "thrown"], Weapon(Equipment51, "Dagger").Properties);
+        Assert.Equal("20/60", Weapon(Equipment51, "Dagger").Range);
+    }
+
+    [Fact]
+    public void The_Barbarian_as_a_later_class_gains_simple_weapons_only_under_2014_rules_side_by_side()
+    {
+        // SRD 5.1 p. 57: shields, simple and martial weapons. SRD 5.2.1 p. 28: Martial weapons and Shields only.
+        using var temp = new TempApp();
+        Character Later(ContentPack classes, ContentPack equipment, string family, string club)
+        {
+            var barbarian = classes.Revisions.Single(r => r.Name == "Barbarian");
+            var fixtureCaster = new ContentReference(Guid.Parse("5f5dc000-0000-4000-8000-000000000001"), Guid.Parse("5f5de000-0000-4000-8000-000000000001"));
+            return new Character
+            {
+                Id = Guid.NewGuid(), Name = "Test Later Barbarian", RulesFamily = family, Level = 2,
+                Classes = [new(fixtureCaster, 1), new(barbarian.Reference, 1)],
+                BaseAbilities = new(14, 12, 12, 13, 10, 10),
+                Equipment = [new(equipment.Revisions.Single(r => r.Name == club).Reference, Equipped: true), new(equipment.Revisions.Single(r => r.Name == "Greataxe").Reference, Equipped: true)],
+            };
+        }
+
+        var old = temp.App.SaveCharacter(Later(Classes51, Equipment51, RulesFamilies.Srd51, "Club")).Sheet;
+        var current = temp.App.SaveCharacter(Later(Classes521, Equipment521, RulesFamilies.Srd521, "Club")).Sheet;
+
+        Assert.Equal([true, true], old.Attacks!.Select(a => a.Proficient));
+        Assert.Equal([false, true], current.Attacks!.Select(a => a.Proficient)); // club (simple) no, greataxe (martial) yes
+        // Saving throw proficiencies come only with the starting class: Str save = the modifier +2, not +2 + PB.
+        Assert.Equal((2, 2), (old.Field(FieldIds.Save(Ability.Str)).Value, current.Field(FieldIds.Save(Ability.Str)).Value));
+    }
+
+    [Fact]
+    public void Content_list_offers_the_newest_revision_and_marks_the_superseded_Barbarian()
+    {
+        using var temp = new TempApp();
+
+        var barbarians = temp.App.ListContent(RulesFamilies.Srd521).Where(o => o.Name == "Barbarian" && o.Compatible).ToList();
+
+        Assert.Equal(2, barbarians.Count); // the M1 revision (still pinned by saved characters) and the content v5 revision
+        Assert.Equal(Classes521.Revisions.Single(r => r.Name == "Barbarian").Reference, Assert.Single(barbarians, o => !o.Superseded).Reference);
     }
 
     [Theory]

@@ -1,0 +1,172 @@
+{
+  "packId": "srd-5.1-classes",
+  "formatVersion": 1,
+  "notice": "Classes of the System Reference Document 5.1 (CC-BY-4.0) beyond the M1 slice, and a content v5 revision of the Barbarian with its multiclass data. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000000003",
+      "revisionId": "51e00000-0000-4000-8000-000000300001",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Barbarian",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 8,
+          "end": 9
+        }
+      },
+      "status": "published",
+      "summary": "Hit Dice: 1d12 per barbarian level. Hit Points at 1st Level: 12 + your Constitution modifier. Hit Points at Higher Levels: 1d12 (or 7) + your Constitution modifier per barbarian level after 1st. Armor: Light armor, medium armor, shields. Weapons: Simple weapons, martial weapons. Tools: None. Saving Throws: Strength, Constitution. Skills: Choose two from Animal Handling, Athletics, Intimidation, Nature, Perception, and Survival. TomeStack slice: levels 1-3.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "barbarian-hit-die",
+          "die": 12
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "barbarian-skills",
+          "choiceId": "barbarian-skills",
+          "count": 2,
+          "text": "Skills: Choose two from Animal Handling, Athletics, Intimidation, Nature, Perception, and Survival.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000008",
+              "revisionId": "51e00000-0000-4000-8000-000000000008"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000009",
+              "revisionId": "51e00000-0000-4000-8000-000000000009"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000010",
+              "revisionId": "51e00000-0000-4000-8000-000000000010"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000011",
+              "revisionId": "51e00000-0000-4000-8000-000000000011"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000012",
+              "revisionId": "51e00000-0000-4000-8000-000000000012"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000013",
+              "revisionId": "51e00000-0000-4000-8000-000000000013"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "rage",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000000004",
+            "revisionId": "51e00000-0000-4000-8000-000000000004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "unarmored-defense",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000000005",
+            "revisionId": "51e00000-0000-4000-8000-000000000005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "reckless-attack",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000000006",
+            "revisionId": "51e00000-0000-4000-8000-000000000006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "danger-sense",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000000007",
+            "revisionId": "51e00000-0000-4000-8000-000000000007"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "primal-path",
+          "choiceId": "primal-path",
+          "count": 1,
+          "level": 3,
+          "text": "Primal Path. At 3rd level, you choose a path that shapes the nature of your rage. (The SRD 5.1 includes the Path of the Berserker.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000000014",
+              "revisionId": "51e00000-0000-4000-8000-000000000014"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-weapons-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "text": "Weapons: Simple weapons, martial weapons."
+        },
+        {
+          "type": "grant",
+          "id": "barbarian-weapons-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial"
+        },
+        {
+          "type": "restriction",
+          "id": "barbarian-multiclass-str",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Multiclassing prerequisite: Strength 13. Multiclassing proficiencies gained: shields, simple weapons, martial weapons (SRD 5.1 pp. 56-57)."
+        }
+      ]
+    }
+  ]
+}

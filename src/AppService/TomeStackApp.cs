@@ -44,6 +44,8 @@ public sealed partial class TomeStackApp : IDisposable
     [
         "TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json",
         "TomeStack.Content.srd-5.1-spells.json", "TomeStack.Content.srd-5.2.1-spells.json",
+        "TomeStack.Content.srd-5.1-equipment.json", "TomeStack.Content.srd-5.2.1-equipment.json",
+        "TomeStack.Content.srd-5.1-classes.json", "TomeStack.Content.srd-5.2.1-classes.json",
     ];
 
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
@@ -95,10 +97,13 @@ public sealed partial class TomeStackApp : IDisposable
         if (campaignId is { } id)
             allowed = (_store.FindCampaign(id) ?? throw new AppValidationException([new("campaign.not-found", $"Campaign {id} does not exist.")])).AllowedSources.ToHashSet();
         var sources = _store.ListSources().ToDictionary(s => s.Id);
+        var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
+        // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
+        // characters still pin them and show their names) but are marked, so pickers offer only the newest.
+        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
         return
         [
-            .. _store.ListRevisions()
-                .Where(r => r.Status == RevisionStatus.Published)
+            .. published
                 .Select(r =>
                 {
                     var source = sources.GetValueOrDefault(r.Provenance.SourceId);
@@ -108,7 +113,8 @@ public sealed partial class TomeStackApp : IDisposable
                         allowed?.Contains(r.Provenance.SourceId),
                         r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
                             ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
-                            : null);
+                            : null,
+                        Superseded: newest[r.ContentId] != r.RevisionId);
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -283,7 +289,8 @@ public sealed record ContentOption(
     string? Page,
     string? Summary,
     bool? AllowedInCampaign = null,
-    SpellSummary? Spell = null);
+    SpellSummary? Spell = null,
+    bool Superseded = false);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);

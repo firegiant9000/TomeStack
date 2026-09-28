@@ -451,6 +451,8 @@ export interface ContentOption {
   summary?: string;
   /** Set when listed for a campaign: whether it allows this option's source. */
   allowedInCampaign?: boolean;
+  /** A newer published revision of the same content exists: listed so pinned names resolve, but not offered for new picks. */
+  superseded?: boolean;
   /** Spell options only (content schema v5). */
   spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
 }
