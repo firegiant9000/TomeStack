@@ -55,25 +55,42 @@ public sealed partial class TomeStackApp : IDisposable
     /// that already contain fixture content keep it (published revisions are never deleted).
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
+    /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
     public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null)
     {
-        Directory.CreateDirectory(dataDirectory);
-        var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor };
-        app.InterruptLeftoverImports();
-        foreach (var pack in BundledPacks)
-            app.Seed(pack);
-        if (devFixtures)
+        // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
+        // process is the only one using the folder.
+        var folderLock = DataFolderLock.Acquire(dataDirectory);
+        TomeStackApp? app = null;
+        try
         {
-            app.Seed("TomeStack.FixturePack.json");
-            app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
-            app.Seed("TomeStack.FixturePackM2Spells.json"); // original test casters and spells (M2 spellcasting)
-            app.Seed("TomeStack.FixturePackM2Combat.json"); // original test weapons and a multiclass class (M2)
-            app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
+            var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _folderLock = folderLock };
+            app.InterruptLeftoverImports();
+            foreach (var pack in BundledPacks)
+                app.Seed(pack);
+            if (devFixtures)
+            {
+                app.Seed("TomeStack.FixturePack.json");
+                app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
+                app.Seed("TomeStack.FixturePackM2Spells.json"); // original test casters and spells (M2 spellcasting)
+                app.Seed("TomeStack.FixturePackM2Combat.json"); // original test weapons and a multiclass class (M2)
+                app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
+            }
+            AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
+            return app;
         }
-        AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
-        return app;
+        catch
+        {
+            if (app is not null)
+                app.Dispose(); // releases the lock too
+            else
+                folderLock.Dispose();
+            throw;
+        }
     }
+
+    private DataFolderLock? _folderLock;
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
@@ -264,6 +281,7 @@ public sealed partial class TomeStackApp : IDisposable
     {
         StopImportsForDispose(); // a running import becomes "interrupted" and resumes after the next start
         _store.Dispose();
+        _folderLock?.Dispose(); // last: the folder is free only once the database is closed
     }
 
     private CharacterView View(Character character)

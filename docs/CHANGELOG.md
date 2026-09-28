@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (M3 and M4)
+## Unreleased (M2.1, M3 and M4)
 
 ### Added
 
@@ -31,6 +31,8 @@
 - **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
 
 ### Fixed
+
+- **One TomeStack per data folder (M2.1; ARCHITECTURE "Data folder"):** starting TomeStack again while it is open now brings the open window to the front instead of opening the same data a second time. Before, the second copy marked the first copy's running PDF import as interrupted, so resuming it could run two imports of one job at once. Its start-up clean-up could also delete a PDF the first copy was still attaching. TomeStack now holds `tomestack.lock` in the data folder while it runs, and Windows releases it when TomeStack exits or crashes. The DevHost is refused on a folder the app has open, and the app on one the DevHost has open.
 
 - **Import review fixes (M4, independent review 2026-09-28; ADR-009, `docs/features/pdf-import.md`):**
   - A page that crashes the worker, runs out of time or memory, or cannot be read by OCR now fails alone: it is marked unreadable and the rest of the book is read. Resuming used to stop on the same page every time. After 5 such pages in one run the import stops, and "Resume" continues after them.

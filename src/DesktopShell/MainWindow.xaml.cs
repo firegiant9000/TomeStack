@@ -317,6 +317,19 @@ public partial class MainWindow : Window
         catch (WebView2RuntimeNotFoundException) { return null; }
     }
 
+    /// <summary>M2.1: a second launch on this data folder asked for this window. Called on the UI thread.</summary>
+    public void BringToFront()
+    {
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Show();
+        Activate();
+        // Windows may refuse focus to a background process; a brief Topmost raises the window anyway.
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
     private void ShowStartupError(string message)
     {
         WebView.Visibility = Visibility.Collapsed;

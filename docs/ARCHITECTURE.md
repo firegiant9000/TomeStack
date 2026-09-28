@@ -49,6 +49,7 @@ Extraction and OCR are decided in [ADR-009](decisions/ADR-009-pdf-extraction-and
 
 - SQLite transactions cover creation, leveling, rest, revision publication and import commits. Migrations are numbered and backed up before upgrading a user database.
 - Keep PDFs/files outside the database, referenced through managed IDs and content hashes; prohibit archive path traversal. Allow choosing a data directory before large imports.
+- **Data folder (M2.1):** one process per data folder. `TomeStackApp.Open` takes `tomestack.lock` (opened without sharing, released by Windows when the process ends, even after a crash) before the database opens, because start-up interrupts leftover imports and deletes unreferenced attachment files. A second shell launch signals the first to come forward (a session-local named event keyed on a hash of the folder path) and exits with code 3; `scripts/single-instance-check.ps1` proves it with two real processes.
 - Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, `gaps/` (backups only), optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
 - Export is deterministic enough for human inspection and useful diffs. Document compatibility and round-trip unknown extension fields.
 - Backups are local, discoverable and restorable on a clean installation; do not confuse an export with a complete backup when PDF attachments were omitted.
