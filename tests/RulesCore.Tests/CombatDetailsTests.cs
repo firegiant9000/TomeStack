@@ -248,6 +248,135 @@ public class CombatDetailsTests
         Assert.Equal(("1d10", 7), (roll.Dice, roll.Bonus));
     }
 
+    private static ContentRevision BonusRoll(int n, string bonus) => Revision(n, ContentKind.Feat, $"Test Bonus Roll {n}",
+        new RollEffect { Id = "hit", RollId = "hit", Label = "Test hit", Dice = "1d6", Bonus = bonus });
+
+    private static FeatureEffect RollOf(CharacterSheet sheet, ContentRevision feat) =>
+        sheet.Features!.Single(f => f.Content == feat.Reference).Effects.Single(e => e.Id == "hit");
+
+    [Theory]
+    [InlineData("-1", 12, -1)]
+    [InlineData("STR.MOD", 8, -1)] // Strength 8: the bonus is -1, not 0
+    [InlineData("STR.MOD", 16, 3)]
+    public void A_roll_bonus_keeps_its_sign(string bonus, int strength, int expected)
+    {
+        var feat = BonusRoll(42, bonus);
+        var character = Fighter(RulesFamilies.Srd51, null, new ClassLevel(Vanguard.Reference, 1)) with { Pins = [feat.Reference], BaseAbilities = new(strength, 14, 14, 10, 10, 10) };
+        var sheet = CharacterCalculator.Calculate(character, Catalog(feat));
+
+        Assert.Equal(expected, RollOf(sheet, feat).Bonus);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Content == feat.Reference);
+    }
+
+    [Fact]
+    public void A_roll_bonus_that_cannot_be_evaluated_is_a_content_diagnostic()
+    {
+        // CLASS_LEVEL parses, but a feat belongs to no class, so it has no value for this character.
+        var feat = BonusRoll(43, "CLASS_LEVEL");
+        var character = Fighter(RulesFamilies.Srd51, null, new ClassLevel(Vanguard.Reference, 1)) with { Pins = [feat.Reference] };
+        var sheet = CharacterCalculator.Calculate(character, Catalog(feat));
+
+        Assert.Null(RollOf(sheet, feat).Bonus);
+        var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Content == feat.Reference);
+        Assert.Equal(("effect.invalid-formula", "hit"), (diagnostic.Code, diagnostic.EffectId));
+        Assert.Equal(AutomationStatus.Assisted, sheet.Features!.Single(f => f.Content == feat.Reference).Automation);
+    }
+
+    [Fact]
+    public void The_critical_range_is_bounded_to_a_d20_roll()
+    {
+        var feat = Revision(44, ContentKind.Feat, "Test Absurd Edge", new ModifierEffect { Id = "critical", Operation = ModifierOperation.Bonus, Target = FieldIds.CriticalRange, Value = "-25" });
+        var character = Fighter(RulesFamilies.Srd51, null, new ClassLevel(Vanguard.Reference, 1)) with { Pins = [feat.Reference] };
+        var field = CharacterCalculator.Calculate(character, Catalog(feat)).Field(FieldIds.CriticalRange);
+
+        Assert.Equal(1, field.Value);
+        Assert.Contains(field.Trace, t => t.Operation == "bound" && t.Result == 1);
+        var warning = Assert.Single(field.Warnings, w => w.Code == "effect.out-of-range");
+        Assert.Equal((feat.Reference, "critical"), (warning.Content, warning.EffectId));
+    }
+
+    [Fact]
+    public void The_attack_count_is_at_least_one()
+    {
+        var feat = Revision(45, ContentKind.Feat, "Test Clumsy", new ModifierEffect { Id = "attacks", Operation = ModifierOperation.Bonus, Target = FieldIds.Attacks, Value = "-3" });
+        var character = Fighter(RulesFamilies.Srd51, null, new ClassLevel(Vanguard.Reference, 1)) with { Pins = [feat.Reference] };
+        var field = CharacterCalculator.Calculate(character, Catalog(feat)).Field(FieldIds.Attacks);
+
+        Assert.Equal(1, field.Value);
+        Assert.Contains(field.Trace, t => t.Operation == "bound" && t.Result == 1);
+        Assert.Contains(field.Warnings, w => w.Code == "effect.out-of-range" && w.Content == feat.Reference);
+
+        // In range, nothing is bounded.
+        var fine = Sheet(Fighter(RulesFamilies.Srd51, null, new ClassLevel(Vanguard.Reference, 5))).Field(FieldIds.Attacks);
+        Assert.DoesNotContain(fine.Trace, t => t.Operation == "bound");
+        Assert.DoesNotContain(fine.Warnings, w => w.Code == "effect.out-of-range");
+    }
+
+    [Fact]
+    public void Below_content_v8_the_calculator_ignores_the_v8_fields()
+    {
+        // The validator refuses these, but an imported or hand-edited v7 revision can carry them; an older build ignores them.
+        var guard = GuardStyle with { SchemaVersion = 7 };
+        var rally = BonusRoll(46, "5") with { SchemaVersion = 7 };
+        var hauberk = Hauberk with { SchemaVersion = 7 };
+        var trained = Revision(47, ContentKind.Class, "Test Old Class", new HitDieEffect { Id = "hit-die", Die = 8 }, Training("light")) with { SchemaVersion = 7 };
+        var catalog = new InMemoryContentCatalog(
+            [.. Fixtures.Pack().Sources, .. Fixtures.M1Pack().Sources],
+            [.. Fixtures.Pack().Revisions, .. Fixtures.M1Pack().Revisions, guard, rally, hauberk, trained]);
+        var character = Fighter(RulesFamilies.Srd521, [Worn(hauberk)], new ClassLevel(trained.Reference, 1)) with { Pins = [guard.Reference, rally.Reference] };
+        var sheet = CharacterCalculator.Calculate(character, catalog);
+        var ac = sheet.Field(FieldIds.ArmorClass);
+
+        Assert.Equal(16 + 1, ac.Value); // the guard bonus applies (whileArmored ignored; armor is worn anyway)
+        Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.armor-strength" or "equipment.armor-untrained"); // Str 12 < 13, heavy untrained: both ignored
+        Assert.DoesNotContain(sheet.Field(FieldIds.Skill(CharacterCalculator.Stealth)).Warnings, w => w.Code == "equipment.stealth-disadvantage");
+        Assert.Null(RollOf(sheet, rally).Bonus);
+        Assert.Equal(4, sheet.Diagnostics.Count(d => d.Code == "effect.schema-field-ignored")); // whileArmored, armor requirements, bonus, training
+
+        // Without armor, an ignored whileArmored modifier applies as an always-on bonus, as in a v7 build.
+        var bare = CharacterCalculator.Calculate(character with { Equipment = [] }, catalog).Field(FieldIds.ArmorClass);
+        Assert.Equal(10 + 2 + 1, bare.Value);
+    }
+
+    [Fact]
+    public void The_validator_rejects_set_and_replace_on_the_critical_range()
+    {
+        var catalog = Catalog();
+        foreach (var operation in new[] { ModifierOperation.Set, ModifierOperation.Replace })
+        {
+            var edge = KeenEdge with { Effects = [new ModifierEffect { Id = "critical", Operation = operation, Target = FieldIds.CriticalRange, Value = "19" }] };
+            Assert.Contains(ContentValidator.Validate(edge, catalog).Errors, e => e.Code == "validate.critical-range-operation" && e.EffectId == "critical");
+        }
+        Assert.DoesNotContain(ContentValidator.Validate(KeenEdge, catalog).Errors, e => e.Code == "validate.critical-range-operation");
+    }
+
+    [Fact]
+    public void The_validator_rejects_an_armor_class_replacement_that_applies_only_while_armored()
+    {
+        var catalog = Catalog();
+        var never = GuardStyle with { Effects = [new ModifierEffect { Id = "guard", Operation = ModifierOperation.Replace, Target = FieldIds.ArmorClass, Value = "15", WhileArmored = true }] };
+        Assert.Contains(ContentValidator.Validate(never, catalog).Errors, e => e.Code == "validate.while-armored-replace" && e.EffectId == "guard");
+
+        // A bonus while armored is fine, and so is an unarmored replacement.
+        Assert.True(ContentValidator.Validate(GuardStyle, catalog).CanPublish);
+        var unarmored = GuardStyle with { Effects = [new ModifierEffect { Id = "guard", Operation = ModifierOperation.Replace, Target = FieldIds.ArmorClass, Value = "13 + DEX.MOD" }] };
+        Assert.DoesNotContain(ContentValidator.Validate(unarmored, catalog).Errors, e => e.Code == "validate.while-armored-replace");
+    }
+
+    [Fact]
+    public void The_validator_reports_the_lowest_schema_version_a_revision_needs()
+    {
+        var catalog = Catalog();
+        ContentRevision Feat(params Effect[] effects) => Revision(48, ContentKind.Feat, "Test Needs", effects);
+
+        Assert.Equal(3, ContentValidator.Validate(Feat(new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }), catalog).RequiredSchemaVersion);
+        Assert.Equal(4, ContentValidator.Validate(Coat, catalog).RequiredSchemaVersion);
+        Assert.Equal(5, ContentValidator.Validate(Feat(new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = FieldIds.SpellSaveDc, Value = "1" }), catalog).RequiredSchemaVersion);
+        Assert.Equal(6, ContentValidator.Validate(Feat(new ToggleEffect { Id = "t", ToggleId = "t", Label = "T" }), catalog).RequiredSchemaVersion);
+        foreach (var revision in new[] { ExtraSwing, KeenEdge, GuardStyle, Rally, Hauberk, Vanguard, Scholar })
+            Assert.Equal(8, ContentValidator.Validate(revision, catalog).RequiredSchemaVersion);
+    }
+
     [Fact]
     public void Combat_details_need_content_schema_v8()
     {

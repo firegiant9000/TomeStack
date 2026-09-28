@@ -195,12 +195,13 @@ public class HomebrewStudioTests
         restored.App.ApplyImport(backup);
         Assert.Equal(TempApp.Json(view.Sheet), TempApp.Json(restored.App.GetCharacter(id).Sheet));
 
-        // The exported revisions (written in the current content schema) and the character match docs/schemas.
+        // The exported revisions and the character match docs/schemas. A published revision is written in the lowest
+        // content schema that holds it: this subclass extends a choice, which is v4 (M2.2).
         using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(backup));
         var path = zip.GetEntry($"content/{authored.Path.RevisionId:D}.json")!;
         using (var document = System.Text.Json.JsonDocument.Parse(new StreamReader(path.Open()).ReadToEnd()))
         {
-            Assert.Equal(ContentRevision.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("", SchemaTests.Validate("content-revision", document.RootElement));
         }
         using (var character = System.Text.Json.JsonDocument.Parse(new StreamReader(zip.GetEntry($"characters/{id:D}.json")!.Open()).ReadToEnd()))

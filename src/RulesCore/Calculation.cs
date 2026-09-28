@@ -429,6 +429,21 @@ public static class CharacterCalculator
                     item.Revision.Reference,
                     effect.Id));
             }
+            if (IgnoresV8(item.Revision))
+            {
+                foreach (var effect in item.Revision.Effects)
+                {
+                    var field = effect switch
+                    {
+                        ModifierEffect { WhileArmored: not null } => "whileArmored",
+                        ArmorEffect a when a.Strength is not null || a.StealthDisadvantage is not null => "armor strength or stealthDisadvantage",
+                        RollEffect { Bonus: not null } => "a roll bonus",
+                        _ => null,
+                    };
+                    if (field is not null)
+                        diagnostics.Add(V8FieldIgnored(item.Revision, effect, field));
+                }
+            }
         }
 
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
@@ -455,6 +470,7 @@ public static class CharacterCalculator
             var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
+            value = Bound(spec, value, steps, warnings[id], family);
 
             var computed = value;
             var fieldOverride = character.Overrides.LastOrDefault(o => o.Field == id);
@@ -540,6 +556,33 @@ public static class CharacterCalculator
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles), active);
+    }
+
+    /// <summary>
+    /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
+    /// either outside that is bounded, with a trace step and an <c>effect.out-of-range</c> warning naming the last effect
+    /// that changed the field. Overrides are not bounded: they are the player's value.
+    /// </summary>
+    private static int Bound(FieldSpec spec, int value, List<Step> steps, List<Diagnostic> warnings, string family)
+    {
+        var (minimum, maximum) = spec.Id switch
+        {
+            FieldIds.Attacks => (1, int.MaxValue),
+            FieldIds.CriticalRange => (1, 20),
+            _ => (int.MinValue, int.MaxValue),
+        };
+        if (value >= minimum && value <= maximum)
+            return value;
+        var bounded = Math.Clamp(value, minimum, maximum);
+        var cause = steps.LastOrDefault(s => s.Origin.Content is not null)?.Origin;
+        var range = maximum == int.MaxValue ? $"at least {minimum}" : $"{minimum} to {maximum}";
+        warnings.Add(new(
+            "effect.out-of-range",
+            $"{spec.Label} would be {value}{(cause is null ? "" : $" after '{cause.ContentName}'")}; it is {range}, so {bounded} is used.",
+            cause?.Content,
+            cause?.EffectId));
+        steps.Add(new(spec.Id, "bound", $"Bounded to {range} ({value} is out of range)", null, bounded, cause ?? new(TraceOriginKind.RulesPolicy, family)));
+        return bounded;
     }
 
     // ---- attacks (content schema v5; SPEC C-02, C-04) --------------------------------------------------------
@@ -1286,7 +1329,7 @@ public static class CharacterCalculator
         {
             for (var i = 0; i < modifiers.Count; i++)
             {
-                if (modifiers[i].Effect.WhileArmored == true && modifiers[i].SkipReason is null)
+                if (modifiers[i].Effect.WhileArmored == true && modifiers[i].SkipReason is null && !IgnoresV8(modifiers[i].Content.Revision))
                     modifiers[i] = modifiers[i] with { SkipReason = "it applies only while armor is worn, and none is" };
             }
         }
@@ -1317,7 +1360,7 @@ public static class CharacterCalculator
     /// </summary>
     private static void ArmorRequirements(WornArmor worn, Dictionary<string, int> values, Dictionary<string, List<Diagnostic>> warnings)
     {
-        if (worn.Body is not { } body)
+        if (worn.Body is not { } body || IgnoresV8(body.Content.Revision))
             return;
         var (content, effect) = body;
         var strength = values[FieldIds.Score(Ability.Str)];

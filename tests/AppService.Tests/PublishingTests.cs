@@ -77,6 +77,28 @@ public class PublishingTests
     }
 
     [Fact]
+    public void Publishing_writes_the_lowest_content_schema_the_revision_needs()
+    {
+        // M2.2: homebrew that uses no newer field stays readable by older builds. The draft keeps its version.
+        var (temp, _, _) = Setup();
+        using var _t = temp;
+        Assert.Equal(ContentRevision.CurrentSchemaVersion, Draft2.SchemaVersion);
+
+        var plain = temp.App.Publish(temp.App.SaveDraft(Draft2));
+        Assert.Equal(3, temp.App.Store.FindRevision(plain.Published)!.SchemaVersion);
+        Assert.Equal(ContentRevision.CurrentSchemaVersion, temp.App.Store.FindRevision(plain.Draft)!.SchemaVersion);
+        Assert.Equal(3, plain.Report.RequiredSchemaVersion);
+
+        var rolled = Draft2 with
+        {
+            RevisionId = Guid.NewGuid(),
+            Effects = [new RollEffect { Id = "roll", RollId = "roll", Label = "Knack", Dice = "1d4", Bonus = "PB" }],
+        };
+        var v8 = temp.App.Publish(temp.App.SaveDraft(rolled));
+        Assert.Equal(ContentRevision.CombatDetailsSchemaVersion, temp.App.Store.FindRevision(v8.Published)!.SchemaVersion);
+    }
+
+    [Fact]
     public void Publishing_refuses_an_invalid_draft_or_a_published_revision_and_adds_nothing()
     {
         var (temp, _, _) = Setup();
