@@ -76,9 +76,9 @@ jobs:
         run: scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe -Report "$env:RUNNER_TEMP/smoke-result.json"
 
       # M2.1: two real TomeStack.exe processes on one data folder; the second hands over and exits, and the folder
-      # still works once the first closes. Non-blocking until three consecutive green hosted runs, like the smoke was.
-      - name: Two instances on one data folder (non-blocking)
-        continue-on-error: true
+      # still works once the first closes. Blocking since it passed three consecutive hosted runs (36474541648,
+      # 36475494877, 36475497184 on 2026-09-28).
+      - name: Two instances on one data folder
         shell: pwsh
         run: scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 
