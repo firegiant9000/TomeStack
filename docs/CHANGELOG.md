@@ -4,6 +4,8 @@
 
 ### Added
 
+- **The SRD spells, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):** all 319 SRD 5.1 spells and all 339 SRD 5.2.1 spells ship as content (CC-BY-4.0, attributed like the other SRD content). Each has its level, school, casting time, range, components, duration, class lists, attack or save, base dice and full description, with its page. They are in two new bundled packs that share each family's source record. A caster lists them in the builder once the SRD caster classes are bundled (next).
+
 - **Short rest, hit dice, death saves and inspiration (D01 follow-up, owner 2026-09-27: SRD rules, previewed; SPEC C-05; `docs/features/rests.md`, `docs/features/sheet-play.md`):**
   - **Hit dice:** the sheet shows the hit dice left per die size. "Short rest…" spends the hit dice the player picks, each rolled in TomeStack or entered from the table, and shows the hit points each restores (roll plus the Con modifier). Short-rest recoveries such as the 2024 Rage are ticked changes, as on the long rest. The long rest now also gives spent hit dice back.
   - **Death saving throws:** they appear at 0 hit points. Roll one or enter a physical roll, and TomeStack records the SRD outcome (a 1 is two failures, a 20 regains 1 hit point). "Add a failure" covers damage at 0. Regaining hit points clears them.
@@ -40,6 +42,7 @@
 
 ### Fixed
 
+- **The builder no longer shows choice options as "Missing content" while they load.** The choices appeared before the option list had arrived, so options were briefly disabled and named by id. The bundled spells made the list big enough for this to show up in the e2e test. A choice now says "Loading the options…" until the list is there.
 - **Attaching a PDF in browser development no longer drops the file.** The Sources screen recorded which source the browser file picker was for only after the host's "no native dialog" reply, so a file picked before that was silently ignored. This was the cause of the intermittent e2e failure "attaches a PDF…". The target is now recorded when the button is pressed.
 
 ### Changed

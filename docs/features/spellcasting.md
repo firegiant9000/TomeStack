@@ -1,6 +1,6 @@
 # Spellcasting (D04)
 
-SPEC C-01, C-02, C-04, C-05 · LIVING_SPECS D04 · MVP "Builder" (spells), "Sheet" (slots) · status: **engine implemented (M2); SRD casters and spells not bundled yet** (owner decision 2026-09-27: the full SRD casters, levels 1–20, in both families, under an extended pack review, SPEC Q-03).
+SPEC C-01, C-02, C-04, C-05 · LIVING_SPECS D04 · MVP "Builder" (spells), "Sheet" (slots) · status: **engine implemented (M2); SRD spells bundled (319 SRD 5.1, 339 SRD 5.2.1); SRD caster classes not bundled yet** (owner decision 2026-09-27: the full SRD casters, levels 1–20, in both families, under an extended pack review, SPEC Q-03).
 
 Rules core: `SpellcastingEffect` and `SpellEffect` in `src/RulesCore/Effects.cs`, and the "spellcasting" section of `src/RulesCore/Calculation.cs`. Service: slot actions in `src/AppService/Play.cs`, spell rolls in `src/AppService/Rolling.cs`. UI: the spell picker in `src/Ui/src/components/CharacterBuilder.tsx` and `src/Ui/src/components/SpellsPanel.tsx`. Acceptance: `tests/RulesCore.Tests/SpellcastingTests.cs`, `tests/AppService.Tests/SpellcastingCommandTests.cs`, and the e2e test "builds a spellcaster…". Fixtures: `tests/RulesFixtures/fixture-pack-m2-spells.json` (invented casters and spells; the tables are not the SRD's).
 
@@ -73,7 +73,7 @@ The choices step (create, level-up and "Make choices") has a picker per caster. 
 
 ## Not yet
 
-- The SRD casters and spells (the next content commits, each with its pack review update).
+- The SRD caster classes (the next content commits, with the pack review update). The SRD spells are bundled: `src/AppService/Content/srd-5.1-spells.json` and `srd-5.2.1-spells.json`, with lists `bard`, `cleric`, `druid`, `paladin`, `ranger`, `sorcerer`, `warlock` and `wizard`.
 - Combined multiclass slots and Pact Magic combined with slots (M3, D04).
 - Upcast damage, cantrip scaling, spell components and material costs, and concentration tracking (text only).
 - Spell authoring in the homebrew studio. Homebrew spells can be imported as content v5 revisions.

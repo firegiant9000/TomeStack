@@ -36,8 +36,15 @@ public sealed partial class TomeStackApp : IDisposable
 
     internal SqliteStore Store => _store;
 
-    /// <summary>The bundled SRD packs (M1 item 1): always seeded. They are insert-only, so re-seeding is a no-op.</summary>
-    public static IReadOnlyList<string> BundledPacks { get; } = ["TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json"];
+    /// <summary>
+    /// The bundled SRD packs (M1 item 1; spells since M2): always seeded. They are insert-only, so re-seeding is a no-op.
+    /// Each family's packs share one source record (docs/licensing/srd-pack-review.md).
+    /// </summary>
+    public static IReadOnlyList<string> BundledPacks { get; } =
+    [
+        "TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json",
+        "TomeStack.Content.srd-5.1-spells.json", "TomeStack.Content.srd-5.2.1-spells.json",
+    ];
 
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">

@@ -9,8 +9,21 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class SrdPackTests
 {
-    private static readonly ContentPack Srd51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1.json");
-    private static readonly ContentPack Srd521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1.json");
+    // The M1 base packs, and everything bundled per family (base pack plus the M2 spell pack, sharing one source record).
+    private static readonly ContentPack Base51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1.json");
+    private static readonly ContentPack Base521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1.json");
+    private static readonly ContentPack Spells51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-spells.json");
+    private static readonly ContentPack Spells521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-spells.json");
+    private static readonly ContentPack Srd51 = Merge(Base51, Spells51);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521);
+
+    private static ContentPack Merge(params ContentPack[] packs) => new()
+    {
+        PackId = packs[0].PackId,
+        FormatVersion = packs[0].FormatVersion,
+        Sources = [.. packs.SelectMany(p => p.Sources).DistinctBy(s => s.Id)],
+        Revisions = [.. packs.SelectMany(p => p.Revisions)],
+    };
 
     public static TheoryData<string, string, string> Packs() => new()
     {
@@ -19,6 +32,13 @@ public class SrdPackTests
     };
 
     private static ContentPack Pack(string id) => id == "srd-5.1" ? Srd51 : Srd521;
+
+    [Fact]
+    public void A_familys_packs_carry_the_identical_source_record()
+    {
+        Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(Spells51.Sources));
+        Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(Spells521.Sources));
+    }
 
     [Theory]
     [MemberData(nameof(Packs))]
@@ -75,9 +95,40 @@ public class SrdPackTests
     }
 
     [Fact]
+    public void The_spell_packs_have_every_SRD_spell_once_with_its_data()
+    {
+        string[] classes = ["bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"];
+        foreach (var (pack, count) in new[] { (Spells51, 319), (Spells521, 339) })
+        {
+            Assert.Equal(count, pack.Revisions.Count);
+            Assert.All(pack.Revisions, r => Assert.Equal(ContentKind.Spell, r.Kind));
+            Assert.Equal(pack.Revisions.Count, pack.Revisions.Select(r => r.Name).Distinct().Count());
+            var data = pack.Revisions.Select(r => Assert.Single(r.Effects.OfType<SpellEffect>())).ToList();
+            Assert.All(data, s =>
+            {
+                Assert.InRange(s.Level, 0, 9);
+                Assert.NotEmpty(s.Lists);
+                Assert.All(s.Lists, l => Assert.Contains(l, classes));
+                Assert.False(string.IsNullOrWhiteSpace(s.Text));
+            });
+        }
+    }
+
+    [Fact]
+    public void The_same_spell_differs_by_family_as_content_side_by_side()
+    {
+        // Cure Wounds heals 1d8 under 2014 rules (SRD 5.1 p. 132) and 2d8 under 2024 rules (SRD 5.2.1 p. 121): two revisions.
+        SpellEffect Cure(ContentPack pack) => pack.Revisions.Single(r => r.Name == "Cure Wounds").Effects.OfType<SpellEffect>().Single();
+
+        Assert.Equal(("1d8", 1), (Cure(Spells51).Dice, Cure(Spells51).Level));
+        Assert.Equal(("2d8", 1), (Cure(Spells521).Dice, Cure(Spells521).Level));
+        Assert.NotEqual(Spells51.Revisions.Single(r => r.Name == "Cure Wounds").ContentId, Spells521.Revisions.Single(r => r.Name == "Cure Wounds").ContentId);
+    }
+
+    [Fact]
     public void The_slice_is_one_species_one_background_one_class_with_its_subclass_and_feats()
     {
-        foreach (var pack in new[] { Srd51, Srd521 })
+        foreach (var pack in new[] { Base51, Base521 })
         {
             Assert.Single(pack.Revisions, r => r.Kind == ContentKind.Species);
             Assert.Single(pack.Revisions, r => r.Kind == ContentKind.Background);

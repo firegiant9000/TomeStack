@@ -89,7 +89,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 /** Ticks one option of the choice whose legend starts with `legend`. */
 async function pick(user: ReturnType<typeof userEvent.setup>, legend: RegExp, option: RegExp) {
   const group = await screen.findByRole('group', { name: legend });
-  await user.click(within(group).getByRole('checkbox', { name: option }));
+  await user.click(await within(group).findByRole('checkbox', { name: option })); // options load after the choices
 }
 
 it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {

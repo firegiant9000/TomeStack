@@ -326,10 +326,22 @@ function LevelStep(props: {
 function ChoicePicker(props: {
   choice: ChoiceStatus;
   optionOf: (ref: ContentReference) => ContentOption | undefined;
+  /** False until `content.list` answers: options are then "loading", not "missing". */
+  optionsLoaded: boolean;
   onChange: (selected: ContentReference[]) => void;
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
+  if (!props.optionsLoaded) {
+    return (
+      <fieldset className="choice-picker" aria-busy="true">
+        <legend>
+          {choice.sourceName}: choose {choice.count}
+        </legend>
+        <p className="hint">Loading the options…</p>
+      </fieldset>
+    );
+  }
   return (
     <fieldset className="choice-picker">
       <legend>
@@ -430,6 +442,7 @@ function ChoicesStep(props: {
   view: CharacterView;
   commitLabel: string;
   optionOf: (ref: ContentReference) => ContentOption | undefined;
+  optionsLoaded: boolean;
   spellOptions: ContentOption[];
   onChoose: (choice: ChoiceStatus, selected: ContentReference[]) => void;
   onSpells: (spells: KnownSpell[]) => void;
@@ -457,6 +470,7 @@ function ChoicesStep(props: {
           key={`${choice.source.revisionId}-${choice.choiceId}`}
           choice={choice}
           optionOf={props.optionOf}
+          optionsLoaded={props.optionsLoaded}
           onChange={(selected) => props.onChoose(choice, selected)}
         />
       ))}
@@ -518,6 +532,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [draftId] = useState(() => crypto.randomUUID());
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
   const [listed, setListed] = useState<ContentOption[]>([]);
+  // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
+  const [listedFor, setListedFor] = useState<string>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [outside, setOutside] = useState({ allow: false, reason: '' });
   const [busy, setBusy] = useState(false);
@@ -538,6 +554,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       .then((result) => {
         if (!current) return;
         setListed(result);
+        setListedFor(`${family}|${campaignId ?? ''}`);
         // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
         const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
         setBasics((b) => ({
@@ -678,6 +695,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           view={view}
           commitLabel={mode.kind === 'create' ? 'Create and save' : mode.kind === 'levelUp' ? 'Save level-up' : 'Save choices'}
           optionOf={optionOf}
+          optionsLoaded={listedFor === `${family}|${campaignId ?? ''}`}
           spellOptions={options.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={(spells) => view && preview({ ...view.character, spells })}
