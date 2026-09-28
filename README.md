@@ -2,7 +2,7 @@
 
 A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
 
-> **Status: M0 foundation.** You can create a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules, see its initiative with a source-aware calculation trace, override it, save it locally, and export/import a portable package. The only content is original test fixtures. No SRD text ships yet (pending attribution review, SPEC Q-03).
+> **Status: M1 rules core delivered (v0.2.0).** You can create a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules and see every calculated field with a source-aware trace. You can override it, save it locally, and export or import a portable package (a personal backup, or a share that leaves out content you may not share). The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). There is no builder UI yet (M2).
 
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 
@@ -52,16 +52,18 @@ CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/w
 dotnet run --project src/DesktopShell
 ```
 
-Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`). Pass `--devtools` to enable WebView2 DevTools.
+Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). Pass `--devtools` to enable WebView2 DevTools. The app seeds the bundled SRD packs. Set `TOMESTACK_DEV_FIXTURES=1` to also seed the original test fixtures (DevHost always does).
 
 **Self-test.** This launches the shell, loads the UI, round-trips commands over the bridge, creates a fixture character, exports it and previews the package. It then exits 0/2 and writes a JSON report:
 
 ```powershell
 src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-report smoke.json
 scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe       # same run, with the report checked
-scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime
+scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime (smoke-only flag)
 scripts/offline-check.ps1 -Mode AssumeOffline      # turn on airplane mode first
 ```
+
+Every script in `scripts/` runs under both Windows PowerShell 5.1 and pwsh 7 (checked 2026-09-26: `smoke`, `offline-check` in all modes, `installer-smoke` with both adapters, and `pack-installer`).
 
 **UI with hot reload in a browser** (two terminals):
 
@@ -78,7 +80,15 @@ The dev host writes a fresh token to `<data dir>/devhost.token` at each launch, 
 dotnet publish src/DesktopShell -c Release -r win-x64 --self-contained true -o artifacts/publish
 ```
 
-No installer yet (see ADR-006, "Not yet proven").
+**Installer** (Velopack, per-user, self-contained, unsigned; [ADR-008](docs/decisions/ADR-008-installer-and-distribution.md)). Build the UI first. `vpk` is a repo-local tool, so run `dotnet tool restore` once:
+
+```powershell
+dotnet tool restore
+scripts/pack-installer.ps1        # -> artifacts/installer/<version>/TomeStack.App-win-Setup.exe
+scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/<old> -NewBuild artifacts/installer/<new>
+```
+
+It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that folder, never the data folder. The version comes from `Directory.Build.props` and must go up with every build you hand out.
 
 ## Safety defaults
 
@@ -89,4 +99,4 @@ No installer yet (see ADR-006, "Not yet proven").
 
 ## License
 
-Code is licensed under the [Apache License 2.0](LICENSE) (LIVING_SPECS D07). Fixture content is original to this project. SRD content, once added, will be used under CC-BY-4.0 with its required attribution (LIVING_SPECS D09). Third-party components are listed in [ATTRIBUTION.md](ATTRIBUTION.md), and export and license policy is in [ADR-007](docs/decisions/ADR-007-export-package-and-license-policy.md). TomeStack is not affiliated with or endorsed by Wizards of the Coast.
+TomeStack's code is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE) (LIVING_SPECS D07). Fixture content is original to this project. Third-party components are listed in [ATTRIBUTION.md](ATTRIBUTION.md), and export and license policy is in [ADR-007](docs/decisions/ADR-007-export-package-and-license-policy.md). TomeStack is not affiliated with or endorsed by Wizards of the Coast.

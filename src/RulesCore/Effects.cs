@@ -8,6 +8,8 @@ public static class FieldIds
 {
     public const string Initiative = "initiative";
     public const string ProficiencyBonus = "proficiencyBonus";
+    public const string ArmorClass = "armorClass";
+    public const string HitPoints = "hitPoints";
 
     public static string Score(Ability ability) => $"ability.{Key(ability)}.score";
 
@@ -100,6 +102,24 @@ public sealed record GrantEffect : Effect
     public string? Target { get; init; }
 
     public ContentReference? Content { get; init; }
+
+    /// <summary>
+    /// Content schema v3: the grant applies from this level on. It is the class level for class content and for content
+    /// that belongs to a class (granted by it or chosen from it), and the character level for anything else.
+    /// </summary>
+    public int? Level { get; init; }
+}
+
+/// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
+public sealed record HitDieEffect : Effect
+{
+    public const string TypeName = "hitDie";
+
+    public static readonly IReadOnlyList<int> AllowedDice = [6, 8, 10, 12];
+
+    public override string Type => TypeName;
+
+    public required int Die { get; init; }
 }
 
 /// <summary>A limited-use resource with a formula maximum (for example, uses per rest).</summary>
@@ -128,6 +148,9 @@ public sealed record ChoiceEffect : Effect
     public int Count { get; init; } = 1;
 
     public IReadOnlyList<ContentReference> Options { get; init; } = [];
+
+    /// <summary>Content schema v3: the choice is made from this level on (class level inside a class; see <see cref="GrantEffect.Level"/>).</summary>
+    public int? Level { get; init; }
 }
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>
@@ -225,6 +248,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RestrictionEffect.TypeName => element.Deserialize<RestrictionEffect>(options),
                 RecoveryEffect.TypeName => element.Deserialize<RecoveryEffect>(options),
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
+                HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

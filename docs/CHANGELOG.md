@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## Unreleased (0.2.0: M1 delivered)
 
 ### Added
+
+- **M1 exit gate passed (ROADMAP M1; `docs/features/m1-acceptance.md`):** two level-3 SRD characters, Korga (SRD 5.1 Half-Orc Acolyte Barbarian, Berserker) and Brenna (SRD 5.2.1 Dwarf Soldier Barbarian, Berserker), calculate the expected values. Every major number explains itself: sources and pages, rules steps, and an override that keeps the calculated value. The executable acceptance test is `M1AcceptanceTests`. The version is 0.2.0 (ADR-008 policy: MINOR goes up at milestone delivery).
 
 - M0 foundation: repository layout, .NET 10 solution, React/TypeScript UI, CI workflow on Windows.
 - Rules core with the `srd-5.1` and `srd-5.2.1` rules-family IDs and an explicit policy difference: ability score increases come from species in 2014 rules and from background in 2024 rules (SPEC S-02, C-01).
@@ -13,7 +15,8 @@
 - Import-worker contracts. Candidates can only become inactive drafts (SPEC I-01).
 - WPF + WebView2 desktop shell. It uses an in-process service over the WebView2 message bridge, blocks non-app network requests, and has a `--smoke` self-test (ADR-006).
 - Original M0 test fixtures for both rules families (no SRD or third-party text).
-- `ATTRIBUTION.md` lists the licenses of the third-party components that ship. ADR-007 (proposed) covers export and license policy. The SRD 5.1 and 5.2.1 CC-BY-4.0 attribution statements are drafted verbatim from the official documents for owner approval (`docs/licensing/srd-attribution-draft.md`). There is still no SRD content and no project `LICENSE` (D07 open).
+- `ATTRIBUTION.md` lists the licenses of the third-party components that ship. ADR-007 (proposed) covers export and license policy. The SRD 5.1 and 5.2.1 CC-BY-4.0 attribution statements are drafted verbatim from the official documents for owner approval (`docs/licensing/srd-attribution-draft.md`). There is still no SRD content.
+- The project's code is licensed under Apache-2.0: `LICENSE` and `NOTICE` at the repo root (LIVING_SPECS D07, owner decision 2026-09-26).
 - `--smoke` also proves the M0 exit gate in the built app: it creates a character with fixture content, exports it and previews the package. The report includes `charactersAtStart`, so two runs on one data folder prove persistence. `scripts/smoke.ps1` checks the report, and `scripts/offline-check.ps1` covers a simulated missing WebView2 runtime and a manual airplane-mode run (ADR-006).
 - UI flow test (`npm run test:e2e`) drives create → sheet → override → export → import, plus keyboard-only access, against the real DevHost. It uses Vitest with Testing Library and jsdom, which are dev-only. It is part of the gate and CI. There is an accessibility checklist for the working-default target (formal target D05 still open): `docs/features/accessibility-checklist.md`.
 - ADR-003: a typed declarative effect model with explicit stacking (`stack` / `highestInGroup`), operations (`bonus` / `set` / `replace`) and timing, plus the bounded formula grammar (SPEC I-04, I-05, Q-02).
@@ -23,11 +26,43 @@
 - Per-character cross-family exceptions (BACKLOG B06), stored as data (`crossFamilyExceptions`, with a required reason). Recorded content applies under the character's own family with a `content.cross-family-exception` warning. The UI for recording one is still to come.
 - Original M1 fixtures (`tests/RulesFixtures/fixture-pack-m1.json`, test-only) with a deliberate cross-edition conflict: two different revisions named "Fixture Keen Senses". Side-by-side tests show the same inputs giving different, explained outputs per family (`tests/RulesFixtures/README.md`).
 - Dice engine skeleton in the rules core (`docs/features/dice-engine.md`): bounded `NdM±K` expressions, advantage and disadvantage on a single d20, critical dice doubling, a seeded RNG for tests, and a CSPRNG for play. Roll records hold the formula, every die, modifiers with origins, and provenance. Rolling never consumes a resource (SPEC C-04). A request with both advantage and critical doubling is refused rather than silently dropping one. There is no UI yet.
-- ADR-008 (installer and distribution, proposed; the technology is an owner decision) sets out the requirements and the options. It records two data-loss risks: Velopack's default install folder is the data folder, and MSIX virtualizes AppData. `scripts/installer-smoke.ps1` is an installer-neutral install → smoke → upgrade → smoke → uninstall harness. Only an Xcopy adapter exists so far.
-- ADR-001 (local-only Windows, accepted), ADR-004 (review before publish, accepted; evidence is the quarantine and draft tests) and ADR-005 (managed PDF copy vs. link, proposed and blocked on D02).
+- **Installer (ADR-008, accepted):** a per-user, self-contained, unsigned Velopack installer built by `scripts/pack-installer.ps1`, with `vpk` pinned as a repo-local tool in `.config/dotnet-tools.json`. The pack id is `TomeStack.App`, so uninstalling cannot delete the data folder `%LOCALAPPDATA%\TomeStack`. `LICENSE`, `NOTICE` and `ATTRIBUTION.md` ship next to `TomeStack.exe`. `scripts/installer-smoke.ps1 -Adapter Velopack` proves install → smoke → upgrade from a schema-1 build (with `tomestack.db.v1.bak`) → uninstall that keeps the data, under Windows PowerShell 5.1 and pwsh 7. The version policy is in ADR-008: `Directory.Build.props` is the single source and must go up with every build given to a user. This build is 0.1.1.
+- ADR-008 first set out the installer requirements and the options. It records two data-loss risks: Velopack's default install folder is the data folder, and MSIX virtualizes AppData. `scripts/installer-smoke.ps1` is an installer-neutral install → smoke → upgrade → smoke → uninstall harness. Only an Xcopy adapter exists so far.
+- ADR-001 (local-only Windows, accepted), ADR-004 (review before publish, accepted; evidence is the quarantine and draft tests) and ADR-005 (managed PDF copy vs. link).
+- **Owner decisions (2026-09-26):** ADR-001 accepted with Windows 10 best-effort. ADR-005 accepted (D02): the data folder is `%LOCALAPPDATA%\TomeStack`, PDFs are managed copies by default, and the `pdfRef` → attachment migration is planned for M2. ADR-007 accepted (D03 and the SRD route: CC-BY-4.0 for both SRDs). The accessibility target is WCAG 2.2 AA for the sheet and builder (D05), and the owner's keyboard walkthrough passed.
+- **Backup vs. share export (ADR-007, SPEC P-02, Q-03):** the sheet's export asks what the package is for. A *personal backup* includes everything and is named `…-personal-backup.tomestack.zip`. A *share* leaves out content from non-redistributable sources and lists what it left out before exporting (`package.exportPreview`) and in the manifest (`omitted[]`). The receiver gets a `package.content-omitted` warning naming the source and publisher, and the sheet shows that content as missing.
+- **Sync-root warning (ADR-005):** if the data folder is inside OneDrive or another cloud sync root, the app shows a warning at the top of the window (`app.info` `warnings`, code `data-dir.sync-root`).
+- Private homebrew fixtures (the owner's Stardust Guardian material) go in the gitignored `tests/RulesFixtures/local/`.
+- **Levels and classes (M1 item 5, SPEC C-01, C-02, C-03; `docs/features/levels-and-classes.md`):** characters record levels per class. The total level is their sum and drives the proficiency bonus. `CLASS_LEVEL` resolves to the level in the class that content belongs to. Grants can apply from a class level (`grant.level`), so a level-3 feature is absent at level 2. New fields, each with a full trace:
+  - **Hit points:** the starting class's hit die maximum, then the fixed value per level, plus Constitution × level. Traces cite the class, source and page.
+  - **Armor class:** 10 + Dex, with `replace` alternatives; the highest wins.
+  - **All 18 skills.**
+
+  Original fixtures "Fixture Warden" and "Fixture Scholar" cover multiclass hit points and level gates. D04 (multiclass and spellcasting scope for MVP) is recorded in LIVING_SPECS.
+- **SRD packs (M1 item 1, SPEC S-02, Q-03; ADR-007; `docs/licensing/srd-pack-review.md`):** SRD 5.1 and SRD 5.2.1 ship as two separate CC-BY-4.0 source packs, with separate sources, content IDs and revisions. Each source carries the approved attribution verbatim, a CC-BY §3 `modificationNotice` (which also travels in package notices) and the checked PDF's SHA-256. The slice per family:
+  - one species (Half-Orc / Dwarf);
+  - one background (Acolyte / Soldier, with its ability options and origin feat);
+  - the Barbarian at levels 1–3, with its skill choices, level-gated features and the Path of the Berserker;
+  - one feat (Grappler with its Strength 13 prerequisite / Savage Attacker).
+
+  Every revision validates, and `SrdPackTests` checks the attribution against the approval page. `NOTICE` and `ATTRIBUTION.md` carry the statements.
+- **Roll command (M1 item 7, SPEC C-04; `docs/features/dice-engine.md`):** `roll` rolls a content roll effect that applies to the character, or a sheet field (ability check, save, skill, initiative) as a d20 test. It returns a roll record with formula, dice, modifiers with their origins, and provenance (revision, source, page). It never changes the character and never spends a linked resource. The sheet now lists its active revisions (`active`).
+- **Publishing and pin updates (M1 item 2, SPEC I-06; `docs/features/publishing-and-updates.md`):**
+  - `content.saveDraft` stores an inactive draft. `content.publish` re-validates it and inserts a new immutable revision (same content id, new revision id), leaving the draft and older revisions untouched.
+  - `content.revisions` lists a content id's history. `content.affected` lists the characters that use it, and how (pin, class, choice, or grant).
+  - `character.reviewUpdate` shows the mechanics diff and recalculated fields without changing anything. `character.applyUpdate` moves the character only with an explicit `confirm`, carrying choices over and keeping overrides.
+  - An updated character round-trips through a package.
+- **Rules-family review for the SRD slice (M1 item 6; `docs/features/rules-family-policy.md`):** the slice needs no new `RulesFamilyPolicy` field. Every difference it exercises is content, or already covered by `AbilityIncreaseSource` and `BackgroundGrantsFeat`. New side-by-side tests use real SRD content: Half-Orc Strength under 2014 vs. 2024 rules, the Soldier's ability option and feat, the Acolyte's feature, and same-named Barbarians never merged. A cross-family exception recorded for a chosen option now admits it too.
+- **Restrictions and validation (M1 item 3; `docs/features/validation-and-restrictions.md`):**
+  - `restriction` effects are prerequisites. Content whose prerequisite is not met is not applied, with a `restriction.unmet` diagnostic scoped to it. Prerequisites are checked without the content itself, so a feat cannot qualify itself.
+  - `content.validate` (`ContentValidator`) reports schema, reference, formula and dependency-cycle problems for a stored or unsaved revision before publish. Errors block publishing; warnings do not.
+- **Choices (M1 item 4, SPEC C-01; `docs/features/choices.md`):** characters store selections for `choice` effects. Counts are enforced, and options must be listed and usable under the character's rules family. Every offered choice appears on the sheet, and unresolved ones are flagged ("Choices to make"). Chosen content becomes active with a "chosen from" trace; a chosen subclass follows its class level. `character.choose` records a validated selection. A feature chosen from a species or background follows that origin's ability-increase policy.
 - JSON Schemas for source, content revision, character and package manifest (v1, plus v2 for content revisions, characters and manifests) in `docs/schemas/`. A test validates every fixture and a real exported package against them.
 
 ### Changed
+
+- The shipped app seeds the bundled SRD packs and **no longer seeds the original test fixtures**. DevHost and tests still do, and `TOMESTACK_DEV_FIXTURES=1` enables them in the shell. Data folders that already have fixture content keep it. The GUI smoke now checks SRD content (a Half-Orc's Strength +2).
+- `character.choose` refuses an option that is already selected for another choice (`choice.option-already-chosen`), as SRD wording such as "another skill" requires.
 
 - Trace shape (ARCHITECTURE step 5): a field's trace now includes the steps of every field it reads, in dependency order. Each entry names its `field` and the `inputs` it read, and each value has `units`. Initiative gains an explicit "starts at the Dexterity modifier" step. A field's warnings include its inputs' warnings, so an ignored Dex increase still explains initiative. Overrides stay the final layer, and dependents read the overridden value.
 - The ability-increase policy now restricts only *origin* content (species and background). Feats and class features may raise scores under both rules families; M0 blocked them by mistake. For origin content it covers every operation, so a `set` or `replace` on an ability score cannot bypass it.
@@ -40,6 +75,10 @@
 
 ### Fixed
 
+- **M1 review (SPEC Q-02, C-03; ADR-004):**
+  - Untrusted JSON with empty (null) list entries got an internal error instead of a diagnostic. Examples: `pins: [null]` on `character.save`, `effects: [null]` on `content.validate`, and a packaged character with `pins: [null]` on `package.preview`. Worse, `character.save` stored such a character before failing, and it could not be opened again. Now characters report `character.empty-entry` and revisions `validate.empty-entry` (also on `content.saveDraft` and import), and `character.choose` reports `choice.empty-entry`. `character.save` calculates the sheet before it writes, so nothing is stored on failure.
+  - A published revision inside a package was imported without content validation, so, for example, a d1000000 hit die or a choice with count -1 became active. New published revisions in a package are now validated like `content.publish`. For content schema v3, which TomeStack only publishes after validation, errors block the import. Older revisions (published by v0.1, before validation) import with the problems as preview warnings. A reference to content that is missing on this machine is always a warning, because a share package may leave it out. The calculator also isolates such content wherever it comes from: a choice count below 1 (`choice.invalid-count`) and a hit die outside d6–d12 (`class.hit-die-invalid`) are reported, not applied.
+  - `RulesFamilyPolicy` could be bypassed through choices and chains. Under SRD 5.1, a background could offer a feat as a choice, or offer a feature that grants one. A background could also grant a feature whose chosen option raised an ability score. Origin (species or background) now carries along any chain of features, so both `BackgroundGrantsFeat` and `AbilityIncreaseSource` hold however the content is reached (`policy.background-feat` now also covers "cannot offer a feat").
 - The shell showed an unhandled exception when its UI bundle was missing. It now shows an error and exits cleanly (found by the spike's negative control).
 - After an import, the summary (including where the replaced character was backed up) was cleared as soon as the character opened. It now stays visible. Found by the UI flow test.
 - In dark mode, error, accent and warning text failed 4.5:1 contrast (2.9, 3.0 and 3.5 to 1). They now use `light-dark()` shades at 7.8 to 10.1 to 1.
@@ -57,6 +96,10 @@
 - Derived values always reported `automatic`, even when an effect on them was not applied.
 - The UI lint rule caught only a bare `fetch`. It now also blocks `window.fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` and `window.chrome` outside the transport.
 - `scripts/smoke.ps1` removes the throwaway data folder the app creates when no `-DataDir` is given.
+- The missing-runtime check (`offline-check.ps1 -Mode MissingRuntime`) failed on a hosted GitHub runner: the WebView2 loader ignored `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` there. It now uses a smoke-only shell flag, `--simulate-missing-webview2`, that takes the same not-found path on any machine. It is proven under Windows PowerShell 5.1 and pwsh 7. The loader-override variant stays as a local diagnostic (`-Mode MissingRuntimeLoader`), and the smoke report records which loader overrides the process saw (ADR-006).
+- Opening a sheet left keyboard focus on the page body. It now moves to the sheet's heading (WCAG 2.4.3, accessibility checklist #9).
+- "New character" did nothing when clicked before the app had loaded its rules families. It is now disabled until then (checklist #11).
+- Every commit warned about CRLF line endings. `.gitattributes` now keeps LF in the repository and in working copies.
 - Unexpected command failures no longer send the exception message to the UI, because it could contain file paths or internals. The UI gets a generic message and a correlation id. The details (including the stack) go only to `<data dir>/logs/errors.log`, which rolls over at 1 MB (SPEC Q-02).
 
 ### Migration
@@ -66,3 +109,7 @@
 - **Database schema v2:** stored revisions are rewritten in the v2 representation, with new hashes and the original JSON in `legacy_json`. `tomestack.db.v1.bak` is written first. Without this, M0 data folders would have failed to open.
 - **Character schema v2:** adds `level` (1–20) and `crossFamilyExceptions`. v1 characters are read as level 1 with no exceptions.
 - **Package format v2:** content entries are schema v2. v1 packages still import. Older builds refuse v2 packages with a clear message.
+- **Character schema v3:** adds `classes` (levels per class) and `choices` (selections). v1 and v2 characters are read with neither, which changes nothing.
+- **Content schema v3 (ADR-003):** adds `grant.level`, `choice.level`, the `hitDie` effect, and the `armorClass` and `hitPoints` targets. v2 revisions are **not** upcast (v2 is a subset of v3), so stored hashes are unchanged and no database migration is needed. v1 still upcasts to v2. Builds that know only v2 refuse v3 revisions.
+- Exports now also include content that included content grants (for example class features or a background's feat), so the receiving machine calculates the same sheet. Before, a granted revision that the receiver lacked showed as missing.
+- **Package format v3 (ADR-007):** the manifest adds `purpose` (`backup` / `share`) and `omitted[]`. v1 and v2 packages import as backups. Older builds refuse v3. Export file names change: a backup is `<name>-personal-backup.tomestack.zip`.

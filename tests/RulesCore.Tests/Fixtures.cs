@@ -20,6 +20,22 @@ internal static class Fixtures
     public static readonly ContentReference Watchful = M1Ref(2);
     public static readonly ContentReference KeenSenses2014 = M1Ref(3);
     public static readonly ContentReference KeenSenses2024 = M1Ref(4);
+    public static readonly ContentReference Warden = M1Ref(10);
+    public static readonly ContentReference WardenGuard = M1Ref(11);
+    public static readonly ContentReference WardenStride = M1Ref(12);
+    public static readonly ContentReference Scholar = M1Ref(13);
+    public static readonly ContentReference Hardy = M1Ref(14);
+    public static readonly ContentReference Bracers = M1Ref(15);
+    public static readonly ContentReference WardenAthletics = M1Ref(16);
+    public static readonly ContentReference WardenSurvival = M1Ref(17);
+    public static readonly ContentReference WardenNature = M1Ref(18);
+    public static readonly ContentReference PathOfThorns = M1Ref(19);
+    public static readonly ContentReference Thorns = M1Ref(20);
+    public static readonly ContentReference Crossroads = M1Ref(21);
+    public static readonly ContentReference CrossroadsStr = M1Ref(22);
+    public static readonly ContentReference CrossroadsDex = M1Ref(23);
+    public static readonly ContentReference CrossroadsWis2014 = M1Ref(24);
+    public static readonly ContentReference IronGrip = M1Ref(25);
 
     public static ContentPack Pack() => Load<ContentPack>("fixture-pack.json");
 
@@ -41,7 +57,7 @@ internal static class Fixtures
     public static Character Load(string characterFile) => Load<Character>($"characters/{characterFile}");
 
     private static ContentReference M1Ref(int n) =>
-        new(Guid.Parse($"5f1dc000-0000-4000-8000-00000000000{n}"), Guid.Parse($"5f1de000-0000-4000-8000-00000000000{n}"));
+        new(Guid.Parse($"5f1dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f1de000-0000-4000-8000-{n:D12}"));
 
     private static ContentReference Ref(int n) =>
         new(Guid.Parse($"5f0dc000-0000-4000-8000-00000000000{n}"), Guid.Parse($"5f0de000-0000-4000-8000-00000000000{n}"));

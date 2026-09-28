@@ -1,0 +1,7 @@
+# The repository stores LF; working copies use LF too, so core.autocrlf=true stops warning on every commit.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.zip binary
+*.pdf binary

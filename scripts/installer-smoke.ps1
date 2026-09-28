@@ -3,22 +3,33 @@
   Install -> smoke -> upgrade -> smoke -> uninstall, checking that user data survives (ADR-008).
 .DESCRIPTION
   Installer-neutral harness. Each installer technology gets an adapter (install / uninstall / installed exe path).
-  Only the 'Xcopy' adapter exists until the owner picks the installer (ADR-008). It copies a publish folder to a
-  per-user location, which proves the harness and binary-level upgrade compatibility, but NOT installer behavior.
+
+  Adapters:
+    Velopack  -OldBuild/-NewBuild are release folders from scripts/pack-installer.ps1 (they contain
+              TomeStack.App-win-Setup.exe). Installs per-user with `Setup.exe --silent` to
+              %LOCALAPPDATA%\TomeStack.App, upgrades by running the newer Setup.exe over it, and uninstalls with
+              `Update.exe --uninstall --silent`. Refuses to run if TomeStack.App is already installed.
+    Xcopy     -OldBuild/-NewBuild are publish folders. Copies them to a per-user folder. Proves the harness and
+              binary-level upgrade compatibility, NOT installer behavior.
 
   Checks:
     1. The old build installs and passes the smoke on a fresh data folder (it creates one character).
     2. The new build installs over it and passes the smoke, and the character from step 1 is still there.
     3. If the database schema version changed, tomestack.db.v<old>.bak exists (backup before migration).
-    4. After uninstall, the data folder and database still exist.
+    4. After uninstall, the data folder and database still exist, and so does %LOCALAPPDATA%\TomeStack if it existed
+       before (it is only checked, never written).
+    5. (Velopack) The installed folder carries LICENSE, NOTICE and ATTRIBUTION.md (ADR-008 R6), and the app version
+       increased.
 
   -DataDir defaults to a throwaway folder. On a clean VM, pass -DataDir "$env:LOCALAPPDATA\TomeStack" to check the
   real default location. Never do that on a machine with real TomeStack data.
 .EXAMPLE
+  scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/0.1.0 -NewBuild artifacts/installer/0.1.1
+.EXAMPLE
   scripts/installer-smoke.ps1 -Adapter Xcopy -OldBuild artifacts/old -NewBuild artifacts/new
 #>
 param(
-  [Parameter(Mandatory)] [ValidateSet('Xcopy')] [string] $Adapter,
+  [Parameter(Mandatory)] [ValidateSet('Velopack', 'Xcopy')] [string] $Adapter,
   [Parameter(Mandatory)] [string] $OldBuild,
   [Parameter(Mandatory)] [string] $NewBuild,
   [string] $DataDir,
@@ -27,11 +38,26 @@ param(
 $ErrorActionPreference = 'Stop'
 $smoke = Join-Path $PSScriptRoot 'smoke.ps1'
 if (-not $DataDir) { $DataDir = Join-Path ([IO.Path]::GetTempPath()) "tomestack-installer-smoke-$([guid]::NewGuid().ToString('N'))" }
-if (-not $InstallRoot) { $InstallRoot = Join-Path $env:LOCALAPPDATA "Programs\TomeStack-installer-smoke" }
+$defaultData = Join-Path $env:LOCALAPPDATA 'TomeStack'
+$defaultDataExisted = Test-Path $defaultData
+if (-not $InstallRoot) {
+  $InstallRoot = switch ($Adapter) {
+    'Velopack' { Join-Path $env:LOCALAPPDATA 'TomeStack.App' }   # Velopack's fixed per-user location for the pack id
+    'Xcopy' { Join-Path $env:LOCALAPPDATA 'Programs\TomeStack-installer-smoke' }
+  }
+}
+if ([IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') -ieq [IO.Path]::GetFullPath($defaultData).TrimEnd('\')) {
+  throw "The install folder must not be the data folder ($defaultData); uninstall would delete user data (ADR-008)"
+}
 
 # --- adapters -------------------------------------------------------------------------------------------------
+function Invoke-Checked([string] $file, [string[]] $arguments) {
+  $process = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru
+  if ($process.ExitCode -ne 0) { throw "$(Split-Path $file -Leaf) $($arguments -join ' ') exited $($process.ExitCode)" }
+}
 function Install-Build([string] $build) {
   switch ($Adapter) {
+    'Velopack' { Invoke-Checked (Join-Path $build 'TomeStack.App-win-Setup.exe') @('--silent') }
     'Xcopy' {
       if (Test-Path $InstallRoot) { Remove-Item $InstallRoot -Recurse -Force }   # replace the program folder only
       New-Item -ItemType Directory -Path $InstallRoot | Out-Null
@@ -39,9 +65,17 @@ function Install-Build([string] $build) {
     }
   }
 }
-function Get-InstalledExe { Join-Path $InstallRoot 'TomeStack.exe' }
+function Get-InstalledExe {
+  switch ($Adapter) {
+    'Velopack' { Join-Path $InstallRoot 'current\TomeStack.exe' }
+    'Xcopy' { Join-Path $InstallRoot 'TomeStack.exe' }
+  }
+}
 function Uninstall-App {
-  switch ($Adapter) { 'Xcopy' { Remove-Item $InstallRoot -Recurse -Force } }
+  switch ($Adapter) {
+    'Velopack' { Invoke-Checked (Join-Path $InstallRoot 'Update.exe') @('--uninstall', '--silent') }
+    'Xcopy' { Remove-Item $InstallRoot -Recurse -Force }
+  }
 }
 # --------------------------------------------------------------------------------------------------------------
 
@@ -52,7 +86,11 @@ function Invoke-Step([string] $name, [int] $expectCharacters) {
   return (Get-Content $report -Raw | ConvertFrom-Json)
 }
 
-Write-Output "data dir: $DataDir"
+if ($Adapter -eq 'Velopack' -and (Test-Path $InstallRoot)) {
+  throw "$InstallRoot already exists; uninstall TomeStack first. The harness will not install over an existing copy."
+}
+
+Write-Output "adapter: $Adapter; install folder: $InstallRoot; data dir: $DataDir"
 Install-Build $OldBuild
 $old = Invoke-Step 'old build smoke' 0
 Write-Output "PASS 1: old build v$($old.appVersion) (schema $($old.schemaVersion)) installed and ran"
@@ -70,6 +108,15 @@ if ($new.schemaVersion -ne $old.schemaVersion) {
   Write-Output "SKIP 3: schema unchanged ($($new.schemaVersion)); no backup expected"
 }
 
+if ($Adapter -eq 'Velopack') {
+  $missing = @('LICENSE', 'NOTICE', 'ATTRIBUTION.md') | Where-Object { -not (Test-Path (Join-Path $InstallRoot "current\$_")) }
+  if ($missing) { throw "installed folder lacks $($missing -join ', ')" }
+  if ([version]$new.appVersion -le [version]$old.appVersion) { throw "version did not increase ($($old.appVersion) -> $($new.appVersion))" }
+  Write-Output "PASS 5: v$($old.appVersion) -> v$($new.appVersion); LICENSE, NOTICE and ATTRIBUTION.md installed"
+}
+
 Uninstall-App
 if (-not (Test-Path $database)) { throw 'uninstall removed the database' }
-Write-Output "PASS 4: uninstalled; data folder preserved ($database)"
+if ($defaultDataExisted -and -not (Test-Path $defaultData)) { throw "uninstall removed $defaultData" }
+if ($Adapter -eq 'Velopack' -and (Test-Path (Get-InstalledExe))) { throw 'uninstall left the app in place' }
+Write-Output "PASS 4: uninstalled; data folder preserved ($database)$(if ($defaultDataExisted) { "; $defaultData untouched" })"

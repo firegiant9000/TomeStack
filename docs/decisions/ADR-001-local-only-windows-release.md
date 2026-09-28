@@ -1,7 +1,7 @@
 # ADR-001: Local-only Windows release
 
-Status: accepted for M0–M2. Windows 10 support level is an open owner decision.
-Date: 2026-09-25
+Status: accepted for M0–M2, including the Windows 10 support level (best-effort; owner decision 2026-09-26).
+Date: 2026-09-25 (updated 2026-09-26)
 
 ## Context
 
@@ -11,14 +11,15 @@ SPEC "Users and jobs": one Windows user on one computer, with no account or netw
 
 - The first releases are a single-user Windows desktop app: a WPF + WebView2 shell with an in-process service (ADR-006).
 - There is no account, telemetry, update check or other network call in normal use. The shell refuses any http(s) request outside its virtual host, and the app opens no listening socket (ADR-006).
-- All data is local. SQLite plus files live in one data directory (currently `%LOCALAPPDATA%\TomeStack`, which can be overridden; the final policy is D02 / ADR-005). Portability is by export/import package (ADR-007), not sync.
+- All data is local. SQLite plus files live in one data directory: `%LOCALAPPDATA%\TomeStack` by default, which can be overridden (D02, ADR-005 accepted). Portability is by export/import package (ADR-007), not sync.
+- Windows 11 is the supported target. **Windows 10 is best-effort:** WebView2 and .NET 10 support it, and issues found there are fixed when cheap, but it is not tested and not a release gate.
 - Windows only. The rules core stays free of Windows references (`RulesCore` invariant), so another shell stays possible later without changing rules code.
 
 ## Consequences
 
 - Backup and moving to another machine are the user's job. The app must make them easy and discoverable: packages, pre-import backups (6b), and the backups made before database migrations.
 - Updates cannot be pushed. Installer and updater behavior belongs to ADR-008, and any update check would need an explicit opt-in and a revision of this ADR.
-- Windows 10: WebView2 and .NET 10 support it, but it is **not tested**. Its support level (required / best-effort / none) is an open owner decision; see ADR-008.
+- Windows 10 (best-effort) is **not tested**. A run on a Windows 10 VM is listed with the other clean-VM checks in ADR-008.
 
 ## Alternatives considered
 

@@ -7,10 +7,24 @@
     <AssemblyName>TomeStack</AssemblyName>
     <RootNamespace>TomeStack.DesktopShell</RootNamespace>
     <UiDist>$(MSBuildThisFileDirectory)..\Ui\dist\</UiDist>
+    <!-- Velopack's install/uninstall hooks must run before WPF starts (ADR-008), so App has its own Main. -->
+    <StartupObject>TomeStack.DesktopShell.App</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+  <!-- License and third-party notices ship next to TomeStack.exe (ADR-008 R6). -->
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)..\..\LICENSE;$(MSBuildThisFileDirectory)..\..\NOTICE;$(MSBuildThisFileDirectory)..\..\ATTRIBUTION.md"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,8 +37,7 @@
   </ItemGroup>
 
   <Target Name="RequireUiBundle" BeforeTargets="Build">
-    <Error Condition="!Exists('$(UiDist)index.html')"
-           Text="UI bundle not found at $(UiDist). Run 'npm ci' and 'npm run build' in src/Ui before building the desktop shell." />
+    <Error Condition="!Exists('$(UiDist)index.html')" Text="UI bundle not found at $(UiDist). Run 'npm ci' and 'npm run build' in src/Ui before building the desktop shell." />
   </Target>
 
 </Project>

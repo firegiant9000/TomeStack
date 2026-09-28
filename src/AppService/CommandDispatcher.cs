@@ -19,8 +19,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "character.list", "character.get", "character.create", "character.save",
-        "package.export", "package.saveAs", "package.preview", "package.apply",
+        "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.reviewUpdate", "character.applyUpdate", "roll",
+        "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
     public string Dispatch(string requestJson)
@@ -74,10 +75,20 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         "app.info" => app.GetInfo(),
         "content.list" => app.ListContent(Payload<RulesFamilyPayload>(payload).RulesFamily),
+        "content.validate" => Validate(Payload<ContentPayload>(payload)),
+        "content.saveDraft" => app.SaveDraft(Payload<ContentPayload>(payload).Revision ?? throw new JsonException("content.saveDraft needs a revision.")),
+        "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
+        "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
+        "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
+        "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
+        "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
+        "roll" => app.Roll(Payload<RollCommand>(payload)),
         "character.list" => app.ListCharacters(),
         "character.get" => app.GetCharacter(Payload<IdPayload>(payload).Id),
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
+        "character.choose" => app.Choose(Payload<ChooseRequest>(payload)),
+        "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
@@ -85,9 +96,21 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         _ => throw new UnknownCommandException(command),
     };
 
+    private object Validate(ContentPayload payload)
+    {
+        var report = app.ValidateContent(payload.Reference, payload.Revision);
+        return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
+    }
+
+    private UpdateReview ReviewUpdate(UpdatePayload payload) => app.ReviewUpdate(payload.CharacterId, payload.From, payload.To);
+
+    private CharacterView ApplyUpdate(UpdatePayload payload) => app.ApplyUpdate(payload.CharacterId, payload.From, payload.To, payload.Confirm);
+
+    private ExportPreview PreviewExport(ExportPayload payload) => app.PreviewExport(payload.CharacterIds, payload.Purpose);
+
     private object ExportPackage(ExportPayload payload)
     {
-        var export = app.ExportCharacters(payload.CharacterIds);
+        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
@@ -99,7 +122,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        var export = app.ExportCharacters(payload.CharacterIds);
+        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
         var path = host.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
         if (path is null)
             return new SaveOutcome(false, null);
@@ -144,7 +167,16 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record IdPayload(Guid Id);
 
-    private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds);
+    private sealed record ContentIdPayload(Guid ContentId);
+
+    /// <param name="Confirm">Must be true to apply; the review never changes anything (SPEC I-06).</param>
+    private sealed record UpdatePayload(Guid CharacterId, ContentReference From, ContentReference To, bool Confirm = false);
+
+    /// <summary>A stored revision by <paramref name="Reference"/>, or an unsaved one inline.</summary>
+    private sealed record ContentPayload(ContentReference? Reference = null, ContentRevision? Revision = null);
+
+    /// <param name="Purpose">ADR-007: <c>backup</c> (default, everything) or <c>share</c> (leaves out non-redistributable sources).</param>
+    private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
 
     private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
 }

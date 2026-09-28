@@ -1,6 +1,6 @@
 # ADR-006: Desktop host and UI ↔ service transport
 
-Status: accepted (transport and hosting). Installer choice remains open; see "Not yet proven".
+Status: accepted (transport and hosting). The installer is Velopack (ADR-008); clean-VM checks remain open, see "Not yet proven".
 Date: 2026-09-24
 
 ## Context
@@ -58,21 +58,22 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 | --- | --- | --- |
 | Smoke also proves the M0 exit gate | `scripts/smoke.ps1 -Exe <TomeStack.exe>` | Pass. Bridge round trip, then `character.create` with fixture content (initiative 3), `package.export` and `package.preview` (`canApply: true`); `blockedRequests: []` |
 | Persistence across restarts | `smoke.ps1 -DataDir <dir> -ExpectCharactersAtStart 0`, then again with `1` | Pass. The second run found the character saved by the first |
-| Missing WebView2 runtime (simulated) | `scripts/offline-check.ps1 -Mode MissingRuntime` | Pass. `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` pointing at an empty folder gives `webview2-runtime-missing`, exit 2, the in-window message, and no crash |
+| Missing WebView2 runtime (simulated) | `scripts/offline-check.ps1 -Mode MissingRuntime` | Pass (2026-09-26, Windows PowerShell 5.1 and pwsh 7.6). The smoke-only `--simulate-missing-webview2` flag takes the shell's runtime-not-found path: `webview2-runtime-missing`, exit 2, the in-window message, and no crash |
+| Missing runtime through the real loader (local diagnostic) | `offline-check.ps1 -Mode MissingRuntimeLoader` | Pass locally under 5.1 and pwsh 7. `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` pointing at an empty folder makes the loader fail. **On a hosted GitHub runner (run 36275477994, pwsh 7) the app started normally, and even `GetAvailableBrowserVersionString()` inside it reported 153.0.4234.48, so the loader never saw the override.** pwsh 7 is not the cause (it passes here). The docs rank the env var above registry policy, so a policy should not win either. The smoke report now records which overrides the process saw (`webView2LoaderOverrides`, booleans only) and CI logs any policy keys, so the next hosted run can narrow the cause. CI uses the deterministic flag instead |
 | Network disabled | `scripts/offline-check.ps1 -Mode AssumeOffline` (turn on airplane mode first) | **Not run.** Running it would have disconnected the machine used for this work. The owner has to run it |
 
 An earlier draft of `offline-check.ps1` also disabled network adapters from the script. Windows Defender (AMSI) blocked it as malicious, so that mode was removed. Airplane mode plus `-Mode AssumeOffline` is the supported procedure.
 
 ## Not yet proven (keep open in M0)
 
-- Installer technology, per-user install, upgrade, and uninstall-preserves-data. These are blocked on the owner's installer decision ([ADR-008](ADR-008-installer-and-distribution.md)). Installer-neutral upgrade evidence (backup before migration, refusing a newer data folder) is recorded there. Note: Velopack's default install folder is the same as our data folder, and MSIX virtualizes AppData. Both would delete user data on uninstall if adopted naively.
+- ~~Installer technology, per-user install, upgrade, and uninstall-preserves-data.~~ **Proven on the development machine (2026-09-26):** Velopack per-user install, upgrade from a schema-1 build with `tomestack.db.v1.bak`, and uninstall that keeps the data folder ([ADR-008](ADR-008-installer-and-distribution.md), pack id `TomeStack.App` so uninstall cannot delete `%LOCALAPPDATA%\TomeStack`). The clean-VM parts below are still open.
 - A run with the network actually disabled (procedure above; not yet executed).
 - **Clean VM only:**
   - first launch on a machine that never had TomeStack or its data directory;
   - a truly absent WebView2 Runtime. The simulation above swaps the loader path but does not remove the runtime, so it does not exercise the installer's runtime bootstrap;
-  - Windows 10 (support level is an open owner decision);
+  - Windows 10 (best-effort, owner decision 2026-09-26);
   - a standard (non-admin) user account;
   - behavior with the Evergreen Standalone Installer offline.
-- The smoke on GitHub-hosted runners. **Decision (2026-09-25): it stays non-blocking.** Evidence: the `windows-2025` image README lists Microsoft Edge 153 and .NET SDK 10.0.x but **not** the WebView2 Runtime. Windows Server does not guarantee the runtime alongside Edge, and whether the job has a desktop session is undocumented. No hosted run has been observed yet (nothing has been pushed). CI now probes the runtime from the registry, logs the session, runs `scripts/smoke.ps1` and uploads the report. Promote the smoke to blocking after three consecutive green hosted runs. If the runtime is missing, install the Evergreen Standalone Runtime in CI first.
+- The smoke on GitHub-hosted runners. **Decision (2026-09-25): it stays non-blocking.** Evidence: the `windows-2025` image README lists Microsoft Edge 153 and .NET SDK 10.0.x but **not** the WebView2 Runtime. Windows Server does not guarantee the runtime alongside Edge, and whether the job has a desktop session is undocumented. **Green hosted run 1 of 3: PR #2, run 36275477994 (2026-09-26), WebView2 Runtime 153.0.4234.48 present, interactive session.** The missing-runtime step failed in that run; see the offline evidence table above. The replacement flag has not had a hosted run yet (nothing pushed since). CI now probes the runtime from the registry, logs the session, runs `scripts/smoke.ps1` and uploads the report. Promote the smoke to blocking after three consecutive green hosted runs. If the runtime is missing, install the Evergreen Standalone Runtime in CI first.
 
 Supersedes: none. Updates LIVING_SPECS D06.

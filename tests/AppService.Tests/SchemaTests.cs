@@ -46,14 +46,19 @@ public class SchemaTests
         AssertValid("character", document.RootElement, file);
     }
 
+    /// <summary>Test fixture packs and the bundled SRD packs.</summary>
     public static TheoryData<string> PackFixtures() =>
-        [.. Directory.GetFiles(FixtureRoot, "fixture-pack*.json").Select(f => Path.GetFileName(f))];
+    [
+        .. Directory.GetFiles(FixtureRoot, "fixture-pack*.json").Select(f => Path.Combine("RulesFixtures", Path.GetFileName(f))),
+        .. Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Content"), "*.json").Select(f => Path.Combine("Content", Path.GetFileName(f))),
+    ];
 
     [Theory]
     [MemberData(nameof(PackFixtures))]
     public void Fixture_pack_sources_and_revisions_match_their_schemas(string file)
     {
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(FixtureRoot, file)));
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, file)));
+        AssertValid("content-pack", document.RootElement, file);
         foreach (var source in document.RootElement.GetProperty("sources").EnumerateArray())
             AssertValid("source", source, $"{file} source {source.GetProperty("id")}");
         foreach (var revision in document.RootElement.GetProperty("revisions").EnumerateArray())

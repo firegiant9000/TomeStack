@@ -36,10 +36,10 @@ public class FieldGraphTests
     {
         var sheet = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
 
-        Assert.Equal(6 + 6 + 1 + 6 + 1 + 1, sheet.Fields.Count); // scores, modifiers, PB, saves, Stealth, initiative
+        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1, sheet.Fields.Count); // scores, modifiers, PB, saves, skills, initiative, AC, HP
         Assert.Equal(
-            ["score", "modifier", "bonus", "modifier", "modifier", "modifier"],
-            new[] { "ability.str.score", "ability.str.mod", FieldIds.ProficiencyBonus, FieldIds.Save(Ability.Wis), FieldIds.Skill("stealth"), FieldIds.Initiative }
+            ["score", "modifier", "bonus", "modifier", "modifier", "modifier", "modifier", "score", "score"],
+            new[] { "ability.str.score", "ability.str.mod", FieldIds.ProficiencyBonus, FieldIds.Save(Ability.Wis), FieldIds.Skill("stealth"), FieldIds.Skill("animalHandling"), FieldIds.Initiative, FieldIds.ArmorClass, FieldIds.HitPoints }
                 .Select(f => sheet.Field(f).Units));
         Assert.Equal(
             [(10, 0), (17, 3), (12, 1), (10, 0), (13, 1), (8, -1)],
@@ -183,10 +183,12 @@ public class FieldGraphTests
         var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
         var sheet = Sheet(Fixtures.Srd51Character(), manual);
 
-        Assert.All(plain.Fields, f => Assert.Equal(AutomationStatus.Automatic, f.Automation));
+        // Hit points need a class, and this M0 character has none, so only they are assisted without the manual effect.
+        Assert.All(plain.Fields.Where(f => f.Field != FieldIds.HitPoints), f => Assert.Equal(AutomationStatus.Automatic, f.Automation));
+        Assert.Equal(AutomationStatus.Assisted, plain.Field(FieldIds.HitPoints).Automation);
         Assert.Equal(
-            [FieldIds.Score(Ability.Dex), FieldIds.Modifier(Ability.Dex), FieldIds.Save(Ability.Dex), FieldIds.Skill("stealth"), FieldIds.Initiative],
-            sheet.Fields.Where(f => f.Automation == AutomationStatus.Assisted).Select(f => f.Field));
+            [FieldIds.Score(Ability.Dex), FieldIds.Modifier(Ability.Dex), FieldIds.Save(Ability.Dex), FieldIds.Skill("acrobatics"), FieldIds.Skill("sleightOfHand"), FieldIds.Skill("stealth"), FieldIds.Initiative, FieldIds.ArmorClass],
+            sheet.Fields.Where(f => f.Automation == AutomationStatus.Assisted && f.Field != FieldIds.HitPoints).Select(f => f.Field));
         Assert.Equal(17, sheet.Field(FieldIds.Score(Ability.Dex)).Value);
     }
 
@@ -244,7 +246,7 @@ public class FieldGraphTests
         var classy = Content(
             "Fixture Class Scaling", ContentKind.Feature,
             Bonus("scaling", FieldIds.Initiative, "floor(CLASS_LEVEL / 2)"),
-            Bonus("nowhere", "armorClass", "1"),
+            Bonus("nowhere", "speed", "1"),
             new GrantEffect { Id = "bad-grant", Grant = GrantKind.Proficiency, Target = "skill.juggling" });
 
         var sheet = Sheet(Fixtures.Srd51Character(), classy);

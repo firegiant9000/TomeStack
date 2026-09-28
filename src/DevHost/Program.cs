@@ -11,7 +11,7 @@ var dataDirectory = TomeStackApp.DefaultDataDirectory("TomeStack-dev");
 var port = int.TryParse(Environment.GetEnvironmentVariable("TOMESTACK_DEV_PORT"), out var configuredPort) ? configuredPort : 5178;
 string[] allowedOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
-using var tomeStack = TomeStackApp.Open(dataDirectory);
+using var tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: true); // development host: original fixtures too
 var dispatcher = new CommandDispatcher(tomeStack);
 var dispatchGate = new Lock();
 var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));

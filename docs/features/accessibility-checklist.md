@@ -2,7 +2,7 @@
 
 SPEC P-03, Q-04 · BACKLOG B17 · LIVING_SPECS D05
 
-**Formal target: not set. It is an owner decision (D05).** Until one is chosen, this checklist uses the working default from LIVING_SPECS, "full keyboard use, text zoom, contrast check". Each item lists the WCAG 2.2 success criterion it maps to, so adopting a target (for example WCAG 2.2 AA) only means confirming the list rather than rewriting it.
+**Formal target: WCAG 2.2 Level AA for the character sheet and the builder** (owner decision D05, 2026-09-26). The import preview and the export panel are held to the same bar. Each item lists the WCAG 2.2 success criteria it covers. An item is only ✅ when it meets AA; ⚠️ and ☐ items are open AA gaps and must be closed before MVP (MVP.md release checks).
 
 Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ open finding · ☐ not checked yet.
 
@@ -17,15 +17,15 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | --- | --- | --- | --- |
 | 1 | Every form control has a visible, programmatic label | 1.3.1, 3.3.2, 4.1.2 | ✅ partial: the e2e test finds every control on its path by role and name. Controls off that path (for example the source keep/use choice in the import preview) are covered by code review only |
 | 2 | Radio groups and checkbox lists are grouped with a legend | 1.3.1 | ✅ code review (`fieldset`/`legend` in the builder and the import choice) |
-| 3 | All actions work from the keyboard; no keyboard traps | 2.1.1, 2.1.2 | ✅ partial: the e2e keyboard test covers the primary actions. The full walkthrough is below (☐) |
+| 3 | All actions work from the keyboard; no keyboard traps | 2.1.1, 2.1.2 | ✅ the e2e keyboard test covers the primary actions, and the owner's manual walkthrough passed (below). Re-check the new export panel (purpose radios) by keyboard |
 | 4 | A visible focus indicator | 2.4.7, 2.4.11 | ✅ `:focus-visible` 3 px outline; accent contrast is 6.2:1 (light) and 8.9:1 (dark) |
 | 5 | Text contrast ≥ 4.5:1 in light **and** dark scheme | 1.4.3 | 🔧 Dark mode failed: error 2.87, accent 3.04, warn 3.45. Now `light-dark()` gives 7.8 / 8.9 / 10.1. Light mode: text 21, muted 7.0, accent 6.2, warn 5.4, error 6.5 |
 | 6 | Text resizes to 200% without loss of content | 1.4.4, 1.4.10 | ☐ The layout uses `rem` and `font-size: 100%`, but the check has not been run at 200% / 400% in WebView2 |
 | 7 | Errors are announced and described in text | 3.3.1, 4.1.3 | ✅ errors use `role="alert"`, status messages `role="status"` |
 | 8 | Status after import stays visible | 4.1.3 | 🔧 The import summary, including the backup location, was cleared immediately by opening the character. Found by the e2e test |
-| 9 | Focus moves sensibly after navigation (create → sheet, import → sheet) | 2.4.3 | ⚠️ Focus falls back to `body` when the form unmounts. Move focus to the sheet heading |
-| 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 21 fields |
-| 11 | No action is silently ignored | 3.2.x | ⚠️ "New character" does nothing if clicked before `app.info` has loaded. Disable it until ready, or render the form with a loading state |
+| 9 | Focus moves sensibly after navigation (create → sheet, import → sheet) | 2.4.3 | 🔧 Focus used to fall back to `body` when the form unmounted. Opening a sheet now focuses its heading (`tabIndex=-1`); the e2e flow asserts it after create |
+| 10 | Derived values are not noisy for screen readers | 4.1.3 | 🔧 Field values used `<output>`, which has the implicit role `status` (a live region). They are plain text in the field heading now; the sheet has 40 fields (M1 item 5) |
+| 11 | No action is silently ignored | 3.2.x | 🔧 "New character" did nothing if clicked before `app.info` had loaded. It is now disabled until then; both e2e tests wait for it to become enabled |
 | 12 | Override forms are independent per field | 3.3.2 | 🔧 Each field card has its own override state (item 11) |
 | 13 | Tables have captions and header cells | 1.3.1 | ✅ trace, package and diff tables have `caption` and `th scope` |
 | 14 | Colour is not the only signal | 1.4.1 | ✅ overrides say "overridden (calculated N)"; conflicts and warnings are text |
@@ -35,7 +35,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 
 ## Manual keyboard walkthrough
 
-**Not yet performed.** It needs a person at the installed app. Procedure: launch `TomeStack.exe` and do not touch the mouse. Then:
+It needs a person at the app. Procedure: launch `TomeStack.exe` and do not touch the mouse. Then:
 
 1. Tab through the header, sidebar and main area. Note the order and anything you can't reach.
 2. Create a character: type a name, change the rules family with the arrow keys, set scores, toggle content with Space, and submit with Enter.
@@ -47,4 +47,4 @@ Record each run here as the date, build, pass/fail per step, and notes.
 
 | Date | Build | Result | Notes |
 | --- | --- | --- | --- |
-| | | | |
+| 2026-09-26 | `m0-finish` (PR #2), v0.1.0 | **PASS** (owner, Arlo Kharod) | Keyboard walkthrough steps 1–4 passed, including the native Save dialog and the import. Step 5 (200% zoom, dark mode) was not reported separately; item 6 stays ☐. Predates the export purpose panel (ADR-007), so re-run step 3 with "Share" |

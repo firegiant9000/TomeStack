@@ -68,7 +68,8 @@ export function App() {
 
       <nav className="sidebar" aria-label="Characters">
         <div className="actions">
-          <button type="button" onClick={() => setScreen({ kind: 'create' })}>
+          {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
+          <button type="button" onClick={() => setScreen({ kind: 'create' })} disabled={!info}>
             New character
           </button>
           <button type="button" onClick={() => fileInput.current?.click()}>
@@ -94,6 +95,11 @@ export function App() {
       </nav>
 
       <main className="content">
+        {info?.warnings.map((w) => (
+          <p key={w.code} role="note" className="warn">
+            {w.message}
+          </p>
+        ))}
         {message && (
           <p role={message.tone === 'error' ? 'alert' : 'status'} className={message.tone}>
             {message.text}

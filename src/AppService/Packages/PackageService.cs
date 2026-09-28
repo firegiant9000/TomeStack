@@ -23,14 +23,69 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     /// <summary>Total decompressed size of all entries; bounds memory against archives that expand far beyond their size.</summary>
     public const long MaxTotalBytes = 64L * 1024 * 1024;
     public const int MaxEntries = 2_000;
+
+    /// <summary>The first content schema whose published revisions were always validated before publishing (M1 item 3).</summary>
+    private const int ValidatedOnPublishSchemaVersion = 3;
     private const string ManifestPath = "manifest.json";
 
     [GeneratedRegex("^(sources|content|characters)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
     private static partial Regex EntryPathPattern();
 
-    public ExportResult Export(IReadOnlyList<Guid> characterIds)
+    private sealed record ExportPlan(
+        List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
+
+    /// <summary>What <see cref="Export"/> would write for <paramref name="purpose"/>, without writing it (ADR-007).</summary>
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose)
+    {
+        var plan = Plan(characterIds, purpose);
+        return new ExportPreview(purpose, plan.FileName, [.. plan.Characters.Select(c => c.Id)], [.. plan.Sources.Select(Notice)], plan.Omitted);
+    }
+
+    public ExportResult Export(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup)
+    {
+        var plan = Plan(characterIds, purpose);
+        var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
+        foreach (var source in plan.Sources)
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null })); // machine-local path; may name the user
+        foreach (var revision in plan.Revisions)
+            files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
+        foreach (var character in plan.Characters)
+            files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
+
+        var createdAt = time.GetUtcNow();
+        var manifest = new PackageManifest
+        {
+            CreatedAt = createdAt,
+            AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+            Purpose = purpose,
+            Characters = [.. plan.Characters.Select(c => c.Id)],
+            Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],
+            Notices = [.. plan.Sources.Select(Notice)],
+            Omitted = plan.Omitted,
+        };
+
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteEntry(zip, ManifestPath, Json(manifest), createdAt);
+            foreach (var (path, file) in files)
+                WriteEntry(zip, path, file.Bytes, createdAt);
+        }
+        return new ExportResult(plan.FileName, buffer.ToArray(), manifest);
+    }
+
+    private static LicenseNotice Notice(SourceRecord s) => new(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution, s.ModificationNotice);
+
+    /// <summary>
+    /// Resolves characters, their pinned revisions and those revisions' sources. For <see cref="ExportPurpose.Share"/>,
+    /// revisions from sources with <c>redistributable: false</c> are left out and listed in <see cref="ExportPlan.Omitted"/>
+    /// with the characters that pin them; the characters keep their pins (ADR-007).
+    /// </summary>
+    private ExportPlan Plan(IReadOnlyList<Guid> characterIds, ExportPurpose purpose)
     {
         ArgumentNullException.ThrowIfNull(characterIds);
+        if (!Enum.IsDefined(purpose))
+            throw new PackageException([new("export.purpose-unknown", $"Export purpose '{purpose}' is not supported.")]);
         var errors = new List<Diagnostic>();
         var characters = new List<Character>();
         foreach (var id in characterIds.Distinct())
@@ -42,12 +97,27 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
 
         var revisions = new Dictionary<Guid, ContentRevision>();
-        foreach (var pin in characters.SelectMany(c => c.Pins))
+        foreach (var pin in characters.SelectMany(c => c.AllReferences()))
         {
             if (store.FindRevision(pin) is { } revision)
                 revisions[revision.RevisionId] = revision;
             else
                 errors.Add(new("export.revision-missing", $"Pinned revision {pin.RevisionId} is missing; repair the character before exporting.", pin));
+        }
+        // Content granted by included content (class features, a background's feat) is needed to calculate the same
+        // sheet on the receiving machine. Follow grants transitively; a granted revision missing here is already shown
+        // as missing on this machine's sheet, so it is skipped rather than failing the export.
+        var pending = new Queue<ContentRevision>(revisions.Values);
+        while (pending.Count > 0)
+        {
+            foreach (var grant in pending.Dequeue().Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content && g.Content is not null))
+            {
+                if (!revisions.ContainsKey(grant.Content!.RevisionId) && store.FindRevision(grant.Content) is { } granted)
+                {
+                    revisions[granted.RevisionId] = granted;
+                    pending.Enqueue(granted);
+                }
+            }
         }
 
         var sources = new Dictionary<Guid, SourceRecord>();
@@ -62,34 +132,27 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         if (errors.Count > 0)
             throw new PackageException(errors);
 
-        var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
-        foreach (var source in sources.Values)
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null })); // machine-local path; may name the user
-        foreach (var revision in revisions.Values)
-            files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
-        foreach (var character in characters)
-            files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
-
-        var createdAt = time.GetUtcNow();
-        var manifest = new PackageManifest
+        var omitted = new List<OmittedSource>();
+        if (purpose == ExportPurpose.Share)
         {
-            CreatedAt = createdAt,
-            AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
-            Characters = [.. characters.Select(c => c.Id)],
-            Entries = [.. files.Select(f => new PackageEntry(f.Key, f.Value.Kind, Hash(f.Value.Bytes), f.Value.Bytes.LongLength))],
-            Notices = [.. sources.Values.OrderBy(s => s.Id).Select(s => new LicenseNotice(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution))],
-        };
-
-        using var buffer = new MemoryStream();
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            WriteEntry(zip, ManifestPath, Json(manifest), createdAt);
-            foreach (var (path, file) in files)
-                WriteEntry(zip, path, file.Bytes, createdAt);
+            foreach (var source in sources.Values.Where(s => !s.Redistributable).OrderBy(s => s.Id))
+            {
+                var left = revisions.Values.Where(r => r.Provenance.SourceId == source.Id).OrderBy(r => r.RevisionId).ToList();
+                omitted.Add(new(source.Id, source.Title, source.Publisher, source.License,
+                [
+                    .. left.Select(r => new OmittedRevision(
+                        r.Reference, r.Name, [.. characters.Where(c => c.AllReferences().Contains(r.Reference)).Select(c => c.Id)])),
+                ]));
+                foreach (var revision in left)
+                    revisions.Remove(revision.RevisionId);
+                sources.Remove(source.Id);
+            }
         }
 
         var name = characters.Count == 1 ? SafeFileName(characters[0].Name) : "characters";
-        return new ExportResult($"{name}.tomestack.zip", buffer.ToArray(), manifest);
+        // ADR-007: the file name says what a backup is, so it is not handed on by mistake.
+        var fileName = purpose == ExportPurpose.Backup ? $"{name}-personal-backup.tomestack.zip" : $"{name}.tomestack.zip";
+        return new ExportPlan(characters, [.. revisions.Values], [.. sources.Values.OrderBy(s => s.Id)], omitted, fileName);
     }
 
     public PackagePreview Preview(byte[] package) => Read(package).Preview;
@@ -201,6 +264,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var items = new List<PackageItem>();
         var packageRevisions = parsed.Revisions.ToDictionary(r => r.Reference);
         var packageSources = parsed.Sources.ToDictionary(s => s.Id);
+        var catalog = new PackageCatalog(packageRevisions, packageSources, store);
 
         foreach (var source in parsed.Sources)
         {
@@ -232,15 +296,57 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 warnings.Add(new("package.revision-draft", $"'{revision.Name}' is a draft and stays inactive after import.", revision.Reference));
             var families = string.Join(", ", revision.RulesFamilies);
             items.Add(new("contentRevision", revision.RevisionId, revision.Name, action, $"{revision.Kind} · {families} · {revision.Status}"));
+
+            Diagnostic Named(Diagnostic d) => d with { Message = $"'{revision.Name}': {d.Message}" };
+            if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
+            {
+                errors.AddRange(empty.Select(Named));
+                continue;
+            }
+            // ADR-004: a published revision in a package becomes active on import, so it gets the same validation as
+            // content.publish, shown in the preview. Installed copies were checked when they arrived; drafts stay inactive.
+            if (action != PackageItemAction.Add || revision.Status != RevisionStatus.Published)
+                continue;
+            // Builds that write content schema v3 validate before publishing, so a v3 revision that fails was not
+            // published by TomeStack and is refused. Older revisions were published before validation existed (v0.1):
+            // their problems are shown as warnings, and the calculator isolates what it cannot apply (SPEC C-03).
+            var blocking = revision.SchemaVersion >= ValidatedOnPublishSchemaVersion;
+            foreach (var problem in ContentValidator.Validate(revision, catalog).Errors)
+            {
+                if (problem.Code == "validate.source-missing")
+                    continue; // reported above as package.source-missing
+                // A share package may leave out referenced content (ADR-007), and a backup skips a granted revision that
+                // is already missing locally; the sheet shows either as missing content, so it does not block import.
+                if (blocking && problem.Code != "validate.reference-missing")
+                    errors.Add(Named(problem));
+                else
+                    warnings.Add(Named(problem));
+            }
         }
 
+        // ADR-007: a share package may leave out non-redistributable content, but only content its manifest names.
+        var omitted = new Dictionary<ContentReference, OmittedSource>();
+        if (parsed.Manifest.FormatVersion >= 3 && parsed.Manifest.Purpose == ExportPurpose.Share) // v1/v2 had no purpose
+        {
+            foreach (var source in parsed.Manifest.Omitted)
+            {
+                foreach (var revision in source.Revisions)
+                    omitted.TryAdd(revision.Reference, source); // a repeated entry in the untrusted manifest is harmless
+            }
+        }
         foreach (var character in parsed.Characters)
         {
-            foreach (var problem in character.Validate())
+            var problems = character.Validate();
+            foreach (var problem in problems)
                 errors.Add(problem with { Message = $"'{character.Name}': {problem.Message}" });
-            foreach (var pin in character.Pins)
+            var malformed = problems.Any(p => p.Code == "character.empty-entry"); // its references cannot be read
+            foreach (var pin in malformed ? Enumerable.Empty<ContentReference>() : character.AllReferences())
             {
-                if (!packageRevisions.ContainsKey(pin) && store.FindRevision(pin) is null)
+                if (packageRevisions.ContainsKey(pin) || store.FindRevision(pin) is not null)
+                    continue;
+                if (omitted.TryGetValue(pin, out var source))
+                    warnings.Add(new("package.content-omitted", $"'{character.Name}' uses content from '{source.Title}' ({source.Publisher}), which the sender left out because it may not be shared. It shows as missing until you install that source yourself.", pin));
+                else
                     errors.Add(new("package.pin-missing", $"'{character.Name}' pins revision {pin.RevisionId}, which is neither in the package nor installed.", pin));
             }
             var exists = store.FindCharacter(character.Id) is not null;
@@ -310,6 +416,14 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var manifest = Deserialize<PackageManifest>(ManifestPath, manifestBytes, errors);
         if (manifest is null)
             return null;
+        // Untrusted JSON can carry null where the model has none; reject it here rather than fail later.
+        if (manifest.Entries is null || manifest.Entries.Any(e => e?.Path is null || e.Sha256 is null)
+            || manifest.Notices is null || manifest.Notices.Any(n => n is null)
+            || manifest.Omitted is null || manifest.Omitted.Any(s => s?.Revisions is null || s.Revisions.Any(r => r?.Reference is null)))
+        {
+            errors.Add(new("package.invalid-json", "The package manifest has missing or empty entries."));
+            return null;
+        }
         if (manifest.Format != PackageManifest.FormatName || manifest.FormatVersion is < 1 or > PackageManifest.CurrentFormatVersion)
         {
             errors.Add(new("package.unsupported-format", $"Package format '{manifest.Format}' v{manifest.FormatVersion} is not supported by this version (v{PackageManifest.CurrentFormatVersion})."));
@@ -446,6 +560,16 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     {
         var cleaned = new string([.. name.Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')]).Trim('-');
         return cleaned.Length == 0 ? "character" : cleaned[..Math.Min(cleaned.Length, 60)];
+    }
+
+    /// <summary>The package's revisions and sources first, then this machine's: what content in the package can refer to.</summary>
+    private sealed class PackageCatalog(
+        IReadOnlyDictionary<ContentReference, ContentRevision> revisions, IReadOnlyDictionary<Guid, SourceRecord> sources, IContentCatalog local)
+        : IContentCatalog
+    {
+        public ContentRevision? FindRevision(ContentReference reference) => revisions.GetValueOrDefault(reference) ?? local.FindRevision(reference);
+
+        public SourceRecord? FindSource(Guid sourceId) => sources.GetValueOrDefault(sourceId) ?? local.FindSource(sourceId);
     }
 
     private sealed class EntryTooLargeException(string path)

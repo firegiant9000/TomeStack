@@ -30,7 +30,12 @@ export interface Character {
   name: string;
   rulesFamily: RulesFamilyId;
   campaignId?: string;
+  /** Total level; with classes recorded it is their sum (the service keeps it in step). */
   level: number;
+  /** Levels per class, in the order taken (character schema v3). */
+  classes: ClassLevel[];
+  /** Selections for choice effects (character schema v3). */
+  choices: ChoiceSelection[];
   crossFamilyExceptions: CrossFamilyException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
@@ -38,6 +43,29 @@ export interface Character {
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
+}
+
+export interface ClassLevel {
+  class: ContentReference;
+  level: number;
+}
+
+export interface ChoiceSelection {
+  source: ContentReference;
+  choiceId: string;
+  selected: ContentReference[];
+}
+
+/** A choice an active revision offers; unresolved ones are flagged on the sheet (SPEC C-01). */
+export interface ChoiceStatus {
+  source: ContentReference;
+  sourceName: string;
+  choiceId: string;
+  text?: string;
+  count: number;
+  options: ContentReference[];
+  selected: ContentReference[];
+  resolved: boolean;
 }
 
 export interface Diagnostic {
@@ -94,6 +122,7 @@ export interface CharacterSheet {
   rulesFamily: RulesFamilyId;
   fields: DerivedValue[];
   diagnostics: Diagnostic[];
+  choices?: ChoiceStatus[];
 }
 
 export interface CharacterView {
@@ -126,6 +155,8 @@ export interface AppInfo {
   version: string;
   schemaVersion: number;
   rulesFamilies: RulesFamilyPolicy[];
+  /** Startup warnings, e.g. `data-dir.sync-root` when the data folder is inside OneDrive (ADR-005). */
+  warnings: Diagnostic[];
 }
 
 export interface ContentOption {
@@ -154,6 +185,25 @@ export interface LicenseNotice {
   license: string;
   redistributable: boolean;
   attribution?: string;
+  /** CC-BY-4.0 §3: how the material was modified (SRD packs). */
+  modificationNotice?: string;
+}
+
+/** ADR-007: a backup includes everything and is not for sharing; a share leaves out non-redistributable sources. */
+export type ExportPurpose = 'backup' | 'share';
+
+export interface OmittedRevision {
+  reference: ContentReference;
+  name: string;
+  characters: string[];
+}
+
+export interface OmittedSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
+  revisions: OmittedRevision[];
 }
 
 export interface PackageManifest {
@@ -161,9 +211,20 @@ export interface PackageManifest {
   formatVersion: number;
   createdAt: string;
   appVersion: string;
+  /** Absent before format v3 (always a backup). */
+  purpose?: ExportPurpose;
   characters: string[];
   notices: LicenseNotice[];
+  omitted?: OmittedSource[];
   attachmentPolicy: string;
+}
+
+export interface ExportPreview {
+  purpose: ExportPurpose;
+  fileName: string;
+  characters: string[];
+  included: LicenseNotice[];
+  omitted: OmittedSource[];
 }
 
 export interface ExportedPackage {
@@ -204,6 +265,13 @@ export interface PackagePreview {
   items: PackageItem[];
   errors: Diagnostic[];
   warnings: Diagnostic[];
+}
+
+export interface ValidationReport {
+  revision: ContentReference;
+  errors: Diagnostic[];
+  warnings: Diagnostic[];
+  canPublish: boolean;
 }
 
 export interface ImportResult {

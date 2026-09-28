@@ -9,7 +9,7 @@ namespace TomeStack.AppService;
 /// The application interface used by every transport (WebView2 bridge, loopback dev host, tests).
 /// Owns validation and transactions; delegates calculation to the rules core.
 /// </summary>
-public sealed class TomeStackApp : IDisposable
+public sealed partial class TomeStackApp : IDisposable
 {
     public const string DatabaseFileName = "tomestack.db";
 
@@ -17,10 +17,13 @@ public sealed class TomeStackApp : IDisposable
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
 
-    private TomeStackApp(string dataDirectory, TimeProvider time)
+    private readonly IReadOnlyList<Diagnostic> _warnings;
+
+    private TomeStackApp(string dataDirectory, TimeProvider time, IReadOnlyList<Diagnostic> warnings)
     {
         DataDirectory = dataDirectory;
         _time = time;
+        _warnings = warnings;
         _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
         _packages = new PackageService(_store, time, Path.Combine(dataDirectory, PackageService.BackupFolderName));
         ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
@@ -33,17 +36,30 @@ public sealed class TomeStackApp : IDisposable
 
     internal SqliteStore Store => _store;
 
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null)
+    /// <summary>The bundled SRD packs (M1 item 1): always seeded. They are insert-only, so re-seeding is a no-op.</summary>
+    public static IReadOnlyList<string> BundledPacks { get; } = ["TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json"];
+
+    /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
+    /// <param name="devFixtures">
+    /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
+    /// shipped app has real SRD content, so fixtures stay out of user data (owner decision, 2026-09-26). Data folders
+    /// that already contain fixture content keep it (published revisions are never deleted).
+    /// </param>
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false)
     {
         Directory.CreateDirectory(dataDirectory);
-        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System);
-        app.SeedFixturePack();
+        var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
+        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]);
+        foreach (var pack in BundledPacks)
+            app.Seed(pack);
+        if (devFixtures)
+            app.Seed("TomeStack.FixturePack.json");
         return app;
     }
 
     /// <summary>
-    /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c>.
-    /// Final location policy is pending (LIVING_SPECS D02).
+    /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
+    /// A folder inside a cloud sync root is allowed but warned about in <see cref="AppInfo.Warnings"/>.
     /// </summary>
     public static string DefaultDataDirectory(string folderName = "TomeStack") =>
         Environment.GetEnvironmentVariable("TOMESTACK_DATA_DIR") is { Length: > 0 } configured
@@ -53,7 +69,8 @@ public sealed class TomeStackApp : IDisposable
     public AppInfo GetInfo() => new(
         typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
         _store.SchemaVersion,
-        RulesFamilies.All);
+        RulesFamilies.All,
+        _warnings);
 
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
     {
@@ -73,6 +90,18 @@ public sealed class TomeStackApp : IDisposable
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
+    }
+
+    /// <summary>
+    /// M1 item 3: schema, reference, formula and cycle problems for one revision, before it is published. Validates a
+    /// stored revision (by reference) or an unsaved one (inline). Nothing is written.
+    /// </summary>
+    public ValidationReport ValidateContent(ContentReference? reference, ContentRevision? revision)
+    {
+        var target = revision
+            ?? (reference is not null ? _store.FindRevision(reference) : null)
+            ?? throw new AppValidationException([new("content.not-found", reference is null ? "Name a revision to validate." : $"Revision {reference.RevisionId} is not installed.", reference)]);
+        return ContentValidator.Validate(target, _store);
     }
 
     public IReadOnlyList<CharacterSummary> ListCharacters() =>
@@ -99,6 +128,10 @@ public sealed class TomeStackApp : IDisposable
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
+        // With classes recorded, the level is their sum: keep the stored value in step rather than reject a stale one.
+        // (An empty entry is left for Validate to report.)
+        if (character.Classes is { Count: > 0 } classes && classes.All(c => c is not null))
+            character = character with { Level = classes.Sum(c => c.Level) };
         var problems = character.Validate().ToList();
         if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
             problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));
@@ -106,11 +139,60 @@ public sealed class TomeStackApp : IDisposable
             throw new AppValidationException(problems);
 
         var saved = character with { UpdatedAt = _time.GetUtcNow() };
+        // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
+        // character that cannot be opened).
+        var view = View(saved);
         _store.InTransaction(() => _store.SaveCharacter(saved));
-        return View(saved);
+        return view;
     }
 
-    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds) => _packages.Export(characterIds);
+    /// <summary>
+    /// SPEC C-01: records the options picked for one choice (an empty list clears it). The choice must be offered to the
+    /// character now (its revision active, its level reached), every option must be one of its options and usable under
+    /// the character's rules family, and the count must not be exceeded. Nothing else about the character changes.
+    /// </summary>
+    public CharacterView Choose(ChooseRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var character = _store.FindCharacter(request.CharacterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
+        var selected = request.Selected ?? [];
+        if (request.Source is null || selected.Any(o => o is null))
+            throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
+        var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
+        var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
+            ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
+
+        var problems = new List<Diagnostic>();
+        if (selected.Distinct().Count() != selected.Count)
+            problems.Add(new("choice.duplicate-option", "The same option is selected more than once.", request.Source));
+        if (selected.Count > offered.Count)
+            problems.Add(new("choice.too-many", $"'{offered.SourceName}' choice '{offered.ChoiceId}' allows {offered.Count} selection(s), not {selected.Count}.", request.Source));
+        foreach (var option in selected.Where(o => !offered.Options.Contains(o)))
+            problems.Add(new("choice.invalid-option", $"Revision {option.RevisionId} is not an option of '{offered.SourceName}' choice '{offered.ChoiceId}'.", option));
+        // One option answers one choice: SRD wording such as "another skill" means a second choice over the same list
+        // must pick something new.
+        var chosenElsewhere = without.Choices.SelectMany(c => c.Selected).ToHashSet();
+        foreach (var option in selected.Where(chosenElsewhere.Contains))
+            problems.Add(new("choice.option-already-chosen", $"Revision {option.RevisionId} is already selected for another choice.", option));
+        foreach (var option in selected.Where(offered.Options.Contains))
+        {
+            var revision = _store.FindRevision(option);
+            if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))
+                problems.Add(new("choice.option-unavailable", $"Option {revision?.Name ?? option.RevisionId.ToString()} is not a published revision for {character.RulesFamily}.", option));
+        }
+        if (problems.Count > 0)
+            throw new AppValidationException(problems);
+
+        return SaveCharacter(selected.Count == 0
+            ? without
+            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] });
+    }
+
+    public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
+        _packages.Export(characterIds, purpose);
+
+    public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
@@ -121,12 +203,18 @@ public sealed class TomeStackApp : IDisposable
 
     private CharacterView View(Character character) => new(character, CharacterCalculator.Calculate(character, _store));
 
-    private void SeedFixturePack()
+    /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
+    public static ContentPack LoadBundledPack(string resourceName)
     {
-        using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream("TomeStack.FixturePack.json")
-            ?? throw new InvalidOperationException("Embedded fixture pack is missing.");
-        var pack = JsonSerializer.Deserialize<ContentPack>(stream, RulesJson.Options)
-            ?? throw new InvalidOperationException("Embedded fixture pack is empty.");
+        using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is missing.");
+        return JsonSerializer.Deserialize<ContentPack>(stream, RulesJson.Options)
+            ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is empty.");
+    }
+
+    private void Seed(string resourceName)
+    {
+        var pack = LoadBundledPack(resourceName);
         _store.InTransaction(() =>
         {
             foreach (var source in pack.Sources.Where(s => _store.FindSource(s.Id) is null))
@@ -137,7 +225,8 @@ public sealed class TomeStackApp : IDisposable
     }
 }
 
-public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies);
+/// <param name="Warnings">Startup warnings for the user, such as a data folder inside a sync root (<c>data-dir.sync-root</c>).</param>
+public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings);
 
 public sealed record ContentOption(
     ContentReference Reference,
@@ -153,6 +242,8 @@ public sealed record ContentOption(
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
 public sealed record CharacterView(Character Character, CharacterSheet Sheet);
+
+public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
 public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
 

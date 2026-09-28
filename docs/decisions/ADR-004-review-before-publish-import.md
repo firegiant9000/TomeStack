@@ -1,6 +1,6 @@
 # ADR-004: Review before publish for imported content
 
-Status: accepted (contract and enforcement). The review UI and the publish command are M2/M4.
+Status: accepted (contract and enforcement). The publish command, which validates first, is built (M1 item 2); the review UI is M2/M4.
 Date: 2026-09-25
 
 ## Context
@@ -10,9 +10,9 @@ SPEC I-01, I-02 and I-06 and ARCHITECTURE "Import lifecycle": PDF extraction and
 ## Decision
 
 - The import worker can only produce `DraftCandidate`s. `CandidateQuarantine.ToDraftRevision` is the only conversion, and it always yields `status: draft` with every effect forced to `automation: reference`. No overload or flag produces a published revision.
-- Publishing is a separate, user-confirmed command (not built yet). It creates a new immutable revision (ADR-002) after schema and reference validation.
+- Publishing is a separate command (`content.publish`, M1 item 2). It re-runs schema, reference, formula and cycle validation (`ContentValidator`), refuses on any error, and creates a new immutable revision (ADR-002) with a new revision id. The draft is kept unchanged.
 - The calculator applies only `published` revisions. Drafts are isolated with a `content.unpublished` diagnostic and never contribute to a trace.
-- The same rule holds for packages: drafts inside a package stay drafts and inactive after import.
+- The same rule holds for packages: drafts inside a package stay drafts and inactive after import. A *published* revision in a package becomes active, so each new one gets the same validation as `content.publish`, shown in the import preview. For content schema v3 (always validated before publishing), errors refuse the import. For older revisions (published by v0.1, before validation existed) they are warnings, and the calculator isolates what it cannot apply (`docs/features/validation-and-restrictions.md`, 2026-09-26 M1 review).
 - Imported content never executes code. Effects are declarative data, and formulas use a bounded grammar with no `eval` (ADR-003).
 
 ## Consequences
@@ -29,3 +29,4 @@ SPEC I-01, I-02 and I-06 and ARCHITECTURE "Import lifecycle": PDF extraction and
 - `tests/AppService.Tests/ImportQuarantineTests.cs`: `Imported_candidate_becomes_an_inactive_draft_even_with_high_confidence`.
 - `tests/RulesCore.Tests/InitiativeTraceTests.cs`: `Draft_revision_never_affects_calculation`.
 - `tests/AppService.Tests/PackageRoundTripTests.cs`: `Draft_revisions_stay_inactive_after_import`.
+- `tests/AppService.Tests/PackageLimitTests.cs`: `Published_v3_revision_that_fails_validation_is_rejected`, `Published_v2_revision_that_fails_validation_imports_with_a_warning`.

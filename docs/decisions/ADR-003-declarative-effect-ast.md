@@ -16,16 +16,17 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `type` | Fields | Used by |
 | --- | --- | --- |
 | `modifier` | `operation` (`bonus` / `set` / `replace`), `target` (field id), `value` (formula), `stacking` (`stack` / `highestInGroup`), `stackGroup` | calculator |
-| `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin) | calculator (item 11–12) |
+| `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin), optional `level` (v3) | calculator (item 11–12; levels M1 item 5) |
+| `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
 | `resource` | `resourceId`, `label`, `maximum` (formula) | sheet / commands (M2) |
-| `choice` | `choiceId`, `count`, `options[]` (pins) | builder (M2) |
-| `restriction` | `field`, `minimum` | validation (M2) |
+| `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
+| `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 
 **Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON and writes it back with the same properties, order and values (whitespace and string escaping are normalized), and is always reference-only (`effect.unsupported`). A *known* type with a malformed body, including wrong value kinds such as a numeric `id`, degrades the same way instead of failing the whole revision. Only an effect that is not a JSON object fails its revision.
 
-Field ids: `initiative`, `proficiencyBonus`, `ability.<abl>.score`, `ability.<abl>.mod`, `save.<abl>`, `skill.<name>`.
+Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability.<abl>.score`, `ability.<abl>.mod`, `save.<abl>`, `skill.<name>` (all 18 skills; see `features/levels-and-classes.md`).
 
 ### Stacking and order (per field)
 
@@ -64,6 +65,12 @@ NUMBER  := [0-9]+
 - **Database migration v2** rewrites each upgraded row's `json` and `sha256` in the new representation and keeps the original bytes in `legacy_json`. This is the one sanctioned rewrite of published revisions: a lossless change of representation, not of content. Without it, every M0 data folder would fail to open, because re-seeding the fixtures would hit the insert-only hash check (`UpgradeTests.Schema_v1_data_folder_with_v1_revision_json_migrates_to_typed_effects` first failed with `ImmutableRevisionException`). The pre-upgrade backup (`tomestack.db.v1.bak`) is taken first.
 - **Packages:** `formatVersion` 2. v1 packages still import and are upcast. Builds that only know v1 refuse v2 with `package.unsupported-format` instead of misreading typed effects.
 - Calculation is proven identical before and after (`EffectModelTests.Calculation_is_identical_before_and_after_the_v1_to_v2_migration`).
+
+## Content schema v3 (M1, 2026-09-26)
+
+- **Adds** `grant.level`, `choice.level`, the `hitDie` effect type, and the `armorClass` and `hitPoints` targets. `CLASS_LEVEL` now resolves: it is the level in the class the content belongs to (`features/levels-and-classes.md`).
+- **No upcast from v2.** v2 is a subset of v3, so v2 revisions keep `schemaVersion: 2` and their serialized form, which means their hashes do not change and no database migration is needed. v1 still upcasts to exactly v2. New revisions are written as v3.
+- **Why a version and not an extension field:** a v2-only build would read `level` as an unknown extension and apply a level-3 feature at level 1. Refusing v3 (`content.schema-unsupported`, `package.schema-unsupported`) is safer than silently calculating differently. New effect *types*, by contrast, are forward-compatible (they become `UnknownEffect`), but new *fields* on existing types are not.
 
 ## Consequences
 

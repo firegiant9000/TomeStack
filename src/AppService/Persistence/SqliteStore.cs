@@ -166,6 +166,10 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<ContentRevision> ListRevisions() =>
         Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
 
+    /// <summary>Every stored revision (draft or published) of one content entity, in insertion order.</summary>
+    public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) =>
+        Query<ContentRevision>("SELECT json FROM content_revisions WHERE content_id = $cid ORDER BY rowid;", ("$cid", Key(contentId)));
+
     public void SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
@@ -293,11 +297,11 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     private T? QuerySingle<T>(string sql, params (string Name, object Value)[] parameters) where T : class =>
         QueryScalar(sql, parameters) is { } json ? JsonSerializer.Deserialize<T>(json, RulesJson.Compact) : null;
 
-    private List<T> Query<T>(string sql)
+    private List<T> Query<T>(string sql, params (string Name, object Value)[] parameters)
     {
         lock (_gate)
         {
-            using var command = Command(sql, []);
+            using var command = Command(sql, parameters);
             using var reader = command.ExecuteReader();
             var results = new List<T>();
             while (reader.Read())
