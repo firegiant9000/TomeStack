@@ -387,6 +387,15 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
+                if (IsV8Field(restriction.Field) && IgnoresV8(revision))
+                {
+                    // As in an older build, where the field does not exist: the content is not applied.
+                    yield return new(
+                        "effect.schema-field-ignored",
+                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', a content schema v8 field, but the revision declares v{revision.SchemaVersion}; the content is not applied.",
+                        revision.Reference, restriction.Id);
+                    continue;
+                }
                 var actual = sheet.Field(restriction.Field).Value;
                 if (actual >= restriction.Minimum)
                     met = true;
@@ -453,8 +462,11 @@ public static class CharacterCalculator
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining);
-        var classes = resolved.Classes.Where(c => c.Level > 0).ToList();
-        var checkTraining = classes.Count > 0 && classes.All(c => RecordsArmorTraining(c.Content.Revision));
+        // Every class the character records, not only those that resolved: a missing, unsupported or wrong-family class
+        // has unknown training, so it turns the check off too.
+        var classes = character.Classes.Where(e => e.Level > 0).ToList();
+        var checkTraining = classes.Count > 0 && classes.All(e =>
+            resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
         var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
@@ -1418,6 +1430,11 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
+                if (IsV8Field(effect.Target) && IgnoresV8(revision))
+                {
+                    diagnostics.Add(V8FieldIgnored(revision, effect, $"the {effect.Target} field"));
+                    continue;
+                }
                 if (item.Origin is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
                 {
                     var parent = (item.ChosenFrom ?? item.GrantedBy)!;
@@ -1482,20 +1499,31 @@ public static class CharacterCalculator
     public const string NoArmorTrainingKey = "none";
 
     /// <summary>
-    /// Whether a class records its armor training (content v8): an <c>armor.*</c> grant, gated or not, including
-    /// <c>armor.none</c>. Classes written before v8 record none, so the training check cannot tell what they give.
+    /// Whether a class records its armor training (content v8): at least one <c>armor.*</c> grant, gated or not, including
+    /// <c>armor.none</c>, and every one of them automatic and always on (the only ones that grant training). Classes
+    /// written before v8 record none, and a class with an assisted or conditional armor grant has training the
+    /// calculator cannot see, so the training check cannot tell what either gives.
     /// </summary>
-    private static bool RecordsArmorTraining(ContentRevision revision) =>
-        revision.SchemaVersion >= ContentRevision.CombatDetailsSchemaVersion
-        && revision.Effects.OfType<GrantEffect>().Any(g => g.Grant == GrantKind.Proficiency && g.Target is { } target
-            && target.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal)
-            && (ArmorTrainingKeys.Contains(target[ArmorTrainingPrefix.Length..]) || target[ArmorTrainingPrefix.Length..] == NoArmorTrainingKey));
+    private static bool RecordsArmorTraining(ContentRevision revision)
+    {
+        if (revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
+            return false;
+        var grants = revision.Effects.OfType<GrantEffect>()
+            .Where(g => g.Grant == GrantKind.Proficiency && g.Target is { } target && target.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal))
+            .ToList();
+        return grants.Count > 0 && grants.All(g =>
+            g.Automation == AutomationStatus.Automatic && g.Timing == EffectTiming.Always
+            && (ArmorTrainingKeys.Contains(g.Target![ArmorTrainingPrefix.Length..]) || g.Target![ArmorTrainingPrefix.Length..] == NoArmorTrainingKey));
+    }
 
     /// <summary>
     /// A content v8 field in a revision that declares an older schema. The validator refuses to publish that, but an
     /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
     /// </summary>
     private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
+
+    /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
+    private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
 
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
         new("effect.schema-field-ignored", $"'{revision.Name}' effect '{effect.Id}' uses {field}, a content schema v8 field, but the revision declares v{revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);

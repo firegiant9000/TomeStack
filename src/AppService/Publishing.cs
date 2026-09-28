@@ -89,7 +89,9 @@ public sealed partial class TomeStackApp
             SchemaVersion = Math.Min(draft.SchemaVersion, report.RequiredSchemaVersion),
         };
         _store.InTransaction(() => _store.AddRevision(published));
-        return new PublishResult(draftReference, published.Reference, report, AffectedCharacters(draft.ContentId));
+        // The report states the version actually written (it can be the draft's own, lower than the requirement when only a
+        // spell field target raises it; those were never refused).
+        return new PublishResult(draftReference, published.Reference, report with { RequiredSchemaVersion = published.SchemaVersion }, AffectedCharacters(draft.ContentId));
     }
 
     public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) => _store.ListRevisions(contentId);

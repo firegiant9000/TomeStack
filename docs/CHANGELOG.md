@@ -51,10 +51,10 @@
 ### Fixed
 
 - **Fighter review fixes (M2.2, PR #12 review; `docs/features/equipment.md`, `docs/features/multiclass-and-attacks.md`):**
-  - Armor training is checked only when every class the character has levels in records it. A Paladin who took a level of Fighter is no longer told they lack training for their plate, and under 2024 rules a Cleric who takes a feat granting light armor keeps the shield's Armor Class. A Wizard who takes a level of Fighter is still warned about heavy armor.
+  - Armor training is checked only when every class the character has levels in records it (and is installed). A Paladin who took a level of Fighter is no longer told they lack training for their plate, and under 2024 rules a Cleric who takes a feat granting light armor keeps the shield's Armor Class. A Wizard who takes a level of Fighter is still warned about heavy armor.
   - A roll's bonus keeps its sign: a Strength 8 bonus is −1, not 0. The button shows it as "1d6 − 1", and the roll record calls it "<roll> bonus" instead of showing the formula. A bonus that cannot be worked out for the character is shown as a problem on the feature, and the roll is refused instead of rolled without it.
   - The critical range stays between 1 and 20, and the number of attacks is at least 1, with a warning when content goes past that. Homebrew can lower the critical range only with a bonus (a "set" or "replace" would keep the highest value, which is the wrong way round), and can't make an Armor Class replacement that applies only in armor (it could never apply).
-  - Content that claims an older content version but carries the new Fighter fields has those fields ignored, as an older TomeStack would, with a note on the sheet.
+  - Content that claims an older content version but carries the new Fighter fields (including the attack count and critical range) has those fields ignored, as an older TomeStack would, with a note on the sheet.
 
 - **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. A sixth race: the Barbarian flow read the long-rest proposal as soon as the panel had focus, before the proposal had arrived (reproduced by delaying it 400 ms), and that flow took 23 of its 30 seconds. It now waits for the proposal, and e2e tests have 60 seconds. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder. It passed three hosted runs in a row, so it is blocking too.
 
@@ -78,7 +78,7 @@
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).
-- **SRD packs (M2.2):** new v8 revisions of the Paladin and Ranger (Extra Attack and armor training) and of the Wizard and Sorcerer (`armor.none`), in both families (insert-only).
+- **SRD packs (M2.2):** new v8 revisions of the Paladin and Ranger (Extra Attack, then a further revision adding armor training) and of the Wizard and Sorcerer (`armor.none`), in both families (insert-only: a data folder opened by an earlier build of this branch still opens).
 - **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
 
 ## 0.3.0 (M2 delivered)

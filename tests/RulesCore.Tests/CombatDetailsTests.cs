@@ -223,6 +223,33 @@ public class CombatDetailsTests
     }
 
     [Fact]
+    public void A_class_that_does_not_resolve_turns_the_training_check_off()
+    {
+        // Dual review: a starting class that is missing (left out of a share package, or removed) has unknown training.
+        // Without it, the check would run on the Scholar alone and take the shield away under 5.2.1.
+        var missing = new ClassLevel(new(Guid.NewGuid(), Guid.NewGuid()), 5);
+        var sheet = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Buckler)], missing, new ClassLevel(Scholar.Reference, 1)));
+        var ac = sheet.Field(FieldIds.ArmorClass);
+
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "content.missing");
+        Assert.Equal(10 + 2 + 2, ac.Value);
+        Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.armor-untrained" or "equipment.shield-untrained");
+    }
+
+    [Fact]
+    public void A_class_whose_armor_grants_are_not_automatic_has_unknown_training()
+    {
+        // Dual review: an assisted grant gives no training the calculator can see, so it must not count as a record.
+        var assisted = Revision(6, ContentKind.Class, "Test Assisted Class", new HitDieEffect { Id = "hit-die", Die = 8 },
+            Training("shield") with { Automation = AutomationStatus.Assisted });
+        var character = Fighter(RulesFamilies.Srd521, [Worn(Buckler)], new ClassLevel(assisted.Reference, 1));
+        var ac = CharacterCalculator.Calculate(character, Catalog(assisted)).Field(FieldIds.ArmorClass);
+
+        Assert.Equal(10 + 2 + 2, ac.Value);
+        Assert.DoesNotContain(ac.Warnings, w => w.Code == "equipment.shield-untrained");
+    }
+
+    [Fact]
     public void An_untrained_shield_adds_to_armor_class_under_2014_rules_but_not_2024_rules_side_by_side()
     {
         // RulesFamilyPolicy.UntrainedShieldGivesArmorClass: SRD 5.1 p. 62 (disadvantage only) vs SRD 5.2.1 p. 92.
@@ -336,6 +363,27 @@ public class CombatDetailsTests
         // Without armor, an ignored whileArmored modifier applies as an always-on bonus, as in a v7 build.
         var bare = CharacterCalculator.Calculate(character with { Equipment = [] }, catalog).Field(FieldIds.ArmorClass);
         Assert.Equal(10 + 2 + 1, bare.Value);
+    }
+
+    [Fact]
+    public void Below_content_v8_the_attacks_and_critical_range_fields_do_not_exist()
+    {
+        // Dual review: a v7 build does not know these fields, so a v7 (or v1 or v2, imported with warnings only) revision
+        // that changes them changes nothing, and a restriction on them keeps the content out, as an unknown field does.
+        var edge = KeenEdge with { SchemaVersion = 7, Effects = [new ModifierEffect { Id = "critical", Operation = ModifierOperation.Set, Target = FieldIds.CriticalRange, Value = "2" }] };
+        var swing = ExtraSwing with { SchemaVersion = 7 };
+        var gated = Revision(49, ContentKind.Feat, "Test Gated Feat",
+            new RestrictionEffect { Id = "needs-attacks", Field = FieldIds.Attacks, Minimum = 1 },
+            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "5" }) with { SchemaVersion = 7 };
+        var catalog = new InMemoryContentCatalog(
+            [.. Fixtures.Pack().Sources, .. Fixtures.M1Pack().Sources],
+            [.. Fixtures.Pack().Revisions, .. Fixtures.M1Pack().Revisions, edge, swing, gated]);
+        var sheet = CharacterCalculator.Calculate(Fighter(RulesFamilies.Srd51, null) with { Pins = [edge.Reference, swing.Reference, gated.Reference] }, catalog);
+
+        Assert.Equal((20, 1), (sheet.Field(FieldIds.CriticalRange).Value, sheet.Field(FieldIds.Attacks).Value));
+        Assert.Equal(2, sheet.Diagnostics.Count(d => d.Code == "effect.schema-field-ignored" && d.Content != gated.Reference));
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.schema-field-ignored" && d.Content == gated.Reference && d.EffectId == "needs-attacks");
+        Assert.DoesNotContain(gated.Reference, sheet.Active!);
     }
 
     [Fact]

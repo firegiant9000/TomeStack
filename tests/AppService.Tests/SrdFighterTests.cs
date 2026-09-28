@@ -238,6 +238,8 @@ public class SrdFighterTests
         {
             var paladin = Classes(family).Revisions.Last(r => r.Name == "Paladin" && r.Kind == ContentKind.Class);
             Assert.Contains(paladin.Effects.OfType<GrantEffect>(), g => g.Target == "armor.heavy" && g.OnlyAs == ClassEntry.StartingClass);
+            // The armor grants are a new revision; the v8 revision already on the PR branch is unchanged (insert-only).
+            Assert.Equal(2, Classes(family).Revisions.Count(r => r.Name == "Paladin" && r.Kind == ContentKind.Class && r.SchemaVersion == 8));
             var plate = Armor(family).Revisions.Single(r => r.Name is "Plate" or "Plate Armor").Reference;
             var sheet = temp.App.SaveCharacter(new Character
             {
@@ -299,8 +301,8 @@ public class SrdFighterTests
                     Id = Guid.NewGuid(), Name = $"Test {name}", RulesFamily = family, Level = level, Classes = [new(cls, level)], BaseAbilities = new(15, 14, 13, 10, 14, 14),
                 };
                 Assert.Equal((1, 2), (temp.App.SaveCharacter(At(revisions[^1].Reference, 4)).Sheet.Field(FieldIds.Attacks).Value, temp.App.SaveCharacter(At(revisions[^1].Reference, 5)).Sheet.Field(FieldIds.Attacks).Value));
-                // The earlier revision (pinned by existing characters) keeps its reference-only Extra Attack until the update.
-                Assert.Equal(1, temp.App.SaveCharacter(At(revisions[^2].Reference, 5)).Sheet.Field(FieldIds.Attacks).Value);
+                // The pre-v8 revision (pinned by existing characters) keeps its reference-only Extra Attack until the update.
+                Assert.Equal(1, temp.App.SaveCharacter(At(revisions.Last(r => r.SchemaVersion < 8).Reference, 5)).Sheet.Field(FieldIds.Attacks).Value);
             }
         }
     }

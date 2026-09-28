@@ -96,6 +96,17 @@ public class PublishingTests
         };
         var v8 = temp.App.Publish(temp.App.SaveDraft(rolled));
         Assert.Equal(ContentRevision.CombatDetailsSchemaVersion, temp.App.Store.FindRevision(v8.Published)!.SchemaVersion);
+
+        // Dual review: the report states the version written. A v4 draft whose spell field target would need v5 was never
+        // refused, keeps v4, and the report says 4.
+        var spell = Draft2 with
+        {
+            RevisionId = Guid.NewGuid(),
+            SchemaVersion = 4,
+            Effects = [new ModifierEffect { Id = "dc", Operation = ModifierOperation.Bonus, Target = FieldIds.SpellSaveDc, Value = "1" }],
+        };
+        var old = temp.App.Publish(temp.App.SaveDraft(spell));
+        Assert.Equal((4, 4), (temp.App.Store.FindRevision(old.Published)!.SchemaVersion, old.Report.RequiredSchemaVersion));
     }
 
     [Fact]

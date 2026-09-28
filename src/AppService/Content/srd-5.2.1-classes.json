@@ -12096,33 +12096,6 @@
           "target": "weapon.martial"
         },
         {
-          "type": "grant",
-          "id": "paladin-armor-light",
-          "grant": "proficiency",
-          "target": "armor.light",
-          "text": "Armor Training: Light, Medium, and Heavy armor and Shields"
-        },
-        {
-          "type": "grant",
-          "id": "paladin-armor-medium",
-          "grant": "proficiency",
-          "target": "armor.medium"
-        },
-        {
-          "type": "grant",
-          "id": "paladin-armor-shield",
-          "grant": "proficiency",
-          "target": "armor.shield"
-        },
-        {
-          "type": "grant",
-          "id": "paladin-armor-heavy",
-          "grant": "proficiency",
-          "target": "armor.heavy",
-          "onlyAs": "startingClass",
-          "text": "As a multiclass character a paladin gains training with Light and Medium armor and Shields, not Heavy armor."
-        },
-        {
           "type": "restriction",
           "id": "paladin-multiclass-str",
           "field": "ability.str.score",
@@ -12484,25 +12457,6 @@
           "id": "ranger-weapon-martial",
           "grant": "proficiency",
           "target": "weapon.martial"
-        },
-        {
-          "type": "grant",
-          "id": "ranger-armor-light",
-          "grant": "proficiency",
-          "target": "armor.light",
-          "text": "Armor Training: Light and Medium armor and Shields"
-        },
-        {
-          "type": "grant",
-          "id": "ranger-armor-medium",
-          "grant": "proficiency",
-          "target": "armor.medium"
-        },
-        {
-          "type": "grant",
-          "id": "ranger-armor-shield",
-          "grant": "proficiency",
-          "target": "armor.shield"
         },
         {
           "type": "restriction",
@@ -13124,6 +13078,674 @@
             {
               "contentId": "52c00000-0000-4000-8000-000000407500",
               "revisionId": "52e00000-0000-4000-8000-000000407500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000403000",
+      "revisionId": "52e90000-0000-4000-8000-000000403000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Paladin",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 53,
+          "end": 57
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Strength and Charisma\nHit Point Die D10 per Paladin level\nSaving Throw Proficiencies Wisdom and Charisma\nSkill Proficiencies Choose 2: Athletics, Insight, Intimidation, Medicine, Persuasion, or Religion\nWeapon Proficiencies Simple and Martial weapons\nArmor Training Light, Medium, and Heavy armor and Shields\nStarting Equipment Choose A or B: (A) Chain Mail, Shield, Longsword, 6 Javelins, Holy Symbol, Priest’s Pack, and 9 GP; or (B) 150 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "paladin-hit-die",
+          "die": 10
+        },
+        {
+          "type": "grant",
+          "id": "paladin-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "paladin-skills",
+          "choiceId": "paladin-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Athletics, Insight, Intimidation, Medicine, Persuasion, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403800",
+              "revisionId": "52e00000-0000-4000-8000-000000403800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403801",
+              "revisionId": "52e00000-0000-4000-8000-000000403801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403802",
+              "revisionId": "52e00000-0000-4000-8000-000000403802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403803",
+              "revisionId": "52e00000-0000-4000-8000-000000403803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403804",
+              "revisionId": "52e00000-0000-4000-8000-000000403804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403805",
+              "revisionId": "52e00000-0000-4000-8000-000000403805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "paladin-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-weapon-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor Training: Light, Medium, and Heavy armor and Shields"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-heavy",
+          "grant": "proficiency",
+          "target": "armor.heavy",
+          "onlyAs": "startingClass",
+          "text": "As a multiclass character a paladin gains training with Light and Medium armor and Shields, not Heavy armor."
+        },
+        {
+          "type": "restriction",
+          "id": "paladin-multiclass-str",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Paladin Traits table: Hit Point Die, proficiency with Martial weapons, and training with Light and Medium armor and Shields."
+        },
+        {
+          "type": "restriction",
+          "id": "paladin-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403001",
+            "revisionId": "52e70000-0000-4000-8000-000000403001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-lay-on-hands",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403002",
+            "revisionId": "52e00000-0000-4000-8000-000000403002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403003",
+            "revisionId": "52e00000-0000-4000-8000-000000403003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-fighting-style",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403004",
+            "revisionId": "52e00000-0000-4000-8000-000000403004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-paladin-s-smite",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403005",
+            "revisionId": "52e00000-0000-4000-8000-000000403005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-channel-divinity",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403006",
+            "revisionId": "52e00000-0000-4000-8000-000000403006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-paladin-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403007",
+            "revisionId": "52e00000-0000-4000-8000-000000403007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403008",
+            "revisionId": "52e00000-0000-4000-8000-000000403008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403009",
+            "revisionId": "52e80000-0000-4000-8000-000000403009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-faithful-steed",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403010",
+            "revisionId": "52e00000-0000-4000-8000-000000403010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-of-protection",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403011",
+            "revisionId": "52e00000-0000-4000-8000-000000403011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-abjure-foes",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403012",
+            "revisionId": "52e00000-0000-4000-8000-000000403012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-of-courage",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403013",
+            "revisionId": "52e00000-0000-4000-8000-000000403013"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-radiant-strikes",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403014",
+            "revisionId": "52e00000-0000-4000-8000-000000403014"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-restoring-touch",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403015",
+            "revisionId": "52e00000-0000-4000-8000-000000403015"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-expansion",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403016",
+            "revisionId": "52e00000-0000-4000-8000-000000403016"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403017",
+            "revisionId": "52e00000-0000-4000-8000-000000403017"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "paladin-subclass",
+          "choiceId": "paladin-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Paladin subclass. (The SRD 5.2.1 includes the Oath of Devotion.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403500",
+              "revisionId": "52e00000-0000-4000-8000-000000403500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000404000",
+      "revisionId": "52e90000-0000-4000-8000-000000404000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Ranger",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 57,
+          "end": 61
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Dexterity and Wisdom\nHit Point Die D10 per Ranger level\nSaving Throw Proficiencies Strength and Dexterity\nSkill Proficiencies Choose 3: Animal Handling, Athletics, Insight, Investigation, Nature, Perception, Stealth, or Survival\nWeapon Proficiencies Simple and Martial weapons\nArmor Training Light and Medium armor and Shields\nStarting Equipment Choose A or B: (A) Studded Leather Armor, Scimitar, Shortsword, Longbow, 20 Arrows, Quiver, Druidic Focus (sprig of mistletoe), Explorer’s Pack, and 7 GP; or (B) 150 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "ranger-hit-die",
+          "die": 10
+        },
+        {
+          "type": "grant",
+          "id": "ranger-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "ranger-skills",
+          "choiceId": "ranger-skills",
+          "count": 3,
+          "onlyAs": "startingClass",
+          "text": "Choose 3: Animal Handling, Athletics, Insight, Investigation, Nature, Perception, Stealth, or Survival",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404800",
+              "revisionId": "52e00000-0000-4000-8000-000000404800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404801",
+              "revisionId": "52e00000-0000-4000-8000-000000404801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404802",
+              "revisionId": "52e00000-0000-4000-8000-000000404802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404803",
+              "revisionId": "52e00000-0000-4000-8000-000000404803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404804",
+              "revisionId": "52e00000-0000-4000-8000-000000404804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404805",
+              "revisionId": "52e00000-0000-4000-8000-000000404805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404806",
+              "revisionId": "52e00000-0000-4000-8000-000000404806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404807",
+              "revisionId": "52e00000-0000-4000-8000-000000404807"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "ranger-multiclass-skill",
+          "choiceId": "ranger-multiclass-skill",
+          "count": 1,
+          "onlyAs": "multiclass",
+          "text": "As a multiclass character, one skill (the class's multiclass proficiencies).",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404800",
+              "revisionId": "52e00000-0000-4000-8000-000000404800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404801",
+              "revisionId": "52e00000-0000-4000-8000-000000404801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404802",
+              "revisionId": "52e00000-0000-4000-8000-000000404802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404803",
+              "revisionId": "52e00000-0000-4000-8000-000000404803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404804",
+              "revisionId": "52e00000-0000-4000-8000-000000404804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404805",
+              "revisionId": "52e00000-0000-4000-8000-000000404805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404806",
+              "revisionId": "52e00000-0000-4000-8000-000000404806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404807",
+              "revisionId": "52e00000-0000-4000-8000-000000404807"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "ranger-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-weapon-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor Training: Light and Medium armor and Shields"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
+          "type": "restriction",
+          "id": "ranger-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Ranger Traits table: Hit Point Die, proficiency with Martial weapons, proficiency in one skill of your choice from the Ranger’s skill list, and training with Light and Medium armor and Shields."
+        },
+        {
+          "type": "restriction",
+          "id": "ranger-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404001",
+            "revisionId": "52e70000-0000-4000-8000-000000404001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-favored-enemy",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404002",
+            "revisionId": "52e00000-0000-4000-8000-000000404002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404003",
+            "revisionId": "52e00000-0000-4000-8000-000000404003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-deft-explorer",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404004",
+            "revisionId": "52e00000-0000-4000-8000-000000404004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-fighting-style",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404005",
+            "revisionId": "52e00000-0000-4000-8000-000000404005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ranger-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404006",
+            "revisionId": "52e00000-0000-4000-8000-000000404006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404007",
+            "revisionId": "52e00000-0000-4000-8000-000000404007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404008",
+            "revisionId": "52e80000-0000-4000-8000-000000404008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-roving",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404009",
+            "revisionId": "52e00000-0000-4000-8000-000000404009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404010",
+            "revisionId": "52e00000-0000-4000-8000-000000404010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-tireless",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404011",
+            "revisionId": "52e00000-0000-4000-8000-000000404011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-relentless-hunter",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404012",
+            "revisionId": "52e00000-0000-4000-8000-000000404012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-nature-s-veil",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404013",
+            "revisionId": "52e00000-0000-4000-8000-000000404013"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-precise-hunter",
+          "grant": "content",
+          "level": 17,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404014",
+            "revisionId": "52e00000-0000-4000-8000-000000404014"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-feral-senses",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404015",
+            "revisionId": "52e00000-0000-4000-8000-000000404015"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404016",
+            "revisionId": "52e00000-0000-4000-8000-000000404016"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-foe-slayer",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404017",
+            "revisionId": "52e00000-0000-4000-8000-000000404017"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "ranger-subclass",
+          "choiceId": "ranger-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Ranger subclass. (The SRD 5.2.1 includes the Hunter.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404500",
+              "revisionId": "52e00000-0000-4000-8000-000000404500"
             }
           ]
         }
