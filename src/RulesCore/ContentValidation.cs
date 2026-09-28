@@ -193,6 +193,8 @@ public static class ContentValidator
                         Error("validate.spellcasting", $"Spellcasting '{spellcasting.Id}': {problem}.", spellcasting.Id);
                     if (spellcasting.SpellsFormula is { } spellsFormula)
                         CheckFormula(spellsFormula, spellcasting.Id, "spellsFormula");
+                    if (spellcasting.MulticlassCaster is not null && spellcasting.SlotKind == SpellSlotKind.PactMagic)
+                        Error("validate.spellcasting-multiclass-pact", $"Spellcasting '{spellcasting.Id}': Pact Magic slots are never combined with other casters' slots, so it takes no multiclassCaster.", spellcasting.Id);
                     if (revision.Kind is not (ContentKind.Class or ContentKind.Subclass or ContentKind.Feature))
                         Warn("validate.spellcasting-kind", $"Spellcasting is calculated only inside a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spellcasting.Id);
                     break;
@@ -218,6 +220,8 @@ public static class ContentValidator
             Error("validate.requires-v5", $"This revision has spellcasting, spell or weapon data (content schema v5) but declares v{revision.SchemaVersion}; in an older revision they are reference only.");
         if (needsV6 && revision.SchemaVersion < ToggleEffect.SchemaVersion)
             Error("validate.requires-v6", $"This revision uses content schema v6 features (toggles, toggled modifiers, shared resources, roll costs) but declares v{revision.SchemaVersion}; an older build would ignore them.");
+        if (revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) && revision.SchemaVersion < SpellcastingEffect.MulticlassSchemaVersion)
+            Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)

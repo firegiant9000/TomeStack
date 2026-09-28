@@ -8714,6 +8714,3274 @@
           ]
         }
       ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000400001",
+      "revisionId": "52e70000-0000-4000-8000-000000400001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 32
+        }
+      },
+      "status": "published",
+      "summary": "You have learned to cast spells through your bardic arts. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Bard spells, which appear in the Bard spell list later in the class’s description.\n\nCantrips. You know two cantrips of your choice from the Bard spell list. Dancing Lights and Vicious Mockery are recommended.\n\nWhenever you gain a Bard level, you can replace one of your cantrips with another cantrip of your choice from the Bard spell list.\n\nWhen you reach Bard levels 4 and 10, you learn another cantrip of your choice from the Bard spell list, as shown in the Cantrips column of the Bard Features table.\n\nSpell Slots. The Bard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Bard spell list. Charm Person, Color Spray, Dissonant Whispers, and Healing Word are recommended.\n\nThe number of spells on your list increases as you gain Bard levels, as shown in the Prepared Spells column of the Bard Features table. Whenever that number increases, choose additional spells from the Bard spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Bard, your list of prepared spells can include six spells of levels 1 and 2 in any combination.\n\nIf another Bard feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Bard spells for you.\n\nChanging Your Prepared Spells. Whenever you gain a Bard level, you can replace one spell on your list with another Bard spell for which you have spell slots.\n\nSpellcasting Ability. Charisma is your spellcasting ability for your Bard spells.\n\nSpellcasting Focus. You can use a Musical Instrument as a Spellcasting Focus for your Bard spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "bard-spellcasting",
+          "ability": "cha",
+          "preparation": "prepared",
+          "spellList": "bard",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              2,
+              1,
+              1
+            ]
+          ],
+          "cantrips": [
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "spellsTable": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "text": "The Bard Features table gives spell slots, cantrips and prepared spells by Bard level.",
+          "multiclassCaster": "full"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000400000",
+      "revisionId": "52e70000-0000-4000-8000-000000400000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Bard",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 31,
+          "end": 35
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Charisma\nHit Point Die D8 per Bard level\nSaving Throw Proficiencies Dexterity and Charisma\nSkill Proficiencies Choose any 3 skills (see “Playing the Game”)\nWeapon Proficiencies Simple weapons\nTool Proficiencies Choose 3 Musical Instruments (see “Equipment”)\nArmor Training Light armor\nStarting Equipment Choose A or B: (A) Leather Armor, 2 Daggers, Musical Instrument of your choice, Entertainer’s Pack, and 19 GP; or (B) 90 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "bard-hit-die",
+          "die": 8
+        },
+        {
+          "type": "grant",
+          "id": "bard-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "bard-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "bard-skills",
+          "choiceId": "bard-skills",
+          "count": 3,
+          "onlyAs": "startingClass",
+          "text": "Choose any 3 skills (see “Playing the Game”)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400800",
+              "revisionId": "52e00000-0000-4000-8000-000000400800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400801",
+              "revisionId": "52e00000-0000-4000-8000-000000400801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400802",
+              "revisionId": "52e00000-0000-4000-8000-000000400802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400803",
+              "revisionId": "52e00000-0000-4000-8000-000000400803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400804",
+              "revisionId": "52e00000-0000-4000-8000-000000400804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400805",
+              "revisionId": "52e00000-0000-4000-8000-000000400805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400806",
+              "revisionId": "52e00000-0000-4000-8000-000000400806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400807",
+              "revisionId": "52e00000-0000-4000-8000-000000400807"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400808",
+              "revisionId": "52e00000-0000-4000-8000-000000400808"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400809",
+              "revisionId": "52e00000-0000-4000-8000-000000400809"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400810",
+              "revisionId": "52e00000-0000-4000-8000-000000400810"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400811",
+              "revisionId": "52e00000-0000-4000-8000-000000400811"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400812",
+              "revisionId": "52e00000-0000-4000-8000-000000400812"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400813",
+              "revisionId": "52e00000-0000-4000-8000-000000400813"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400814",
+              "revisionId": "52e00000-0000-4000-8000-000000400814"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400815",
+              "revisionId": "52e00000-0000-4000-8000-000000400815"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400816",
+              "revisionId": "52e00000-0000-4000-8000-000000400816"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400817",
+              "revisionId": "52e00000-0000-4000-8000-000000400817"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "bard-multiclass-skill",
+          "choiceId": "bard-multiclass-skill",
+          "count": 1,
+          "onlyAs": "multiclass",
+          "text": "As a multiclass character, one skill (the class's multiclass proficiencies).",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400800",
+              "revisionId": "52e00000-0000-4000-8000-000000400800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400801",
+              "revisionId": "52e00000-0000-4000-8000-000000400801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400802",
+              "revisionId": "52e00000-0000-4000-8000-000000400802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400803",
+              "revisionId": "52e00000-0000-4000-8000-000000400803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400804",
+              "revisionId": "52e00000-0000-4000-8000-000000400804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400805",
+              "revisionId": "52e00000-0000-4000-8000-000000400805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400806",
+              "revisionId": "52e00000-0000-4000-8000-000000400806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400807",
+              "revisionId": "52e00000-0000-4000-8000-000000400807"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400808",
+              "revisionId": "52e00000-0000-4000-8000-000000400808"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400809",
+              "revisionId": "52e00000-0000-4000-8000-000000400809"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400810",
+              "revisionId": "52e00000-0000-4000-8000-000000400810"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400811",
+              "revisionId": "52e00000-0000-4000-8000-000000400811"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400812",
+              "revisionId": "52e00000-0000-4000-8000-000000400812"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400813",
+              "revisionId": "52e00000-0000-4000-8000-000000400813"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400814",
+              "revisionId": "52e00000-0000-4000-8000-000000400814"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400815",
+              "revisionId": "52e00000-0000-4000-8000-000000400815"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400816",
+              "revisionId": "52e00000-0000-4000-8000-000000400816"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400817",
+              "revisionId": "52e00000-0000-4000-8000-000000400817"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "bard-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "restriction",
+          "id": "bard-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Bard Traits table: Hit Point Die, proficiency in one skill of your choice, proficiency with one Musical Instrument of your choice, and training with Light armor."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400001",
+            "revisionId": "52e70000-0000-4000-8000-000000400001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-bardic-inspiration",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400002",
+            "revisionId": "52e00000-0000-4000-8000-000000400002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400003",
+            "revisionId": "52e00000-0000-4000-8000-000000400003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-jack-of-all-trades",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400004",
+            "revisionId": "52e00000-0000-4000-8000-000000400004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-bard-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400005",
+            "revisionId": "52e00000-0000-4000-8000-000000400005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400006",
+            "revisionId": "52e00000-0000-4000-8000-000000400006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-font-of-inspiration",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400007",
+            "revisionId": "52e00000-0000-4000-8000-000000400007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-countercharm",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400008",
+            "revisionId": "52e00000-0000-4000-8000-000000400008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-magical-secrets",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400009",
+            "revisionId": "52e00000-0000-4000-8000-000000400009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-superior-inspiration",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400010",
+            "revisionId": "52e00000-0000-4000-8000-000000400010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400011",
+            "revisionId": "52e00000-0000-4000-8000-000000400011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-words-of-creation",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000400012",
+            "revisionId": "52e00000-0000-4000-8000-000000400012"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "bard-subclass",
+          "choiceId": "bard-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Bard subclass. (The SRD 5.2.1 includes the College of Lore.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000400500",
+              "revisionId": "52e00000-0000-4000-8000-000000400500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000401001",
+      "revisionId": "52e70000-0000-4000-8000-000000401001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 36,
+          "end": 37
+        }
+      },
+      "status": "published",
+      "summary": "You have learned to cast spells through prayer and meditation. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Cleric spells, which appear on the Cleric spell list later in the class’s description.\n\nCantrips. You know three cantrips of your choice from the Cleric spell list. Guidance, Sacred Flame, and Thaumaturgy are recommended.\n\nWhenever you gain a Cleric level, you can replace one of your cantrips with another cantrip of your choice from the Cleric spell list.\n\nWhen you reach Cleric levels 4 and 10, you learn another cantrip of your choice from the Cleric spell list, as shown in the Cantrips column of the Cleric Features table.\n\nSpell Slots. The Cleric Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Cleric spell list. Bless, Cure Wounds, Guiding Bolt, and Shield of Faith are recommended.\n\nThe number of spells on your list increases as you gain Cleric levels, as shown in the Prepared Spells column of the Cleric Features table. Whenever that number increases, choose additional spells from the Cleric spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Cleric, your list of prepared spells can include six spells of levels 1 and 2 in any combination.\n\nIf another Cleric feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Cleric spells for you.\n\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells there with other Cleric spells for which you have spell slots.\n\nSpellcasting Ability. Wisdom is your spellcasting ability for your Cleric spells.\n\nSpellcasting Focus. You can use a Holy Symbol as a Spellcasting Focus for your Cleric spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "cleric-spellcasting",
+          "ability": "wis",
+          "preparation": "prepared",
+          "spellList": "cleric",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              2,
+              1,
+              1
+            ]
+          ],
+          "cantrips": [
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "spellsTable": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "text": "The Cleric Features table gives spell slots, cantrips and prepared spells by Cleric level.",
+          "multiclassCaster": "full"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000401000",
+      "revisionId": "52e70000-0000-4000-8000-000000401000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Cleric",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 36,
+          "end": 40
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Wisdom\nHit Point Die D8 per Cleric level\nSaving Throw Proficiencies Wisdom and Charisma\nSkill Proficiencies Choose 2: History, Insight, Medicine, Persuasion, or Religion\nWeapon Proficiencies Simple weapons\nArmor Training Light and Medium armor and Shields\nStarting Equipment Choose A or B: (A) Chain Shirt, Shield, Mace, Holy Symbol, Priest’s Pack, and 7 GP; or (B) 110 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "cleric-hit-die",
+          "die": 8
+        },
+        {
+          "type": "grant",
+          "id": "cleric-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "cleric-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "cleric-skills",
+          "choiceId": "cleric-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: History, Insight, Medicine, Persuasion, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401800",
+              "revisionId": "52e00000-0000-4000-8000-000000401800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401801",
+              "revisionId": "52e00000-0000-4000-8000-000000401801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401802",
+              "revisionId": "52e00000-0000-4000-8000-000000401802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401803",
+              "revisionId": "52e00000-0000-4000-8000-000000401803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401804",
+              "revisionId": "52e00000-0000-4000-8000-000000401804"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "cleric-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "restriction",
+          "id": "cleric-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Cleric Traits table: Hit Point Die and training with Light and Medium armor and Shields."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401001",
+            "revisionId": "52e70000-0000-4000-8000-000000401001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-divine-order",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401002",
+            "revisionId": "52e00000-0000-4000-8000-000000401002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-channel-divinity",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401003",
+            "revisionId": "52e00000-0000-4000-8000-000000401003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-cleric-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401004",
+            "revisionId": "52e00000-0000-4000-8000-000000401004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401005",
+            "revisionId": "52e00000-0000-4000-8000-000000401005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sear-undead",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401006",
+            "revisionId": "52e00000-0000-4000-8000-000000401006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-blessed-strikes",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401007",
+            "revisionId": "52e00000-0000-4000-8000-000000401007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-divine-intervention",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401008",
+            "revisionId": "52e00000-0000-4000-8000-000000401008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-improved-blessed-strikes",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401009",
+            "revisionId": "52e00000-0000-4000-8000-000000401009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401010",
+            "revisionId": "52e00000-0000-4000-8000-000000401010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-greater-divine-intervention",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000401011",
+            "revisionId": "52e00000-0000-4000-8000-000000401011"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "cleric-subclass",
+          "choiceId": "cleric-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Cleric subclass. (The SRD 5.2.1 includes the Life Domain.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000401500",
+              "revisionId": "52e00000-0000-4000-8000-000000401500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000402001",
+      "revisionId": "52e70000-0000-4000-8000-000000402001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 41,
+          "end": 42
+        }
+      },
+      "status": "published",
+      "summary": "You have learned to cast spells through studying the mystical forces of nature. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Druid spells, which appear on the Druid spell list later in the class’s description.\n\nCantrips. You know two cantrips of your choice from the Druid spell list. Druidcraft and Produce Flame are recommended.\n\nWhenever you gain a Druid level, you can replace one of your cantrips with another cantrip of your choice from the Druid spell list.\n\nWhen you reach Druid levels 4 and 10, you learn another cantrip of your choice from the Druid spell list, as shown in the Cantrips column of the Druid Features table.\n\nSpell Slots. The Druid Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose four level 1 spells from the Druid spell list. Animal Friendship, Cure Wounds, Faerie Fire, and Thunderwave are recommended.\n\nThe number of spells on your list increases as you gain Druid levels, as shown in the Prepared Spells column of the Druid Features table. Whenever that number increases, choose additional spells from the Druid spell list until the number of spells on your list matches the number on the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Druid, your list of prepared spells can include six spells of levels 1 and 2 in any combination.\n\nIf another Druid feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Druid spells for you.\n\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells with other Druid spells for which you have spell slots.\n\nSpellcasting Ability. Wisdom is your spellcasting ability for your Druid spells.\n\nSpellcasting Focus. You can use a Druidic Focus as a Spellcasting Focus for your Druid spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "druid-spellcasting",
+          "ability": "wis",
+          "preparation": "prepared",
+          "spellList": "druid",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              2,
+              1,
+              1
+            ]
+          ],
+          "cantrips": [
+            2,
+            2,
+            2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4
+          ],
+          "spellsTable": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "text": "The Druid Features table gives spell slots, cantrips and prepared spells by Druid level.",
+          "multiclassCaster": "full"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000402000",
+      "revisionId": "52e70000-0000-4000-8000-000000402000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Druid",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 41,
+          "end": 46
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Wisdom\nHit Point Die D8 per Druid level\nSaving Throw Proficiencies Intelligence and Wisdom\nSkill Proficiencies Choose 2: Animal Handling, Arcana, Insight, Medicine, Nature, Perception, Religion, or Survival\nWeapon Proficiencies Simple weapons\nTool Proficiencies Herbalism Kit\nArmor Training Light armor and Shields\nStarting Equipment Choose A or B: (A) Leather Armor, Shield, Sickle, Druidic Focus (Quarterstaff), Explorer’s Pack, Herbalism Kit, and 9 GP; or (B) 50 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "druid-hit-die",
+          "die": 8
+        },
+        {
+          "type": "grant",
+          "id": "druid-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "druid-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "druid-skills",
+          "choiceId": "druid-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Animal Handling, Arcana, Insight, Medicine, Nature, Perception, Religion, or Survival",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402800",
+              "revisionId": "52e00000-0000-4000-8000-000000402800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402801",
+              "revisionId": "52e00000-0000-4000-8000-000000402801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402802",
+              "revisionId": "52e00000-0000-4000-8000-000000402802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402803",
+              "revisionId": "52e00000-0000-4000-8000-000000402803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402804",
+              "revisionId": "52e00000-0000-4000-8000-000000402804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402805",
+              "revisionId": "52e00000-0000-4000-8000-000000402805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402806",
+              "revisionId": "52e00000-0000-4000-8000-000000402806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402807",
+              "revisionId": "52e00000-0000-4000-8000-000000402807"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "druid-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "restriction",
+          "id": "druid-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Druid Traits table: Hit Point Die and training with Light armor and Shields."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402001",
+            "revisionId": "52e70000-0000-4000-8000-000000402001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-druidic",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402002",
+            "revisionId": "52e00000-0000-4000-8000-000000402002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-primal-order",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402003",
+            "revisionId": "52e00000-0000-4000-8000-000000402003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-wild-shape",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402004",
+            "revisionId": "52e00000-0000-4000-8000-000000402004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-wild-companion",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402005",
+            "revisionId": "52e00000-0000-4000-8000-000000402005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-druid-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402006",
+            "revisionId": "52e00000-0000-4000-8000-000000402006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402007",
+            "revisionId": "52e00000-0000-4000-8000-000000402007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-wild-resurgence",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402008",
+            "revisionId": "52e00000-0000-4000-8000-000000402008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-elemental-fury",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402009",
+            "revisionId": "52e00000-0000-4000-8000-000000402009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-improved-elemental-fury",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402010",
+            "revisionId": "52e00000-0000-4000-8000-000000402010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-beast-spells",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402011",
+            "revisionId": "52e00000-0000-4000-8000-000000402011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402012",
+            "revisionId": "52e00000-0000-4000-8000-000000402012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-archdruid",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000402013",
+            "revisionId": "52e00000-0000-4000-8000-000000402013"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "druid-subclass",
+          "choiceId": "druid-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Druid subclass. (The SRD 5.2.1 includes the Circle of the Land.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000402500",
+              "revisionId": "52e00000-0000-4000-8000-000000402500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000403001",
+      "revisionId": "52e70000-0000-4000-8000-000000403001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 54
+        }
+      },
+      "status": "published",
+      "summary": "You have learned to cast spells through prayer and meditation. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Paladin spells, which appear in the Paladin spell list later in the class’s description.\n\nSpell Slots. The Paladin Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Paladin spells. Heroism and Searing Smite are recommended.\n\nThe number of spells on your list increases as you gain Paladin levels, as shown in the Prepared Spells column of the Paladin Features table. Whenever that number increases, choose additional Paladin spells until the number of spells on your list matches the number in the Paladin Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Paladin, your list of prepared spells can include six Paladin spells of level 1 or 2 in any combination.\n\nIf another Paladin feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Paladin spells for you.\n\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Paladin spell for which you have spell slots.\n\nSpellcasting Ability. Charisma is your spellcasting ability for your Paladin spells.\n\nSpellcasting Focus. You can use a Holy Symbol as a Spellcasting Focus for your Paladin spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "paladin-spellcasting",
+          "ability": "cha",
+          "preparation": "prepared",
+          "spellList": "paladin",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ]
+          ],
+          "spellsTable": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            6,
+            7,
+            7,
+            9,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            14,
+            14,
+            15,
+            15
+          ],
+          "text": "The Paladin Features table gives spell slots, cantrips and prepared spells by Paladin level.",
+          "multiclassCaster": "half"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000403000",
+      "revisionId": "52e70000-0000-4000-8000-000000403000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Paladin",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 53,
+          "end": 57
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Strength and Charisma\nHit Point Die D10 per Paladin level\nSaving Throw Proficiencies Wisdom and Charisma\nSkill Proficiencies Choose 2: Athletics, Insight, Intimidation, Medicine, Persuasion, or Religion\nWeapon Proficiencies Simple and Martial weapons\nArmor Training Light, Medium, and Heavy armor and Shields\nStarting Equipment Choose A or B: (A) Chain Mail, Shield, Longsword, 6 Javelins, Holy Symbol, Priest’s Pack, and 9 GP; or (B) 150 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "paladin-hit-die",
+          "die": 10
+        },
+        {
+          "type": "grant",
+          "id": "paladin-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "paladin-skills",
+          "choiceId": "paladin-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Athletics, Insight, Intimidation, Medicine, Persuasion, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403800",
+              "revisionId": "52e00000-0000-4000-8000-000000403800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403801",
+              "revisionId": "52e00000-0000-4000-8000-000000403801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403802",
+              "revisionId": "52e00000-0000-4000-8000-000000403802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403803",
+              "revisionId": "52e00000-0000-4000-8000-000000403803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403804",
+              "revisionId": "52e00000-0000-4000-8000-000000403804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403805",
+              "revisionId": "52e00000-0000-4000-8000-000000403805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "paladin-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-weapon-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial"
+        },
+        {
+          "type": "restriction",
+          "id": "paladin-multiclass-str",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Paladin Traits table: Hit Point Die, proficiency with Martial weapons, and training with Light and Medium armor and Shields."
+        },
+        {
+          "type": "restriction",
+          "id": "paladin-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403001",
+            "revisionId": "52e70000-0000-4000-8000-000000403001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-lay-on-hands",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403002",
+            "revisionId": "52e00000-0000-4000-8000-000000403002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403003",
+            "revisionId": "52e00000-0000-4000-8000-000000403003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-fighting-style",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403004",
+            "revisionId": "52e00000-0000-4000-8000-000000403004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-paladin-s-smite",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403005",
+            "revisionId": "52e00000-0000-4000-8000-000000403005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-channel-divinity",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403006",
+            "revisionId": "52e00000-0000-4000-8000-000000403006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-paladin-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403007",
+            "revisionId": "52e00000-0000-4000-8000-000000403007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403008",
+            "revisionId": "52e00000-0000-4000-8000-000000403008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403009",
+            "revisionId": "52e00000-0000-4000-8000-000000403009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-faithful-steed",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403010",
+            "revisionId": "52e00000-0000-4000-8000-000000403010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-of-protection",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403011",
+            "revisionId": "52e00000-0000-4000-8000-000000403011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-abjure-foes",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403012",
+            "revisionId": "52e00000-0000-4000-8000-000000403012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-of-courage",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403013",
+            "revisionId": "52e00000-0000-4000-8000-000000403013"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-radiant-strikes",
+          "grant": "content",
+          "level": 11,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403014",
+            "revisionId": "52e00000-0000-4000-8000-000000403014"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-restoring-touch",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403015",
+            "revisionId": "52e00000-0000-4000-8000-000000403015"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-aura-expansion",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403016",
+            "revisionId": "52e00000-0000-4000-8000-000000403016"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000403017",
+            "revisionId": "52e00000-0000-4000-8000-000000403017"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "paladin-subclass",
+          "choiceId": "paladin-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Paladin subclass. (The SRD 5.2.1 includes the Oath of Devotion.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000403500",
+              "revisionId": "52e00000-0000-4000-8000-000000403500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000404001",
+      "revisionId": "52e70000-0000-4000-8000-000000404001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 57,
+          "end": 58
+        }
+      },
+      "status": "published",
+      "summary": "You have learned to channel the magical essence of nature to cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Ranger spells, which appear in the Ranger spell list later in the class’s description.\n\nSpell Slots. The Ranger Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Ranger spells. Cure Wounds and Ensnaring Strike are recommended.\n\nThe number of spells on your list increases as you gain Ranger levels, as shown in the Prepared Spells column of the Ranger Features table. Whenever that number increases, choose additional Ranger spells until the number of spells on your list matches the number in the Ranger Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 5 Ranger, your list of prepared spells can include six Ranger spells of level 1 or 2 in any combination.\n\nIf another Ranger feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Ranger spells for you.\n\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can replace one spell on your list with another Ranger spell for which you have spell slots.\n\nSpellcasting Ability. Wisdom is your spellcasting ability for your Ranger spells.\n\nSpellcasting Focus. You can use a Druidic Focus as a Spellcasting Focus for your Ranger spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "ranger-spellcasting",
+          "ability": "wis",
+          "preparation": "prepared",
+          "spellList": "ranger",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ]
+          ],
+          "spellsTable": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            6,
+            7,
+            7,
+            9,
+            9,
+            10,
+            10,
+            11,
+            11,
+            12,
+            12,
+            14,
+            14,
+            15,
+            15
+          ],
+          "text": "The Ranger Features table gives spell slots, cantrips and prepared spells by Ranger level.",
+          "multiclassCaster": "half"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000404000",
+      "revisionId": "52e70000-0000-4000-8000-000000404000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Ranger",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 57,
+          "end": 61
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Dexterity and Wisdom\nHit Point Die D10 per Ranger level\nSaving Throw Proficiencies Strength and Dexterity\nSkill Proficiencies Choose 3: Animal Handling, Athletics, Insight, Investigation, Nature, Perception, Stealth, or Survival\nWeapon Proficiencies Simple and Martial weapons\nArmor Training Light and Medium armor and Shields\nStarting Equipment Choose A or B: (A) Studded Leather Armor, Scimitar, Shortsword, Longbow, 20 Arrows, Quiver, Druidic Focus (sprig of mistletoe), Explorer’s Pack, and 7 GP; or (B) 150 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "ranger-hit-die",
+          "die": 10
+        },
+        {
+          "type": "grant",
+          "id": "ranger-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-save-dex",
+          "grant": "proficiency",
+          "target": "save.dex",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "ranger-skills",
+          "choiceId": "ranger-skills",
+          "count": 3,
+          "onlyAs": "startingClass",
+          "text": "Choose 3: Animal Handling, Athletics, Insight, Investigation, Nature, Perception, Stealth, or Survival",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404800",
+              "revisionId": "52e00000-0000-4000-8000-000000404800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404801",
+              "revisionId": "52e00000-0000-4000-8000-000000404801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404802",
+              "revisionId": "52e00000-0000-4000-8000-000000404802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404803",
+              "revisionId": "52e00000-0000-4000-8000-000000404803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404804",
+              "revisionId": "52e00000-0000-4000-8000-000000404804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404805",
+              "revisionId": "52e00000-0000-4000-8000-000000404805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404806",
+              "revisionId": "52e00000-0000-4000-8000-000000404806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404807",
+              "revisionId": "52e00000-0000-4000-8000-000000404807"
+            }
+          ]
+        },
+        {
+          "type": "choice",
+          "id": "ranger-multiclass-skill",
+          "choiceId": "ranger-multiclass-skill",
+          "count": 1,
+          "onlyAs": "multiclass",
+          "text": "As a multiclass character, one skill (the class's multiclass proficiencies).",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404800",
+              "revisionId": "52e00000-0000-4000-8000-000000404800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404801",
+              "revisionId": "52e00000-0000-4000-8000-000000404801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404802",
+              "revisionId": "52e00000-0000-4000-8000-000000404802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404803",
+              "revisionId": "52e00000-0000-4000-8000-000000404803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404804",
+              "revisionId": "52e00000-0000-4000-8000-000000404804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404805",
+              "revisionId": "52e00000-0000-4000-8000-000000404805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404806",
+              "revisionId": "52e00000-0000-4000-8000-000000404806"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404807",
+              "revisionId": "52e00000-0000-4000-8000-000000404807"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "ranger-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-weapon-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial"
+        },
+        {
+          "type": "restriction",
+          "id": "ranger-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the following traits from the Core Ranger Traits table: Hit Point Die, proficiency with Martial weapons, proficiency in one skill of your choice from the Ranger’s skill list, and training with Light and Medium armor and Shields."
+        },
+        {
+          "type": "restriction",
+          "id": "ranger-multiclass-wis",
+          "field": "ability.wis.score",
+          "minimum": 13,
+          "multiclass": true
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404001",
+            "revisionId": "52e70000-0000-4000-8000-000000404001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-favored-enemy",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404002",
+            "revisionId": "52e00000-0000-4000-8000-000000404002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-weapon-mastery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404003",
+            "revisionId": "52e00000-0000-4000-8000-000000404003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-deft-explorer",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404004",
+            "revisionId": "52e00000-0000-4000-8000-000000404004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-fighting-style",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404005",
+            "revisionId": "52e00000-0000-4000-8000-000000404005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ranger-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404006",
+            "revisionId": "52e00000-0000-4000-8000-000000404006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404007",
+            "revisionId": "52e00000-0000-4000-8000-000000404007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404008",
+            "revisionId": "52e00000-0000-4000-8000-000000404008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-roving",
+          "grant": "content",
+          "level": 6,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404009",
+            "revisionId": "52e00000-0000-4000-8000-000000404009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-expertise",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404010",
+            "revisionId": "52e00000-0000-4000-8000-000000404010"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-tireless",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404011",
+            "revisionId": "52e00000-0000-4000-8000-000000404011"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-relentless-hunter",
+          "grant": "content",
+          "level": 13,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404012",
+            "revisionId": "52e00000-0000-4000-8000-000000404012"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-nature-s-veil",
+          "grant": "content",
+          "level": 14,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404013",
+            "revisionId": "52e00000-0000-4000-8000-000000404013"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-precise-hunter",
+          "grant": "content",
+          "level": 17,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404014",
+            "revisionId": "52e00000-0000-4000-8000-000000404014"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-feral-senses",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404015",
+            "revisionId": "52e00000-0000-4000-8000-000000404015"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404016",
+            "revisionId": "52e00000-0000-4000-8000-000000404016"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-foe-slayer",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000404017",
+            "revisionId": "52e00000-0000-4000-8000-000000404017"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "ranger-subclass",
+          "choiceId": "ranger-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Ranger subclass. (The SRD 5.2.1 includes the Hunter.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000404500",
+              "revisionId": "52e00000-0000-4000-8000-000000404500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000405001",
+      "revisionId": "52e70000-0000-4000-8000-000000405001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64,
+          "end": 65
+        }
+      },
+      "status": "published",
+      "summary": "Drawing from your innate magic, you can cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Sorcerer spells, which appear in the Sorcerer spell list later in the class’s description.\n\nCantrips. You know four Sorcerer cantrips of your choice. Light, Prestidigitation, Shocking Grasp, and Sorcerous Burst are recommended. Whenever you gain a Sorcerer level, you can replace one of your cantrips from this feature with another Sorcerer cantrip of your choice.\n\nWhen you reach Sorcerer levels 4 and 10, you learn another Sorcerer cantrip of your choice, as shown in the Cantrips column of the Sorcerer Features table.\n\nSpell Slots. The Sorcerer Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To start, choose two level 1 Sorcerer spells. Burning Hands and Detect Magic are recommended.\n\nThe number of spells on your list increases as you gain Sorcerer levels, as shown in the Prepared Spells column of the Sorcerer Features table. Whenever that number increases, choose additional Sorcerer spells until the number of spells on your list matches the number in the Sorcerer Features table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Sorcerer, your list of prepared spells can include six Sorcerer spells of level 1 or 2 in any combination.\n\nIf another Sorcerer feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Sorcerer spells for you.\n\nChanging Your Prepared Spells. Whenever you gain a Sorcerer level, you can replace one spell on your list with another Sorcerer spell for which you have spell slots.\n\nSpellcasting Ability. Charisma is your spellcasting ability for your Sorcerer spells.\n\nSpellcasting Focus. You can use an Arcane Focus as a Spellcasting Focus for your Sorcerer spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "sorcerer-spellcasting",
+          "ability": "cha",
+          "preparation": "prepared",
+          "spellList": "sorcerer",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              2,
+              1,
+              1
+            ]
+          ],
+          "cantrips": [
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6,
+            6
+          ],
+          "spellsTable": [
+            2,
+            4,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            17,
+            18,
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "text": "The Sorcerer Features table gives spell slots, cantrips and prepared spells by Sorcerer level.",
+          "multiclassCaster": "full"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000405000",
+      "revisionId": "52e70000-0000-4000-8000-000000405000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Sorcerer",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Charisma\nHit Point Die D6 per Sorcerer level\nSaving Throw Proficiencies Constitution and Charisma\nSkill Proficiencies Choose 2: Arcana, Deception, Insight, Intimidation, Persuasion, or Religion\nWeapon Proficiencies Simple weapons\nArmor Training None\nStarting Equipment Choose A or B: (A) Spear, 2 Daggers, Arcane Focus (crystal), Dungeoneer’s Pack, and 28 GP; or (B) 50 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "sorcerer-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-skills",
+          "choiceId": "sorcerer-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Arcana, Deception, Insight, Intimidation, Persuasion, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405800",
+              "revisionId": "52e00000-0000-4000-8000-000000405800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405801",
+              "revisionId": "52e00000-0000-4000-8000-000000405801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405802",
+              "revisionId": "52e00000-0000-4000-8000-000000405802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405803",
+              "revisionId": "52e00000-0000-4000-8000-000000405803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405804",
+              "revisionId": "52e00000-0000-4000-8000-000000405804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405805",
+              "revisionId": "52e00000-0000-4000-8000-000000405805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "restriction",
+          "id": "sorcerer-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the Hit Point Die from the Core Sorcerer Traits table."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405001",
+            "revisionId": "52e70000-0000-4000-8000-000000405001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-innate-sorcery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405002",
+            "revisionId": "52e00000-0000-4000-8000-000000405002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-font-of-magic",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405003",
+            "revisionId": "52e00000-0000-4000-8000-000000405003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-metamagic",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405004",
+            "revisionId": "52e00000-0000-4000-8000-000000405004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerer-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405005",
+            "revisionId": "52e00000-0000-4000-8000-000000405005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405006",
+            "revisionId": "52e00000-0000-4000-8000-000000405006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerous-restoration",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405007",
+            "revisionId": "52e00000-0000-4000-8000-000000405007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcery-incarnate",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405008",
+            "revisionId": "52e00000-0000-4000-8000-000000405008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405009",
+            "revisionId": "52e00000-0000-4000-8000-000000405009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-apotheosis",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405010",
+            "revisionId": "52e00000-0000-4000-8000-000000405010"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-subclass",
+          "choiceId": "sorcerer-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Sorcerer subclass. (The SRD 5.2.1 includes the Draconic Sorcery.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405500",
+              "revisionId": "52e00000-0000-4000-8000-000000405500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000407001",
+      "revisionId": "52e70000-0000-4000-8000-000000407001",
+      "schemaVersion": 7,
+      "kind": "feature",
+      "name": "Spellcasting",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 77,
+          "end": 78
+        }
+      },
+      "status": "published",
+      "summary": "As a student of arcane magic, you have learned to cast spells. See “Spells” for the rules on spellcasting. The information below details how you use those rules with Wizard spells, which appear in the Wizard spell list later in the class’s description.\n\nCantrips. You know three Wizard cantrips of your choice. Light, Mage Hand, and Ray of Frost are recommended. Whenever you finish a Long Rest, you can replace one of your cantrips from this feature with another Wizard cantrip of your choice. ExpandinG and rEplacinG a spEllBook The spells you add to your spellbook as you gain levels reflect your ongoing magical research, but you might find other spells during your adventures that you can add to the book. You could discover a Wizard spell on a Spell Scroll, for example, and then copy it into your spellbook.\n\nCopying a Spell into the Book. When you find a level 1+ Wizard spell, you can copy it into your spellbook if it’s of a level you can prepare and if you have time to copy it. For each level of the spell, the transcription takes 2 hours and costs 50 GP. Afterward you can prepare the spell like the other spells in your spellbook.\n\nCopying the Book. You can copy a spell from your spellbook into another book. This is like copying a new spell into your spellbook but faster, since you already know how to cast the spell. You need spend only 1 hour and 10 GP for each level of the copied spell.\n\nIf you lose your spellbook, you can use the same procedure to transcribe the Wizard spells that you have prepared into a new spellbook. Filling out the remainder of the new book requires you to find new spells to do so. For this reason, many wizards keep a backup spellbook.\n\nWhen you reach Wizard levels 4 and 10, you learn another Wizard cantrip of your choice, as shown in the Cantrips column of the Wizard Features table.\n\nSpellbook. Your wizardly apprenticeship culminated in the creation of a unique book: your spellbook. It is a Tiny object that weighs 3 pounds, contains 100 pages, and can be read only by you or someone casting Identify. You determine the book’s appearance and materials, such as a gilt-edged tome or a collection of vellum bound with twine.\n\nThe book contains the level 1+ spells you know. It starts with six level 1 Wizard spells of your choice. Detect Magic, Feather Fall, Mage Armor, Magic Missile, Sleep, and Thunderwave are recommended.\n\nWhenever you gain a Wizard level after 1, add two Wizard spells of your choice to your spellbook. Each of these spells must be of a level for which you have spell slots, as shown in the Wizard Features table. The spells are the culmination of arcane research you do regularly.\n\nSpell Slots. The Wizard Features table shows how many spell slots you have to cast your level 1+ spells. You regain all expended slots when you finish a Long Rest.\n\nPrepared Spells of Level 1+. You prepare the list of level 1+ spells that are available for you to cast with this feature. To do so, choose four spells from your spellbook. The chosen spells must be of a level for which you have spell slots.\n\nThe number of spells on your list increases as you gain Wizard levels, as shown in the Prepared Spells column of the Wizard Features table. Whenever that number increases, choose additional Wizard spells until the number of spells on your list matches the number in the table. The chosen spells must be of a level for which you have spell slots. For example, if you’re a level 3 Wizard, your list of prepared spells can include six spells of levels 1 and 2 in any combination, chosen from your spellbook.\n\nIf another Wizard feature gives you spells that you always have prepared, those spells don’t count against the number of spells you can prepare with this feature, but those spells otherwise count as Wizard spells for you.\n\nChanging Your Prepared Spells. Whenever you finish a Long Rest, you can change your list of prepared spells, replacing any of the spells there with spells from your spellbook.\n\nSpellcasting Ability. Intelligence is your spellcasting ability for your Wizard spells.\n\nSpellcasting Focus. You can use an Arcane Focus or your spellbook as a Spellcasting Focus for your Wizard spells.",
+      "effects": [
+        {
+          "type": "spellcasting",
+          "id": "wizard-spellcasting",
+          "ability": "int",
+          "preparation": "prepared",
+          "spellList": "wizard",
+          "slotKind": "spellSlots",
+          "slots": [
+            [
+              2
+            ],
+            [
+              3
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              4,
+              3
+            ],
+            [
+              4,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3
+            ],
+            [
+              4,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              1,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              1,
+              1,
+              1
+            ],
+            [
+              4,
+              3,
+              3,
+              3,
+              3,
+              2,
+              2,
+              1,
+              1
+            ]
+          ],
+          "cantrips": [
+            3,
+            3,
+            3,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5,
+            5
+          ],
+          "spellsTable": [
+            4,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            16,
+            16,
+            17,
+            18,
+            19,
+            21,
+            22,
+            23,
+            24,
+            25
+          ],
+          "text": "The Wizard Features table gives spell slots, cantrips and prepared spells by Wizard level.",
+          "multiclassCaster": "full"
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000407000",
+      "revisionId": "52e70000-0000-4000-8000-000000407000",
+      "schemaVersion": 5,
+      "kind": "class",
+      "name": "Wizard",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 77,
+          "end": 82
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Intelligence\nHit Point Die D6 per Wizard level\nSaving Throw Proficiencies Intelligence and Wisdom\nSkill Proficiencies Choose 2: Arcana, History, Insight, Investigation, Medicine, Nature, or Religion\nWeapon Proficiencies Simple weapons\nArmor Training None\nStarting Equipment Choose A or B: (A) 2 Daggers, Arcane Focus (Quarterstaff), Robe, Spellbook, Scholar’s Pack, and 5 GP; or (B) 55 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "wizard-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "wizard-skills",
+          "choiceId": "wizard-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Arcana, History, Insight, Investigation, Medicine, Nature, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407800",
+              "revisionId": "52e00000-0000-4000-8000-000000407800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407801",
+              "revisionId": "52e00000-0000-4000-8000-000000407801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407802",
+              "revisionId": "52e00000-0000-4000-8000-000000407802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407803",
+              "revisionId": "52e00000-0000-4000-8000-000000407803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407804",
+              "revisionId": "52e00000-0000-4000-8000-000000407804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407805",
+              "revisionId": "52e00000-0000-4000-8000-000000407805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407806",
+              "revisionId": "52e00000-0000-4000-8000-000000407806"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "restriction",
+          "id": "wizard-multiclass-int",
+          "field": "ability.int.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the Hit Point Die from the Core Wizard Traits table."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407001",
+            "revisionId": "52e70000-0000-4000-8000-000000407001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ritual-adept",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407002",
+            "revisionId": "52e00000-0000-4000-8000-000000407002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-recovery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407003",
+            "revisionId": "52e00000-0000-4000-8000-000000407003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-scholar",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407004",
+            "revisionId": "52e00000-0000-4000-8000-000000407004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-wizard-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407005",
+            "revisionId": "52e00000-0000-4000-8000-000000407005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407006",
+            "revisionId": "52e00000-0000-4000-8000-000000407006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-memorize-spell",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407007",
+            "revisionId": "52e00000-0000-4000-8000-000000407007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-spell-mastery",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407008",
+            "revisionId": "52e00000-0000-4000-8000-000000407008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407009",
+            "revisionId": "52e00000-0000-4000-8000-000000407009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-signature-spells",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407010",
+            "revisionId": "52e00000-0000-4000-8000-000000407010"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "wizard-subclass",
+          "choiceId": "wizard-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Wizard subclass. (The SRD 5.2.1 includes the Evoker.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407500",
+              "revisionId": "52e00000-0000-4000-8000-000000407500"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

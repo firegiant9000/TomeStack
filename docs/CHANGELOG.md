@@ -2,6 +2,15 @@
 
 ## Unreleased (M3)
 
+### Added
+
+- **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
+
+### Migration
+
+- **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
+- **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
+
 ## 0.3.0 (M2 delivered)
 
 M2 "Usable MVP" is delivered (ADR-008: MINOR for a delivered milestone). The owner checks passed on the installed 0.2.2 on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal (`docs/features/m2-acceptance.md`). This build also carries M3 B1–B3 below.

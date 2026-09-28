@@ -105,6 +105,20 @@ Differences shown as content (side-by-side tests in `SrdPackTests`): the trident
 
 A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p. 132) or 2d8 (5.2.1 p. 121), in two separate revisions (`SrdPackTests.The_same_spell_differs_by_family_as_content_side_by_side`).
 
+## M3 extension: multiclass spellcasting (2026-09-28, M3 C3)
+
+**Documents:** the same two PDFs. Their SHA-256 hashes were checked again on 2026-09-28 and match the table above.
+
+| Where | What was taken | Pages |
+| --- | --- | --- |
+| `srd-5.1-classes.json`, `srd-5.2.1-classes.json` | A content v7 revision of each slot caster's Spellcasting feature, identical to its v5 revision except `multiclassCaster` (Bard, Cleric, Druid, Sorcerer, Wizard: `full`; Paladin, Ranger: `half`), and a new revision of each of those seven classes that pins it. No new text | 5.1 p. 58; 5.2.1 p. 25 |
+| `src/RulesCore/RulesFamilies.cs` (`RulesFamilyPolicy`) | The numbers of the Multiclass Spellcaster table (20 rows × 9 spell levels), and the rounding of half caster levels: down (5.1), up (5.2.1). These are game numbers, not rules text, like the other policy fields (for example `HitDieHealingMinimum`) | 5.1 p. 58; 5.2.1 pp. 25–26 |
+
+- **Method:** the table was parsed twice from each PDF, independently: pypdf plain text read as a token sequence, and a reading of the layout-mode page by eye. Both parses of both SRDs agree cell for cell. They also equal the bundled SRD Wizard tables of both families, which had been parsed twice for M2. The class lists (full: Bard, Cleric, Druid, Sorcerer, Wizard; half: Paladin, Ranger) and the rounding are from the "Spell Slots" paragraph of each SRD's multiclassing rules.
+- **Warlock:** not combined. Its Pact Magic stays separate in both SRDs, and casting Pact slots for other classes' spells stays a manual step.
+- **Third casters:** neither SRD has one (the classes and subclasses that would be are not in the SRDs). `third` exists for homebrew, and its rounding is TomeStack's choice.
+- **Checks:** `SrdCasterTests.A_Sorcerer_Paladin_combines_slots_on_the_multiclass_table_differently_per_family_side_by_side` and `Pact_Magic_stays_separate_from_a_single_casters_own_table`, and `SchemaTests` for the v7 revisions.
+
 ## How it was modified (recorded in each source's `modificationNotice`)
 
 - Passages are excerpted. Descriptive text not needed for play (for example age and alignment) is left out, and some passages are shortened. Nothing is reworded to change a rule.

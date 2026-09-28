@@ -11,13 +11,15 @@ public class SrdCasterTests
     private static readonly ContentPack Classes521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-classes.json");
     private static readonly ContentPack Spells521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-spells.json");
 
-    private static ContentRevision Named(ContentPack pack, string name, ContentKind kind) => pack.Revisions.Single(r => r.Name == name && r.Kind == kind);
+    /// <summary>The newest revision (the last in the pack), as the pickers offer it.</summary>
+    private static ContentRevision Named(ContentPack pack, string name, ContentKind kind) => pack.Revisions.Last(r => r.Name == name && r.Kind == kind);
 
     private static ContentReference Spell(ContentPack pack, string name) => Named(pack, name, ContentKind.Spell).Reference;
 
     /// <summary>The revision carrying the class's spellcasting effect (its Spellcasting or Pact Magic feature).</summary>
     private static Guid Caster(ContentPack pack, string className) =>
-        pack.Revisions.Single(r => r.Effects.OfType<SpellcastingEffect>().Any() && r.Effects.OfType<SpellcastingEffect>().Single().SpellList == className.ToLowerInvariant()).ContentId;
+        pack.Revisions.Where(r => r.Effects.OfType<SpellcastingEffect>().Any() && r.Effects.OfType<SpellcastingEffect>().Single().SpellList == className.ToLowerInvariant())
+            .Select(r => r.ContentId).Distinct().Single();
 
     [Fact]
     public void An_SRD_5_2_1_Wizard_5_prepares_SRD_spells_with_the_tables_slots()
@@ -77,7 +79,7 @@ public class SrdCasterTests
     public void SRD_5_2_1_Paladin_and_Ranger_have_two_slots_at_level_1_and_Druid_two_cantrips()
     {
         // The two table values the review found mis-transcribed or at risk (docs/licensing/srd-pack-review.md).
-        SpellcastingEffect Of(string name) => Classes521.Revisions.SelectMany(r => r.Effects.OfType<SpellcastingEffect>()).Single(s => s.SpellList == name);
+        SpellcastingEffect Of(string name) => Classes521.Revisions.SelectMany(r => r.Effects.OfType<SpellcastingEffect>()).Last(s => s.SpellList == name);
 
         Assert.Equal([2], Of("paladin").Slots[0]);
         Assert.Equal([2], Of("ranger").Slots[0]);
@@ -189,10 +191,64 @@ public class SrdCasterTests
 
         Assert.Contains(weak.Diagnostics, d => d.Code == "restriction.multiclass-unmet" && d.Content == paladin);
         Assert.DoesNotContain(strong.Diagnostics, d => d.Code == "restriction.multiclass-unmet");
-        // Saving throws come from the starting class only (Sorcerer: Con and Cha), and the slots of two casters are a manual step.
+        // Saving throws come from the starting class only (Sorcerer: Con and Cha).
         Assert.Equal(2 + 3, strong.Field(FieldIds.Save(Ability.Con)).Value); // Con +2, PB 3 (Sorcerer save)
         Assert.Equal(0, strong.Field(FieldIds.Save(Ability.Wis)).Value); // Wis +0: no Paladin save proficiency as a later class
-        Assert.Equal(AutomationStatus.Assisted, strong.Field(FieldIds.SpellSlots(1)).Automation);
+        // M3 C3: Sorcerer 3 + half of Paladin 2 (rounded up, 2024) = caster level 4 on the Multiclass Spellcaster table.
+        Assert.Equal([(1, 4), (2, 3)], strong.SpellSlots!.Select(s => (s.Level, s.Maximum)));
+        Assert.Equal(AutomationStatus.Automatic, strong.Field(FieldIds.SpellSlots(1)).Automation);
         Assert.Equal(["Spellcasting", "Spellcasting"], strong.Spellcasting!.Select(s => s.Name));
+    }
+
+    /// <summary>
+    /// M3 C3 (D04's M3 part), SRD 5.1 p. 58 and SRD 5.2.1 pp. 25–26: full casters count every level and half casters half,
+    /// rounded down under 2014 rules and up under 2024 rules (<see cref="RulesFamilyPolicy.HalfCasterLevels"/>). The same
+    /// Sorcerer 3 / Paladin 3 is caster level 4 under SRD 5.1 and 5 under SRD 5.2.1.
+    /// </summary>
+    [Fact]
+    public void A_Sorcerer_Paladin_combines_slots_on_the_multiclass_table_differently_per_family_side_by_side()
+    {
+        using var temp = new TempApp();
+        CharacterSheet Build(string family, ContentPack classes) => temp.App.SaveCharacter(new Character
+        {
+            Id = Guid.NewGuid(), Name = "Test Sorcerer Paladin", RulesFamily = family, Level = 6,
+            Classes = [new(Named(classes, "Sorcerer", ContentKind.Class).Reference, 3), new(Named(classes, "Paladin", ContentKind.Class).Reference, 3)],
+            BaseAbilities = new(13, 12, 14, 10, 10, 16),
+        }).Sheet;
+
+        var old = Build(RulesFamilies.Srd51, Classes51);
+        var current = Build(RulesFamilies.Srd521, Classes521);
+
+        Assert.Equal([(1, 4), (2, 3)], old.SpellSlots!.Select(s => (s.Level, s.Maximum))); // 3 + floor(3 / 2) = 4
+        Assert.Equal([(1, 4), (2, 3), (3, 2)], current.SpellSlots!.Select(s => (s.Level, s.Maximum))); // 3 + ceil(3 / 2) = 5
+        foreach (var sheet in new[] { old, current })
+        {
+            var slots = sheet.Field(FieldIds.SpellSlots(1));
+            Assert.Equal(AutomationStatus.Automatic, slots.Automation);
+            Assert.DoesNotContain(slots.Warnings, w => w.Code == "spellcasting.multiclass-slots");
+            // The trace names each class's contribution, then the table (rules-family policy).
+            Assert.Equal(2, slots.Trace.Count(t => t.Origin.Kind == TraceOriginKind.Content));
+            Assert.Contains(slots.Trace, t => t.Origin.Kind == TraceOriginKind.RulesPolicy && t.Description.StartsWith("Multiclass Spellcaster table", StringComparison.Ordinal));
+            // Each caster still prepares from its own table: the Paladin's highest spell level is 1.
+            Assert.Equal(2, sheet.Spellcasting!.Count);
+        }
+        Assert.Contains(old.Field(FieldIds.SpellSlots(1)).Trace, t => t.Description.Contains("half, rounded down", StringComparison.Ordinal));
+        Assert.Contains(current.Field(FieldIds.SpellSlots(1)).Trace, t => t.Description.Contains("half, rounded up", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Pact_Magic_stays_separate_from_a_single_casters_own_table()
+    {
+        using var temp = new TempApp();
+        var sheet = temp.App.SaveCharacter(new Character
+        {
+            Id = Guid.NewGuid(), Name = "Test Warlock Wizard", RulesFamily = RulesFamilies.Srd521, Level = 5,
+            Classes = [new(Named(Classes521, "Warlock", ContentKind.Class).Reference, 2), new(Named(Classes521, "Wizard", ContentKind.Class).Reference, 3)],
+            BaseAbilities = new(8, 14, 14, 16, 12, 13),
+        }).Sheet;
+
+        Assert.Equal((2, 1), (sheet.PactSlots!.Maximum, sheet.PactSlots.Level)); // Warlock 2: two level 1 Pact Magic slots
+        Assert.Equal([(1, 4), (2, 2)], sheet.SpellSlots!.Select(s => (s.Level, s.Maximum))); // Wizard 3's own table
+        Assert.Equal(AutomationStatus.Automatic, sheet.Field(FieldIds.SpellSlots(1)).Automation);
     }
 }

@@ -1722,9 +1722,10 @@ public static class CharacterCalculator
     }
 
     /// <summary>
-    /// D04: slots come from the first caster with ordinary spell slots, at its class level. With a second one, TomeStack
-    /// does not combine them (the SRD multiclass spellcaster table is M3): the field is assisted, and the player records
-    /// the total as an override.
+    /// D04: slots come from the one caster with ordinary spell slots, at its class level. With two or more, and when each
+    /// declares how its levels count (<see cref="SpellcastingEffect.MulticlassCaster"/>, content v7), the SRD Multiclass
+    /// Spellcaster table gives the slots (M3 C3). Otherwise TomeStack cannot combine them: the field shows the first
+    /// caster's slots, assisted, and the player records the total as an override. Pact Magic is never combined.
     /// </summary>
     private static int SlotBase(BaseContext c, List<Step> steps, int level)
     {
@@ -1735,6 +1736,8 @@ public static class CharacterCalculator
             steps.Add(new(field, "base", "No spell slots", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 0;
         }
+        if (slotCasters.Count > 1 && slotCasters.All(x => x.Effect.MulticlassCaster is not null))
+            return CombinedSlots(c, steps, level, slotCasters);
         var (content, effect, classLevel) = slotCasters[0];
         var value = Row(effect.Slots, classLevel)[level - 1];
         steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel}: {value} level {level} slot(s), from its table", value, value, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
@@ -1750,6 +1753,38 @@ public static class CharacterCalculator
         }
         return value;
     }
+
+    /// <summary>
+    /// SRD multiclass spellcasting (both families): add every full caster's class levels, half of each half caster's and a
+    /// third of each third caster's, rounded as the family's policy says, then read the Multiclass Spellcaster table at
+    /// that caster level. Each caster's own spells, counts and highest spell level stay per class (<see cref="SpellcastingEntry"/>).
+    /// </summary>
+    private static int CombinedSlots(BaseContext c, List<Step> steps, int level, IReadOnlyList<CasterInfo> casters)
+    {
+        var field = FieldIds.SpellSlots(level);
+        var policy = RulesFamilies.Get(c.Family);
+        var total = 0;
+        foreach (var (content, effect, classLevel) in casters)
+        {
+            var (part, how) = effect.MulticlassCaster switch
+            {
+                MulticlassCaster.Half => (Fraction(classLevel, 2, policy.HalfCasterLevels), $"half, rounded {Rounding(policy.HalfCasterLevels)}"),
+                MulticlassCaster.Third => (Fraction(classLevel, 3, policy.ThirdCasterLevels), $"a third, rounded {Rounding(policy.ThirdCasterLevels)}"),
+                _ => (classLevel, "all levels"),
+            };
+            total += part;
+            steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel} counts {part} caster level(s) ({how})", part, total, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
+        }
+        var casterLevel = Math.Min(total, Character.MaxLevel);
+        var value = casterLevel == 0 ? 0 : Row(policy.MulticlassSpellSlots, casterLevel)[level - 1];
+        steps.Add(new(field, "base", $"Multiclass Spellcaster table at caster level {casterLevel}: {value} level {level} slot(s)", casterLevel, value, new(TraceOriginKind.RulesPolicy, c.Family)));
+        return value;
+    }
+
+    private static int Fraction(int classLevel, int divisor, CasterLevelRounding rounding) =>
+        rounding == CasterLevelRounding.Up ? (classLevel + divisor - 1) / divisor : classLevel / divisor;
+
+    private static string Rounding(CasterLevelRounding rounding) => rounding == CasterLevelRounding.Up ? "up" : "down";
 
     private static int PactBase(BaseContext c, List<Step> steps)
     {

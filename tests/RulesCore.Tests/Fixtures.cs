@@ -65,10 +65,21 @@ internal static class Fixtures
 
     public static ContentPack EffectsPack() => Load<ContentPack>("fixture-pack-m3-effects.json");
 
+    // M3 C3 fixtures (fixture-pack-m3-multiclass.json): invented casters that declare how their levels combine.
+    public static readonly ContentReference Loremaster = MulticlassRef(1);
+    public static readonly ContentReference Wayfinder = MulticlassRef(2);
+    public static readonly ContentReference Runeblade = MulticlassRef(3);
+    public static readonly ContentReference Hexwright = MulticlassRef(4);
+
+    public static ContentPack MulticlassPack() => Load<ContentPack>("fixture-pack-m3-multiclass.json");
+
+    private static ContentReference MulticlassRef(int n) =>
+        new(Guid.Parse($"5f9dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f9de000-0000-4000-8000-{n:D12}"));
+
     /// <summary>Every fixture pack: M0, M1, spellcasting and combat.</summary>
     public static InMemoryContentCatalog AllCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 

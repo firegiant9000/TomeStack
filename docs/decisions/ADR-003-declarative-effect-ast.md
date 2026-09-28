@@ -24,7 +24,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | long rest preview and confirmed rest (M2 item 3, `features/rests.md`); short rest after M2 |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
-| `spellcasting` (content v5 only) | `ability`, `preparation`, `spellList`, `slotKind`, `slots` (20 rows), optional `cantrips`, `spellsTable` or `spellsFormula` | spell fields and `sheet.spellcasting` (`features/spellcasting.md`) |
+| `spellcasting` (content v5 only) | `ability`, `preparation`, `spellList`, `slotKind`, `slots` (20 rows), optional `cantrips`, `spellsTable` or `spellsFormula`, and `multiclassCaster` (v7) | spell fields and `sheet.spellcasting` (`features/spellcasting.md`); combined multiclass slots (v7) |
 | `toggle` (content v6 only) | `toggleId`, `label`, optional `resourceId` | play-state switch; bound `whileActive` modifiers apply while it is on (`features/m3-effects.md`) |
 | `weapon` (content v5 only) | `category`, `attack`, `damage`, `damageType`, `properties`, `versatile`, `range`, `weaponKey`, `mastery` | attacks of equipped items (`features/multiclass-and-attacks.md`) |
 | `spell` (content v5 only) | `level`, `lists`, `school`, `castingTime`, `range`, `components`, `duration`, `concentration`, `ritual`, `attack`, `save`, `dice` | spells of a caster; never active content |
@@ -109,6 +109,13 @@ NUMBER  := [0-9]+
   Toggle state is play state (character schema v7, `play.toggles`).
 - **Why v6 and not more v5:** v5 shipped in the 0.2.2 build handed over for the M2 owner checks, and content authored there may already be v5. Extending v5 now would change what those revisions mean. As with v5, every new field on an existing type is nullable and absent by default, so no stored revision re-serializes. Validation refuses them below v6 (`validate.requires-v6`). Evidence: `ToggleAndCostTests.A_toggle_effect_in_a_revision_older_than_v6_stays_unknown_and_byte_for_byte`.
 - **Timing:** `whileActive` effects are no longer always assisted. A modifier bound to a toggle is automatic, on or off. Only an unbound `whileActive` modifier stays assisted.
+
+## Content schema v7 (M3 C3, 2026-09-28)
+
+- **Adds** `spellcasting.multiclassCaster`: `full`, `half` or `third`, meaning how the caster's class levels count toward the SRD Multiclass Spellcaster table (D04's M3 part, `features/spellcasting.md`). It is ordinary spell slots only, because Pact Magic is never combined (`validate.spellcasting-multiclass-pact`). The rounding of the fractions and the table itself are rules-family policy (`HalfCasterLevels`, `ThirdCasterLevels`, `MulticlassSpellSlots`; `features/rules-family-policy.md`), so the class states *what* it is and the family states *how* it counts.
+- **Why v7 and not more v6:** 0.3.0 (the M2 delivery, which already contains v6) was bumped before this change. A v6 build must not read a v7 caster and silently calculate its slots without combining them. As before, the field is nullable and absent by default, so no stored revision re-serializes (`MulticlassSpellSlotTests.An_older_spellcasting_revision_serializes_without_the_new_field`). Validation refuses it below v7 (`validate.requires-v7`).
+- **Without the field** (every revision before v7, and homebrew that leaves it out), a second slot caster keeps the M2 behavior: the first caster's slots, assisted, with `spellcasting.multiclass-slots` and an override as the manual step.
+- **SRD content:** new v7 revisions of the seven slot casters' Spellcasting features (with the same content ids), and new class revisions that pin them, in both families. They are insert-only. Characters keep their pins until a reviewed update.
 
 ## Consequences
 

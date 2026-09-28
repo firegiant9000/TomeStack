@@ -71,8 +71,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v4 (M2 item 5) adds <see cref="ExtendsChoice"/>; v2 and v3 revisions are not upcast, for the same reason.
     /// v5 (M2 spellcasting) adds the <c>spellcasting</c> and <c>spell</c> effect types; older revisions are not upcast.
     /// v6 (M3 B2) adds the <c>toggle</c> effect, <c>modifier.toggle</c>, and <c>roll</c> resourceContent, cost and variableCost.
+    /// v7 (M3 C3) adds <c>spellcasting.multiclassCaster</c>.
     /// </summary>
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;

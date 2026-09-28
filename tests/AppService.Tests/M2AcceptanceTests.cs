@@ -10,7 +10,8 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class M2AcceptanceTests
 {
-    private static ContentRevision Named(ContentPack pack, string name, ContentKind kind) => pack.Revisions.Single(r => r.Name == name && r.Kind == kind);
+    /// <summary>The newest revision (the last in the pack), as the pickers offer it.</summary>
+    private static ContentRevision Named(ContentPack pack, string name, ContentKind kind) => pack.Revisions.Last(r => r.Name == name && r.Kind == kind);
 
     public static TheoryData<string, string, string, string> Families() => new()
     {
@@ -26,7 +27,7 @@ public class M2AcceptanceTests
         var classes = TomeStackApp.LoadBundledPack($"TomeStack.Content.srd-{version}-classes.json");
         var spells = TomeStackApp.LoadBundledPack($"TomeStack.Content.srd-{version}-spells.json");
         var equipment = TomeStackApp.LoadBundledPack($"TomeStack.Content.srd-{version}-equipment.json");
-        var caster = classes.Revisions.Single(r => r.Effects.OfType<SpellcastingEffect>().Any(s => s.SpellList == "wizard")).ContentId;
+        var caster = classes.Revisions.Where(r => r.Effects.OfType<SpellcastingEffect>().Any(s => s.SpellList == "wizard")).Select(r => r.ContentId).Distinct().Single();
         using var temp = new TempApp();
 
         // Build: a level 3 Wizard with a cantrip, two levelled spells and a quarterstaff (both SRDs make it a wizard weapon).

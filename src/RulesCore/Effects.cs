@@ -364,6 +364,12 @@ public enum SpellPreparation { Prepared, Known }
 public enum SpellSlotKind { SpellSlots, PactMagic }
 
 /// <summary>
+/// Content schema v7 (M3 C3): how a caster's class levels count toward the SRD Multiclass Spellcaster table: all of them,
+/// half, or a third. The rounding of the fractions is rules-family policy (<see cref="RulesFamilyPolicy.HalfCasterLevels"/>).
+/// </summary>
+public enum MulticlassCaster { Full, Half, Third }
+
+/// <summary>
 /// Content schema v5 (M2, D04): a class's (or subclass's) Spellcasting feature. Spell attack bonus = PB + the ability
 /// modifier and save DC = 8 + PB + the ability modifier, in both SRDs. Tables are indexed by the level in the class the
 /// content belongs to (row 0 = level 1), so each SRD revision states its own progression and the 2014/2024 differences
@@ -401,6 +407,16 @@ public sealed record SpellcastingEffect : Effect
 
     /// <summary>Optional formula for the number of prepared spells, for example <c>max(1, WIS.MOD + CLASS_LEVEL)</c> (2014 rules).</summary>
     public string? SpellsFormula { get; init; }
+
+    /// <summary>
+    /// Content schema v7 (M3 C3): how this caster's levels combine with other casters' through the Multiclass Spellcaster
+    /// table. Absent (the default, so older revisions serialize unchanged): its slots are not combined, and a character
+    /// with a second slot caster gets the slot total as a manual step. Ordinary spell slots only; Pact Magic stays separate.
+    /// </summary>
+    public MulticlassCaster? MulticlassCaster { get; init; }
+
+    /// <summary>The content schema version that adds <see cref="MulticlassCaster"/>.</summary>
+    public const int MulticlassSchemaVersion = 7;
 
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellcastingEffect>(unknown);
 }

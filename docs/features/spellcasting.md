@@ -2,13 +2,15 @@
 
 SPEC C-01, C-02, C-04, C-05 · LIVING_SPECS D04 · MVP "Builder" (spells), "Sheet" (slots) · status: **implemented (M2)**. The SRD spells (319 SRD 5.1, 339 SRD 5.2.1) and the eight SRD casters, levels 1–20 in both families, are bundled (owner decision 2026-09-27; SPEC Q-03 review in `licensing/srd-pack-review.md`). Acceptance on SRD content: `tests/AppService.Tests/SrdCasterTests.cs`.
 
-Rules core: `SpellcastingEffect` and `SpellEffect` in `src/RulesCore/Effects.cs`, and the "spellcasting" section of `src/RulesCore/Calculation.cs`. Service: slot actions in `src/AppService/Play.cs`, spell rolls in `src/AppService/Rolling.cs`. UI: the spell picker in `src/Ui/src/components/CharacterBuilder.tsx` and `src/Ui/src/components/SpellsPanel.tsx`. Acceptance: `tests/RulesCore.Tests/SpellcastingTests.cs`, `tests/AppService.Tests/SpellcastingCommandTests.cs`, and the e2e test "builds a spellcaster…". Fixtures: `tests/RulesFixtures/fixture-pack-m2-spells.json` (invented casters and spells; the tables are not the SRD's).
+Rules core: `SpellcastingEffect` and `SpellEffect` in `src/RulesCore/Effects.cs`, and the "spellcasting" section of `src/RulesCore/Calculation.cs`. Service: slot actions in `src/AppService/Play.cs`, spell rolls in `src/AppService/Rolling.cs`. UI: the spell picker in `src/Ui/src/components/CharacterBuilder.tsx` and `src/Ui/src/components/SpellsPanel.tsx`. Acceptance: `tests/RulesCore.Tests/SpellcastingTests.cs`, `tests/RulesCore.Tests/MulticlassSpellSlotTests.cs` (M3 C3), `tests/AppService.Tests/SpellcastingCommandTests.cs`, `SrdCasterTests.A_Sorcerer_Paladin_combines_slots_on_the_multiclass_table_differently_per_family_side_by_side`, and the e2e test "builds a spellcaster…". Fixtures: `tests/RulesFixtures/fixture-pack-m2-spells.json` (invented casters and spells; the tables are not the SRD's).
 
 ## D04 scope
 
 - **In M2:** one spellcasting class per character, with spell attack bonus, save DC, slots by class level, and prepared or known spells.
-- **A second caster:** calculated separately (its own attack bonus, save DC and slots). Combining spell slots across classes (the SRD multiclass spellcaster table) is **not** done. The slot fields are assisted, with `spellcasting.multiclass-slots`. The manual step is to record the total as an override (SPEC C-06), which play then uses.
-- **Pact Magic:** its own pool (`pactSlots`), recovered by a short or a long rest, next to ordinary slots.
+- **A second caster:** calculated separately (its own attack bonus, save DC, counts and highest spell level).
+- **Combined slots (M3 C3, content v7):** when every caster with ordinary spell slots declares `multiclassCaster`, the slots come from the SRD Multiclass Spellcaster table (SRD 5.1 p. 58, SRD 5.2.1 pp. 25–26). The caster level is every full caster's class levels, plus half of each half caster's and a third of each third caster's. Half rounds down under 2014 rules and up under 2024 rules. Neither SRD has a third caster, and TomeStack rounds it down under both. These are policy fields (`rules-family-policy.md`). The trace lists each class's contribution, then the table row. The bundled SRD casters declare it since their v7 revisions: Bard, Cleric, Druid, Sorcerer and Wizard are full casters; Paladin and Ranger are half casters. Characters that pin the earlier revisions keep the M2 behavior until they take the reviewed update (SPEC I-06).
+- **Otherwise** (a caster without the field, for example homebrew before v7), the slot fields show the first caster's slots, assisted, with `spellcasting.multiclass-slots`. The manual step is to record the total as an override (SPEC C-06), which play then uses.
+- **Pact Magic:** its own pool (`pactSlots`), recovered by a short or a long rest, next to ordinary slots. It is never combined. Validation refuses `multiclassCaster` on it, and a Warlock with one other caster uses that caster's own table.
 
 ## Content (schema v5)
 
@@ -23,6 +25,7 @@ A class, subclass or class feature carries one `spellcasting` effect:
 | `slots` | 20 rows, one per class level, each the counts for spell levels 1–9 |
 | `cantrips`, `spellsTable` | Optional, 20 counts each: cantrips, and spells known or prepared |
 | `spellsFormula` | Optional instead of `spellsTable`, for example `max(1, INT.MOD + CLASS_LEVEL)` (2014 prepared casters) |
+| `multiclassCaster` | Content v7, optional: `full`, `half` or `third`, meaning how the class levels count toward the Multiclass Spellcaster table. Ordinary slots only |
 
 Tables live in the content, so each SRD class revision states its own progression. The 2014/2024 differences are **content, not policy fields**, for example half casters with slots at level 1 in 2024 and a prepared count that is a formula (2014) or a table (2024). `rules-family-policy.md` records this conclusion. The SRD content commits add a side-by-side test for each difference.
 
@@ -75,6 +78,7 @@ The choices step (create, level-up and "Make choices") has a picker per caster. 
 
 - Always-prepared subclass spells (domain, oath, patron and circle spells) are text only. The player records them, and the sheet may flag them "not on the list".
 - For the SRD content, see `src/AppService/Content/srd-<family>-spells.json` and `srd-<family>-classes.json`. On an SRD class, the `spellcasting` effect sits on its Spellcasting (or Pact Magic) feature, so a known spell's `caster` is that feature's content id.
-- Combined multiclass slots and Pact Magic combined with slots (M3, D04).
+- Casting Pact Magic slots for another class's spells, and the reverse (SRD "Pact Magic" under multiclassing): the pools stay separate on the sheet, and the player picks which slot to spend.
+- A third caster in the SRD content (neither SRD bundles one; `third` is for homebrew).
 - Upcast damage, cantrip scaling, spell components and material costs, and concentration tracking (text only).
 - Spell authoring in the homebrew studio. Homebrew spells can be imported as content v5 revisions.
