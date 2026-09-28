@@ -224,8 +224,9 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Long rest…' }));
   let rest = await screen.findByRole('region', { name: 'Long rest' });
   await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Long rest' })));
-  expect(within(rest).getByRole('checkbox', { name: /^Hit points: 28 → 35/ })).toBeTruthy();
-  expect(within(rest).getByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
+  // The heading is focused on mount; the preview's changes arrive afterwards (restPreview), so wait for them.
+  expect(await within(rest).findByRole('checkbox', { name: /^Hit points: 28 → 35/ })).toBeTruthy();
+  expect(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
   await user.click(within(rest).getByRole('button', { name: 'Cancel rest' }));
   expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy();
 
