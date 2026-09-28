@@ -93,7 +93,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<SpellcastingEntry>? Spellcasting = null,
     IReadOnlyList<SlotValue>? SpellSlots = null,
     SlotValue? PactSlots = null,
-    IReadOnlyList<AttackEntry>? Attacks = null)
+    IReadOnlyList<AttackEntry>? Attacks = null,
+    IReadOnlyList<ToggleValue>? Toggles = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -143,8 +144,14 @@ public sealed record FeatureEntry(
     IReadOnlyList<Diagnostic> Diagnostics);
 
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
+/// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
+/// <param name="Cost">Content v6: uses the action spends (its formula evaluated), or the most it may spend when <paramref name="VariableCost"/>.</param>
 public sealed record FeatureEffect(
-    string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null);
+    string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false);
+
+/// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
+public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
@@ -419,7 +426,7 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
         AddArmor(active, modifiers, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies);
@@ -475,7 +482,15 @@ public static class CharacterCalculator
 
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)])).ToList();
+        int? Evaluate(ActiveContent item, string source) =>
+            Formula.TryParse(source, out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
+                ? Math.Max(value, 0)
+                : null;
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Evaluate)).ToList();
+        var toggles = active
+            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
+                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
+            .ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
         var hitDice = resolved.Classes
@@ -509,7 +524,7 @@ public static class CharacterCalculator
 
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
-            spellcasting, spellSlots, pactSlots, attacks), active);
+            spellcasting, spellSlots, pactSlots, attacks, toggles), active);
     }
 
     // ---- attacks (content schema v5; SPEC C-02, C-04) --------------------------------------------------------
@@ -803,12 +818,14 @@ public static class CharacterCalculator
         return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
     }
 
-    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics)
+    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> evaluate)
     {
         var revision = item.Revision;
         var effects = revision.Effects.Select(e => e switch
         {
-            RollEffect roll => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation),
+            RollEffect roll => new FeatureEffect(
+                e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
@@ -1175,7 +1192,7 @@ public static class CharacterCalculator
     }
 
     private static List<Modifier> CollectModifiers(
-        List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
+        List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
         HashSet<string> manual)
     {
         var modifiers = new List<Modifier>();
@@ -1184,7 +1201,15 @@ public static class CharacterCalculator
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
-                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
+                // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
+                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
+                    && revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                {
+                    if (!character.Play.IsOn(revision.ContentId, toggle))
+                        continue;
+                }
+                else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);

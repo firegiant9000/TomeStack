@@ -110,6 +110,12 @@ public sealed record ModifierEffect : Effect
 
     /// <summary>Required with <see cref="StackingRule.HighestInGroup"/>.</summary>
     public string? StackGroup { get; init; }
+
+    /// <summary>
+    /// Content schema v6 (M3 B2): with <see cref="EffectTiming.WhileActive"/>, the <c>toggle</c> of this revision that
+    /// switches the modifier on. It applies only while that toggle is on. Null: a whileActive modifier stays assisted.
+    /// </summary>
+    public string? Toggle { get; init; }
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -237,6 +243,42 @@ public sealed record RollEffect : Effect
 
     /// <summary>Content schema v5 (SPEC C-04): action, bonus action, reaction or other; null is listed under "Other".</summary>
     public Activation? Activation { get; init; }
+
+    /// <summary>
+    /// Content schema v6 (M3 B2, shared resources): the content id that defines <see cref="ResourceId"/>, when the resource
+    /// belongs to another feature (for example one pool several features spend). Null: this revision defines it.
+    /// </summary>
+    public Guid? ResourceContent { get; init; }
+
+    /// <summary>Content schema v6: uses the action spends (a formula; default 1). With <see cref="VariableCost"/>, the most it may spend.</summary>
+    public string? Cost { get; init; }
+
+    /// <summary>Content schema v6 (variable spend): the player chooses how many uses to spend, from 1 to <see cref="Cost"/> (or what is left).</summary>
+    public bool? VariableCost { get; init; }
+}
+
+/// <summary>
+/// Content schema v6 (M3 B2, SPEC I-05 "assisted actions"): something the player switches on and off at the table, such
+/// as a stance or an aura. While it is on (play state, character schema v7), the revision's modifiers that name it apply.
+/// Turning it on can spend one use of a resource. Turning it on or off is a confirmed play action, and the long rest
+/// proposes turning it off.
+/// </summary>
+public sealed record ToggleEffect : Effect
+{
+    public const string TypeName = "toggle";
+
+    public const int SchemaVersion = 6;
+
+    public override string Type => TypeName;
+
+    public required string ToggleId { get; init; }
+
+    public required string Label { get; init; }
+
+    /// <summary>A resource of this revision that turning the toggle on spends one use of.</summary>
+    public string? ResourceId { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ToggleEffect>(unknown);
 }
 
 public enum WeaponCategory { Simple, Martial }
@@ -416,6 +458,7 @@ internal static class VersionedEffects
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
             [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
             [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
+            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
         };
 
     /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
@@ -484,7 +527,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

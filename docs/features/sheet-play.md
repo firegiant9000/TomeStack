@@ -36,6 +36,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `hitDiceSpent[]` (v5) | `{ die, spent }` per hit die size (d6–d12, 0–20). Spent on a short rest, given back by a long rest ([rests.md](rests.md)) |
 | `deathSaves` (v5) | `{ successes, failures }`, 0–3 each. Three successes: Stable (the 3 stays as the marker). Three failures: dead |
 | `inspiration` (v5) | Inspiration (2014) or Heroic Inspiration (2024): you have it or not |
+| `toggles[]` (v7) | Active toggles (`{ contentId, toggleId }`; actions `toggleOn`, `toggleOff`; [m3-effects.md](m3-effects.md)) |
 | `spellSlotsSpent[]`, `pactSlotsSpent` (v6) | Spent spell slots per spell level and spent Pact Magic slots ([spellcasting.md](spellcasting.md); actions `spendSlot`, `regainSlot`, `spendPactSlot`, `regainPactSlot`) |
 
 **Migration on read:** character schema v1–v4 are upcast to v5 with the new state at its default (full hit points, nothing spent, no conditions, no hit dice spent, no death saves, no inspiration), which is exactly their meaning. Characters are stored as JSON and are not hashed, so no database migration is needed. A build before each version refuses its characters (`character.schema-unsupported`, `package.schema-unsupported`) instead of dropping the play state; 0.2.1 refuses v5.

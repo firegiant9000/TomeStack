@@ -48,6 +48,11 @@ public sealed record PlayState
     /// <summary>Character schema v6: spent Pact Magic slots. Recovered by a short or long rest.</summary>
     public int PactSlotsSpent { get; init; }
 
+    /// <summary>Character schema v7 (M3 B2): the <c>toggle</c> effects switched on, keyed by content id (so an update keeps them).</summary>
+    public IReadOnlyList<ActiveToggle> Toggles { get; init; } = [];
+
+    public bool IsOn(Guid contentId, string toggleId) => Toggles.Any(t => t.ContentId == contentId && t.ToggleId == toggleId);
+
     public int SlotsSpentOf(int level) => SpellSlotsSpent.LastOrDefault(s => s.Level == level)?.Spent ?? 0;
 
     /// <summary>The same state with <paramref name="spent"/> slots of spell level <paramref name="level"/> spent (0 removes the entry).</summary>
@@ -112,6 +117,8 @@ public sealed record PlayState
             yield return new("play.spell-slots-invalid", $"Spent level {use.Level} spell slots ({use.Spent}) must be for spell levels 1–{SpellcastingEffect.MaxSpellLevel}, between 0 and {MaxSlots}.");
         if (SpellSlotsSpent.GroupBy(s => s.Level).Any(g => g.Count() > 1))
             yield return new("play.spell-slots-duplicate", "A spell slot level is recorded more than once.");
+        if (Toggles.Any(t => string.IsNullOrWhiteSpace(t.ToggleId)) || Toggles.GroupBy(t => (t.ContentId, t.ToggleId)).Any(g => g.Count() > 1))
+            yield return new("play.toggle-invalid", "An active toggle needs a toggle id, and each is recorded once.");
         if (PactSlotsSpent is < 0 or > MaxSlots)
             yield return new("play.spell-slots-invalid", $"Spent Pact Magic slots must be between 0 and {MaxSlots}.");
         if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
@@ -121,6 +128,9 @@ public sealed record PlayState
 
 /// <summary>How many uses of one resource are spent. <paramref name="ContentId"/> is the content that defines it.</summary>
 public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
+
+/// <summary>A <c>toggle</c> effect that is switched on: the content that defines it and its toggle id.</summary>
+public sealed record ActiveToggle(Guid ContentId, string ToggleId);
 
 /// <summary>How many spell slots of one spell level are spent.</summary>
 public sealed record SpellSlotUse(int Level, int Spent);

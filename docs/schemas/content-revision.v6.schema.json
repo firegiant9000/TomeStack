@@ -1,0 +1,747 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/content-revision.v6.schema.json",
+  "title": "TomeStack content revision (schemaVersion 6)",
+  "description": "One immutable revision of a content entity (ADR-002) with typed declarative effects (ADR-003). v6 (M3 B2) adds the toggle effect, modifier.toggle (whileActive modifiers that apply while a toggle is on), and roll resourceContent (a shared resource), cost and variableCost; v2 to v5 revisions keep their version. v5 (M2, D04) adds the spellcasting, spell and weapon effects, the spell fields (spellAttack, spellSaveDc, spellSlots.1-9, pactSlots), weapon proficiency grants (weapon.*), onlyAs on grants and choices, multiclass and group on restrictions, and activation on rolls; v2 to v4 revisions keep their version. v4 (M2 items 4 and 5) adds the armor effect and extendsChoice: the revision is an extra option of another content's choice. v3 added level-gated grants and choices, the hitDie effect, and the armorClass and hitPoints fields. v2 and v3 revisions keep their version (not upcast). Unknown properties round-trip. An effect whose type is not listed here is kept and is reference-only.",
+  "type": "object",
+  "required": [
+    "contentId",
+    "revisionId",
+    "schemaVersion",
+    "kind",
+    "name",
+    "rulesFamilies",
+    "provenance",
+    "status"
+  ],
+  "properties": {
+    "contentId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "revisionId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "schemaVersion": {
+      "const": 6
+    },
+    "extendsChoice": {
+      "description": "This revision is also an option of the choice choiceId offered by any revision of contentId (for example a homebrew subclass for an SRD class).",
+      "type": "object",
+      "required": [
+        "contentId",
+        "choiceId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "choiceId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "kind": {
+      "enum": [
+        "species",
+        "background",
+        "class",
+        "subclass",
+        "feature",
+        "feat",
+        "spell",
+        "item"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rulesFamilies": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/rulesFamily"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "sourceId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "page": {
+          "$ref": "#/$defs/pageRef"
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "published"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/effect"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "rulesFamily": {
+      "enum": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ]
+    },
+    "level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "description": "Applies from this class level (class content and content belonging to a class) or character level (anything else)."
+    },
+    "pageRef": {
+      "type": "object",
+      "required": [
+        "start"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contentReference": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "revisionId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "formula": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Bounded formula (ADR-003 grammar), e.g. \"2\", \"PB + CON.MOD\", \"floor(CLASS_LEVEL / 2)\"."
+    },
+    "fieldId": {
+      "type": "string",
+      "pattern": "^(initiative|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*)$"
+    },
+    "common": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "automation": {
+          "enum": [
+            "automatic",
+            "assisted",
+            "reference"
+          ]
+        },
+        "timing": {
+          "enum": [
+            "always",
+            "whileActive",
+            "onRoll",
+            "onShortRest",
+            "onLongRest"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "effect": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "modifier"
+            },
+            "operation": {
+              "enum": [
+                "bonus",
+                "set",
+                "replace"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/fieldId"
+            },
+            "value": {
+              "$ref": "#/$defs/formula"
+            },
+            "stacking": {
+              "enum": [
+                "stack",
+                "highestInGroup"
+              ]
+            },
+            "stackGroup": {
+              "type": "string",
+              "minLength": 1
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Content v6: the toggle of this revision that switches this whileActive modifier on."
+            }
+          },
+          "required": [
+            "operation",
+            "target",
+            "value"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "grant"
+            },
+            "grant": {
+              "enum": [
+                "proficiency",
+                "expertise",
+                "content"
+              ]
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/fieldId"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^weapon\\.[a-z0-9][a-z0-9-]*$"
+                }
+              ]
+            },
+            "content": {
+              "$ref": "#/$defs/contentReference"
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "onlyAs": {
+              "enum": [
+                "startingClass",
+                "multiclass"
+              ],
+              "description": "Content v5 (D04): only as the starting class, or only as a later class."
+            }
+          },
+          "required": [
+            "grant"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "resource"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maximum": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "resourceId",
+            "label",
+            "maximum"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "choice"
+            },
+            "choiceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/contentReference"
+              }
+            },
+            "level": {
+              "$ref": "#/$defs/level"
+            },
+            "onlyAs": {
+              "enum": [
+                "startingClass",
+                "multiclass"
+              ],
+              "description": "Content v5 (D04): only as the starting class, or only as a later class."
+            }
+          },
+          "required": [
+            "choiceId"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "restriction"
+            },
+            "field": {
+              "$ref": "#/$defs/fieldId"
+            },
+            "minimum": {
+              "type": "integer"
+            },
+            "multiclass": {
+              "type": "boolean",
+              "description": "Content v5 (D04): a multiclass prerequisite."
+            },
+            "group": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Content v5: restrictions with the same group are alternatives."
+            }
+          },
+          "required": [
+            "field",
+            "minimum"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "recovery"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "enum": [
+                "shortRest",
+                "longRest"
+              ]
+            },
+            "amount": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "resourceId",
+            "on",
+            "amount"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "roll"
+            },
+            "rollId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "dice": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "resourceId": {
+              "type": "string"
+            },
+            "activation": {
+              "enum": [
+                "action",
+                "bonusAction",
+                "reaction",
+                "other"
+              ]
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "Content v6: the content id that defines resourceId (a shared resource)."
+            },
+            "cost": {
+              "$ref": "#/$defs/formula",
+              "description": "Content v6: uses spent (default 1), or the most with variableCost."
+            },
+            "variableCost": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rollId",
+            "label",
+            "dice"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "hitDie"
+            },
+            "die": {
+              "enum": [
+                6,
+                8,
+                10,
+                12
+              ]
+            }
+          },
+          "required": [
+            "die"
+          ]
+        },
+        {
+          "description": "M2 item 4: body armor (light, medium, heavy) or a shield on an item. Content v4 only (ADR-003): in a v2 or v3 revision an armor effect is unknown and reference-only, kept byte for byte, so revisions stored by 0.2.0 keep their hash and meaning.",
+          "properties": {
+            "type": {
+              "const": "armor"
+            },
+            "category": {
+              "enum": [
+                "light",
+                "medium",
+                "heavy",
+                "shield"
+              ]
+            },
+            "armorClass": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30
+            },
+            "dexterityCap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
+          },
+          "required": [
+            "category",
+            "armorClass"
+          ]
+        },
+        {
+          "description": "Content v5: a class's (or subclass's) Spellcasting. Tables are indexed by the level in the class (row 0 = level 1). Spell attack = PB + the ability modifier; save DC = 8 + PB + the ability modifier.",
+          "properties": {
+            "type": {
+              "const": "spellcasting"
+            },
+            "ability": {
+              "enum": [
+                "str",
+                "dex",
+                "con",
+                "int",
+                "wis",
+                "cha"
+              ]
+            },
+            "preparation": {
+              "enum": [
+                "prepared",
+                "known"
+              ]
+            },
+            "spellList": {
+              "type": "string",
+              "minLength": 1
+            },
+            "slotKind": {
+              "enum": [
+                "spellSlots",
+                "pactMagic"
+              ]
+            },
+            "slots": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "array",
+                "maxItems": 9,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 20
+                }
+              }
+            },
+            "cantrips": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "spellsTable": {
+              "type": "array",
+              "minItems": 20,
+              "maxItems": 20,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "spellsFormula": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "ability",
+            "spellList",
+            "slots"
+          ]
+        },
+        {
+          "description": "Content v5: the game data of a spell (on spell content). Never active content.",
+          "properties": {
+            "type": {
+              "const": "spell"
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9
+            },
+            "school": {
+              "type": "string"
+            },
+            "castingTime": {
+              "type": "string"
+            },
+            "range": {
+              "type": "string"
+            },
+            "components": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "string"
+            },
+            "concentration": {
+              "type": "boolean"
+            },
+            "ritual": {
+              "type": "boolean"
+            },
+            "lists": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "attack": {
+              "enum": [
+                "none",
+                "melee",
+                "ranged"
+              ]
+            },
+            "save": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dice": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "level"
+          ]
+        },
+        {
+          "description": "Content v5: a weapon on an item; an equipped one gives an attack (SPEC C-02, C-04).",
+          "properties": {
+            "type": {
+              "const": "weapon"
+            },
+            "category": {
+              "enum": [
+                "simple",
+                "martial"
+              ]
+            },
+            "attack": {
+              "enum": [
+                "melee",
+                "ranged"
+              ]
+            },
+            "damage": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "damageType": {
+              "type": "string",
+              "minLength": 1
+            },
+            "properties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "versatile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "range": {
+              "type": "string"
+            },
+            "weaponKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "mastery": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "category",
+            "attack",
+            "damage",
+            "damageType",
+            "weaponKey"
+          ]
+        },
+        {
+          "description": "Content v6 (M3 B2): something switched on and off at the table; modifiers naming it apply while it is on. Turning it on can spend one use of a resource of this revision.",
+          "properties": {
+            "type": {
+              "const": "toggle"
+            },
+            "toggleId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "toggleId",
+            "label"
+          ]
+        },
+        {
+          "description": "Unknown effect type: kept, reference-only.",
+          "properties": {
+            "type": {
+              "not": {
+                "enum": [
+                  "modifier",
+                  "grant",
+                  "resource",
+                  "choice",
+                  "restriction",
+                  "recovery",
+                  "roll",
+                  "hitDie",
+                  "armor",
+                  "spellcasting",
+                  "spell",
+                  "weapon",
+                  "toggle"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

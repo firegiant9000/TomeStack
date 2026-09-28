@@ -376,9 +376,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <h3 id="rolls-heading">Rolls</h3>
         <RollModePicker mode={rollMode} onChange={setRollMode} />
         <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} act={act} />
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
       </section>
-      <ActionsPanel view={view} roll={roll} />
+      <ActionsPanel view={view} roll={roll} act={act} />
       <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} />
 
       {groups.map((group) => {

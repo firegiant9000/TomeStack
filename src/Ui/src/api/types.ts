@@ -167,6 +167,23 @@ export interface FeatureEffect {
   resourceId?: string;
   /** SPEC C-04 (content v5): when the roll's action is used; absent is "other". */
   activation?: Activation;
+  /** Content v6: the content id that defines `resourceId` (a shared resource). */
+  resourceContent?: string;
+  /** Content v6: uses spent, or the most with `variableCost`. */
+  cost?: number;
+  variableCost?: boolean;
+}
+
+/** Content v6 (M3 B2): something switched on and off at the table. */
+export interface ToggleValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  toggleId: string;
+  label: string;
+  on: boolean;
+  resourceId?: string;
+  text?: string;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
@@ -242,6 +259,7 @@ export interface CharacterSheet {
   spellSlots?: SlotValue[];
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
+  toggles?: ToggleValue[];
 }
 
 export interface ResourceUse {
@@ -280,7 +298,9 @@ export type PlayActionKind =
   | 'spendSlot'
   | 'regainSlot'
   | 'spendPactSlot'
-  | 'regainPactSlot';
+  | 'regainPactSlot'
+  | 'toggleOn'
+  | 'toggleOff';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -288,12 +308,14 @@ export interface PlayAction {
   contentId?: string;
   resourceId?: string;
   condition?: string;
+  /** Content v6: the toggle to switch on or off (with `contentId`). */
+  toggleId?: string;
 }
 
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle';
   slotLevel?: number;
   die?: number;
   amount?: number;
@@ -342,6 +364,8 @@ export interface RollProvenance {
   sourceTitle?: string;
   page?: PageRef;
   linkedResourceId?: string;
+  /** The content that defines the linked resource (another feature's, for a shared one). */
+  linkedResourceContent?: string;
 }
 
 /** SPEC C-04: a roll record. Rolling never changes the character. */

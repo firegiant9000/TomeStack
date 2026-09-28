@@ -4,10 +4,20 @@
 
 ### Added
 
+- **Toggled effects, shared resources and variable costs (M3 B2; `docs/features/m3-effects.md`):**
+  - **Toggles:** content can declare a toggle (a stance, an aura) that the player switches on and off in "Attacks and actions". Turning it on can spend a use, in the same confirmed change. Modifiers bound to it apply only while it is on: for example +2 Armor Class, traced and still automatic. The long rest proposes switching active toggles off.
+  - **Shared resources:** an action can spend another feature's resource.
+  - **Variable costs:** an action can cost several uses, or let the player choose how many, in the roll's "Spend" control.
+
 - **The Stardust Guardian acceptance (M3 B1; MVP definition of done 3; `docs/features/m3-stardust-guardian.md`):**
   - **The test:** it imports the owner's private backup of the character from the gitignored `tests/RulesFixtures/local/stardust-guardian/`. It checks the four DoD 3 mechanics and lists every mechanic as automatic, assisted or reference, with its manual step. It compares them with the owner's optional expectations, and writes the full report only inside that local folder.
   - **Without the material,** it is skipped. A synthetic stand-in runs the same pipeline in the gate.
   - **`character.mechanics`:** a new command that returns that inventory for any character.
+
+### Migration
+
+- **Content schema v6** (`docs/schemas/content-revision.v6.schema.json`) adds the `toggle` effect, `modifier.toggle`, and roll `resourceContent`, `cost` and `variableCost`. They are typed only in v6 revisions, and the new fields are absent by default, so older revisions are unchanged. 0.2.2 refuses v6 revisions.
+- **Character schema v7** (`docs/schemas/character.v7.schema.json`) adds `play.toggles`. v1–v6 characters are upcast with every toggle off. There is no database migration.
 
 ## 0.2.2 (M2 exit candidate)
 

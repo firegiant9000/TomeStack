@@ -55,6 +55,12 @@ public enum PlayActionKind
 
     /// <summary>Regains one spent Pact Magic slot by hand.</summary>
     RegainPactSlot,
+
+    /// <summary>Content v6 (M3 B2): switches a toggle on (<c>contentId</c>, <c>toggleId</c>); if it names a resource, one use is spent in the same change.</summary>
+    ToggleOn,
+
+    /// <summary>Switches a toggle off.</summary>
+    ToggleOff,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -66,7 +72,8 @@ public sealed record PlayCommand(
     int Amount = 1,
     Guid? ContentId = null,
     string? ResourceId = null,
-    string? Condition = null);
+    string? Condition = null,
+    string? ToggleId = null);
 
 public sealed partial class TomeStackApp
 {
@@ -121,12 +128,34 @@ public sealed partial class TomeStackApp
             PlayActionKind.RegainPactSlot => play.PactSlotsSpent > 0
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
+            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(play, sheet, command),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
         return SaveWithPlay(character with { Play = play });
+    }
+
+    private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)
+    {
+        var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
+            ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
+        var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
+        if (command.Action == PlayActionKind.ToggleOff)
+        {
+            return toggle.On
+                ? play with { Toggles = others }
+                : throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+        }
+        if (toggle.On)
+            throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
+        if (toggle.ResourceId is { } resourceId)
+        {
+            // Turning it on spends one use, in the same confirmed change (a use that is not there refuses the whole change).
+            play = ChangeResource(play, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: 1, ContentId: toggle.Content.ContentId, ResourceId: resourceId));
+        }
+        return play with { Toggles = [.. others, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
     }
 
     private static PlayState ChangeSlot(PlayState play, CharacterSheet sheet, PlayCommand command)

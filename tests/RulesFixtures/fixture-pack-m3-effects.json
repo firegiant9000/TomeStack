@@ -1,0 +1,131 @@
+{
+  "packId": "tomestack-m3-effects-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (M3 B2: toggles, shared resources, variable costs). Invented; no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "5f8d5000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Effects",
+      "publisher": "TomeStack project",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "5f8dc000-0000-4000-8000-000000000001",
+      "revisionId": "5f8de000-0000-4000-8000-000000000001",
+      "schemaVersion": 6,
+      "kind": "feat",
+      "name": "Fixture Radiant Stance",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "5f8d5000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 1
+        }
+      },
+      "status": "published",
+      "summary": "A test feat: a stance that spends radiance, a fixed-cost flare and a variable-cost surge.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "radiance",
+          "resourceId": "radiance",
+          "label": "Radiance",
+          "maximum": "PB"
+        },
+        {
+          "type": "recovery",
+          "id": "radiance-long",
+          "timing": "onLongRest",
+          "resourceId": "radiance",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "toggle",
+          "id": "stance",
+          "toggleId": "stance",
+          "label": "Radiant stance",
+          "resourceId": "radiance",
+          "text": "Take the stance (1 radiance): +2 Armor Class until you leave it."
+        },
+        {
+          "type": "modifier",
+          "id": "stance-ac",
+          "timing": "whileActive",
+          "toggle": "stance",
+          "operation": "bonus",
+          "target": "armorClass",
+          "value": "2"
+        },
+        {
+          "type": "roll",
+          "id": "flare",
+          "timing": "onRoll",
+          "rollId": "flare",
+          "label": "Radiant flare",
+          "dice": "1d8",
+          "resourceId": "radiance",
+          "cost": "1",
+          "activation": "action"
+        },
+        {
+          "type": "roll",
+          "id": "surge",
+          "timing": "onRoll",
+          "rollId": "surge",
+          "label": "Radiant surge",
+          "dice": "1d6",
+          "resourceId": "radiance",
+          "cost": "PB",
+          "variableCost": true,
+          "activation": "bonusAction",
+          "text": "Spend 1 to PB radiance; the surge grows with it."
+        }
+      ]
+    },
+    {
+      "contentId": "5f8dc000-0000-4000-8000-000000000002",
+      "revisionId": "5f8de000-0000-4000-8000-000000000002",
+      "schemaVersion": 6,
+      "kind": "feat",
+      "name": "Fixture Borrowed Spark",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "5f8d5000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 2
+        }
+      },
+      "status": "published",
+      "summary": "A test feat that spends the Radiant Stance's radiance (a shared resource).",
+      "effects": [
+        {
+          "type": "roll",
+          "id": "spark",
+          "timing": "onRoll",
+          "rollId": "spark",
+          "label": "Borrowed spark",
+          "dice": "1d4",
+          "resourceId": "radiance",
+          "resourceContent": "5f8dc000-0000-4000-8000-000000000001",
+          "activation": "reaction"
+        }
+      ]
+    }
+  ]
+}

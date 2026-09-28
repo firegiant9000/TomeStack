@@ -53,6 +53,7 @@ public static class ContentValidator
 
         var needsV3 = false;
         var needsV5 = false;
+        var needsV6 = false;
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -67,6 +68,21 @@ public static class ContentValidator
                     if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                         Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
                     CheckFormula(modifier.Value, modifier.Id, "value");
+                    if (modifier.Toggle is { } toggle)
+                    {
+                        needsV6 = true;
+                        if (modifier.Timing != EffectTiming.WhileActive)
+                            Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
+                        if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                    }
+                    break;
+                case ToggleEffect toggleEffect:
+                    needsV6 = true;
+                    if (string.IsNullOrWhiteSpace(toggleEffect.ToggleId) || string.IsNullOrWhiteSpace(toggleEffect.Label))
+                        Error("validate.toggle-incomplete", $"Toggle '{toggleEffect.Id}' needs a toggleId and a label.", toggleEffect.Id);
+                    if (toggleEffect.ResourceId is { } spends && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
+                        Error("validate.toggle-resource", $"Toggle '{toggleEffect.Id}' spends '{spends}', which this revision does not define.", toggleEffect.Id);
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -130,6 +146,19 @@ public static class ContentValidator
                     if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
                         Error("validate.dice-invalid", $"Roll '{roll.Id}' dice '{roll.Dice}': {diceError!.Message} ({diceError.Code})", roll.Id);
                     needsV5 |= roll.Activation is not null;
+                    needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
+                    if (roll.Cost is { } cost)
+                        CheckFormula(cost, roll.Id, "cost");
+                    if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
+                        Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
+                    if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
+                    {
+                        var definer = local.Values.Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
+                        if (definer is null)
+                            Warn("validate.roll-resource-content-missing", $"Roll '{roll.Id}' spends '{shared}' of content {holder}, which is not installed.", roll.Id);
+                        else if (!definer.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared))
+                            Error("validate.roll-resource-content", $"Roll '{roll.Id}': '{definer.Name}' defines no resource '{shared}'.", roll.Id);
+                    }
                     break;
                 case WeaponEffect weapon:
                     foreach (var (weaponDice, what) in new[] { (weapon.Damage, "damage"), (weapon.Versatile, "versatile damage") })
@@ -187,6 +216,8 @@ public static class ContentValidator
             Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
         if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision has spellcasting, spell or weapon data (content schema v5) but declares v{revision.SchemaVersion}; in an older revision they are reference only.");
+        if (needsV6 && revision.SchemaVersion < ToggleEffect.SchemaVersion)
+            Error("validate.requires-v6", $"This revision uses content schema v6 features (toggles, toggled modifiers, shared resources, roll costs) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)

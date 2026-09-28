@@ -276,16 +276,37 @@ const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
  * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
  * a roll that names a resource offers "Spend" in its record.
  */
-export function ActionsPanel({ view, roll }: { view: CharacterView; roll: (target: RollTarget) => void }) {
+export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (target: RollTarget) => void; act: Act }) {
   const [critical, setCritical] = useState(false);
   const attacks = view.sheet.attacks ?? [];
+  const toggles = view.sheet.toggles ?? [];
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
     feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
   );
-  if (attacks.length === 0 && rolls.length === 0) return null;
+  if (attacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
+      {toggles.length > 0 && (
+        <fieldset>
+          <legend>Active effects (switching one is a confirmed change)</legend>
+          {toggles.map((t) => (
+            <label key={`${t.content.revisionId}-${t.toggleId}`} className="choice">
+              <input
+                type="checkbox"
+                checked={t.on}
+                onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+              />
+              {t.label}
+              <span className="option-source">
+                {t.contentName}
+                {t.resourceId ? ' · turning it on spends 1 use' : ''}
+                {t.text ? ` · ${t.text}` : ''}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
       <label className="choice">
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
@@ -438,19 +459,29 @@ function FeatureItem({ feature, openPage }: { feature: FeatureEntry; openPage?: 
 export function RollResult({
   record,
   resources,
+  features,
   act,
 }: {
   record?: RollRecord;
   resources: ResourceValue[];
+  features: FeatureEntry[];
   act: Act;
 }) {
+  const [amount, setAmount] = useState('');
   if (!record) return <div role="region" aria-label="Last roll" aria-live="polite" />;
   const p = record.provenance;
-  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic).
+  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
+  // resource (content v6) is found through the content that defines it.
+  const holder = p?.linkedResourceContent ?? p?.content?.contentId;
   const linked = p?.linkedResourceId
-    ? (resources.find((r) => r.resourceId === p.linkedResourceId && r.content.contentId === p.content?.contentId) ??
+    ? (resources.find((r) => r.resourceId === p.linkedResourceId && r.content.contentId === holder) ??
       resources.find((r) => r.resourceId === p.linkedResourceId))
     : undefined;
+  const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
+  const cost = effect?.cost ?? 1;
+  const most = linked?.current !== undefined ? Math.min(cost, linked.current) : 0;
+  const chosen = Number(amount);
+  const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
     <div role="region" aria-label="Last roll" aria-live="polite" className="roll-result">
       <p>
@@ -470,14 +501,32 @@ export function RollResult({
         {record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('')}
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
-      {linked && linked.current !== undefined && (
+      {linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={linked.current === 0}
-          onClick={() => act({ action: 'spend', amount: 1, contentId: linked.content.contentId, resourceId: linked.resourceId })}
+          disabled={linked.current < cost}
+          onClick={() => act({ action: 'spend', amount: cost, contentId: linked.content.contentId, resourceId: linked.resourceId })}
         >
-          Spend 1 {linked.label} ({linked.current} left)
+          Spend {cost} {linked.label} ({linked.current} left)
         </button>
+      )}
+      {linked && linked.current !== undefined && effect?.variableCost && (
+        <div className="inline-form">
+          <label className="field">
+            {linked.label} to spend (1 to {most})
+            <input type="number" min={1} max={most} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            disabled={!validChoice}
+            onClick={() => {
+              act({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId });
+              setAmount('');
+            }}
+          >
+            Spend {validChoice ? chosen : ''} {linked.label} ({linked.current} left)
+          </button>
+        </div>
       )}
     </div>
   );

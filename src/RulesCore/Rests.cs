@@ -1,7 +1,7 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
@@ -9,7 +9,8 @@ public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion
 /// on the situation (for example, food and drink), and the player decides. <paramref name="Die"/> is the hit die size of
 /// a <see cref="RestChangeKind.HitDie"/> or <see cref="RestChangeKind.HitDice"/> change, and <paramref name="Amount"/> the
 /// hit points one spent hit die restores. <paramref name="SlotLevel"/> is the spell level of a
-/// <see cref="RestChangeKind.SpellSlots"/> change.
+/// <see cref="RestChangeKind.SpellSlots"/> change. A <see cref="RestChangeKind.Toggle"/> change carries its toggle id in
+/// <paramref name="ResourceId"/>.
 /// </summary>
 public sealed record RestChange(
     string Id,
@@ -166,6 +167,13 @@ public static class RestPlanner
         }
         AddPactSlots(sheet, "a long rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.LongRest, changes, manual, rules);
+        // Content v6 toggles (stances, auras) rarely outlast a night's rest; each is proposed off, and the player can keep it.
+        foreach (var toggle in (sheet.Toggles ?? []).Where(t => t.On))
+        {
+            changes.Add(new(
+                $"toggle:{toggle.Content.ContentId:D}:{toggle.ToggleId}", RestChangeKind.Toggle, toggle.Label, 1, 0,
+                $"{toggle.ContentName}: switched off after a long rest (untick to keep it on)", rules, toggle.Content.ContentId, toggle.ToggleId));
+        }
 
         if (character.Play.Exhaustion > 0)
         {
@@ -332,6 +340,9 @@ public static class RestPlanner
                     break;
                 case RestChangeKind.PactSlots:
                     play = play with { PactSlotsSpent = 0 };
+                    break;
+                case RestChangeKind.Toggle:
+                    play = play with { Toggles = [.. play.Toggles.Where(t => !(t.ContentId == change.ContentId && t.ToggleId == change.ResourceId))] };
                     break;
                 case RestChangeKind.DeathSaves:
                     // Only when hit points were actually regained: unticking every hit die keeps the saves.

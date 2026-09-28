@@ -59,10 +59,16 @@ internal static class Fixtures
 
     public static ContentPack CombatPack() => Load<ContentPack>("fixture-pack-m2-combat.json");
 
+    // M3 B2 fixtures (fixture-pack-m3-effects.json).
+    public static readonly ContentReference RadiantStance = new(Guid.Parse("5f8dc000-0000-4000-8000-000000000001"), Guid.Parse("5f8de000-0000-4000-8000-000000000001"));
+    public static readonly ContentReference BorrowedSpark = new(Guid.Parse("5f8dc000-0000-4000-8000-000000000002"), Guid.Parse("5f8de000-0000-4000-8000-000000000002"));
+
+    public static ContentPack EffectsPack() => Load<ContentPack>("fixture-pack-m3-effects.json");
+
     /// <summary>Every fixture pack: M0, M1, spellcasting and combat.</summary>
     public static InMemoryContentCatalog AllCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 

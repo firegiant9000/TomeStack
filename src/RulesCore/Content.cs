@@ -70,8 +70,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// Older builds refuse v3 revisions (<c>content.schema-unsupported</c>) instead of ignoring the level gates.
     /// v4 (M2 item 5) adds <see cref="ExtendsChoice"/>; v2 and v3 revisions are not upcast, for the same reason.
     /// v5 (M2 spellcasting) adds the <c>spellcasting</c> and <c>spell</c> effect types; older revisions are not upcast.
+    /// v6 (M3 B2) adds the <c>toggle</c> effect, <c>modifier.toggle</c>, and <c>roll</c> resourceContent, cost and variableCost.
     /// </summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;

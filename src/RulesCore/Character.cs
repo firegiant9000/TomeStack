@@ -10,13 +10,14 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
+    /// v7 adds the active toggles to <see cref="Play"/> (M3 B2).
     /// v6 adds <see cref="Spells"/> and spent spell slots in <see cref="Play"/> (spellcasting, M2, D04).
     /// v5 adds spent hit dice, death saves and inspiration to <see cref="Play"/> (the short rest, M2).
     /// v4 adds <see cref="Play"/> (M2 item 2) and <see cref="Equipment"/> (M2 item 4). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
@@ -191,13 +192,14 @@ public sealed record Character : IJsonOnDeserialized
         Check("spells", Spells is null || Spells.Any(s => s?.Spell is null));
         Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null)
             || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null
-            || Play.SpellSlotsSpent is null || Play.SpellSlotsSpent.Any(s => s is null));
+            || Play.SpellSlotsSpent is null || Play.SpellSlotsSpent.Any(s => s is null)
+            || Play.Toggles is null || Play.Toggles.Any(t => t?.ToggleId is null));
         return problems;
     }
 
     /// <summary>
-    /// v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, and v5 no spells or
-    /// spell slots; the defaults (level 1, none, full, nothing spent) are exactly their meaning.
+    /// v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, v5 no spells or spell
+    /// slots, and v6 no toggles; the defaults (level 1, none, full, nothing spent, all off) are exactly their meaning.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {

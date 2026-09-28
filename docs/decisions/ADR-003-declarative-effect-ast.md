@@ -25,6 +25,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | long rest preview and confirmed rest (M2 item 3, `features/rests.md`); short rest after M2 |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 | `spellcasting` (content v5 only) | `ability`, `preparation`, `spellList`, `slotKind`, `slots` (20 rows), optional `cantrips`, `spellsTable` or `spellsFormula` | spell fields and `sheet.spellcasting` (`features/spellcasting.md`) |
+| `toggle` (content v6 only) | `toggleId`, `label`, optional `resourceId` | play-state switch; bound `whileActive` modifiers apply while it is on (`features/m3-effects.md`) |
 | `weapon` (content v5 only) | `category`, `attack`, `damage`, `damageType`, `properties`, `versatile`, `range`, `weaponKey`, `mastery` | attacks of equipped items (`features/multiclass-and-attacks.md`) |
 | `spell` (content v5 only) | `level`, `lists`, `school`, `castingTime`, `range`, `components`, `duration`, `concentration`, `ritual`, `attack`, `save`, `dice` | spells of a caster; never active content |
 
@@ -46,7 +47,7 @@ Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability
 
 ### Timing
 
-Derived fields use only `always`. `whileActive` effects need an assisted toggle (M2). `onRoll` belongs to the dice engine. `onShortRest` and `onLongRest` belong to rest previews, which never apply themselves (ARCHITECTURE "commands vs calculation").
+Derived fields use only `always`, plus `whileActive` modifiers bound to a toggle while that toggle is on (content v6; see "Content schema v6"). An unbound `whileActive` effect stays assisted. `onRoll` belongs to the dice engine. `onShortRest` and `onLongRest` belong to rest previews, which never apply themselves (ARCHITECTURE "commands vs calculation").
 
 ### Formula grammar (item 10)
 
@@ -97,6 +98,17 @@ NUMBER  := [0-9]+
 
   v5 is still unreleased (0.3.0), so it grows during the M2 exit instead of taking a v6. Each new field on an existing type is **nullable and absent by default**. The serializer writes every non-null value (`WhenWritingNull`), so a non-nullable default such as `false` would have re-serialized every stored revision, changed its hash and broken re-seeding. No existing content uses these property names (checked against the SRD packs and fixtures). Validation refuses them below v5 (`validate.requires-v5`).
 - **The spell fields read the primary caster's ability, which is data.** Statically they read every ability modifier, so the evaluation order is right. The automation closure and the trace use only the proficiency bonus and the actual ability (`Closure`'s `actualReads`). A non-caster's spell fields therefore never turn assisted because some unrelated modifier is.
+
+## Content schema v6 (M3 B2, 2026-09-27)
+
+- **Adds:**
+  - the `toggle` effect (typed only in v6);
+  - `modifier.toggle`: a `whileActive` modifier that applies while its revision's toggle is on;
+  - `roll.resourceContent` (a shared resource), `roll.cost` (formula) and `roll.variableCost` (`features/m3-effects.md`).
+  
+  Toggle state is play state (character schema v7, `play.toggles`).
+- **Why v6 and not more v5:** v5 shipped in the 0.2.2 build handed over for the M2 owner checks, and content authored there may already be v5. Extending v5 now would change what those revisions mean. As with v5, every new field on an existing type is nullable and absent by default, so no stored revision re-serializes. Validation refuses them below v6 (`validate.requires-v6`). Evidence: `ToggleAndCostTests.A_toggle_effect_in_a_revision_older_than_v6_stays_unknown_and_byte_for_byte`.
+- **Timing:** `whileActive` effects are no longer always assisted. A modifier bound to a toggle is automatic, on or off. Only an unbound `whileActive` modifier stays assisted.
 
 ## Consequences
 

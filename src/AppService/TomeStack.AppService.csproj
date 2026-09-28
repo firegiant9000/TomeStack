@@ -27,6 +27,7 @@
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2.json" LogicalName="TomeStack.FixturePackM2.json" />
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2-spells.json" LogicalName="TomeStack.FixturePackM2Spells.json" />
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2-combat.json" LogicalName="TomeStack.FixturePackM2Combat.json" />
+    <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m3-effects.json" LogicalName="TomeStack.FixturePackM3Effects.json" />
   </ItemGroup>
 
   <ItemGroup>

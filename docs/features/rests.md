@@ -40,6 +40,8 @@ The plan is calculated from the sheet (both SRDs):
 
 **Nothing is skipped silently.** A recovery TomeStack cannot calculate (a formula that fails, or an assisted recovery) is listed under "Do these by hand" (`rest.recover-by-hand`). So is a spent resource whose content has no recovery rule at all (`rest.no-recovery-encoded`). Resources that recover only on the other kind of rest are left as they are.
 
+**Toggles (content v6, [m3-effects.md](m3-effects.md)):** a long rest proposes switching every active toggle off (`toggle:<content>:<id>`); untick it to keep one on.
+
 **Spell slots ([spellcasting.md](spellcasting.md)):** a long rest proposes every spent slot back (`spellSlots:<level>`), and both rests propose spent Pact Magic slots back (`pactSlots`). Each is ticked and can be unticked like any change.
 
 ## Commands

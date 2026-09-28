@@ -618,6 +618,48 @@ it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions
   expect(within(reactions).getByRole('button', { name: 'Roll Riposte damage (1d6)' })).toBeTruthy();
 });
 
+it('switches a toggled effect on and off, spends a chosen amount, and a long rest proposes the toggle off', async () => {
+  // M3 B2 (content v6) with the original fixture feat "Fixture Radiant Stance": a stance (+2 AC, spends 1 radiance) and a
+  // variable-cost surge. PB 2 at level 1, so 2 radiance.
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Stance');
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Duelist/ }));
+  await user.click(screen.getByText(/^Other content \(/)); // the summary, not the legend inside it
+  await user.click(await screen.findByRole('checkbox', { name: /^Fixture Radiant Stance/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Stance' });
+
+  const armorClass = () => Number(/^Armor Class: (\d+)/.exec(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent ?? '')![1]);
+  const before = armorClass();
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  await user.click(within(actions()).getByRole('checkbox', { name: /^Radiant stance/ }));
+  await waitFor(() => expect(armorClass()).toBe(before + 2));
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  expect(within(resources()).getByRole('heading', { name: 'Radiance: 1 of 2' })).toBeTruthy();
+
+  // The surge spends a chosen amount (1 to the cost or what is left): here only 1 is left.
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Radiant surge (1d6)' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await user.type(await within(lastRoll).findByRole('spinbutton', { name: 'Radiance to spend (1 to 1)' }), '1');
+  await user.click(within(lastRoll).getByRole('button', { name: /^Spend 1 Radiance/ }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Radiance: 0 of 2' })).toBeTruthy());
+
+  // The long rest proposes switching it off (and restores radiance).
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  expect(await within(rest).findByRole('checkbox', { name: /^Radiant stance: 1 → 0/ })).toBeTruthy();
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  await waitFor(() => expect(armorClass()).toBe(before));
+  expect(within(actions()).getByRole<HTMLInputElement>('checkbox', { name: /^Radiant stance/ }).checked).toBe(false);
+});
+
 it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {
   // D04 (M2 spellcasting) with the original fixture caster "Fixture Arcanist" (invented tables: 2 level 1 slots at level 1).
   const user = userEvent.setup();
