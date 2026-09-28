@@ -30,7 +30,7 @@ A Windows player can install TomeStack, create and play a level-1-to-20 SRD-base
 
 ## Separate replacement milestone (M3)
 
-After MVP, build a complete character using Arlo's current Stardust Guardian material and play an entire session without D&D Beyond for that character. Test complex choices, multiclass, spellcasting if applicable, item interactions, short/long rest recovery, update review and printable backup. Gaps become prioritized issues; passing requires the actual character, not only synthetic fixtures. This is a stronger gate than shipping MVP.
+After MVP, build a complete character using Arlo's current Stardust Guardian material and play an entire session without D&D Beyond for that character. Test complex choices, multiclass, spellcasting if applicable, item interactions, short/long rest recovery, update review and printable backup. Gaps become prioritized issues; passing requires the actual character, not only synthetic fixtures. This is a stronger gate than shipping MVP. *(Printable backup, owner decision 2026-09-28: a print view of the sheet from the app's print dialog, gap notes opt-in; `features/printable-backup.md`.)*
 
 ## Release checks
 

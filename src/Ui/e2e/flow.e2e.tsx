@@ -709,6 +709,50 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClass);
 });
 
+it('prints a sheet with its license notices, and gap notes only when ticked', async () => {
+  // M3 C4: the printable backup. The print dialog is the browser's; here window.print is a spy.
+  const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Print');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Print' });
+
+  const gaps = within(sheet).getByRole('region', { name: /^Gap notes/ });
+  const form = within(gaps).getByRole('form', { name: 'New gap note' });
+  await user.selectOptions(within(form).getByRole('combobox', { name: /^About/ }), 'Armor Class');
+  await user.type(within(form).getByRole('textbox', { name: /^What was missing or wrong/ }), 'Private note for the print test.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await within(gaps).findByText('Private note for the print test.');
+
+  await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
+  const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
+  expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
+  expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
+  expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
+  // The license notices of the sources used (the fixture sources here), and the version it was printed from.
+  await waitFor(() => expect(preview.querySelectorAll('.print-notice').length).toBeGreaterThan(0));
+  await waitFor(() => expect(preview.textContent).toMatch(/Printed from TomeStack \d+\.\d+\.\d+/));
+  // Gap notes are private: left out until ticked. No path ever appears.
+  expect(preview.textContent).not.toContain('Private note for the print test.');
+  expect(preview.textContent).not.toMatch(/[A-Za-z]:\\|\/Users\/|\\Users\\/);
+  await user.click(within(preview).getByRole('checkbox', { name: /^Include gap notes/ }));
+  expect(await within(preview).findByText(/Private note for the print test\./)).toBeTruthy();
+
+  await user.click(within(preview).getByRole('button', { name: 'Print…' }));
+  expect(print).toHaveBeenCalledTimes(1);
+  await user.click(within(preview).getByRole('button', { name: 'Close print preview' }));
+  expect(within(sheet).queryByRole('region', { name: 'Print preview' })).toBeNull();
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' }));
+  print.mockRestore();
+});
+
 it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {
   // D04 (M2 spellcasting) with the original fixture caster "Fixture Arcanist" (invented tables: 2 level 1 slots at level 1).
   const user = userEvent.setup();

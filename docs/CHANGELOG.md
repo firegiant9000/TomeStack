@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Printable backup (M3 C4; `docs/features/printable-backup.md`):** "Print…" on the sheet opens a print preview of the character: abilities, saves, skills, combat numbers, attacks, resources, spells, every feature with its source, page and manual step, and overrides. It ends with the license notices. Print it on paper or with "Microsoft Print to PDF" from the app's own print dialog. Gap notes are printed only if you tick them in. Nothing is sent anywhere, and no file path appears.
+
 - **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
 
 ### Migration

@@ -103,3 +103,19 @@ span.warn { color: var(--warn); }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
+
+/* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
+.print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
+.print-sheet table { margin: 0.5rem 0; }
+.print-title { font-size: 1.4rem; margin: 0.5rem 0 0; }
+.print-feature p { margin: 0.2rem 0; }
+.print-notice { font-size: 0.85em; color: var(--muted); }
+@media print {
+  :root { color-scheme: light; }
+  .app { display: block; }
+  .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
+  article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
+  .content { max-width: none; padding: 0; }
+  .print-sheet { border: none; padding: 0; }
+  .print-feature, tr { break-inside: avoid; }
+}

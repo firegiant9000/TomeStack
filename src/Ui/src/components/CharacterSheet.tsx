@@ -18,6 +18,7 @@ import { downloadBase64 } from '../files';
 import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { GapNotesPanel } from './GapNotesPanel';
+import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
 
@@ -247,6 +248,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const { character, sheet } = view;
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
+  const printButton = useRef<HTMLButtonElement>(null);
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -255,6 +257,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
   const [resting, setResting] = useState<RestPeriod>();
+  const [printing, setPrinting] = useState(false);
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -318,7 +321,21 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
+        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing}>
+          Print…
+        </button>
       </header>
+
+      {printing && (
+        <PrintView
+          view={view}
+          onError={onError}
+          onClose={() => {
+            setPrinting(false);
+            printButton.current?.focus();
+          }}
+        />
+      )}
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">

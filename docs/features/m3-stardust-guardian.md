@@ -36,4 +36,4 @@ The mechanics of the homebrew sources come from the calculated sheet, so the inv
 - The material in the local folder, and a passing run with the owner's `expectations.json`.
 - B2 is done for the expected gaps ([m3-effects.md](m3-effects.md): toggles, shared resources, variable costs). Any other gap the run finds gets the same treatment.
 - A whole session played with the character, recording gaps as notes ([gap-notes.md](gap-notes.md), B3), then fixing or accepting each.
-- Printable backup, if the character needs it. Multiclass slot combination (D04's M3 part) is done (C3, `spellcasting.md`).
+- Printable backup (C4, `printable-backup.md`) and multiclass slot combination (D04's M3 part; C3, `spellcasting.md`) are done.
