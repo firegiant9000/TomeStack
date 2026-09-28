@@ -33,6 +33,8 @@ The mechanics of the homebrew sources come from the calculated sheet, so the inv
 
 ## M3 exit gate: what is still needed
 
+The status of every M3 item is in [m3-acceptance.md](m3-acceptance.md).
+
 - The material in the local folder, and a passing run with the owner's `expectations.json`.
 - B2 is done for the expected gaps ([m3-effects.md](m3-effects.md): toggles, shared resources, variable costs). Any other gap the run finds gets the same treatment.
 - A whole session played with the character, recording gaps as notes ([gap-notes.md](gap-notes.md), B3), then fixing or accepting each.

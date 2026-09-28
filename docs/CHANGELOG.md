@@ -4,6 +4,8 @@
 
 ### Added
 
+- **M3 exit evidence (`docs/features/m3-acceptance.md`):** every M3 item is mapped to its executable acceptance. The exit gate is not met yet, because the owner's Stardust Guardian material and a played session are needed. The version stays 0.3.0.
+
 - **Source updates (M3 C7, SPEC I-06; `docs/features/publishing-and-updates.md`):** when a newer revision of something a character uses arrives, from an updated SRD pack or your own homebrew, the sheet's "Updates available" panel offers it. Review it to see what changes, then apply it or keep the current revision. Nothing updates by itself.
 
 - **Gap notes follow-ups (M3 C5; `docs/features/gap-notes.md`):**
