@@ -49,6 +49,8 @@ export interface Character {
   /** Spells known or prepared, per caster (character schema v6, D04). */
   spells?: KnownSpell[];
   updatedAt: string;
+  /** SPEC C-08: set while archived. Only `character.archive` / `character.unarchive` change it; a save keeps it. */
+  archivedAt?: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
 }
@@ -438,6 +440,17 @@ export interface CharacterSummary {
   name: string;
   rulesFamily: RulesFamilyId;
   updatedAt: string;
+  /** SPEC C-08: set while the character is archived. */
+  archivedAt?: string;
+}
+
+/** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */
+export interface ArchivePreview {
+  characterId: string;
+  name: string;
+  alreadyArchived: boolean;
+  gapNotes: number;
+  campaign?: string;
 }
 
 export interface RulesFamilyPolicy {

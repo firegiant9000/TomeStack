@@ -34,6 +34,7 @@ The primary user is a fifth-edition player or DM who wants a reliable local char
 - **C-05** HP, temporary HP, death saves, spell slots, resources, conditions, inspiration and inventory are editable. Short/long rests propose deterministic recovery, show the pending changes and let the user confirm or adjust context-dependent outcomes.
 - **C-06** A user can override a calculated field with value and optional reason. The sheet labels the override and shows the underlying result. Overrides survive recalculation until removed or invalidated by a reviewed migration.
 - **C-07** Character creation/level-up are recoverable drafts; the user can cancel without partial application. Backups and export/import are available offline.
+- **C-08** A character can be archived instead of deleted: after a preview that says what happens, the user confirms, and the character moves to a collapsed "Archived" list. Nothing is removed (its play state, gap notes, campaign membership and the content it uses stay), a full library backup includes it and restores it archived, and unarchiving brings it back unchanged. There is no hard delete. *(Added 2026-09-28, audit hardening.)*
 
 ### Campaigns, portability and presentation
 

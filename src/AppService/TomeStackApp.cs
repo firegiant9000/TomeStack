@@ -171,7 +171,7 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     public IReadOnlyList<CharacterSummary> ListCharacters() =>
-        [.. _store.ListCharacters().Select(c => new CharacterSummary(c.Id, c.Name, c.RulesFamily, c.UpdatedAt))];
+        [.. _store.ListCharacters().Select(Summary)];
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character
@@ -200,12 +200,13 @@ public sealed partial class TomeStackApp : IDisposable
     /// <c>character.save</c>. SPEC C-05: the play state of a stored character is kept as stored, whatever the payload
     /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
-    /// play state it is saved with.
+    /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
+    /// <c>character.unarchive</c> change it.
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play } : character);
+        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt } : character);
     }
 
     /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
@@ -352,7 +353,8 @@ public sealed record ContentOption(
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
+/// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

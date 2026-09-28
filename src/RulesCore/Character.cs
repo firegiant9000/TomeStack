@@ -99,6 +99,13 @@ public sealed record Character : IJsonOnDeserialized
 
     public DateTimeOffset UpdatedAt { get; init; }
 
+    /// <summary>
+    /// SPEC C-08: when the character was archived (moved out of the character list), or null. Library organisation only:
+    /// it never affects calculation. Optional and written only when set, so the character schema is unchanged; an older
+    /// build keeps it as extension data and lists the character as active.
+    /// </summary>
+    public DateTimeOffset? ArchivedAt { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 

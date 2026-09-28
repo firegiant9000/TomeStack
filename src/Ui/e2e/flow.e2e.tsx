@@ -1056,3 +1056,42 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   await expectStatus(/Short rest finished/);
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy());
 });
+
+it('archives a character after a preview, lists it apart, and brings it back (SPEC C-08)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Archivist');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
+  const characters = screen.getByRole('navigation', { name: 'Characters' });
+
+  // Preview first: "Keep it" changes nothing.
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  let confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
+  expect(confirm.textContent).toMatch(/Nothing is deleted/);
+  await user.click(within(confirm).getByRole('button', { name: 'Keep it' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+
+  // Confirmed: the character moves to the collapsed "Archived" list, and its sheet says so.
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
+  await user.click(within(confirm).getByRole('button', { name: 'Archive' }));
+  await expectStatus(/Archived E2E Archivist/);
+  const archivedList = await within(characters).findByRole('list', { name: 'Archived characters' });
+  expect(within(archivedList).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+  expect(archivedList.closest('details')!.open).toBe(false);
+  await waitFor(() => expect(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('heading', { name: 'Archived' })).toBeTruthy());
+
+  // Unarchive: back in the main list.
+  await user.click(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Unarchive' }));
+  await expectStatus(/back in the character list/);
+  await waitFor(() => expect(within(characters).queryByRole('list', { name: 'Archived characters' })).toBeNull());
+  expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+});

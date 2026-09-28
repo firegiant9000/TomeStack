@@ -54,6 +54,21 @@ export function App() {
     }
   }
 
+  const active = characters.filter((c) => !c.archivedAt);
+  const archived = characters.filter((c) => c.archivedAt);
+  const characterLink = (c: CharacterSummary) => (
+    <li key={c.id}>
+      <button
+        type="button"
+        className="link"
+        aria-current={screen.kind === 'sheet' && screen.view.character.id === c.id ? 'page' : undefined}
+        onClick={() => open(c.id)}
+      >
+        {c.name} <span className="tag">{c.rulesFamily}</span>
+      </button>
+    </li>
+  );
+
   async function chooseImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -147,20 +162,18 @@ export function App() {
           </button>
         </div>
         <ul className="character-list">
-          {characters.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="link"
-                aria-current={screen.kind === 'sheet' && screen.view.character.id === c.id ? 'page' : undefined}
-                onClick={() => open(c.id)}
-              >
-                {c.name} <span className="tag">{c.rulesFamily}</span>
-              </button>
-            </li>
-          ))}
-          {characters.length === 0 && <li className="hint">No characters yet.</li>}
+          {active.map(characterLink)}
+          {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
         </ul>
+        {/* SPEC C-08: archived characters are kept, listed apart and collapsed. */}
+        {archived.length > 0 && (
+          <details className="archived-characters">
+            <summary>Archived ({archived.length})</summary>
+            <ul className="character-list" aria-label="Archived characters">
+              {archived.map(characterLink)}
+            </ul>
+          </details>
+        )}
       </nav>
 
       <main className="content">
@@ -229,6 +242,11 @@ export function App() {
             onChanged={async (view) => {
               setScreen({ kind: 'sheet', view });
               await refresh();
+            }}
+            onArchiveChanged={async () => {
+              const id = screen.view.character.id;
+              await refresh();
+              setScreen({ kind: 'sheet', view: await client.getCharacter(id) });
             }}
           />
         )}

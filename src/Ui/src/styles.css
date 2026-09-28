@@ -60,6 +60,8 @@ button.link[aria-current='page'] { font-weight: 700; }
   color: var(--muted);
 }
 .character-list, .options { list-style: none; padding: 0; margin: 0.75rem 0 0; }
+.archived-characters { margin-top: 1rem; }
+.archived-characters summary { cursor: pointer; }
 .options li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.3rem 0; }
 .options .incompatible { color: var(--muted); }
 .option-name { font-weight: 600; }

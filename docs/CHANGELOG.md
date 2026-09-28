@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Older versions of TomeStack show an archived character as active.
+
 - **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
   - **Automated:** Fighting Style as a choice (Defense adds +1 AC while you wear armor), and Second Wind, Action Surge and Indomitable as resources that come back on rests. Second Wind rolls 1d10 plus your Fighter level. Also automated: the number of attacks (Extra Attack) and the Champion's critical range. The Champion's second Fighting Style is a choice too, and a style can't be picked twice.
   - **Armor:** light, medium and heavy armor and shields set Armor Class as before. They now also warn when you lack the Strength (speed 10 feet lower) or the training, and Stealth warns about disadvantage. Under 2024 rules a shield without training adds nothing to Armor Class; under 2014 rules it still does.

@@ -393,6 +393,11 @@
       "type": "string",
       "format": "date-time"
     },
+    "archivedAt": {
+      "description": "SPEC C-08 (2026-09-28): when the character was archived; absent while it is not. Optional and not a schema version change: older builds keep it as an unknown property and list the character as active.",
+      "type": "string",
+      "format": "date-time"
+    },
     "spells": {
       "description": "Spells known or prepared, each for one caster (the content id of the class or subclass with spellcasting).",
       "type": "array",
