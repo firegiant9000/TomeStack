@@ -453,6 +453,8 @@ export interface ContentOption {
   allowedInCampaign?: boolean;
   /** A newer published revision of the same content exists: listed so pinned names resolve, but not offered for new picks. */
   superseded?: boolean;
+  /** False when another revision grants it or offers it in a choice (class features, skill options): it is not pinned directly. */
+  standalone?: boolean;
   /** Spell options only (content schema v5). */
   spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
 }

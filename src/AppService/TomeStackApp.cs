@@ -37,7 +37,7 @@ public sealed partial class TomeStackApp : IDisposable
     internal SqliteStore Store => _store;
 
     /// <summary>
-    /// The bundled SRD packs (M1 item 1; spells since M2): always seeded. They are insert-only, so re-seeding is a no-op.
+    /// The bundled SRD packs (M1 item 1; spells, weapons and the caster classes since M2): always seeded. They are insert-only, so re-seeding is a no-op.
     /// Each family's packs share one source record (docs/licensing/srd-pack-review.md).
     /// </summary>
     public static IReadOnlyList<string> BundledPacks { get; } =
@@ -101,6 +101,12 @@ public sealed partial class TomeStackApp : IDisposable
         // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
         // characters still pin them and show their names) but are marked, so pickers offer only the newest.
         var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        // Content that another revision grants or offers in a choice (class features, skill options) arrives through it;
+        // pickers for directly pinned content leave it out.
+        var reachable = published
+            .SelectMany(r => r.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
+                .Concat(r.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options.Select(o => o.ContentId))))
+            .ToHashSet();
         return
         [
             .. published
@@ -109,16 +115,23 @@ public sealed partial class TomeStackApp : IDisposable
                     var source = sources.GetValueOrDefault(r.Provenance.SourceId);
                     return new ContentOption(
                         r.Reference, r.Kind, r.Name, r.RulesFamilies, r.RulesFamilies.Contains(rulesFamily),
-                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary,
+                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), Preview(r.Summary),
                         allowed?.Contains(r.Provenance.SourceId),
                         r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
                             ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
                             : null,
-                        Superseded: newest[r.ContentId] != r.RevisionId);
+                        Superseded: newest[r.ContentId] != r.RevisionId,
+                        Standalone: !reachable.Contains(r.ContentId));
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
     }
+
+    /// <summary>A listing needs only the start of a summary; full feature texts would make every list call megabytes.</summary>
+    private const int SummaryPreviewLength = 200;
+
+    private static string? Preview(string? summary) =>
+        summary is { Length: > SummaryPreviewLength } ? summary[..SummaryPreviewLength].TrimEnd() + "…" : summary;
 
     /// <summary>
     /// M1 item 3: schema, reference, formula and cycle problems for one revision, before it is published. Validates a
@@ -290,7 +303,8 @@ public sealed record ContentOption(
     string? Summary,
     bool? AllowedInCampaign = null,
     SpellSummary? Spell = null,
-    bool Superseded = false);
+    bool Superseded = false,
+    bool Standalone = true);
 
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);

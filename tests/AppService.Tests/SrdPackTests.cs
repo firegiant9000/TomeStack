@@ -93,6 +93,21 @@ public class SrdPackTests
     }
 
     [Fact]
+    public void Content_list_marks_granted_content_and_sends_only_a_summary_preview()
+    {
+        using var temp = new TempApp();
+
+        var options = temp.App.ListContent(RulesFamilies.Srd521);
+
+        // A class feature arrives through its class; a feat or a weapon is pinned or carried directly.
+        Assert.False(options.First(o => o.Name == "Arcane Recovery").Standalone);
+        Assert.False(options.First(o => o.Name == "Wizard Skill: Arcana").Standalone);
+        Assert.True(options.First(o => o.Name == "Longsword").Standalone);
+        // Full feature texts stay out of the listing (the builder never shows them), which keeps each call small.
+        Assert.All(options, o => Assert.True((o.Summary?.Length ?? 0) <= 201, o.Name));
+    }
+
+    [Fact]
     public void Content_list_offers_the_newest_revision_and_marks_the_superseded_Barbarian()
     {
         using var temp = new TempApp();

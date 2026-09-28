@@ -4,6 +4,13 @@
 
 ### Added
 
+- **The SRD spellcasting classes, levels 1–20, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):**
+  - **Classes:** Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard. Each has every class feature from level 1 to 20, its SRD subclass, its spellcasting tables, and its multiclass prerequisites and proficiencies.
+  - **Resources:** the main per-rest ones are tracked (Bardic Inspiration, Channel Divinity, Wild Shape, Lay on Hands, Sorcery Points, Arcane Recovery and others). Other features are shown as text.
+  - **2014/2024 differences, as content:**
+    - 2024 Paladins and Rangers cast from level 1;
+    - 2014 prepared casters use a formula and 2024 casters a table;
+    - 2014 known casters have fixed spell counts.
 - **The SRD weapon tables and the Barbarian's multiclass data (`docs/licensing/srd-pack-review.md`):**
   - **Weapons:** the 37 SRD 5.1 and 38 SRD 5.2.1 weapons are items with their damage, properties and range (and the 2024 mastery property's name), ready to equip and attack with.
   - **Barbarian:** a new revision of the SRD Barbarian in each family records its weapon proficiencies, its multiclass prerequisite (Strength 13) and its multiclass proficiencies. Under 2024 rules, a later-class Barbarian gains martial weapons but not simple ones.
@@ -51,6 +58,7 @@
 
 ### Changed
 
+- **The builder's "Other content" lists only content that is picked directly** (feats, items and the like), not class features or skill options, which arrive through their class. Content listings carry only the first 200 characters of each summary. With the bundled SRD classes, the full list made the builder slow.
 - The "Remove PDF" confirmation lists the entries that cite the PDF in alphabetical order.
 - Feature roll buttons moved from the features list to the new "Attacks and actions" panel, with the "Critical hit" toggle.
 

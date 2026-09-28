@@ -117,8 +117,9 @@ function BasicsStep(props: {
   const { basics, options, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const ofKind = (kind: ContentKind) => options.filter((o) => o.kind === kind);
-  // Spells are picked per caster in the choices step, never pinned as content.
-  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind));
+  // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
+  // offers (class features, skill options) arrives through it, so only standalone content is listed here.
+  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false);
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();

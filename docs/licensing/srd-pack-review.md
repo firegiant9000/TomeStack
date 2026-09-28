@@ -55,6 +55,35 @@ Each spell is one revision (kind `spell`, content schema v5) with its level, sch
   - Spot checks against the PDFs: Acid Arrow, Fireball, Cure Wounds, Eldritch Blast, Shield, Magic Missile, Sacred Flame, Ice Storm and Guiding Bolt, plus 10 random spells per family in the extraction reports.
 - **Residual risk:** a whitespace or line-join error in some of the 658 texts is possible. It would be a typographic error, not a changed rule. Report one with the spell and page, and a corrected revision replaces it (revisions are insert-only).
 
+## M2 extension: the eight spellcasting classes, levels 1–20 (2026-09-27)
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.1-classes.json` | Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard: proficiencies, every class feature of levels 1–20, the SRD subclass of each (College of Lore, Life Domain, Circle of the Land, Oath of Devotion, Hunter, Draconic Bloodline, The Fiend, School of Evocation), and the multiclassing prerequisites and proficiencies | pp. 11–55; multiclassing pp. 56–57 |
+| `srd-5.2.1-classes.json` | The same eight classes with their Core Traits, every class feature of levels 1–20, the SRD subclass of each (College of Lore, Life Domain, Circle of the Land, Oath of Devotion, Hunter, Draconic Sorcery, Fiend Patron, Evoker), and "As a Multiclass Character" | pp. 31–82; multiclassing pp. 24–25 |
+
+- **Method:**
+  - Scripts extracted the feature and subclass text from the hash-checked PDFs, verbatim apart from whitespace, hyphenation and column repair, and a space the italics left before punctuation.
+  - **Every number in the class tables was parsed a second time**, independently, by a script that reads each row's cells from the end of the row. It was diffed against the first extraction. The diff found two errors in the 5.2.1 transcription, both corrected:
+    - the Druid's cantrips (it had read the Wild Shape column);
+    - the Warlock's cantrips at level 10 (4, not 3).
+  - For 5.1 the two parses agree on every cell. Checks: `SrdCasterTests` (full casters reach 9th-level slots, half casters 5th, Pact Magic 4 slots of 5th level; 5.2.1 Paladins and Rangers have 2 slots at level 1).
+- **Structure:**
+  - Each class is one revision: hit die, saving throws and the skill choice for the starting class only, weapon proficiencies split by the multiclass subset, the multiclass prerequisites, a level-gated grant of each feature, and the subclass choice.
+  - The Spellcasting (or Pact Magic) feature carries the `spellcasting` effect with the tables, so it starts at its level (2nd for 2014 Paladins and Rangers).
+  - Each feature is a revision with its verbatim text. Most are reference only.
+  - A checked set has resources:
+    - 5.1: Bardic Inspiration, Channel Divinity, Wild Shape, Divine Sense, Lay on Hands, Cleansing Touch, Sorcery Points and Arcane Recovery;
+    - 5.2.1: Bardic Inspiration, Channel Divinity, Wild Shape, Lay On Hands, Sorcery Points and Arcane Recovery.
+    
+    Each maximum follows the class table or the feature text, and each resource effect's text says which (for example "2 at levels 2-5, 3 at 6-17, 4 at 18-20").
+  - Weapon keys follow the weapon table ("rapiers" → `rapier`).
+- **Known limitations of the text:**
+  - Some sub-headings inside long features (for example Pact Magic's "Spells Known of 1st Level and Higher") run into the following sentence.
+  - Tables inside features (domain and oath spells, Creating Spell Slots, the Circle of the Land terrains) are kept as plain text lines.
+  - Always-prepared subclass spells are text only: the player records them, and the sheet may flag them "not on the list".
+- **Not bundled:** the non-spellcasting classes other than the M1 Barbarian slice (Fighter, Monk, Rogue) and Barbarian levels 4–20, backgrounds, species and feats beyond the M1 slice, armor, and magic items. These were not in the owner's scope ("the full SRD casters").
+
 ## M2 extension: weapons and the Barbarian's multiclass data (2026-09-27)
 
 | Pack file | Content | Pages |
