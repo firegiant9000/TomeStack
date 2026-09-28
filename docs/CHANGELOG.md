@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Import review (M4 D5; `docs/features/pdf-import.md`):** on the Sources screen, a source of your own with a PDF has "Read the text and find candidates". Read some pages or the whole book, watch the progress, cancel or resume, and search the text. Then review the candidates, filtered by page, kind, confidence and status. Each shows its excerpt next to "Open page", what was read, what is unsure, and what it depends on. Edit it, accept it as a draft or as a reference entry, or ignore it. Accepted entries are drafts in the studio, where publishing checks them again.
+
 - **Reviewing candidates (M4 D4; `docs/features/pdf-import.md`):** before a candidate is accepted, TomeStack checks the entry it would become (rules, references, formulas) and shows what it depends on. It stays blocked while a field is unsure or a name it refers to is missing, until you edit it or accept it as a reference entry only. Accepting creates a draft; nothing applies until you publish it in the studio.
 
 - **Candidate detection (M4 D3; `docs/features/pdf-import.md`):** an import proposes candidates found in the book's text: spells, feats, class features, weapon and armor table rows, and class feature tables. Each has its excerpt, page, proposed rules, a confidence and what it is unsure of, and the names it mentions that are not installed. Nothing becomes content until you review it. Measured on the two SRDs: every spell is found with its level, and every bundled weapon and class is found.

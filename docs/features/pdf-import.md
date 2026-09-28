@@ -1,6 +1,26 @@
 # M4: PDF import (extraction, jobs, candidates, review)
 
-ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction, D2 import jobs, D3 candidate detection and D4 acceptance validation implemented**; the review UI (D5) follows in this document.
+ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **implemented (D1–D5)**. The exit evidence follows in D6 (`m4-acceptance.md`).
+
+## D5: the review UI (SPEC I-02)
+
+UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on the **Sources** screen, for each of the user's own sources with a PDF. Acceptance: the e2e test "reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio", run against the real DevHost and worker.
+
+- **Read the text and find candidates:** "Read these pages" (from and to) or "Read the whole document" starts a job. Its line shows progress while it runs (a `status` live region, polled), with Cancel and Resume. When it completes, it shows "Review N candidates".
+- **Search the text of <source>** (SPEC I-03): pages with a snippet and "Open page N".
+- **Candidates from <source>:** filters for page, kind, confidence (unsure first: below 80 %) and status (to review by default). Each candidate shows its name, kind, page, confidence and status.
+- **A candidate** (a region named "Candidate: <name>", focused when chosen) shows:
+  - its kind, page, family, confidence (labelled "a hint, not a check") and status;
+  - **Open page N** (the PDF viewer; the desktop app only);
+  - the **excerpt** beside it;
+  - **what was read**, with unsure fields marked "(unsure)";
+  - its **uncertainties**;
+  - its **unresolved references**, each with "Dismiss";
+  - an edit form: name, kind, text, and the proposed effects as JSON (they stay reference-only);
+  - the **check** (blockers, the validator's problems, what it depends on);
+  - **Accept as a draft**, which is disabled until the check passes;
+  - **Accept as reference** and **Ignore**.
+- **Publishing** is the homebrew studio's, with its own validation: an accepted candidate is a draft in the source, listed there like any other.
 
 ## D4: dependency and confidence validation (SPEC I-02, ADR-004)
 

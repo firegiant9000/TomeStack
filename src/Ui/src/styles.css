@@ -104,6 +104,12 @@ span.warn { color: var(--warn); }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
 
+/* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
+pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
+dt { font-weight: 600; }
+dd { margin: 0; }
+
 /* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
 .print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
 .print-sheet table { margin: 0.5rem 0; }

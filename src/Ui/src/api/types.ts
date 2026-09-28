@@ -630,6 +630,100 @@ export interface GapNote {
   updatedAt: string;
 }
 
+// ---- PDF import (M4; docs/features/pdf-import.md) ----
+
+export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted';
+
+/** An import job: extraction of one source's PDF, then candidate detection. Local only; never exported. */
+export interface ImportJob {
+  id: string;
+  sourceId: string;
+  firstPage: number;
+  lastPage?: number;
+  wholeDocument: boolean;
+  status: ImportJobStatus;
+  pageCount?: number;
+  nextPage?: number;
+  pagesDone: number;
+  pagesFailed: number;
+  pagesFromOcr: number;
+  pagesWithoutText: number;
+  /** A code such as `pdf.encrypted`; never text from the PDF. */
+  failureCode?: string;
+  failureMessage?: string;
+  candidates: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportSearchHit {
+  page: number;
+  snippet: string;
+}
+
+export interface DraftCandidate {
+  id: string;
+  sourceId: string;
+  page: PageRef;
+  excerpt: string;
+  proposedKind: ContentKind;
+  proposedName: string;
+  rulesFamilies: RulesFamilyId[];
+  proposedEffects: (Effect | Record<string, unknown>)[];
+  /** A UI hint, never permission (ADR-004). */
+  confidence: number;
+  uncertainties: string[];
+  unresolvedReferences: string[];
+  fields: Record<string, string>;
+  lowConfidenceFields: string[];
+  summary?: string;
+}
+
+export type CandidateStatus = 'pending' | 'accepted' | 'acceptedAsReference' | 'ignored';
+
+export interface StoredCandidate {
+  id: string;
+  jobId: string;
+  candidate: DraftCandidate;
+  /** The reviewer's version, when edited. */
+  edited?: DraftCandidate;
+  status: CandidateStatus;
+  draft?: ContentReference;
+  updatedAt: string;
+}
+
+export interface CandidateDependency {
+  kind: 'source' | 'content' | 'missing-content' | 'unresolved-name';
+  name: string;
+  reference?: ContentReference;
+}
+
+export interface CandidateCheck {
+  candidateId: string;
+  report: ValidationReport;
+  dependencies: CandidateDependency[];
+  blockers: Diagnostic[];
+  canAccept: boolean;
+  canAcceptAsReference: boolean;
+}
+
+export interface CandidateFilter {
+  page?: number;
+  kind?: ContentKind;
+  minConfidence?: number;
+  maxConfidence?: number;
+  status?: CandidateStatus;
+}
+
+export interface CandidateEdit {
+  name?: string;
+  kind?: ContentKind;
+  rulesFamilies?: RulesFamilyId[];
+  summary?: string;
+  effects?: unknown[];
+  dismissReferences?: string[];
+}
+
 /** `gap.listAll` (M3 C5): a note with its character's name. */
 export interface GapNoteListing {
   note: GapNote;

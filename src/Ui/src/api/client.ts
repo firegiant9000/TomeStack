@@ -4,6 +4,12 @@ import type {
   AppInfo,
   AttachmentInfo,
   Campaign,
+  CandidateCheck,
+  CandidateEdit,
+  CandidateFilter,
+  ImportJob,
+  ImportSearchHit,
+  StoredCandidate,
   DetachPreview,
   OpenPageOutcome,
   ContentRevision,
@@ -83,6 +89,23 @@ export function createClient(transport: Transport) {
     /** SPEC I-03: a page range (or the whole document) of an attached PDF as a draft reference-only entry; nothing is extracted. */
     importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
       call<ContentRevision>('source.importPages', { sourceId, ...request }),
+    // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
+    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) =>
+      call<ImportJob>('import.start', { sourceId, ...request }),
+    importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
+    listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
+    cancelImport: (jobId: string) => call<ImportJob>('import.cancel', { jobId }, { timeoutMs: null }),
+    resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
+    /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
+    searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
+    candidates: (jobId: string, filter: CandidateFilter = {}) => call<StoredCandidate[]>('import.candidates', { jobId, ...filter }),
+    /** Validation, dependencies and blockers of accepting; writes nothing. */
+    checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
+    editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
+    /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
+    acceptCandidate: (candidateId: string, asReference: boolean) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true }),
+    ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),

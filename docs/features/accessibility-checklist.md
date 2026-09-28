@@ -15,6 +15,12 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 - M2 items 3–5: the long-rest proposal, the equipment panel, the homebrew studio (source form, editor, rule groups named "Rule N: …", Check results) and the update review (captioned tables) are driven by role and name in the e2e tests. The rest proposal, editor and review move focus to their headings. The studio editor is long; a keyboard walkthrough of it is an owner check.
 - M2 item 6: the Sources screen names each source's list item, and removal asks in an `alertdialog` named "Remove <file>?". The PDF viewer window is WebView2's own viewer; its accessibility is Microsoft's, and a Narrator check of it is still open.
 - M2 item 7: the campaign form (named "Campaign"), the builder's "Campaign sources" group and the disabled options, which say "not allowed in this campaign" in text rather than only greyed out (1.4.1), are driven by role and name in the e2e test.
+- M3 C4 and C5, M4 D5 (2026-09-28):
+  - The print preview, "Report a gap" and the notes of all characters are driven by role and name, and so is the import review. That covers the "Read the text of …" region, the job progress (a `status` line while it runs), search results, and the "Candidates from …" region with labelled page, kind, confidence and status filters.
+  - Each candidate is a region named "Candidate: <name>". Choosing one moves focus to its heading (2.4.3), and closing the print preview returns focus to "Print…".
+  - The confidence is text ("72 %", "a hint, not a check"), and unsure fields say "(unsure)", so colour is not the only signal (1.4.1).
+  - Blockers are listed ("Blocks accepting") beside the disabled "Accept as a draft", and "Accept as reference" stays available.
+  - A keyboard-only and Narrator pass of the review screen is an owner check (items 15 and 3).
 
 ## Checklist
 

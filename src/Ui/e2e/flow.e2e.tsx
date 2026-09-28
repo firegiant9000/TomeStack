@@ -1,6 +1,8 @@
 // End-to-end UI flow against the real DevHost (same CommandDispatcher as the shell): create -> sheet -> override
 // -> export -> import. Only the transport differs from the desktop app: HTTP to loopback instead of the WebView2
 // bridge, so export takes the download fallback instead of the native Save dialog.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -459,6 +461,95 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await screen.findByRole('article', { name: 'E2E Reader' });
   expect(screen.queryByRole('button', { name: 'Open E2E Cited Feat, p. 7' })).toBeNull();
   expect(within(screen.getByRole('region', { name: 'Features' })).getByText('E2E Cited Feat')).toBeTruthy();
+});
+
+it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
+  // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Grimoire', ['srd-5.2.1']);
+  // jsdom gives import.meta.url no file scheme; the e2e run starts in src/Ui (npm --prefix).
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Grimoire' })).getByRole('region', { name: 'Read the text of E2E Grimoire' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Grimoire' })).getByRole('button', { name: 'Read the whole document' }));
+  const reviewButton = await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 });
+  // Page 6 has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
+  expect(within(reader()).getByText(/whole document: completed, 6 pages read, (1 by OCR, )?1 without text, 9 candidates\./)).toBeTruthy();
+
+  // SPEC I-03: the read text is searchable within this source.
+  await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Grimoire' }), 'hookblade');
+  await user.click(within(reader()).getByRole('button', { name: 'Search' }));
+  expect((await within(reader()).findByRole('list', { name: 'Search results' })).textContent).toMatch(/p\. 4.*Fixture Hookblade/);
+
+  await user.click(reviewButton);
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Grimoire' });
+  const list = () => within(panel()).getByRole('list', { name: 'Candidates' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Grimoire' });
+  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(9));
+  const kind = within(panel()).getByRole('combobox', { name: 'Kind' });
+  const detail = (name: string) => within(panel()).findByRole('region', { name: `Candidate: ${name}` });
+
+  // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
+  await user.selectOptions(kind, 'spell');
+  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
+  await user.click(within(list()).getByRole('button', { name: 'Fixture Ember Lance' }));
+  const ember = await detail('Fixture Ember Lance');
+  await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
+  expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
+  expect(ember.querySelector('dl[aria-label="What was read"]')!.textContent).toMatch(/level2schoolevocationcastingtimeAction/);
+  await user.click(within(ember).getByRole('button', { name: 'Open page 2' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
+  const acceptEmber = within(ember).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptEmber.disabled).toBe(false));
+  await user.click(acceptEmber);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in the studio/));
+
+  // Ignore the other spell.
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));
+  await user.click(within(await detail('Fixture Frost Veil')).getByRole('button', { name: 'Ignore' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ignored Fixture Frost Veil/));
+
+  // An unresolved reference blocks "Accept as a draft"; "Accept as reference" keeps the text and page only.
+  await user.selectOptions(kind, 'feature');
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Stormcall' }));
+  const stormcall = await detail('Fixture Stormcall');
+  expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
+  await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
+  expect(within(stormcall).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' }).disabled).toBe(true);
+  await user.click(within(stormcall).getByRole('button', { name: 'Accept as reference' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
+
+  // The feat: accepted as a draft, then published in the studio, which validates it again.
+  await user.selectOptions(kind, 'feat');
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Keen Watcher' }));
+  const feat = await detail('Fixture Keen Watcher');
+  const acceptFeat = within(feat).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptFeat.disabled).toBe(false));
+  await user.click(acceptFeat);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Keen Watcher is now a draft/));
+
+  // Only drafts exist: nothing is active until it is published.
+  const entries = await client.contentBySource(source.id);
+  expect(entries.map((e) => [e.name, e.latest.status]).sort()).toEqual([
+    ['Fixture Ember Lance', 'draft'],
+    ['Fixture Keen Watcher', 'draft'],
+    ['Fixture Stormcall', 'draft'],
+  ]);
+  expect(entries.find((e) => e.name === 'Fixture Keen Watcher')!.latest.effects.every((e) => e.automation === 'reference')).toBe(true);
+
+  const studio = screen.getByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await user.click(studio);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit Fixture Keen Watcher' }));
+  const editor = screen.getByRole('region', { name: /^Edit Fixture Keen Watcher/ });
+  await user.click(within(editor).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Keen Watcher.'));
+  expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {

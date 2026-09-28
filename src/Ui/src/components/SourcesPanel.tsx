@@ -3,6 +3,7 @@ import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { AttachmentInfo, DetachPreview, SourceRecord } from '../api/types';
 import { readFileAsBase64 } from '../files';
+import { ImportPanel } from './ImportPanel';
 
 interface Props {
   onError: (error: unknown) => void;
@@ -193,7 +194,10 @@ export function SourcesPanel({ onError, onStatus }: Props) {
                 )}
               </div>
               {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && (
-                <PageImportForm source={source} onError={onError} onStatus={onStatus} />
+                <>
+                  <PageImportForm source={source} onError={onError} onStatus={onStatus} />
+                  <ImportPanel source={source} onError={onError} onStatus={onStatus} />
+                </>
               )}
               {removing?.sourceId === source.id && (
                 <div role="alertdialog" aria-label={`Remove ${removing.originalFileName}?`} className="play-panel">
