@@ -20,7 +20,7 @@ All content here is **original** and was written for TomeStack tests. It contain
 
 ## Private fixtures (not in the repo)
 
-Material that may not be published, starting with the owner's **Stardust Guardian** homebrew (MVP definition of done 3, M3), goes in `tests/RulesFixtures/local/`. The acceptance reads `local/stardust-guardian/character.tomestack.zip` (a "Personal backup" export) and an optional `expectations.json`, and writes `report.md` there. See `docs/features/m3-stardust-guardian.md`. That folder is gitignored, because the repository is public. Nothing in the gate reads from it, so the gate passes without it. A test that needs it must skip when the folder is absent and must never copy its contents into a committed file, a log or a snapshot. Before committing, `git status` must not show anything under `local/`.
+Material that may not be published, starting with the owner's **Stardust Guardian** homebrew (MVP definition of done 3, M3), goes in `tests/RulesFixtures/local/`. The acceptance reads `local/stardust-guardian/character.tomestack.zip` (a "Personal backup" export) and an optional `expectations.json`, and writes `report.md` there. See `docs/features/m3-stardust-guardian.md`. The M4 exit run reads any third-party test PDF in `local/third-party/` and writes a counts-only `report.md` there (`docs/features/m4-acceptance.md`). That folder is gitignored, because the repository is public. Nothing in the gate reads from it, so the gate passes without it. A test that needs it must skip when the folder is absent and must never copy its contents into a committed file, a log or a snapshot. Before committing, `git status` must not show anything under `local/`.
 
 ## Acceptance example (level 5, PB +3; base Dex 14, Wis 13)
 

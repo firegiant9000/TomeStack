@@ -4,6 +4,8 @@
 
 ### Added
 
+- **M4 exit evidence (`docs/features/m4-acceptance.md`):** the original fixture book is imported through the real worker in the gate, reviewed, and nothing is active without approval. The run on a third-party test PDF is prepared (it reads a private local folder and reports counts only) and still owed, so the version stays 0.3.0.
+
 - **Import review (M4 D5; `docs/features/pdf-import.md`):** on the Sources screen, a source of your own with a PDF has "Read the text and find candidates". Read some pages or the whole book, watch the progress, cancel or resume, and search the text. Then review the candidates, filtered by page, kind, confidence and status. Each shows its excerpt next to "Open page", what was read, what is unsure, and what it depends on. Edit it, accept it as a draft or as a reference entry, or ignore it. Accepted entries are drafts in the studio, where publishing checks them again.
 
 - **Reviewing candidates (M4 D4; `docs/features/pdf-import.md`):** before a candidate is accepted, TomeStack checks the entry it would become (rules, references, formulas) and shows what it depends on. It stays blocked while a field is unsure or a name it refers to is missing, until you edit it or accept it as a reference entry only. Accepting creates a draft; nothing applies until you publish it in the studio.

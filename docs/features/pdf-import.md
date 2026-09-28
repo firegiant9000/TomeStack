@@ -1,6 +1,6 @@
 # M4: PDF import (extraction, jobs, candidates, review)
 
-ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **implemented (D1–D5)**. The exit evidence follows in D6 (`m4-acceptance.md`).
+ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **implemented (D1–D5)**. The exit evidence is in [m4-acceptance.md](m4-acceptance.md).
 
 ## D5: the review UI (SPEC I-02)
 
