@@ -43,13 +43,21 @@ public sealed record ContentReference(Guid ContentId, Guid RevisionId);
 /// One immutable revision of a content entity. Identity is <see cref="ContentId"/>/<see cref="RevisionId"/>,
 /// never <see cref="Name"/>. Unknown JSON fields round-trip through <see cref="Extensions"/>.
 /// </summary>
-public sealed record ContentRevision
+public sealed record ContentRevision : IJsonOnDeserialized
 {
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>v2: typed effects (ADR-003). v1 revisions are upcast on read; see <see cref="UpgradedFrom"/>.</summary>
+    public const int CurrentSchemaVersion = 2;
+
+    private int _schemaVersion = CurrentSchemaVersion;
 
     public required Guid ContentId { get; init; }
     public required Guid RevisionId { get; init; }
-    public int SchemaVersion { get; init; } = CurrentSchemaVersion;
+
+    public int SchemaVersion { get => _schemaVersion; init => _schemaVersion = value; }
+
+    /// <summary>The schema version the JSON was written in, when it was older and upcast on read.</summary>
+    [JsonIgnore]
+    public int? UpgradedFrom { get; private set; }
     public required ContentKind Kind { get; init; }
     public required string Name { get; init; }
     public required IReadOnlyList<string> RulesFamilies { get; init; }
@@ -63,24 +71,18 @@ public sealed record ContentRevision
 
     [JsonIgnore]
     public ContentReference Reference => new(ContentId, RevisionId);
-}
 
-/// <summary>
-/// M0 declarative effect. <see cref="Type"/> is an open string so unknown effects survive
-/// round trips and degrade to reference-only diagnostics. M1 replaces this with the typed effect AST (ADR-003).
-/// </summary>
-public sealed record Effect
-{
-    public const string AbilityScoreIncrease = "abilityScoreIncrease";
-    public const string InitiativeBonus = "initiativeBonus";
-
-    public required string Id { get; init; }
-    public required string Type { get; init; }
-    public Ability? Ability { get; init; }
-    public int? Amount { get; init; }
-    public AutomationStatus Automation { get; init; } = AutomationStatus.Automatic;
-    public string? Text { get; init; }
-
-    [JsonExtensionData]
-    public Dictionary<string, JsonElement>? Extensions { get; init; }
+    /// <summary>
+    /// ADR-003 migration: schemaVersion 1 differs only in the effect shape, which <see cref="EffectJsonConverter"/>
+    /// already mapped while reading. Record the upcast. Versions newer than supported are left as they are, so
+    /// callers refuse them with a diagnostic.
+    /// </summary>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        if (_schemaVersion is >= 1 and < CurrentSchemaVersion)
+        {
+            UpgradedFrom = _schemaVersion;
+            _schemaVersion = CurrentSchemaVersion;
+        }
+    }
 }

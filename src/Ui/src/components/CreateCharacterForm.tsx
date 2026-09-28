@@ -91,6 +91,7 @@ export function CreateCharacterForm({ rulesFamilies, onCreated, onError }: Props
         {policy && (
           <p className="hint">
             Ability score increases under this family come from <strong>{policy.abilityIncreaseSource}</strong> content.
+            Backgrounds {policy.backgroundGrantsFeat ? 'can' : 'cannot'} grant a feat.
           </p>
         )}
       </fieldset>

@@ -16,6 +16,10 @@ src/Ui/dist/
 *.db
 *.db-wal
 *.db-shm
+*.db.v*.bak
+smoke-result.json
+errors.log
+errors.log.1
 devhost.token
 
 # OS / editors

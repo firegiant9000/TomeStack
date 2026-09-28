@@ -14,10 +14,15 @@ public class InitiativeTraceTests
         Assert.Equal(4, initiative.ComputedValue);
         Assert.Empty(initiative.Warnings);
         Assert.Empty(sheet.Diagnostics);
+        // The trace includes the fields initiative reads (Dex score, then Dex modifier), then initiative's own steps.
         Assert.Equal(
-            [("base", 14, 14), ("add", 2, 16), ("add", 1, 17), ("derive", 17, 3), ("add", 1, 4)],
+            [("base", 14, 14), ("add", 2, 16), ("add", 1, 17), ("derive", 17, 3), ("base", 3, 3), ("add", 1, 4)],
             initiative.Trace.Select(t => (t.Operation, t.Amount ?? 0, t.Result)));
-        Assert.Equal([1, 2, 3, 4, 5], initiative.Trace.Select(t => t.Order));
+        Assert.Equal([1, 2, 3, 4, 5, 6], initiative.Trace.Select(t => t.Order));
+        Assert.Equal(
+            ["ability.dex.score", "ability.dex.score", "ability.dex.score", "ability.dex.mod", "initiative", "initiative"],
+            initiative.Trace.Select(t => t.Field));
+        Assert.Equal([new TraceInput("ability.dex.score", 17)], initiative.Trace[3].Inputs);
 
         var quickfoot = initiative.Trace[1].Origin;
         Assert.Equal(TraceOriginKind.Content, quickfoot.Kind);
@@ -40,7 +45,7 @@ public class InitiativeTraceTests
 
         Assert.Equal(3, initiative.Value);
         Assert.Equal(
-            [("base", 14, 14), ("add", 2, 16), ("derive", 16, 3)],
+            [("base", 14, 14), ("add", 2, 16), ("derive", 16, 3), ("base", 3, 3)],
             initiative.Trace.Select(t => (t.Operation, t.Amount ?? 0, t.Result)));
         Assert.Equal(Fixtures.Courier, initiative.Trace[1].Origin.Content);
         Assert.Equal(Fixtures.Source2024, initiative.Trace[1].Origin.SourceId);

@@ -8,7 +8,12 @@ namespace TomeStack.AppService.Packages;
 public sealed record PackageManifest
 {
     public const string FormatName = "tomestack.package";
-    public const int CurrentFormatVersion = 1;
+
+    /// <summary>
+    /// v2 (ADR-003): content entries use content schemaVersion 2 (typed effects). v1 packages still import, and their
+    /// revisions are upcast. Builds that only know v1 refuse v2 with a clear message instead of misreading effects.
+    /// </summary>
+    public const int CurrentFormatVersion = 2;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
@@ -26,7 +31,14 @@ public sealed record LicenseNotice(Guid SourceId, string Title, string Publisher
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 
-public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemAction Action, string? Detail = null);
+/// <summary>One field that differs between the local record and the package's copy.</summary>
+public sealed record FieldChange(string Field, string? Local, string? Imported);
+
+/// <param name="Changes">For a source that differs from the local record: every differing field. Apply needs a <see cref="SourceChoice"/> for it.</param>
+public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemAction Action, string? Detail = null, IReadOnlyList<FieldChange>? Changes = null);
+
+/// <summary>What to do with a package source whose metadata (e.g. license) differs from the local record.</summary>
+public enum SourceChoice { KeepLocal, UseImported }
 
 public sealed record PackagePreview(
     bool CanApply,
@@ -35,7 +47,8 @@ public sealed record PackagePreview(
     IReadOnlyList<Diagnostic> Errors,
     IReadOnlyList<Diagnostic> Warnings);
 
-public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters);
+/// <param name="BackupFile">Path relative to the data directory of the pre-import backup, when characters were replaced.</param>
+public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters, string? BackupFile = null);
 
 public sealed record ExportResult(string FileName, byte[] Content, PackageManifest Manifest);
 

@@ -115,6 +115,7 @@ export function App() {
             key={screen.view.character.id}
             view={screen.view}
             onError={onError}
+            onStatus={(text) => setMessage({ tone: 'status', text })}
             onChanged={async (view) => {
               setScreen({ kind: 'sheet', view });
               await refresh();
@@ -123,18 +124,24 @@ export function App() {
         )}
         {screen.kind === 'import' && (
           <ImportPreview
+            key={`${screen.fileName}-${screen.base64.length}`}
             {...screen}
             onError={onError}
             onCancel={() => setScreen({ kind: 'empty' })}
             onApplied={async (result) => {
               await refresh();
-              setMessage({
-                tone: 'status',
-                text: `Imported: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged.`,
-              });
+              // Open first: open() clears the message, which used to hide this summary and the backup location.
               const first = result.characters[0];
               if (first) await open(first);
               else setScreen({ kind: 'empty' });
+              setMessage({
+                tone: 'status',
+                text:
+                  `Imported: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged.` +
+                  (result.backupFile
+                    ? ` The replaced copy was backed up to ${result.backupFile} in your data folder; import that file to restore it.`
+                    : ''),
+              });
             }}
           />
         )}

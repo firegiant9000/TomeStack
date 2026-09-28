@@ -6,23 +6,32 @@ export interface CommandError {
   code: string;
   message: string;
   diagnostics?: { code: string; message: string }[];
+  /** Set for unexpected failures; the details are only in the local error log. */
+  correlationId?: string;
 }
 
 export class TomeStackError extends Error {
   readonly code: string;
   readonly diagnostics: { code: string; message: string }[];
+  readonly correlationId?: string;
 
   constructor(error: CommandError) {
     super(error.message);
     this.name = 'TomeStackError';
     this.code = error.code;
     this.diagnostics = error.diagnostics ?? [];
+    this.correlationId = error.correlationId;
   }
 }
 
 type CommandResponse = { id: string | null; ok: true; result: unknown } | { id: string | null; ok: false; error: CommandError };
 
-export type Transport = (command: string, payload?: unknown) => Promise<unknown>;
+export interface CallOptions {
+  /** Overrides the transport's timeout; `null` waits indefinitely (for commands that wait on the user, like a native dialog). */
+  timeoutMs?: number | null;
+}
+
+export type Transport = (command: string, payload?: unknown, options?: CallOptions) => Promise<unknown>;
 
 export interface WebViewBridge {
   postMessage(message: unknown): void;
@@ -36,7 +45,10 @@ function unwrap(response: CommandResponse): unknown {
 
 export function createBridgeTransport(bridge: WebViewBridge, timeoutMs = 30_000): Transport {
   let nextId = 1;
-  const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
+  const pending = new Map<
+    string,
+    { resolve: (value: unknown) => void; reject: (error: unknown) => void; timer?: ReturnType<typeof setTimeout> }
+  >();
 
   bridge.addEventListener('message', (event) => {
     const response = event.data as CommandResponse;
@@ -52,25 +64,30 @@ export function createBridgeTransport(bridge: WebViewBridge, timeoutMs = 30_000)
     }
   });
 
-  return (command, payload) =>
+  return (command, payload, options) =>
     new Promise((resolve, reject) => {
       const id = String(nextId++);
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new TomeStackError({ code: 'timeout', message: `No response to ${command}.` }));
-      }, timeoutMs);
+      const limit = options?.timeoutMs === undefined ? timeoutMs : options.timeoutMs;
+      const timer =
+        limit === null
+          ? undefined
+          : setTimeout(() => {
+              pending.delete(id);
+              reject(new TomeStackError({ code: 'timeout', message: `No response to ${command}.` }));
+            }, limit);
       pending.set(id, { resolve, reject, timer });
       bridge.postMessage({ id, command, payload });
     });
 }
 
-export function createHttpTransport(endpoint = '/api/command'): Transport {
+/** `headers` lets tests call DevHost directly with its token; in the browser the Vite proxy adds it. */
+export function createHttpTransport(endpoint = '/api/command', headers: Record<string, string> = {}): Transport {
   let nextId = 1;
   return async (command, payload) => {
     const id = String(nextId++);
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, command, payload }),
     });
     if (!response.ok) {
@@ -90,6 +107,6 @@ declare global {
 }
 
 export function detectTransport(): Transport {
-  const bridge = window.chrome?.webview;
+  const bridge = typeof window === 'undefined' ? undefined : window.chrome?.webview;
   return bridge ? createBridgeTransport(bridge) : createHttpTransport();
 }

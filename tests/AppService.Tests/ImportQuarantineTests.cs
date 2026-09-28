@@ -13,7 +13,7 @@ public class ImportQuarantineTests
         var candidate = new DraftCandidate(
             Guid.NewGuid(), sourceId, new PageRef(40), "Original excerpt placeholder.",
             ContentKind.Feat, "Candidate Swiftness", [RulesFamilies.Srd51],
-            [new Effect { Id = "swift", Type = Effect.InitiativeBonus, Amount = 5 }],
+            [new ModifierEffect { Id = "swift", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "5" }],
             Confidence: 0.99, Uncertainties: []);
 
         var draft = CandidateQuarantine.ToDraftRevision(candidate);

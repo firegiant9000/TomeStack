@@ -4,6 +4,8 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
+const transportOnly = 'Use the api client; only src/api/transport.ts talks to the transport.';
+
 export default defineConfig([
   globalIgnores(['dist', 'node_modules']),
   {
@@ -13,12 +15,19 @@ export default defineConfig([
     rules: {
       'no-restricted-globals': [
         'error',
-        { name: 'fetch', message: 'Use the api client; only src/api/transport.ts talks to the transport.' },
+        ...['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource'].map((name) => ({ name, message: transportOnly })),
+      ],
+      'no-restricted-properties': [
+        'error',
+        ...['window', 'globalThis', 'self'].flatMap((object) =>
+          ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'chrome'].map((property) => ({ object, property, message: transportOnly })),
+        ),
       ],
     },
   },
   {
-    files: ['src/api/transport.ts'],
-    rules: { 'no-restricted-globals': 'off' },
+    // The transport, and the e2e harness that health-checks DevHost from Node, are the only fetch and bridge users.
+    files: ['src/api/transport.ts', 'e2e/devhost.setup.ts'],
+    rules: { 'no-restricted-globals': 'off', 'no-restricted-properties': 'off' },
   },
 ]);

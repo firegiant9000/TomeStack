@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/source.v1.schema.json",
+  "title": "TomeStack source record (v1)",
+  "description": "SPEC S-01. A source of rules content and its rights metadata. Serialized as camelCase; null fields are omitted. pdfRef is machine-local and never exported.",
+  "type": "object",
+  "required": ["id", "title", "publisher", "rulesFamilies", "editionVersion", "license", "redistributable"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "title": { "type": "string", "minLength": 1 },
+    "publisher": { "type": "string", "minLength": 1 },
+    "rulesFamilies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rulesFamily" } },
+    "editionVersion": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "redistributable": { "type": "boolean" },
+    "attribution": { "type": "string" },
+    "importedAt": { "type": "string", "format": "date-time" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "pdfRef": { "type": "string" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] }
+  }
+}

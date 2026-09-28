@@ -1,4 +1,5 @@
-// Browser-native file handling. Works in both a normal browser and WebView2 (native dialogs).
+// Browser-native file handling. In the shell, export uses the native Save dialog (package.saveAs) instead;
+// downloadBase64 is the fallback for browser development against DevHost.
 
 export function downloadBase64(fileName: string, base64: string, mimeType = 'application/zip'): void {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));

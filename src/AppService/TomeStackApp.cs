@@ -22,10 +22,14 @@ public sealed class TomeStackApp : IDisposable
         DataDirectory = dataDirectory;
         _time = time;
         _store = new SqliteStore(Path.Combine(dataDirectory, DatabaseFileName));
-        _packages = new PackageService(_store, time);
+        _packages = new PackageService(_store, time, Path.Combine(dataDirectory, PackageService.BackupFolderName));
+        ErrorLog = new FileErrorLog(Path.Combine(dataDirectory, "logs"), time);
     }
 
     public string DataDirectory { get; }
+
+    /// <summary>Local-only log for unexpected failures (never sent to the UI).</summary>
+    public IErrorLog ErrorLog { get; }
 
     internal SqliteStore Store => _store;
 
@@ -53,7 +57,8 @@ public sealed class TomeStackApp : IDisposable
 
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
     {
-        RulesFamilies.Get(rulesFamily);
+        if (!RulesFamilies.IsKnown(rulesFamily))
+            throw new AppValidationException([new("rules-family.unknown", $"Rules family '{rulesFamily}' is not supported.")]);
         var sources = _store.ListSources().ToDictionary(s => s.Id);
         return
         [
@@ -109,7 +114,8 @@ public sealed class TomeStackApp : IDisposable
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
-    public ImportResult ApplyImport(byte[] package) => _packages.Apply(package);
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
+        _packages.Apply(package, sourceChoices);
 
     public void Dispose() => _store.Dispose();
 
@@ -150,8 +156,11 @@ public sealed record CharacterView(Character Character, CharacterSheet Sheet);
 
 public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
 
-public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems)
+/// <param name="code">Error code at the transport boundary: <c>validation</c>, or <c>unsupported</c> for a missing host capability.</param>
+public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems, string code = "validation")
     : Exception(string.Join(" ", problems.Select(p => p.Message)))
 {
     public IReadOnlyList<Diagnostic> Problems { get; } = problems;
+
+    public string Code { get; } = code;
 }

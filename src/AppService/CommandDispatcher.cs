@@ -7,22 +7,27 @@ namespace TomeStack.AppService;
 /// <summary>
 /// Transport-neutral JSON command protocol (ADR-006). Request:
 /// <c>{ "id": "1", "command": "character.get", "payload": { ... } }</c>. Response:
-/// <c>{ "id": "1", "ok": true, "result": ... }</c> or <c>{ "id": "1", "ok": false, "error": { "code", "message", "diagnostics" } }</c>.
+/// <c>{ "id": "1", "ok": true, "result": ... }</c> or <c>{ "id": "1", "ok": false, "error": { "code", "message", "diagnostics", "correlationId" } }</c>.
+/// Unexpected failures return a generic message and a correlation id; details go to the local error log only.
 /// </summary>
-public sealed class CommandDispatcher(TomeStackApp app)
+public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = null, IHostServices? host = null)
 {
+    private readonly IErrorLog _errorLog = errorLog ?? app.ErrorLog;
+
     /// <summary>Base64 package payloads dominate; this bounds a 50 MB package plus envelope.</summary>
     public const int MaxRequestChars = 72 * 1024 * 1024;
 
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "character.list", "character.get", "character.create", "character.save",
-        "package.export", "package.preview", "package.apply",
+        "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
     public string Dispatch(string requestJson)
     {
+        ArgumentNullException.ThrowIfNull(requestJson);
         string? id = null;
+        string command = "(unparsed)";
         try
         {
             if (requestJson.Length > MaxRequestChars)
@@ -30,25 +35,38 @@ public sealed class CommandDispatcher(TomeStackApp app)
             var request = JsonSerializer.Deserialize<CommandRequest>(requestJson, RulesJson.Compact)
                 ?? throw new JsonException("Empty request.");
             id = request.Id;
-            var result = Execute(request.Command, request.Payload);
+            command = request.Command ?? throw new JsonException("Request has no command.");
+            var result = Execute(command, request.Payload);
             return JsonSerializer.Serialize(new { id, ok = true, result }, RulesJson.Compact);
         }
         catch (AppValidationException ex)
         {
-            return Error(id, "validation", ex.Message, ex.Problems);
+            return Error(id, ex.Code, ex.Message, ex.Problems);
         }
         catch (PackageException ex)
         {
             return Error(id, "package", ex.Message, ex.Errors);
         }
-        catch (Exception ex) when (ex is JsonException or ArgumentException or FormatException or KeyNotFoundException)
+        catch (JsonException ex)
+        {
+            // System.Text.Json messages name a JSON path and position, never a file path.
+            return Error(id, "bad-request", ex.Message);
+        }
+        catch (UnknownCommandException ex)
         {
             return Error(id, "bad-request", ex.Message);
         }
+        catch (FormatException)
+        {
+            return Error(id, "bad-request", "The request contains a value in the wrong format (for example, package data that is not base64).");
+        }
         catch (Exception ex)
         {
-            // Transport boundary: one failing command must not take down the shell or host.
-            return Error(id, "internal", ex.Message);
+            // Transport boundary: one failing command must not take down the shell or host. The message of an
+            // unexpected exception can contain paths or internals, so it stays in the local log.
+            var correlationId = FileErrorLog.NewCorrelationId();
+            _errorLog.Record(correlationId, command, ex);
+            return Error(id, "internal", $"Something went wrong. Reference {correlationId}; details are in the local error log.", correlationId: correlationId);
         }
     }
 
@@ -61,9 +79,10 @@ public sealed class CommandDispatcher(TomeStackApp app)
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
+        "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
-        "package.apply" => app.ApplyImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
-        _ => throw new KeyNotFoundException($"Unknown command '{command}'."),
+        "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
+        _ => throw new UnknownCommandException(command),
     };
 
     private object ExportPackage(ExportPayload payload)
@@ -72,13 +91,52 @@ public sealed class CommandDispatcher(TomeStackApp app)
         return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
     }
 
+    /// <summary>
+    /// Exports and writes the package where the user chooses in a native Save dialog. The page never supplies
+    /// a path and the package bytes never cross the bridge.
+    /// </summary>
+    private SaveOutcome SavePackageAs(ExportPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        var export = app.ExportCharacters(payload.CharacterIds);
+        var path = host.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
+        if (path is null)
+            return new SaveOutcome(false, null);
+
+        var temporary = path + ".partial";
+        try
+        {
+            File.WriteAllBytes(temporary, export.Content);
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            TryDelete(temporary);
+            throw new AppValidationException([new("package.save-failed", $"Could not save {Path.GetFileName(path)}. Check that the folder exists and is writable, then try again.")]);
+        }
+        return new SaveOutcome(true, Path.GetFileName(path));
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
+    }
+
+    private object ApplyImport(PackagePayload payload) =>
+        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices);
+
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element
             ? element.Deserialize<T>(RulesJson.Compact) ?? throw new JsonException("Payload is null.")
             : throw new JsonException($"Command requires a {typeof(T).Name} payload object.");
 
-    private static string Error(string? id, string code, string message, IReadOnlyList<Diagnostic>? diagnostics = null) =>
-        JsonSerializer.Serialize(new { id, ok = false, error = new { code, message, diagnostics } }, RulesJson.Compact);
+    private static string Error(string? id, string code, string message, IReadOnlyList<Diagnostic>? diagnostics = null, string? correlationId = null) =>
+        JsonSerializer.Serialize(new { id, ok = false, error = new { code, message, diagnostics, correlationId } }, RulesJson.Compact);
+
+    private sealed class UnknownCommandException(string command)
+        : Exception($"Unknown command '{(command.Length > 64 ? command[..64] + "…" : command)}'.");
 
     private sealed record CommandRequest(string Id, string Command, JsonElement? Payload);
 
@@ -88,5 +146,5 @@ public sealed class CommandDispatcher(TomeStackApp app)
 
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds);
 
-    private sealed record PackagePayload(string Base64);
+    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
 }

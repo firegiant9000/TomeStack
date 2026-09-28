@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createClient } from './client';
 import { createBridgeTransport, TomeStackError, type WebViewBridge } from './transport';
 
 function fakeBridge(reply: (message: { id: string; command: string }) => unknown) {
@@ -50,5 +51,40 @@ describe('bridge transport', () => {
     const call = createBridgeTransport(bridge, 20);
 
     await expect(call('app.info')).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it('waits indefinitely when a call opts out of the timeout (a native dialog is open)', async () => {
+    let answer: (() => void) | undefined;
+    let listener: ((event: { data: unknown }) => void) | undefined;
+    const bridge: WebViewBridge = {
+      postMessage(message) {
+        const { id } = message as { id: string };
+        answer = () => listener?.({ data: { id, ok: true, result: { saved: true, fileName: 'a.tomestack.zip' } } });
+      },
+      addEventListener(_type, handler) {
+        listener = handler;
+      },
+    };
+    const call = createBridgeTransport(bridge, 20);
+
+    const pending = call('package.saveAs', { characterIds: [] }, { timeoutMs: null });
+    await new Promise((r) => setTimeout(r, 60));
+    answer?.();
+
+    await expect(pending).resolves.toEqual({ saved: true, fileName: 'a.tomestack.zip' });
+  });
+});
+
+describe('client', () => {
+  it('sends package.saveAs without a timeout', async () => {
+    const calls: unknown[] = [];
+    const client = createClient(async (command, _payload, options) => {
+      calls.push({ command, options });
+      return { saved: false };
+    });
+
+    await client.saveExportAs(['x']);
+
+    expect(calls).toEqual([{ command: 'package.saveAs', options: { timeoutMs: null } }]);
   });
 });

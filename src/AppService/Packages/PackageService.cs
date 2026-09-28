@@ -13,10 +13,15 @@ namespace TomeStack.AppService.Packages;
 /// through a preview step. Packages are untrusted input (SPEC Q-02): sizes, entry names and hashes
 /// are checked before anything is parsed or written, and apply re-validates from the bytes.
 /// </summary>
-public sealed partial class PackageService(SqliteStore store, TimeProvider time)
+public sealed partial class PackageService(SqliteStore store, TimeProvider time, string backupDirectory)
 {
+    public const string BackupFolderName = "backups";
+
     public const long MaxPackageBytes = 50L * 1024 * 1024;
     public const long MaxEntryBytes = 5L * 1024 * 1024;
+
+    /// <summary>Total decompressed size of all entries; bounds memory against archives that expand far beyond their size.</summary>
+    public const long MaxTotalBytes = 64L * 1024 * 1024;
     public const int MaxEntries = 2_000;
     private const string ManifestPath = "manifest.json";
 
@@ -59,7 +64,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
 
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in sources.Values)
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source));
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null })); // machine-local path; may name the user
         foreach (var revision in revisions.Values)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         foreach (var character in characters)
@@ -89,17 +94,41 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
 
     public PackagePreview Preview(byte[] package) => Read(package).Preview;
 
-    public ImportResult Apply(byte[] package)
+    /// <param name="sourceChoices">
+    /// Required for every package source whose metadata differs from the local record (preview items with
+    /// <see cref="PackageItem.Changes"/>). Local license metadata is never overwritten without an explicit choice.
+    /// </param>
+    public ImportResult Apply(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
     {
         var (preview, parsed) = Read(package);
         if (!preview.CanApply || parsed is null)
             throw new PackageException(preview.Errors);
 
+        var differing = preview.Items.Where(i => i.Kind == "source" && i.Action == PackageItemAction.Replace).ToList();
+        var missingChoices = differing.Where(i => sourceChoices is null || !sourceChoices.ContainsKey(i.Id)).ToList();
+        if (missingChoices.Count > 0)
+        {
+            throw new PackageException(
+            [
+                .. missingChoices.Select(i => new Diagnostic(
+                    "package.source-choice-required",
+                    $"Source '{i.Name}' in the package differs from your local record ({string.Join(", ", i.Changes!.Select(c => c.Field))}). Choose whether to keep your local version or use the imported one.")),
+            ]);
+        }
+        var keepLocal = differing.Where(i => sourceChoices![i.Id] == SourceChoice.KeepLocal).Select(i => i.Id).ToHashSet();
+
+        // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
+        var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
+        var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
+
         int added = 0, replaced = 0, unchanged = 0;
         store.InTransaction(() =>
         {
-            foreach (var source in parsed.Sources)
-                store.UpsertSource(source);
+            foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
+            {
+                // A PDF reference is machine-local; an import never adds, changes or removes one.
+                store.UpsertSource(source with { PdfRef = store.FindSource(source.Id)?.PdfRef });
+            }
             foreach (var revision in parsed.Revisions)
             {
                 if (store.AddRevision(revision)) added++;
@@ -112,7 +141,46 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
                 store.SaveCharacter(character);
             }
         });
-        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)]);
+        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
+    }
+
+    /// <summary>
+    /// Exports the local copies of <paramref name="characterIds"/> to <c>backups/</c> as an ordinary package, so
+    /// restoring is a normal import. Returns the path relative to the data directory.
+    /// </summary>
+    private string WriteBackup(IReadOnlyList<Guid> characterIds)
+    {
+        ExportResult backup;
+        try
+        {
+            backup = Export(characterIds);
+        }
+        catch (PackageException ex)
+        {
+            throw new PackageException(
+            [
+                new("package.backup-failed", "The local copy of a character this package would replace cannot be backed up, so nothing was imported. Repair or export that character first."),
+                .. ex.Errors,
+            ]);
+        }
+
+        Directory.CreateDirectory(backupDirectory);
+        var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        for (var attempt = 0; ; attempt++)
+        {
+            var name = attempt == 0 ? $"pre-import-{stamp}.tomestack.zip" : $"pre-import-{stamp}-{attempt}.tomestack.zip";
+            try
+            {
+                using var file = new FileStream(Path.Combine(backupDirectory, name), FileMode.CreateNew, FileAccess.Write);
+                file.Write(backup.Content);
+                file.Flush(flushToDisk: true);
+                return $"{BackupFolderName}/{name}";
+            }
+            catch (IOException) when (attempt < 100 && File.Exists(Path.Combine(backupDirectory, name)))
+            {
+                // Same second as an earlier backup; try the next suffix.
+            }
+        }
     }
 
     private sealed record ParsedPackage(
@@ -137,10 +205,16 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
         foreach (var source in parsed.Sources)
         {
             var local = store.FindSource(source.Id);
+            var changes = local is null ? [] : SourceChanges(local, source);
             var action = local is null ? PackageItemAction.Add
-                : SqliteStore.Serialize(local) == SqliteStore.Serialize(source) ? PackageItemAction.Unchanged
+                : changes.Count == 0 ? PackageItemAction.Unchanged
                 : PackageItemAction.Replace;
-            items.Add(new("source", source.Id, source.Title, action, $"{source.License}; redistributable: {(source.Redistributable ? "yes" : "no")}"));
+            if (action == PackageItemAction.Replace)
+                warnings.Add(new("package.source-differs", $"Source '{source.Title}' differs from your local record ({string.Join(", ", changes.Select(c => c.Field))}). Choose which version to keep before importing."));
+            items.Add(new(
+                "source", source.Id, source.Title, action,
+                $"{source.License}; redistributable: {(source.Redistributable ? "yes" : "no")}",
+                action == PackageItemAction.Replace ? changes : null));
         }
 
         foreach (var revision in parsed.Revisions)
@@ -171,7 +245,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
             }
             var exists = store.FindCharacter(character.Id) is not null;
             if (exists)
-                warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy."));
+                warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy. The current copy is saved to the {BackupFolderName} folder in your data folder first, and you can restore it by importing that file."));
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
 
@@ -196,16 +270,24 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            // Names are checked for every entry before any entry is decompressed.
+            foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName)))
+                errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
+            if (errors.Count > 0)
+                return null;
+            long remaining = MaxTotalBytes;
             foreach (var entry in zip.Entries)
             {
-                if (entry.FullName != ManifestPath && !EntryPathPattern().IsMatch(entry.FullName))
-                {
-                    errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
-                    continue;
-                }
-                if (!files.TryAdd(entry.FullName, ReadBounded(entry)))
+                var bytes = ReadBounded(entry, remaining);
+                remaining -= bytes.LongLength;
+                if (!files.TryAdd(entry.FullName, bytes))
                     errors.Add(new("package.entry-duplicate", $"Entry '{entry.FullName}' appears more than once."));
             }
+        }
+        catch (TotalTooLargeException ex)
+        {
+            errors.Add(new("package.content-too-large", ex.Message));
+            return null;
         }
         catch (InvalidDataException ex)
         {
@@ -263,15 +345,38 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
                     break;
                 case "content" when Deserialize<ContentRevision>(path, bytes, errors) is { } revision:
                     ExpectId(path, id, revision.RevisionId, errors);
+                    ExpectSchema(path, "content", revision.SchemaVersion, ContentRevision.CurrentSchemaVersion, errors);
                     revisions.Add(revision);
                     break;
                 case "characters" when Deserialize<Character>(path, bytes, errors) is { } character:
                     ExpectId(path, id, character.Id, errors);
+                    ExpectSchema(path, "character", character.SchemaVersion, Character.CurrentSchemaVersion, errors);
                     characters.Add(character);
                     break;
             }
         }
         return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters);
+    }
+
+    /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c>.</summary>
+    private static List<FieldChange> SourceChanges(SourceRecord local, SourceRecord imported)
+    {
+        var localNode = JsonSerializer.SerializeToNode(local, RulesJson.Compact)!.AsObject();
+        var importedNode = JsonSerializer.SerializeToNode(imported, RulesJson.Compact)!.AsObject();
+        return
+        [
+            .. localNode.Select(p => p.Key).Union(importedNode.Select(p => p.Key)).Order(StringComparer.Ordinal)
+                .Where(field => field != "pdfRef")
+                .Select(field => new FieldChange(field, localNode[field]?.ToJsonString(), importedNode[field]?.ToJsonString()))
+                .Where(change => change.Local != change.Imported),
+        ];
+    }
+
+    /// <summary>Data from a newer TomeStack is refused rather than silently misread.</summary>
+    private static void ExpectSchema(string path, string kind, int version, int supported, List<Diagnostic> errors)
+    {
+        if (version < 1 || version > supported)
+            errors.Add(new("package.schema-unsupported", $"Entry '{path}' uses {kind} schema v{version}; this version of TomeStack supports v1 to v{supported}. Update TomeStack to import this package."));
     }
 
     private static void ExpectId(string path, Guid expected, Guid actual, List<Diagnostic> errors)
@@ -292,13 +397,24 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
             errors.Add(new("package.invalid-json", $"Entry '{path}' is not valid: {ex.Message}"));
             return null;
         }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or KeyNotFoundException or FormatException or ArgumentException)
+        {
+            // Package bytes are untrusted: a reader bug must surface as a rejected entry, not an internal error.
+            errors.Add(new("package.invalid-json", $"Entry '{path}' is not valid."));
+            return null;
+        }
     }
 
-    /// <summary>Reads at most <see cref="MaxEntryBytes"/>; does not trust the declared entry length.</summary>
-    private static byte[] ReadBounded(ZipArchiveEntry entry)
+    /// <summary>
+    /// Reads at most <see cref="MaxEntryBytes"/>, and at most <paramref name="remaining"/> of the package-wide
+    /// <see cref="MaxTotalBytes"/>. Does not trust the declared entry length.
+    /// </summary>
+    private static byte[] ReadBounded(ZipArchiveEntry entry, long remaining)
     {
         if (entry.Length > MaxEntryBytes)
             throw new EntryTooLargeException(entry.FullName);
+        if (entry.Length > remaining)
+            throw new TotalTooLargeException();
         using var stream = entry.Open();
         using var output = new MemoryStream();
         var buffer = new byte[81920];
@@ -308,6 +424,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
             output.Write(buffer, 0, read);
             if (output.Length > MaxEntryBytes)
                 throw new EntryTooLargeException(entry.FullName);
+            if (output.Length > remaining)
+                throw new TotalTooLargeException();
         }
         return output.ToArray();
     }
@@ -332,4 +450,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time)
 
     private sealed class EntryTooLargeException(string path)
         : Exception($"Entry '{path}' exceeds the {MaxEntryBytes}-byte limit.");
+
+    private sealed class TotalTooLargeException()
+        : Exception($"The package's contents exceed {MaxTotalBytes} bytes when unpacked.");
 }

@@ -11,8 +11,8 @@ public static class RulesFamilies
 
     public static IReadOnlyList<RulesFamilyPolicy> All { get; } =
     [
-        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species),
-        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background),
+        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false),
+        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -27,6 +27,10 @@ public static class RulesFamilies
 /// that it can be fixture-tested side by side rather than inferred.
 /// </summary>
 /// <param name="AbilityIncreaseSource">
-/// Which content kind may grant ability score increases: species under 2014 rules, background under 2024 rules.
+/// Which origin content kind may grant ability score increases: species under 2014 rules, background under 2024 rules.
+/// Applies to every modifier operation on an ability score, so origin content cannot bypass it with <c>set</c> or <c>replace</c>.
 /// </param>
-public sealed record RulesFamilyPolicy(string Id, string DisplayName, ContentKind AbilityIncreaseSource);
+/// <param name="BackgroundGrantsFeat">
+/// Whether a background may grant a feat (a <c>grant</c> effect of kind <c>content</c>): no under 2014 rules, yes under 2024 rules.
+/// </param>
+public sealed record RulesFamilyPolicy(string Id, string DisplayName, ContentKind AbilityIncreaseSource, bool BackgroundGrantsFeat);

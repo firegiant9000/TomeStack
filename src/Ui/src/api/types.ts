@@ -30,6 +30,8 @@ export interface Character {
   name: string;
   rulesFamily: RulesFamilyId;
   campaignId?: string;
+  level: number;
+  crossFamilyExceptions: CrossFamilyException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
@@ -58,13 +60,21 @@ export interface TraceOrigin {
   page?: PageRef;
 }
 
+export interface TraceInput {
+  name: string;
+  value: number;
+}
+
 export interface TraceEntry {
   order: number;
-  operation: 'base' | 'add' | 'derive' | 'override' | string;
+  operation: 'base' | 'add' | 'derive' | 'replace' | 'set' | 'ignored' | 'override' | string;
   description: string;
   amount?: number;
   result: number;
   origin: TraceOrigin;
+  /** The field this step belongs to; a field's trace includes the steps of the fields it reads. */
+  field?: string;
+  inputs?: TraceInput[];
 }
 
 export interface DerivedValue {
@@ -76,6 +86,7 @@ export interface DerivedValue {
   warnings: Diagnostic[];
   automation: AutomationStatus;
   override?: FieldOverride;
+  units: 'score' | 'modifier' | 'bonus' | string;
 }
 
 export interface CharacterSheet {
@@ -101,6 +112,14 @@ export interface RulesFamilyPolicy {
   id: RulesFamilyId;
   displayName: string;
   abilityIncreaseSource: ContentKind;
+  backgroundGrantsFeat: boolean;
+}
+
+/** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */
+export interface CrossFamilyException {
+  content: ContentReference;
+  reason: string;
+  recordedAt?: string;
 }
 
 export interface AppInfo {
@@ -153,7 +172,19 @@ export interface ExportedPackage {
   manifest: PackageManifest;
 }
 
+export interface SaveOutcome {
+  saved: boolean;
+  fileName?: string;
+}
+
 export type PackageItemAction = 'add' | 'unchanged' | 'replace' | 'conflict';
+
+/** Values are compact JSON of the field on each side. */
+export interface FieldChange {
+  field: string;
+  local?: string;
+  imported?: string;
+}
 
 export interface PackageItem {
   kind: 'source' | 'contentRevision' | 'character';
@@ -161,7 +192,11 @@ export interface PackageItem {
   name: string;
   action: PackageItemAction;
   detail?: string;
+  /** Set on a source that differs from the local record; apply needs a SourceChoice for it. */
+  changes?: FieldChange[];
 }
+
+export type SourceChoice = 'keepLocal' | 'useImported';
 
 export interface PackagePreview {
   canApply: boolean;
@@ -176,4 +211,6 @@ export interface ImportResult {
   replaced: number;
   unchanged: number;
   characters: string[];
+  /** Relative to the data folder; set when a local character was replaced. Import it to restore. */
+  backupFile?: string;
 }

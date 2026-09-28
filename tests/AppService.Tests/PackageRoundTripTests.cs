@@ -20,7 +20,7 @@ public class PackageRoundTripTests
         RulesFamilies = [RulesFamilies.Srd51],
         Provenance = new(HomebrewSource, new PageRef(12)),
         Status = RevisionStatus.Published,
-        Effects = [new Effect { Id = "quick-draw-init", Type = Effect.InitiativeBonus, Amount = 2 }],
+        Effects = [new ModifierEffect { Id = "quick-draw-init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "2" }],
     };
 
     private static Character ExportableCharacter()
@@ -195,6 +195,167 @@ public class PackageRoundTripTests
         var sheet = destination.App.GetCharacter(saved.Character.Id).Sheet;
         Assert.Contains(sheet.Diagnostics, d => d.Code == "content.unpublished");
         Assert.Equal(3, sheet.Field(RulesCore.CharacterCalculator.InitiativeField).Value);
+    }
+
+    [Fact]
+    public void Import_that_replaces_a_character_backs_up_the_local_copy_and_the_backup_restores_it()
+    {
+        using var origin = new TempApp();
+        var exported = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([exported.Character.Id]).Content;
+
+        using var local = new TempApp();
+        var localCopy = local.App.SaveCharacter(exported.Character with
+        {
+            Name = "Pell (edited locally)",
+            Overrides = [new FieldOverride(RulesCore.CharacterCalculator.InitiativeField, 11, "Local ruling")],
+        }).Character;
+
+        var preview = local.App.PreviewImport(package);
+        Assert.Contains(preview.Warnings, w => w.Code == "package.character-replace" && w.Message.Contains("backups", StringComparison.Ordinal));
+
+        var result = local.App.ApplyImport(package);
+
+        Assert.Equal(1, result.Replaced);
+        Assert.NotNull(result.BackupFile);
+        Assert.StartsWith("backups/pre-import-", result.BackupFile, StringComparison.Ordinal);
+        Assert.Equal(exported.Character.Name, local.App.GetCharacter(localCopy.Id).Character.Name);
+
+        // Restore: the backup is an ordinary package; importing it brings the local edit back.
+        var backup = File.ReadAllBytes(Path.Combine(local.App.DataDirectory, result.BackupFile));
+        Assert.True(local.App.PreviewImport(backup).CanApply);
+        var restore = local.App.ApplyImport(backup);
+
+        var restored = local.App.GetCharacter(localCopy.Id).Character;
+        Assert.Equal(TempApp.Json(localCopy), TempApp.Json(restored));
+        Assert.NotEqual(result.BackupFile, restore.BackupFile);
+    }
+
+    [Fact]
+    public void Import_that_adds_only_new_characters_takes_no_backup()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        using var destination = new TempApp();
+
+        var result = destination.App.ApplyImport(origin.App.ExportCharacters([saved.Character.Id]).Content);
+
+        Assert.Null(result.BackupFile);
+        Assert.False(Directory.Exists(Path.Combine(destination.App.DataDirectory, PackageService.BackupFolderName)));
+    }
+
+    [Fact]
+    public void Import_is_refused_when_the_local_copy_cannot_be_backed_up()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+
+        using var local = new TempApp();
+        var broken = local.App.SaveCharacter(saved.Character with { Pins = [new ContentReference(Guid.NewGuid(), Guid.NewGuid())] }).Character;
+
+        var ex = Assert.Throws<PackageException>(() => local.App.ApplyImport(package));
+
+        Assert.Equal("package.backup-failed", ex.Errors[0].Code);
+        Assert.Equal(TempApp.Json(broken), TempApp.Json(local.App.GetCharacter(broken.Id).Character));
+    }
+
+    private static SourceRecord LocalHomebrewSource() => new()
+    {
+        Id = HomebrewSource,
+        Title = "My Homebrew Notes",
+        Publisher = "Test author",
+        RulesFamilies = [RulesFamilies.Srd51],
+        EditionVersion = "1",
+        License = "CC BY 4.0 (my local note)",
+        Redistributable = true,
+        PdfRef = @"C:\Users\someone\Books\notes.pdf",
+    };
+
+    [Fact]
+    public void Differing_source_metadata_is_shown_as_a_diff_and_blocks_apply_until_a_choice_is_made()
+    {
+        using var origin = new TempApp();
+        AddHomebrew(origin);
+        var saved = origin.App.SaveCharacter(ExportableCharacter());
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+
+        using var local = new TempApp();
+        local.App.Store.UpsertSource(LocalHomebrewSource());
+
+        var preview = local.App.PreviewImport(package);
+
+        Assert.True(preview.CanApply);
+        var item = Assert.Single(preview.Items, i => i.Id == HomebrewSource);
+        Assert.Equal(PackageItemAction.Replace, item.Action);
+        Assert.Equal(["license", "redistributable"], item.Changes!.Select(c => c.Field));
+        Assert.Equal("\"CC BY 4.0 (my local note)\"", item.Changes![0].Local);
+        Assert.Equal("\"Personal homebrew\"", item.Changes![0].Imported);
+        Assert.Contains(preview.Warnings, w => w.Code == "package.source-differs");
+
+        var ex = Assert.Throws<PackageException>(() => local.App.ApplyImport(package));
+        Assert.Equal("package.source-choice-required", Assert.Single(ex.Errors).Code);
+        Assert.Empty(local.App.ListCharacters());
+        Assert.Equal(TempApp.Json(LocalHomebrewSource()), TempApp.Json(local.App.Store.FindSource(HomebrewSource)));
+    }
+
+    [Theory]
+    [InlineData(SourceChoice.KeepLocal, "CC BY 4.0 (my local note)", true)]
+    [InlineData(SourceChoice.UseImported, "Personal homebrew", false)]
+    public void Source_choice_decides_which_license_metadata_is_kept_and_never_touches_the_local_pdf_reference(
+        SourceChoice choice, string expectedLicense, bool expectedRedistributable)
+    {
+        using var origin = new TempApp();
+        AddHomebrew(origin);
+        var saved = origin.App.SaveCharacter(ExportableCharacter());
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+        using var local = new TempApp();
+        local.App.Store.UpsertSource(LocalHomebrewSource());
+
+        local.App.ApplyImport(package, new Dictionary<Guid, SourceChoice> { [HomebrewSource] = choice });
+
+        var source = local.App.Store.FindSource(HomebrewSource)!;
+        Assert.Equal(expectedLicense, source.License);
+        Assert.Equal(expectedRedistributable, source.Redistributable);
+        Assert.Equal(LocalHomebrewSource().PdfRef, source.PdfRef);
+        Assert.NotNull(local.App.ListCharacters().SingleOrDefault(c => c.Id == saved.Character.Id));
+    }
+
+    [Fact]
+    public void Export_never_includes_the_machine_local_pdf_reference()
+    {
+        using var origin = new TempApp();
+        origin.App.Store.UpsertSource(LocalHomebrewSource());
+        origin.App.Store.AddRevision(HomebrewFeat);
+        var saved = origin.App.SaveCharacter(ExportableCharacter());
+
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+
+        using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+        using var reader = new StreamReader(zip.GetEntry($"sources/{HomebrewSource:D}.json")!.Open());
+        var json = reader.ReadToEnd();
+        Assert.DoesNotContain("pdfRef", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("someone", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dispatcher_passes_source_choices_through_package_apply()
+    {
+        using var origin = new TempApp();
+        AddHomebrew(origin);
+        var saved = origin.App.SaveCharacter(ExportableCharacter());
+        var base64 = Convert.ToBase64String(origin.App.ExportCharacters([saved.Character.Id]).Content);
+        using var local = new TempApp();
+        local.App.Store.UpsertSource(LocalHomebrewSource());
+        var dispatcher = new CommandDispatcher(local.App);
+
+        var refused = JsonDocument.Parse(dispatcher.Dispatch($$$"""{"id":"1","command":"package.apply","payload":{"base64":"{{{base64}}}"}}""")).RootElement;
+        var choices = $$"""{"{{HomebrewSource}}":"keepLocal"}""";
+        var applied = JsonDocument.Parse(dispatcher.Dispatch($$$"""{"id":"2","command":"package.apply","payload":{"base64":"{{{base64}}}","sourceChoices":{{{choices}}}}}""")).RootElement;
+
+        Assert.Equal("package.source-choice-required", refused.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
+        Assert.True(applied.GetProperty("ok").GetBoolean(), applied.ToString());
+        Assert.Equal("CC BY 4.0 (my local note)", local.App.Store.FindSource(HomebrewSource)!.License);
     }
 
     [Fact]

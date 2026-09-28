@@ -12,9 +12,12 @@ namespace TomeStack.AppService.Persistence;
 /// </summary>
 public sealed class SqliteStore : IContentCatalog, IDisposable
 {
-    private static readonly string[] Migrations =
+    /// <summary>A numbered, forward-only migration: SQL, plus an optional data step in the same transaction.</summary>
+    internal sealed record Migration(string Sql, Action<SqliteStore>? Code = null);
+
+    internal static readonly Migration[] Migrations =
     [
-        """
+        new("""
         CREATE TABLE sources (
             id TEXT PRIMARY KEY,
             json TEXT NOT NULL
@@ -34,17 +37,28 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             updated_at TEXT NOT NULL,
             json TEXT NOT NULL
         );
-        """,
+        """),
+        // v2 (ADR-003): content revisions move to typed effects. Stored JSON and hashes are rewritten in the new
+        // representation so the insert-only check keeps working. The original bytes stay in legacy_json.
+        new("ALTER TABLE content_revisions ADD COLUMN legacy_json TEXT;", store => store.RewriteUpgradedRevisions()),
     ];
 
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
+    private readonly IReadOnlyList<Migration> _migrations;
     private SqliteTransaction? _transaction;
 
     public SqliteStore(string databasePath)
+        : this(databasePath, Migrations)
+    {
+    }
+
+    /// <summary>Test seam: run a different migration list (for example, a simulated future schema).</summary>
+    internal SqliteStore(string databasePath, IReadOnlyList<Migration> migrations)
     {
         DatabasePath = databasePath;
-        BackupBeforeUpgrade(databasePath);
+        _migrations = migrations;
+        BackupBeforeUpgrade(databasePath, migrations.Count);
         _connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
@@ -185,34 +199,76 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     private static string Key(Guid id) => id.ToString("D");
 
-    /// <summary>ARCHITECTURE: migrations are numbered and the user database is backed up before upgrading.</summary>
-    private static void BackupBeforeUpgrade(string databasePath)
+    /// <summary>File name of the copy taken before migrating a database from schema <paramref name="version"/>.</summary>
+    public static string BackupPath(string databasePath, int version) => $"{databasePath}.v{version}.bak";
+
+    /// <summary>
+    /// ARCHITECTURE: migrations are numbered and the user database is backed up before upgrading. Uses SQLite's
+    /// online backup rather than a file copy: in WAL mode, committed data can still be in <c>-wal</c> after a crash,
+    /// and a copy of the main file alone would silently miss it.
+    /// </summary>
+    private static void BackupBeforeUpgrade(string databasePath, int latestVersion)
     {
         if (!File.Exists(databasePath))
             return;
+        using var probe = new SqliteConnection($"Data Source={databasePath};Pooling=False");
+        probe.Open();
         int version;
-        using (var probe = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Pooling=False"))
+        using (var command = probe.CreateCommand())
         {
-            probe.Open();
-            using var command = probe.CreateCommand();
             command.CommandText = "PRAGMA user_version;";
             version = Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
         }
-        if (version > LatestSchemaVersion)
-            throw new InvalidOperationException($"Database schema v{version} is newer than this build supports (v{LatestSchemaVersion}).");
-        if (version is > 0 && version < LatestSchemaVersion)
-            File.Copy(databasePath, $"{databasePath}.v{version}.bak", overwrite: true);
+        if (version > latestVersion)
+            throw new NewerDatabaseException(version, latestVersion);
+        if (version is > 0 && version < latestVersion)
+        {
+            var backupPath = BackupPath(databasePath, version);
+            File.Delete(backupPath);
+            using var backup = new SqliteConnection($"Data Source={backupPath};Pooling=False");
+            probe.BackupDatabase(backup);
+        }
     }
 
     private void Migrate()
     {
-        for (var version = SchemaVersion; version < Migrations.Length; version++)
+        for (var version = SchemaVersion; version < _migrations.Count; version++)
         {
             InTransaction(() =>
             {
-                Execute(Migrations[version]);
+                Execute(_migrations[version].Sql);
+                _migrations[version].Code?.Invoke(this);
                 Execute($"PRAGMA user_version = {version + 1};");
             });
+        }
+    }
+
+    /// <summary>
+    /// The one sanctioned rewrite of published revisions: a lossless change of representation, not of content
+    /// (ADR-003 "Migration"). Runs inside the migration's transaction.
+    /// </summary>
+    private void RewriteUpgradedRevisions()
+    {
+        var rows = new List<(string Id, string Json)>();
+        lock (_gate)
+        {
+            using var command = Command("SELECT revision_id, json FROM content_revisions;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        foreach (var (id, json) in rows)
+        {
+            var revision = JsonSerializer.Deserialize<ContentRevision>(json, RulesJson.Compact)!;
+            if (revision.UpgradedFrom is null)
+                continue;
+            var upgraded = Serialize(revision);
+            Execute(
+                "UPDATE content_revisions SET json = $json, sha256 = $hash, legacy_json = $legacy WHERE revision_id = $id;",
+                ("$json", upgraded),
+                ("$hash", Sha256(upgraded)),
+                ("$legacy", json),
+                ("$id", id));
         }
     }
 
@@ -259,6 +315,13 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             command.Parameters.AddWithValue(name, value);
         return command;
     }
+}
+
+/// <summary>The data folder was written by a newer TomeStack. Nothing is changed; the user must update the app.</summary>
+public sealed class NewerDatabaseException(int version, int supported)
+    : InvalidOperationException($"This data folder was created by a newer version of TomeStack (database schema v{version}; this version supports up to v{supported}). Update TomeStack to open it. Nothing was changed.")
+{
+    public int Version { get; } = version;
 }
 
 public sealed class ImmutableRevisionException(ContentReference reference)

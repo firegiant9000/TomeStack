@@ -49,12 +49,12 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 | ID | Question | Working default | Decide by |
 | --- | --- | --- | --- |
 | D01 | Which rests/recoveries auto-apply? | Preview deterministic deltas, ask for contextual choices | M2 UX rehearsal |
-| D02 | Copy or externally link a PDF by default? | **Decided 2026-09-25:** managed copy for reliable page links, removable attachment. Data stays in `%LOCALAPPDATA%\TomeStack`, overridable with `--data-dir` or `TOMESTACK_DATA_DIR`. To be recorded in ADR-005 | Decided |
-| D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs | M2 export test |
+| D02 | Copy or externally link a PDF by default? | **Decided 2026-09-25:** managed copy for reliable page links, removable attachment. Data stays in `%LOCALAPPDATA%\TomeStack`, overridable with `--data-dir` or `TOMESTACK_DATA_DIR`. Options and the OneDrive/sync-root risk for the data directory are in ADR-005 (proposed; to be accepted with this decision) | Decided |
+| D03 | What goes into shared packages? | JSON and licensed assets; omit third-party PDFs. **Proposed (ADR-007):** separate `backup` and `share` exports; `share` omits non-redistributable sources | M2 export test; owner decision |
 | D04 | How much multiclass/spellcasting in MVP? | SRD-supported paths under both editions. M1 field order: ability modifiers, proficiency bonus, saves, skills, then AC and HP | M1 fixture review |
-| D05 | What accessibility target? | **Decided 2026-09-25:** WCAG 2.2 AA for the builder and sheet, including full keyboard use, text zoom and contrast | Decided |
+| D05 | What accessibility target? | **Decided 2026-09-25:** WCAG 2.2 AA for the builder and sheet, including full keyboard use, text zoom and contrast. The checklist is mapped to WCAG 2.2 criteria in `features/accessibility-checklist.md` | Decided |
 | D06 | Which Windows shell/IPC? | **Decided (ADR-006):** WPF/WebView2 shell, in-process service, WebView2 message bridge; loopback host dev-only. **Installer decided 2026-09-25:** Velopack, per-user, self-contained, unsigned until public release. To be proven and recorded in ADR-008 | Installer spike (M0) |
-| D07 | License for the project's own code? | **Decided 2026-09-25:** Apache-2.0 (`LICENSE`) | Decided |
+| D07 | License for the project's own code? | **Decided 2026-09-25:** Apache-2.0 (`LICENSE`). The dependency review (`ATTRIBUTION.md`: MIT, BSD-3-Clause, Apache-2.0, public domain) found nothing incompatible | Decided |
 | D08 | Name availability and public branding? | TomeStack working name; trademark check before launch | Before public release |
 | D09 | Which SRD license route? | **Decided 2026-09-25:** SRD 5.1 and SRD 5.2.1 under CC-BY-4.0. No SRD text ships until the owner approves the exact attribution statements (SPEC Q-03). No Wizards of the Coast trademarks in branding | Attribution review (M0) |
 | D10 | Which Windows versions? | **Decided 2026-09-25:** Windows 10 and Windows 11. The installer must provide the WebView2 runtime when it is missing (common on Windows 10) | Installer spike (M0) |

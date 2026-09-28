@@ -32,7 +32,7 @@ IDs are stable UUIDs; display names are never identity. A revision is immutable 
 
 1. Resolve character selections and pinned content revisions within the selected rules family.
 2. Validate prerequisites, choices, dependency cycles and compatibility; allow a recorded cross-edition exception where meaningful.
-3. Compile supported declarative effects into a dependency graph: grant, choice, bonus/set/replace, resource, action, spellcasting, restriction, recovery, roll. Distinguish stacking rules and effect timing explicitly.
+3. Compile supported declarative effects into a dependency graph: grant, choice, bonus/set/replace, resource, action, spellcasting, restriction, recovery, roll. Distinguish stacking rules and effect timing explicitly. The typed effect union, stacking order, timing and formula grammar are defined in [ADR-003](decisions/ADR-003-declarative-effect-ast.md); action and spellcasting effects are not modeled yet.
 4. Evaluate formulas with a typed, bounded expression AST, e.g. `PB + CON.MOD` and `floor(CLASS_LEVEL / 2)`. No `eval`, scripting, file access, network access or recursion from user content. Dice expressions evaluate only on a requested roll.
 5. Return `{ value, units, trace[], warnings[], automationStatus }` for each field. Trace entries include effect ID, revision ID, source/page, operation, inputs and resulting value.
 6. Apply a labeled user override as the final display layer; preserve the computed value and its trace. A malformed feature is disabled with a diagnostic scoped to that feature.

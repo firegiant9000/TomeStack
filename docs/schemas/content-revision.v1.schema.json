@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/content-revision.v1.schema.json",
+  "title": "TomeStack content revision (schemaVersion 1)",
+  "description": "One immutable revision of a content entity (ADR-002). Identity is contentId/revisionId, never name. Unknown properties on the revision and on effects round-trip. schemaVersion 1 uses the M0 string-typed effect; effect types other than abilityScoreIncrease and initiativeBonus are reference-only.",
+  "type": "object",
+  "required": ["contentId", "revisionId", "kind", "name", "rulesFamilies", "provenance", "status"],
+  "properties": {
+    "contentId": { "$ref": "#/$defs/uuid" },
+    "revisionId": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": { "const": 1, "description": "Omitted means 1." },
+    "kind": { "enum": ["species", "background", "class", "subclass", "feature", "feat", "spell", "item"] },
+    "name": { "type": "string", "minLength": 1 },
+    "rulesFamilies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rulesFamily" } },
+    "provenance": {
+      "type": "object",
+      "required": ["sourceId"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/uuid" },
+        "page": { "$ref": "#/$defs/pageRef" }
+      }
+    },
+    "status": { "enum": ["draft", "published"] },
+    "summary": { "type": "string" },
+    "effects": { "type": "array", "items": { "$ref": "#/$defs/effect" } }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
+    "pageRef": {
+      "type": "object",
+      "required": ["start"],
+      "additionalProperties": false,
+      "properties": {
+        "start": { "type": "integer", "minimum": 1 },
+        "end": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
+        "amount": { "type": "integer" },
+        "automation": { "enum": ["automatic", "assisted", "reference"] },
+        "text": { "type": "string" }
+      }
+    }
+  }
+}

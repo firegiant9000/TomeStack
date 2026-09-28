@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -47,15 +48,40 @@ jobs:
       - name: .NET tests
         run: dotnet test TomeStack.slnx -c Release --no-build
 
-      # Launches the real WPF + WebView2 shell, loads the bundled UI and round-trips commands over
-      # the message bridge. Not yet proven on hosted runners (needs a desktop session and the
-      # WebView2 runtime), so it does not block the build until it has passed there.
-      - name: Desktop shell smoke (non-blocking)
-        continue-on-error: true
+      # Starts the Release DevHost on a free loopback port with a throwaway data folder; no GUI needed.
+      - name: UI flow against DevHost (e2e)
+        working-directory: src/Ui
+        run: npm run test:e2e
+
+      # Evidence for ADR-006/ADR-008: the runner image lists Edge but not the WebView2 Runtime, and whether a
+      # desktop session is available is unproven. Record what is there before trying the GUI smoke.
+      - name: Probe WebView2 Runtime (evidence)
         shell: pwsh
         run: |
-          $exe = "src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe"
-          $report = Join-Path $env:RUNNER_TEMP "smoke-result.json"
-          $p = Start-Process -FilePath $exe -ArgumentList @('--smoke', '--smoke-report', $report) -Wait -PassThru
-          if (Test-Path $report) { Get-Content $report }
-          exit $p.ExitCode
+          $keys = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+                  'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $found = $keys | Where-Object { Test-Path $_ } | ForEach-Object { (Get-ItemProperty $_).pv }
+          "WebView2 Runtime: $(if ($found) { $found -join ', ' } else { 'not found' })"
+          "Session: $([Environment]::UserInteractive) / $env:SESSIONNAME"
+
+      # Launches the real WPF + WebView2 shell, loads the bundled UI, round-trips commands over the message bridge,
+      # then creates, exports and previews a fixture character. Non-blocking until it has passed on hosted runners;
+      # promote it to blocking after three consecutive green runs (ADR-006 "Not yet proven").
+      - name: Desktop shell smoke (non-blocking)
+        id: smoke
+        continue-on-error: true
+        shell: pwsh
+        run: scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe -Report "$env:RUNNER_TEMP/smoke-result.json"
+
+      - name: Missing WebView2 runtime path (non-blocking)
+        continue-on-error: true
+        shell: pwsh
+        run: scripts/offline-check.ps1 -Mode MissingRuntime
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-result
+          path: ${{ runner.temp }}/smoke-result.json
+          if-no-files-found: warn
