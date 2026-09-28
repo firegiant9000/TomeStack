@@ -60,7 +60,7 @@ CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/w
 dotnet run --project src/DesktopShell
 ```
 
-Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). Pass `--devtools` to enable WebView2 DevTools. The app seeds the bundled SRD packs. Set `TOMESTACK_DEV_FIXTURES=1` to also seed the original test fixtures (DevHost always does).
+Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). The app seeds the bundled SRD packs. In a Debug build, `--devtools` enables WebView2 DevTools and `TOMESTACK_DEV_FIXTURES=1` also seeds the original test fixtures (DevHost always does); a Release build ignores both (LIVING_SPECS D11).
 
 **Self-test.** This launches the shell, loads the UI, round-trips commands over the bridge, creates a fixture character, exports it and previews the package. It then exits 0/2 and writes a JSON report:
 

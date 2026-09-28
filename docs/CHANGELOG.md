@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Older versions of TomeStack show an archived character as active.
+- **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Exporting a character never passes on that it is archived, and importing a package never archives or unarchives one. Older versions of TomeStack show an archived character as active.
 
 - **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
   - **Automated:** Fighting Style as a choice (Defense adds +1 AC while you wear armor), and Second Wind, Action Surge and Indomitable as resources that come back on rests. Second Wind rolls 1d10 plus your Fighter level. Also automated: the number of attacks (Extra Attack) and the Champion's critical range. The Champion's second Fighting Style is a choice too, and a style can't be picked twice.
@@ -48,7 +48,7 @@
 
 ### Changed
 
-- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build or together with `--smoke`. A normal launch of the installed app ignores both, so a variable or a shortcut can no longer seed test content into your library or open the browser developer tools.
+- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` now works only in a Debug build, and `--devtools` only in a Debug build or in a smoke run on its own throwaway folder. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
 - **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
 
 - **Honest status (M2.1; README, MVP, ROADMAP, acceptance docs):** claims now say how far they are proven: implemented, fixture-verified, Windows-install verified, or accepted in real play. The README states the current class, species and background coverage. M2 is "checks passed, limited content", because the MVP goal of any SRD character 1–20 is not met yet. The ROADMAP adds M2.1 (data safety, done) and M2.2 (Fighter baseline and SRD armor), and puts M2.2 before the M3 Stardust Guardian run that depends on it. PDF candidate import is labeled **Experimental** in the app until a real third-party book and the SRD measurements pass.

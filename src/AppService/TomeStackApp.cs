@@ -206,7 +206,9 @@ public sealed partial class TomeStackApp : IDisposable
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt } : character);
+        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
+            ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt }
+            : character with { ArchivedAt = null }); // a save never creates an archived character
     }
 
     /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>

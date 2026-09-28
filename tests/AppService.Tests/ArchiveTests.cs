@@ -72,6 +72,37 @@ public class ArchiveTests
         temp.App.Unarchive(id);
         temp.App.SaveCharacter(stale with { ArchivedAt = DateTimeOffset.UnixEpoch }); // a payload cannot archive either
         Assert.Null(temp.App.Store.FindCharacter(id)!.ArchivedAt);
+
+        // Dual review: nor can a save create an archived character.
+        var created = temp.App.SaveCharacter(stale with { Id = Guid.NewGuid(), ArchivedAt = DateTimeOffset.UnixEpoch }).Character;
+        Assert.Null(temp.App.Store.FindCharacter(created.Id)!.ArchivedAt);
+    }
+
+    [Fact]
+    public void A_character_package_never_carries_or_changes_the_archive_mark()
+    {
+        // Dual review: archiving is local library organisation. Only a full library restore brings it back.
+        var (temp, id) = Setup();
+        using var _t = temp;
+        var beforeArchive = temp.App.ExportCharacters([id]).Content; // an older export, made while it was active
+        temp.App.Archive(new(id, Confirm: true));
+
+        foreach (var purpose in new[] { ExportPurpose.Backup, ExportPurpose.Share })
+        {
+            var package = temp.App.ExportCharacters([id], purpose).Content;
+            using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(package));
+            using var character = JsonDocument.Parse(new StreamReader(zip.GetEntry($"characters/{id:D}.json")!.Open()).ReadToEnd());
+            Assert.False(character.RootElement.TryGetProperty("archivedAt", out _), purpose.ToString());
+
+            // A friend who imports it gets an active character.
+            using var friend = new TempApp();
+            friend.App.ApplyImport(package);
+            Assert.Null(Assert.Single(friend.App.ListCharacters()).ArchivedAt);
+        }
+
+        // Re-importing the older export replaces the character but keeps it archived here.
+        temp.App.ApplyImport(beforeArchive);
+        Assert.NotNull(temp.App.Store.FindCharacter(id)!.ArchivedAt);
     }
 
     [Fact]

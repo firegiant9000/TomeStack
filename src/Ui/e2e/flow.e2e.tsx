@@ -1071,10 +1071,16 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
   const characters = screen.getByRole('navigation', { name: 'Characters' });
 
-  // Preview first: "Keep it" changes nothing.
+  // Preview first: focus moves into it, and Escape (or "Keep it") changes nothing and returns focus.
   await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
   let confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
   expect(confirm.textContent).toMatch(/Nothing is deleted/);
+  await waitFor(() => expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Archive' })));
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' }));
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
   await user.click(within(confirm).getByRole('button', { name: 'Keep it' }));
   expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
@@ -1088,10 +1094,13 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   expect(within(archivedList).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
   expect(archivedList.closest('details')!.open).toBe(false);
   await waitFor(() => expect(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('heading', { name: 'Archived' })).toBeTruthy());
+  // The pressed button is gone; focus lands on the control that replaced it, not on <body>.
+  await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Unarchive' })));
 
   // Unarchive: back in the main list.
   await user.click(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Unarchive' }));
   await expectStatus(/back in the character list/);
   await waitFor(() => expect(within(characters).queryByRole('list', { name: 'Archived characters' })).toBeNull());
   expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+  await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Archive…' })));
 });

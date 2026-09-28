@@ -3,8 +3,9 @@ using TomeStack.DesktopShell;
 namespace TomeStack.DesktopShell.Tests;
 
 /// <summary>
-/// Audit 2026-09-28, LIVING_SPECS D11: the development switches (<c>TOMESTACK_DEV_FIXTURES=1</c>, <c>--devtools</c>) are
-/// honoured only in a Debug build or together with <c>--smoke</c>. A Release launch of the shipped exe ignores both.
+/// Audit 2026-09-28, LIVING_SPECS D11: <c>TOMESTACK_DEV_FIXTURES=1</c> is honoured only in a Debug build; <c>--devtools</c>
+/// and WebView2's extra browser arguments only in a Debug build or a smoke run on its own throwaway folder. A Release
+/// launch of the shipped exe ignores them.
 /// </summary>
 public class ShellOptionsTests
 {
@@ -19,13 +20,28 @@ public class ShellOptionsTests
     }
 
     [Fact]
-    public void A_smoke_run_or_a_debug_build_honours_them()
+    public void A_debug_build_honours_them()
     {
-        var smoke = ShellOptions.Parse(["--smoke", "--devtools"], devFixturesVariable: "1", debugBuild: false);
         var debug = ShellOptions.Parse(["--devtools"], devFixturesVariable: "1", debugBuild: true);
+        Assert.Equal((true, true, true), (debug.DevTools, debug.DevFixtures, debug.AllowBrowserArguments));
+    }
 
-        Assert.Equal((true, true), (smoke.DevTools, smoke.DevFixtures));
-        Assert.Equal((true, true), (debug.DevTools, debug.DevFixtures));
+    [Fact]
+    public void A_release_smoke_run_never_seeds_fixtures_and_opens_devtools_only_on_its_own_folder()
+    {
+        // Dual review: fixtures cannot be removed once seeded, so --smoke must not seed them; and --smoke --data-dir can
+        // point at a real library, so DevTools and extra browser arguments stay off there.
+        var smoke = ShellOptions.Parse(["--smoke", "--devtools"], devFixturesVariable: "1", debugBuild: false);
+        var chosen = ShellOptions.Parse(["--smoke", "--devtools", "--data-dir", @"C:\Users\someone\AppData\Local\TomeStack"], devFixturesVariable: "1", debugBuild: false);
+
+        Assert.Equal((true, false, true), (smoke.DevTools, smoke.DevFixtures, smoke.AllowBrowserArguments));
+        Assert.Equal((false, false, false), (chosen.DevTools, chosen.DevFixtures, chosen.AllowBrowserArguments));
+    }
+
+    [Fact]
+    public void A_release_launch_drops_extra_browser_arguments()
+    {
+        Assert.False(ShellOptions.Parse([], null, debugBuild: false).AllowBrowserArguments);
     }
 
     [Theory]
@@ -34,7 +50,7 @@ public class ShellOptionsTests
     [InlineData("true")]
     public void Only_the_value_1_seeds_fixtures(string? value)
     {
-        Assert.False(ShellOptions.Parse(["--smoke"], value, debugBuild: true).DevFixtures);
+        Assert.False(ShellOptions.Parse([], value, debugBuild: true).DevFixtures);
     }
 
     [Fact]

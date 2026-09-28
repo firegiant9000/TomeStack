@@ -72,8 +72,9 @@ public partial class App : Application
 }
 
 /// <param name="DevTools">
-/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build or with
-/// <c>--smoke</c> (audit 2026-09-28), so a shortcut or script cannot open them in the shipped app.
+/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build, or with
+/// <c>--smoke</c> on the smoke's own throwaway data folder (no <c>--data-dir</c>) (audit 2026-09-28). The shell also clears
+/// <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c> outside those cases, so no variable can open a debugging port either.
 /// </param>
 /// <param name="SimulateMissingRuntime">
 /// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
@@ -81,9 +82,15 @@ public partial class App : Application
 /// </param>
 /// <param name="DevFixtures">
 /// <c>TOMESTACK_DEV_FIXTURES=1</c>: seed the original test fixtures into the data folder. Honoured only in a Debug build
-/// or with <c>--smoke</c> (LIVING_SPECS D11), so an environment variable cannot seed test content into a user's library.
+/// (LIVING_SPECS D11): seeded revisions cannot be removed, so no Release launch, smoke included, seeds them.
 /// </param>
-public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false)
+/// <param name="AllowBrowserArguments">
+/// Whether WebView2 may apply <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c> (for example a remote debugging port). Only in a
+/// development session, the same one <paramref name="DevTools"/> needs; otherwise the shell clears the variable first.
+/// </param>
+public sealed record ShellOptions(
+    bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false,
+    bool AllowBrowserArguments = false)
 {
 #if DEBUG
     private const bool DebugBuild = true;
@@ -101,13 +108,17 @@ public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirecto
         ArgumentNullException.ThrowIfNull(args);
         string? Value(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         var smoke = args.Contains("--smoke");
-        var development = debugBuild || smoke;
+        var dataDirectory = Value("--data-dir");
+        // A smoke run counts only on its own throwaway folder (no --data-dir), never on a chosen library.
+        var development = debugBuild || (smoke && dataDirectory is null);
         return new ShellOptions(
             Smoke: smoke,
             DevTools: development && args.Contains("--devtools"),
-            DataDirectory: Value("--data-dir"),
+            AllowBrowserArguments: development,
+            DataDirectory: dataDirectory,
             SmokeReport: Value("--smoke-report"),
             SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"),
-            DevFixtures: development && devFixturesVariable == "1");
+            // Seeded fixtures cannot be removed (published revisions are insert-only), so only a Debug build seeds them.
+            DevFixtures: debugBuild && devFixturesVariable == "1");
     }
 }
