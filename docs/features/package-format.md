@@ -67,6 +67,14 @@ A character backup protects characters and what they use. It does not protect ho
   - Apply checks the file again and refuses with `restore.disk-full` if the PDFs would not fit. It copies the missing PDFs into `attachments/`, verifying each hash, then writes everything else in one transaction. A copy whose transaction fails has no record, and the next start removes it.
   - A restore **deletes nothing**: data that is not in the backup stays. A source that differs needs `keepLocal` or `useImported`, as in rule 9. A source gets the backup's PDF only if it has none here.
   - Before anything is replaced (a character, campaign, gap note, or a source you take from the backup), the whole database is copied to `<data dir>/backups/pre-restore-<UTC timestamp>.db`, an SQLite online backup. To go back, close TomeStack and put that file in place of `tomestack.db`.
+- **Hardening (review, 2026-09-28):**
+  - A restore adds an attachment record, and copies its PDF, only when a restored source will point to it. Nothing is added for a source you keep local, or one that already has its own PDF here.
+  - A linked PDF is restored only if its path is a full path to a `.pdf` on a local drive (`restore.linked-pdf-skipped` otherwise). A network path would make Windows connect to another machine, and send your credentials, just by listing sources.
+  - A managed record's size must equal its PDF's, and the writer records the size on disk.
+  - PDF entries are checked for size before any is read: at most 64 GB in total, not more than the file itself, and not much more than they occupy (TomeStack stores PDFs uncompressed). The check stops at the first bad PDF.
+  - The writer refuses a library over the reader's limits (`backup.too-large`) before writing, so every saved backup can be restored.
+  - A backup file that changes between "Choose" and "Restore" is refused (`restore.file-changed`).
+  - The preview says a replaced character is kept in the `pre-restore-*.db` copy (`restore.character-replace`). It also warns when a revision from the backup would become the newest over a newer one that only this library has (`restore.newest-changes`).
 - The two kinds do not mix. `package.preview` refuses a library backup (`package.library-backup`), and a restore refuses a character package (`restore.not-a-library-backup`). Only a v6 library backup may contain `attachments/` or `files/` entries.
 - Tests: `tests/AppService.Tests/LibraryBackupTests.cs` covers the clean-folder restore compared as a whole, including a restart, plus the exclusions, the refusals, an altered PDF, the pre-restore copy and a damaged PDF copy. `LibraryBackupTests.The_commands_use_the_native_dialogs…` covers the commands. The desktop smoke (`scripts/smoke.ps1`) backs up its data folder, PDF included, and restores it into a second, clean folder with the shipped exe.
 - **Not verified:** a restore on a second machine, and a backup of a real library with large PDFs. Both are owner checks.

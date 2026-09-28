@@ -25,6 +25,9 @@ public sealed partial class PackageService
 
     public const int MaxLibraryPdfs = 10_000;
 
+    /// <summary>All PDFs of one library backup together; bounds how much a restore reads, hashes and copies.</summary>
+    public const long MaxLibraryPdfBytes = 64L * 1024 * 1024 * 1024;
+
     /// <summary>The bundled packs' revision IDs: every install seeds them, so a library backup leaves them out.</summary>
     private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
 
@@ -59,7 +62,8 @@ public sealed partial class PackageService
                 ? AttachmentFiles.ManagedCopyIsIntact(store, attachment)
                 : path is not null && File.Exists(path) && new FileInfo(path).Length == attachment.ByteLength;
             if (intact)
-                attachments.Add(attachment);
+                // The size on disk, not the recorded one: the manifest declares it and a restore requires the two to match.
+                attachments.Add(attachment with { ByteLength = new FileInfo(path!).Length });
             else
                 unreadable.Add(titles.GetValueOrDefault(attachment.AttachmentId) ?? attachment.OriginalFileName);
         }
@@ -116,6 +120,13 @@ public sealed partial class PackageService
         foreach (var attachment in plan.Attachments)
             files[$"{AttachmentFolder}{attachment.AttachmentId:D}.json"] = ("attachment", Json(attachment));
         var pdfs = plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
+
+        // The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
+        var jsonBytes = files.Values.Sum(f => f.Bytes.LongLength);
+        if (files.Count + pdfs.Count + 1 > MaxLibraryEntries || jsonBytes > MaxLibraryJsonBytes || pdfs.Count > MaxLibraryPdfs || pdfs.Sum(p => p.ByteLength) > MaxLibraryPdfBytes)
+        {
+            throw new PackageException([new("backup.too-large", $"This library is larger than a full backup can hold ({MaxLibraryEntries:N0} entries, {MaxLibraryJsonBytes / (1024 * 1024)} MB of data, {MaxLibraryPdfs:N0} PDFs or {MaxLibraryPdfBytes / (1024L * 1024 * 1024)} GB of PDFs). Nothing was written. Back up characters one at a time and keep copies of the PDFs.")]);
+        }
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -180,8 +191,10 @@ public sealed partial class PackageService
             var replaces = preview.Items.Any(i => i.Action == PackageItemAction.Replace && (i.Kind != "source" || !keepLocal.Contains(i.Id)));
             var safetyCopy = replaces ? WriteSafetyCopy() : null;
 
+            // Only PDFs a restored source will point to (not ones for a source you kept, or one that has its own PDF here).
+            var linked = AttachmentsToRestore(parsed, keepLocal);
             var needed = parsed.Attachments
-                .Where(a => a.Mode == AttachmentMode.Managed && !File.Exists(AttachmentFiles.ManagedPath(store, a.Sha256!)))
+                .Where(a => a.Mode == AttachmentMode.Managed && linked.Contains(a.AttachmentId) && !File.Exists(AttachmentFiles.ManagedPath(store, a.Sha256!)))
                 .DistinctBy(a => a.Sha256)
                 .ToList();
             EnsureFreeSpace(needed.Sum(a => a.ByteLength));
@@ -198,6 +211,11 @@ public sealed partial class PackageService
                 {
                     // The file changed since the preview. Copies made so far have no record and go at the next start.
                     throw new PackageException([new("restore.pdf-failed", $"A PDF in the backup could not be restored ({ex.Message}) Nothing else was changed.")]);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Disk full or the folder not writable, part-way through. The message may hold a path, so it is not shown.
+                    throw new PackageException([new("restore.pdf-failed", "A PDF could not be copied into your data folder (the disk may be full, or the folder not writable). Nothing else was changed.")]);
                 }
             }
 
@@ -242,19 +260,32 @@ public sealed partial class PackageService
                 }
                 var warnings = new List<Diagnostic>();
                 if (parsed is not null)
-                    VerifyPdfs(parsed, errors);
+                    VerifyPdfs(parsed, file.Length, errors);
                 var (preview, checkedPackage) = BuildPreview(parsed, errors, warnings);
                 return use(preview, checkedPackage, errors);
             }
         }
     }
 
-    /// <summary>Streams every PDF entry: the declared size, the PDF signature, the size limit and the SHA-256 in its name.</summary>
-    private static void VerifyPdfs(ParsedPackage parsed, List<Diagnostic> errors)
+    /// <summary>
+    /// Streams every PDF entry: the declared size, the PDF signature, the size limit and the SHA-256 in its name. Before
+    /// reading anything it bounds the work. The writer stores PDFs uncompressed, so an entry that unpacks to much more
+    /// than it occupies, or entries that together occupy more than the file (overlapping entries), are refused unread;
+    /// so is a total over <see cref="MaxLibraryPdfBytes"/>. It stops at the first bad PDF.
+    /// </summary>
+    private static void VerifyPdfs(ParsedPackage parsed, long archiveLength, List<Diagnostic> errors)
     {
         if (parsed.Pdfs.Count > MaxLibraryPdfs)
         {
             errors.Add(new("package.too-many-entries", $"The backup has {parsed.Pdfs.Count} PDFs; the limit is {MaxLibraryPdfs}."));
+            return;
+        }
+        var entries = parsed.Pdfs.Values.ToList();
+        if (entries.Sum(e => e.Length) > MaxLibraryPdfBytes
+            || entries.Sum(e => e.CompressedLength) > archiveLength
+            || entries.Any(e => e.CompressedLength < e.Length - (e.Length / 10)))
+        {
+            errors.Add(new("package.content-too-large", "The backup's PDFs unpack to more than they occupy in the file, or to more than a full backup can hold. It was not written by TomeStack, or it is damaged."));
             return;
         }
         var declared = parsed.Manifest.Entries.Where(e => e.Path.StartsWith(PdfFolder, StringComparison.Ordinal)).ToDictionary(e => e.Sha256, e => e.Size, StringComparer.Ordinal);
@@ -263,20 +294,74 @@ public sealed partial class PackageService
             if (entry.Length > AttachmentFiles.MaxPdfBytes || entry.Length != declared.GetValueOrDefault(sha, -1))
             {
                 errors.Add(new("package.entry-too-large", $"PDF entry '{entry.FullName}' is larger than listed or than {AttachmentFiles.MaxPdfBytes / (1024 * 1024)} MB."));
-                continue;
+                return;
             }
             try
             {
                 using var stream = entry.Open();
                 using var bounded = new BoundedStream(stream, AttachmentFiles.MaxPdfBytes);
                 if (!PdfHashMatches(bounded, sha))
+                {
                     errors.Add(new("package.hash-mismatch", $"PDF entry '{entry.FullName}' does not match its hash; the backup may be damaged or altered."));
+                    return;
+                }
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException)
             {
                 errors.Add(new("package.invalid-archive", $"PDF entry '{entry.FullName}' cannot be read: {ex.Message}"));
+                return;
             }
         }
+    }
+
+    /// <summary>
+    /// The attachment records a restore adds: each one a restored source will point to. That is a source you did not
+    /// keep local, that names the attachment and has no PDF of its own here. A linked record also needs a safe path
+    /// (<see cref="IsSafeLinkedPath"/>).
+    /// </summary>
+    private HashSet<Guid> AttachmentsToRestore(ParsedPackage parsed, HashSet<Guid> keepLocal)
+    {
+        var records = parsed.Attachments.ToDictionary(a => a.AttachmentId);
+        var ids = new HashSet<Guid>();
+        foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
+        {
+            if (source.AttachmentId is not { } id || !records.TryGetValue(id, out var record))
+                continue;
+            var local = store.FindSource(source.Id)?.AttachmentId;
+            if ((local is null || local == id) && (record.Mode == AttachmentMode.Managed || IsSafeLinkedPath(record.LinkedPath)))
+                ids.Add(id);
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// A linked PDF from a backup is only restored if its path is a full path on a local drive ending in <c>.pdf</c>.
+    /// A network (UNC) or device path would make Windows connect to another machine just by listing sources, sending the
+    /// user's credentials. A relative path would mean whatever file is in the working folder.
+    /// </summary>
+    internal static bool IsSafeLinkedPath(string? path) =>
+        path is { Length: > 3 and <= 32_767 }
+        && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/'
+        && Path.IsPathFullyQualified(path)
+        && !path.Contains("..", StringComparison.Ordinal)
+        && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>What a library restore does not bring back, and what it changes beyond the item list.</summary>
+    private List<Diagnostic> LibraryWarnings(ParsedPackage parsed)
+    {
+        var warnings = new List<Diagnostic>();
+        foreach (var record in parsed.Attachments.Where(a => a.Mode == AttachmentMode.Linked && !IsSafeLinkedPath(a.LinkedPath)))
+            warnings.Add(new("restore.linked-pdf-skipped", $"The linked PDF '{record.OriginalFileName}' points somewhere other than a PDF on a local drive, so it is not restored. Attach it again."));
+        // Newest means last stored (SPEC I-06). A revision the backup adds lands after any revision only this library has,
+        // so it would become the newest though it is older. Say so; nothing is reordered.
+        var inBackup = parsed.Revisions.Select(r => r.RevisionId).ToHashSet();
+        foreach (var group in parsed.Revisions.Where(r => r.Status == RevisionStatus.Published && store.RevisionHash(r.RevisionId) is null).GroupBy(r => r.ContentId))
+        {
+            var localOnly = store.RevisionsOf(group.Key).Any(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId));
+            if (localOnly)
+                warnings.Add(new("restore.newest-changes", $"'{group.Last().Name}' has a newer published revision here that is not in the backup. After the restore, the backup's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", group.Last().Reference));
+        }
+        return warnings;
     }
 
     private static bool PdfHashMatches(Stream stream, string sha)
@@ -305,8 +390,12 @@ public sealed partial class PackageService
             errors.Add(new("package.invalid-json", $"Entry '{path}' has an unknown mode."));
         else if (attachment.Mode == AttachmentMode.Managed && (attachment.Sha256 is null || !pdfs.ContainsKey(attachment.Sha256)))
             errors.Add(new("package.entry-missing", $"Entry '{path}' is a PDF copy whose file is not in the backup."));
-        else if (attachment.Mode == AttachmentMode.Linked && (string.IsNullOrWhiteSpace(attachment.LinkedPath) || attachment.LinkedPath.Length > 32_767))
-            errors.Add(new("package.invalid-json", $"Entry '{path}' is a linked PDF without a valid location."));
+        else if (attachment.Mode == AttachmentMode.Managed && attachment.ByteLength != pdfs[attachment.Sha256!].Length)
+            // The size is kept and later trusted (the free-space check, the next backup's manifest), so it must be the real one.
+            errors.Add(new("package.invalid-json", $"Entry '{path}' records a different size than its PDF."));
+        else if (attachment.Mode == AttachmentMode.Linked && string.IsNullOrWhiteSpace(attachment.LinkedPath))
+            errors.Add(new("package.invalid-json", $"Entry '{path}' is a linked PDF without a location."));
+        // A linked path that is not a local PDF is not an error: LibraryWarnings reports it, and the restore skips it.
     }
 
     /// <summary>The revisions in the order the manifest lists; the list must name each revision entry exactly once.</summary>

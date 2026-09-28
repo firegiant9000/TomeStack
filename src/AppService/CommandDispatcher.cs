@@ -35,7 +35,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// M2.1: backup files chosen in the native Open dialog, by the token the UI got with the preview. The path stays here;
     /// only the file name reaches the page.
     /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _chosenBackups = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, ChosenBackup> _chosenBackups = new();
 
     public string Dispatch(string requestJson)
     {
@@ -247,6 +247,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
         var temporary = path + ".partial";
         LibraryBackupResult result;
+        var moved = false;
         try
         {
             using (var file = new FileStream(temporary, FileMode.Create, FileAccess.ReadWrite))
@@ -255,11 +256,17 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
                 file.Flush(flushToDisk: true);
             }
             File.Move(temporary, path, overwrite: true);
+            moved = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            TryDelete(temporary);
             throw new AppValidationException([new("library.save-failed", $"Could not save {Path.GetFileName(path)}. Check that the folder exists, is writable and has enough free space, then try again.")]);
+        }
+        finally
+        {
+            // Whatever failed (the disk, the database, a limit), no half-written backup stays next to the chosen file.
+            if (!moved)
+                TryDelete(temporary);
         }
         return new { saved = true, fileName = Path.GetFileName(path), result.Bytes, result.Contents, result.Warnings };
     }
@@ -273,18 +280,42 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         if (path is null)
             return new { chosen = false };
         var token = Guid.NewGuid();
-        _chosenBackups[token] = path;
-        return new { chosen = true, token, fileName = Path.GetFileName(path), preview = app.PreviewLibraryRestore(path) };
+        var stamp = FileStamp(path); // before the check: a file that changes while it is checked no longer matches
+        var preview = app.PreviewLibraryRestore(path);
+        _chosenBackups[token] = new ChosenBackup(path, stamp);
+        return new { chosen = true, token, fileName = Path.GetFileName(path), preview };
     }
+
+    /// <summary>The file's size and last write time: a restore applies only the file whose preview the user saw.</summary>
+    private static (long Length, DateTime Written)? FileStamp(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? (info.Length, info.LastWriteTimeUtc) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record ChosenBackup(string Path, (long Length, DateTime Written)? Stamp);
 
     /// <summary>Step 2, after the user has read the preview: re-checks the same file and restores it.</summary>
     private LibraryRestoreResult ApplyLibraryRestore(RestorePayload payload)
     {
         if (!payload.Confirm)
             throw new AppValidationException([new("restore.confirm-required", "Show the restore preview and confirm it first.")]);
-        if (!_chosenBackups.TryGetValue(payload.Token, out var path))
+        if (!_chosenBackups.TryGetValue(payload.Token, out var chosen))
             throw new AppValidationException([new("restore.not-chosen", "Choose the backup file again.")]);
-        var result = app.ApplyLibraryRestore(path, payload.SourceChoices);
+        if (chosen.Stamp is null || FileStamp(chosen.Path) != chosen.Stamp)
+        {
+            // A sync client or a later save replaced the file after its preview: the user never saw what it would do.
+            _chosenBackups.TryRemove(payload.Token, out _);
+            throw new AppValidationException([new("restore.file-changed", "The backup file changed after it was checked. Choose it again to see what it would restore.")]);
+        }
+        var result = app.ApplyLibraryRestore(chosen.Path, payload.SourceChoices);
         _chosenBackups.TryRemove(payload.Token, out _); // a failed attempt (say, a missing source choice) can be retried
         return result;
     }

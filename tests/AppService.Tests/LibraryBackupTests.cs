@@ -216,7 +216,7 @@ public class LibraryBackupTests
             var before = Snapshot(clean.App);
             var preview = clean.App.PreviewLibraryRestore(path);
             Assert.False(preview.CanApply);
-            Assert.Contains(preview.Errors, e => e.Code is "package.hash-mismatch" or "package.entry-too-large");
+            Assert.Contains(preview.Errors, e => e.Code is "package.hash-mismatch" or "package.entry-too-large" or "package.content-too-large" or "package.invalid-json");
             Assert.Throws<PackageException>(() => clean.App.ApplyLibraryRestore(path));
             Assert.Equal(before, Snapshot(clean.App));
             Assert.False(Directory.Exists(clean.App.Store.AttachmentsDirectory) && Directory.EnumerateFiles(clean.App.Store.AttachmentsDirectory).Any());
@@ -285,6 +285,227 @@ public class LibraryBackupTests
             Assert.Null(clean.App.GetAttachment(library.Source.Id)); // re-attach it
             Assert.NotNull(clean.App.Store.FindRevision(library.Draft));
             Assert.NotNull(clean.App.Store.FindCharacter(library.Character));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>Edits the JSON entries of a backup file in place and re-signs its manifest.</summary>
+    private static void EditBackup(string path, string folder, Action<System.Text.Json.Nodes.JsonNode> change) =>
+        File.WriteAllBytes(path, PackageEditor.Edit(File.ReadAllBytes(path), p => p.StartsWith(folder, StringComparison.Ordinal), change));
+
+    [Fact]
+    public void A_source_kept_local_brings_no_pdf_and_no_orphan_attachment_record()
+    {
+        // Review L1: the backup's PDF must not be copied (and kept forever) when no restored source will use it.
+        using var origin = new TempApp();
+        var library = Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            using var target = new TempApp();
+            // The same source exists here with different metadata, so the restore asks, and the user keeps theirs.
+            target.App.Store.UpsertSource(library.Source with { Title = "Test Library Homebrew (mine)" });
+            var preview = target.App.PreviewLibraryRestore(path);
+            Assert.Contains(preview.Items, i => i.Kind == "source" && i.Id == library.Source.Id && i.Action == PackageItemAction.Replace);
+
+            var restored = target.App.ApplyLibraryRestore(path, new Dictionary<Guid, SourceChoice> { [library.Source.Id] = SourceChoice.KeepLocal });
+
+            Assert.Equal(0, restored.PdfsCopied);
+            Assert.Empty(target.App.Store.ListAttachments());
+            Assert.False(Directory.Exists(target.App.Store.AttachmentsDirectory) && Directory.EnumerateFiles(target.App.Store.AttachmentsDirectory).Any());
+            Assert.Equal("Test Library Homebrew (mine)", target.App.Store.FindSource(library.Source.Id)!.Title);
+            Assert.NotNull(target.App.Store.FindRevision(library.Draft)); // the rest is restored
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(@"\\attacker-host\share\book.pdf")]
+    [InlineData(@"\\?\C:\books\book.pdf")]
+    [InlineData(@"books\book.pdf")]
+    [InlineData(@"C:\Windows\win.ini")]
+    [InlineData(@"C:\books\..\Windows\book.pdf")]
+    public void A_linked_pdf_outside_a_local_drive_is_not_restored(string linkedPath)
+    {
+        // Review R1/L2: listing sources checks that a linked file exists. A network path would send the user's Windows
+        // credentials to another machine without a click, so a restore never records one.
+        using var origin = new TempApp();
+        var source = origin.App.CreateHomebrewSource(new("Test Linked Book", [RulesFamilies.Srd521]));
+        var real = Path.Combine(Path.GetTempPath(), "tomestack-tests", $"{Guid.NewGuid():N}.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(real)!);
+        File.WriteAllBytes(real, Pdf);
+        var path = TempFile();
+        try
+        {
+            origin.App.AttachPdfFile(source.Id, real, AttachmentMode.Linked);
+            Backup(origin.App, path);
+            EditBackup(path, "attachments/", node => node["linkedPath"] = linkedPath);
+
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+            var warning = Assert.Single(preview.Warnings, w => w.Code == "restore.linked-pdf-skipped");
+            Assert.DoesNotContain(linkedPath, warning.Message, StringComparison.Ordinal);
+            clean.App.ApplyLibraryRestore(path);
+
+            Assert.Empty(clean.App.Store.ListAttachments());
+            Assert.Null(clean.App.Store.FindSource(source.Id)!.AttachmentId);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(real);
+        }
+    }
+
+    [Fact]
+    public void A_linked_pdf_on_a_local_drive_is_restored_with_its_link()
+    {
+        using var origin = new TempApp();
+        var source = origin.App.CreateHomebrewSource(new("Test Linked Book", [RulesFamilies.Srd521]));
+        var real = Path.Combine(Path.GetTempPath(), "tomestack-tests", $"{Guid.NewGuid():N}.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(real)!);
+        File.WriteAllBytes(real, Pdf);
+        var path = TempFile();
+        try
+        {
+            origin.App.AttachPdfFile(source.Id, real, AttachmentMode.Linked);
+            var written = Backup(origin.App, path);
+            Assert.Equal((0, 1), (written.Contents.ManagedPdfs, written.Contents.LinkedPdfs));
+
+            using var clean = new TempApp();
+            var restored = clean.App.ApplyLibraryRestore(path);
+            Assert.Equal(0, restored.PdfsCopied); // a linked file stays where it is
+            Assert.Equal("linked", clean.App.GetAttachment(source.Id)!.Mode.ToString().ToLowerInvariant());
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(real);
+        }
+    }
+
+    [Fact]
+    public void An_attachment_record_whose_size_differs_from_its_pdf_is_refused()
+    {
+        // Review R2: the recorded size feeds the free-space check and the next backup's manifest, so it must be true.
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            EditBackup(path, "attachments/", node => node["byteLength"] = 0);
+
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.False(preview.CanApply);
+            Assert.Contains(preview.Errors, e => e.Code == "package.invalid-json" && e.Message.Contains("different size", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Pdf_entries_that_unpack_to_much_more_than_they_occupy_are_refused_unread()
+    {
+        // Review R3: the writer stores PDFs uncompressed; a highly compressed "PDF" is a decompression bomb, not a backup.
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            var bomb = Encoding.ASCII.GetBytes("%PDF-1.4\n" + new string(' ', 200_000) + "%%EOF\n");
+            var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bomb));
+            using (var zip = ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                using (var stream = zip.CreateEntry($"files/{sha}.pdf", CompressionLevel.SmallestSize).Open())
+                    stream.Write(bomb);
+                var manifestEntry = zip.GetEntry("manifest.json")!;
+                System.Text.Json.Nodes.JsonNode manifest;
+                using (var read = manifestEntry.Open())
+                    manifest = System.Text.Json.Nodes.JsonNode.Parse(read)!;
+                manifest["entries"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject { ["path"] = $"files/{sha}.pdf", ["kind"] = "pdf", ["sha256"] = sha, ["size"] = bomb.Length });
+                manifestEntry.Delete();
+                using var write = zip.CreateEntry("manifest.json").Open();
+                write.Write(Encoding.UTF8.GetBytes(manifest.ToJsonString()));
+            }
+
+            using var clean = new TempApp();
+            var preview = clean.App.PreviewLibraryRestore(path);
+            Assert.False(preview.CanApply);
+            Assert.Contains(preview.Errors, e => e.Code == "package.content-too-large");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_restore_preview_names_the_database_copy_and_a_revision_that_would_become_newest()
+    {
+        // Review R5, R6.
+        using var temp = new TempApp();
+        var library = Fill(temp.App);
+        var path = TempFile();
+        try
+        {
+            Backup(temp.App, path);
+            temp.App.SaveCharacter(temp.App.Store.FindCharacter(library.Character)! with { Name = "Test Renamed" });
+
+            var preview = temp.App.PreviewLibraryRestore(path);
+            var replace = Assert.Single(preview.Warnings, w => w.Code == "restore.character-replace");
+            Assert.Contains("pre-restore-", replace.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(preview.Warnings, w => w.Code == "package.character-replace");
+            Assert.DoesNotContain(preview.Warnings, w => w.Code == "restore.newest-changes"); // nothing diverged
+
+            // Another library published a newer revision of the same content that the backup does not have.
+            using var other = new TempApp();
+            other.App.Store.InTransaction(() =>
+            {
+                other.App.Store.UpsertSource(library.Source);
+                foreach (var revision in temp.App.Store.ListRevisions(library.Pinned.ContentId).Where(r => r.RevisionId == library.Superseded.RevisionId))
+                    other.App.Store.AddRevision(revision);
+                other.App.Store.AddRevision(temp.App.Store.FindRevision(library.Superseded)! with { RevisionId = Guid.NewGuid(), Name = "Test Quick Hands (newer here)" });
+            });
+            var diverged = other.App.PreviewLibraryRestore(path);
+            Assert.Contains(diverged.Warnings, w => w.Code == "restore.newest-changes" && w.Content == library.Pinned);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void A_backup_file_that_changes_after_its_preview_is_not_applied()
+    {
+        // Review R4: a sync client or a later save can replace the file between "Choose" and "Restore".
+        using var origin = new TempApp();
+        Fill(origin.App);
+        var path = TempFile();
+        try
+        {
+            Backup(origin.App, path);
+            using var clean = new TempApp();
+            var dispatcher = new CommandDispatcher(clean.App, host: new DialogHost(null, path));
+            var token = Ok(dispatcher, "library.restoreChoose").GetProperty("token").GetString();
+            File.AppendAllText(path, " ");
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+
+            Assert.Equal("restore.file-changed", ErrorCode(dispatcher, "library.restoreApply", new { token, confirm = true }));
+            Assert.Empty(clean.App.ListCharacters());
         }
         finally
         {

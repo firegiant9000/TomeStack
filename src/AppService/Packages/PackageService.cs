@@ -219,10 +219,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     private (int Added, int Replaced, int Unchanged) Commit(ParsedPackage parsed, HashSet<Guid> keepLocal, List<Diagnostic> warnings)
     {
         var library = parsed.Manifest.Scope == PackageScope.Library;
+        var linked = library ? AttachmentsToRestore(parsed, keepLocal) : [];
         int added = 0, replaced = 0, unchanged = 0;
         store.InTransaction(() =>
         {
-            foreach (var attachment in parsed.Attachments)
+            // Only records a restored source will point to: any other would be an orphan nothing ever removes.
+            foreach (var attachment in parsed.Attachments.Where(a => linked.Contains(a.AttachmentId)))
             {
                 if (store.FindAttachment(attachment.AttachmentId) is null) { store.AddAttachment(attachment); added++; }
                 else unchanged++;
@@ -234,7 +236,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 var attachmentId = local?.AttachmentId;
                 if (library && source.AttachmentId is { } fromBackup && fromBackup != attachmentId)
                 {
-                    if (attachmentId is null && store.FindAttachment(fromBackup) is not null)
+                    if (attachmentId is null && linked.Contains(fromBackup) && store.FindAttachment(fromBackup) is not null)
                         attachmentId = fromBackup;
                     else if (attachmentId is not null)
                         warnings.Add(new("restore.pdf-kept", $"'{source.Title}' already has a different PDF here; it is kept."));
@@ -443,7 +445,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     errors.Add(new("package.pin-missing", $"'{character.Name}' pins revision {pin.RevisionId}, which is neither in the package nor installed.", pin));
             }
             var exists = store.FindCharacter(character.Id) is not null;
-            if (exists)
+            if (exists && parsed.Manifest.Scope == PackageScope.Library)
+                warnings.Add(new("restore.character-replace", $"'{character.Name}' already exists and will be replaced by the backup's copy. Your whole database is copied to the {BackupFolderName} folder first (pre-restore-….db); to go back, close TomeStack and put that file in place of {TomeStackApp.DatabaseFileName}."));
+            else if (exists)
                 warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy. The current copy is saved to the {BackupFolderName} folder in your data folder first, and you can restore it by importing that file."));
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
@@ -469,6 +473,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("gapNote", note.Id, note.Target?.Label ?? "(gap note)", action, $"{owner.Name} · {note.Status}"));
         }
 
+        if (parsed.Manifest.Scope == PackageScope.Library)
+            warnings.AddRange(LibraryWarnings(parsed));
         foreach (var attachment in parsed.Attachments)
         {
             var action = store.FindAttachment(attachment.AttachmentId) is null ? PackageItemAction.Add : PackageItemAction.Unchanged;
