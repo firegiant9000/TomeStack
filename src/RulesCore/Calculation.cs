@@ -174,7 +174,9 @@ public sealed record SlotValue(int Level, int Maximum, int Spent, int Remaining,
 /// <summary>
 /// D04: one caster (a class or subclass with a <c>spellcasting</c> effect) at its class level. The first one in class order
 /// is <paramref name="Primary"/>: its attack bonus, save DC and slots are the sheet fields. Others are calculated here the
-/// same way; their spell slots are not combined (the SRD multiclass table is a manual step, D04).
+/// same way, with the same <c>spellAttack</c> and <c>spellSaveDc</c> modifiers (an item's "+1 to spell attacks" counts
+/// for every caster); a user override of the sheet field is the primary's only (M2.1). <paramref name="AttackTrace"/> and
+/// <paramref name="SaveDcTrace"/> explain both numbers for every caster.
 /// </summary>
 public sealed record SpellcastingEntry(
     ContentReference Content,
@@ -193,7 +195,9 @@ public sealed record SpellcastingEntry(
     bool Primary,
     TraceOrigin Origin,
     IReadOnlyList<SpellEntry> Spells,
-    IReadOnlyList<Diagnostic> Warnings)
+    IReadOnlyList<Diagnostic> Warnings,
+    IReadOnlyList<TraceEntry>? AttackTrace = null,
+    IReadOnlyList<TraceEntry>? SaveDcTrace = null)
 {
     /// <summary>The highest spell level this caster has a slot for (0: cantrips only).</summary>
     public int HighestSlotLevel => Slots.Select((count, i) => (count, level: i + 1)).Where(s => s.count > 0).Select(s => s.level).DefaultIfEmpty(0).Max();
@@ -505,7 +509,8 @@ public static class CharacterCalculator
             })
             .ToList();
 
-        var spellcasting = SpellcastingEntries(casters, character, catalog, resolved.ClassLevels, values, family, diagnostics);
+        var casterNumbers = new CasterNumbers(modifiers, ownSteps, order, fields.ToDictionary(f => f.Field, f => f.Trace, StringComparer.Ordinal));
+        var spellcasting = SpellcastingEntries(casters, character, catalog, resolved.ClassLevels, values, family, diagnostics, casterNumbers);
         SlotValue Slot(int level, string field, int spent)
         {
             var maximum = Math.Max(values[field], 0);
@@ -648,16 +653,49 @@ public static class CharacterCalculator
 
     private static int PactSlotLevel(IReadOnlyList<int> row) => row.Select((n, i) => (n, i + 1)).Where(p => p.n > 0).Select(p => p.Item2).DefaultIfEmpty(0).Max();
 
+    /// <summary>What a secondary caster's attack bonus and save DC need from the sheet calculation (M2.1).</summary>
+    /// <param name="FieldTraces">The finished sheet fields' traces; the primary caster's numbers are those fields.</param>
+    private sealed record CasterNumbers(
+        List<Modifier> Modifiers, Dictionary<string, List<Step>> OwnSteps, List<string> Order, Dictionary<string, IReadOnlyList<TraceEntry>> FieldTraces);
+
+    /// <summary>
+    /// A secondary caster's spell attack bonus or save DC: the same base as <see cref="CasterBase"/> with its own ability,
+    /// then every modifier of the sheet field, in ADR-003 order. The trace starts with its inputs' steps, like a field's.
+    /// </summary>
+    private static (int Value, IReadOnlyList<TraceEntry> Trace) SecondaryCasterNumber(
+        CasterInfo caster, string field, int constant, string description, Character character, Dictionary<ContentReference, int> classLevels,
+        Dictionary<string, int> values, string family, CasterNumbers numbers, List<Diagnostic> warnings)
+    {
+        var (content, effect, _) = caster;
+        var modifier = FieldIds.Modifier(effect.Ability);
+        var mod = values[modifier];
+        var pb = values[FieldIds.ProficiencyBonus];
+        var steps = new List<Step>();
+        var text = string.Format(System.Globalization.CultureInfo.InvariantCulture, description, AbilityNames[effect.Ability]);
+        var value = constant + pb + mod;
+        steps.Add(new(field, "base", $"{text}, from {Describe(content)}", constant, value, ContentOrigin(family, content, effect), [new(FieldIds.ProficiencyBonus, pb), new(modifier, mod)]));
+        var applying = numbers.Modifiers.Where(m => m.Effect.Target == field).ToList();
+        value = ApplyModifiers(field, value, applying, character, classLevels, values, family, steps, warnings, new HashSet<string>(StringComparer.Ordinal));
+
+        var inputs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var read in applying.SelectMany(m => m.ReadsFields).Append(FieldIds.ProficiencyBonus).Append(modifier))
+            inputs.UnionWith(Closure(read, numbers.Modifiers, new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)));
+        inputs.Remove(field);
+        var trace = Flatten(inputs, numbers.OwnSteps, numbers.Order);
+        foreach (var step in steps)
+            trace.Add(new(trace.Count + 1, step.Operation, step.Description, step.Amount, step.Result, step.Origin, step.Field, step.Inputs));
+        return (value, trace);
+    }
+
     private static List<SpellcastingEntry> SpellcastingEntries(
-        List<CasterInfo> casters, Character character, IContentCatalog catalog, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics)
+        List<CasterInfo> casters, Character character, IContentCatalog catalog, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics,
+        CasterNumbers numbers)
     {
         var entries = new List<SpellcastingEntry>();
-        var pb = values[FieldIds.ProficiencyBonus];
         for (var i = 0; i < casters.Count; i++)
         {
             var (content, effect, level) = casters[i];
             var warnings = new List<Diagnostic>();
-            var mod = values[FieldIds.Modifier(effect.Ability)];
             var row = Row(effect.Slots, level);
             int? cantrips = effect.Cantrips?[level - 1];
             int? allowed = effect.SpellsTable?[level - 1];
@@ -693,12 +731,17 @@ public static class CharacterCalculator
             }
 
             var primary = i == 0;
+            var (attack, attackTrace) = primary
+                ? (values[FieldIds.SpellAttack], numbers.FieldTraces[FieldIds.SpellAttack])
+                : SecondaryCasterNumber(casters[i], FieldIds.SpellAttack, 0, "Spell attack bonus = proficiency bonus + {0} modifier", character, classLevels, values, family, numbers, warnings);
+            var (saveDc, saveDcTrace) = primary
+                ? (values[FieldIds.SpellSaveDc], numbers.FieldTraces[FieldIds.SpellSaveDc])
+                : SecondaryCasterNumber(casters[i], FieldIds.SpellSaveDc, 8, "Spell save DC = 8 + proficiency bonus + {0} modifier", character, classLevels, values, family, numbers, warnings);
             entries.Add(new(
                 content.Revision.Reference, content.Revision.Name, effect.Id, level, effect.Ability,
-                primary ? values[FieldIds.SpellAttack] : pb + mod,
-                primary ? values[FieldIds.SpellSaveDc] : 8 + pb + mod,
+                attack, saveDc,
                 effect.Preparation, effect.SpellList, effect.SlotKind, row, cantrips, allowed, primary,
-                ContentOrigin(family, content, effect), spells, warnings));
+                ContentOrigin(family, content, effect), spells, warnings, attackTrace, saveDcTrace));
         }
         var casterIds = casters.Select(c => c.Content.Revision.ContentId).ToHashSet();
         foreach (var orphan in character.Spells.Where(s => !casterIds.Contains(s.Caster)))

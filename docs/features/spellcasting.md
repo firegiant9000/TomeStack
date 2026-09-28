@@ -42,6 +42,7 @@ Like `armor`, both types are typed only in a revision of schema v5 or newer. In 
   - `pactSlots` comes from the pact caster.
   - Each field traces its content, source and page, and can be overridden.
   - For a non-caster they are 0, automatic, and hidden on the sheet.
+- **Every caster's attack bonus and save DC (M2.1):** the fields are the primary caster's. Every other caster gets the same base with its own ability, then every `spellAttack` and `spellSaveDc` modifier (an item's "+1 to spell attacks" counts for each caster). `attackTrace` and `saveDcTrace` explain both numbers, and the sheet's Spells panel shows them for each caster after the first. A user override of the sheet field changes the primary's number only. Before M2.1 a second caster got a bare PB + modifier with no trace. A modifier limited to one class's spells is not modeled.
 - **Spells:** `sheet.spellcasting[]` lists each caster with its own attack bonus and save DC, the counts for its level, and its recorded spells with their data. Problems are flagged, and the spell stays listed:
   - a spell not on the caster's list (`spells.not-on-list`);
   - a level above the caster's highest slot (`spells.level-too-high`);

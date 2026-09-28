@@ -29,6 +29,15 @@ function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
+/**
+ * Waits until the status line says `text`. The status line stays on screen, so `findByRole('status')` would return at
+ * once with the previous message (lint forbids it here).
+ */
+async function expectStatus(text: RegExp): Promise<HTMLElement> {
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(text));
+  return screen.getByRole('status');
+}
+
 it('creates a character, shows its traced sheet, overrides, exports and re-imports it', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -81,9 +90,8 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
 
-  const status = await screen.findByRole('status');
+  const status = await expectStatus(/1 replaced/);
   expect(status.getAttribute('role')).toBe('status');
-  expect(status.textContent).toMatch(/1 replaced/);
   expect(status.textContent).toMatch(/backed up to backups\/pre-import-/);
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 });
@@ -138,7 +146,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   expect(await screen.findByText('All choices are made.')).toBeTruthy(); // level 2 offers no new choice
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Draft discarded/);
+  await expectStatus(/Draft discarded/);
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).getByText('Level 1')).toBeTruthy();
 
@@ -216,8 +224,9 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Long rest…' }));
   let rest = await screen.findByRole('region', { name: 'Long rest' });
   await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Long rest' })));
-  expect(within(rest).getByRole('checkbox', { name: /^Hit points: 28 → 35/ })).toBeTruthy();
-  expect(within(rest).getByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
+  // The heading is focused on mount; the preview's changes arrive afterwards (restPreview), so wait for them.
+  expect(await within(rest).findByRole('checkbox', { name: /^Hit points: 28 → 35/ })).toBeTruthy();
+  expect(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
   await user.click(within(rest).getByRole('button', { name: 'Cancel rest' }));
   expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy();
 
@@ -225,7 +234,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   rest = await screen.findByRole('region', { name: 'Long rest' });
   await user.click(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })); // untick: keep Rages as they are
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Long rest finished: 1 change applied/);
+  await expectStatus(/Long rest finished: 1 change applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 
@@ -244,7 +253,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   const spend = await within(rest).findByRole('list', { name: 'Hit dice to spend' });
   expect(spend.textContent).toMatch(/Rolled 5, Constitution modifier \+2: 7 hit point\(s\)\. Hit points 25 → 32/);
   await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Short rest finished: 2 changes applied/);
+  await expectStatus(/Short rest finished: 2 changes applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
   expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
@@ -439,7 +448,7 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.type(within(pages).getByRole('spinbutton', { name: 'Last page (optional)' }), '4');
   await user.type(within(pages).getByRole('textbox', { name: 'Title (optional)' }), 'E2E Chapter');
   await user.click(within(pages).getByRole('button', { name: 'Import pages' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Draft reference entry "E2E Chapter" created/);
+  await expectStatus(/Draft reference entry "E2E Chapter" created/);
   const drafts = await client.contentBySource(source.id);
   expect(drafts.find((e) => e.name === 'E2E Chapter')?.revisions[0]).toMatchObject({ status: 'draft', provenance: { page: { start: 3, end: 4 } } });
 
@@ -475,6 +484,8 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.click(await screen.findByRole('button', { name: 'Sources' }));
   const reader = () => within(screen.getByRole('listitem', { name: 'E2E Grimoire' })).getByRole('region', { name: 'Read the text of E2E Grimoire' });
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Grimoire' })).getByRole('button', { name: 'Read the whole document' }));
+  // M4 stays experimental until a real third-party PDF and the SRD measurements pass (ROADMAP M4).
+  expect(within(reader()).getByRole('heading', { name: /Read the text and find candidates Experimental/ })).toBeTruthy();
   const reviewButton = await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 });
   // Page 6 has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
   expect(within(reader()).getByText(/whole document: completed, 6 pages read, (1 by OCR, )?1 without text, 9 candidates\./)).toBeTruthy();
@@ -927,4 +938,23 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   expect(await within(rest).findByRole('checkbox', { name: /^Level 1 spell slots: 1 → 2/ })).toBeTruthy();
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy());
+});
+
+it('the Backups screen says what a full backup holds, and needs the desktop app to write or restore one (M2.1)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(await screen.findByRole('button', { name: 'Backups' }));
+  const panel = await screen.findByRole('region', { name: 'Backups' });
+  // Earlier flows in this run created characters, homebrew drafts, a campaign and a PDF copy: the counts come from the service.
+  const contents = await within(panel).findByRole('list', { name: 'What the backup contains' });
+  expect(contents.textContent).toMatch(/\d+ character\(s\), \d+ campaign\(s\), \d+ gap note\(s\)/);
+  expect(contents.textContent).toMatch(/\d+ published and [1-9]\d* draft entries/);
+  expect(contents.textContent).toMatch(/Not included: text read from PDFs/);
+
+  // DevHost has no native Save or Open dialog, so both say what they need instead of doing nothing.
+  await user.click(within(panel).getByRole('button', { name: 'Back up everything…' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/Backing up everything needs the TomeStack desktop app/);
+  await user.click(within(panel).getByRole('button', { name: 'Choose a full backup…' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Restoring a full backup needs the TomeStack desktop app/));
 });

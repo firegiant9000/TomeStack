@@ -59,6 +59,58 @@ public static partial class AttachmentFiles
         return attachment;
     }
 
+    /// <summary>
+    /// M2.1 restore: copies one managed PDF from a library backup into this data folder, unless a copy with that hash is
+    /// already here. The bytes must be a PDF within the limit whose SHA-256 is <paramref name="sha256"/>; otherwise nothing
+    /// is kept (<c>attachment.damaged</c>). Adds no record: the restore's transaction does. A copy whose record is then
+    /// rolled back is removed at the next start (<see cref="DeleteUnusedManagedFiles"/>). Returns whether it copied.
+    /// </summary>
+    public static bool RestoreManaged(SqliteStore store, Stream content, string sha256)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(content);
+        var target = ManagedPath(store, sha256);
+        if (File.Exists(target))
+            return false;
+        Directory.CreateDirectory(store.AttachmentsDirectory);
+        var temporary = Path.Combine(store.AttachmentsDirectory, $"{Guid.NewGuid():N}.partial");
+        try
+        {
+            string actual;
+            using (var output = File.Create(temporary))
+                (actual, _) = CopyChecked(content, output);
+            if (actual != sha256)
+                throw new AttachmentException("attachment.damaged", "A PDF in the backup does not match its recorded hash; the backup may be damaged.");
+            File.Move(temporary, target);
+            File.SetAttributes(target, FileAttributes.ReadOnly);
+            return true;
+        }
+        catch
+        {
+            TryDelete(temporary);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// M2.1 backup: whether the managed copy of <paramref name="attachment"/> is on disk and still has its hash (read in
+    /// full). A copy that fails is left out of a library backup with a warning.
+    /// </summary>
+    public static bool ManagedCopyIsIntact(SqliteStore store, Attachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        if (attachment.Mode != AttachmentMode.Managed || attachment.Sha256 is null)
+            return false;
+        try
+        {
+            return HashFile(ManagedPath(store, attachment.Sha256)).Sha256 == attachment.Sha256;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or AttachmentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Records a PDF left where it is (ADR-005 option B), with its hash to detect later changes.</summary>
     public static Attachment Link(SqliteStore store, string path, DateTimeOffset now)
     {

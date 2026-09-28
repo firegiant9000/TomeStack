@@ -31,6 +31,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     [GeneratedRegex("^(sources|content|characters|campaigns|gaps)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
     private static partial Regex EntryPathPattern();
 
+    /// <summary>M2.1, library backups only: attachment records, and managed PDFs named by their SHA-256.</summary>
+    [GeneratedRegex("^(attachments/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json|files/[0-9a-f]{64}\\.pdf)$", RegexOptions.CultureInvariant)]
+    private static partial Regex LibraryEntryPathPattern();
+
+    private const string AttachmentFolder = "attachments/";
+    private const string PdfFolder = "files/";
+
     private sealed record ExportPlan(
         List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
 
@@ -65,6 +72,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
         {
+            FormatVersion = PackageManifest.CharacterFormatVersion,
             CreatedAt = createdAt,
             AppVersion = typeof(PackageService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
             Purpose = purpose,
@@ -176,7 +184,19 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var (preview, parsed) = Read(package);
         if (!preview.CanApply || parsed is null)
             throw new PackageException(preview.Errors);
+        var keepLocal = SourcesKeptLocal(preview, sourceChoices);
 
+        // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
+        var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
+        var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
+
+        var (added, replaced, unchanged) = Commit(parsed, keepLocal, []);
+        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
+    }
+
+    /// <summary>The sources to leave as they are; every source that differs from the local record needs a choice.</summary>
+    private static HashSet<Guid> SourcesKeptLocal(PackagePreview preview, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices)
+    {
         var differing = preview.Items.Where(i => i.Kind == "source" && i.Action == PackageItemAction.Replace).ToList();
         var missingChoices = differing.Where(i => sourceChoices is null || !sourceChoices.ContainsKey(i.Id)).ToList();
         if (missingChoices.Count > 0)
@@ -188,19 +208,40 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     $"Source '{i.Name}' in the package differs from your local record ({string.Join(", ", i.Changes!.Select(c => c.Field))}). Choose whether to keep your local version or use the imported one.")),
             ]);
         }
-        var keepLocal = differing.Where(i => sourceChoices![i.Id] == SourceChoice.KeepLocal).Select(i => i.Id).ToHashSet();
+        return differing.Where(i => sourceChoices![i.Id] == SourceChoice.KeepLocal).Select(i => i.Id).ToHashSet();
+    }
 
-        // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
-        var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
-        var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
-
+    /// <summary>
+    /// Writes a checked package in one transaction. A package import never changes a source's PDF. A library restore
+    /// (<see cref="ParsedPackage.Attachments"/> non-empty or library scope) also adds attachment records, and gives a
+    /// source the backup's PDF when it has none here; a different local PDF is kept (<paramref name="warnings"/>).
+    /// </summary>
+    private (int Added, int Replaced, int Unchanged) Commit(ParsedPackage parsed, HashSet<Guid> keepLocal, List<Diagnostic> warnings)
+    {
+        var library = parsed.Manifest.Scope == PackageScope.Library;
+        var linked = library ? AttachmentsToRestore(parsed, keepLocal) : [];
         int added = 0, replaced = 0, unchanged = 0;
         store.InTransaction(() =>
         {
+            // Only records a restored source will point to: any other would be an orphan nothing ever removes.
+            foreach (var attachment in parsed.Attachments.Where(a => linked.Contains(a.AttachmentId)))
+            {
+                if (store.FindAttachment(attachment.AttachmentId) is null) { store.AddAttachment(attachment); added++; }
+                else unchanged++;
+            }
             foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
             {
-                // A PDF reference is machine-local; an import never adds, changes or removes one.
-                store.UpsertSource(source with { PdfRef = store.FindSource(source.Id)?.PdfRef, AttachmentId = store.FindSource(source.Id)?.AttachmentId });
+                // A PDF reference is machine-local; a package import never adds, changes or removes one.
+                var local = store.FindSource(source.Id);
+                var attachmentId = local?.AttachmentId;
+                if (library && source.AttachmentId is { } fromBackup && fromBackup != attachmentId)
+                {
+                    if (attachmentId is null && linked.Contains(fromBackup) && store.FindAttachment(fromBackup) is not null)
+                        attachmentId = fromBackup;
+                    else if (attachmentId is not null)
+                        warnings.Add(new("restore.pdf-kept", $"'{source.Title}' already has a different PDF here; it is kept."));
+                }
+                store.UpsertSource(source with { PdfRef = local?.PdfRef, AttachmentId = attachmentId });
             }
             foreach (var revision in parsed.Revisions)
             {
@@ -230,7 +271,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 store.SaveGapNote(note);
             }
         });
-        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
+        return (added, replaced, unchanged);
     }
 
     /// <summary>
@@ -272,23 +313,36 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
     }
 
+    /// <param name="Attachments">Library backups only: attachment records (<c>attachments/</c>).</param>
+    /// <param name="Pdfs">Library backups only: the <c>files/</c> entries by content hash. Valid while the archive is open; never read into memory.</param>
     private sealed record ParsedPackage(
         PackageManifest Manifest,
         IReadOnlyList<SourceRecord> Sources,
         IReadOnlyList<ContentRevision> Revisions,
         IReadOnlyList<Character> Characters,
         IReadOnlyList<Campaign> Campaigns,
-        IReadOnlyList<GapNote> GapNotes);
+        IReadOnlyList<GapNote> GapNotes,
+        IReadOnlyList<Attachment> Attachments,
+        IReadOnlyDictionary<string, ZipArchiveEntry> Pdfs);
 
     private (PackagePreview Preview, ParsedPackage? Parsed) Read(byte[] package)
     {
         ArgumentNullException.ThrowIfNull(package);
         var errors = new List<Diagnostic>();
         var parsed = Parse(package, errors);
-        if (parsed is null)
-            return (new PackagePreview(false, null, [], errors, []), null);
+        if (parsed?.Manifest.Scope == PackageScope.Library)
+        {
+            errors.Add(new("package.library-backup", "This file is a full backup of a TomeStack library. Use \"Restore full backup\" to restore it; it cannot be imported as a package."));
+            parsed = null;
+        }
+        return BuildPreview(parsed, errors, []);
+    }
 
-        var warnings = new List<Diagnostic>();
+    /// <param name="warnings">Warnings found before the preview (a library restore's PDF checks).</param>
+    private (PackagePreview Preview, ParsedPackage? Parsed) BuildPreview(ParsedPackage? parsed, List<Diagnostic> errors, List<Diagnostic> warnings)
+    {
+        if (parsed is null || errors.Count > 0)
+            return (new PackagePreview(false, parsed?.Manifest, [], errors, warnings), null);
         var items = new List<PackageItem>();
         var packageRevisions = parsed.Revisions.ToDictionary(r => r.Reference);
         var packageSources = parsed.Sources.ToDictionary(s => s.Id);
@@ -391,7 +445,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     errors.Add(new("package.pin-missing", $"'{character.Name}' pins revision {pin.RevisionId}, which is neither in the package nor installed.", pin));
             }
             var exists = store.FindCharacter(character.Id) is not null;
-            if (exists)
+            if (exists && parsed.Manifest.Scope == PackageScope.Library)
+                warnings.Add(new("restore.character-replace", $"'{character.Name}' already exists and will be replaced by the backup's copy. Your whole database is copied to the {BackupFolderName} folder first (pre-restore-….db); to go back, close TomeStack and put that file in place of {TomeStackApp.DatabaseFileName}."));
+            else if (exists)
                 warnings.Add(new("package.character-replace", $"'{character.Name}' already exists and will be replaced by the imported copy. The current copy is saved to the {BackupFolderName} folder in your data folder first, and you can restore it by importing that file."));
             items.Add(new("character", character.Id, character.Name, exists ? PackageItemAction.Replace : PackageItemAction.Add, character.RulesFamily));
         }
@@ -417,8 +473,24 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("gapNote", note.Id, note.Target?.Label ?? "(gap note)", action, $"{owner.Name} · {note.Status}"));
         }
 
-        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings), parsed);
+        if (parsed.Manifest.Scope == PackageScope.Library)
+            warnings.AddRange(LibraryWarnings(parsed));
+        foreach (var attachment in parsed.Attachments)
+        {
+            var action = store.FindAttachment(attachment.AttachmentId) is null ? PackageItemAction.Add : PackageItemAction.Unchanged;
+            var detail = attachment.Mode == AttachmentMode.Managed
+                ? $"PDF copy · {attachment.ByteLength / (1024.0 * 1024.0):0.#} MB"
+                : "linked PDF (the file itself is not in the backup)";
+            items.Add(new("attachment", attachment.AttachmentId, attachment.OriginalFileName, action, detail));
+        }
+
+        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings), errors.Count == 0 ? parsed : null);
     }
+
+    /// <summary>Entry count and total unpacked JSON for one kind of archive.</summary>
+    private sealed record ReadLimits(int MaxEntries, long MaxJsonBytes);
+
+    private static readonly ReadLimits PackageLimits = new(MaxEntries, MaxTotalBytes);
 
     private static ParsedPackage? Parse(byte[] package, List<Diagnostic> errors)
     {
@@ -427,25 +499,48 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             errors.Add(new("package.too-large", $"Package is {package.LongLength} bytes; the limit is {MaxPackageBytes}."));
             return null;
         }
-
-        Dictionary<string, byte[]> files;
         try
         {
             using var zip = new ZipArchive(new MemoryStream(package, writable: false), ZipArchiveMode.Read);
-            if (zip.Entries.Count > MaxEntries)
+            return ParseArchive(zip, PackageLimits, errors);
+        }
+        catch (InvalidDataException ex)
+        {
+            errors.Add(new("package.invalid-archive", $"The file is not a readable package: {ex.Message}"));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Checks and reads every JSON entry of an open archive. PDF entries (<c>files/</c>, library backups only) are listed
+    /// but not read: <see cref="VerifyPdfs"/> streams them. The returned entries are valid while <paramref name="zip"/> is open.
+    /// </summary>
+    private static ParsedPackage? ParseArchive(ZipArchive zip, ReadLimits limits, List<Diagnostic> errors)
+    {
+        Dictionary<string, byte[]> files;
+        var pdfs = new Dictionary<string, ZipArchiveEntry>(StringComparer.Ordinal);
+        try
+        {
+            if (zip.Entries.Count > limits.MaxEntries)
             {
-                errors.Add(new("package.too-many-entries", $"Package has {zip.Entries.Count} entries; the limit is {MaxEntries}."));
+                errors.Add(new("package.too-many-entries", $"Package has {zip.Entries.Count} entries; the limit is {limits.MaxEntries}."));
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             // Names are checked for every entry before any entry is decompressed.
-            foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName)))
+            foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
                 errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
             if (errors.Count > 0)
                 return null;
-            long remaining = MaxTotalBytes;
+            long remaining = limits.MaxJsonBytes;
             foreach (var entry in zip.Entries)
             {
+                if (entry.FullName.StartsWith(PdfFolder, StringComparison.Ordinal))
+                {
+                    if (!pdfs.TryAdd(entry.FullName[PdfFolder.Length..^4], entry))
+                        errors.Add(new("package.entry-duplicate", $"Entry '{entry.FullName}' appears more than once."));
+                    continue;
+                }
                 var bytes = ReadBounded(entry, remaining);
                 remaining -= bytes.LongLength;
                 if (!files.TryAdd(entry.FullName, bytes))
@@ -492,14 +587,35 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             return null;
         }
 
+        // M2.1: attachment records and PDFs belong only in a v6 library backup.
+        var library = manifest.FormatVersion >= 6 && manifest.Scope == PackageScope.Library;
+        if (!library && (pdfs.Count > 0 || files.Keys.Any(p => p.StartsWith(AttachmentFolder, StringComparison.Ordinal))))
+        {
+            errors.Add(new("package.entry-not-allowed", "Only a full library backup may contain PDFs and attachment records."));
+            return null;
+        }
+        if (manifest.Scope == PackageScope.Library && (manifest.FormatVersion < 6 || manifest.Purpose != ExportPurpose.Backup))
+        {
+            errors.Add(new("package.invalid-json", "A full library backup must be a format v6 backup."));
+            return null;
+        }
+
         var listed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in manifest.Entries.Where(e => !listed.Add(e.Path)))
             errors.Add(new("package.entry-duplicate", $"Manifest lists '{entry.Path}' more than once."));
-        foreach (var path in files.Keys.Where(p => p != ManifestPath && !listed.Contains(p)))
+        foreach (var path in files.Keys.Where(p => p != ManifestPath).Concat(pdfs.Values.Select(e => e.FullName)).Where(p => !listed.Contains(p)))
             errors.Add(new("package.entry-unlisted", $"Entry '{path}' is not listed in the manifest."));
         foreach (var entry in manifest.Entries)
         {
-            if (!files.TryGetValue(entry.Path, out var bytes))
+            if (entry.Path.StartsWith(PdfFolder, StringComparison.Ordinal))
+            {
+                // A PDF entry is named by its hash; VerifyPdfs streams it and checks the hash and size.
+                if (!pdfs.ContainsKey(entry.Path[PdfFolder.Length..^4]))
+                    errors.Add(new("package.entry-missing", $"Manifest lists '{entry.Path}', which is not in the package."));
+                else if (entry.Sha256 != entry.Path[PdfFolder.Length..^4])
+                    errors.Add(new("package.hash-mismatch", $"Entry '{entry.Path}' is listed with a different hash than its name."));
+            }
+            else if (!files.TryGetValue(entry.Path, out var bytes))
                 errors.Add(new("package.entry-missing", $"Manifest lists '{entry.Path}', which is not in the package."));
             else if (Hash(bytes) != entry.Sha256)
                 errors.Add(new("package.hash-mismatch", $"Entry '{entry.Path}' does not match its manifest hash; the package may be damaged or altered."));
@@ -512,6 +628,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var characters = new List<Character>();
         var campaigns = new List<Campaign>();
         var gapNotes = new List<GapNote>();
+        var attachments = new List<Attachment>();
         foreach (var (path, bytes) in files.Where(f => f.Key != ManifestPath).OrderBy(f => f.Key, StringComparer.Ordinal))
         {
             var id = Guid.Parse(Path.GetFileNameWithoutExtension(path));
@@ -544,9 +661,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     ExpectSchema(path, "gap note", note.SchemaVersion, GapNote.CurrentSchemaVersion, errors);
                     gapNotes.Add(note);
                     break;
+                case "attachments" when Deserialize<Attachment>(path, bytes, errors) is { } attachment:
+                    ExpectId(path, id, attachment.AttachmentId, errors);
+                    ExpectAttachment(path, attachment, pdfs, errors);
+                    attachments.Add(attachment);
+                    break;
             }
         }
-        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes);
+        if (errors.Count > 0)
+            return null;
+        if (library)
+            revisions = OrderAsStored(revisions, manifest.RevisionOrder, errors);
+        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs);
     }
 
     /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>

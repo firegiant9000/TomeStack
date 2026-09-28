@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased (M3 and M4)
+## Unreleased (M2.1, M3 and M4)
 
 ### Added
+
+- **Back up everything and restore it (M2.1; `docs/features/package-format.md` "Full library backup", ADR-007 item 10):** a new **Backups** screen.
+  - **Back up everything** saves one file with your whole library: characters, campaigns, gap notes, all your homebrew (drafts, older versions and entries no character uses yet) and the PDFs TomeStack keeps a copy of. Before this, only characters and what they used could be backed up, so unfinished homebrew had no backup at all.
+  - **Restore full backup** checks the whole file first, PDFs included, shows what it would add or replace, and restores only when you confirm. It deletes nothing. Before it replaces anything, it saves a copy of your current data in the backups folder.
+  - A character's own export is unchanged, and so is its "Share with someone", which never includes PDFs or gap notes.
+  - Character packages are still format v5, so TomeStack 0.3.0 can read them. Full backups are format v6, and older versions refuse them with a clear message.
 
 - **M4 exit evidence (`docs/features/m4-acceptance.md`):** the original fixture book is imported through the real worker in the gate, reviewed, and nothing is active without approval. The run on a third-party test PDF is prepared (it reads a private local folder and reports counts only) and still owed, so the version stays 0.3.0.
 
@@ -30,7 +36,17 @@
 
 - **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
 
+### Changed
+
+- **Honest status (M2.1; README, MVP, ROADMAP, acceptance docs):** claims now say how far they are proven: implemented, fixture-verified, Windows-install verified, or accepted in real play. The README states the current class, species and background coverage. M2 is "checks passed, limited content", because the MVP goal of any SRD character 1–20 is not met yet. The ROADMAP adds M2.1 (data safety, done) and M2.2 (Fighter baseline and SRD armor), and puts M2.2 before the M3 Stardust Guardian run that depends on it. PDF candidate import is labeled **Experimental** in the app until a real third-party book and the SRD measurements pass.
+
 ### Fixed
+
+- **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. A sixth race: the Barbarian flow read the long-rest proposal as soon as the panel had focus, before the proposal had arrived (reproduced by delaying it 400 ms), and that flow took 23 of its 30 seconds. It now waits for the proposal, and e2e tests have 60 seconds. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder. It passed three hosted runs in a row, so it is blocking too.
+
+- **A second spellcasting class gets its bonuses, with a trace (M2.1; `docs/features/spellcasting.md`):** a bonus to spell attacks or spell save DCs (from an item or a feature) used to reach only the first spellcasting class. A multiclass character's other casters showed a bare proficiency bonus + ability modifier, without saying how it was calculated. Every caster now gets those bonuses, and the Spells panel explains each caster's attack bonus and save DC step by step.
+
+- **One TomeStack per data folder (M2.1; ARCHITECTURE "Data folder"):** starting TomeStack again while it is open now brings the open window to the front instead of opening the same data a second time. Before, the second copy marked the first copy's running PDF import as interrupted, so resuming it could run two imports of one job at once. Its start-up clean-up could also delete a PDF the first copy was still attaching. TomeStack now holds `tomestack.lock` in the data folder while it runs, and Windows releases it when TomeStack exits or crashes. The DevHost is refused on a folder the app has open, and the app on one the DevHost has open.
 
 - **Import review fixes (M4, independent review 2026-09-28; ADR-009, `docs/features/pdf-import.md`):**
   - A page that crashes the worker, runs out of time or memory, or cannot be read by OCR now fails alone: it is marked unreadable and the rest of the book is read. Resuming used to stop on the same page every time. After 5 such pages in one run the import stops, and "Resume" continues after them.

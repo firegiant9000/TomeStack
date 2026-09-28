@@ -49,7 +49,7 @@ public class ExportPurposeTests
         var export = origin.App.ExportCharacters([id], ExportPurpose.Backup);
 
         Assert.Equal(ExportPurpose.Backup, export.Manifest.Purpose);
-        Assert.Equal(PackageManifest.CurrentFormatVersion, export.Manifest.FormatVersion); // v4 since M2 item 7 (campaigns)
+        Assert.Equal(PackageManifest.CharacterFormatVersion, export.Manifest.FormatVersion); // v5 since M3 B3; v6 is library backups only (M2.1)
         Assert.Contains(export.Manifest.Entries, e => e.Path == $"content/{HomebrewFeat.RevisionId:D}.json");
         Assert.Contains(export.Manifest.Notices, n => n.SourceId == HomebrewSource && !n.Redistributable);
         Assert.Empty(export.Manifest.Omitted);

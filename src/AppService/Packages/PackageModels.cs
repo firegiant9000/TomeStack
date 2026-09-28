@@ -10,6 +10,10 @@ public sealed record PackageManifest
     public const string FormatName = "tomestack.package";
 
     /// <summary>
+    /// v6 (M2.1): <see cref="Scope"/>. A <see cref="PackageScope.Library"/> backup is the whole data folder: every
+    /// source (with its PDF link), every revision including drafts (in <see cref="RevisionOrder"/>), attachment records
+    /// (<c>attachments/</c>) and the managed PDFs themselves (<c>files/</c>). Only "Restore full backup" reads it; an
+    /// ordinary import refuses it, and older builds refuse v6.
     /// v5 (M3 B3): <c>gaps/</c> entries (session gap notes), in backups only. A share package never has them, and an
     /// import refuses one that does. Older builds refuse v5 instead of rejecting the unknown path mid-preview.
     /// v4 (M2 items 5–7): <c>campaigns/</c> entries (SPEC P-01), and entries may use content schema v4 and character
@@ -18,7 +22,10 @@ public sealed record PackageManifest
     /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
     /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
     /// </summary>
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
+
+    /// <summary>Character packages (backup and share) have not changed since v5, so they stay readable by 0.3.0.</summary>
+    public const int CharacterFormatVersion = 5;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
@@ -35,11 +42,46 @@ public sealed record PackageManifest
     /// <summary>Share packages only: every source whose content was left out, and what it would have provided.</summary>
     public IReadOnlyList<OmittedSource> Omitted { get; init; } = [];
 
-    public string AttachmentPolicy { get; init; } = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
+    /// <summary>Absent before v6, and not written for character packages (they stay v5): <see cref="PackageScope.Characters"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public PackageScope Scope { get; init; } = PackageScope.Characters;
+
+    /// <summary>
+    /// Library backups only: the revision IDs in the order they were stored. The newest published revision of each content
+    /// is the last one stored (SPEC I-06), so a restore adds them in this order, not in entry order.
+    /// </summary>
+    public IReadOnlyList<Guid>? RevisionOrder { get; init; }
+
+    public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;
+
+    public const string CharacterAttachmentPolicy = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
+
+    public const string LibraryAttachmentPolicy = "A full backup includes the PDFs TomeStack keeps a copy of. Linked PDFs stay where they are and are not included. Text read from PDFs is not included; import it again.";
 }
 
 /// <summary>ADR-007 (D03). A backup includes everything and must not be shared; a share leaves out non-redistributable sources.</summary>
 public enum ExportPurpose { Backup, Share }
+
+/// <summary>
+/// M2.1. <see cref="Characters"/>: chosen characters and what they need (a character backup or share). <see cref="Library"/>:
+/// the whole data folder, including drafts, unused homebrew and managed PDFs ("Back up everything"); always a backup.
+/// </summary>
+public enum PackageScope { Characters, Library }
+
+/// <summary>What "Back up everything" would write (<c>library.backupPreview</c>); nothing is written.</summary>
+/// <param name="ManagedPdfs">PDFs TomeStack keeps a copy of (included), and their total size.</param>
+/// <param name="LinkedPdfs">PDFs left where they are: their records are included, the files are not.</param>
+/// <param name="Unreadable">Managed PDFs that are missing or damaged on disk and would be left out, by source title.</param>
+public sealed record LibraryBackupPreview(
+    string FileName, int Characters, int Campaigns, int GapNotes, int Sources, int PublishedRevisions, int DraftRevisions,
+    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable);
+
+/// <param name="Warnings">Anything left out (a damaged PDF copy); the backup is still complete otherwise.</param>
+public sealed record LibraryBackupResult(string FileName, long Bytes, LibraryBackupPreview Contents, IReadOnlyList<Diagnostic> Warnings);
+
+/// <param name="SafetyCopy">Path relative to the data folder of the database copy taken before anything changed, when there was data to replace.</param>
+/// <param name="PdfsCopied">Managed PDFs copied into this data folder (ones already here are not copied again).</param>
+public sealed record LibraryRestoreResult(int Added, int Replaced, int Unchanged, int PdfsCopied, string? SafetyCopy, IReadOnlyList<Diagnostic> Warnings);
 
 public sealed record PackageEntry(string Path, string Kind, string Sha256, long Size);
 

@@ -556,6 +556,21 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<Character> ListCharacters() =>
         Query<Character>("SELECT json FROM characters ORDER BY updated_at DESC, id;");
 
+    /// <summary>
+    /// A complete copy of the database at <paramref name="path"/> (SQLite online backup, so data still in the WAL is
+    /// included). M2.1: taken before a library restore replaces anything.
+    /// </summary>
+    public void BackupTo(string path)
+    {
+        lock (_gate)
+        {
+            using var target = new SqliteConnection($"Data Source={path};Pooling=False");
+            _connection.BackupDatabase(target);
+        }
+    }
+
+    public IReadOnlyList<Attachment> ListAttachments() => Attachments("ORDER BY created_at, attachment_id");
+
     public void Dispose()
     {
         _connection.Dispose();

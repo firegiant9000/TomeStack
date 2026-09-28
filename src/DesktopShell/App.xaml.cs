@@ -36,6 +36,17 @@ public partial class App : Application
             // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1).
             _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES") == "1");
         }
+        catch (DataFolderInUseException ex)
+        {
+            // M2.1: a second launch on the same folder brings the running window forward and exits. It never touches the data.
+            var activated = SingleInstance.ActivateExisting(dataDirectory);
+            if (options.Smoke)
+                SingleInstance.WriteSmokeReport(options, dataDirectory, activated);
+            else if (!activated)
+                MessageBox.Show(ex.Message, "TomeStack", MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown(SingleInstance.InUseExitCode);
+            return;
+        }
         catch (Exception ex) when (!options.Smoke)
         {
             MessageBox.Show($"TomeStack could not open its data folder:\n{dataDirectory}\n\n{ex.Message}", "TomeStack", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -43,12 +54,17 @@ public partial class App : Application
             return;
         }
 
-        MainWindow = new MainWindow(_tomeStack, options);
-        MainWindow.Show();
+        var window = new MainWindow(_tomeStack, options);
+        MainWindow = window;
+        _activation = SingleInstance.ListenForActivation(dataDirectory, () => Dispatcher.BeginInvoke(window.BringToFront));
+        window.Show();
     }
+
+    private IDisposable? _activation;
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _activation?.Dispose();
         _tomeStack?.Dispose();
         base.OnExit(e);
     }

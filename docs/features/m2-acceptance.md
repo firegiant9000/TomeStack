@@ -1,8 +1,30 @@
 # M2 acceptance: every MVP.md check, with its evidence
 
-ROADMAP M2 exit gate ("all MVP.md checks pass on an installed Windows build") · build **0.2.2** (the M2 exit candidate) · status: **delivered (0.3.0, 2026-09-28)**. Every automated check passed on 0.2.2, and the owner checks passed on the installed 0.2.2 (table below), so the version became 0.3.0 (ADR-008).
+ROADMAP M2 exit gate ("all MVP.md checks pass on an installed Windows build") · build **0.2.2** (the M2 exit candidate) · status: **delivered as a limited-content build (0.3.0, 2026-09-28)**. Every automated check passed on 0.2.2, and the owner checks passed on the installed 0.2.2 (table below), so the version became 0.3.0 (ADR-008). **The MVP goal is not met yet:** only the spellcasting classes can be built 1–20, and there is one species and one background per family ("Known limits" below). The M2 checks passed; the goal they stand for did not.
 
 Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2e` against the real DevHost, and `scripts/smoke.ps1` on the built shell. Owner means a person at the installed app. Anything that cannot be verified on the development machine is listed at the end.
+
+## Evidence levels (M2.1, 2026-09-28)
+
+Every claim in the acceptance documents, the ROADMAP and the README uses one of these, from weakest to strongest:
+
+| Level | Meaning |
+| --- | --- |
+| **Implemented** | The code is merged. Nothing more is claimed. |
+| **Fixture-verified** | An automated test in the gate passes on original fixtures, a synthetic stand-in, or the bundled SRD content. |
+| **Windows-install verified** | Checked on an installed Windows build: by the desktop smoke in CI, or by an owner check. An owner check records its date, build and result below; one without an artifact (log, screenshot or report file) says "reported by the owner". |
+| **Accepted in real play** | The owner used it with their real character in a real session. M3 is the first gate that needs this. |
+
+| MVP area | Level reached | Not reached |
+| --- | --- | --- |
+| Windows app | Windows-install verified (smoke in CI; the clean-VM install is reported by the owner) | Windows 10 (best-effort, untested) |
+| Rules packs | Fixture-verified | — |
+| Builder | Fixture-verified for the eight SRD casters 1–20 and the Barbarian 1–3 | No Fighter, Monk or Rogue; Barbarian 4–20; one species and one background per family |
+| Sheet | Fixture-verified; a play rehearsal with an SRD character is reported by the owner | Accepted in real play (M3). Before M2.1, a second spellcasting class skipped spell attack and save DC bonuses and had no trace |
+| Homebrew | Fixture-verified on a synthetic stand-in | The real Stardust Guardian (M3) |
+| Sources | Windows-install verified (the viewer's page is reported by the owner) | — |
+| Safety | Fixture-verified. Since M2.1: full library backup and restore (drafts, unused homebrew, campaigns, PDFs), and one TomeStack per data folder | A restore on a second machine (owner check) |
+| Campaign | Fixture-verified | — |
 
 ## Committed candidate scope (MVP.md table)
 
@@ -14,7 +36,7 @@ Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2
 | Sheet | Play through a short scripted encounter and rest | **`M2AcceptanceTests`** (an SRD Wizard per family: damage, cantrip attack, weapon attack, a slot spent, short rest with a hit die, long rest, backup round trip); e2e Brenna flow (resources, temporary hit points, damage, conditions, rolls with advantage, long and short rest, death saves, Heroic Inspiration); `RestCommandTests`, `PlayCommandTests`, `SpellcastingCommandTests`, `AttackCommandTests` | ✅ |
 | Homebrew | Stardust Guardian fixture with representative automatic and assisted features | `HomebrewStudioTests` and e2e "authors a homebrew subclass…" (synthetic stand-in: one modifier, one class resource, one limited-use action, one reference-only feature, update review). The real character: `StardustGuardianAcceptanceTests`, added by M3 B1, which skips without the owner's local material | ✅ synthetic (owner decision 2026-09-28: the stand-in meets the M2 check; the real character is the M3 gate) |
 | Sources | Open the cited page from a feature offline | `AttachmentTests`; `PageImportTests` (page ranges and whole documents become draft reference entries; drafts inactive); e2e "attaches a PDF…" (attach, import pages, "Open …, p. 7", remove with a warning); smoke opens a generated PDF offline | ✅ (owner 2026-09-28: the viewer shows the cited page) |
-| Safety | Malformed feature leaves sheet usable; fresh-install round trip | `MalformedContentTests`, `FormulaTests` (hostile and fuzzed), `ContentValidatorTests`, `HostileInputTests`, `PackageLimitTests`, `PackageRoundTripTests`, `ExportPurposeTests`, `UpgradeTests.Backup_includes_committed_data_still_in_the_wal_after_a_crash` | ✅ |
+| Safety | Malformed feature leaves sheet usable; fresh-install round trip | `MalformedContentTests`, `FormulaTests` (hostile and fuzzed), `ContentValidatorTests`, `HostileInputTests`, `PackageLimitTests`, `PackageRoundTripTests`, `ExportPurposeTests`, `UpgradeTests.Backup_includes_committed_data_still_in_the_wal_after_a_crash`; since M2.1 `LibraryBackupTests` (whole library, clean-folder restore), `DataFolderTests` and `scripts/single-instance-check.ps1` | ✅ for characters at 0.3.0. **Gap found 2026-09-28 (audit H1):** homebrew no character used, drafts and PDFs had no backup. Fixed in M2.1 (fixture-verified) |
 | Campaign | Two profiles show different allowed content | `CampaignTests`; e2e "shows different allowed content for two campaign profiles…" | ✅ |
 
 ## Definition of done (MVP.md)
@@ -70,6 +92,6 @@ The results were reported by the owner; the development session did not observe 
 
 ## Known limits against MVP.md's goal
 
-- **"Create and play a level-1-to-20 SRD-based character under either rules family":** true for the eight casters, levels 1–20 in both families. The bundled non-casters are only the M1 Barbarian slice (levels 1–3), and Fighter, Monk and Rogue are not bundled. There is one species and one background per family (Half-Orc and Acolyte; Dwarf and Soldier). Other species, backgrounds and feats come from the homebrew studio or later SRD packs.
-- **Armor:** no SRD armor table (text in the SRD, not bundled). Armor items come from homebrew.
+- **"Create and play a level-1-to-20 SRD-based character under either rules family":** true for the eight casters, levels 1–20 in both families. The bundled non-casters are only the M1 Barbarian slice (levels 1–3), and Fighter, Monk and Rogue are not bundled. There is one species and one background per family (Half-Orc and Acolyte; Dwarf and Soldier). Other species, backgrounds and feats come from the homebrew studio or later SRD packs. **Checked 2026-09-28:** no Fighter content exists anywhere in the repo, so a Fighter, with or without a subclass, cannot be built today except as homebrew. Extra Attack, Weapon Mastery and a wider critical range are not automated either (ROADMAP "M2.2 Fighter baseline").
+- **Armor:** no SRD armor table (text in the SRD, not bundled). Armor items come from homebrew. Armor proficiency, the heavy-armor Strength requirement and Stealth disadvantage are not modeled (`equipment.md`).
 - **Automated mechanics:** most class features are reference-only text with their pages. Main resources are tracked; the rest is by hand, as MVP "Homebrew: reference-only text" allows.

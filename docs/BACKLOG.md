@@ -8,7 +8,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B02 | Homebrew debugger | M5 | Missing references, invalid formulas and dead resources have diagnostics |
 | B03 | Character sandbox | M5 | Preview a draft subclass at chosen levels without changing a saved character |
 | B04 | Before/after tests | M5 | Compare two revisions on fixture characters |
-| B05 | PDF source-page links | M2 | Open cited page offline. **Implemented (M2 item 6, `features/pdf-attachments.md`)**; the owner check of the landed page is open |
+| B05 | PDF source-page links | M2 | Open cited page offline. **Implemented (M2 item 6, `features/pdf-attachments.md`)**; the owner check of the landed page passed on 0.2.2 (reported by the owner, 2026-09-28) |
 | B06 | Rules-family compatibility checker | M1/M2 | Warn and record exception for deliberate mix |
 | B07 | Homebrew diff viewer | M3/M5 | Compare revisions by mechanics and text |
 | B08 | Character snapshots | M3/M5 | Restore an earlier state with a preview |

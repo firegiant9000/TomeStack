@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/attachment.v1.schema.json",
+  "title": "TomeStack PDF attachment record (library backups, attachments/<attachmentId>.json)",
+  "description": "ADR-005: a source's PDF. 'managed' is a copy in the data folder, named by its SHA-256, and travels in the same backup as files/<sha256>.pdf. 'linked' is a file left where it is: only the record travels, and the path is personal (a full backup is never for sharing). M2.1.",
+  "type": "object",
+  "required": ["attachmentId", "originalFileName", "byteLength", "mode", "createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "attachmentId": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "originalFileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "byteLength": { "type": "integer", "minimum": 0, "maximum": 1073741824 },
+    "mode": { "enum": ["managed", "linked"] },
+    "linkedPath": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "if": { "properties": { "mode": { "const": "managed" } } },
+  "then": { "required": ["sha256"], "not": { "required": ["linkedPath"] } },
+  "else": { "required": ["linkedPath"] }
+}

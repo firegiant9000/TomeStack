@@ -214,7 +214,9 @@ internal static class PackageEditor
         {
             foreach (var (path, bytes) in files)
             {
-                using var stream = zip.CreateEntry(path).Open();
+                // PDFs stay stored, as TomeStack writes them (a restore refuses PDF entries that unpack to much more).
+                var level = path.StartsWith("files/", StringComparison.Ordinal) ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
+                using var stream = zip.CreateEntry(path, level).Open();
                 stream.Write(bytes);
             }
         }

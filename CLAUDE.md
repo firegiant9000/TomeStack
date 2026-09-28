@@ -13,6 +13,7 @@ dotnet build TomeStack.slnx -c Release
 dotnet test TomeStack.slnx -c Release
 npm run test:e2e --prefix src/Ui   # after the .NET build: UI flow (Vitest + Testing Library) against the real DevHost
 scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # Windows GUI smoke (checks the report)
+scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # two processes on one data folder (M2.1)
 ```
 
 ## Invariants

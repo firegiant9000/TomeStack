@@ -91,8 +91,13 @@ export function ImportPanel({ source, onError, onStatus }: Props) {
 
   return (
     <section aria-label={`Read the text of ${source.title}`} className="play-panel">
-      <h4>Read the text and find candidates</h4>
-      <p className="hint">TomeStack reads the PDF on this computer and proposes entries for you to review. The text is never exported.</p>
+      <h4>
+        Read the text and find candidates <span className="tag">Experimental</span>
+      </h4>
+      <p className="hint">
+        TomeStack reads the PDF on this computer and proposes entries for you to review. The text is never exported. Experimental: it has not been
+        proven on a real third-party book yet, so check every candidate against its page. Nothing becomes a rule until you publish it.
+      </p>
       <div className="inline-form">
         <label className="field">
           From page

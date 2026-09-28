@@ -140,7 +140,7 @@ public class GapNoteTests
 
         var backup = temp.App.ExportCharacters([id], ExportPurpose.Backup);
         Assert.Contains(backup.Manifest.Entries, e => e.Path == $"gaps/{note.Id:D}.json" && e.Kind == "gapNote");
-        Assert.Equal(PackageManifest.CurrentFormatVersion, backup.Manifest.FormatVersion);
+        Assert.Equal(PackageManifest.CharacterFormatVersion, backup.Manifest.FormatVersion);
 
         using var clean = new TempApp();
         var preview = clean.App.PreviewImport(backup.Content);

@@ -538,6 +538,9 @@ export interface SpellcastingEntry {
   origin: TraceOrigin;
   spells: SpellEntry[];
   warnings: Diagnostic[];
+  /** How the attack bonus and save DC are calculated; the primary's are the sheet fields' traces (M2.1). */
+  attackTrace?: TraceEntry[];
+  saveDcTrace?: TraceEntry[];
 }
 
 export interface CreateCharacterRequest {
@@ -919,4 +922,40 @@ export interface ImportResult {
   characters: string[];
   /** Relative to the data folder; set when a local character was replaced. Import it to restore. */
   backupFile?: string;
+}
+
+// ---- full library backup (M2.1) ----
+
+/** What "Back up everything" would write; nothing is written. */
+export interface LibraryBackupPreview {
+  fileName: string;
+  characters: number;
+  campaigns: number;
+  gapNotes: number;
+  sources: number;
+  publishedRevisions: number;
+  draftRevisions: number;
+  managedPdfs: number;
+  managedPdfBytes: number;
+  linkedPdfs: number;
+  /** Sources whose PDF copy is missing or damaged, and would be left out. */
+  unreadable: string[];
+}
+
+export type LibraryBackupOutcome =
+  | { saved: false }
+  | { saved: true; fileName: string; bytes: number; contents: LibraryBackupPreview; warnings: Diagnostic[] };
+
+export type LibraryRestoreChoice =
+  | { chosen: false }
+  | { chosen: true; token: string; fileName: string; preview: PackagePreview };
+
+export interface LibraryRestoreResult {
+  added: number;
+  replaced: number;
+  unchanged: number;
+  pdfsCopied: number;
+  /** Relative to the data folder: the database as it was before the restore, when anything was replaced. */
+  safetyCopy?: string;
+  warnings: Diagnostic[];
 }

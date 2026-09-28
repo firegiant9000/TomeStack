@@ -3,6 +3,7 @@ import { client } from './api/client';
 import { TomeStackError } from './api/transport';
 import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from './api/types';
 import { AllGapNotesPanel } from './components/AllGapNotesPanel';
+import { BackupsPanel } from './components/BackupsPanel';
 import { CampaignsPanel } from './components/CampaignsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -18,6 +19,7 @@ type Screen =
   | { kind: 'sources' }
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
+  | { kind: 'backups' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -133,6 +135,16 @@ export function App() {
           >
             Gap notes
           </button>
+          <button
+            type="button"
+            aria-current={screen.kind === 'backups' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'backups' });
+            }}
+          >
+            Backups
+          </button>
         </div>
         <ul className="character-list">
           {characters.map((c) => (
@@ -197,6 +209,9 @@ export function App() {
         )}
         {screen.kind === 'sources' &&<SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
         {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={open} />}
+        {screen.kind === 'backups' && (
+          <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
+        )}
         {screen.kind === 'sheet' && (
           <CharacterSheet
             key={screen.view.character.id}

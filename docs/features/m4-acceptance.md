@@ -1,6 +1,6 @@
 # M4 acceptance: Import intelligence, exit evidence
 
-ROADMAP M4 exit gate: "A third-party test PDF produces reviewable candidates; no unapproved active rules" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · build **0.3.0** · status: **engineering done; gate not met.** The third-party test PDF was not on the development machine (2026-09-28), so its run is still owed. Following ADR-008, the version stays 0.3.0 until the gate is met.
+ROADMAP M4 exit gate: "A third-party test PDF produces reviewable candidates; no unapproved active rules" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · build **0.3.0** · status: **engineering done; gate not met.** The third-party test PDF was not on the development machine (2026-09-28), so its run is still owed. Following ADR-008, the version stays 0.3.0 until the gate is met. **Experimental until the gate passes:** the UI labels "Read the text and find candidates" experimental, and so do the README and ROADMAP. The label comes off only when both a real third-party PDF run and the SRD precision/recall floors pass, with dated counts recorded below. The fixture book alone does not qualify. Evidence level: fixture-verified (the original fixture book through the real worker in the gate).
 
 Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2e` against the real DevHost and worker, and `scripts/smoke.ps1` on the built shell.
 

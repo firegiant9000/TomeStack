@@ -79,6 +79,50 @@ public static class DataFolder
         return [.. roots.Distinct(StringComparer.OrdinalIgnoreCase)];
     }
 
+    /// <summary>
+    /// A stable key for one data folder (case-insensitive full path, hashed so no path appears in an OS object name).
+    /// The shell names its "show the window" event with it, so a second launch can find the first (M2.1).
+    /// </summary>
+    public static string InstanceKey(string dataDirectory) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Normalize(dataDirectory).ToUpperInvariant())))[..32];
+
     private static string Normalize(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }
+
+/// <summary>
+/// M2.1: one TomeStack process per data folder. Two processes on one folder race each other: the second marks the
+/// first's running import as interrupted (so a resume starts a second worker on the same job) and its startup cleanup
+/// deletes the first's half-written PDF copy, or a new managed PDF before its record is saved. The lock is
+/// <c>tomestack.lock</c> held open without sharing for the app's lifetime. Windows releases it when the process ends,
+/// even after a crash, so a stale lock cannot keep the folder closed.
+/// </summary>
+public sealed class DataFolderLock : IDisposable
+{
+    public const string FileName = "tomestack.lock";
+
+    private readonly FileStream _file;
+
+    private DataFolderLock(FileStream file) => _file = file;
+
+    /// <exception cref="DataFolderInUseException">Another process holds the folder.</exception>
+    public static DataFolderLock Acquire(string dataDirectory)
+    {
+        Directory.CreateDirectory(dataDirectory);
+        try
+        {
+            return new(new FileStream(Path.Combine(dataDirectory, FileName), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+        }
+        catch (IOException ex) when ((ex.HResult & 0xFFFF) is 32 or 33) // ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+        {
+            throw new DataFolderInUseException(ex);
+        }
+    }
+
+    public void Dispose() => _file.Dispose();
+}
+
+/// <summary>Another TomeStack (or DevHost) has this data folder open. Nothing was read or changed.</summary>
+public sealed class DataFolderInUseException(Exception inner)
+    : IOException("TomeStack is already open with this data folder. Switch to that window, or close it first.", inner);
