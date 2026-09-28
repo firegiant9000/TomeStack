@@ -211,6 +211,30 @@ public partial class MainWindow : Window
         using var attached = Command("source.attachPdfData", new { sourceId, fileName = "smoke.pdf", base64 = Convert.ToBase64String(SmokePdf.Create(pages: 2)) });
         if (!attached.RootElement.GetProperty("ok").GetBoolean())
             return (false, "data-check-failed:source.attachPdfData");
+
+        // M4 D2 (ADR-009 (c)): the shipped worker, TomeStack.ImportWorker.Host.exe next to this exe, extracts the PDF in a
+        // child process (no socket). The job must complete with both pages.
+        using var import = Command("import.start", new { sourceId, wholeDocument = true });
+        if (!import.RootElement.GetProperty("ok").GetBoolean())
+            return (false, "data-check-failed:import.start");
+        var jobId = import.RootElement.GetProperty("result").GetProperty("id").GetString();
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        string? status = null;
+        var pages = 0;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var job = Command("import.status", new { jobId });
+            var state = job.RootElement.GetProperty("result");
+            status = state.GetProperty("status").GetString();
+            pages = state.GetProperty("pagesDone").GetInt32();
+            if (status is not ("queued" or "running"))
+                break;
+            Thread.Sleep(100);
+        }
+        if (status != "completed" || pages != 2)
+            return (false, $"data-check-failed:import:{status}:{pages}");
+        _smokeCommands.AddRange(["import.start", "import.status"]);
+
         _awaitingViewer = true;
         using var opened = Command("source.openPage", new { sourceId, page = 2 });
         if (!opened.RootElement.GetProperty("ok").GetBoolean() || !opened.RootElement.GetProperty("result").GetProperty("opened").GetBoolean())

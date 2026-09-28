@@ -81,6 +81,7 @@ public sealed partial class TomeStackApp
         var source = FindSourceOrThrow(sourceId);
         if (source.AttachmentId is not { } id || _store.FindAttachment(id) is not { } attachment)
             throw new AppValidationException([new("attachment.none", $"'{source.Title}' has no PDF attached.")]);
+        CancelImportsOf(sourceId); // M4 D2: a running import reads the file; it stops first, and its pages stay
         _store.InTransaction(() =>
         {
             _store.UpsertSource(source with { AttachmentId = null });

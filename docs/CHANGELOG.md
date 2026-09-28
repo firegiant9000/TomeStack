@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Import jobs (M4 D2; `docs/features/pdf-import.md`):** extracting a PDF runs as a job you can cancel and resume. It survives closing the app and keeps a local audit log with no text from the book. Extracted text is searchable within its source. Imported text stays on this computer: no backup or share includes it.
+
 - **PDF text extraction (M4 D1, ADR-009; `docs/features/pdf-import.md`):** TomeStack can read the text of a PDF page by page, with its layout, and reads pages without a text layer with Windows' built-in OCR. The reading happens in a separate worker process with size, page, time and memory limits, so a damaged or hostile PDF cannot take the app down. Nothing is imported yet: import jobs and candidates follow.
 - **Third-party components:** PdfPig 0.1.16 (Apache-2.0), and the Windows SDK C#/WinRT projection (Microsoft Windows SDK license) for OCR. The self-contained install grows by about 31 MB (`ATTRIBUTION.md`).
 
@@ -22,6 +24,7 @@
 
 ### Migration
 
+- **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
 - **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
 

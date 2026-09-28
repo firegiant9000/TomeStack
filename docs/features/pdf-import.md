@@ -1,6 +1,33 @@
 # M4: PDF import (extraction, jobs, candidates, review)
 
-ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction implemented**; jobs (D2), detection (D3), acceptance validation (D4) and the review UI (D5) follow in this document.
+ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction and D2 import jobs implemented**; detection (D3), acceptance validation (D4) and the review UI (D5) follow in this document.
+
+## D2: import jobs (ARCHITECTURE "Import lifecycle")
+
+Service: `src/AppService/ImportJobs.cs`, database migration v6 in `SqliteStore`. Acceptance: `tests/AppService.Tests/ImportJobTests.cs`.
+
+| Command | Payload | Does |
+| --- | --- | --- |
+| `import.start` | `{ sourceId, firstPage?, lastPage? }` or `{ sourceId, wholeDocument: true }` | Starts a background job that extracts those pages of the source's PDF. **It changes no content.** Only the user's own sources (made in TomeStack) with an available PDF can be imported. Refused with `source.not-editable`, `source.no-pdf`, `attachment.missing`, `import.pdf-changed` (a linked file changed), `source.page-range-invalid`, or `import.busy` (one job at a time) |
+| `import.status` | `{ jobId }` | The job: status (`queued`, `running`, `completed`, `cancelled`, `failed`, `interrupted`), page count, `nextPage`, pages done, unreadable, read by OCR, without text, and a failure code |
+| `import.list` | `{ sourceId? }` | Jobs, newest first |
+| `import.cancel` | `{ jobId }` | Stops the running job (the worker is killed). Pages already extracted stay |
+| `import.resume` | `{ jobId }` | Continues a cancelled, failed or interrupted job at `nextPage`, on the same PDF (`import.pdf-changed` otherwise) |
+| `import.audit` | `{ jobId }` | The local audit log: `created`, `started`, `resumed`, `cancelled`, `interrupted`, `failed` (with the code) and `completed` (with counts). **Codes and counts only, never text from the PDF** |
+| `import.search` | `{ sourceId, query }` | SPEC I-03: pages of the source's PDF whose extracted text contains the query (2 to 100 characters, case-insensitive), with a snippet, at most 50. Only within one source; search across sources is M7 (BACKLOG B10) |
+| `import.page` | `{ sourceId, page }` | One extracted page: text, blocks, warnings and error |
+
+- **Progress and resume:** each page is stored as it arrives, in the same transaction as the job's counts. A cancelled or failed job resumes where it stopped. A job that was running when the app closed (or crashed) is `interrupted` at the next start, and resumes the same way. This is page-granular.
+- **Limits:** the extraction limits of ADR-009 (c), per run.
+- **The PDF is pinned by hash:** pages are stored per PDF (SHA-256 and page), so a re-import of the same file replaces them. Removing the PDF first stops a job that reads it.
+- **Page navigation does not depend on it (ARCHITECTURE):** a failed or cancelled job leaves the attachment, "Open page", page import as reference and the removal preview as they were.
+- **Never exported (ADR-009 (d)):** `import_jobs`, `import_pages`, `import_candidates` and `import_audit` are local. No backup or share contains them, and `ImportJobTests.Extracted_text_is_never_exported_in_a_backup_or_a_share` checks both. After a restore on another machine, attach the PDF and import again.
+
+**The shipped worker in the smoke:** `scripts/smoke.ps1` has the built shell import its generated two-page PDF with `import.start`. The job must complete with both pages through `TomeStack.ImportWorker.Host.exe` next to `TomeStack.exe`, with no blocked request.
+
+### Database migration v6
+
+It adds the four tables above. As with every upgrade, `tomestack.db.v5.bak` is taken first. It is forward-only: a v5 build refuses the upgraded folder (`NewerDatabaseException`).
 
 ## D1: extraction (ADR-009 (a) to (c))
 

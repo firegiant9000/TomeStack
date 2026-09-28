@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RulesCore\TomeStack.RulesCore.csproj" />
+    <!-- Import contracts, the worker client and detection (ADR-009); the PDF parsing itself runs in the worker process. -->
+    <ProjectReference Include="..\ImportWorker\TomeStack.ImportWorker.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -54,11 +54,13 @@ public sealed partial class TomeStackApp : IDisposable
     /// shipped app has real SRD content, so fixtures stay out of user data (owner decision, 2026-09-26). Data folders
     /// that already contain fixture content keep it (published revisions are never deleted).
     /// </param>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false)
+    /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null)
     {
         Directory.CreateDirectory(dataDirectory);
         var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]);
+        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor };
+        app.InterruptLeftoverImports();
         foreach (var pack in BundledPacks)
             app.Seed(pack);
         if (devFixtures)
@@ -258,7 +260,11 @@ public sealed partial class TomeStackApp : IDisposable
     public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
         _packages.Apply(package, sourceChoices);
 
-    public void Dispose() => _store.Dispose();
+    public void Dispose()
+    {
+        StopImportsForDispose(); // a running import becomes "interrupted" and resumes after the next start
+        _store.Dispose();
+    }
 
     private CharacterView View(Character character)
     {

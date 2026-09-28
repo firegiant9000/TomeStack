@@ -2,11 +2,17 @@
 
   <!-- Development-only loopback host for running the UI in a browser. Not shipped (ADR-006). -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- The Windows 10 TFM of the import worker it runs (ADR-009); the output folder keeps its name for the e2e setup. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <OutputPath>bin\$(Configuration)\net10.0\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AppService\TomeStack.AppService.csproj" />
+    <!-- Imports extract in TomeStack.ImportWorker.Host.exe, copied next to the DevHost like next to the shell. -->
+    <ProjectReference Include="..\ImportWorker.Host\TomeStack.ImportWorker.Host.csproj" />
   </ItemGroup>
 
 </Project>

@@ -25,6 +25,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
+        "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -114,6 +115,14 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
         "gap.listAll" => app.ListAllGapNotes(),
+        "import.start" => app.StartImport(Payload<ImportStartRequest>(payload)),
+        "import.status" => app.ImportStatus(Payload<ImportJobRequest>(payload).JobId),
+        "import.list" => app.ListImports(payload is { ValueKind: JsonValueKind.Object } ? Payload<ImportListRequest>(payload).SourceId : null),
+        "import.cancel" => app.CancelImport(Payload<ImportJobRequest>(payload).JobId),
+        "import.resume" => app.ResumeImport(Payload<ImportJobRequest>(payload).JobId),
+        "import.audit" => app.ImportAudit(Payload<ImportJobRequest>(payload).JobId),
+        "import.search" => app.SearchImportedText(Payload<ImportSearchRequest>(payload)),
+        "import.page" => app.ImportedPage(Payload<ImportPageRequest>(payload)),
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),
