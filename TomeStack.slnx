@@ -22,6 +22,9 @@
   <Folder Name="/tests/AppService.Tests/">
     <Project Path="tests/AppService.Tests/TomeStack.AppService.Tests.csproj" />
   </Folder>
+  <Folder Name="/tests/DesktopShell.Tests/">
+    <Project Path="tests/DesktopShell.Tests/TomeStack.DesktopShell.Tests.csproj" />
+  </Folder>
   <Folder Name="/tests/ImportWorker.Tests/">
     <Project Path="tests/ImportWorker.Tests/TomeStack.ImportWorker.Tests.csproj" />
   </Folder>
