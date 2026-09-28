@@ -54,6 +54,7 @@ public static class ContentValidator
         var needsV3 = false;
         var needsV5 = false;
         var needsV6 = false;
+        var needsV8 = false;
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -63,6 +64,7 @@ public static class ContentValidator
                     break;
                 case ModifierEffect modifier:
                     needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
+                    needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
                     if (!CharacterCalculator.IsField(modifier.Target))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
                     if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
@@ -99,6 +101,12 @@ public static class ContentValidator
                         needsV5 = true;
                         if (weaponTarget.Length == CharacterCalculator.WeaponProficiencyPrefix.Length || grant.Grant != GrantKind.Proficiency)
                             Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in weapon.simple, weapon.martial or weapon.<key>.", grant.Id);
+                    }
+                    else if (grant.Target is { } armorTarget && armorTarget.StartsWith(CharacterCalculator.ArmorTrainingPrefix, StringComparison.Ordinal))
+                    {
+                        needsV8 = true;
+                        if (!CharacterCalculator.ArmorTrainingKeys.Contains(armorTarget[CharacterCalculator.ArmorTrainingPrefix.Length..]) || grant.Grant != GrantKind.Proficiency)
+                            Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in armor.light, armor.medium, armor.heavy or armor.shield.", grant.Id);
                     }
                     else if (grant.Target is not { } target || !CharacterCalculator.IsField(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                     {
@@ -149,6 +157,11 @@ public static class ContentValidator
                     needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
                     if (roll.Cost is { } cost)
                         CheckFormula(cost, roll.Id, "cost");
+                    if (roll.Bonus is { } bonus)
+                    {
+                        needsV8 = true;
+                        CheckFormula(bonus, roll.Id, "bonus");
+                    }
                     if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
@@ -185,6 +198,9 @@ public static class ContentValidator
                         Error("validate.armor-class", $"Armor '{armor.Id}' gives Armor Class {armor.ArmorClass}; it must be between 0 and 30.", armor.Id);
                     if (armor.DexterityCap is { } cap && (armor.Category != ArmorCategory.Medium || cap is < 0 or > 10))
                         Error("validate.armor-dexterity-cap", $"Armor '{armor.Id}': a Dexterity cap (0 to 10) applies only to medium armor.", armor.Id);
+                    needsV8 |= armor.Strength is not null || armor.StealthDisadvantage is not null;
+                    if (armor.Strength is { } strength && (strength is < 1 or > 30 || armor.Category == ArmorCategory.Shield))
+                        Error("validate.armor-strength", $"Armor '{armor.Id}': a Strength requirement (1 to 30) applies only to body armor.", armor.Id);
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.armor-kind", $"Armor counts only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it applies only if pinned.", armor.Id);
                     break;
@@ -222,6 +238,8 @@ public static class ContentValidator
             Error("validate.requires-v6", $"This revision uses content schema v6 features (toggles, toggled modifiers, shared resources, roll costs) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) && revision.SchemaVersion < SpellcastingEffect.MulticlassSchemaVersion)
             Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
+        if (needsV8 && revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
+            Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)

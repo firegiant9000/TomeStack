@@ -325,7 +325,8 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
               {groupRolls.map(({ feature, effect }) => (
                 <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
                   <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-                    Roll {effect.label ?? effect.id} ({effect.dice})
+                    Roll {effect.label ?? effect.id} ({effect.dice}
+                    {effect.bonus ? ` + ${effect.bonus}` : ''})
                   </button>{' '}
                   <span className="hint">
                     {feature.name}

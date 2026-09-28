@@ -11,7 +11,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `content-revision.v4.schema.json` | Adds the `armor` effect (M2 item 4) and `extendsChoice` (M2 item 5): an extra option of another content's choice, such as a homebrew subclass. Still read and kept as v4 | `schemaVersion` |
 | `content-revision.v5.schema.json` | Adds the `spellcasting`, `spell` and `weapon` effects, the spell fields (`features/spellcasting.md`), weapon proficiency grants, `onlyAs`, restriction `multiclass` and `group`, and roll `activation` (`features/multiclass-and-attacks.md`). In an older revision these types are unknown and reference-only. Still read and kept as v5 | `schemaVersion` |
 | `content-revision.v6.schema.json` | Adds the `toggle` effect, `modifier.toggle`, and roll `resourceContent`, `cost` and `variableCost` (`features/m3-effects.md`). Still read and kept as v6 | `schemaVersion` |
-| `content-revision.v7.schema.json` | Adds `spellcasting.multiclassCaster` (`full` / `half` / `third`; `features/spellcasting.md`, M3 C3). Current: new revisions are written as v7 | `schemaVersion` |
+| `content-revision.v7.schema.json` | Adds `spellcasting.multiclassCaster` (`full` / `half` / `third`; `features/spellcasting.md`, M3 C3). Still read | `schemaVersion` |
+| `content-revision.v8.schema.json` | Adds the `attacks` and `criticalRange` fields, armor training grants (`armor.light` … `armor.shield`), armor `strength` and `stealthDisadvantage`, modifier `whileArmored` and roll `bonus` (M2.2, the Fighter). Current: new revisions are written as v8 | `schemaVersion` |
 | `character.v1.schema.json` | `Character`: choices, pins and overrides. Read and upcast | `schemaVersion` |
 | `character.v2.schema.json` | Adds `level` and `crossFamilyExceptions`. Read and upcast | `schemaVersion` |
 | `character.v3.schema.json` | Adds `classes` (levels per class) and `choices`. Read and upcast | `schemaVersion` |

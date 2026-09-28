@@ -32,7 +32,7 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
   // D04: the primary caster's numbers, with traces and overrides (the manual step for combined multiclass slots).
   { title: 'Spellcasting', match: (f) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.') },
 ];

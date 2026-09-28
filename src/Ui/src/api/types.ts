@@ -172,6 +172,8 @@ export interface FeatureEffect {
   /** Content v6: uses spent, or the most with `variableCost`. */
   cost?: number;
   variableCost?: boolean;
+  /** Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level). */
+  bonus?: number;
 }
 
 /** Content v6 (M3 B2): something switched on and off at the table. */

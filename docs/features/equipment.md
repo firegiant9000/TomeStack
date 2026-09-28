@@ -33,7 +33,12 @@ Validation: `armorClass` 0–30 (`validate.armor-class`), a Dex cap only on medi
 
 Brenna (Dex +1, Con +2): unarmored 13 (Unarmored Defense), light 11 → 12, medium 14 → 15, heavy 17, shield +2.
 
-Not modeled yet: armor proficiency, heavy armor's Strength requirement and speed penalty, Stealth disadvantage (text only), and a feature that needs "no shield" (for example the Monk's Unarmored Defense, not in the SRD slice). Weapons and attacks: [multiclass-and-attacks.md](multiclass-and-attacks.md) (content v5).
+**Since M2.2 (content schema v8):**
+- **Armor training:** a class grants `armor.light`, `armor.medium`, `armor.heavy` or `armor.shield`, like weapon proficiencies (`onlyAs` works too). Worn armor without training is a warning on Armor Class: disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting. An untrained shield still adds to Armor Class under 2014 rules and adds nothing under 2024 rules (`RulesFamilyPolicy.UntrainedShieldGivesArmorClass`; SRD 5.1 p. 62, SRD 5.2.1 p. 92). Training is checked only for a character whose content records some; classes bundled before M2.2 record none, so nothing changes for them.
+- **Strength and Stealth:** armor may name `strength` (the score it needs) and `stealthDisadvantage`. Below the Strength score, Armor Class warns that speed is 10 feet lower (TomeStack has no speed field), and Stealth warns about the disadvantage. The player picks disadvantage when they roll.
+- **While armored:** a modifier with `whileArmored` applies only while body armor is worn (a shield alone does not count), as the Defense fighting style needs.
+
+Not modeled yet: speed itself, and a feature that needs "no shield" (for example the Monk's Unarmored Defense, not in the SRD slice). Weapons and attacks: [multiclass-and-attacks.md](multiclass-and-attacks.md) (content v5).
 
 ## "No ability score above 20" (owner decision 2026-09-27)
 

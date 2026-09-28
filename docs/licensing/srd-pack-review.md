@@ -119,6 +119,31 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
 - **Third casters:** neither SRD has one (the classes and subclasses that would be are not in the SRDs). `third` exists for homebrew, and its rounding is TomeStack's choice.
 - **Checks:** `SrdCasterTests.A_Sorcerer_Paladin_combines_slots_on_the_multiclass_table_differently_per_family_side_by_side` and `Pact_Magic_stays_separate_from_a_single_casters_own_table`, and `SchemaTests` for the v7 revisions.
 
+## M2.2 extension: the Fighter and the armor table (2026-09-28, owner direction)
+
+**Documents:** the same two PDFs, downloaded again on 2026-09-28 from the official SRD links (SRD 5.1 from media.wizards.com, SRD 5.2.1 from media.dndbeyond.com). Their SHA-256 hashes match the table above. The files stay outside the repository.
+
+**Scope reviewed and approved for bundling** (CC-BY-4.0, the same attribution and modification notice as the other packs; nothing outside these pages):
+
+| Pack file | Content | Pages |
+| --- | --- | --- |
+| `srd-5.1-fighter.json` | The Fighter: hit points, proficiencies, every class feature of levels 1–20 (Fighting Style with its six options, Second Wind, Action Surge, Martial Archetype, Ability Score Improvement, Extra Attack, Indomitable), the Champion archetype (Improved Critical, Remarkable Athlete, Additional Fighting Style, Superior Critical, Survivor), the multiclass prerequisite and the multiclass proficiencies. The starting equipment is left out | pp. 24–25; multiclassing pp. 56–57 |
+| `srd-5.2.1-fighter.json` | The Fighter: Core Fighter Traits, every class feature of levels 1–20 (Fighting Style, Second Wind, Weapon Mastery, Action Surge, Tactical Mind, Fighter Subclass, Ability Score Improvement, Extra Attack, Tactical Shift, Indomitable, Tactical Master, Two Extra Attacks, Studied Attacks, Epic Boon, Three Extra Attacks), the Champion subclass (Improved Critical, Remarkable Athlete, Additional Fighting Style, Heroic Warrior, Superior Critical, Survivor), and the four Fighting Style feats (Archery, Defense, Great Weapon Fighting, Two-Weapon Fighting). The starting equipment and the Epic Boon feats are left out | pp. 47–49; feats pp. 87–88; multiclassing pp. 24–25 |
+| `srd-5.1-armor.json`, `srd-5.2.1-armor.json` | The 12 armors and the shield of each Armor table: category, Armor Class, Strength, Stealth, weight and cost. The armor rules (proficiency or training, Strength, Stealth, one shield at a time) are quoted in the effect texts. Armor descriptions (5.1 "Padded. Padded armor consists of…") are left out | 5.1 pp. 62–64; 5.2.1 p. 92 |
+
+- **Method:** as for the casters. The text comes from pypdf, in layout mode for 5.1 and plain mode for 5.2.1 (each mode splits words in the other SRD). Line breaks and hyphenation are repaired, and every sentence is checked against the page. The armor rows and the Fighter Features table (Second Wind and Weapon Mastery columns) are read twice, once from each extraction mode, and compared cell by cell.
+- **Encoded as effects:**
+  - hit die, saving throws, skill choices and weapon and armor proficiencies;
+  - the multiclass prerequisite (Strength 13 **or** Dexterity 13, a restriction group) and the multiclass subset (heavy armor only as the starting class, in both SRDs);
+  - resources and recoveries: Second Wind (5.1: once per short rest; 5.2.1: 2/3/4 uses at levels 1/4/10, one back on a short rest); Action Surge (1, 2 at 17); Indomitable (1/2/3 at 9/13/17);
+  - the attack count (Extra Attack, highest wins: "the features don't add together", 5.1 p. 57; "don't stack", 5.2.1 p. 25);
+  - the critical range (Improved and Superior Critical);
+  - the Defense style's +1 while armored, and the armor table.
+  
+  Everything else is reference text with its page: Fighting Styles other than Defense, Tactical Mind's reroll, Remarkable Athlete, Heroic Warrior, Survivor, ASIs and Weapon Mastery. The player applies those by hand.
+- **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
+- **Checks:** `SrdFighterTests` (both families, levels 1–20, side by side), `SrdPackTests` (source records, attribution, every revision validates), and `SchemaTests`.
+
 ## How it was modified (recorded in each source's `modificationNotice`)
 
 - Passages are excerpted. Descriptive text not needed for play (for example age and alignment) is left out, and some passages are shortened. Nothing is reworded to change a rule.

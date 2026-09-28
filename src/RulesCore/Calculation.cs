@@ -146,9 +146,10 @@ public sealed record FeatureEntry(
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
 /// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
 /// <param name="Cost">Content v6: uses the action spends (its formula evaluated), or the most it may spend when <paramref name="VariableCost"/>.</param>
+/// <param name="Bonus">Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level), added to the dice.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
 
 /// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
 public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
@@ -431,9 +432,10 @@ public static class CharacterCalculator
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
-        AddArmor(active, modifiers, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
-        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies);
+        var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining);
+        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, policy, warnings);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -461,6 +463,7 @@ public static class CharacterCalculator
             ownSteps[id] = steps;
             results[id] = (value, computed, fieldOverride);
         }
+        ArmorRequirements(worn, values, warnings);
 
         IReadOnlyList<string> casterReads = casters.Count == 0 ? [] : [FieldIds.ProficiencyBonus, FieldIds.Modifier(casters[0].Effect.Ability)];
         var actualReads = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
@@ -868,7 +871,8 @@ public static class CharacterCalculator
         {
             RollEffect roll => new FeatureEffect(
                 e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true),
+                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
+                roll.Bonus is { } bonus ? evaluate(item, bonus) : null),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
@@ -1192,7 +1196,18 @@ public static class CharacterCalculator
     /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
     /// count; extra ones get a diagnostic.
     /// </summary>
-    private static void AddArmor(List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics)
+    /// <summary>The body armor and shield that count (at most one of each).</summary>
+    private sealed record WornArmor((ActiveContent Content, ArmorEffect Effect)? Body, (ActiveContent Content, ArmorEffect Effect)? Shield);
+
+    /// <remarks>
+    /// Content v8 (M2.2): a <c>whileArmored</c> modifier does not apply without body armor. Armor training is checked only
+    /// when the character's content records some (<paramref name="training"/> non-empty); older classes record none. Missing
+    /// training is a warning in both families; an untrained shield's bonus follows
+    /// <see cref="RulesFamilyPolicy.UntrainedShieldGivesArmorClass"/>.
+    /// </remarks>
+    private static WornArmor AddArmor(
+        List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, RulesFamilyPolicy policy,
+        Dictionary<string, List<Diagnostic>> warnings)
     {
         var armor = active
             .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
@@ -1222,9 +1237,71 @@ public static class CharacterCalculator
                 _ => $"{effect.ArmorClass}",
             };
             modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+            var key = effect.Category.ToString().ToLowerInvariant();
+            if (training.Count > 0 && !training.ContainsKey(key))
+            {
+                warnings[FieldIds.ArmorClass].Add(new(
+                    "equipment.armor-untrained",
+                    $"This character has no training with {key} armor, which '{content.Revision.Name}' is: disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting, while it is worn.",
+                    content.Revision.Reference,
+                    effect.Id));
+            }
+        }
+        else
+        {
+            for (var i = 0; i < modifiers.Count; i++)
+            {
+                if (modifiers[i].Effect.WhileArmored == true && modifiers[i].SkipReason is null)
+                    modifiers[i] = modifiers[i] with { SkipReason = "it applies only while armor is worn, and none is" };
+            }
         }
         if (shields.Count > 0)
-            modifiers.Add(Synthetic(shields[0].Content, shields[0].Effect, ModifierOperation.Bonus, $"{shields[0].Effect.ArmorClass}"));
+        {
+            var (content, effect) = shields[0];
+            var shield = Synthetic(content, effect, ModifierOperation.Bonus, $"{effect.ArmorClass}");
+            if (training.Count > 0 && !training.ContainsKey("shield"))
+            {
+                warnings[FieldIds.ArmorClass].Add(new(
+                    "equipment.shield-untrained",
+                    policy.UntrainedShieldGivesArmorClass
+                        ? $"This character has no training with shields: '{content.Revision.Name}' still adds to Armor Class under {policy.DisplayName}, with disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting."
+                        : $"This character has no training with shields, so '{content.Revision.Name}' adds nothing to Armor Class under {policy.DisplayName}.",
+                    content.Revision.Reference,
+                    effect.Id));
+                if (!policy.UntrainedShieldGivesArmorClass)
+                    shield = shield with { SkipReason = "the character has no training with shields" };
+            }
+            modifiers.Add(shield);
+        }
+        return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
+    }
+
+    /// <summary>
+    /// Content v8 (M2.2): worn armor's Strength requirement (speed 10 feet lower below it; TomeStack has no speed field, so
+    /// Armor Class warns) and Stealth disadvantage (the Stealth field warns). Both SRDs state them alike.
+    /// </summary>
+    private static void ArmorRequirements(WornArmor worn, Dictionary<string, int> values, Dictionary<string, List<Diagnostic>> warnings)
+    {
+        if (worn.Body is not { } body)
+            return;
+        var (content, effect) = body;
+        var strength = values[FieldIds.Score(Ability.Str)];
+        if (effect.Strength is { } needed && strength < needed)
+        {
+            warnings[FieldIds.ArmorClass].Add(new(
+                "equipment.armor-strength",
+                $"'{content.Revision.Name}' needs Strength {needed}; with Strength {strength} the wearer's speed is 10 feet lower. Adjust speed by hand.",
+                content.Revision.Reference,
+                effect.Id));
+        }
+        if (effect.StealthDisadvantage == true)
+        {
+            warnings[FieldIds.Skill(Stealth)].Add(new(
+                "equipment.stealth-disadvantage",
+                $"'{content.Revision.Name}' gives disadvantage on Dexterity (Stealth) checks; choose disadvantage when you roll.",
+                content.Revision.Reference,
+                effect.Id));
+        }
     }
 
     private static Modifier Synthetic(ActiveContent content, ArmorEffect armor, ModifierOperation operation, string value)
@@ -1314,9 +1391,15 @@ public static class CharacterCalculator
     /// <summary>The prefix of weapon proficiency grant targets (content v5): <c>weapon.simple</c>, <c>weapon.martial</c> or <c>weapon.&lt;key&gt;</c>.</summary>
     public const string WeaponProficiencyPrefix = "weapon.";
 
+    /// <summary>The prefix of armor training grant targets (content v8): <c>armor.light</c>, <c>armor.medium</c>, <c>armor.heavy</c>, <c>armor.shield</c>.</summary>
+    public const string ArmorTrainingPrefix = "armor.";
+
+    /// <summary>The keys an armor training grant may name (the <see cref="ArmorCategory"/> values, in lower case).</summary>
+    public static IReadOnlyList<string> ArmorTrainingKeys { get; } = [.. Enum.GetValues<ArmorCategory>().Select(c => c.ToString().ToLowerInvariant())];
+
     private static Dictionary<string, Proficiency> CollectProficiencies(
         List<ActiveContent> active, Character character, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel,
-        Dictionary<string, Proficiency> weapons)
+        Dictionary<string, Proficiency> weapons, Dictionary<string, Proficiency> armor)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -1333,6 +1416,15 @@ public static class CharacterCalculator
                 {
                     if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
                         weapons.TryAdd(weapon[WeaponProficiencyPrefix.Length..], new(GrantKind.Proficiency, item, grant));
+                    continue;
+                }
+                if (grant.Target is { } armorTarget && armorTarget.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal))
+                {
+                    var key = armorTarget[ArmorTrainingPrefix.Length..];
+                    if (!ArmorTrainingKeys.Contains(key))
+                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy or armor.shield; it is ignored.", item.Revision.Reference, grant.Id));
+                    else if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
+                        armor.TryAdd(key, new(GrantKind.Proficiency, item, grant));
                     continue;
                 }
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
@@ -1731,6 +1823,17 @@ public static class CharacterCalculator
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));
+        // Content v8 (M2.2). Extra Attack sets the count (highest wins); Improved and Superior Critical lower the range.
+        specs.Add(new(FieldIds.Attacks, "Attacks per Attack action", "score", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.Attacks, "base", "One attack when you take the Attack action", 1, 1, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 1;
+        }));
+        specs.Add(new(FieldIds.CriticalRange, "Weapon critical hit on a d20 roll of at least", "score", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.CriticalRange, "base", "A weapon attack is a critical hit on a roll of 20", 20, 20, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 20;
+        }));
 
         // Spellcasting (content schema v5, D04). Every ability modifier is an input, because the caster's ability is data.
         IReadOnlyList<string> casterInputs = [FieldIds.ProficiencyBonus, .. Enum.GetValues<Ability>().Select(FieldIds.Modifier)];

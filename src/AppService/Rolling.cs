@@ -57,6 +57,10 @@ public sealed partial class TomeStackApp
                 attack.Item, attack.Name, attack.EffectId, attack.Origin.SourceId, attack.Origin.SourceTitle, attack.Origin.Page);
             if (!command.Damage)
             {
+                // M2.2: say when a lower roll is already a critical hit (Improved Critical); the player marks the damage roll.
+                var critical = sheet.Field(FieldIds.CriticalRange).Value;
+                if (critical < 20)
+                    provenance = provenance with { Label = $"{provenance.Label} (critical hit on {critical}–20)" };
                 request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit, attack.Origin)], provenance);
             }
             else
@@ -105,7 +109,12 @@ public sealed partial class TomeStackApp
             var revision = _store.FindRevision(reference)!;
             var effect = revision.Effects.OfType<RollEffect>().FirstOrDefault(e => e.Id == command.EffectId)
                 ?? throw new AppValidationException([new("roll.effect-not-found", $"'{revision.Name}' has no roll effect '{command.EffectId}'.", reference, command.EffectId)]);
-            request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical);
+            // Content v8 (M2.2): the roll's bonus formula, as the sheet evaluated it for this character (a flat modifier).
+            var bonus = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id)?.Bonus;
+            IReadOnlyList<RollModifier>? modifiers = bonus is { } amount && amount != 0
+                ? [new RollModifier($"{effect.Label} bonus ({effect.Bonus})", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
+                : null;
+            request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical, modifiers);
         }
         else if (command.Field is { } field)
         {

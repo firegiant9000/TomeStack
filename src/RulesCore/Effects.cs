@@ -11,6 +11,18 @@ public static class FieldIds
     public const string ArmorClass = "armorClass";
     public const string HitPoints = "hitPoints";
 
+    /// <summary>
+    /// Content schema v8 (M2.2): attacks per Attack action. Base 1; Extra Attack features <c>set</c> it, and the highest
+    /// applies (SRD 5.1 p. 57: "the features don't add together"; SRD 5.2.1 p. 25: "the features don't stack").
+    /// </summary>
+    public const string Attacks = "attacks";
+
+    /// <summary>
+    /// Content schema v8 (M2.2): the lowest d20 roll that is a critical hit with weapon attacks. Base 20; Improved and
+    /// Superior Critical each lower it by 1.
+    /// </summary>
+    public const string CriticalRange = "criticalRange";
+
     /// <summary>The primary caster's spell attack bonus (content schema v5; D04).</summary>
     public const string SpellAttack = "spellAttack";
 
@@ -116,6 +128,12 @@ public sealed record ModifierEffect : Effect
     /// switches the modifier on. It applies only while that toggle is on. Null: a whileActive modifier stays assisted.
     /// </summary>
     public string? Toggle { get; init; }
+
+    /// <summary>
+    /// Content schema v8 (M2.2): applies only while the character wears equipped body armor (light, medium or heavy; a
+    /// shield alone does not count), for example the Defense fighting style. Null or false: always.
+    /// </summary>
+    public bool? WhileArmored { get; init; }
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -255,6 +273,12 @@ public sealed record RollEffect : Effect
 
     /// <summary>Content schema v6 (variable spend): the player chooses how many uses to spend, from 1 to <see cref="Cost"/> (or what is left).</summary>
     public bool? VariableCost { get; init; }
+
+    /// <summary>
+    /// Content schema v8 (M2.2): a formula added to the dice, evaluated for the character (for example <c>CLASS_LEVEL</c>
+    /// for Second Wind's "1d10 plus your Fighter level"). It is a roll modifier: never doubled on a critical.
+    /// </summary>
+    public string? Bonus { get; init; }
 }
 
 /// <summary>
@@ -355,6 +379,15 @@ public sealed record ArmorEffect : Effect
 
     /// <summary>Medium armor only: the most the Dexterity modifier adds (default 2).</summary>
     public int? DexterityCap { get; init; }
+
+    /// <summary>
+    /// Content schema v8 (M2.2): the Strength score this armor needs; below it the wearer's speed is 10 feet lower (both
+    /// SRDs). TomeStack has no speed field, so the sheet warns.
+    /// </summary>
+    public int? Strength { get; init; }
+
+    /// <summary>Content schema v8 (M2.2): the wearer has disadvantage on Dexterity (Stealth) checks. The Stealth field warns.</summary>
+    public bool? StealthDisadvantage { get; init; }
 }
 
 /// <summary>How a caster readies spells: <see cref="Prepared"/> from a list (or spellbook) that can change, or a fixed <see cref="Known"/> set.</summary>
