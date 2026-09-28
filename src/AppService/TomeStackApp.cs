@@ -46,6 +46,9 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-spells.json", "TomeStack.Content.srd-5.2.1-spells.json",
         "TomeStack.Content.srd-5.1-equipment.json", "TomeStack.Content.srd-5.2.1-equipment.json",
         "TomeStack.Content.srd-5.1-classes.json", "TomeStack.Content.srd-5.2.1-classes.json",
+        // M2.2: armor before the Fighter, which is proficient with it; the Fighter after the classes it may multiclass with.
+        "TomeStack.Content.srd-5.1-armor.json", "TomeStack.Content.srd-5.2.1-armor.json",
+        "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
     ];
 
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>

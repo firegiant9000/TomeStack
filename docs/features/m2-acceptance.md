@@ -19,7 +19,7 @@ Every claim in the acceptance documents, the ROADMAP and the README uses one of 
 | --- | --- | --- |
 | Windows app | Windows-install verified (smoke in CI; the clean-VM install is reported by the owner) | Windows 10 (best-effort, untested) |
 | Rules packs | Fixture-verified | — |
-| Builder | Fixture-verified for the eight SRD casters 1–20 and the Barbarian 1–3 | No Fighter, Monk or Rogue; Barbarian 4–20; one species and one background per family |
+| Builder | Fixture-verified for the eight SRD casters 1–20 and the Barbarian 1–3; since M2.2 the Fighter 1–20 with the Champion and the armor table | No Monk or Rogue; Barbarian 4–20; one species and one background per family |
 | Sheet | Fixture-verified; a play rehearsal with an SRD character is reported by the owner | Accepted in real play (M3). Before M2.1, a second spellcasting class skipped spell attack and save DC bonuses and had no trace |
 | Homebrew | Fixture-verified on a synthetic stand-in | The real Stardust Guardian (M3) |
 | Sources | Windows-install verified (the viewer's page is reported by the owner) | — |
@@ -92,6 +92,6 @@ The results were reported by the owner; the development session did not observe 
 
 ## Known limits against MVP.md's goal
 
-- **"Create and play a level-1-to-20 SRD-based character under either rules family":** true for the eight casters, levels 1–20 in both families. The bundled non-casters are only the M1 Barbarian slice (levels 1–3), and Fighter, Monk and Rogue are not bundled. There is one species and one background per family (Half-Orc and Acolyte; Dwarf and Soldier). Other species, backgrounds and feats come from the homebrew studio or later SRD packs. **Checked 2026-09-28:** no Fighter content exists anywhere in the repo, so a Fighter, with or without a subclass, cannot be built today except as homebrew. Extra Attack, Weapon Mastery and a wider critical range are not automated either (ROADMAP "M2.2 Fighter baseline").
-- **Armor:** no SRD armor table (text in the SRD, not bundled). Armor items come from homebrew. Armor proficiency, the heavy-armor Strength requirement and Stealth disadvantage are not modeled (`equipment.md`).
+- **"Create and play a level-1-to-20 SRD-based character under either rules family":** true for the eight casters, levels 1–20 in both families. The bundled non-casters are only the M1 Barbarian slice (levels 1–3), and Fighter, Monk and Rogue are not bundled. There is one species and one background per family (Half-Orc and Acolyte; Dwarf and Soldier). Other species, backgrounds and feats come from the homebrew studio or later SRD packs. **Checked 2026-09-28:** no Fighter content existed, so a Fighter could not be built except as homebrew. **M2.2 (same day):** the SRD Fighter 1–20 with the Champion, in both families, with Extra Attack and the critical range automated. Weapon Mastery stays reference text.
+- **Armor:** since M2.2 the SRD armor table is bundled, with the Strength requirement, Stealth disadvantage and armor training as warnings (`equipment.md`).
 - **Automated mechanics:** most class features are reference-only text with their pages. Main resources are tracked; the rest is by hand, as MVP "Homebrew: reference-only text" allows.

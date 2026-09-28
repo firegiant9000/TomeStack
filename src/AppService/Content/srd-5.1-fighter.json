@@ -1,0 +1,1049 @@
+{
+  "packId": "srd-5.1-fighter",
+  "formatVersion": 1,
+  "notice": "The Fighter of the System Reference Document 5.1 (CC-BY-4.0), levels 1-20, with the Champion and the Fighting Styles, pp. 24-25 and 56-57. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408000",
+      "revisionId": "51e00000-0000-4000-8000-000000408000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Fighter",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "summary": "Hit Points\nHit Dice: 1d10 per fighter level\nHit Points at 1st Level: 10 + your Constitution modifier\nHit Points at Higher Levels: 1d10 (or 6) + your Constitution modifier per fighter level after 1st\n\nProficiencies\nArmor: All armor, shields\nWeapons: Simple weapons, martial weapons\nTools: None\nSaving Throws: Strength, Constitution\nSkills: Choose two skills from Acrobatics, Animal Handling, Athletics, History, Insight, Intimidation, Perception, and Survival",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "fighter-hit-die",
+          "die": 10
+        },
+        {
+          "type": "grant",
+          "id": "fighter-save-str",
+          "grant": "proficiency",
+          "target": "save.str",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "fighter-skills",
+          "choiceId": "fighter-skills",
+          "count": 2,
+          "text": "Skills: Choose two skills from Acrobatics, Animal Handling, Athletics, History, Insight, Intimidation, Perception, and Survival",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408800",
+              "revisionId": "51e00000-0000-4000-8000-000000408800"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408801",
+              "revisionId": "51e00000-0000-4000-8000-000000408801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408802",
+              "revisionId": "51e00000-0000-4000-8000-000000408802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408803",
+              "revisionId": "51e00000-0000-4000-8000-000000408803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408804",
+              "revisionId": "51e00000-0000-4000-8000-000000408804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408805",
+              "revisionId": "51e00000-0000-4000-8000-000000408805"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408806",
+              "revisionId": "51e00000-0000-4000-8000-000000408806"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408807",
+              "revisionId": "51e00000-0000-4000-8000-000000408807"
+            }
+          ],
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-weapon-martial",
+          "grant": "proficiency",
+          "target": "weapon.martial",
+          "text": "Weapons: Simple weapons, martial weapons. Multiclassing Proficiencies (p. 57), Fighter: Light armor, medium armor, shields, simple weapons, martial weapons."
+        },
+        {
+          "type": "grant",
+          "id": "fighter-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor: All armor, shields"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
+          "type": "grant",
+          "id": "fighter-armor-heavy",
+          "grant": "proficiency",
+          "target": "armor.heavy",
+          "onlyAs": "startingClass",
+          "text": "As a multiclass character a fighter gains light armor, medium armor and shields, not heavy armor (Multiclassing Proficiencies, p. 57)."
+        },
+        {
+          "type": "restriction",
+          "id": "fighter-multiclass-str",
+          "text": "Multiclassing Prerequisites (p. 56): Fighter, Strength 13 or Dexterity 13",
+          "field": "ability.str.score",
+          "minimum": 13,
+          "multiclass": true,
+          "group": "fighter-multiclass"
+        },
+        {
+          "type": "restriction",
+          "id": "fighter-multiclass-dex",
+          "field": "ability.dex.score",
+          "minimum": 13,
+          "multiclass": true,
+          "group": "fighter-multiclass"
+        },
+        {
+          "type": "grant",
+          "id": "feature-fighting-style",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408001",
+            "revisionId": "51e00000-0000-4000-8000-000000408001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-second-wind",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408002",
+            "revisionId": "51e00000-0000-4000-8000-000000408002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-action-surge",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408003",
+            "revisionId": "51e00000-0000-4000-8000-000000408003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-martial-archetype",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408004",
+            "revisionId": "51e00000-0000-4000-8000-000000408004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408005",
+            "revisionId": "51e00000-0000-4000-8000-000000408005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-extra-attack",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408006",
+            "revisionId": "51e00000-0000-4000-8000-000000408006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-indomitable",
+          "grant": "content",
+          "level": 9,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408007",
+            "revisionId": "51e00000-0000-4000-8000-000000408007"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "fighter-subclass",
+          "choiceId": "fighter-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Martial Archetype. (The SRD 5.1 includes the Champion.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408500",
+              "revisionId": "51e00000-0000-4000-8000-000000408500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408001",
+      "revisionId": "51e00000-0000-4000-8000-000000408001",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "You adopt a particular style of fighting as your specialty. Choose one of the following options. You can’t take a Fighting Style option more than once, even if you later get to choose again.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "fighting-style",
+          "choiceId": "fighting-style",
+          "count": 1,
+          "text": "Fighting Style: You adopt a particular style of fighting as your specialty. Choose one of the following options. You can’t take a Fighting Style option more than once, even if you later get to choose again.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408600",
+              "revisionId": "51e00000-0000-4000-8000-000000408600"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408601",
+              "revisionId": "51e00000-0000-4000-8000-000000408601"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408602",
+              "revisionId": "51e00000-0000-4000-8000-000000408602"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408603",
+              "revisionId": "51e00000-0000-4000-8000-000000408603"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408604",
+              "revisionId": "51e00000-0000-4000-8000-000000408604"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408605",
+              "revisionId": "51e00000-0000-4000-8000-000000408605"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408002",
+      "revisionId": "51e00000-0000-4000-8000-000000408002",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Second Wind",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "second-wind",
+          "resourceId": "second-wind",
+          "label": "Second Wind",
+          "maximum": "1",
+          "text": "Once per short or long rest."
+        },
+        {
+          "type": "recovery",
+          "id": "second-wind-shortRest",
+          "timing": "onShortRest",
+          "resourceId": "second-wind",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "second-wind-longRest",
+          "timing": "onLongRest",
+          "resourceId": "second-wind",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "roll",
+          "id": "second-wind-heal",
+          "timing": "onRoll",
+          "rollId": "second-wind-heal",
+          "label": "Second Wind healing",
+          "dice": "1d10",
+          "resourceId": "second-wind",
+          "activation": "bonusAction",
+          "bonus": "CLASS_LEVEL"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408003",
+      "revisionId": "51e00000-0000-4000-8000-000000408003",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Action Surge",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 2nd level, you can push yourself beyond your normal limits for a moment. On your turn, you can take one additional action on top of your regular action and a possible bonus action.\n\nOnce you use this feature, you must finish a short or long rest before you can use it again. Starting at 17th level, you can use it twice before a rest, but only once on the same turn.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "action-surge",
+          "resourceId": "action-surge",
+          "label": "Action Surge",
+          "maximum": "1 + floor(CLASS_LEVEL / 17)",
+          "text": "1 use; 2 from 17th level."
+        },
+        {
+          "type": "recovery",
+          "id": "action-surge-shortRest",
+          "timing": "onShortRest",
+          "resourceId": "action-surge",
+          "on": "shortRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "action-surge-longRest",
+          "timing": "onLongRest",
+          "resourceId": "action-surge",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408004",
+      "revisionId": "51e00000-0000-4000-8000-000000408004",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Martial Archetype",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "At 3rd level, you choose an archetype that you strive to emulate in your combat styles and techniques, such as Champion. The archetype you choose grants you features at 3rd level and again at 7th, 10th, 15th, and 18th level.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408005",
+      "revisionId": "51e00000-0000-4000-8000-000000408005",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Ability Score Improvement",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "When you reach 4th level, and again at 6th, 8th, 12th, 14th, 16th, and 19th level, you can increase one ability score of your choice by 2, or you can increase two ability scores of your choice by 1. As normal, you can’t increase an ability score above 20 using this feature.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408006",
+      "revisionId": "51e00000-0000-4000-8000-000000408006",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Extra Attack",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 5th level, you can attack twice, instead of once, whenever you take the Attack action on your turn.\n\nThe number of attacks increases to three when you reach 11th level in this class and to four when you reach 20th level in this class.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "extra-attack",
+          "text": "2 attacks from 5th level, 3 from 11th, 4 at 20th.",
+          "operation": "set",
+          "target": "attacks",
+          "value": "2 + floor((CLASS_LEVEL + 1) / 12) + floor(CLASS_LEVEL / 20)"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408007",
+      "revisionId": "51e00000-0000-4000-8000-000000408007",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Indomitable",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Beginning at 9th level, you can reroll a saving throw that you fail. If you do so, you must use the new roll, and you can’t use this feature again until you finish a long rest.\n\nYou can use this feature twice between long rests starting at 13th level and three times between long rests starting at 17th level.",
+      "effects": [
+        {
+          "type": "resource",
+          "id": "indomitable",
+          "resourceId": "indomitable",
+          "label": "Indomitable",
+          "maximum": "1 + floor((CLASS_LEVEL - 9) / 4)",
+          "text": "1 use from 9th level, 2 from 13th, 3 from 17th."
+        },
+        {
+          "type": "recovery",
+          "id": "indomitable-longRest",
+          "timing": "onLongRest",
+          "resourceId": "indomitable",
+          "on": "longRest",
+          "amount": "all"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408500",
+      "revisionId": "51e00000-0000-4000-8000-000000408500",
+      "schemaVersion": 8,
+      "kind": "subclass",
+      "name": "Champion",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Different fighters choose different approaches to perfecting their fighting prowess. The martial archetype you choose to emulate reflects your approach.\n\nThe archetypal Champion focuses on the development of raw physical power honed to deadly perfection. Those who model themselves on this archetype combine rigorous training with physical excellence to deal devastating blows.",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "feature-improved-critical",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408501",
+            "revisionId": "51e00000-0000-4000-8000-000000408501"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-remarkable-athlete",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408502",
+            "revisionId": "51e00000-0000-4000-8000-000000408502"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-additional-fighting-style",
+          "grant": "content",
+          "level": 10,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408503",
+            "revisionId": "51e00000-0000-4000-8000-000000408503"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-superior-critical",
+          "grant": "content",
+          "level": 15,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408504",
+            "revisionId": "51e00000-0000-4000-8000-000000408504"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-survivor",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000408505",
+            "revisionId": "51e00000-0000-4000-8000-000000408505"
+          }
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408501",
+      "revisionId": "51e00000-0000-4000-8000-000000408501",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Improved Critical",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Beginning when you choose this archetype at 3rd level, your weapon attacks score a critical hit on a roll of 19 or 20.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "improved-critical",
+          "text": "A critical hit on 19 or 20.",
+          "operation": "bonus",
+          "target": "criticalRange",
+          "value": "-1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408502",
+      "revisionId": "51e00000-0000-4000-8000-000000408502",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Remarkable Athlete",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 7th level, you can add half your proficiency bonus (round up) to any Strength, Dexterity, or Constitution check you make that doesn’t already use your proficiency bonus.\n\nIn addition, when you make a running long jump, the distance you can cover increases by a number of feet equal to your Strength modifier.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408503",
+      "revisionId": "51e00000-0000-4000-8000-000000408503",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Additional Fighting Style",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "At 10th level, you can choose a second option from the Fighting Style class feature.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "additional-fighting-style",
+          "choiceId": "additional-fighting-style",
+          "count": 1,
+          "text": "Additional Fighting Style: choose a second option from the Fighting Style class feature.",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408600",
+              "revisionId": "51e00000-0000-4000-8000-000000408600"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408601",
+              "revisionId": "51e00000-0000-4000-8000-000000408601"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408602",
+              "revisionId": "51e00000-0000-4000-8000-000000408602"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408603",
+              "revisionId": "51e00000-0000-4000-8000-000000408603"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408604",
+              "revisionId": "51e00000-0000-4000-8000-000000408604"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000408605",
+              "revisionId": "51e00000-0000-4000-8000-000000408605"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408504",
+      "revisionId": "51e00000-0000-4000-8000-000000408504",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Superior Critical",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "Starting at 15th level, your weapon attacks score a critical hit on a roll of 18–20.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "superior-critical",
+          "text": "With Improved Critical: a critical hit on 18–20.",
+          "operation": "bonus",
+          "target": "criticalRange",
+          "value": "-1"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408505",
+      "revisionId": "51e00000-0000-4000-8000-000000408505",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Survivor",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 25
+        }
+      },
+      "status": "published",
+      "summary": "At 18th level, you attain the pinnacle of resilience in battle. At the start of each of your turns, you regain hit points equal to 5 + your Constitution modifier if you have no more than half of your hit points left. You don’t gain this benefit if you have 0 hit points.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408600",
+      "revisionId": "51e00000-0000-4000-8000-000000408600",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Archery",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "You gain a +2 bonus to attack rolls you make with ranged weapons.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408601",
+      "revisionId": "51e00000-0000-4000-8000-000000408601",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Defense",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "While you are wearing armor, you gain a +1 bonus to AC.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "defense",
+          "text": "While you are wearing armor, you gain a +1 bonus to AC.",
+          "operation": "bonus",
+          "target": "armorClass",
+          "value": "1",
+          "whileArmored": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408602",
+      "revisionId": "51e00000-0000-4000-8000-000000408602",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Dueling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "When you are wielding a melee weapon in one hand and no other weapons, you gain a +2 bonus to damage rolls with that weapon.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408603",
+      "revisionId": "51e00000-0000-4000-8000-000000408603",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Great Weapon Fighting",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "When you roll a 1 or 2 on a damage die for an attack you make with a melee weapon that you are wielding with two hands, you can reroll the die and must use the new roll, even if the new roll is a 1 or a 2. The weapon must have the two-handed or versatile property for you to gain this benefit.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408604",
+      "revisionId": "51e00000-0000-4000-8000-000000408604",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Protection",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "When a creature you can see attacks a target other than you that is within 5 feet of you, you can use your reaction to impose disadvantage on the attack roll. You must be wielding a shield.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408605",
+      "revisionId": "51e00000-0000-4000-8000-000000408605",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighting Style: Two-Weapon Fighting",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24
+        }
+      },
+      "status": "published",
+      "summary": "When you engage in two-weapon fighting, you can add your ability modifier to the damage of the second attack.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408800",
+      "revisionId": "51e00000-0000-4000-8000-000000408800",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Acrobatics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.acrobatics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408801",
+      "revisionId": "51e00000-0000-4000-8000-000000408801",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Animal Handling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.animalHandling"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408802",
+      "revisionId": "51e00000-0000-4000-8000-000000408802",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Athletics",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.athletics"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408803",
+      "revisionId": "51e00000-0000-4000-8000-000000408803",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: History",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.history"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408804",
+      "revisionId": "51e00000-0000-4000-8000-000000408804",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Insight",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.insight"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408805",
+      "revisionId": "51e00000-0000-4000-8000-000000408805",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Intimidation",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.intimidation"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408806",
+      "revisionId": "51e00000-0000-4000-8000-000000408806",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Perception",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.perception"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000408807",
+      "revisionId": "51e00000-0000-4000-8000-000000408807",
+      "schemaVersion": 8,
+      "kind": "feature",
+      "name": "Fighter Skill: Survival",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 24,
+          "end": 25
+        }
+      },
+      "status": "published",
+      "effects": [
+        {
+          "type": "grant",
+          "id": "skill",
+          "grant": "proficiency",
+          "target": "skill.survival"
+        }
+      ]
+    }
+  ]
+}

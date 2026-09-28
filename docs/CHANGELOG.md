@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased (M2.1, M3 and M4)
+## Unreleased (M2.1, M2.2, M3 and M4)
 
 ### Added
+
+- **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
+  - **Automated:** Fighting Style as a choice (Defense adds +1 AC while you wear armor), and Second Wind, Action Surge and Indomitable as resources that come back on rests. Second Wind rolls 1d10 plus your Fighter level. Also automated: the number of attacks (Extra Attack) and the Champion's critical range. The Champion's second Fighting Style is a choice too, and a style can't be picked twice.
+  - **Armor:** light, medium and heavy armor and shields set Armor Class as before. They now also warn when you lack the Strength (speed 10 feet lower) or the training, and Stealth warns about disadvantage. Under 2024 rules a shield without training adds nothing to Armor Class; under 2014 rules it still does.
+  - **Reference text, applied by hand:** the other Fighting Styles, Weapon Mastery (the kinds you choose), Tactical Mind and Tactical Shift, Remarkable Athlete, Heroic Warrior, Survivor and Ability Score Improvements. The feature texts say what to do.
+  - **Homebrew:** a homebrew Fighter subclass joins the Fighter's subclass choice next to the Champion, which is the path the Stardust Guardian will take.
+  - **Paladin and Ranger:** their Extra Attack is now counted too, in new revisions. Existing characters get them through "Updates available".
+  - **Content schema v8** adds the fields this needs. Older content is unchanged, and older versions of TomeStack refuse v8 content with a clear message.
 
 - **Back up everything and restore it (M2.1; `docs/features/package-format.md` "Full library backup", ADR-007 item 10):** a new **Backups** screen.
   - **Back up everything** saves one file with your whole library: characters, campaigns, gap notes, all your homebrew (drafts, older versions and entries no character uses yet) and the PDFs TomeStack keeps a copy of. Before this, only characters and what they used could be backed up, so unfinished homebrew had no backup at all.

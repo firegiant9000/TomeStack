@@ -142,7 +142,13 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
   
   Everything else is reference text with its page: Fighting Styles other than Defense, Tactical Mind's reroll, Remarkable Athlete, Heroic Warrior, Survivor, ASIs and Weapon Mastery. The player applies those by hand.
 - **Not taken:** Epic Boon feats (Boon of Combat Prowess is named in the text only), starting equipment, the armor descriptions, magic armor, and the Weapon Mastery property rules (Push, Sap, Slow and the others). Weapon Mastery's chosen kinds are tracked by the player.
-- **Checks:** `SrdFighterTests` (both families, levels 1–20, side by side), `SrdPackTests` (source records, attribution, every revision validates), and `SchemaTests`.
+- **Checks:** `SrdFighterTests` (both families, levels 1–20, side by side), `SrdPackTests` (source records, attribution, every revision validates, the armor numbers), and `SchemaTests`.
+- **Done 2026-09-28:**
+  - `srd-5.1-fighter.json` has 28 revisions: the class, 7 features, the Champion with 5 features, 6 Fighting Style options and 8 skill options.
+  - `srd-5.2.1-fighter.json` has 36: the class, 15 features, the Champion with 6 features, 4 Fighting Style feats and 9 skill options.
+  - Each `srd-<family>-armor.json` has 13 items.
+  - The generating script's armor-row check found every row in both extraction modes of each PDF. For 5.2.1 layout mode, the comparison ignores the spaces it inserts inside words. The script also checked the Second Wind and Weapon Mastery columns of the 5.2.1 Fighter Features table against the plain extraction. The script stays outside the repository, like the others.
+- **Also added:** a content v8 revision of the Paladin's and the Ranger's Extra Attack in both families (the same text, now counted as 2 attacks), and a new class revision that grants it. No new text. The earlier revisions stay for the characters that pin them.
 
 ## How it was modified (recorded in each source's `modificationNotice`)
 

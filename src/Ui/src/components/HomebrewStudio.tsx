@@ -322,14 +322,15 @@ function EntryEditor(props: {
       .then(async (options: ContentOption[]) => {
         // One entry per class content: older revisions are listed too (superseded), and would repeat every choice.
         const classes = options.filter((o) => o.kind === 'class' && o.compatible && !o.superseded);
+        // In parallel: one request per class, in class order.
+        const histories = await Promise.all(classes.map((c) => client.contentRevisions(c.reference.contentId)));
         const found: ClassChoice[] = [];
-        for (const c of classes) {
-          const revisions = await client.contentRevisions(c.reference.contentId);
-          const latest = revisions.filter((r) => r.status === 'published').at(-1);
+        classes.forEach((c, i) => {
+          const latest = histories[i]!.filter((r) => r.status === 'published').at(-1);
           for (const effect of latest?.effects ?? []) {
             if (effect.type === 'choice') found.push({ classContentId: c.reference.contentId, className: c.name, choiceId: effect.choiceId, text: effect.text ?? effect.choiceId });
           }
-        }
+        });
         if (current) setClassChoices(found);
       })
       .catch(onError);

@@ -1,0 +1,389 @@
+{
+  "packId": "srd-5.2.1-armor",
+  "formatVersion": 1,
+  "notice": "The armor table of the System Reference Document 5.2.1 (CC-BY-4.0), p. 92. Taken from SRD_CC_v5.2.1.pdf (SHA-256 8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "52500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.2.1",
+      "publisher": "SRD 5.2.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "editionVersion": "5.2.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material from the System Reference Document 5.2.1 (\"SRD 5.2.1\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "8974902d109d6e63672d7c490bde9ccf052410503d9cfa768237154fbc5e3d87"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201001",
+      "revisionId": "52e00000-0000-4000-8000-000000201001",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Padded Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Padded Armor (Light Armor): Armor Class 11 + Dex modifier; Strength —; Stealth Disadvantage; 8 lb.; 5 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Light Armor (1 Minute to Don or Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 11,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201002",
+      "revisionId": "52e00000-0000-4000-8000-000000201002",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Leather Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Leather Armor (Light Armor): Armor Class 11 + Dex modifier; Strength —; Stealth —; 10 lb.; 10 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Light Armor (1 Minute to Don or Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 11
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201003",
+      "revisionId": "52e00000-0000-4000-8000-000000201003",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Studded Leather Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Studded Leather Armor (Light Armor): Armor Class 12 + Dex modifier; Strength —; Stealth —; 13 lb.; 45 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Light Armor (1 Minute to Don or Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 12
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201004",
+      "revisionId": "52e00000-0000-4000-8000-000000201004",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Hide Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Hide Armor (Medium Armor): Armor Class 12 + Dex modifier (max 2); Strength —; Stealth —; 12 lb.; 10 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Medium Armor (5 Minutes to Don and 1 Minute to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 12,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201005",
+      "revisionId": "52e00000-0000-4000-8000-000000201005",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Chain Shirt",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Chain Shirt (Medium Armor): Armor Class 13 + Dex modifier (max 2); Strength —; Stealth —; 20 lb.; 50 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Medium Armor (5 Minutes to Don and 1 Minute to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 13,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201006",
+      "revisionId": "52e00000-0000-4000-8000-000000201006",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Scale Mail",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Scale Mail (Medium Armor): Armor Class 14 + Dex modifier (max 2); Strength —; Stealth Disadvantage; 45 lb.; 50 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Medium Armor (5 Minutes to Don and 1 Minute to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 14,
+          "dexterityCap": 2,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201007",
+      "revisionId": "52e00000-0000-4000-8000-000000201007",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Breastplate",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Breastplate (Medium Armor): Armor Class 14 + Dex modifier (max 2); Strength —; Stealth —; 20 lb.; 400 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Medium Armor (5 Minutes to Don and 1 Minute to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 14,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201008",
+      "revisionId": "52e00000-0000-4000-8000-000000201008",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Half Plate Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Half Plate Armor (Medium Armor): Armor Class 15 + Dex modifier (max 2); Strength —; Stealth Disadvantage; 40 lb.; 750 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Medium Armor (5 Minutes to Don and 1 Minute to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 15,
+          "dexterityCap": 2,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201009",
+      "revisionId": "52e00000-0000-4000-8000-000000201009",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Ring Mail",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Ring Mail (Heavy Armor): Armor Class 14; Strength —; Stealth Disadvantage; 40 lb.; 30 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy Armor (10 Minutes to Don and 5 Minutes to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 14,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201010",
+      "revisionId": "52e00000-0000-4000-8000-000000201010",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Chain Mail",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Chain Mail (Heavy Armor): Armor Class 16; Strength Str 13; Stealth Disadvantage; 55 lb.; 75 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy Armor (10 Minutes to Don and 5 Minutes to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows a Strength score in the Strength column for an armor type, that armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 16,
+          "strength": 13,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201011",
+      "revisionId": "52e00000-0000-4000-8000-000000201011",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Splint Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Splint Armor (Heavy Armor): Armor Class 17; Strength Str 15; Stealth Disadvantage; 60 lb.; 200 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy Armor (10 Minutes to Don and 5 Minutes to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows a Strength score in the Strength column for an armor type, that armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 17,
+          "strength": 15,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201012",
+      "revisionId": "52e00000-0000-4000-8000-000000201012",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Plate Armor",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Plate Armor (Heavy Armor): Armor Class 18; Strength Str 15; Stealth Disadvantage; 65 lb.; 1,500 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy Armor (10 Minutes to Don and 5 Minutes to Doff). The table’s Armor Class column tells you what your base AC is when you wear a type of armor. If the table shows a Strength score in the Strength column for an armor type, that armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks. If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 18,
+          "strength": 15,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000201013",
+      "revisionId": "52e00000-0000-4000-8000-000000201013",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Shield",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 92
+        }
+      },
+      "status": "published",
+      "summary": "Shield: Armor Class +2; Strength —; Stealth —; 6 lb.; 10 GP.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "shield",
+          "text": "Shield (Utilize Action to Don or Doff). You gain the Armor Class benefit of a Shield only if you have training with it. A creature can wear only one suit of armor at a time and wield only one Shield at a time.",
+          "category": "shield",
+          "armorClass": 2
+        }
+      ]
+    }
+  ]
+}
