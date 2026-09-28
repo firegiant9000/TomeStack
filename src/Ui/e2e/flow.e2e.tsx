@@ -379,15 +379,26 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));
   await user.type(within(modifier).getByRole('textbox', { name: /^Value/ }), '3');
   await publish('Path of the E2E Storm');
-  await user.click(await screen.findByRole('button', { name: 'Review update for E2E Storm' }));
-  const review = await screen.findByRole('region', { name: 'Update E2E Storm: Path of the E2E Storm' });
+  expect(await screen.findByRole('button', { name: 'Review update for E2E Storm' })).toBeTruthy();
+
+  // M3 C7: the sheet offers the new revision too, and nothing changes until the reviewed update is applied.
+  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Storm' });
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy();
+  const updates = await within(sheet).findByRole('region', { name: 'Updates available' });
+  // The setup pins the M1 SRD Barbarian revision, so the newer bundled revision is offered as well.
+  expect(within(updates).getByRole('button', { name: 'Review update: Barbarian' }).closest('li')!.textContent).toMatch(/bundled/);
+  expect(within(updates).getByRole('button', { name: 'Review update: Path of the E2E Storm' }).closest('li')!.textContent).toMatch(/your source/);
+  await user.click(within(updates).getByRole('button', { name: 'Review update: Path of the E2E Storm' }));
+  const review = await within(updates).findByRole('region', { name: 'Update E2E Storm: Path of the E2E Storm' });
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  // The status line already holds the publish message; wait for the update's own message instead of the first match.
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm/), { timeout: 5000 });
-  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/), { timeout: 5000 });
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
+  const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
+  await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
+  expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
@@ -717,6 +728,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(mine()).toHaveLength(2));
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
+  // The reopened sheet loads its notes again; wait for them before using them.
+  await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
 
   // Deleting asks first; "Keep note" leaves it.
   const quickfootNote = () => within(gaps()).getByText('Speed bonus should apply while unarmored only.').closest('li')!;

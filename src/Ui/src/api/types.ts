@@ -768,6 +768,17 @@ export interface AffectedCharacter {
   via?: string;
 }
 
+/** `character.updates` (M3 C7): a newer published revision of content the character uses; an offer, never applied by itself. */
+export interface UpdateOffer {
+  from: ContentReference;
+  to: ContentReference;
+  name: string;
+  role: ReferenceRole;
+  sourceTitle: string;
+  /** The source ships with TomeStack (an SRD pack) rather than being made in TomeStack. */
+  bundled: boolean;
+}
+
 export interface PublishResult {
   draft: ContentReference;
   published: ContentReference;

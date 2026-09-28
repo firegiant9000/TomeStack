@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Source updates (M3 C7, SPEC I-06; `docs/features/publishing-and-updates.md`):** when a newer revision of something a character uses arrives, from an updated SRD pack or your own homebrew, the sheet's "Updates available" panel offers it. Review it to see what changes, then apply it or keep the current revision. Nothing updates by itself.
+
 - **Gap notes follow-ups (M3 C5; `docs/features/gap-notes.md`):**
   - **Report a gap:** a button on every feature and field fills in the gap note's "About" and puts the cursor in the text box.
   - **All characters:** a new "Gap notes" screen in the sidebar lists every character's notes, open first, with "Mark resolved" and a way to open the character.

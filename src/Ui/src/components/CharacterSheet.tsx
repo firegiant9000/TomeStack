@@ -21,6 +21,7 @@ import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
+import { UpdatesPanel } from './UpdatesPanel';
 
 function describeOrigin(origin: TraceOrigin): string {
   switch (origin.kind) {
@@ -359,6 +360,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           </ul>
         </section>
       )}
+
+      <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 

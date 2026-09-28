@@ -10,6 +10,7 @@ import type {
   PublishResult,
   SourceRecord,
   StudioEntry,
+  UpdateOffer,
   UpdateReview,
   Character,
   CharacterSummary,
@@ -85,6 +86,8 @@ export function createClient(transport: Transport) {
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),
+    /** Newer revisions of content the character uses (M3 C7); writes nothing. */
+    availableUpdates: (characterId: string) => call<UpdateOffer[]>('character.updates', { characterId }),
     /** Applies a reviewed update; only the "Apply update" button calls this. */
     applyUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<CharacterView>('character.applyUpdate', { characterId, from, to, confirm: true }),
