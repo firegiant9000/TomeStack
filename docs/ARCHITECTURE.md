@@ -1,6 +1,6 @@
 # Architecture · v0.1
 
-**Status:** proposed technical design. The desktop host and transport are decided by the M0 spike ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)); the installer is Velopack ([ADR-008](decisions/ADR-008-installer-and-distribution.md)).
+**Status:** the design as built through 0.3.0 and M2.1; sections marked as proposals are not built yet. The desktop host and transport are decided by the M0 spike ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)); the installer is Velopack ([ADR-008](decisions/ADR-008-installer-and-distribution.md)).
 
 ## Boundaries
 
@@ -10,15 +10,16 @@
 | React + TypeScript UI | Builder, sheet, editor, import review, trace display | Trusted rule truth |
 | .NET application service (in-process in the shell) | Commands, validation, transactions, import/export orchestration | User-facing layout |
 | Rules core (.NET library) | Edition policy, formulas, modifiers, choices, dependency graph, derived state and traces | Persistence or Windows APIs |
-| Import worker | PDF extraction/OCR adapters, candidate detection, quarantined drafts | Automatic publication |
-| SQLite store | Sources, immutable content revisions, character events/state, drafts, PDF index, migrations | Business rules |
+| Import worker | PDF extraction/OCR adapters (in a child process), quarantined drafts. Candidate detection runs in the app process, bounded by regex timeouts and a text budget (M4) | Automatic publication |
+| SQLite store | Sources, immutable content revisions (drafts too), character state (stored, not events), attachments, extracted page text, migrations | Business rules |
 
-**Packaging (ADR-006, 2026-09-24):** a WPF + WebView2 Windows shell hosts the React UI and runs the .NET application service **in-process**, with SQLite for storage. The UI is served from the app folder through a WebView2 virtual host (`https://app.tomestack.localhost/`). It talks to the service over the **WebView2 message bridge** using a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens no listening socket. A development-only loopback host (`src/DevHost`: 127.0.0.1 only, per-launch token, origin allowlist) exposes the same dispatcher for browser development under Vite. The shell refuses any http(s) request outside the app origin. The spike superseded the originally proposed local ASP.NET Core service. The installer is a per-user, self-contained Velopack package (pack id `TomeStack.App`, installed to `%LOCALAPPDATA%\TomeStack.App`, separate from the data folder). Upgrade and uninstall are proven on the development machine; the clean-machine install is still open (ADR-008). The domain core remains UI independent.
+**Packaging (ADR-006, 2026-09-24):** a WPF + WebView2 Windows shell hosts the React UI and runs the .NET application service **in-process**, with SQLite for storage. The UI is served from the app folder through a WebView2 virtual host (`https://app.tomestack.localhost/`). It talks to the service over the **WebView2 message bridge** using a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens no listening socket. A development-only loopback host (`src/DevHost`: 127.0.0.1 only, per-launch token, origin allowlist) exposes the same dispatcher for browser development under Vite. The shell refuses any http(s) request outside the app origin. The spike superseded the originally proposed local ASP.NET Core service. The installer is a per-user, self-contained Velopack package (pack id `TomeStack.App`, installed to `%LOCALAPPDATA%\TomeStack.App`, separate from the data folder). Upgrade and uninstall are proven on the development machine, and a clean-VM install of 0.2.2 passed (reported by the owner, 2026-09-28; ADR-008). The domain core remains UI independent.
 
 ## Core entities and identity
 
 ```text
-Source(id, name, publisher, edition, license, pdfRef?, sha256)
+Source(id, name, publisher, edition, license, attachmentId?)   # pdfRef became an attachment in database v3 (ADR-005)
+Attachment(id, sha256?, fileName, mode: managed | linked, linkedPath?)
 ContentRevision(contentId, revisionId, kind, rulesFamily, sourceId, pageRef?, data, status)
 ContentReference(contentId, revisionId)
 Campaign(id, ruleFamily, sourcePolicy, houseRules)
@@ -52,7 +53,7 @@ Extraction and OCR are decided in [ADR-009](decisions/ADR-009-pdf-extraction-and
 - **Data folder (M2.1):** one process per data folder. `TomeStackApp.Open` takes `tomestack.lock` (opened without sharing, released by Windows when the process ends, even after a crash) before the database opens, because start-up interrupts leftover imports and deletes unreferenced attachment files. A second shell launch signals the first to come forward (a session-local named event keyed on a hash of the folder path) and exits with code 3; `scripts/single-instance-check.ps1` proves it with two real processes.
 - Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, `gaps/` (backups only), optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
 - Export is deterministic enough for human inspection and useful diffs. Document compatibility and round-trip unknown extension fields.
-- Backups are local, discoverable and restorable on a clean installation; do not confuse an export with a complete backup when PDF attachments were omitted.
+- Backups are local, discoverable and restorable on a clean installation; do not confuse an export with a complete backup when PDF attachments were omitted. **Built (M2.1):** a character export is labeled as one character without PDFs, and "Back up everything" is the complete backup: package format v6 `scope: "library"`, managed PDFs included, streamed to and from a file, restored with preview and a pre-restore database copy ([features/package-format.md](features/package-format.md#full-library-backup-m21)).
 
 ## Editions and licensing
 

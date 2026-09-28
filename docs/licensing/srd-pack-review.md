@@ -82,7 +82,7 @@ Each spell is one revision (kind `spell`, content schema v5) with its level, sch
   - Some sub-headings inside long features (for example Pact Magic's "Spells Known of 1st Level and Higher") run into the following sentence.
   - Tables inside features (domain and oath spells, Creating Spell Slots, the Circle of the Land terrains) are kept as plain text lines.
   - Always-prepared subclass spells are text only: the player records them, and the sheet may flag them "not on the list".
-- **Not bundled:** the non-spellcasting classes other than the M1 Barbarian slice (Fighter, Monk, Rogue) and Barbarian levels 4–20, backgrounds, species and feats beyond the M1 slice, armor, and magic items. These were not in the owner's scope ("the full SRD casters").
+- **Not bundled:** the non-spellcasting classes other than the M1 Barbarian slice (Fighter, Monk, Rogue) and Barbarian levels 4–20, backgrounds, species and feats beyond the M1 slice, armor, and magic items. These were not in the owner's scope ("the full SRD casters"). **Next (ROADMAP M2.2, owner direction 2026-09-28):** the Fighter with the Champion, the Fighting Styles, and the armor and shield table, in both SRDs. This review gets a Fighter section, with pages and checks like the casters', before any of that text is added (SPEC Q-03).
 
 ## M2 extension: weapons and the Barbarian's multiclass data (2026-09-27)
 

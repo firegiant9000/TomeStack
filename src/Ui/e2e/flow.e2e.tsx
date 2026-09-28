@@ -483,6 +483,8 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.click(await screen.findByRole('button', { name: 'Sources' }));
   const reader = () => within(screen.getByRole('listitem', { name: 'E2E Grimoire' })).getByRole('region', { name: 'Read the text of E2E Grimoire' });
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Grimoire' })).getByRole('button', { name: 'Read the whole document' }));
+  // M4 stays experimental until a real third-party PDF and the SRD measurements pass (ROADMAP M4).
+  expect(within(reader()).getByRole('heading', { name: /Read the text and find candidates Experimental/ })).toBeTruthy();
   const reviewButton = await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 });
   // Page 6 has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
   expect(within(reader()).getByText(/whole document: completed, 6 pages read, (1 by OCR, )?1 without text, 9 candidates\./)).toBeTruthy();

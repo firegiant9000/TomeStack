@@ -2,7 +2,15 @@
 
 A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
 
-> **Status: M2 "Usable MVP" in progress (v0.2.1; M1 rules core delivered in v0.2.0).** You can build a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, every choice), and see every calculated field with a source-aware trace. You can play it: hit points, resources, conditions, equipment and armor, rolls with their records, and a confirmed long rest. You can author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, and keep campaign profiles with allowed sources. You can override values, save locally, and export or import a portable package. The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). Spellcasting and the short rest are not in yet.
+> **Status: v0.3.0, a limited-content build.** The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet. M2.1 (data safety) is implemented and not released yet. The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
+>
+> - **Classes you can build:** the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. **Not yet:** Fighter (next, ROADMAP M2.2), Monk, Rogue, Barbarian 4–20, and the SRD armor table.
+> - **Species and backgrounds:** one each per family (Half-Orc and Acolyte for SRD 5.1; Dwarf and Soldier for SRD 5.2.1). Anything else you add in the homebrew studio.
+> - **Works today:** build under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, multiclassing, spells, every choice), and see every calculated field with a source-aware trace. Play: hit points, resources, spell slots, conditions, equipment, rolls, short and long rests, death saves. Author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, keep campaign profiles, and print a sheet. Back up and restore your whole library, PDFs included, or export one character to back it up or share it.
+> - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
+> - **Evidence:** checks are either fixture-verified (automated tests), Windows-install verified (the CI desktop smoke, or an owner check on an installed build), or accepted in real play. Nothing is accepted in real play yet (that is the M3 gate). See [features/m2-acceptance.md](docs/features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
+>
+> The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)).
 
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 
@@ -59,6 +67,7 @@ Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `
 ```powershell
 src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe --smoke --smoke-report smoke.json
 scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe       # same run, with the report checked
+scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe   # two processes on one data folder
 scripts/offline-check.ps1 -Mode MissingRuntime     # simulated missing WebView2 runtime (smoke-only flag)
 scripts/offline-check.ps1 -Mode AssumeOffline      # turn on airplane mode first
 ```
@@ -94,7 +103,8 @@ It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that fo
 
 - Offline: the shell refuses any network request outside the app's virtual host, and the production bundle has a strict CSP.
 - Only published content revisions affect calculations. Imported candidates become drafts, and imported effects are reference-only until reviewed.
-- Package import is preview-then-apply, with size limits, a fixed path layout and SHA-256 verification. PDFs are never packaged.
+- Package import is preview-then-apply, with size limits, a fixed path layout and SHA-256 verification. Character packages never include PDFs. Only a full library backup contains your managed PDF copies, and it is personal: do not share it.
+- One TomeStack per data folder: a second launch brings the open window forward.
 - 2014 and 2024 rules are separate rules-family IDs, and their differences are explicit policy fields.
 
 ## License
