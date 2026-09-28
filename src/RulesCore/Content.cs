@@ -69,8 +69,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// of v3, and keeping the written version keeps their serialized form, and so their hashes, unchanged (ADR-002).
     /// Older builds refuse v3 revisions (<c>content.schema-unsupported</c>) instead of ignoring the level gates.
     /// v4 (M2 item 5) adds <see cref="ExtendsChoice"/>; v2 and v3 revisions are not upcast, for the same reason.
+    /// v5 (M2 spellcasting) adds the <c>spellcasting</c> and <c>spell</c> effect types; older revisions are not upcast.
     /// </summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;
@@ -121,7 +122,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
             UpgradedFrom = _schemaVersion;
             _schemaVersion = TypedEffectsSchemaVersion;
         }
-        if (_schemaVersion >= ArmorEffect.SchemaVersion && _effects.Any(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName }))
-            _effects = [.. _effects.Select(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName } armor ? ArmorEffect.FromUnknown(armor) : e)];
+        bool Typeable(Effect e) =>
+            e is UnknownEffect unknown && VersionedEffects.ByName.TryGetValue(unknown.DeclaredType, out var typed) && _schemaVersion >= typed.Version;
+        if (_effects.Any(Typeable))
+            _effects = [.. _effects.Select(e => Typeable(e) ? VersionedEffects.ByName[((UnknownEffect)e).DeclaredType].Type((UnknownEffect)e) : e)];
     }
 }

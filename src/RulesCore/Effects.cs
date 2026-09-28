@@ -11,6 +11,18 @@ public static class FieldIds
     public const string ArmorClass = "armorClass";
     public const string HitPoints = "hitPoints";
 
+    /// <summary>The primary caster's spell attack bonus (content schema v5; D04).</summary>
+    public const string SpellAttack = "spellAttack";
+
+    /// <summary>The primary caster's spell save DC.</summary>
+    public const string SpellSaveDc = "spellSaveDc";
+
+    /// <summary>Pact Magic slots (all of one level).</summary>
+    public const string PactSlots = "pactSlots";
+
+    /// <summary>Spell slots of spell level <paramref name="level"/> (1–9).</summary>
+    public static string SpellSlots(int level) => $"spellSlots.{level}";
+
     public static string Score(Ability ability) => $"ability.{Key(ability)}.score";
 
     public static string Modifier(Ability ability) => $"ability.{Key(ability)}.mod";
@@ -215,17 +227,7 @@ public sealed record ArmorEffect : Effect
     public const int SchemaVersion = 4;
 
     /// <summary>An <c>armor</c> effect read from a v4 revision; a malformed body stays reference-only.</summary>
-    internal static Effect FromUnknown(UnknownEffect unknown)
-    {
-        try
-        {
-            return unknown.Raw.Deserialize<ArmorEffect>(RulesJson.Compact) ?? (Effect)unknown;
-        }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
-        {
-            return unknown;
-        }
-    }
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ArmorEffect>(unknown);
 
     public const int DefaultMediumDexterityCap = 2;
 
@@ -238,6 +240,122 @@ public sealed record ArmorEffect : Effect
 
     /// <summary>Medium armor only: the most the Dexterity modifier adds (default 2).</summary>
     public int? DexterityCap { get; init; }
+}
+
+/// <summary>How a caster readies spells: <see cref="Prepared"/> from a list (or spellbook) that can change, or a fixed <see cref="Known"/> set.</summary>
+public enum SpellPreparation { Prepared, Known }
+
+/// <summary>Which pool a caster's slots belong to: ordinary spell slots (long rest) or Pact Magic (short or long rest).</summary>
+public enum SpellSlotKind { SpellSlots, PactMagic }
+
+/// <summary>
+/// Content schema v5 (M2, D04): a class's (or subclass's) Spellcasting feature. Spell attack bonus = PB + the ability
+/// modifier and save DC = 8 + PB + the ability modifier, in both SRDs. Tables are indexed by the level in the class the
+/// content belongs to (row 0 = level 1), so each SRD revision states its own progression and the 2014/2024 differences
+/// (for example half casters with slots at level 1 in 2024) are content, not code. Typed only in a v5 (or newer) revision,
+/// like <see cref="ArmorEffect"/>.
+/// </summary>
+public sealed record SpellcastingEffect : Effect
+{
+    public const string TypeName = "spellcasting";
+
+    public const int SchemaVersion = 5;
+
+    public const int MaxSpellLevel = 9;
+
+    public override string Type => TypeName;
+
+    /// <summary>The spellcasting ability (Intelligence, Wisdom or Charisma in the SRDs).</summary>
+    public required Ability Ability { get; init; }
+
+    public SpellPreparation Preparation { get; init; } = SpellPreparation.Prepared;
+
+    /// <summary>The key of the spell list this caster uses; spells name the lists they are on (<see cref="SpellEffect.Lists"/>). A key, never a display name.</summary>
+    public required string SpellList { get; init; }
+
+    public SpellSlotKind SlotKind { get; init; } = SpellSlotKind.SpellSlots;
+
+    /// <summary>20 rows (class levels 1–20), each the number of slots of spell levels 1, 2, … (at most 9 entries).</summary>
+    public required IReadOnlyList<IReadOnlyList<int>> Slots { get; init; }
+
+    /// <summary>Optional, 20 entries: cantrips known at each class level.</summary>
+    public IReadOnlyList<int>? Cantrips { get; init; }
+
+    /// <summary>Optional, 20 entries: spells known (known casters) or prepared (a 2024 table) at each class level.</summary>
+    public IReadOnlyList<int>? SpellsTable { get; init; }
+
+    /// <summary>Optional formula for the number of prepared spells, for example <c>max(1, WIS.MOD + CLASS_LEVEL)</c> (2014 rules).</summary>
+    public string? SpellsFormula { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellcastingEffect>(unknown);
+}
+
+/// <summary>Whether a spell needs an attack roll.</summary>
+public enum SpellAttackKind { None, Melee, Ranged }
+
+/// <summary>
+/// Content schema v5: the game data of a spell, on a <see cref="ContentKind.Spell"/> revision. The revision's summary and
+/// this effect's text carry the description. A spell is never active content: it applies only through a caster's list,
+/// and nothing on it changes calculated fields.
+/// </summary>
+public sealed record SpellEffect : Effect
+{
+    public const string TypeName = "spell";
+
+    public override string Type => TypeName;
+
+    /// <summary>0 for a cantrip, else 1–9.</summary>
+    public required int Level { get; init; }
+
+    public string? School { get; init; }
+    public string? CastingTime { get; init; }
+    public string? Range { get; init; }
+    public string? Components { get; init; }
+    public string? Duration { get; init; }
+    public bool Concentration { get; init; }
+    public bool Ritual { get; init; }
+
+    /// <summary>The spell lists (keys) this spell is on, for example <c>wizard</c>.</summary>
+    public IReadOnlyList<string> Lists { get; init; } = [];
+
+    public SpellAttackKind Attack { get; init; } = SpellAttackKind.None;
+
+    /// <summary>The saving throw a target makes, if any.</summary>
+    public Ability? Save { get; init; }
+
+    /// <summary>Optional dice the sheet can roll (damage or healing at the spell's base level), for example <c>8d6</c>.</summary>
+    public string? Dice { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellEffect>(unknown);
+}
+
+/// <summary>
+/// Effect types added after v3 are typed only in a revision of their content schema version or newer. An older revision
+/// may carry the same type name as an unknown effect stored byte for byte; typing it would change its hash and meaning
+/// (ADR-003, the <c>armor</c> lesson).
+/// </summary>
+internal static class VersionedEffects
+{
+    public static readonly IReadOnlyDictionary<string, (int Version, Func<UnknownEffect, Effect> Type)> ByName =
+        new Dictionary<string, (int, Func<UnknownEffect, Effect>)>(StringComparer.Ordinal)
+        {
+            [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, ArmorEffect.FromUnknown),
+            [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
+            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
+        };
+
+    /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
+    public static Effect Typed<T>(UnknownEffect unknown) where T : Effect
+    {
+        try
+        {
+            return unknown.Raw.Deserialize<T>(RulesJson.Compact) ?? (Effect)unknown;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return unknown;
+        }
+    }
 }
 
 /// <summary>
@@ -291,8 +409,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RecoveryEffect.TypeName => element.Deserialize<RecoveryEffect>(options),
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
-                // Typed only in content v4 revisions (ContentRevision.OnDeserialized); older ones keep it as written.
-                ArmorEffect.TypeName => UnknownEffect.From(element),
+                // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

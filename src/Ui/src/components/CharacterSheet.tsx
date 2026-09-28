@@ -18,6 +18,7 @@ import { downloadBase64 } from '../files';
 import { ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { RestPanel } from './RestPanel';
+import { SpellsPanel } from './SpellsPanel';
 
 function describeOrigin(origin: TraceOrigin): string {
   switch (origin.kind) {
@@ -44,7 +45,11 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
   { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' },
+  // D04: the primary caster's numbers, with traces and overrides (the manual step for combined multiclass slots).
+  { title: 'Spellcasting', match: (f) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.') },
 ];
+
+const isSpellField = (f: string) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.');
 
 function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string, string> }) {
   return (
@@ -356,6 +361,17 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <ConditionsPanel view={view} act={act} />
       <ResourcesPanel view={view} act={act} />
       <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+      <SpellsPanel
+        view={view}
+        act={act}
+        roll={roll}
+        onSave={(changed) =>
+          client
+            .saveCharacter(changed)
+            .then(onChanged)
+            .catch(onError)
+        }
+      />
       <section aria-labelledby="rolls-heading" className="play-panel">
         <h3 id="rolls-heading">Rolls</h3>
         <RollModePicker mode={rollMode} onChange={setRollMode} />
@@ -365,7 +381,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <FeaturesPanel view={view} roll={roll} pdfSources={pdfSources} openPage={openPage} />
 
       {groups.map((group) => {
-        const fields = sheet.fields.filter((f) => group.match(f.field));
+        const caster = (sheet.spellcasting ?? []).length > 0;
+        // Spell fields of a non-caster are all 0; they are shown only for a caster, or when a value or override exists.
+        const fields = sheet.fields.filter((f) => group.match(f.field) && (!isSpellField(f.field) || caster || f.value !== 0 || !!f.override));
         if (fields.length === 0) return null;
         return (
           <section key={group.title} aria-label={group.title} className="field-group">

@@ -6,7 +6,8 @@ namespace TomeStack.AppService;
 /// What to roll: a content roll effect (<paramref name="Content"/> and <paramref name="EffectId"/>), a sheet field as
 /// a d20 test (<paramref name="Field"/>: an ability modifier, saving throw, skill or initiative), one of the character's
 /// hit dice (<paramref name="HitDie"/>: the die alone; a short rest adds the Constitution modifier), or a death saving
-/// throw (<paramref name="DeathSave"/>: a d20 with no modifier).
+/// throw (<paramref name="DeathSave"/>: a d20 with no modifier), or one of the character's spells (<paramref name="Spell"/>:
+/// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice).
 /// </summary>
 public sealed record RollCommand(
     Guid CharacterId,
@@ -16,7 +17,9 @@ public sealed record RollCommand(
     RollMode Mode = RollMode.Normal,
     bool Critical = false,
     int? HitDie = null,
-    bool DeathSave = false);
+    bool DeathSave = false,
+    ContentReference? Spell = null,
+    bool SpellAttack = false);
 
 public sealed partial class TomeStackApp
 {
@@ -36,9 +39,30 @@ public sealed partial class TomeStackApp
         var sheet = CharacterCalculator.Calculate(character, _store);
 
         RollRequest request;
-        if ((command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0) + (command.DeathSave ? 1 : 0) > 1)
-            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die or a death saving throw.")]);
-        if (command.HitDie is { } die)
+        if ((command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0) + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) > 1)
+            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw or a spell.")]);
+        if (command.Spell is { } spellReference)
+        {
+            var (caster, spell) = sheet.Spellcasting?.SelectMany(c => c.Spells.Select(s => (c, s))).FirstOrDefault(p => p.s.Spell == spellReference) ?? default;
+            if (spell is null)
+                throw new AppValidationException([new("roll.spell-unknown", "This character has no such spell ready.", spellReference)]);
+            var provenance = new RollProvenance(
+                $"spell.{(command.SpellAttack ? "attack" : "dice")}", command.SpellAttack ? $"{spell.Name} (spell attack)" : spell.Name,
+                spell.Spell, spell.Name, spell.Origin.EffectId, spell.Origin.SourceId, spell.Origin.SourceTitle, spell.Origin.Page);
+            if (command.SpellAttack)
+            {
+                if (spell.Attack == SpellAttackKind.None)
+                    throw new AppValidationException([new("roll.spell-no-attack", $"'{spell.Name}' makes no attack roll.", spellReference)]);
+                request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{caster!.Name} spell attack", caster.AttackBonus, caster.Origin)], provenance);
+            }
+            else
+            {
+                request = spell.Dice is { } dice
+                    ? new RollRequest(dice, RollMode.Normal, command.Critical, [], provenance)
+                    : throw new AppValidationException([new("roll.spell-no-dice", $"'{spell.Name}' has no dice to roll.", spellReference)]);
+            }
+        }
+        else if (command.HitDie is { } die)
         {
             if (sheet.HitDice?.Any(h => h.Die == die) != true)
                 throw new AppValidationException([new("rest.hit-die-unknown", $"This character has no d{die} hit dice.")]);

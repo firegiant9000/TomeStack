@@ -131,7 +131,7 @@ public class ResourceAndFeatureTests
     }
 
     [Fact]
-    public void A_v4_character_reads_as_v5_with_no_hit_dice_spent_no_death_saves_and_no_inspiration()
+    public void A_v4_character_reads_as_the_current_schema_with_no_hit_dice_spent_no_death_saves_no_inspiration_and_no_spells()
     {
         var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "characters", "m1-acceptance-srd51-korga.json"))
             .Replace("\"schemaVersion\": 3", "\"schemaVersion\": 4", StringComparison.Ordinal)
@@ -139,9 +139,10 @@ public class ResourceAndFeatureTests
 
         var character = JsonSerializer.Deserialize<Character>(json, RulesJson.Options)!;
 
-        Assert.Equal(5, character.SchemaVersion);
+        Assert.Equal(Character.CurrentSchemaVersion, character.SchemaVersion);
         Assert.Equal((7, 1), (character.Play.CurrentHitPoints, character.Play.Exhaustion));
         Assert.Equal((0, new DeathSaves(), false), (character.Play.HitDiceSpent.Count, character.Play.DeathSaves, character.Play.Inspiration));
+        Assert.Equal((0, 0, 0), (character.Spells.Count, character.Play.SpellSlotsSpent.Count, character.Play.PactSlotsSpent));
         Assert.Empty(character.Validate());
     }
 

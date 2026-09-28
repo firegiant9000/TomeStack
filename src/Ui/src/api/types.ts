@@ -46,6 +46,8 @@ export interface Character {
   play?: PlayState;
   /** Items carried; only equipped ones apply (M2 item 4). */
   equipment?: EquipmentEntry[];
+  /** Spells known or prepared, per caster (character schema v6, D04). */
+  spells?: KnownSpell[];
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
@@ -210,6 +212,9 @@ export interface CharacterSheet {
   features?: FeatureEntry[];
   hitPoints?: HitPointState;
   hitDice?: HitDiceValue[];
+  spellcasting?: SpellcastingEntry[];
+  spellSlots?: SlotValue[];
+  pactSlots?: SlotValue;
 }
 
 export interface ResourceUse {
@@ -244,7 +249,11 @@ export type PlayActionKind =
   | 'recordDeathSave'
   | 'addDeathSaveFailure'
   | 'clearDeathSaves'
-  | 'setInspiration';
+  | 'setInspiration'
+  | 'spendSlot'
+  | 'regainSlot'
+  | 'spendPactSlot'
+  | 'regainPactSlot';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -257,7 +266,8 @@ export interface PlayAction {
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots';
+  slotLevel?: number;
   die?: number;
   amount?: number;
   label: string;
@@ -331,6 +341,9 @@ export interface RollTarget {
   hitDie?: number;
   /** A death saving throw: a d20 with no modifier. */
   deathSave?: boolean;
+  /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
+  spell?: ContentReference;
+  spellAttack?: boolean;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */
@@ -407,6 +420,65 @@ export interface ContentOption {
   summary?: string;
   /** Set when listed for a campaign: whether it allows this option's source. */
   allowedInCampaign?: boolean;
+  /** Spell options only (content schema v5). */
+  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
+}
+
+/** A spell recorded for one caster; `caster` is the content id of the class or subclass with spellcasting. */
+export interface KnownSpell {
+  caster: string;
+  spell: ContentReference;
+  prepared?: boolean;
+}
+
+export interface SlotValue {
+  level: number;
+  maximum: number;
+  spent: number;
+  remaining: number;
+  field: string;
+}
+
+export interface SpellEntry {
+  spell: ContentReference;
+  name: string;
+  level: number;
+  prepared: boolean;
+  summary?: string;
+  text?: string;
+  school?: string;
+  castingTime?: string;
+  range?: string;
+  components?: string;
+  duration?: string;
+  concentration: boolean;
+  ritual: boolean;
+  attack: 'none' | 'melee' | 'ranged';
+  save?: Ability;
+  dice?: string;
+  origin: TraceOrigin;
+  diagnostics: Diagnostic[];
+}
+
+/** One caster (D04); the primary one's attack, save DC and slots are sheet fields. */
+export interface SpellcastingEntry {
+  content: ContentReference;
+  name: string;
+  effectId: string;
+  classLevel: number;
+  ability: Ability;
+  attackBonus: number;
+  saveDc: number;
+  preparation: 'prepared' | 'known';
+  spellList: string;
+  slotKind: 'spellSlots' | 'pactMagic';
+  slots: number[];
+  cantripsAllowed?: number;
+  spellsAllowed?: number;
+  primary: boolean;
+  origin: TraceOrigin;
+  spells: SpellEntry[];
+  warnings: Diagnostic[];
 }
 
 export interface CreateCharacterRequest {
@@ -420,6 +492,7 @@ export interface CreateCharacterRequest {
   choices?: ChoiceSelection[];
   campaignId?: string;
   campaignExceptions?: CampaignException[];
+  spells?: KnownSpell[];
 }
 
 export interface LicenseNotice {
@@ -593,7 +666,7 @@ export interface StudioEntry {
   latestPublished?: ContentRevision;
 }
 
-export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment';
+export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment' | 'spell';
 
 export interface AffectedCharacter {
   characterId: string;

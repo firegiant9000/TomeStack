@@ -10,15 +10,19 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
+    /// v6 adds <see cref="Spells"/> and spent spell slots in <see cref="Play"/> (spellcasting, M2, D04).
     /// v5 adds spent hit dice, death saves and inspiration to <see cref="Play"/> (the short rest, M2).
     /// v4 adds <see cref="Play"/> (M2 item 2) and <see cref="Equipment"/> (M2 item 4). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
+
+    /// <summary>A bound on recorded spells (untrusted input, SPEC Q-02); far above any SRD caster's list.</summary>
+    public const int MaxSpells = 500;
 
     private int _schemaVersion = CurrentSchemaVersion;
 
@@ -51,9 +55,15 @@ public sealed record Character : IJsonOnDeserialized
     /// </summary>
     public IReadOnlyList<ChoiceSelection> Choices { get; init; } = [];
 
-    /// <summary>Every content revision the character references: pins, classes, chosen options and equipment. Packages and updates use this.</summary>
+    /// <summary>Every content revision the character references: pins, classes, chosen options, equipment and spells. Packages and updates use this.</summary>
     public IEnumerable<ContentReference> AllReferences() =>
-        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Concat(Equipment.Select(e => e.Item)).Distinct();
+        Pins.Concat(Classes.Select(c => c.Class)).Concat(Choices.SelectMany(c => c.Selected)).Concat(Equipment.Select(e => e.Item)).Concat(Spells.Select(s => s.Spell)).Distinct();
+
+    /// <summary>
+    /// Character schema v6 (M2, D04): the spells the character knows or has prepared, each for one caster (the content id
+    /// of the class or subclass with the <c>spellcasting</c> effect, so an update of that content keeps the list).
+    /// </summary>
+    public IReadOnlyList<KnownSpell> Spells { get; init; } = [];
 
     /// <summary>
     /// BACKLOG B06 / ARCHITECTURE step 2: deliberate use of content from another rules family, each with a recorded
@@ -108,6 +118,7 @@ public sealed record Character : IJsonOnDeserialized
             CrossFamilyExceptions = [.. CrossFamilyExceptions.Select(e => e with { Content = Swap(e.Content) })],
             Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item) })],
             CampaignExceptions = [.. CampaignExceptions.Select(e => e with { Content = Swap(e.Content) })],
+            Spells = [.. Spells.Select(s => s with { Spell = Swap(s.Spell) })],
         };
     }
 
@@ -155,6 +166,10 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.equipment-duplicate", "An item is recorded more than once; record one entry with its quantity.", duplicate.Key));
         foreach (var entry in Equipment.Where(e => e.Quantity is < 1 or > EquipmentEntry.MaxQuantity))
             problems.Add(new("character.equipment-quantity", $"Item quantity {entry.Quantity} must be between 1 and {EquipmentEntry.MaxQuantity}.", entry.Item));
+        foreach (var duplicate in Spells.GroupBy(s => (s.Caster, s.Spell.ContentId)).Where(g => g.Count() > 1))
+            problems.Add(new("character.spell-duplicate", "A spell is recorded more than once for the same caster.", duplicate.First().Spell));
+        if (Spells.Count > MaxSpells)
+            problems.Add(new("character.spells-too-many", $"At most {MaxSpells} spells can be recorded."));
         return problems;
     }
 
@@ -173,14 +188,16 @@ public sealed record Character : IJsonOnDeserialized
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
         Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
         Check("campaign exceptions", CampaignExceptions is null || CampaignExceptions.Any(e => e?.Content is null));
+        Check("spells", Spells is null || Spells.Any(s => s?.Spell is null));
         Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null)
-            || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null);
+            || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null
+            || Play.SpellSlotsSpent is null || Play.SpellSlotsSpent.Any(s => s is null));
         return problems;
     }
 
     /// <summary>
-    /// v1 has no level, v2 no classes, v3 no play state and v4 no hit dice, death saves or inspiration; the defaults
-    /// (level 1, none, full, nothing spent) are exactly their meaning.
+    /// v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, and v5 no spells or
+    /// spell slots; the defaults (level 1, none, full, nothing spent) are exactly their meaning.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
@@ -220,6 +237,13 @@ public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false
 {
     public const int MaxQuantity = 9_999;
 }
+
+/// <summary>
+/// A spell the character knows or has prepared for one caster. <paramref name="Caster"/> is the content id of the class
+/// (or subclass) with the <c>spellcasting</c> effect. <paramref name="Prepared"/> matters for prepared casters (a wizard's
+/// spellbook holds unprepared spells); a known caster's spells are always ready.
+/// </summary>
+public sealed record KnownSpell(Guid Caster, ContentReference Spell, bool Prepared = true);
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);

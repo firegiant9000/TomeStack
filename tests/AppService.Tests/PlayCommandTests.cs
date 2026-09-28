@@ -187,7 +187,7 @@ public class PlayCommandTests
         Assert.Equal(2, stored.Character.Play.Exhaustion);
         Assert.True(stored.Character.Play.Inspiration);
         Assert.Equal([new HitDiceUse(12, 1)], stored.Character.Play.HitDiceSpent);
-        Assert.Equal(5, stored.Character.SchemaVersion);
+        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
 
         using var destination = new TempApp();
         destination.App.ApplyImport(temp.App.ExportCharacters([id]).Content);

@@ -566,3 +566,51 @@ it('reaches the primary actions by keyboard alone', async () => {
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
 });
+
+it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {
+  // D04 (M2 spellcasting) with the original fixture caster "Fixture Arcanist" (invented tables: 2 level 1 slots at level 1).
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Sage');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  const intelligence = within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Intelligence' });
+  await user.clear(intelligence);
+  await user.type(intelligence, '16');
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Arcanist/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+
+  // Int 16 (+3) at level 1: 3 cantrips, max(1, 3 + 1) = 4 prepared. Only spells on the caster's list and castable levels.
+  let picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(0 of 3 cantrips, 0 of 4 prepared spells\)/ });
+  expect(within(picker).queryByRole('checkbox', { name: /Fixture Mending Word/ })).toBeNull(); // another list
+  expect(within(picker).queryByRole('checkbox', { name: /Fixture Ember Wave/ })).toBeNull(); // level 3: no slot yet
+  await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ }));
+  picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips/ });
+  await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Frost Ring/ }));
+  await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips, 1 of 4 prepared spells\)/ });
+  await user.click(screen.getByRole('button', { name: 'Create and save' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Sage' });
+  const spells = () => within(screen.getByRole('article', { name: 'E2E Sage' })).getByRole('region', { name: 'Spells and slots' });
+  expect(within(spells()).getByRole('heading', { name: 'Fixture Arcanist (level 1, Intelligence): spell attack +5, save DC 13' })).toBeTruthy();
+  expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy();
+  expect(within(sheet).getByRole('heading', { name: /^Spell attack bonus: \+5/ })).toBeTruthy();
+
+  // Casting spends a slot (a confirmed play change); rolling a spell spends nothing.
+  await user.click(within(spells()).getByRole('button', { name: 'Cast Fixture Frost Ring (spend a slot)' }));
+  await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy());
+  await user.click(within(spells()).getByRole('button', { name: 'Roll Fixture Spark attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Spark \(spell attack\): \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Fixture Arcanist spell attack \+5/);
+  expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy();
+
+  // The long rest proposes the slot back.
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  expect(await within(rest).findByRole('checkbox', { name: /^Level 1 spell slots: 1 → 2/ })).toBeTruthy();
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy());
+});

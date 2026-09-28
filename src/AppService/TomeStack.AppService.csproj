@@ -19,6 +19,7 @@
     <!-- The original test fixture pack is seeded only by development hosts and tests (TomeStackApp.Open devFixtures). -->
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack.json" LogicalName="TomeStack.FixturePack.json" />
     <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2.json" LogicalName="TomeStack.FixturePackM2.json" />
+    <EmbeddedResource Include="..\..\tests\RulesFixtures\fixture-pack-m2-spells.json" LogicalName="TomeStack.FixturePackM2Spells.json" />
   </ItemGroup>
 
   <ItemGroup>

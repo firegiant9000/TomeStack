@@ -1,14 +1,15 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
 /// the player can untick it and the confirmed rest skips it. <paramref name="Condition"/> is set when the change depends
 /// on the situation (for example, food and drink), and the player decides. <paramref name="Die"/> is the hit die size of
 /// a <see cref="RestChangeKind.HitDie"/> or <see cref="RestChangeKind.HitDice"/> change, and <paramref name="Amount"/> the
-/// hit points one spent hit die restores.
+/// hit points one spent hit die restores. <paramref name="SlotLevel"/> is the spell level of a
+/// <see cref="RestChangeKind.SpellSlots"/> change.
 /// </summary>
 public sealed record RestChange(
     string Id,
@@ -23,7 +24,8 @@ public sealed record RestChange(
     string? Condition = null,
     int? SpentAfter = null,
     int? Die = null,
-    int? Amount = null);
+    int? Amount = null,
+    int? SlotLevel = null);
 
 /// <summary>A rest's proposal: every change it would make, plus what the player must handle by hand.</summary>
 public sealed record RestPlan(RestPeriod Kind, IReadOnlyList<RestChange> Changes, IReadOnlyList<Diagnostic> Manual);
@@ -122,6 +124,7 @@ public static class RestPlanner
                 changes.Add(DeathSavesReset(saves, rules));
         }
 
+        AddPactSlots(sheet, "a short rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.ShortRest, changes, manual, rules);
         return new(RestPeriod.ShortRest, changes, manual);
     }
@@ -130,8 +133,8 @@ public static class RestPlanner
     /// SRD long rest (both families): regain all lost hit points, lose temporary hit points, regain spent hit dice
     /// (<see cref="RulesFamilyPolicy.LongRestHitDice"/>), recover every resource by its <c>longRest</c> recovery, and remove
     /// one exhaustion level (2014: only with food and drink, <see cref="RulesFamilyPolicy.LongRestExhaustionNeedsFoodAndDrink"/>).
-    /// Short-rest recoveries are not part of a long rest; content that recovers on both declares both. Spell slots are not
-    /// tracked yet.
+    /// Short-rest recoveries are not part of a long rest; content that recovers on both declares both. Every spent spell
+    /// slot and Pact Magic slot comes back.
     /// </summary>
     public static RestPlan LongRest(Character character, CharacterSheet sheet)
     {
@@ -155,6 +158,13 @@ public static class RestPlanner
         }
 
         AddHitDiceRecovery(sheet, policy, changes, rules);
+        foreach (var slots in (sheet.SpellSlots ?? []).Where(s => s.Spent > 0))
+        {
+            changes.Add(new(
+                $"spellSlots:{slots.Level}", RestChangeKind.SpellSlots, $"Level {slots.Level} spell slots", slots.Remaining, slots.Maximum,
+                "A long rest restores all expended spell slots", rules, SpentAfter: 0, SlotLevel: slots.Level));
+        }
+        AddPactSlots(sheet, "a long rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.LongRest, changes, manual, rules);
 
         if (character.Play.Exhaustion > 0)
@@ -171,6 +181,17 @@ public static class RestPlanner
         }
 
         return new(RestPeriod.LongRest, changes, manual);
+    }
+
+    /// <summary>Pact Magic slots come back on a short or a long rest (both SRDs).</summary>
+    private static void AddPactSlots(CharacterSheet sheet, string rest, List<RestChange> changes, TraceOrigin rules)
+    {
+        if (sheet.PactSlots is { Spent: > 0 } pact)
+        {
+            changes.Add(new(
+                "pactSlots", RestChangeKind.PactSlots, "Pact Magic slots", pact.Remaining, pact.Maximum,
+                $"Pact Magic slots are regained on {rest}", rules, SpentAfter: 0));
+        }
     }
 
     private static RestChange DeathSavesReset(DeathSaves saves, TraceOrigin rules) => new(
@@ -305,6 +326,12 @@ public static class RestPlanner
                     {
                         CurrentHitPoints = healed >= maximumHitPoints ? null : healed,
                     };
+                    break;
+                case RestChangeKind.SpellSlots:
+                    play = play.WithSlotsSpent(change.SlotLevel!.Value, 0);
+                    break;
+                case RestChangeKind.PactSlots:
+                    play = play with { PactSlotsSpent = 0 };
                     break;
                 case RestChangeKind.DeathSaves:
                     // Only when hit points were actually regained: unticking every hit die keeps the saves.

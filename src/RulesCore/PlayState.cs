@@ -13,6 +13,9 @@ public sealed record PlayState
     public const int MaxHitPoints = 10_000;
     public const int MaxExhaustion = 6;
 
+    /// <summary>A bound on spent slots of one level (untrusted input); overrides can raise a maximum, never past this.</summary>
+    public const int MaxSlots = 100;
+
     /// <summary>Current hit points; <c>null</c> means at the maximum, so a character keeps full hit points when it levels up.</summary>
     public int? CurrentHitPoints { get; init; }
 
@@ -38,6 +41,24 @@ public sealed record PlayState
 
     /// <summary>Character schema v5 (SPEC C-05): Inspiration (2014) or Heroic Inspiration (2024). Either you have it or not.</summary>
     public bool Inspiration { get; init; }
+
+    /// <summary>Character schema v6 (D04): spent spell slots per spell level (1–9). Recovered by a long rest.</summary>
+    public IReadOnlyList<SpellSlotUse> SpellSlotsSpent { get; init; } = [];
+
+    /// <summary>Character schema v6: spent Pact Magic slots. Recovered by a short or long rest.</summary>
+    public int PactSlotsSpent { get; init; }
+
+    public int SlotsSpentOf(int level) => SpellSlotsSpent.LastOrDefault(s => s.Level == level)?.Spent ?? 0;
+
+    /// <summary>The same state with <paramref name="spent"/> slots of spell level <paramref name="level"/> spent (0 removes the entry).</summary>
+    public PlayState WithSlotsSpent(int level, int spent) => this with
+    {
+        SpellSlotsSpent =
+        [
+            .. SpellSlotsSpent.Where(s => s.Level != level),
+            .. spent > 0 ? [new SpellSlotUse(level, spent)] : Array.Empty<SpellSlotUse>(),
+        ],
+    };
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
@@ -87,6 +108,12 @@ public sealed record PlayState
             yield return new("play.hit-dice-invalid", $"Spent d{use.Die} hit dice ({use.Spent}) must be a d6, d8, d10 or d12, and between 0 and {Character.MaxLevel}.");
         if (HitDiceSpent.GroupBy(h => h.Die).Any(g => g.Count() > 1))
             yield return new("play.hit-dice-duplicate", "A hit die size is recorded more than once.");
+        foreach (var use in SpellSlotsSpent.Where(s => s.Level is < 1 or > SpellcastingEffect.MaxSpellLevel || s.Spent is < 0 or > MaxSlots))
+            yield return new("play.spell-slots-invalid", $"Spent level {use.Level} spell slots ({use.Spent}) must be for spell levels 1–{SpellcastingEffect.MaxSpellLevel}, between 0 and {MaxSlots}.");
+        if (SpellSlotsSpent.GroupBy(s => s.Level).Any(g => g.Count() > 1))
+            yield return new("play.spell-slots-duplicate", "A spell slot level is recorded more than once.");
+        if (PactSlotsSpent is < 0 or > MaxSlots)
+            yield return new("play.spell-slots-invalid", $"Spent Pact Magic slots must be between 0 and {MaxSlots}.");
         if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
             yield return new("play.death-saves-out-of-range", $"Death saving throw successes and failures must each be between 0 and {DeathSaves.Maximum}.");
     }
@@ -94,6 +121,9 @@ public sealed record PlayState
 
 /// <summary>How many uses of one resource are spent. <paramref name="ContentId"/> is the content that defines it.</summary>
 public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
+
+/// <summary>How many spell slots of one spell level are spent.</summary>
+public sealed record SpellSlotUse(int Level, int Spent);
 
 /// <summary>How many hit dice of one size (d6, d8, d10 or d12) are spent.</summary>
 public sealed record HitDiceUse(int Die, int Spent);

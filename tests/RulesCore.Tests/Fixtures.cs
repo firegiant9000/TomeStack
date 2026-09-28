@@ -37,6 +37,28 @@ internal static class Fixtures
     public static readonly ContentReference CrossroadsWis2014 = M1Ref(24);
     public static readonly ContentReference IronGrip = M1Ref(25);
 
+    // M2 spellcasting fixtures (fixture-pack-m2-spells.json): invented casters and spells.
+    public static readonly ContentReference Arcanist = SpellRef(1);
+    public static readonly ContentReference Chanter = SpellRef(2);
+    public static readonly ContentReference Oathbinder = SpellRef(3);
+    public static readonly ContentReference Spark = SpellRef(11);
+    public static readonly ContentReference FrostRing = SpellRef(12);
+    public static readonly ContentReference Veil = SpellRef(13);
+    public static readonly ContentReference EmberWave = SpellRef(14);
+    public static readonly ContentReference MendingWord = SpellRef(15);
+
+    public static ContentPack SpellPack() => Load<ContentPack>("fixture-pack-m2-spells.json");
+
+    /// <summary>The M0, M1 and spellcasting fixture packs together.</summary>
+    public static InMemoryContentCatalog SpellCatalog()
+    {
+        var (m0, m1, spells) = (Pack(), M1Pack(), SpellPack());
+        return new([.. m0.Sources, .. m1.Sources, .. spells.Sources], [.. m0.Revisions, .. m1.Revisions, .. spells.Revisions]);
+    }
+
+    private static ContentReference SpellRef(int n) =>
+        new(Guid.Parse($"5f5dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f5de000-0000-4000-8000-{n:D12}"));
+
     public static ContentPack Pack() => Load<ContentPack>("fixture-pack.json");
 
     public static ContentPack M1Pack() => Load<ContentPack>("fixture-pack-m1.json");

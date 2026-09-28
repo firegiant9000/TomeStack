@@ -133,8 +133,34 @@ public static class ContentValidator
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.armor-kind", $"Armor counts only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it applies only if pinned.", armor.Id);
                     break;
+                case SpellcastingEffect spellcasting:
+                    if (CharacterCalculator.SpellcastingProblem(spellcasting) is { } problem)
+                        Error("validate.spellcasting", $"Spellcasting '{spellcasting.Id}': {problem}.", spellcasting.Id);
+                    if (spellcasting.SpellsFormula is { } spellsFormula)
+                        CheckFormula(spellsFormula, spellcasting.Id, "spellsFormula");
+                    if (revision.Kind is not (ContentKind.Class or ContentKind.Subclass or ContentKind.Feature))
+                        Warn("validate.spellcasting-kind", $"Spellcasting is calculated only inside a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spellcasting.Id);
+                    break;
+                case SpellEffect spell:
+                    if (spell.Level is < 0 or > SpellcastingEffect.MaxSpellLevel)
+                        Error("validate.spell-level", $"Spell '{spell.Id}' level {spell.Level} must be 0 (cantrip) to {SpellcastingEffect.MaxSpellLevel}.", spell.Id);
+                    if (spell.Lists.Count == 0 || spell.Lists.Any(string.IsNullOrWhiteSpace))
+                        Warn("validate.spell-lists", $"Spell '{spell.Id}' is on no spell list; casters can record it only by hand.", spell.Id);
+                    if (spell.Dice is { } dice && !DiceExpression.TryParse(dice, out _, out var spellDiceError))
+                        Error("validate.dice-invalid", $"Spell '{spell.Id}' dice '{dice}': {spellDiceError!.Message} ({spellDiceError.Code})", spell.Id);
+                    if (revision.Kind != ContentKind.Spell)
+                        Warn("validate.spell-kind", $"Spell data is used only on spell content; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spell.Id);
+                    break;
             }
         }
+        if (revision.Effects.OfType<SpellcastingEffect>().Count() > 1)
+            Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
+        if (revision.Effects.OfType<SpellEffect>().Count() > 1)
+            Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
+        if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
+            Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
+        if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
+            Error("validate.requires-v5", $"This revision has spellcasting or spell data (content schema v5) but declares v{revision.SchemaVersion}; in an older revision they are reference only.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
             Error("validate.armor-duplicate", "An item is at most one armor and one shield.");
         if (revision.Effects.OfType<HitDieEffect>().Count() > 1)

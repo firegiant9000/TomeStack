@@ -56,6 +56,7 @@ public sealed partial class TomeStackApp : IDisposable
         {
             app.Seed("TomeStack.FixturePack.json");
             app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
+            app.Seed("TomeStack.FixturePackM2Spells.json"); // original test casters and spells (M2 spellcasting)
         }
         AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
         return app;
@@ -96,7 +97,10 @@ public sealed partial class TomeStackApp : IDisposable
                     return new ContentOption(
                         r.Reference, r.Kind, r.Name, r.RulesFamilies, r.RulesFamilies.Contains(rulesFamily),
                         r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary,
-                        allowed?.Contains(r.Provenance.SourceId));
+                        allowed?.Contains(r.Provenance.SourceId),
+                        r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
+                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
+                            : null);
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -136,6 +140,7 @@ public sealed partial class TomeStackApp : IDisposable
             Choices = request.Choices ?? [],
             CampaignId = request.CampaignId,
             CampaignExceptions = request.CampaignExceptions ?? [],
+            Spells = request.Spells ?? [],
         });
     }
 
@@ -269,7 +274,11 @@ public sealed record ContentOption(
     string SourceTitle,
     string? Page,
     string? Summary,
-    bool? AllowedInCampaign = null);
+    bool? AllowedInCampaign = null,
+    SpellSummary? Spell = null);
+
+/// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
+public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
@@ -288,7 +297,8 @@ public sealed record CreateCharacterRequest(
     IReadOnlyList<ClassLevel>? Classes = null,
     IReadOnlyList<ChoiceSelection>? Choices = null,
     Guid? CampaignId = null,
-    IReadOnlyList<CampaignException>? CampaignExceptions = null);
+    IReadOnlyList<CampaignException>? CampaignExceptions = null,
+    IReadOnlyList<KnownSpell>? Spells = null);
 
 /// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
 public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);

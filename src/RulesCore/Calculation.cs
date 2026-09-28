@@ -76,6 +76,9 @@ public sealed record ChoiceStatus(
 /// <param name="Features">M2 item 2: every active revision with its text, automation status, effects and rolls, in resolution order.</param>
 /// <param name="HitPoints">M2 item 2: the displayed maximum with current and temporary hit points from the play state.</param>
 /// <param name="HitDice">The hit dice pool per die size, largest first, with what is spent (character schema v5).</param>
+/// <param name="Spellcasting">Every caster with its spells (D04), primary first.</param>
+/// <param name="SpellSlots">Spell slots per spell level that has any, from the <c>spellSlots.N</c> fields.</param>
+/// <param name="PactSlots">Pact Magic slots, when a caster has them.</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
@@ -86,7 +89,10 @@ public sealed record CharacterSheet(
     IReadOnlyList<ResourceValue>? Resources = null,
     IReadOnlyList<FeatureEntry>? Features = null,
     HitPointState? HitPoints = null,
-    IReadOnlyList<HitDiceValue>? HitDice = null)
+    IReadOnlyList<HitDiceValue>? HitDice = null,
+    IReadOnlyList<SpellcastingEntry>? Spellcasting = null,
+    IReadOnlyList<SlotValue>? SpellSlots = null,
+    SlotValue? PactSlots = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -149,6 +155,61 @@ public sealed record HitPointState(int Maximum, int Current, int Temporary);
 /// <paramref name="Remaining"/> is the total less what is spent, never below 0 (a lower total after an update does not go negative).
 /// </summary>
 public sealed record HitDiceValue(int Die, int Total, int Spent, int Remaining, IReadOnlyList<string> Classes);
+
+/// <summary>
+/// Slots of one spell level (or the Pact Magic slots, <paramref name="Level"/> being their spell level) for play: the
+/// maximum is the displayed field (after any override), remaining = maximum − spent, never below 0.
+/// </summary>
+public sealed record SlotValue(int Level, int Maximum, int Spent, int Remaining, string Field);
+
+/// <summary>
+/// D04: one caster (a class or subclass with a <c>spellcasting</c> effect) at its class level. The first one in class order
+/// is <paramref name="Primary"/>: its attack bonus, save DC and slots are the sheet fields. Others are calculated here the
+/// same way; their spell slots are not combined (the SRD multiclass table is a manual step, D04).
+/// </summary>
+public sealed record SpellcastingEntry(
+    ContentReference Content,
+    string Name,
+    string EffectId,
+    int ClassLevel,
+    Ability Ability,
+    int AttackBonus,
+    int SaveDc,
+    SpellPreparation Preparation,
+    string SpellList,
+    SpellSlotKind SlotKind,
+    IReadOnlyList<int> Slots,
+    int? CantripsAllowed,
+    int? SpellsAllowed,
+    bool Primary,
+    TraceOrigin Origin,
+    IReadOnlyList<SpellEntry> Spells,
+    IReadOnlyList<Diagnostic> Warnings)
+{
+    /// <summary>The highest spell level this caster has a slot for (0: cantrips only).</summary>
+    public int HighestSlotLevel => Slots.Select((count, i) => (count, level: i + 1)).Where(s => s.count > 0).Select(s => s.level).DefaultIfEmpty(0).Max();
+}
+
+/// <summary>A known or prepared spell with its game data, for the sheet (a spell is never active content).</summary>
+public sealed record SpellEntry(
+    ContentReference Spell,
+    string Name,
+    int Level,
+    bool Prepared,
+    string? Summary,
+    string? Text,
+    string? School,
+    string? CastingTime,
+    string? Range,
+    string? Components,
+    string? Duration,
+    bool Concentration,
+    bool Ritual,
+    SpellAttackKind Attack,
+    Ability? Save,
+    string? Dice,
+    TraceOrigin Origin,
+    IReadOnlyList<Diagnostic> Diagnostics);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -296,6 +357,7 @@ public static class CharacterCalculator
         var proficiencies = CollectProficiencies(active, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels));
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
+        var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
         var ownSteps = new Dictionary<string, List<Step>>(StringComparer.Ordinal);
@@ -304,7 +366,7 @@ public static class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
 
@@ -321,9 +383,15 @@ public static class CharacterCalculator
             results[id] = (value, computed, fieldOverride);
         }
 
+        IReadOnlyList<string> casterReads = casters.Count == 0 ? [] : [FieldIds.ProficiencyBonus, FieldIds.Modifier(casters[0].Effect.Ability)];
+        var actualReads = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            [FieldIds.SpellAttack] = casterReads,
+            [FieldIds.SpellSaveDc] = casterReads,
+        };
         var fields = Specs.Select(spec =>
         {
-            var closure = Closure(spec.Id, modifiers);
+            var closure = Closure(spec.Id, modifiers, actualReads);
             return new DerivedValue(
                 spec.Id,
                 spec.Label,
@@ -354,7 +422,177 @@ public static class CharacterCalculator
             })
             .ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice), active);
+        var spellcasting = SpellcastingEntries(casters, character, catalog, resolved.ClassLevels, values, family, diagnostics);
+        SlotValue Slot(int level, string field, int spent)
+        {
+            var maximum = Math.Max(values[field], 0);
+            return new(level, maximum, spent, Math.Max(maximum - spent, 0), field);
+        }
+        var spellSlots = Enumerable.Range(1, SpellcastingEffect.MaxSpellLevel)
+            .Where(level => values[FieldIds.SpellSlots(level)] > 0 || character.Play.SlotsSpentOf(level) > 0)
+            .Select(level => Slot(level, FieldIds.SpellSlots(level), character.Play.SlotsSpentOf(level)))
+            .ToList();
+        var pactCaster = casters.FirstOrDefault(c => c.Effect.SlotKind == SpellSlotKind.PactMagic);
+        var pactSlots = values[FieldIds.PactSlots] > 0 || character.Play.PactSlotsSpent > 0
+            ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
+            : null;
+
+        return new(new CharacterSheet(
+            character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
+            spellcasting, spellSlots, pactSlots), active);
+    }
+
+    // ---- spellcasting (content schema v5, D04) --------------------------------------------------------------
+
+    /// <param name="ClassLevel">The level in the class the spellcasting content belongs to; its tables are read at this row.</param>
+    private sealed record CasterInfo(ActiveContent Content, SpellcastingEffect Effect, int ClassLevel);
+
+    /// <summary>
+    /// Every active revision with a <c>spellcasting</c> effect that is not reference-only (the first one per revision), in
+    /// the order the classes were taken. Spellcasting outside a class, or with tables that are not 20 rows of at most 9
+    /// levels, is disabled with a diagnostic (SPEC C-03); validation refuses both on publish.
+    /// </summary>
+    private static List<CasterInfo> CollectCasters(List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, List<Diagnostic> diagnostics)
+    {
+        var casters = new List<CasterInfo>();
+        foreach (var item in active)
+        {
+            var effect = item.Revision.Effects.OfType<SpellcastingEffect>().FirstOrDefault(e => e.Automation != AutomationStatus.Reference);
+            if (effect is null)
+                continue;
+            if (item.ClassRoot is not { } root || !classLevels.TryGetValue(root, out var level))
+            {
+                diagnostics.Add(new("spellcasting.no-class", $"'{item.Revision.Name}' has spellcasting, but it does not belong to a class the character has levels in; it is not calculated.", item.Revision.Reference, effect.Id));
+                continue;
+            }
+            if (SpellcastingProblem(effect) is { } problem)
+            {
+                diagnostics.Add(new("spellcasting.table-invalid", $"'{item.Revision.Name}' spellcasting '{effect.Id}': {problem}; it is not calculated.", item.Revision.Reference, effect.Id));
+                continue;
+            }
+            casters.Add(new(item, effect, level));
+        }
+        var order = character.Classes.Select((c, i) => (c.Class, i)).DistinctBy(p => p.Class).ToDictionary(p => p.Class, p => p.i);
+        return [.. casters.OrderBy(c => order.GetValueOrDefault(c.Content.ClassRoot!, int.MaxValue))];
+    }
+
+    /// <summary>What is wrong with a spellcasting effect's tables, or <c>null</c>. Shared with content validation.</summary>
+    internal static string? SpellcastingProblem(SpellcastingEffect effect)
+    {
+        if (effect.Slots is null || effect.Slots.Count != Character.MaxLevel || effect.Slots.Any(r => r is null || r.Count > SpellcastingEffect.MaxSpellLevel || r.Any(n => n is < 0 or > 20)))
+            return $"the slot table needs {Character.MaxLevel} rows (class levels 1–{Character.MaxLevel}) of at most {SpellcastingEffect.MaxSpellLevel} counts between 0 and 20";
+        if (effect.SlotKind == SpellSlotKind.PactMagic && effect.Slots.Any(r => r.Count(n => n > 0) > 1))
+            return "Pact Magic slots are all of one level, so each row may have one non-zero count";
+        if (effect.Cantrips is { } cantrips && (cantrips.Count != Character.MaxLevel || cantrips.Any(n => n is < 0 or > 50)))
+            return $"the cantrips table needs {Character.MaxLevel} counts between 0 and 50";
+        if (effect.SpellsTable is { } spells && (spells.Count != Character.MaxLevel || spells.Any(n => n is < 0 or > 100)))
+            return $"the spells table needs {Character.MaxLevel} counts between 0 and 100";
+        if (effect.SpellsTable is not null && effect.SpellsFormula is not null)
+            return "give the number of spells as a table or a formula, not both";
+        if (string.IsNullOrWhiteSpace(effect.SpellList))
+            return "a spell list key is required";
+        return null;
+    }
+
+    /// <summary>The slot counts at <paramref name="classLevel"/>, padded to 9 spell levels.</summary>
+    private static IReadOnlyList<int> Row(IReadOnlyList<IReadOnlyList<int>> table, int classLevel)
+    {
+        var row = table[Math.Clamp(classLevel, 1, Character.MaxLevel) - 1];
+        return [.. Enumerable.Range(0, SpellcastingEffect.MaxSpellLevel).Select(i => i < row.Count ? row[i] : 0)];
+    }
+
+    private static int PactSlotLevel(IReadOnlyList<int> row) => row.Select((n, i) => (n, i + 1)).Where(p => p.n > 0).Select(p => p.Item2).DefaultIfEmpty(0).Max();
+
+    private static List<SpellcastingEntry> SpellcastingEntries(
+        List<CasterInfo> casters, Character character, IContentCatalog catalog, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics)
+    {
+        var entries = new List<SpellcastingEntry>();
+        var pb = values[FieldIds.ProficiencyBonus];
+        for (var i = 0; i < casters.Count; i++)
+        {
+            var (content, effect, level) = casters[i];
+            var warnings = new List<Diagnostic>();
+            var mod = values[FieldIds.Modifier(effect.Ability)];
+            var row = Row(effect.Slots, level);
+            int? cantrips = effect.Cantrips?[level - 1];
+            int? allowed = effect.SpellsTable?[level - 1];
+            if (effect.SpellsFormula is { } source)
+            {
+                if (Formula.TryParse(source, out var formula, out var failure)
+                    && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
+                {
+                    allowed = Math.Max(value, 0);
+                }
+                else
+                {
+                    warnings.Add(InvalidFormula(content.Revision, effect, failure!));
+                }
+            }
+
+            var casterSpells = character.Spells.Where(s => s.Caster == content.Revision.ContentId).ToList();
+            var spells = new List<SpellEntry>();
+            var highest = effect.SlotKind == SpellSlotKind.PactMagic ? PactSlotLevel(row) : row.Select((n, x) => n > 0 ? x + 1 : 0).Max();
+            foreach (var known in casterSpells)
+            {
+                if (Spell(known, catalog, character, family, effect, highest, warnings) is { } entry)
+                    spells.Add(entry);
+            }
+            var cantripCount = spells.Count(s => s.Level == 0);
+            var readyCount = spells.Count(s => s.Level > 0 && (s.Prepared || effect.Preparation == SpellPreparation.Known));
+            if (cantrips is { } maxCantrips && cantripCount > maxCantrips)
+                warnings.Add(new("spells.too-many-cantrips", $"'{content.Revision.Name}' knows {maxCantrips} cantrip(s) at level {level}; {cantripCount} are recorded.", content.Revision.Reference, effect.Id));
+            if (allowed is { } maxSpells && readyCount > maxSpells)
+            {
+                var what = effect.Preparation == SpellPreparation.Known ? "knows" : "prepares";
+                warnings.Add(new("spells.too-many", $"'{content.Revision.Name}' {what} {maxSpells} spell(s) at level {level}; {readyCount} are recorded.", content.Revision.Reference, effect.Id));
+            }
+
+            var primary = i == 0;
+            entries.Add(new(
+                content.Revision.Reference, content.Revision.Name, effect.Id, level, effect.Ability,
+                primary ? values[FieldIds.SpellAttack] : pb + mod,
+                primary ? values[FieldIds.SpellSaveDc] : 8 + pb + mod,
+                effect.Preparation, effect.SpellList, effect.SlotKind, row, cantrips, allowed, primary,
+                ContentOrigin(family, content, effect), spells, warnings));
+        }
+        var casterIds = casters.Select(c => c.Content.Revision.ContentId).ToHashSet();
+        foreach (var orphan in character.Spells.Where(s => !casterIds.Contains(s.Caster)))
+            diagnostics.Add(new("spells.caster-missing", $"A spell is recorded for caster {orphan.Caster}, which gives this character no spellcasting; it is not listed.", orphan.Spell));
+        return entries;
+    }
+
+    /// <summary>One recorded spell, or <c>null</c> (with a warning) when it cannot be used at all.</summary>
+    private static SpellEntry? Spell(
+        KnownSpell known, IContentCatalog catalog, Character character, string family, SpellcastingEffect caster, int highest, List<Diagnostic> warnings)
+    {
+        var revision = catalog.FindRevision(known.Spell);
+        string? refused = revision switch
+        {
+            null => "is not available",
+            { Status: not RevisionStatus.Published } => "is not published",
+            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
+            _ when !revision.RulesFamilies.Contains(character.RulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}",
+            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
+            _ => null,
+        };
+        if (refused is not null)
+        {
+            warnings.Add(new("spells.unusable", $"Spell {revision?.Name ?? known.Spell.RevisionId.ToString()} {refused}; it is not listed.", known.Spell));
+            return null;
+        }
+        var data = revision!.Effects.OfType<SpellEffect>().First();
+        var diagnostics = new List<Diagnostic>();
+        if (!data.Lists.Contains(caster.SpellList, StringComparer.Ordinal))
+            diagnostics.Add(new("spells.not-on-list", $"'{revision.Name}' is not on the {caster.SpellList} spell list. Keep it only if a feature adds it.", known.Spell));
+        if (data.Level > 0 && data.Level > highest)
+            diagnostics.Add(new("spells.level-too-high", $"'{revision.Name}' is a level {data.Level} spell; this caster has slots up to level {highest}.", known.Spell));
+        warnings.AddRange(diagnostics);
+        var source = catalog.FindSource(revision.Provenance.SourceId);
+        var origin = new TraceOrigin(TraceOriginKind.Content, family, revision.Reference, revision.Name, data.Id, source?.Id, source?.Title, revision.Provenance.Page);
+        return new(
+            revision.Reference, revision.Name, data.Level, known.Prepared || caster.Preparation == SpellPreparation.Known, revision.Summary, data.Text,
+            data.School, data.CastingTime, data.Range, data.Components, data.Duration, data.Concentration, data.Ritual, data.Attack, data.Save, data.Dice,
+            origin, diagnostics);
     }
 
     // ---- resources and features (M2 item 2) -----------------------------------------------------------------
@@ -1147,10 +1385,17 @@ public static class CharacterCalculator
         return value;
     }
 
-    /// <summary>The field plus every field it transitively reads (base inputs and effect formulas).</summary>
-    private static HashSet<string> Closure(string field, List<Modifier> modifiers)
+    /// <summary>
+    /// The field plus every field it transitively reads (base inputs and effect formulas). <paramref name="actualReads"/>
+    /// narrows a spec's static inputs for this character: the spell fields statically read every ability modifier (for
+    /// ordering), but depend only on the proficiency bonus and the primary caster's ability.
+    /// </summary>
+    private static HashSet<string> Closure(string field, List<Modifier> modifiers, IReadOnlyDictionary<string, IReadOnlyList<string>> actualReads)
     {
-        var reads = Specs.ToDictionary(s => s.Id, s => new HashSet<string>(s.Reads, StringComparer.Ordinal), StringComparer.Ordinal);
+        var reads = Specs.ToDictionary(
+            s => s.Id,
+            s => new HashSet<string>(actualReads.TryGetValue(s.Id, out var actual) ? actual : s.Reads, StringComparer.Ordinal),
+            StringComparer.Ordinal);
         foreach (var modifier in modifiers)
             reads[modifier.Effect.Target].UnionWith(modifier.ReadsFields);
 
@@ -1201,7 +1446,7 @@ public static class CharacterCalculator
     /// <param name="Manual">Fields that are only assisted; a base derivation that cannot complete adds its field.</param>
     private sealed record BaseContext(
         Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies,
-        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual);
+        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual, IReadOnlyList<CasterInfo> Casters);
 
     private sealed record FieldSpec(string Id, string Label, string Units, IReadOnlyList<string> Reads, Func<BaseContext, List<Step>, int> Base);
 
@@ -1260,7 +1505,81 @@ public static class CharacterCalculator
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));
+
+        // Spellcasting (content schema v5, D04). Every ability modifier is an input, because the caster's ability is data.
+        IReadOnlyList<string> casterInputs = [FieldIds.ProficiencyBonus, .. Enum.GetValues<Ability>().Select(FieldIds.Modifier)];
+        specs.Add(new(FieldIds.SpellAttack, "Spell attack bonus", "modifier", casterInputs, (c, steps) => CasterBase(c, steps, FieldIds.SpellAttack, 0, "Spell attack bonus = proficiency bonus + {0} modifier")));
+        specs.Add(new(FieldIds.SpellSaveDc, "Spell save DC", "score", casterInputs, (c, steps) => CasterBase(c, steps, FieldIds.SpellSaveDc, 8, "Spell save DC = 8 + proficiency bonus + {0} modifier")));
+        for (var level = 1; level <= SpellcastingEffect.MaxSpellLevel; level++)
+        {
+            var spellLevel = level;
+            specs.Add(new(FieldIds.SpellSlots(level), $"Level {level} spell slots", "slots", [], (c, steps) => SlotBase(c, steps, spellLevel)));
+        }
+        specs.Add(new(FieldIds.PactSlots, "Pact Magic slots", "slots", [], PactBase));
         return specs;
+    }
+
+    private static int CasterBase(BaseContext c, List<Step> steps, string field, int constant, string description)
+    {
+        if (c.Casters.Count == 0)
+        {
+            steps.Add(new(field, "base", "No spellcasting", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        var (content, effect, _) = c.Casters[0];
+        var modifier = FieldIds.Modifier(effect.Ability);
+        var mod = c.Values[modifier];
+        var pb = c.Values[FieldIds.ProficiencyBonus];
+        var value = constant + pb + mod;
+        var text = string.Format(System.Globalization.CultureInfo.InvariantCulture, description, AbilityNames[effect.Ability]);
+        steps.Add(new(field, "base", $"{text}, from {Describe(content)}", constant, value, ContentOrigin(c.Family, content, effect), [new(FieldIds.ProficiencyBonus, pb), new(modifier, mod)]));
+        if (c.Casters.Count > 1)
+            c.Warnings.Add(new("spellcasting.multiclass", $"This character has {c.Casters.Count} casters. The sheet's spell attack and save DC are '{content.Revision.Name}''s; each caster's own are listed with its spells.", content.Revision.Reference, effect.Id));
+        return value;
+    }
+
+    /// <summary>
+    /// D04: slots come from the first caster with ordinary spell slots, at its class level. With a second one, TomeStack
+    /// does not combine them (the SRD multiclass spellcaster table is M3): the field is assisted, and the player records
+    /// the total as an override.
+    /// </summary>
+    private static int SlotBase(BaseContext c, List<Step> steps, int level)
+    {
+        var field = FieldIds.SpellSlots(level);
+        var slotCasters = c.Casters.Where(x => x.Effect.SlotKind == SpellSlotKind.SpellSlots).ToList();
+        if (slotCasters.Count == 0)
+        {
+            steps.Add(new(field, "base", "No spell slots", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        var (content, effect, classLevel) = slotCasters[0];
+        var value = Row(effect.Slots, classLevel)[level - 1];
+        steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel}: {value} level {level} slot(s), from its table", value, value, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
+        if (slotCasters.Count > 1)
+        {
+            var others = string.Join(", ", slotCasters.Skip(1).Select(x => $"'{x.Content.Revision.Name}' {x.ClassLevel}"));
+            c.Warnings.Add(new(
+                "spellcasting.multiclass-slots",
+                $"Spell slots of several classes ({others}) are not combined yet. TomeStack shows '{content.Revision.Name}''s slots; work out the total with the multiclass spellcaster table and record it as an override.",
+                content.Revision.Reference,
+                effect.Id));
+            c.Manual.Add(field);
+        }
+        return value;
+    }
+
+    private static int PactBase(BaseContext c, List<Step> steps)
+    {
+        var pact = c.Casters.FirstOrDefault(x => x.Effect.SlotKind == SpellSlotKind.PactMagic);
+        if (pact is null)
+        {
+            steps.Add(new(FieldIds.PactSlots, "base", "No Pact Magic", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        var row = Row(pact.Effect.Slots, pact.ClassLevel);
+        var value = row.Sum();
+        steps.Add(new(FieldIds.PactSlots, "base", $"{Describe(pact.Content)} at class level {pact.ClassLevel}: {value} Pact Magic slot(s) of level {PactSlotLevel(row)}", value, value, ContentOrigin(c.Family, pact.Content, pact.Effect), [new(FormulaIdentifiers.ClassLevel, pact.ClassLevel)]));
+        return value;
     }
 
     /// <summary>

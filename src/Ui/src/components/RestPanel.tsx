@@ -145,7 +145,6 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
               </ul>
             </>
           )}
-          <p className="hint">Spell slots are not handled yet; adjust them by hand.</p>
         </>
       )}
       <div className="actions">

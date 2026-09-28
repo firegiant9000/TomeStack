@@ -36,6 +36,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `hitDiceSpent[]` (v5) | `{ die, spent }` per hit die size (d6–d12, 0–20). Spent on a short rest, given back by a long rest ([rests.md](rests.md)) |
 | `deathSaves` (v5) | `{ successes, failures }`, 0–3 each. Three successes: Stable (the 3 stays as the marker). Three failures: dead |
 | `inspiration` (v5) | Inspiration (2014) or Heroic Inspiration (2024): you have it or not |
+| `spellSlotsSpent[]`, `pactSlotsSpent` (v6) | Spent spell slots per spell level and spent Pact Magic slots ([spellcasting.md](spellcasting.md); actions `spendSlot`, `regainSlot`, `spendPactSlot`, `regainPactSlot`) |
 
 **Migration on read:** character schema v1–v4 are upcast to v5 with the new state at its default (full hit points, nothing spent, no conditions, no hit dice spent, no death saves, no inspiration), which is exactly their meaning. Characters are stored as JSON and are not hashed, so no database migration is needed. A build before each version refuses its characters (`character.schema-unsupported`, `package.schema-unsupported`) instead of dropping the play state; 0.2.1 refuses v5.
 
@@ -71,4 +72,4 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 
 ## Not in this slice
 
-Attacks and weapon damage (no weapons yet; item 4 adds armor only), spell slots (spellcasting slice), conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").
+Attacks and weapon damage (no weapons yet; item 4 adds armor only), conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

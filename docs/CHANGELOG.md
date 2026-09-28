@@ -15,8 +15,20 @@
   - `ShortRestNeedsOneHitPoint`: no (2014) or yes (2024).
   - A long rest at 0 hit points is refused under both families, as the SRDs say (`rest.needs-hit-points`).
 
+- **Spellcasting engine (D04; `docs/features/spellcasting.md`):**
+  - **Casters:** a class (or subclass) can declare spellcasting with its ability, prepared or known spells, a spell list, and slot and count tables by class level (spell slots or Pact Magic).
+  - **Spells** are a content kind with level, lists, attack or save, and dice.
+  - **Sheet fields:** spell attack bonus, spell save DC, spell slots per level and Pact Magic slots, each traced and overridable.
+  - **Builder:** picks spells per caster, from the caster's list and castable levels, with the counts shown. Going over a count is flagged, not blocked.
+  - **"Spells and slots" panel:** spend and regain slots, cast (spends the lowest free slot), roll a spell's attack or dice (rolling spends nothing), and mark spells prepared.
+  - **Rests:** the long rest restores slots; both rests restore Pact Magic slots.
+  - **A second caster** is calculated separately. Combined multiclass slots are an assisted field; record the total as an override.
+  - **Fixtures:** development builds get original fixture casters and spells. The SRD casters are not bundled yet.
+
 ### Migration
 
+- **Content schema v5** (`docs/schemas/content-revision.v5.schema.json`) adds the `spellcasting` and `spell` effects and the spell fields. They are typed only in v5 revisions; in older ones they stay unknown and unchanged. No revision is upcast, and no database migration is needed. New revisions are written as v5, and 0.2.1 refuses them.
+- **Character schema v6** (`docs/schemas/character.v6.schema.json`) adds `spells` and spent spell and Pact Magic slots. v1–v5 characters are upcast with none. There is no database migration.
 - **Character schema v5** (`docs/schemas/character.v5.schema.json`) adds `play.hitDiceSpent`, `play.deathSaves` and `play.inspiration`. v1–v4 characters are upcast on read with nothing spent, no saves and no inspiration. There is no database migration, because characters are unhashed JSON. 0.2.1 refuses v5 characters and packages that contain them (`character.schema-unsupported`, `package.schema-unsupported`).
 
 ## 0.2.1 (M2 in progress; items 1–7)

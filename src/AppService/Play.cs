@@ -43,6 +43,18 @@ public enum PlayActionKind
 
     /// <summary>Inspiration (2014) or Heroic Inspiration (2024): <c>amount</c> 1 gives it, 0 spends or removes it.</summary>
     SetInspiration,
+
+    /// <summary>Spends one spell slot of spell level <c>amount</c> (1–9), for example to cast a spell at that level (D04).</summary>
+    SpendSlot,
+
+    /// <summary>Regains one spent spell slot of spell level <c>amount</c> by hand.</summary>
+    RegainSlot,
+
+    /// <summary>Spends one Pact Magic slot.</summary>
+    SpendPactSlot,
+
+    /// <summary>Regains one spent Pact Magic slot by hand.</summary>
+    RegainPactSlot,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -102,12 +114,36 @@ public sealed partial class TomeStackApp
             PlayActionKind.SetInspiration => command.Amount is 0 or 1
                 ? play with { Inspiration = command.Amount == 1 }
                 : throw new AppValidationException([new("play.amount-out-of-range", "Inspiration is 1 (have it) or 0 (do not).")]),
+            PlayActionKind.SpendSlot or PlayActionKind.RegainSlot => ChangeSlot(play, sheet, command),
+            PlayActionKind.SpendPactSlot => sheet.PactSlots is { Remaining: > 0 }
+                ? play with { PactSlotsSpent = play.PactSlotsSpent + 1 }
+                : throw new AppValidationException([new("slots.none-left", "No Pact Magic slots are left.")]),
+            PlayActionKind.RegainPactSlot => play.PactSlotsSpent > 0
+                ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
+                : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
         return SaveWithPlay(character with { Play = play });
+    }
+
+    private static PlayState ChangeSlot(PlayState play, CharacterSheet sheet, PlayCommand command)
+    {
+        if (command.Amount is < 1 or > SpellcastingEffect.MaxSpellLevel)
+            throw new AppValidationException([new("play.amount-out-of-range", $"A spell slot level is 1 to {SpellcastingEffect.MaxSpellLevel}.")]);
+        var slots = sheet.SpellSlots?.FirstOrDefault(s => s.Level == command.Amount);
+        var spent = play.SlotsSpentOf(command.Amount);
+        if (command.Action == PlayActionKind.SpendSlot)
+        {
+            return slots is { Remaining: > 0 }
+                ? play.WithSlotsSpent(command.Amount, spent + 1)
+                : throw new AppValidationException([new("slots.none-left", $"No level {command.Amount} spell slots are left.")]);
+        }
+        return spent > 0
+            ? play.WithSlotsSpent(command.Amount, spent - 1)
+            : throw new AppValidationException([new("slots.nothing-spent", $"No level {command.Amount} spell slots are spent.")]);
     }
 
     private static PlayState RecordDeathSave(PlayState play, HitPointState hp, int d20)
