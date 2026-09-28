@@ -33,6 +33,10 @@ import type {
   GapTarget,
   ImportResult,
   HitDieRoll,
+  LibraryBackupOutcome,
+  LibraryBackupPreview,
+  LibraryRestoreChoice,
+  LibraryRestoreResult,
   PackagePreview,
   PlayAction,
   RestPeriod,
@@ -159,6 +163,15 @@ export function createClient(transport: Transport) {
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices }),
+    // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----
+    libraryBackupPreview: () => call<LibraryBackupPreview>('library.backupPreview'),
+    /** Native Save dialog, then writes everything (PDFs included). No timeout: it waits for the dialog and the copy. */
+    saveLibraryBackup: () => call<LibraryBackupOutcome>('library.backupSaveAs', undefined, { timeoutMs: null }),
+    /** Native Open dialog, then checks the whole file (every PDF too); writes nothing. */
+    chooseLibraryRestore: () => call<LibraryRestoreChoice>('library.restoreChoose', undefined, { timeoutMs: null }),
+    /** Only the preview's "Restore" button calls this. */
+    applyLibraryRestore: (token: string, sourceChoices: Record<string, SourceChoice> = {}) =>
+      call<LibraryRestoreResult>('library.restoreApply', { token, sourceChoices, confirm: true }, { timeoutMs: null }),
   };
 }
 

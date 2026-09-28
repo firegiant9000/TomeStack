@@ -28,7 +28,14 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
+        "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
+
+    /// <summary>
+    /// M2.1: backup files chosen in the native Open dialog, by the token the UI got with the preview. The path stays here;
+    /// only the file name reaches the page.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string> _chosenBackups = new();
 
     public string Dispatch(string requestJson)
     {
@@ -137,6 +144,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
+        "library.backupPreview" => app.PreviewLibraryBackup(),
+        "library.backupSaveAs" => SaveLibraryBackupAs(),
+        "library.restoreChoose" => ChooseLibraryRestore(),
+        "library.restoreApply" => ApplyLibraryRestore(Payload<RestorePayload>(payload)),
         _ => throw new UnknownCommandException(command),
     };
 
@@ -221,6 +232,63 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         return new SaveOutcome(true, Path.GetFileName(path));
     }
 
+    /// <summary>
+    /// M2.1 "Back up everything": the native Save dialog picks the file, and the backup streams to <c>&lt;file&gt;.partial</c>
+    /// first, so a cancelled or failed write never leaves a half backup under the chosen name.
+    /// </summary>
+    private object SaveLibraryBackupAs()
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "Backing up everything needs the desktop app's Save dialog.")], "unsupported");
+        var preview = app.PreviewLibraryBackup();
+        var path = host.ChooseSaveLocation(preview.FileName, "TomeStack full backup", ".tomestack.zip");
+        if (path is null)
+            return new { saved = false };
+
+        var temporary = path + ".partial";
+        LibraryBackupResult result;
+        try
+        {
+            using (var file = new FileStream(temporary, FileMode.Create, FileAccess.ReadWrite))
+            {
+                result = app.WriteLibraryBackup(file);
+                file.Flush(flushToDisk: true);
+            }
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            TryDelete(temporary);
+            throw new AppValidationException([new("library.save-failed", $"Could not save {Path.GetFileName(path)}. Check that the folder exists, is writable and has enough free space, then try again.")]);
+        }
+        return new { saved = true, fileName = Path.GetFileName(path), result.Bytes, result.Contents, result.Warnings };
+    }
+
+    /// <summary>M2.1 "Restore full backup", step 1: the native Open dialog picks the file; the result is its full check.</summary>
+    private object ChooseLibraryRestore()
+    {
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "Restoring a full backup needs the desktop app's Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("TomeStack full backup", ".tomestack.zip");
+        if (path is null)
+            return new { chosen = false };
+        var token = Guid.NewGuid();
+        _chosenBackups[token] = path;
+        return new { chosen = true, token, fileName = Path.GetFileName(path), preview = app.PreviewLibraryRestore(path) };
+    }
+
+    /// <summary>Step 2, after the user has read the preview: re-checks the same file and restores it.</summary>
+    private LibraryRestoreResult ApplyLibraryRestore(RestorePayload payload)
+    {
+        if (!payload.Confirm)
+            throw new AppValidationException([new("restore.confirm-required", "Show the restore preview and confirm it first.")]);
+        if (!_chosenBackups.TryGetValue(payload.Token, out var path))
+            throw new AppValidationException([new("restore.not-chosen", "Choose the backup file again.")]);
+        var result = app.ApplyLibraryRestore(path, payload.SourceChoices);
+        _chosenBackups.TryRemove(payload.Token, out _); // a failed attempt (say, a missing source choice) can be retried
+        return result;
+    }
+
     private static void TryDelete(string path)
     {
         try { File.Delete(path); }
@@ -274,4 +342,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
 
     private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
+
+    /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
+    /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>
+    private sealed record RestorePayload(Guid Token, Dictionary<Guid, SourceChoice>? SourceChoices = null, bool Confirm = false);
 }

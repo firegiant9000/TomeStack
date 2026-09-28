@@ -936,3 +936,22 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy());
 });
+
+it('the Backups screen says what a full backup holds, and needs the desktop app to write or restore one (M2.1)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.click(await screen.findByRole('button', { name: 'Backups' }));
+  const panel = await screen.findByRole('region', { name: 'Backups' });
+  // Earlier flows in this run created characters, homebrew drafts, a campaign and a PDF copy: the counts come from the service.
+  const contents = await within(panel).findByRole('list', { name: 'What the backup contains' });
+  expect(contents.textContent).toMatch(/\d+ character\(s\), \d+ campaign\(s\), \d+ gap note\(s\)/);
+  expect(contents.textContent).toMatch(/\d+ published and [1-9]\d* draft entries/);
+  expect(contents.textContent).toMatch(/Not included: text read from PDFs/);
+
+  // DevHost has no native Save or Open dialog, so both say what they need instead of doing nothing.
+  await user.click(within(panel).getByRole('button', { name: 'Back up everything…' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/Backing up everything needs the TomeStack desktop app/);
+  await user.click(within(panel).getByRole('button', { name: 'Choose a full backup…' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Restoring a full backup needs the TomeStack desktop app/));
+});

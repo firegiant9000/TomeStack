@@ -161,11 +161,12 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
         <legend>What is this package for?</legend>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
-          Personal backup: includes everything, your gap notes too. Do not share it.
+          Personal backup of this character: everything it uses, your gap notes too, but no PDFs. Do not share it. (To back up
+          your whole library, PDFs included, use Backups.)
         </label>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'share'} onChange={() => choose('share')} />
-          Share with someone: leaves out content you may not share, and never includes gap notes
+          Share with someone: leaves out content you may not share, and never includes gap notes or PDFs
         </label>
       </fieldset>
       {purpose === 'share' && preview && (

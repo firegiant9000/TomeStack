@@ -3,7 +3,7 @@ import { client } from '../api/client';
 import type { ImportResult, PackageItem, PackagePreview, SourceChoice } from '../api/types';
 
 /** A source whose metadata differs from the local record: show the diff and require an explicit choice. */
-function SourceDecision({ item, choice, onChoose }: { item: PackageItem; choice?: SourceChoice; onChoose: (choice: SourceChoice) => void }) {
+export function SourceDecision({ item, choice, onChoose }: { item: PackageItem; choice?: SourceChoice; onChoose: (choice: SourceChoice) => void }) {
   const name = `source-choice-${item.id}`;
   return (
     <fieldset className="source-decision">

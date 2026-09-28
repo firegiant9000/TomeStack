@@ -23,7 +23,9 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Still importable | `formatVersion` |
 | `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Still importable | `formatVersion` |
 | `package-manifest.v4.schema.json` | Adds `campaigns/` entries (M2 item 7); entries may be content and character schema v4. Still imported | `formatVersion` |
-| `package-manifest.v5.schema.json` | Adds `gaps/` entries, backups only (M3 B3). Current | `formatVersion` |
+| `package-manifest.v5.schema.json` | Adds `gaps/` entries, backups only (M3 B3). Current for character packages | `formatVersion` |
+| `package-manifest.v6.schema.json` | Adds `scope` and `revisionOrder`; `attachments/` and `files/` entries in full library backups only (M2.1). Current for library backups | `formatVersion` |
+| `attachment.v1.schema.json` | `attachments/<attachmentId>.json` in a full library backup: a managed or linked PDF record (ADR-005, M2.1) | none (v1) |
 | `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Current | `schemaVersion` |
 | `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules. Current | `schemaVersion` |
 

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/package-manifest.v6.schema.json",
+  "title": "TomeStack package manifest (formatVersion 6)",
+  "description": "manifest.json of a *.tomestack.zip package (SPEC P-02; docs/features/package-format.md). v6 (M2.1) adds scope: 'library' is a full backup of a data folder, with attachments/ entries (attachment.v1.schema.json), files/<sha256>.pdf entries (managed PDF copies) and revisionOrder. A library backup is always purpose 'backup'. Character packages are still written as v5. v5 added gaps/ entries (backups only); v4 campaigns/; v3 purpose and omitted (ADR-007).",
+  "type": "object",
+  "required": ["format", "formatVersion", "createdAt", "appVersion", "purpose", "characters", "entries", "notices", "omitted", "attachmentPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "tomestack.package" },
+    "formatVersion": { "const": 6 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "appVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "purpose": { "enum": ["backup", "share"] },
+    "scope": { "enum": ["characters", "library"] },
+    "characters": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "revisionOrder": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "entries": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^((sources|content|characters|campaigns|gaps|attachments)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json|files/[0-9a-f]{64}\\.pdf)$"
+          },
+          "kind": { "enum": ["source", "contentRevision", "character", "campaign", "gapNote", "attachment", "pdf"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 1073741824 }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "redistributable"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "redistributable": { "type": "boolean" },
+          "attribution": { "type": "string" },
+          "modificationNotice": { "type": "string" }
+        }
+      }
+    },
+    "omitted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "revisions"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reference", "name", "characters"],
+              "additionalProperties": false,
+              "properties": {
+                "reference": {
+                  "type": "object",
+                  "required": ["contentId", "revisionId"],
+                  "additionalProperties": false,
+                  "properties": { "contentId": { "$ref": "#/$defs/uuid" }, "revisionId": { "$ref": "#/$defs/uuid" } }
+                },
+                "name": { "type": "string" },
+                "characters": { "type": "array", "items": { "$ref": "#/$defs/uuid" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "attachmentPolicy": { "type": "string" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

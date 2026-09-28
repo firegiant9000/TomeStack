@@ -1,6 +1,6 @@
 # ADR-007: Export package and license policy
 
-Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26). Items 1–9 are implemented and tested. The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
+Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26; item 10, M2.1, 2026-09-28). Items 1–10 are implemented and tested. The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
 Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context
@@ -30,6 +30,10 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 **Accepted (SRD route, owner, 2026-09-26):**
 
 8. SRD 5.1 and SRD 5.2.1 ship as two separate source packs (ADR-002) under **CC-BY-4.0** (not OGL 1.0a for SRD 5.1). Each `SourceRecord` has `license: "CC-BY-4.0"`, `redistributable: true`, and `attribution` set to the approved statement in [licensing/srd-attribution-draft.md](../licensing/srd-attribution-draft.md) (approved by Arlo Kharod, 2026-09-26), plus a CC-BY §3 `modificationNotice`, which also travels in package `notices[]`. **Implemented (M1 item 1):** `src/AppService/Content/srd-5.1.json` and `srd-5.2.1.json`, seeded into every data folder; checked by `SrdPackTests`.
+
+**Accepted (M2.1, 2026-09-28; amends item 2):**
+
+10. A **full library backup** (package format v6, `scope: "library"`, always `purpose: "backup"`) is a third kind of file, separate from character exports. It is the only package that includes PDF files: the managed copies (`files/<sha256>.pdf`), because losing them is losing the user's data. Character backups and shares still never include PDFs, and a share never includes gap notes. The library backup is personal, like a character backup: the UI says not to share it, and nothing offers to send it anywhere. It carries each source's `attachmentId` and the linked PDF records (a linked path can name the Windows user, which is acceptable in a personal backup). The rules are in [package-format.md](../features/package-format.md#full-library-backup-m21). Evidence: `LibraryBackupTests`. "Share one source's homebrew" is not part of this: homebrew sources are `redistributable: false` by default, and there is no way yet to mark your own homebrew shareable.
 
 **Accepted (D07, owner, 2026-09-26):**
 

@@ -235,6 +235,11 @@ public partial class MainWindow : Window
             return (false, $"data-check-failed:import:{status}:{pages}");
         _smokeCommands.AddRange(["import.start", "import.status"]);
 
+        // M2.1: the full backup of this folder, PDF included, restores into a second, clean data folder.
+        if (LibraryRoundTrip() is { } failed)
+            return (false, $"data-check-failed:library:{failed}");
+        _smokeCommands.AddRange(["library.backup", "library.restore"]);
+
         _awaitingViewer = true;
         using var opened = Command("source.openPage", new { sourceId, page = 2 });
         if (!opened.RootElement.GetProperty("ok").GetBoolean() || !opened.RootElement.GetProperty("result").GetProperty("opened").GetBoolean())
@@ -244,6 +249,50 @@ public partial class MainWindow : Window
         }
         _smokeCommands.AddRange(["source.createHomebrew", "source.attachPdfData", "source.openPage"]);
         return (true, "ok");
+    }
+
+    /// <summary>
+    /// Smoke only: writes a full backup of this data folder to a scratch file, restores it into a fresh data folder next
+    /// to it, and compares characters, sources and PDF copies. Both scratch items are deleted. Returns null on success.
+    /// </summary>
+    private string? LibraryRoundTrip()
+    {
+        var scratch = Path.Combine(Path.GetTempPath(), "tomestack-smoke", $"library-{Guid.NewGuid():N}");
+        var backup = scratch + ".tomestack.zip";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(scratch)!);
+            using (var file = File.Create(backup))
+            {
+                if (_tomeStack.WriteLibraryBackup(file).Warnings.Count > 0)
+                    return "backup-warnings";
+            }
+            using var clean = TomeStackApp.Open(scratch, syncRoots: []);
+            var preview = clean.PreviewLibraryRestore(backup);
+            if (!preview.CanApply)
+                return $"preview:{preview.Errors.FirstOrDefault()?.Code}";
+            var restored = clean.ApplyLibraryRestore(backup);
+            if (restored.PdfsCopied != 1)
+                return $"pdfs:{restored.PdfsCopied}";
+            if (clean.ListCharacters().Count != _tomeStack.ListCharacters().Count)
+                return "characters";
+            var withPdf = _tomeStack.ListSources().Where(s => s.AttachmentId is not null).Select(s => s.Id).Order().ToList();
+            if (!clean.ListSources().Where(s => s.AttachmentId is not null).Select(s => s.Id).Order().SequenceEqual(withPdf))
+                return "attachments";
+            return null;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(backup);
+                foreach (var file in Directory.Exists(scratch) ? Directory.GetFiles(scratch, "*", SearchOption.AllDirectories) : [])
+                    File.SetAttributes(file, FileAttributes.Normal);
+                if (Directory.Exists(scratch))
+                    Directory.Delete(scratch, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort; under %TEMP% */ }
+        }
     }
 
     private bool _awaitingViewer;

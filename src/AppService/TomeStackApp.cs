@@ -67,8 +67,10 @@ public sealed partial class TomeStackApp : IDisposable
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
             app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _folderLock = folderLock };
             app.InterruptLeftoverImports();
+            var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
-                app.Seed(pack);
+                bundled.UnionWith(app.Seed(pack).Revisions.Select(r => r.RevisionId));
+            app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             if (devFixtures)
             {
                 app.Seed("TomeStack.FixturePack.json");
@@ -277,6 +279,18 @@ public sealed partial class TomeStackApp : IDisposable
     public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
         _packages.Apply(package, sourceChoices);
 
+    /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
+    public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
+
+    /// <summary>M2.1: writes the whole library, managed PDFs included, to <paramref name="output"/>.</summary>
+    public LibraryBackupResult WriteLibraryBackup(Stream output) => _packages.WriteLibraryBackup(output);
+
+    /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
+    public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);
+
+    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
+        _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+
     public void Dispose()
     {
         StopImportsForDispose(); // a running import becomes "interrupted" and resumes after the next start
@@ -299,7 +313,7 @@ public sealed partial class TomeStackApp : IDisposable
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is empty.");
     }
 
-    private void Seed(string resourceName)
+    private ContentPack Seed(string resourceName)
     {
         var pack = LoadBundledPack(resourceName);
         _store.InTransaction(() =>
@@ -309,6 +323,7 @@ public sealed partial class TomeStackApp : IDisposable
             foreach (var revision in pack.Revisions)
                 _store.AddRevision(revision);
         });
+        return pack;
     }
 }
 

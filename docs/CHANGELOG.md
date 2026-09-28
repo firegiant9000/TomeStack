@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Back up everything and restore it (M2.1; `docs/features/package-format.md` "Full library backup", ADR-007 item 10):** a new **Backups** screen.
+  - **Back up everything** saves one file with your whole library: characters, campaigns, gap notes, all your homebrew (drafts, older versions and entries no character uses yet) and the PDFs TomeStack keeps a copy of. Before this, only characters and what they used could be backed up, so unfinished homebrew had no backup at all.
+  - **Restore full backup** checks the whole file first, PDFs included, shows what it would add or replace, and restores only when you confirm. It deletes nothing. Before it replaces anything, it saves a copy of your current data in the backups folder.
+  - A character's own export is unchanged, and so is its "Share with someone", which never includes PDFs or gap notes.
+  - Character packages are still format v5, so TomeStack 0.3.0 can read them. Full backups are format v6, and older versions refuse them with a clear message.
+
 - **M4 exit evidence (`docs/features/m4-acceptance.md`):** the original fixture book is imported through the real worker in the gate, reviewed, and nothing is active without approval. The run on a third-party test PDF is prepared (it reads a private local folder and reports counts only) and still owed, so the version stays 0.3.0.
 
 - **Import review (M4 D5; `docs/features/pdf-import.md`):** on the Sources screen, a source of your own with a PDF has "Read the text and find candidates". Read some pages or the whole book, watch the progress, cancel or resume, and search the text. Then review the candidates, filtered by page, kind, confidence and status. Each shows its excerpt next to "Open page", what was read, what is unsure, and what it depends on. Edit it, accept it as a draft or as a reference entry, or ignore it. Accepted entries are drafts in the studio, where publishing checks them again.
