@@ -11081,6 +11081,33 @@
           "target": "weapon.martial"
         },
         {
+          "type": "grant",
+          "id": "paladin-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor: All armor, shields"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-heavy",
+          "grant": "proficiency",
+          "target": "armor.heavy",
+          "onlyAs": "startingClass",
+          "text": "As a multiclass character a paladin gains light armor, medium armor and shields, not heavy armor (Multiclassing Proficiencies, p. 57)."
+        },
+        {
           "type": "restriction",
           "id": "paladin-multiclass-str",
           "field": "ability.str.score",
@@ -11403,6 +11430,25 @@
           "target": "weapon.martial"
         },
         {
+          "type": "grant",
+          "id": "ranger-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor: Light armor, medium armor, shields"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
           "type": "restriction",
           "id": "ranger-multiclass-dex",
           "field": "ability.dex.score",
@@ -11558,6 +11604,402 @@
             {
               "contentId": "51c00000-0000-4000-8000-000000404500",
               "revisionId": "51e00000-0000-4000-8000-000000404500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000405000",
+      "revisionId": "51e80000-0000-4000-8000-000000405000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Sorcerer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 42,
+          "end": 45
+        }
+      },
+      "status": "published",
+      "summary": "Hit Points\nHit Dice: 1d6 per sorcerer level\nHit Points at 1st Level: 6 + your Constitution modifier\nHit Points at Higher Levels: 1d6 (or 4) + your Constitution modifier per sorcerer level after 1st\n\nProficiencies\nArmor: None\nWeapons: Daggers, darts, slings, quarterstaffs, light crossbows\nTools: None\nSaving Throws: Constitution, Charisma\nSkills: Choose two from Arcana, Deception, Insight, Intimidation, Persuasion, and Religion",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "sorcerer-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-skills",
+          "choiceId": "sorcerer-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Skills: Choose two from Arcana, Deception, Insight, Intimidation, Persuasion, and Religion",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405800",
+              "revisionId": "51e00000-0000-4000-8000-000000405800"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405801",
+              "revisionId": "51e00000-0000-4000-8000-000000405801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405802",
+              "revisionId": "51e00000-0000-4000-8000-000000405802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405803",
+              "revisionId": "51e00000-0000-4000-8000-000000405803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405804",
+              "revisionId": "51e00000-0000-4000-8000-000000405804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405805",
+              "revisionId": "51e00000-0000-4000-8000-000000405805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-dagger",
+          "grant": "proficiency",
+          "target": "weapon.dagger",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-dart",
+          "grant": "proficiency",
+          "target": "weapon.dart",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-sling",
+          "grant": "proficiency",
+          "target": "weapon.sling",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-quarterstaff",
+          "grant": "proficiency",
+          "target": "weapon.quarterstaff",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-light-crossbow",
+          "grant": "proficiency",
+          "target": "weapon.light-crossbow",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor: None"
+        },
+        {
+          "type": "restriction",
+          "id": "sorcerer-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Sorcerer\tCharisma 13\nSorcerer\t—"
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405001",
+            "revisionId": "51e70000-0000-4000-8000-000000405001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerous-origin",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405002",
+            "revisionId": "51e00000-0000-4000-8000-000000405002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-font-of-magic",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405003",
+            "revisionId": "51e00000-0000-4000-8000-000000405003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-metamagic",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405004",
+            "revisionId": "51e00000-0000-4000-8000-000000405004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405005",
+            "revisionId": "51e00000-0000-4000-8000-000000405005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerous-restoration",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000405006",
+            "revisionId": "51e00000-0000-4000-8000-000000405006"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-subclass",
+          "choiceId": "sorcerer-subclass",
+          "count": 1,
+          "level": 1,
+          "text": "Level 1: Sorcerer subclass. (The SRD 5.1 includes the Draconic Bloodline.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000405500",
+              "revisionId": "51e00000-0000-4000-8000-000000405500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000407000",
+      "revisionId": "51e80000-0000-4000-8000-000000407000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Wizard",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 52,
+          "end": 55
+        }
+      },
+      "status": "published",
+      "summary": "Hit Points\nHit Dice: 1d6 per wizard level\nHit Points at 1st Level: 6 + your Constitution modifier\nHit Points at Higher Levels: 1d6 (or 4) + your Constitution modifier per wizard level after 1st\n\nProficiencies\nArmor: None\nWeapons: Daggers, darts, slings, quarterstaffs, light crossbows\nTools: None\nSaving Throws: Intelligence, Wisdom\nSkills: Choose two from Arcana, History, Insight, Investigation, Medicine, and Religion",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "wizard-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "wizard-skills",
+          "choiceId": "wizard-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Skills: Choose two from Arcana, History, Insight, Investigation, Medicine, and Religion",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407800",
+              "revisionId": "51e00000-0000-4000-8000-000000407800"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407801",
+              "revisionId": "51e00000-0000-4000-8000-000000407801"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407802",
+              "revisionId": "51e00000-0000-4000-8000-000000407802"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407803",
+              "revisionId": "51e00000-0000-4000-8000-000000407803"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407804",
+              "revisionId": "51e00000-0000-4000-8000-000000407804"
+            },
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407805",
+              "revisionId": "51e00000-0000-4000-8000-000000407805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-dagger",
+          "grant": "proficiency",
+          "target": "weapon.dagger",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-dart",
+          "grant": "proficiency",
+          "target": "weapon.dart",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-sling",
+          "grant": "proficiency",
+          "target": "weapon.sling",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-quarterstaff",
+          "grant": "proficiency",
+          "target": "weapon.quarterstaff",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-light-crossbow",
+          "grant": "proficiency",
+          "target": "weapon.light-crossbow",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor: None"
+        },
+        {
+          "type": "restriction",
+          "id": "wizard-multiclass-int",
+          "field": "ability.int.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "Wizard\tIntelligence 13\nWizard\t—"
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407001",
+            "revisionId": "51e70000-0000-4000-8000-000000407001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-recovery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407002",
+            "revisionId": "51e00000-0000-4000-8000-000000407002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-tradition",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407003",
+            "revisionId": "51e00000-0000-4000-8000-000000407003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407004",
+            "revisionId": "51e00000-0000-4000-8000-000000407004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-spell-mastery",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407005",
+            "revisionId": "51e00000-0000-4000-8000-000000407005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-signature-spells",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "51c00000-0000-4000-8000-000000407006",
+            "revisionId": "51e00000-0000-4000-8000-000000407006"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "wizard-subclass",
+          "choiceId": "wizard-subclass",
+          "count": 1,
+          "level": 2,
+          "text": "Level 2: Wizard subclass. (The SRD 5.1 includes the School of Evocation.)",
+          "options": [
+            {
+              "contentId": "51c00000-0000-4000-8000-000000407500",
+              "revisionId": "51e00000-0000-4000-8000-000000407500"
             }
           ]
         }

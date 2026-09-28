@@ -269,7 +269,7 @@
                 },
                 {
                   "type": "string",
-                  "pattern": "^armor\\.(light|medium|heavy|shield)$"
+                  "pattern": "^armor\\.(light|medium|heavy|shield|none)$"
                 }
               ]
             },

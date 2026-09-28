@@ -207,6 +207,7 @@ public class SrdFighterTests
         foreach (var family in Families)
         {
             var classes = TomeStackApp.LoadBundledPack($"TomeStack.Content.{(family == RulesFamilies.Srd51 ? "srd-5.1" : "srd-5.2.1")}-classes.json");
+            // The v8 Wizard records that it gives no armor training (armor.none), so the Fighter's missing heavy armor shows.
             var wizard = classes.Revisions.Last(r => r.Name == "Wizard" && r.Kind == ContentKind.Class).Reference;
             var fighter = Named(Fighters(family), "Fighter");
             var plate = Armor(family).Revisions.Single(r => r.Name is "Plate" or "Plate Armor").Reference;
@@ -223,6 +224,64 @@ public class SrdFighterTests
             var weak = temp.App.SaveCharacter(Later(new(10, 12, 12, 16, 10, 10))).Sheet;
             Assert.Contains(weak.Diagnostics, d => d.Code == "restriction.multiclass-unmet" && d.Content == fighter);
         }
+    }
+
+    private static ContentPack Classes(string family) => TomeStackApp.LoadBundledPack($"TomeStack.Content.{(family == RulesFamilies.Srd51 ? "srd-5.1" : "srd-5.2.1")}-classes.json");
+
+    [Fact]
+    public void A_Paladin_who_took_a_level_of_Fighter_is_trained_for_plate()
+    {
+        // PR #12 review: the Paladin's heavy armor comes with the starting class, so a later Fighter level lacking heavy
+        // armor must not flag the Plate. Both families' v8 Paladins record their armor training.
+        using var temp = new TempApp();
+        foreach (var family in Families)
+        {
+            var paladin = Classes(family).Revisions.Last(r => r.Name == "Paladin" && r.Kind == ContentKind.Class);
+            Assert.Contains(paladin.Effects.OfType<GrantEffect>(), g => g.Target == "armor.heavy" && g.OnlyAs == ClassEntry.StartingClass);
+            var plate = Armor(family).Revisions.Single(r => r.Name is "Plate" or "Plate Armor").Reference;
+            var sheet = temp.App.SaveCharacter(new Character
+            {
+                Id = Guid.NewGuid(), Name = "Test Paladin Fighter", RulesFamily = family, Level = 6,
+                Classes = [new(paladin.Reference, 5), new(Named(Fighters(family), "Fighter"), 1)],
+                BaseAbilities = new(15, 10, 14, 10, 10, 13), Equipment = [new(plate, Equipped: true)],
+            }).Sheet;
+
+            var ac = sheet.Field(FieldIds.ArmorClass);
+            Assert.Equal(18, ac.Value);
+            Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.armor-untrained" or "equipment.armor-strength");
+        }
+    }
+
+    [Fact]
+    public void A_2024_Cleric_with_a_feat_granting_only_light_armor_keeps_the_shield()
+    {
+        // PR #12 review: under 5.2.1 an untrained shield adds nothing. The Cleric revision records no armor training, so
+        // a homebrew v8 feat granting light armor alone must not turn the check on and take the shield away.
+        using var temp = new TempApp();
+        var source = Guid.Parse("7c000000-0000-4000-8000-000000000a01");
+        temp.App.Store.UpsertSource(new SourceRecord
+        {
+            Id = source, Title = "Test Feats", Publisher = "Me", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = false,
+        });
+        var feat = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = "Test Lightly Armored",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(source), Status = RevisionStatus.Published,
+            Effects = [new GrantEffect { Id = "light", Grant = GrantKind.Proficiency, Target = "armor.light" }],
+        };
+        temp.App.Store.AddRevision(feat);
+        var cleric = Classes(RulesFamilies.Srd521).Revisions.Last(r => r.Name == "Cleric" && r.Kind == ContentKind.Class).Reference;
+        var shield = Armor(RulesFamilies.Srd521).Revisions.Single(r => r.Name == "Shield").Reference;
+
+        var ac = temp.App.SaveCharacter(new Character
+        {
+            Id = Guid.NewGuid(), Name = "Test Cleric", RulesFamily = RulesFamilies.Srd521, Level = 1, Classes = [new(cleric, 1)],
+            Pins = [feat.Reference], BaseAbilities = new(10, 14, 12, 10, 16, 10), Equipment = [new(shield, Equipped: true)],
+        }).Sheet.Field(FieldIds.ArmorClass);
+
+        Assert.Equal(10 + 2 + 2, ac.Value);
+        Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.shield-untrained" or "equipment.armor-untrained");
     }
 
     [Fact]

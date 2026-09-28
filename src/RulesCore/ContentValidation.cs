@@ -105,8 +105,11 @@ public static class ContentValidator
                     else if (grant.Target is { } armorTarget && armorTarget.StartsWith(CharacterCalculator.ArmorTrainingPrefix, StringComparison.Ordinal))
                     {
                         needsV8 = true;
-                        if (!CharacterCalculator.ArmorTrainingKeys.Contains(armorTarget[CharacterCalculator.ArmorTrainingPrefix.Length..]) || grant.Grant != GrantKind.Proficiency)
-                            Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in armor.light, armor.medium, armor.heavy or armor.shield.", grant.Id);
+                        var armorKey = armorTarget[CharacterCalculator.ArmorTrainingPrefix.Length..];
+                        if (!(CharacterCalculator.ArmorTrainingKeys.Contains(armorKey) || armorKey == CharacterCalculator.NoArmorTrainingKey) || grant.Grant != GrantKind.Proficiency)
+                            Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in armor.light, armor.medium, armor.heavy or armor.shield, or record armor.none.", grant.Id);
+                        if (armorKey == CharacterCalculator.NoArmorTrainingKey && revision.Kind != ContentKind.Class)
+                            Warn("validate.armor-none-kind", $"armor.none records that a class gives no armor training; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it has no effect.", grant.Id);
                     }
                     else if (grant.Target is not { } target || !CharacterCalculator.IsField(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                     {

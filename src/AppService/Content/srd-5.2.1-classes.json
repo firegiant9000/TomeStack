@@ -12096,6 +12096,33 @@
           "target": "weapon.martial"
         },
         {
+          "type": "grant",
+          "id": "paladin-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor Training: Light, Medium, and Heavy armor and Shields"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
+          "type": "grant",
+          "id": "paladin-armor-heavy",
+          "grant": "proficiency",
+          "target": "armor.heavy",
+          "onlyAs": "startingClass",
+          "text": "As a multiclass character a paladin gains training with Light and Medium armor and Shields, not Heavy armor."
+        },
+        {
           "type": "restriction",
           "id": "paladin-multiclass-str",
           "field": "ability.str.score",
@@ -12459,6 +12486,25 @@
           "target": "weapon.martial"
         },
         {
+          "type": "grant",
+          "id": "ranger-armor-light",
+          "grant": "proficiency",
+          "target": "armor.light",
+          "text": "Armor Training: Light and Medium armor and Shields"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-medium",
+          "grant": "proficiency",
+          "target": "armor.medium"
+        },
+        {
+          "type": "grant",
+          "id": "ranger-armor-shield",
+          "grant": "proficiency",
+          "target": "armor.shield"
+        },
+        {
           "type": "restriction",
           "id": "ranger-multiclass-dex",
           "field": "ability.dex.score",
@@ -12654,6 +12700,430 @@
             {
               "contentId": "52c00000-0000-4000-8000-000000404500",
               "revisionId": "52e00000-0000-4000-8000-000000404500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000405000",
+      "revisionId": "52e80000-0000-4000-8000-000000405000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Sorcerer",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 64,
+          "end": 70
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Charisma\nHit Point Die D6 per Sorcerer level\nSaving Throw Proficiencies Constitution and Charisma\nSkill Proficiencies Choose 2: Arcana, Deception, Insight, Intimidation, Persuasion, or Religion\nWeapon Proficiencies Simple weapons\nArmor Training None\nStarting Equipment Choose A or B: (A) Spear, 2 Daggers, Arcane Focus (crystal), Dungeoneer’s Pack, and 28 GP; or (B) 50 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "sorcerer-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-con",
+          "grant": "proficiency",
+          "target": "save.con",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-save-cha",
+          "grant": "proficiency",
+          "target": "save.cha",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-skills",
+          "choiceId": "sorcerer-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Arcana, Deception, Insight, Intimidation, Persuasion, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405800",
+              "revisionId": "52e00000-0000-4000-8000-000000405800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405801",
+              "revisionId": "52e00000-0000-4000-8000-000000405801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405802",
+              "revisionId": "52e00000-0000-4000-8000-000000405802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405803",
+              "revisionId": "52e00000-0000-4000-8000-000000405803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405804",
+              "revisionId": "52e00000-0000-4000-8000-000000405804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405805",
+              "revisionId": "52e00000-0000-4000-8000-000000405805"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "sorcerer-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor Training: None"
+        },
+        {
+          "type": "restriction",
+          "id": "sorcerer-multiclass-cha",
+          "field": "ability.cha.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the Hit Point Die from the Core Sorcerer Traits table."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405001",
+            "revisionId": "52e70000-0000-4000-8000-000000405001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-innate-sorcery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405002",
+            "revisionId": "52e00000-0000-4000-8000-000000405002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-font-of-magic",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405003",
+            "revisionId": "52e00000-0000-4000-8000-000000405003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-metamagic",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405004",
+            "revisionId": "52e00000-0000-4000-8000-000000405004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerer-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405005",
+            "revisionId": "52e00000-0000-4000-8000-000000405005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405006",
+            "revisionId": "52e00000-0000-4000-8000-000000405006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcerous-restoration",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405007",
+            "revisionId": "52e00000-0000-4000-8000-000000405007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-sorcery-incarnate",
+          "grant": "content",
+          "level": 7,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405008",
+            "revisionId": "52e00000-0000-4000-8000-000000405008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405009",
+            "revisionId": "52e00000-0000-4000-8000-000000405009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-apotheosis",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000405010",
+            "revisionId": "52e00000-0000-4000-8000-000000405010"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "sorcerer-subclass",
+          "choiceId": "sorcerer-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Sorcerer subclass. (The SRD 5.2.1 includes the Draconic Sorcery.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000405500",
+              "revisionId": "52e00000-0000-4000-8000-000000405500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "52c00000-0000-4000-8000-000000407000",
+      "revisionId": "52e80000-0000-4000-8000-000000407000",
+      "schemaVersion": 8,
+      "kind": "class",
+      "name": "Wizard",
+      "rulesFamilies": [
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "52500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 77,
+          "end": 82
+        }
+      },
+      "status": "published",
+      "summary": "Primary Ability Intelligence\nHit Point Die D6 per Wizard level\nSaving Throw Proficiencies Intelligence and Wisdom\nSkill Proficiencies Choose 2: Arcana, History, Insight, Investigation, Medicine, Nature, or Religion\nWeapon Proficiencies Simple weapons\nArmor Training None\nStarting Equipment Choose A or B: (A) 2 Daggers, Arcane Focus (Quarterstaff), Robe, Spellbook, Scholar’s Pack, and 5 GP; or (B) 55 GP",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "wizard-hit-die",
+          "die": 6
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "choice",
+          "id": "wizard-skills",
+          "choiceId": "wizard-skills",
+          "count": 2,
+          "onlyAs": "startingClass",
+          "text": "Choose 2: Arcana, History, Insight, Investigation, Medicine, Nature, or Religion",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407800",
+              "revisionId": "52e00000-0000-4000-8000-000000407800"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407801",
+              "revisionId": "52e00000-0000-4000-8000-000000407801"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407802",
+              "revisionId": "52e00000-0000-4000-8000-000000407802"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407803",
+              "revisionId": "52e00000-0000-4000-8000-000000407803"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407804",
+              "revisionId": "52e00000-0000-4000-8000-000000407804"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407805",
+              "revisionId": "52e00000-0000-4000-8000-000000407805"
+            },
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407806",
+              "revisionId": "52e00000-0000-4000-8000-000000407806"
+            }
+          ]
+        },
+        {
+          "type": "grant",
+          "id": "wizard-weapon-simple",
+          "grant": "proficiency",
+          "target": "weapon.simple",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "wizard-armor-none",
+          "grant": "proficiency",
+          "target": "armor.none",
+          "text": "Armor Training: None"
+        },
+        {
+          "type": "restriction",
+          "id": "wizard-multiclass-int",
+          "field": "ability.int.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To qualify for a new class, you must have a score of at least 13 in the primary ability of the new class and your current classes. Gain the Hit Point Die from the Core Wizard Traits table."
+        },
+        {
+          "type": "grant",
+          "id": "feature-spellcasting",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407001",
+            "revisionId": "52e70000-0000-4000-8000-000000407001"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ritual-adept",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407002",
+            "revisionId": "52e00000-0000-4000-8000-000000407002"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-arcane-recovery",
+          "grant": "content",
+          "level": 1,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407003",
+            "revisionId": "52e00000-0000-4000-8000-000000407003"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-scholar",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407004",
+            "revisionId": "52e00000-0000-4000-8000-000000407004"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-wizard-subclass",
+          "grant": "content",
+          "level": 3,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407005",
+            "revisionId": "52e00000-0000-4000-8000-000000407005"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-ability-score-improvement",
+          "grant": "content",
+          "level": 4,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407006",
+            "revisionId": "52e00000-0000-4000-8000-000000407006"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-memorize-spell",
+          "grant": "content",
+          "level": 5,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407007",
+            "revisionId": "52e00000-0000-4000-8000-000000407007"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-spell-mastery",
+          "grant": "content",
+          "level": 18,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407008",
+            "revisionId": "52e00000-0000-4000-8000-000000407008"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-epic-boon",
+          "grant": "content",
+          "level": 19,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407009",
+            "revisionId": "52e00000-0000-4000-8000-000000407009"
+          }
+        },
+        {
+          "type": "grant",
+          "id": "feature-signature-spells",
+          "grant": "content",
+          "level": 20,
+          "content": {
+            "contentId": "52c00000-0000-4000-8000-000000407010",
+            "revisionId": "52e00000-0000-4000-8000-000000407010"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "wizard-subclass",
+          "choiceId": "wizard-subclass",
+          "count": 1,
+          "level": 3,
+          "text": "Level 3: Wizard subclass. (The SRD 5.2.1 includes the Evoker.)",
+          "options": [
+            {
+              "contentId": "52c00000-0000-4000-8000-000000407500",
+              "revisionId": "52e00000-0000-4000-8000-000000407500"
             }
           ]
         }

@@ -435,7 +435,9 @@ public static class CharacterCalculator
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining);
-        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, policy, warnings);
+        var classes = resolved.Classes.Where(c => c.Level > 0).ToList();
+        var checkTraining = classes.Count > 0 && classes.All(c => RecordsArmorTraining(c.Content.Revision));
+        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -1201,13 +1203,14 @@ public static class CharacterCalculator
 
     /// <remarks>
     /// Content v8 (M2.2): a <c>whileArmored</c> modifier does not apply without body armor. Armor training is checked only
-    /// when the character's content records some (<paramref name="training"/> non-empty); older classes record none. Missing
-    /// training is a warning in both families; an untrained shield's bonus follows
-    /// <see cref="RulesFamilyPolicy.UntrainedShieldGivesArmorClass"/>.
+    /// when <paramref name="checkTraining"/>: every class the character has levels in records its armor training
+    /// (<see cref="RecordsArmorTraining"/>). A class written before v8 records none, so its training is unknown, and
+    /// neither the training warnings nor the untrained-shield rule apply. Missing training is a warning in both families;
+    /// an untrained shield's bonus follows <see cref="RulesFamilyPolicy.UntrainedShieldGivesArmorClass"/>.
     /// </remarks>
     private static WornArmor AddArmor(
-        List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, RulesFamilyPolicy policy,
-        Dictionary<string, List<Diagnostic>> warnings)
+        List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, bool checkTraining,
+        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings)
     {
         var armor = active
             .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
@@ -1238,7 +1241,7 @@ public static class CharacterCalculator
             };
             modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
             var key = effect.Category.ToString().ToLowerInvariant();
-            if (training.Count > 0 && !training.ContainsKey(key))
+            if (checkTraining && !training.ContainsKey(key))
             {
                 warnings[FieldIds.ArmorClass].Add(new(
                     "equipment.armor-untrained",
@@ -1259,7 +1262,7 @@ public static class CharacterCalculator
         {
             var (content, effect) = shields[0];
             var shield = Synthetic(content, effect, ModifierOperation.Bonus, $"{effect.ArmorClass}");
-            if (training.Count > 0 && !training.ContainsKey("shield"))
+            if (checkTraining && !training.ContainsKey("shield"))
             {
                 warnings[FieldIds.ArmorClass].Add(new(
                     "equipment.shield-untrained",
@@ -1397,6 +1400,31 @@ public static class CharacterCalculator
     /// <summary>The keys an armor training grant may name (the <see cref="ArmorCategory"/> values, in lower case).</summary>
     public static IReadOnlyList<string> ArmorTrainingKeys { get; } = [.. Enum.GetValues<ArmorCategory>().Select(c => c.ToString().ToLowerInvariant())];
 
+    /// <summary>
+    /// <c>armor.none</c> (content v8): a class records that it gives no armor training (the SRD Wizard and Sorcerer). It
+    /// grants nothing; it lets the armor training check run for a character with such a class.
+    /// </summary>
+    public const string NoArmorTrainingKey = "none";
+
+    /// <summary>
+    /// Whether a class records its armor training (content v8): an <c>armor.*</c> grant, gated or not, including
+    /// <c>armor.none</c>. Classes written before v8 record none, so the training check cannot tell what they give.
+    /// </summary>
+    private static bool RecordsArmorTraining(ContentRevision revision) =>
+        revision.SchemaVersion >= ContentRevision.CombatDetailsSchemaVersion
+        && revision.Effects.OfType<GrantEffect>().Any(g => g.Grant == GrantKind.Proficiency && g.Target is { } target
+            && target.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal)
+            && (ArmorTrainingKeys.Contains(target[ArmorTrainingPrefix.Length..]) || target[ArmorTrainingPrefix.Length..] == NoArmorTrainingKey));
+
+    /// <summary>
+    /// A content v8 field in a revision that declares an older schema. The validator refuses to publish that, but an
+    /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
+    /// </summary>
+    private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
+
+    private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
+        new("effect.schema-field-ignored", $"'{revision.Name}' effect '{effect.Id}' uses {field}, a content schema v8 field, but the revision declares v{revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
+
     private static Dictionary<string, Proficiency> CollectProficiencies(
         List<ActiveContent> active, Character character, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel,
         Dictionary<string, Proficiency> weapons, Dictionary<string, Proficiency> armor)
@@ -1421,8 +1449,12 @@ public static class CharacterCalculator
                 if (grant.Target is { } armorTarget && armorTarget.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal))
                 {
                     var key = armorTarget[ArmorTrainingPrefix.Length..];
-                    if (!ArmorTrainingKeys.Contains(key))
-                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy or armor.shield; it is ignored.", item.Revision.Reference, grant.Id));
+                    if (IgnoresV8(item.Revision))
+                        diagnostics.Add(V8FieldIgnored(item.Revision, grant, "armor training"));
+                    else if (key == NoArmorTrainingKey)
+                        continue; // a record only (RecordsArmorTraining)
+                    else if (!ArmorTrainingKeys.Contains(key))
+                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy, armor.shield or armor.none; it is ignored.", item.Revision.Reference, grant.Id));
                     else if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
                         armor.TryAdd(key, new(GrantKind.Proficiency, item, grant));
                     continue;

@@ -57,7 +57,12 @@ public class CombatDetailsTests
         new ModifierEffect { Id = "attacks", Operation = ModifierOperation.Set, Target = FieldIds.Attacks, Value = "2" });
 
     private static readonly ContentRevision Skirmisher = Revision(2, ContentKind.Class, "Test Skirmisher",
-        new HitDieEffect { Id = "hit-die", Die = 8 }, Feature("swing", SkirmisherSwing.Reference, 5));
+        new HitDieEffect { Id = "hit-die", Die = 8 }, Training("light"), Feature("swing", SkirmisherSwing.Reference, 5));
+
+    // A class that records no armor training (as every class before content v8), and one that records it has none.
+    private static readonly ContentRevision Drifter = Revision(4, ContentKind.Class, "Test Drifter", new HitDieEffect { Id = "hit-die", Die = 8 });
+
+    private static readonly ContentRevision Scholar = Revision(5, ContentKind.Class, "Test Scholar", new HitDieEffect { Id = "hit-die", Die = 6 }, Training(CharacterCalculator.NoArmorTrainingKey));
 
     private static readonly ContentRevision Hauberk = Revision(31, ContentKind.Item, "Test Heavy Hauberk",
         new ArmorEffect { Id = "armor", Category = ArmorCategory.Heavy, ArmorClass = 16, Strength = 13, StealthDisadvantage = true });
@@ -73,7 +78,7 @@ public class CombatDetailsTests
         var m1 = Fixtures.M1Pack();
         return new(
             [.. Fixtures.Pack().Sources, .. m1.Sources],
-            [.. Fixtures.Pack().Revisions, .. m1.Revisions, Vanguard, ExtraSwing, KeenEdge, KeenerEdge, GuardStyle, Rally, Skirmisher, SkirmisherSwing, Hauberk, Coat, Buckler, .. extra]);
+            [.. Fixtures.Pack().Revisions, .. m1.Revisions, Vanguard, ExtraSwing, KeenEdge, KeenerEdge, GuardStyle, Rally, Skirmisher, SkirmisherSwing, Drifter, Scholar, Hauberk, Coat, Buckler, .. extra]);
     }
 
     // Str 12, Dex 14 (+2), Con 14.
@@ -165,7 +170,7 @@ public class CombatDetailsTests
     }
 
     [Fact]
-    public void Missing_armor_training_warns_only_when_the_character_records_some()
+    public void Missing_armor_training_warns_only_when_every_class_records_its_training()
     {
         // A later-class Vanguard has no heavy armor training (onlyAs startingClass).
         var later = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk)], new ClassLevel(Skirmisher.Reference, 1), new ClassLevel(Vanguard.Reference, 1)));
@@ -174,10 +179,47 @@ public class CombatDetailsTests
         var starting = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk)], new ClassLevel(Vanguard.Reference, 1), new ClassLevel(Skirmisher.Reference, 1)));
         Assert.DoesNotContain(starting.Field(FieldIds.ArmorClass).Warnings, w => w.Code == "equipment.armor-untrained");
 
-        // Content that records no armor training at all (every class before M2.2) is never flagged.
-        var unknown = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk), Worn(Buckler)], new ClassLevel(Skirmisher.Reference, 1)));
+        // A class that records no armor training at all (every class before M2.2) is never flagged.
+        var unknown = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk), Worn(Buckler)], new ClassLevel(Drifter.Reference, 1)));
         Assert.DoesNotContain(unknown.Field(FieldIds.ArmorClass).Warnings, w => w.Code is "equipment.armor-untrained" or "equipment.shield-untrained");
         Assert.Equal(16 + 2, unknown.Field(FieldIds.ArmorClass).Value);
+    }
+
+    [Fact]
+    public void One_class_without_an_armor_record_turns_the_training_check_off()
+    {
+        // The review's case: a Paladin (written before v8) who took a level of Fighter. The Fighter's own training has
+        // no heavy armor as a later class, but the first class's training is unknown, so nothing is flagged.
+        var sheet = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk), Worn(Buckler)], new ClassLevel(Drifter.Reference, 5), new ClassLevel(Vanguard.Reference, 1)));
+        var ac = sheet.Field(FieldIds.ArmorClass);
+
+        Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.armor-untrained" or "equipment.shield-untrained");
+        Assert.Equal(16 + 2 + 1, ac.Value); // hauberk, buckler, Guard Style
+    }
+
+    [Fact]
+    public void A_class_that_records_no_armor_training_keeps_the_check_on()
+    {
+        // armor.none (the SRD Wizard): the class states it gives none, so a later Vanguard's missing heavy training shows.
+        var sheet = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Hauberk)], new ClassLevel(Scholar.Reference, 1), new ClassLevel(Vanguard.Reference, 1)));
+        Assert.Contains(sheet.Field(FieldIds.ArmorClass).Warnings, w => w.Code == "equipment.armor-untrained" && w.Message.Contains("heavy armor", StringComparison.Ordinal));
+
+        var alone = Sheet(Fighter(RulesFamilies.Srd521, [Worn(Coat)], new ClassLevel(Scholar.Reference, 1)));
+        Assert.Contains(alone.Field(FieldIds.ArmorClass).Warnings, w => w.Code == "equipment.armor-untrained" && w.Message.Contains("light armor", StringComparison.Ordinal));
+        Assert.DoesNotContain(alone.Diagnostics, d => d.Code == "effect.unknown-target");
+    }
+
+    [Fact]
+    public void Light_armor_from_a_feat_does_not_turn_the_check_on_for_a_class_without_a_record()
+    {
+        // The review's second case: under 5.2.1 an untrained shield adds nothing, so a feat granting only light armor
+        // must not make a shield-trained class (written before v8) lose its shield.
+        var feat = Revision(41, ContentKind.Feat, "Test Light Armor Feat", Training("light"));
+        var character = Fighter(RulesFamilies.Srd521, [Worn(Coat), Worn(Buckler)], new ClassLevel(Drifter.Reference, 1)) with { Pins = [feat.Reference] };
+        var ac = CharacterCalculator.Calculate(character, Catalog(feat)).Field(FieldIds.ArmorClass);
+
+        Assert.Equal(11 + 2 + 2, ac.Value);
+        Assert.DoesNotContain(ac.Warnings, w => w.Code is "equipment.armor-untrained" or "equipment.shield-untrained");
     }
 
     [Fact]
