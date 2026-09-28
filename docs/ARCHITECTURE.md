@@ -43,7 +43,7 @@ Separate *calculation* from *commands*: `LongRest` examines recovery rules and g
 
 `PDF attached → extract page text/layout (+ OCR fallback) → detect entities → propose fields and effects → review edits → validate → publish revision → opt in on characters`
 
-Store page coordinates when extractable; do not make page navigation depend on successful parsing. If OCR/extraction fails, permit manual entry linked to a page. Suggestions are immutable snapshots until user edits them. Confidence is a UI hint, never permission to publish. Book-wide imports run as cancellable, resumable jobs with size/page limits, progress and an audit log. A later optional local model adapter feeds only the proposal stage.
+Extraction and OCR are decided in [ADR-009](decisions/ADR-009-pdf-extraction-and-ocr.md): PdfPig for text and word boxes, and Windows.Data.Pdf plus Windows.Media.Ocr for pages without a text layer. Both run in a child process (`TomeStack.ImportWorker.exe`) over stdin and stdout, with size, page, time and memory limits. Extracted text stays in the local database and is never exported. Store page coordinates when extractable; do not make page navigation depend on successful parsing. If OCR/extraction fails, permit manual entry linked to a page. Suggestions are immutable snapshots until user edits them. Confidence is a UI hint, never permission to publish. Book-wide imports run as cancellable, resumable jobs with size/page limits, progress and an audit log. A later optional local model adapter feeds only the proposal stage.
 
 ## Persistence, backups and exchange
 
