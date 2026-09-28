@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased (M3)
+## Unreleased (M3 and M4)
 
 ### Added
+
+- **PDF text extraction (M4 D1, ADR-009; `docs/features/pdf-import.md`):** TomeStack can read the text of a PDF page by page, with its layout, and reads pages without a text layer with Windows' built-in OCR. The reading happens in a separate worker process with size, page, time and memory limits, so a damaged or hostile PDF cannot take the app down. Nothing is imported yet: import jobs and candidates follow.
+- **Third-party components:** PdfPig 0.1.16 (Apache-2.0), and the Windows SDK C#/WinRT projection (Microsoft Windows SDK license) for OCR. The self-contained install grows by about 31 MB (`ATTRIBUTION.md`).
 
 - **M3 exit evidence (`docs/features/m3-acceptance.md`):** every M3 item is mapped to its executable acceptance. The exit gate is not met yet, because the owner's Stardust Guardian material and a played session are needed. The version stays 0.3.0.
 

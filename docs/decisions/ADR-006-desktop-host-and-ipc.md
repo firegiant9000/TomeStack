@@ -9,7 +9,7 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 
 ## Decision
 
-- **Shell:** WPF (`net10.0-windows`) with the WebView2 control. The React bundle ships in the app folder. WebView2 serves it from the virtual host `https://app.tomestack.localhost/` (`SetVirtualHostNameToFolderMapping`), so there is no HTTP server.
+- **Shell:** WPF (`net10.0-windows`; `net10.0-windows10.0.19041.0` since M4 D1 for the import worker, ADR-009, with the same output folder) with the WebView2 control. The React bundle ships in the app folder. WebView2 serves it from the virtual host `https://app.tomestack.localhost/` (`SetVirtualHostNameToFolderMapping`), so there is no HTTP server.
 - **Service:** the .NET application service (`TomeStack.AppService`) runs **in-process** in the shell. It is not a separate ASP.NET Core host.
 - **Transport:** the **WebView2 message bridge** (`chrome.webview.postMessage` ↔ `PostWebMessageAsJson`) carries a transport-neutral JSON command protocol (`CommandDispatcher`). The shipped app opens **no listening socket**.
 - **Development:** `TomeStack.DevHost` exposes the same `CommandDispatcher` over `127.0.0.1` with a per-launch random token and an origin allowlist, so the UI can run under Vite with hot reload. It is not shipped.

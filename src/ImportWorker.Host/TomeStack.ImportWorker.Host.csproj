@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ADR-009 (c): the isolated extraction process, TomeStack.ImportWorker.Host.exe. It parses untrusted PDFs, so it runs as a
+       child of the app and talks over stdin/stdout only. The Windows TFM brings Windows.Data.Pdf and Windows.Media.Ocr
+       (ADR-009 (b)) with no extra package. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <!-- Not "TomeStack.ImportWorker": that is the library's assembly, and both land in the same folder. -->
+    <AssemblyName>TomeStack.ImportWorker.Host</AssemblyName>
+    <RootNamespace>TomeStack.ImportWorker.Host</RootNamespace>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ImportWorker\TomeStack.ImportWorker.csproj" />
+  </ItemGroup>
+
+</Project>

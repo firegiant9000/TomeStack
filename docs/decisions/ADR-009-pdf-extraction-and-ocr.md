@@ -37,7 +37,7 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 
 ### (c) Isolation: a child process over stdin/stdout
 
-- Extraction runs in **`TomeStack.ImportWorker.exe`** (`src/ImportWorker.Host`), a separate child process started by the application service. Requests and results are JSON lines on stdin and stdout, not a socket, so ADR-006 holds. The request names a **managed attachment file** (`attachments/<sha256>.pdf`) resolved by the service, never a path from the UI. A linked PDF is used only after its hash check.
+- Extraction runs in **`TomeStack.ImportWorker.Host.exe`** (`src/ImportWorker.Host`), a separate child process started by the application service. Requests and results are JSON lines on stdin and stdout, not a socket, so ADR-006 holds. The request names a **managed attachment file** (`attachments/<sha256>.pdf`) resolved by the service, never a path from the UI. A linked PDF is used only after its hash check.
 - **Limits:**
   - at most 1 GiB (the attachment limit) and **5,000 pages** per document;
   - **60 s per page** without output, and **60 min per run**;
@@ -75,8 +75,29 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 | **(c)** A loopback socket to a worker | Rejected by ADR-006 |
 | **(d)** Text in a backup when the source is the user's own | Needs a new "this is my own work" flag, because user-made sources also wrap bought books, and it risks exporting third-party text through a mislabelled source. The text can be re-extracted from the PDF anyway |
 
-## Evidence
+## License finding (D1, owner decision 2026-09-28: keep Windows OCR and record it)
 
-Recorded as D1 to D6 land (`docs/features/pdf-import.md`, `docs/features/m4-acceptance.md`).
+The projection that (b) needs (`Microsoft.Windows.SDK.NET.dll`, 24.9 MB, and `WinRT.Runtime.dll`, 0.5 MB, both from `Microsoft.Windows.SDK.NET.Ref` 10.0.19041.57) is under the **Microsoft Windows SDK license**, not MIT. So "no new dependency" was only true for code TomeStack writes. The license allows distributing it as Distributable Code, on conditions:
+
+- it ships unmodified inside a program that adds significant functionality;
+- Windows only;
+- the program shows its own copyright notice, and alters none of Microsoft's;
+- no Microsoft trademarks in the program's name;
+- no relicensing of the DLL under an "Excluded License";
+- end users agree to terms at least as protective;
+- the distributor indemnifies Microsoft.
+
+Apache-2.0 covers only TomeStack's own code, so it is compatible as long as the DLLs are never relicensed. This is recorded in `ATTRIBUTION.md` and `NOTICE`. Two items stay open before a public release: confirm the files are on REDIST.TXT, and add the end-user terms.
+
+## Evidence (D1, 2026-09-28, Windows 11 26200)
+
+| Check | Result |
+| --- | --- |
+| Self-contained publish of the shell (`dotnet publish -r win-x64 --self-contained`), before and after the worker | 153,952,423 → 185,387,410 bytes (**+31.4 MB, +20 %**): the projection 25.4 MB, PdfPig about 6 MB, the worker itself under 1 MB |
+| The published worker runs self-contained from the app folder (`TomeStack.ImportWorker.Host.runtimeconfig.json` lists `includedFrameworks`) | Pass: a request on stdin gave `document`, two `page` lines and `done` for the fixture book |
+| `tests/ImportWorker.Tests` (`ExtractionTests`, `WorkerProcessTests`, `OcrTests`) | 24 pass on this machine; the OCR tests skip where Windows has no OCR language |
+| The decompression bomb (512 MB of whitespace in about 0.5 MB of Flate data, with a 64 MB heap cap) | PdfPig does not inflate it at once, so the heap cap never trips. It churns until the **page timeout** stops the child (`worker.page-timeout`), and only that run fails |
+
+Later evidence: `docs/features/pdf-import.md` and `docs/features/m4-acceptance.md`.
 
 Supersedes: none. Extends ADR-004 (the worker's candidates) and ADR-006 (a child process, still no socket).
