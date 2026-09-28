@@ -8,4 +8,12 @@
     <ProjectReference Include="..\RulesCore\TomeStack.RulesCore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TomeStack.ImportWorker.Tests" />
+  </ItemGroup>
+
 </Project>

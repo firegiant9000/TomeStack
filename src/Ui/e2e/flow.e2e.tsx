@@ -1,6 +1,8 @@
 // End-to-end UI flow against the real DevHost (same CommandDispatcher as the shell): create -> sheet -> override
 // -> export -> import. Only the transport differs from the desktop app: HTTP to loopback instead of the WebView2
 // bridge, so export takes the download fallback instead of the native Save dialog.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -89,7 +91,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
 /** Ticks one option of the choice whose legend starts with `legend`. */
 async function pick(user: ReturnType<typeof userEvent.setup>, legend: RegExp, option: RegExp) {
   const group = await screen.findByRole('group', { name: legend });
-  await user.click(within(group).getByRole('checkbox', { name: option }));
+  await user.click(await within(group).findByRole('checkbox', { name: option })); // options load after the choices
 }
 
 it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to 3 with a subclass', async () => {
@@ -227,6 +229,43 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 
+  // Short rest (D01 follow-up): spend a hit die rolled at the table (5 + Con 2 = 7), and Rage regains one use (2024).
+  const hpPanel = () => screen.getByRole('region', { name: /^Hit points:/ });
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 25 of 35' })).toBeTruthy());
+  expect(hpPanel().textContent).toMatch(/Hit dice: d12 3 of 3/);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  rest = await screen.findByRole('region', { name: 'Short rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Short rest' })));
+  expect(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
+  await user.type(within(rest).getByRole('spinbutton', { name: 'd12 rolled at the table' }), '5');
+  await user.click(within(rest).getByRole('button', { name: 'Add d12' }));
+  const spend = await within(rest).findByRole('list', { name: 'Hit dice to spend' });
+  expect(spend.textContent).toMatch(/Rolled 5, Constitution modifier \+2: 7 hit point\(s\)\. Hit points 25 → 32/);
+  await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Short rest finished: 2 changes applied/);
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
+  expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
+  expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
+
+  // Heroic Inspiration (2024) and death saving throws (SPEC C-05): a 20 at the table regains 1 hit point.
+  await user.click(within(hpPanel()).getByRole('checkbox', { name: 'Heroic Inspiration' }));
+  await waitFor(() => expect(within(hpPanel()).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(true));
+  expect(screen.queryByRole('region', { name: /^Death saving throws/ })).toBeNull();
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '40');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  const deathSaves = await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
+  await user.click(within(deathSaves).getByRole('button', { name: 'Add a failure (damage at 0)' }));
+  await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 1 of 3 failures/ });
+  await user.type(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('spinbutton', { name: 'd20 rolled at the table' }), '20');
+  await user.click(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('button', { name: 'Record this roll' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
+  expect(screen.queryByRole('region', { name: /^Death saving throws/ })).toBeNull(); // regaining hit points cleared them
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '34');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ })).toBeTruthy());
@@ -342,14 +381,26 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));
   await user.type(within(modifier).getByRole('textbox', { name: /^Value/ }), '3');
   await publish('Path of the E2E Storm');
-  await user.click(await screen.findByRole('button', { name: 'Review update for E2E Storm' }));
-  const review = await screen.findByRole('region', { name: 'Update E2E Storm: Path of the E2E Storm' });
+  expect(await screen.findByRole('button', { name: 'Review update for E2E Storm' })).toBeTruthy();
+
+  // M3 C7: the sheet offers the new revision too, and nothing changes until the reviewed update is applied.
+  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Storm' });
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy();
+  const updates = await within(sheet).findByRole('region', { name: 'Updates available' });
+  // The setup pins the M1 SRD Barbarian revision, so the newer bundled revision is offered as well.
+  expect(within(updates).getByRole('button', { name: 'Review update: Barbarian' }).closest('li')!.textContent).toMatch(/bundled/);
+  expect(within(updates).getByRole('button', { name: 'Review update: Path of the E2E Storm' }).closest('li')!.textContent).toMatch(/your source/);
+  await user.click(within(updates).getByRole('button', { name: 'Review update: Path of the E2E Storm' }));
+  const review = await within(updates).findByRole('region', { name: 'Update E2E Storm: Path of the E2E Storm' });
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Updated E2E Storm/);
-  await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/), { timeout: 5000 });
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
+  const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
+  await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
+  expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
 });
 
 it('attaches a PDF to a source, offers the cited page on a feature, and removes it after a warning', async () => {
@@ -379,7 +430,18 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(within(book).getByRole('button', { name: 'Attach PDF…' }));
   const pdf = new File([new TextEncoder().encode('%PDF-1.4\n% e2e\n%%EOF\n')], 'e2e-book.pdf', { type: 'application/pdf' });
   await user.upload(screen.getByLabelText('PDF file'), pdf);
-  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy());
+  // The upload hashes and copies the file, then reloads every source: allow more than the 1 s default under load.
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy(), { timeout: 5000 });
+
+  // SPEC I-03: pages 3-4 become a draft reference entry (nothing is extracted; it stays inactive until published).
+  const pages = within(screen.getByRole('listitem', { name: 'E2E Book' })).getByRole('group', { name: 'Import pages of E2E Book as reference' });
+  await user.type(within(pages).getByRole('spinbutton', { name: 'First page' }), '3');
+  await user.type(within(pages).getByRole('spinbutton', { name: 'Last page (optional)' }), '4');
+  await user.type(within(pages).getByRole('textbox', { name: 'Title (optional)' }), 'E2E Chapter');
+  await user.click(within(pages).getByRole('button', { name: 'Import pages' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Draft reference entry "E2E Chapter" created/);
+  const drafts = await client.contentBySource(source.id);
+  expect(drafts.find((e) => e.name === 'E2E Chapter')?.revisions[0]).toMatchObject({ status: 'draft', provenance: { page: { start: 3, end: 4 } } });
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
@@ -391,13 +453,105 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(screen.getByRole('button', { name: 'Sources' }));
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Book' })).getByRole('button', { name: 'Remove PDF…' }));
   const confirm = await screen.findByRole('alertdialog', { name: 'Remove e2e-book.pdf?' });
-  expect(confirm.textContent).toMatch(/1 entry cites pages in it \(E2E Cited Feat\)/);
+  // The draft reference entry cites pages in it too.
+  expect(confirm.textContent).toMatch(/2 entries cite pages in it \(E2E Chapter, E2E Cited Feat\)/);
   await user.click(within(confirm).getByRole('button', { name: 'Remove PDF' }));
   await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText('No PDF attached.')).toBeTruthy());
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
   await screen.findByRole('article', { name: 'E2E Reader' });
   expect(screen.queryByRole('button', { name: 'Open E2E Cited Feat, p. 7' })).toBeNull();
-  expect(screen.getByText('E2E Cited Feat')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Features' })).getByText('E2E Cited Feat')).toBeTruthy();
+});
+
+it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
+  // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Grimoire', ['srd-5.2.1']);
+  // jsdom gives import.meta.url no file scheme; the e2e run starts in src/Ui (npm --prefix).
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Grimoire' })).getByRole('region', { name: 'Read the text of E2E Grimoire' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Grimoire' })).getByRole('button', { name: 'Read the whole document' }));
+  const reviewButton = await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 });
+  // Page 6 has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
+  expect(within(reader()).getByText(/whole document: completed, 6 pages read, (1 by OCR, )?1 without text, 9 candidates\./)).toBeTruthy();
+
+  // SPEC I-03: the read text is searchable within this source.
+  await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Grimoire' }), 'hookblade');
+  await user.click(within(reader()).getByRole('button', { name: 'Search' }));
+  expect((await within(reader()).findByRole('list', { name: 'Search results' })).textContent).toMatch(/p\. 4.*Fixture Hookblade/);
+
+  await user.click(reviewButton);
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Grimoire' });
+  const list = () => within(panel()).getByRole('list', { name: 'Candidates' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Grimoire' });
+  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(9));
+  const kind = within(panel()).getByRole('combobox', { name: 'Kind' });
+  const detail = (name: string) => within(panel()).findByRole('region', { name: `Candidate: ${name}` });
+
+  // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
+  await user.selectOptions(kind, 'spell');
+  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
+  await user.click(within(list()).getByRole('button', { name: 'Fixture Ember Lance' }));
+  const ember = await detail('Fixture Ember Lance');
+  await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
+  expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
+  expect(ember.querySelector('dl[aria-label="What was read"]')!.textContent).toMatch(/level2schoolevocationcastingtimeAction/);
+  await user.click(within(ember).getByRole('button', { name: 'Open page 2' }));
+  expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
+  const acceptEmber = within(ember).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptEmber.disabled).toBe(false));
+  await user.click(acceptEmber);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in the studio/));
+  // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
+  await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Candidates from E2E Grimoire' })));
+
+  // Ignore the other spell.
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));
+  await user.click(within(await detail('Fixture Frost Veil')).getByRole('button', { name: 'Ignore' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ignored Fixture Frost Veil/));
+
+  // An unresolved reference blocks "Accept as a draft"; "Accept as reference" keeps the text and page only.
+  await user.selectOptions(kind, 'feature');
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Stormcall' }));
+  const stormcall = await detail('Fixture Stormcall');
+  expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
+  await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
+  expect(within(stormcall).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' }).disabled).toBe(true);
+  await user.click(within(stormcall).getByRole('button', { name: 'Accept as reference' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
+
+  // The feat: accepted as a draft, then published in the studio, which validates it again.
+  await user.selectOptions(kind, 'feat');
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Keen Watcher' }));
+  const feat = await detail('Fixture Keen Watcher');
+  const acceptFeat = within(feat).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptFeat.disabled).toBe(false));
+  await user.click(acceptFeat);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Keen Watcher is now a draft/));
+
+  // Only drafts exist: nothing is active until it is published.
+  const entries = await client.contentBySource(source.id);
+  expect(entries.map((e) => [e.name, e.latest.status]).sort()).toEqual([
+    ['Fixture Ember Lance', 'draft'],
+    ['Fixture Keen Watcher', 'draft'],
+    ['Fixture Stormcall', 'draft'],
+  ]);
+  expect(entries.find((e) => e.name === 'Fixture Keen Watcher')!.latest.effects.every((e) => e.automation === 'reference')).toBe(true);
+
+  const studio = screen.getByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await user.click(studio);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Grimoire/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit Fixture Keen Watcher' }));
+  const editor = screen.getByRole('region', { name: /^Edit Fixture Keen Watcher/ });
+  await user.click(within(editor).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published Fixture Keen Watcher.'));
+  expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
@@ -528,4 +682,249 @@ it('reaches the primary actions by keyboard alone', async () => {
   await user.keyboard('{Shift>}{Tab}{/Shift}{Enter}');
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
+});
+
+it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions are grouped', async () => {
+  // SPEC C-02, C-04 with the original fixtures "Fixture Duelist" (simple and martial weapons) and "Fixture Needle" (finesse).
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Blade');
+  const scores = screen.getByRole('group', { name: 'Base ability scores' });
+  for (const [label, value] of [['Strength', 14], ['Dexterity', 16]] as const) {
+    const input = within(scores).getByRole('spinbutton', { name: label });
+    await user.clear(input);
+    await user.type(input, String(value));
+  }
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Duelist/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Blade' });
+
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Needle/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Needle/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Needle' }));
+
+  // Dex +3 (finesse beats Str +2) + PB 2 = +5; damage 1d4 + 3.
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  await waitFor(() => expect(within(actions()).getByText(/\+5 to hit, 1d4\+3 piercing/)).toBeTruthy());
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Fixture Needle attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Needle attack: \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Fixture Needle to hit \+5/);
+  const reactions = within(actions()).getByRole('region', { name: 'Reactions' });
+  expect(within(reactions).getByRole('button', { name: 'Roll Riposte damage (1d6)' })).toBeTruthy();
+});
+
+it('switches a toggled effect on and off, spends a chosen amount, and a long rest proposes the toggle off', async () => {
+  // M3 B2 (content v6) with the original fixture feat "Fixture Radiant Stance": a stance (+2 AC, spends 1 radiance) and a
+  // variable-cost surge. PB 2 at level 1, so 2 radiance.
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Stance');
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Duelist/ }));
+  await user.click(screen.getByText(/^Other content \(/)); // the summary, not the legend inside it
+  await user.click(await screen.findByRole('checkbox', { name: /^Fixture Radiant Stance/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Stance' });
+
+  const armorClass = () => Number(/^Armor Class: (\d+)/.exec(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent ?? '')![1]);
+  const before = armorClass();
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  await user.click(within(actions()).getByRole('checkbox', { name: /^Radiant stance/ }));
+  await waitFor(() => expect(armorClass()).toBe(before + 2));
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  expect(within(resources()).getByRole('heading', { name: 'Radiance: 1 of 2' })).toBeTruthy();
+
+  // The surge spends a chosen amount (1 to the cost or what is left): here only 1 is left.
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Radiant surge (1d6)' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await user.type(await within(lastRoll).findByRole('spinbutton', { name: 'Radiance to spend (1 to 1)' }), '1');
+  await user.click(within(lastRoll).getByRole('button', { name: /^Spend 1 Radiance/ }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Radiance: 0 of 2' })).toBeTruthy());
+
+  // The long rest proposes switching it off (and restores radiance).
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  expect(await within(rest).findByRole('checkbox', { name: /^Radiant stance: 1 → 0/ })).toBeTruthy();
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  await waitFor(() => expect(armorClass()).toBe(before));
+  expect(within(actions()).getByRole<HTMLInputElement>('checkbox', { name: /^Radiant stance/ }).checked).toBe(false);
+});
+
+it('records a gap note on a field and a feature, resolves one, and deletes one after confirming', async () => {
+  // M3 B3: session feedback, stored locally and never changing the character.
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Gaps');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Gaps' });
+  const armorClass = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
+
+  const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
+  expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
+  const form = within(gaps()).getByRole('form', { name: 'New gap note' });
+  const about = within(form).getByRole('combobox', { name: /^About/ });
+  const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ });
+
+  await user.selectOptions(about, within(about).getByRole('option', { name: 'Armor Class' }));
+  await user.type(text, 'The table grants a cover bonus here.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Gap note saved for Armor Class.'));
+  expect(within(gaps()).getByText('The table grants a cover bonus here.')).toBeTruthy();
+
+  // M3 C5: "Report a gap" on a feature pre-fills the picker and moves focus to the note's text.
+  const features = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: 'Features' });
+  await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
+  expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
+  expect(document.activeElement).toBe(text);
+  await user.type(text, 'Speed bonus should apply while unarmored only.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 2 open'));
+
+  await user.click(within(gaps()).getByRole('button', { name: 'Mark resolved: Armor Class' }));
+  await waitFor(() => expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 1 open'));
+  expect(within(gaps()).getByRole('button', { name: 'Reopen: Armor Class' })).toBeTruthy();
+
+  // "Report a gap" on a field works the same way (the field's details hold the button).
+  const armor = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: /^Armor Class:/ });
+  await user.click(within(armor).getByRole('heading'));
+  await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
+  expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
+  expect(document.activeElement).toBe(text);
+
+  // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
+  await user.click(screen.getByRole('button', { name: 'Gap notes' }));
+  const all = await screen.findByRole('region', { name: /^Gap notes of all characters/ });
+  const allList = await within(all).findByRole('list', { name: 'Gap notes of all characters' });
+  const mine = () => within(allList).getAllByRole('listitem').filter((li: HTMLElement) => li.textContent!.startsWith('E2E Gaps'));
+  expect(mine().map((li: HTMLElement) => li.textContent)).toEqual([expect.stringContaining('Speed bonus should apply while unarmored only.')]);
+  await user.click(within(all).getByRole('checkbox', { name: 'Show resolved notes' }));
+  await waitFor(() => expect(mine()).toHaveLength(2));
+  await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
+  await screen.findByRole('article', { name: 'E2E Gaps' });
+  // The reopened sheet loads its notes again; wait for them before using them.
+  await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
+
+  // Deleting asks first; "Keep note" leaves it.
+  const quickfootNote = () => within(gaps()).getByText('Speed bonus should apply while unarmored only.').closest('li')!;
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete…' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Keep note' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete…' }));
+  await user.click(within(quickfootNote()).getByRole('button', { name: 'Delete note' }));
+  await waitFor(() => expect(within(gaps()).queryByText('Speed bonus should apply while unarmored only.')).toBeNull());
+  expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 0 open');
+
+  // Notes never change the character's sheet.
+  expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClass);
+});
+
+it('prints a sheet with its license notices, and gap notes only when ticked', async () => {
+  // M3 C4: the printable backup. The print dialog is the browser's; here window.print is a spy.
+  const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Print');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Print' });
+
+  const gaps = within(sheet).getByRole('region', { name: /^Gap notes/ });
+  const form = within(gaps).getByRole('form', { name: 'New gap note' });
+  await user.selectOptions(within(form).getByRole('combobox', { name: /^About/ }), 'Armor Class');
+  await user.type(within(form).getByRole('textbox', { name: /^What was missing or wrong/ }), 'Private note for the print test.');
+  await user.click(within(form).getByRole('button', { name: 'Save note' }));
+  await within(gaps).findByText('Private note for the print test.');
+
+  await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
+  const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
+  expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
+  expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
+  expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
+  // The license notices of the sources used (the fixture sources here), and the version it was printed from.
+  await waitFor(() => expect(preview.querySelectorAll('.print-notice').length).toBeGreaterThan(0));
+  await waitFor(() => expect(preview.textContent).toMatch(/Printed from TomeStack \d+\.\d+\.\d+/));
+  // Gap notes are private: left out until ticked. No path ever appears.
+  expect(preview.textContent).not.toContain('Private note for the print test.');
+  expect(preview.textContent).not.toMatch(/[A-Za-z]:\\|\/Users\/|\\Users\\/);
+  await user.click(within(preview).getByRole('checkbox', { name: /^Include gap notes/ }));
+  expect(await within(preview).findByText(/Private note for the print test\./)).toBeTruthy();
+
+  await user.click(within(preview).getByRole('button', { name: 'Print…' }));
+  expect(print).toHaveBeenCalledTimes(1);
+  await user.click(within(preview).getByRole('button', { name: 'Close print preview' }));
+  expect(within(sheet).queryByRole('region', { name: 'Print preview' })).toBeNull();
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' }));
+  print.mockRestore();
+});
+
+it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {
+  // D04 (M2 spellcasting) with the original fixture caster "Fixture Arcanist" (invented tables: 2 level 1 slots at level 1).
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Sage');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  const intelligence = within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Intelligence' });
+  await user.clear(intelligence);
+  await user.type(intelligence, '16');
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Arcanist/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+
+  // Int 16 (+3) at level 1: 3 cantrips, max(1, 3 + 1) = 4 prepared. Only spells on the caster's list and castable levels.
+  let picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(0 of 3 cantrips, 0 of 4 prepared spells\)/ });
+  expect(within(picker).queryByRole('checkbox', { name: /Fixture Mending Word/ })).toBeNull(); // another list
+  expect(within(picker).queryByRole('checkbox', { name: /Fixture Ember Wave/ })).toBeNull(); // level 3: no slot yet
+  await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ }));
+  picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips/ });
+  await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Frost Ring/ }));
+  await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips, 1 of 4 prepared spells\)/ });
+  await user.click(screen.getByRole('button', { name: 'Create and save' }));
+
+  const sheet = await screen.findByRole('article', { name: 'E2E Sage' });
+  const spells = () => within(screen.getByRole('article', { name: 'E2E Sage' })).getByRole('region', { name: 'Spells and slots' });
+  expect(within(spells()).getByRole('heading', { name: 'Fixture Arcanist (level 1, Intelligence): spell attack +5, save DC 13' })).toBeTruthy();
+  expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy();
+  expect(within(sheet).getByRole('heading', { name: /^Spell attack bonus: \+5/ })).toBeTruthy();
+
+  // Casting spends a slot (a confirmed play change); rolling a spell spends nothing.
+  await user.click(within(spells()).getByRole('button', { name: 'Cast Fixture Frost Ring (spend a slot)' }));
+  await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy());
+  await user.click(within(spells()).getByRole('button', { name: 'Roll Fixture Spark attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Spark \(spell attack\): \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Fixture Arcanist spell attack \+5/);
+  expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy();
+
+  // The long rest proposes the slot back.
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  expect(await within(rest).findByRole('checkbox', { name: /^Level 1 spell slots: 1 → 2/ })).toBeTruthy();
+  await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
+  await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy());
 });

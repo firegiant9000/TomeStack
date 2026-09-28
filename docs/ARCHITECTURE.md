@@ -32,7 +32,7 @@ IDs are stable UUIDs; display names are never identity. A revision is immutable 
 
 1. Resolve character selections and pinned content revisions within the selected rules family.
 2. Validate prerequisites, choices, dependency cycles and compatibility; allow a recorded cross-edition exception where meaningful.
-3. Compile supported declarative effects into a dependency graph: grant, choice, bonus/set/replace, resource, action, spellcasting, restriction, recovery, roll. Distinguish stacking rules and effect timing explicitly. The typed effect union, stacking order, timing and formula grammar are defined in [ADR-003](decisions/ADR-003-declarative-effect-ast.md); action and spellcasting effects are not modeled yet.
+3. Compile supported declarative effects into a dependency graph: grant, choice, bonus/set/replace, resource, action, spellcasting, restriction, recovery, roll. Distinguish stacking rules and effect timing explicitly. The typed effect union, stacking order, timing and formula grammar are defined in [ADR-003](decisions/ADR-003-declarative-effect-ast.md); spellcasting is modeled since content schema v5 (`features/spellcasting.md`); action effects are not modeled yet.
 4. Evaluate formulas with a typed, bounded expression AST, e.g. `PB + CON.MOD` and `floor(CLASS_LEVEL / 2)`. No `eval`, scripting, file access, network access or recursion from user content. Dice expressions evaluate only on a requested roll.
 5. Return `{ value, units, trace[], warnings[], automationStatus }` for each field. Trace entries include effect ID, revision ID, source/page, operation, inputs and resulting value.
 6. Apply a labeled user override as the final display layer; preserve the computed value and its trace. A malformed feature is disabled with a diagnostic scoped to that feature.
@@ -43,13 +43,13 @@ Separate *calculation* from *commands*: `LongRest` examines recovery rules and g
 
 `PDF attached → extract page text/layout (+ OCR fallback) → detect entities → propose fields and effects → review edits → validate → publish revision → opt in on characters`
 
-Store page coordinates when extractable; do not make page navigation depend on successful parsing. If OCR/extraction fails, permit manual entry linked to a page. Suggestions are immutable snapshots until user edits them. Confidence is a UI hint, never permission to publish. Book-wide imports run as cancellable, resumable jobs with size/page limits, progress and an audit log. A later optional local model adapter feeds only the proposal stage.
+Extraction and OCR are decided in [ADR-009](decisions/ADR-009-pdf-extraction-and-ocr.md): PdfPig for text and word boxes, and Windows.Data.Pdf plus Windows.Media.Ocr for pages without a text layer. Both run in a child process (`TomeStack.ImportWorker.Host.exe`) over stdin and stdout, with size, page, time and memory limits. Extracted text stays in the local database and is never exported. Store page coordinates when extractable; do not make page navigation depend on successful parsing. If OCR/extraction fails, permit manual entry linked to a page. Suggestions are immutable snapshots until user edits them. Confidence is a UI hint, never permission to publish. Book-wide imports run as cancellable, resumable jobs with size/page limits, progress and an audit log. A later optional local model adapter feeds only the proposal stage.
 
 ## Persistence, backups and exchange
 
 - SQLite transactions cover creation, leveling, rest, revision publication and import commits. Migrations are numbered and backed up before upgrading a user database.
 - Keep PDFs/files outside the database, referenced through managed IDs and content hashes; prohibit archive path traversal. Allow choosing a data directory before large imports.
-- Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
+- Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, `gaps/` (backups only), optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
 - Export is deterministic enough for human inspection and useful diffs. Document compatibility and round-trip unknown extension fields.
 - Backups are local, discoverable and restorable on a clean installation; do not confuse an export with a complete backup when PDF attachments were omitted.
 

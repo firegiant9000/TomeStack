@@ -36,8 +36,17 @@ public sealed partial class TomeStackApp : IDisposable
 
     internal SqliteStore Store => _store;
 
-    /// <summary>The bundled SRD packs (M1 item 1): always seeded. They are insert-only, so re-seeding is a no-op.</summary>
-    public static IReadOnlyList<string> BundledPacks { get; } = ["TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json"];
+    /// <summary>
+    /// The bundled SRD packs (M1 item 1; spells, weapons and the caster classes since M2): always seeded. They are insert-only, so re-seeding is a no-op.
+    /// Each family's packs share one source record (docs/licensing/srd-pack-review.md).
+    /// </summary>
+    public static IReadOnlyList<string> BundledPacks { get; } =
+    [
+        "TomeStack.Content.srd-5.1.json", "TomeStack.Content.srd-5.2.1.json",
+        "TomeStack.Content.srd-5.1-spells.json", "TomeStack.Content.srd-5.2.1-spells.json",
+        "TomeStack.Content.srd-5.1-equipment.json", "TomeStack.Content.srd-5.2.1-equipment.json",
+        "TomeStack.Content.srd-5.1-classes.json", "TomeStack.Content.srd-5.2.1-classes.json",
+    ];
 
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
@@ -45,17 +54,22 @@ public sealed partial class TomeStackApp : IDisposable
     /// shipped app has real SRD content, so fixtures stay out of user data (owner decision, 2026-09-26). Data folders
     /// that already contain fixture content keep it (published revisions are never deleted).
     /// </param>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false)
+    /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null)
     {
         Directory.CreateDirectory(dataDirectory);
         var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]);
+        var app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor };
+        app.InterruptLeftoverImports();
         foreach (var pack in BundledPacks)
             app.Seed(pack);
         if (devFixtures)
         {
             app.Seed("TomeStack.FixturePack.json");
             app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
+            app.Seed("TomeStack.FixturePackM2Spells.json"); // original test casters and spells (M2 spellcasting)
+            app.Seed("TomeStack.FixturePackM2Combat.json"); // original test weapons and a multiclass class (M2)
+            app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
         }
         AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
         return app;
@@ -86,21 +100,41 @@ public sealed partial class TomeStackApp : IDisposable
         if (campaignId is { } id)
             allowed = (_store.FindCampaign(id) ?? throw new AppValidationException([new("campaign.not-found", $"Campaign {id} does not exist.")])).AllowedSources.ToHashSet();
         var sources = _store.ListSources().ToDictionary(s => s.Id);
+        var published = _store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).ToList();
+        // SPEC I-06: the newest published revision of each content is what new picks get; older ones stay listed (saved
+        // characters still pin them and show their names) but are marked, so pickers offer only the newest.
+        var newest = published.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().RevisionId);
+        // Content that another revision grants or offers in a choice (class features, skill options) arrives through it;
+        // pickers for directly pinned content leave it out.
+        var reachable = published
+            .SelectMany(r => r.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
+                .Concat(r.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options.Select(o => o.ContentId))))
+            .ToHashSet();
         return
         [
-            .. _store.ListRevisions()
-                .Where(r => r.Status == RevisionStatus.Published)
+            .. published
                 .Select(r =>
                 {
                     var source = sources.GetValueOrDefault(r.Provenance.SourceId);
                     return new ContentOption(
                         r.Reference, r.Kind, r.Name, r.RulesFamilies, r.RulesFamilies.Contains(rulesFamily),
-                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary,
-                        allowed?.Contains(r.Provenance.SourceId));
+                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), Preview(r.Summary),
+                        allowed?.Contains(r.Provenance.SourceId),
+                        r.Effects.OfType<SpellEffect>().FirstOrDefault() is { } spell
+                            ? new SpellSummary(spell.Level, spell.Lists, spell.School, spell.Concentration, spell.Ritual)
+                            : null,
+                        Superseded: newest[r.ContentId] != r.RevisionId,
+                        Standalone: !reachable.Contains(r.ContentId));
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
     }
+
+    /// <summary>A listing needs only the start of a summary; full feature texts would make every list call megabytes.</summary>
+    private const int SummaryPreviewLength = 200;
+
+    private static string? Preview(string? summary) =>
+        summary is { Length: > SummaryPreviewLength } ? summary[..SummaryPreviewLength].TrimEnd() + "…" : summary;
 
     /// <summary>
     /// M1 item 3: schema, reference, formula and cycle problems for one revision, before it is published. Validates a
@@ -136,6 +170,7 @@ public sealed partial class TomeStackApp : IDisposable
             Choices = request.Choices ?? [],
             CampaignId = request.CampaignId,
             CampaignExceptions = request.CampaignExceptions ?? [],
+            Spells = request.Spells ?? [],
         });
     }
 
@@ -225,7 +260,11 @@ public sealed partial class TomeStackApp : IDisposable
     public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
         _packages.Apply(package, sourceChoices);
 
-    public void Dispose() => _store.Dispose();
+    public void Dispose()
+    {
+        StopImportsForDispose(); // a running import becomes "interrupted" and resumes after the next start
+        _store.Dispose();
+    }
 
     private CharacterView View(Character character)
     {
@@ -269,7 +308,13 @@ public sealed record ContentOption(
     string SourceTitle,
     string? Page,
     string? Summary,
-    bool? AllowedInCampaign = null);
+    bool? AllowedInCampaign = null,
+    SpellSummary? Spell = null,
+    bool Superseded = false,
+    bool Standalone = true);
+
+/// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
+public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
@@ -288,7 +333,8 @@ public sealed record CreateCharacterRequest(
     IReadOnlyList<ClassLevel>? Classes = null,
     IReadOnlyList<ChoiceSelection>? Choices = null,
     Guid? CampaignId = null,
-    IReadOnlyList<CampaignException>? CampaignExceptions = null);
+    IReadOnlyList<CampaignException>? CampaignExceptions = null,
+    IReadOnlyList<KnownSpell>? Spells = null);
 
 /// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
 public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);

@@ -320,7 +320,8 @@ function EntryEditor(props: {
     client
       .listContent(family)
       .then(async (options: ContentOption[]) => {
-        const classes = options.filter((o) => o.kind === 'class' && o.compatible);
+        // One entry per class content: older revisions are listed too (superseded), and would repeat every choice.
+        const classes = options.filter((o) => o.kind === 'class' && o.compatible && !o.superseded);
         const found: ClassChoice[] = [];
         for (const c of classes) {
           const revisions = await client.contentRevisions(c.reference.contentId);

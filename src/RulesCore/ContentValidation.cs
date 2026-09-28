@@ -52,6 +52,8 @@ public static class ContentValidator
             Error("validate.resource-id-duplicate", $"Resource id '{group.Key}' is used more than once.", group.First().Id);
 
         var needsV3 = false;
+        var needsV5 = false;
+        var needsV6 = false;
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -66,6 +68,21 @@ public static class ContentValidator
                     if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                         Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
                     CheckFormula(modifier.Value, modifier.Id, "value");
+                    if (modifier.Toggle is { } toggle)
+                    {
+                        needsV6 = true;
+                        if (modifier.Timing != EffectTiming.WhileActive)
+                            Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
+                        if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                    }
+                    break;
+                case ToggleEffect toggleEffect:
+                    needsV6 = true;
+                    if (string.IsNullOrWhiteSpace(toggleEffect.ToggleId) || string.IsNullOrWhiteSpace(toggleEffect.Label))
+                        Error("validate.toggle-incomplete", $"Toggle '{toggleEffect.Id}' needs a toggleId and a label.", toggleEffect.Id);
+                    if (toggleEffect.ResourceId is { } spends && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
+                        Error("validate.toggle-resource", $"Toggle '{toggleEffect.Id}' spends '{spends}', which this revision does not define.", toggleEffect.Id);
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -77,10 +94,17 @@ public static class ContentValidator
                         else
                             CheckReference(granted, grant.Id, "granted content");
                     }
+                    else if (grant.Target is { } weaponTarget && weaponTarget.StartsWith(CharacterCalculator.WeaponProficiencyPrefix, StringComparison.Ordinal))
+                    {
+                        needsV5 = true;
+                        if (weaponTarget.Length == CharacterCalculator.WeaponProficiencyPrefix.Length || grant.Grant != GrantKind.Proficiency)
+                            Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in weapon.simple, weapon.martial or weapon.<key>.", grant.Id);
+                    }
                     else if (grant.Target is not { } target || !CharacterCalculator.IsField(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                     {
-                        Error("validate.unknown-target", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{grant.Target}', which is not a saving throw or skill.", grant.Id);
+                        Error("validate.unknown-target", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{grant.Target}', which is not a saving throw, skill or weapon.", grant.Id);
                     }
+                    needsV5 |= grant.OnlyAs is not null;
                     break;
                 case ChoiceEffect choice:
                     needsV3 |= choice.Level is not null;
@@ -95,9 +119,13 @@ public static class ContentValidator
                         Error("validate.choice-count", $"Choice '{choice.ChoiceId}' asks for {choice.Count} of {choice.Options.Distinct().Count()} option(s).", choice.Id);
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");
+                    needsV5 |= choice.OnlyAs is not null;
                     break;
                 case RestrictionEffect restriction:
                     needsV3 |= restriction.Field is FieldIds.ArmorClass or FieldIds.HitPoints;
+                    needsV5 |= restriction.Multiclass is not null || restriction.Group is not null;
+                    if (restriction.Multiclass == true && revision.Kind != ContentKind.Class)
+                        Warn("validate.multiclass-kind", $"A multiclass prerequisite belongs on a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", restriction.Id);
                     if (!CharacterCalculator.IsField(restriction.Field))
                         Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field.", restriction.Id);
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
@@ -117,6 +145,33 @@ public static class ContentValidator
                 case RollEffect roll:
                     if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
                         Error("validate.dice-invalid", $"Roll '{roll.Id}' dice '{roll.Dice}': {diceError!.Message} ({diceError.Code})", roll.Id);
+                    needsV5 |= roll.Activation is not null;
+                    needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
+                    if (roll.Cost is { } cost)
+                        CheckFormula(cost, roll.Id, "cost");
+                    if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
+                        Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
+                    if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
+                    {
+                        var definer = local.Values.Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
+                        if (definer is null)
+                            Warn("validate.roll-resource-content-missing", $"Roll '{roll.Id}' spends '{shared}' of content {holder}, which is not installed.", roll.Id);
+                        else if (!definer.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared))
+                            Error("validate.roll-resource-content", $"Roll '{roll.Id}': '{definer.Name}' defines no resource '{shared}'.", roll.Id);
+                    }
+                    break;
+                case WeaponEffect weapon:
+                    foreach (var (weaponDice, what) in new[] { (weapon.Damage, "damage"), (weapon.Versatile, "versatile damage") })
+                    {
+                        if (weaponDice is not null && !DiceExpression.TryParse(weaponDice, out _, out var weaponDiceError))
+                            Error("validate.dice-invalid", $"Weapon '{weapon.Id}' {what} '{weaponDice}': {weaponDiceError!.Message} ({weaponDiceError.Code})", weapon.Id);
+                    }
+                    if (string.IsNullOrWhiteSpace(weapon.WeaponKey) || string.IsNullOrWhiteSpace(weapon.DamageType))
+                        Error("validate.weapon-incomplete", $"Weapon '{weapon.Id}' needs a weaponKey and a damageType.", weapon.Id);
+                    if (weapon.Has("versatile") != (weapon.Versatile is not null))
+                        Warn("validate.weapon-versatile", $"Weapon '{weapon.Id}': the versatile property and versatile damage go together.", weapon.Id);
+                    if (revision.Kind != ContentKind.Item)
+                        Warn("validate.weapon-kind", $"A weapon gives an attack only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", weapon.Id);
                     break;
                 case HitDieEffect hitDie:
                     needsV3 = true;
@@ -133,8 +188,42 @@ public static class ContentValidator
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.armor-kind", $"Armor counts only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it applies only if pinned.", armor.Id);
                     break;
+                case SpellcastingEffect spellcasting:
+                    if (CharacterCalculator.SpellcastingProblem(spellcasting) is { } problem)
+                        Error("validate.spellcasting", $"Spellcasting '{spellcasting.Id}': {problem}.", spellcasting.Id);
+                    if (spellcasting.SpellsFormula is { } spellsFormula)
+                        CheckFormula(spellsFormula, spellcasting.Id, "spellsFormula");
+                    if (spellcasting.MulticlassCaster is not null && spellcasting.SlotKind == SpellSlotKind.PactMagic)
+                        Error("validate.spellcasting-multiclass-pact", $"Spellcasting '{spellcasting.Id}': Pact Magic slots are never combined with other casters' slots, so it takes no multiclassCaster.", spellcasting.Id);
+                    if (revision.Kind is not (ContentKind.Class or ContentKind.Subclass or ContentKind.Feature))
+                        Warn("validate.spellcasting-kind", $"Spellcasting is calculated only inside a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spellcasting.Id);
+                    break;
+                case SpellEffect spell:
+                    if (spell.Level is < 0 or > SpellcastingEffect.MaxSpellLevel)
+                        Error("validate.spell-level", $"Spell '{spell.Id}' level {spell.Level} must be 0 (cantrip) to {SpellcastingEffect.MaxSpellLevel}.", spell.Id);
+                    if (spell.Lists.Count == 0 || spell.Lists.Any(string.IsNullOrWhiteSpace))
+                        Warn("validate.spell-lists", $"Spell '{spell.Id}' is on no spell list; casters can record it only by hand.", spell.Id);
+                    if (spell.Dice is { } dice && !DiceExpression.TryParse(dice, out _, out var spellDiceError))
+                        Error("validate.dice-invalid", $"Spell '{spell.Id}' dice '{dice}': {spellDiceError!.Message} ({spellDiceError.Code})", spell.Id);
+                    if (revision.Kind != ContentKind.Spell)
+                        Warn("validate.spell-kind", $"Spell data is used only on spell content; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spell.Id);
+                    break;
             }
         }
+        if (revision.Effects.OfType<SpellcastingEffect>().Count() > 1)
+            Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
+        if (revision.Effects.OfType<SpellEffect>().Count() > 1)
+            Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
+        if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
+            Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
+        if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
+            Error("validate.requires-v5", $"This revision has spellcasting, spell or weapon data (content schema v5) but declares v{revision.SchemaVersion}; in an older revision they are reference only.");
+        if (needsV6 && revision.SchemaVersion < ToggleEffect.SchemaVersion)
+            Error("validate.requires-v6", $"This revision uses content schema v6 features (toggles, toggled modifiers, shared resources, roll costs) but declares v{revision.SchemaVersion}; an older build would ignore them.");
+        if (revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) && revision.SchemaVersion < SpellcastingEffect.MulticlassSchemaVersion)
+            Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
+        if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
+            Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
             Error("validate.armor-duplicate", "An item is at most one armor and one shield.");
         if (revision.Effects.OfType<HitDieEffect>().Count() > 1)

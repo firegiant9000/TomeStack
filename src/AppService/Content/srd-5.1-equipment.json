@@ -1,0 +1,1222 @@
+{
+  "packId": "srd-5.1-equipment",
+  "formatVersion": 1,
+  "notice": "The weapon table of the System Reference Document 5.1 (CC-BY-4.0), p. 66. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200001",
+      "revisionId": "51e00000-0000-4000-8000-000000200001",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Club",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d4 bludgeoning. Properties: Light. Weight: 2 lb.. Cost: 1 sp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d4",
+          "damageType": "bludgeoning",
+          "properties": [
+            "light"
+          ],
+          "weaponKey": "club"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200002",
+      "revisionId": "51e00000-0000-4000-8000-000000200002",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Dagger",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d4 piercing. Properties: Finesse, light, thrown (range 20/60). Weight: 1 lb.. Cost: 2 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d4",
+          "damageType": "piercing",
+          "properties": [
+            "finesse",
+            "light",
+            "thrown"
+          ],
+          "weaponKey": "dagger",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200003",
+      "revisionId": "51e00000-0000-4000-8000-000000200003",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Greatclub",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d8 bludgeoning. Properties: Two-handed. Weight: 10 lb.. Cost: 2 sp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "bludgeoning",
+          "properties": [
+            "two-handed"
+          ],
+          "weaponKey": "greatclub"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200004",
+      "revisionId": "51e00000-0000-4000-8000-000000200004",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Handaxe",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d6 slashing. Properties: Light, thrown (range 20/60). Weight: 2 lb.. Cost: 5 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "slashing",
+          "properties": [
+            "light",
+            "thrown"
+          ],
+          "weaponKey": "handaxe",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200005",
+      "revisionId": "51e00000-0000-4000-8000-000000200005",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Javelin",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d6 piercing. Properties: Thrown (range 30/120). Weight: 2 lb.. Cost: 5 sp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "thrown"
+          ],
+          "weaponKey": "javelin",
+          "range": "30/120"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200006",
+      "revisionId": "51e00000-0000-4000-8000-000000200006",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Light hammer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d4 bludgeoning. Properties: Light, thrown (range 20/60). Weight: 2 lb.. Cost: 2 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d4",
+          "damageType": "bludgeoning",
+          "properties": [
+            "light",
+            "thrown"
+          ],
+          "weaponKey": "light-hammer",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200007",
+      "revisionId": "51e00000-0000-4000-8000-000000200007",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Mace",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d6 bludgeoning. Properties: —. Weight: 4 lb.. Cost: 5 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "bludgeoning",
+          "properties": [],
+          "weaponKey": "mace"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200008",
+      "revisionId": "51e00000-0000-4000-8000-000000200008",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Quarterstaff",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d6 bludgeoning. Properties: Versatile (1d8). Weight: 4 lb.. Cost: 2 sp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "bludgeoning",
+          "properties": [
+            "versatile"
+          ],
+          "weaponKey": "quarterstaff",
+          "versatile": "1d8"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200009",
+      "revisionId": "51e00000-0000-4000-8000-000000200009",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Sickle",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d4 slashing. Properties: Light. Weight: 2 lb.. Cost: 1 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d4",
+          "damageType": "slashing",
+          "properties": [
+            "light"
+          ],
+          "weaponKey": "sickle"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200010",
+      "revisionId": "51e00000-0000-4000-8000-000000200010",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Spear",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple melee weapon. Damage: 1d6 piercing. Properties: Thrown (range 20/60), versatile (1d8). Weight: 3 lb.. Cost: 1 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "thrown",
+            "versatile"
+          ],
+          "weaponKey": "spear",
+          "versatile": "1d8",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200011",
+      "revisionId": "51e00000-0000-4000-8000-000000200011",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Crossbow, light",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple ranged weapon. Damage: 1d8 piercing. Properties: Ammunition (range 80/320), loading, two-handed. Weight: 5 lb.. Cost: 25 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "ranged",
+          "damage": "1d8",
+          "damageType": "piercing",
+          "properties": [
+            "ammunition",
+            "loading",
+            "two-handed"
+          ],
+          "weaponKey": "light-crossbow",
+          "range": "80/320"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200012",
+      "revisionId": "51e00000-0000-4000-8000-000000200012",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Dart",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple ranged weapon. Damage: 1d4 piercing. Properties: Finesse, thrown (range 20/60). Weight: 1/4 lb.. Cost: 5 cp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "ranged",
+          "damage": "1d4",
+          "damageType": "piercing",
+          "properties": [
+            "finesse",
+            "thrown"
+          ],
+          "weaponKey": "dart",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200013",
+      "revisionId": "51e00000-0000-4000-8000-000000200013",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Shortbow",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple ranged weapon. Damage: 1d6 piercing. Properties: Ammunition (range 80/320), two-handed. Weight: 2 lb.. Cost: 25 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "ranged",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "ammunition",
+            "two-handed"
+          ],
+          "weaponKey": "shortbow",
+          "range": "80/320"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200014",
+      "revisionId": "51e00000-0000-4000-8000-000000200014",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Sling",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Simple ranged weapon. Damage: 1d4 bludgeoning. Properties: Ammunition (range 30/120). Weight: —. Cost: 1 sp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "simple",
+          "attack": "ranged",
+          "damage": "1d4",
+          "damageType": "bludgeoning",
+          "properties": [
+            "ammunition"
+          ],
+          "weaponKey": "sling",
+          "range": "30/120"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200015",
+      "revisionId": "51e00000-0000-4000-8000-000000200015",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Battleaxe",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 slashing. Properties: Versatile (1d10). Weight: 4 lb.. Cost: 10 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "slashing",
+          "properties": [
+            "versatile"
+          ],
+          "weaponKey": "battleaxe",
+          "versatile": "1d10"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200016",
+      "revisionId": "51e00000-0000-4000-8000-000000200016",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Flail",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 bludgeoning. Properties: —. Weight: 2 lb.. Cost: 10 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "bludgeoning",
+          "properties": [],
+          "weaponKey": "flail"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200017",
+      "revisionId": "51e00000-0000-4000-8000-000000200017",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Glaive",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d10 slashing. Properties: Heavy, reach, two-handed. Weight: 6 lb.. Cost: 20 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d10",
+          "damageType": "slashing",
+          "properties": [
+            "heavy",
+            "reach",
+            "two-handed"
+          ],
+          "weaponKey": "glaive"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200018",
+      "revisionId": "51e00000-0000-4000-8000-000000200018",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Greataxe",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d12 slashing. Properties: Heavy, two-handed. Weight: 7 lb.. Cost: 30 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d12",
+          "damageType": "slashing",
+          "properties": [
+            "heavy",
+            "two-handed"
+          ],
+          "weaponKey": "greataxe"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200019",
+      "revisionId": "51e00000-0000-4000-8000-000000200019",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Greatsword",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 2d6 slashing. Properties: Heavy, two-handed. Weight: 6 lb.. Cost: 50 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "2d6",
+          "damageType": "slashing",
+          "properties": [
+            "heavy",
+            "two-handed"
+          ],
+          "weaponKey": "greatsword"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200020",
+      "revisionId": "51e00000-0000-4000-8000-000000200020",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Halberd",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d10 slashing. Properties: Heavy, reach, two-handed. Weight: 6 lb.. Cost: 20 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d10",
+          "damageType": "slashing",
+          "properties": [
+            "heavy",
+            "reach",
+            "two-handed"
+          ],
+          "weaponKey": "halberd"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200021",
+      "revisionId": "51e00000-0000-4000-8000-000000200021",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Lance",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d12 piercing. Properties: Reach, special. Weight: 6 lb.. Cost: 10 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d12",
+          "damageType": "piercing",
+          "properties": [
+            "reach",
+            "special"
+          ],
+          "weaponKey": "lance"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200022",
+      "revisionId": "51e00000-0000-4000-8000-000000200022",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Longsword",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 slashing. Properties: Versatile (1d10). Weight: 3 lb.. Cost: 15 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "slashing",
+          "properties": [
+            "versatile"
+          ],
+          "weaponKey": "longsword",
+          "versatile": "1d10"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200023",
+      "revisionId": "51e00000-0000-4000-8000-000000200023",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Maul",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 2d6 bludgeoning. Properties: Heavy, two-handed. Weight: 10 lb.. Cost: 10 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "2d6",
+          "damageType": "bludgeoning",
+          "properties": [
+            "heavy",
+            "two-handed"
+          ],
+          "weaponKey": "maul"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200024",
+      "revisionId": "51e00000-0000-4000-8000-000000200024",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Morningstar",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 piercing. Properties: —. Weight: 4 lb.. Cost: 15 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "piercing",
+          "properties": [],
+          "weaponKey": "morningstar"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200025",
+      "revisionId": "51e00000-0000-4000-8000-000000200025",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Pike",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d10 piercing. Properties: Heavy, reach, two-handed. Weight: 18 lb.. Cost: 5 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d10",
+          "damageType": "piercing",
+          "properties": [
+            "heavy",
+            "reach",
+            "two-handed"
+          ],
+          "weaponKey": "pike"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200026",
+      "revisionId": "51e00000-0000-4000-8000-000000200026",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Rapier",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 piercing. Properties: Finesse. Weight: 2 lb.. Cost: 25 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "piercing",
+          "properties": [
+            "finesse"
+          ],
+          "weaponKey": "rapier"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200027",
+      "revisionId": "51e00000-0000-4000-8000-000000200027",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Scimitar",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d6 slashing. Properties: Finesse, light. Weight: 3 lb.. Cost: 25 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "slashing",
+          "properties": [
+            "finesse",
+            "light"
+          ],
+          "weaponKey": "scimitar"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200028",
+      "revisionId": "51e00000-0000-4000-8000-000000200028",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Shortsword",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d6 piercing. Properties: Finesse, light. Weight: 2 lb.. Cost: 10 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "finesse",
+            "light"
+          ],
+          "weaponKey": "shortsword"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200029",
+      "revisionId": "51e00000-0000-4000-8000-000000200029",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Trident",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d6 piercing. Properties: Thrown (range 20/60), versatile (1d8). Weight: 4 lb.. Cost: 5 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "thrown",
+            "versatile"
+          ],
+          "weaponKey": "trident",
+          "versatile": "1d8",
+          "range": "20/60"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200030",
+      "revisionId": "51e00000-0000-4000-8000-000000200030",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "War pick",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 piercing. Properties: —. Weight: 2 lb.. Cost: 5 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "piercing",
+          "properties": [],
+          "weaponKey": "war-pick"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200031",
+      "revisionId": "51e00000-0000-4000-8000-000000200031",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Warhammer",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d8 bludgeoning. Properties: Versatile (1d10). Weight: 2 lb.. Cost: 15 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d8",
+          "damageType": "bludgeoning",
+          "properties": [
+            "versatile"
+          ],
+          "weaponKey": "warhammer",
+          "versatile": "1d10"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200032",
+      "revisionId": "51e00000-0000-4000-8000-000000200032",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Whip",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial melee weapon. Damage: 1d4 slashing. Properties: Finesse, reach. Weight: 3 lb.. Cost: 2 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "melee",
+          "damage": "1d4",
+          "damageType": "slashing",
+          "properties": [
+            "finesse",
+            "reach"
+          ],
+          "weaponKey": "whip"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200033",
+      "revisionId": "51e00000-0000-4000-8000-000000200033",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Blowgun",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial ranged weapon. Damage: 1 piercing. Properties: Ammunition (range 25/100), loading. Weight: 1 lb.. Cost: 10 gp.",
+      "effects": []
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200034",
+      "revisionId": "51e00000-0000-4000-8000-000000200034",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Crossbow, hand",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial ranged weapon. Damage: 1d6 piercing. Properties: Ammunition (range 30/120), light, loading. Weight: 3 lb.. Cost: 75 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "ranged",
+          "damage": "1d6",
+          "damageType": "piercing",
+          "properties": [
+            "ammunition",
+            "light",
+            "loading"
+          ],
+          "weaponKey": "hand-crossbow",
+          "range": "30/120"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200035",
+      "revisionId": "51e00000-0000-4000-8000-000000200035",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Crossbow, heavy",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial ranged weapon. Damage: 1d10 piercing. Properties: Ammunition (range 100/400), heavy, loading, two-handed. Weight: 18 lb.. Cost: 50 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "ranged",
+          "damage": "1d10",
+          "damageType": "piercing",
+          "properties": [
+            "ammunition",
+            "heavy",
+            "loading",
+            "two-handed"
+          ],
+          "weaponKey": "heavy-crossbow",
+          "range": "100/400"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200036",
+      "revisionId": "51e00000-0000-4000-8000-000000200036",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Longbow",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial ranged weapon. Damage: 1d8 piercing. Properties: Ammunition (range 150/600), heavy, two-handed. Weight: 2 lb.. Cost: 50 gp.",
+      "effects": [
+        {
+          "type": "weapon",
+          "id": "weapon",
+          "category": "martial",
+          "attack": "ranged",
+          "damage": "1d8",
+          "damageType": "piercing",
+          "properties": [
+            "ammunition",
+            "heavy",
+            "two-handed"
+          ],
+          "weaponKey": "longbow",
+          "range": "150/600"
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000200037",
+      "revisionId": "51e00000-0000-4000-8000-000000200037",
+      "schemaVersion": 5,
+      "kind": "item",
+      "name": "Net",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 66
+        }
+      },
+      "status": "published",
+      "summary": "Martial ranged weapon. Damage: —. Properties: Special, thrown (range 5/15). Weight: 3 lb.. Cost: 1 gp.",
+      "effects": []
+    }
+  ]
+}

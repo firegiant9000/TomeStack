@@ -1,5 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import type {
+  Activation,
+  AttackEntry,
   AutomationStatus,
   CharacterView,
   FeatureEntry,
@@ -79,6 +81,87 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
         </button>
       </form>
       <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
+      {(view.sheet.hitDice ?? []).length > 0 && (
+        <p>
+          Hit dice: {(view.sheet.hitDice ?? []).map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}
+        </p>
+      )}
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={view.character.play?.inspiration ?? false}
+          onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
+        />
+        {view.character.rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration'}
+      </label>
+    </section>
+  );
+}
+
+/**
+ * SPEC C-05, SRD death saving throws (the same in both families): shown at 0 hit points, or while saves are recorded.
+ * A roll is only a suggestion; "Record" is the confirmed change, and TomeStack applies the SRD outcome of the number.
+ */
+export function DeathSavesPanel({
+  view,
+  act,
+  roll,
+  lastRoll,
+}: {
+  view: CharacterView;
+  act: Act;
+  roll: (target: RollTarget) => void;
+  lastRoll?: RollRecord;
+}) {
+  const hp = view.sheet.hitPoints;
+  const saves = view.character.play?.deathSaves ?? { successes: 0, failures: 0 };
+  const [entered, setEntered] = useState('');
+  if (!hp || (hp.current > 0 && saves.successes === 0 && saves.failures === 0)) return null;
+  const rolled = lastRoll?.provenance?.rollId === 'deathSave' ? lastRoll.dice.find((d) => d.kept)?.value : undefined;
+  const value = Number(entered);
+  const valid = entered !== '' && Number.isInteger(value) && value >= 1 && value <= 20;
+  const state = saves.failures >= 3 ? ' (dead)' : saves.successes >= 3 ? ' (stable)' : '';
+  return (
+    <section aria-labelledby="death-saves-heading" className="play-panel">
+      <h3 id="death-saves-heading">
+        Death saving throws: {saves.successes} of 3 successes, {saves.failures} of 3 failures{state}
+      </h3>
+      {hp.current === 0 && (
+        <div className="actions">
+          <button type="button" onClick={() => roll({ deathSave: true })}>
+            Roll death saving throw
+          </button>
+          {rolled !== undefined && (
+            <button type="button" onClick={() => act({ action: 'recordDeathSave', amount: rolled })}>
+              Record death saving throw ({rolled})
+            </button>
+          )}
+          <label className="field">
+            d20 rolled at the table
+            <input type="number" min={1} max={20} value={entered} onChange={(e) => setEntered(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            disabled={!valid}
+            onClick={() => {
+              act({ action: 'recordDeathSave', amount: value });
+              setEntered('');
+            }}
+          >
+            Record this roll
+          </button>
+          <button type="button" onClick={() => act({ action: 'addDeathSaveFailure', amount: 1 })}>
+            Add a failure (damage at 0)
+          </button>
+        </div>
+      )}
+      <button type="button" onClick={() => act({ action: 'clearDeathSaves' })}>
+        Clear death saving throws
+      </button>
+      <p className="hint">
+        10 or higher is a success; a 1 counts as two failures; a 20 regains 1 hit point. A critical hit at 0 hit points is two
+        failures. Regaining hit points clears them.
+      </p>
     </section>
   );
 }
@@ -180,36 +263,154 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
   );
 }
 
-export function FeaturesPanel({
-  view,
-  roll,
-  pdfSources,
-  openPage,
-}: {
-  view: CharacterView;
-  roll: (target: RollTarget) => void;
-  /** Sources with an available PDF (ADR-005); their cited pages can be opened. */
-  pdfSources: ReadonlySet<string>;
-  openPage: (sourceId: string, page: number) => void;
-}) {
-  const features = view.sheet.features ?? [];
+const activationGroups: { key: Activation; title: string }[] = [
+  { key: 'action', title: 'Actions' },
+  { key: 'bonusAction', title: 'Bonus actions' },
+  { key: 'reaction', title: 'Reactions' },
+  { key: 'other', title: 'Other' },
+];
+
+const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
+
+/**
+ * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
+ * a roll that names a resource offers "Spend" in its record.
+ */
+export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (target: RollTarget) => void; act: Act }) {
   const [critical, setCritical] = useState(false);
-  if (features.length === 0) return null;
+  const attacks = view.sheet.attacks ?? [];
+  const toggles = view.sheet.toggles ?? [];
+  const rolls = (view.sheet.features ?? []).flatMap((feature) =>
+    feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
+  );
+  if (attacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
   return (
-    <section aria-labelledby="features-heading" className="play-panel">
-      <h3 id="features-heading">Features</h3>
+    <section aria-labelledby="actions-heading" className="play-panel">
+      <h3 id="actions-heading">Attacks and actions</h3>
+      {toggles.length > 0 && (
+        <fieldset>
+          <legend>Active effects (switching one is a confirmed change)</legend>
+          {toggles.map((t) => (
+            <label key={`${t.content.revisionId}-${t.toggleId}`} className="choice">
+              <input
+                type="checkbox"
+                checked={t.on}
+                onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+              />
+              {t.label}
+              <span className="option-source">
+                {t.contentName}
+                {t.resourceId ? ' · turning it on spends 1 use' : ''}
+                {t.text ? ` · ${t.text}` : ''}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
       <label className="choice">
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
       </label>
+      {activationGroups.map(({ key, title }) => {
+        const groupAttacks = key === 'action' ? attacks : [];
+        const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
+        if (groupAttacks.length === 0 && groupRolls.length === 0) return null;
+        return (
+          <section key={key} aria-labelledby={`actions-${key}`}>
+            <h4 id={`actions-${key}`}>{title}</h4>
+            <ul className="features">
+              {groupAttacks.map((attack) => (
+                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} roll={roll} />
+              ))}
+              {groupRolls.map(({ feature, effect }) => (
+                <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
+                  <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
+                    Roll {effect.label ?? effect.id} ({effect.dice})
+                  </button>{' '}
+                  <span className="hint">
+                    {feature.name}
+                    {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </section>
+  );
+}
+
+function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical: boolean; roll: (target: RollTarget) => void }) {
+  return (
+    <li className="feature">
+      <details>
+        <summary>
+          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage} {attack.damageType}
+          {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
+          {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
+        </summary>
+        <p className="hint">
+          {attack.category} {attack.attack} weapon
+          {attack.range ? ` · range ${attack.range}` : ''}
+          {attack.properties.length > 0 ? ` · ${attack.properties.join(', ')}` : ''}
+          {attack.mastery ? ` · mastery: ${attack.mastery}` : ''}
+        </p>
+        <ul aria-label={`How the ${attack.name} attack is calculated`}>
+          {attack.trace.map((step) => (
+            <li key={step.order}>
+              {step.description}: {signed(step.amount ?? 0)} = {signed(step.result)}
+            </li>
+          ))}
+        </ul>
+        {attack.warnings.length > 0 && (
+          <ul className="warnings" aria-label={`${attack.name} warnings`}>
+            {attack.warnings.map((w) => (
+              <li key={`${w.code}-${w.effectId ?? ''}`}>{w.message}</li>
+            ))}
+          </ul>
+        )}
+      </details>
+      <button type="button" onClick={() => roll({ weapon: attack.item })}>
+        Roll {attack.name} attack
+      </button>
+      <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, critical })}>
+        Roll {attack.name} damage ({attack.damage})
+      </button>
+      {attack.versatileDamage && (
+        <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, versatile: true, critical })}>
+          Roll {attack.name} two-handed damage ({attack.versatileDamage})
+        </button>
+      )}
+    </li>
+  );
+}
+
+export function FeaturesPanel({
+  view,
+  pdfSources,
+  openPage,
+  reportGap,
+}: {
+  view: CharacterView;
+  /** Sources with an available PDF (ADR-005); their cited pages can be opened. */
+  pdfSources: ReadonlySet<string>;
+  openPage: (sourceId: string, page: number) => void;
+  /** M3 C5: pre-fills the gap note form with this feature. */
+  reportGap?: (contentId: string) => void;
+}) {
+  const features = view.sheet.features ?? [];
+  if (features.length === 0) return null;
+  return (
+    <section aria-labelledby="features-heading" className="play-panel">
+      <h3 id="features-heading">Features</h3>
       <ul className="features">
         {features.map((feature) => (
           <FeatureItem
             key={feature.content.revisionId}
             feature={feature}
-            critical={critical}
-            roll={roll}
             openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
+            reportGap={reportGap}
           />
         ))}
       </ul>
@@ -219,16 +420,13 @@ export function FeaturesPanel({
 
 function FeatureItem({
   feature,
-  critical,
-  roll,
   openPage,
+  reportGap,
 }: {
   feature: FeatureEntry;
-  critical: boolean;
-  roll: (target: RollTarget) => void;
   openPage?: (sourceId: string, page: number) => void;
+  reportGap?: (contentId: string) => void;
 }) {
-  const rolls = feature.effects.filter((e) => e.type === 'roll');
   const texts = feature.effects.filter((e) => e.text);
   return (
     <li className="feature">
@@ -260,14 +458,14 @@ function FeatureItem({
           </ul>
         )}
       </details>
-      {rolls.map((effect) => (
-        <button key={effect.id} type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-          Roll {effect.label ?? effect.id} ({effect.dice})
-        </button>
-      ))}
       {openPage && feature.origin.sourceId && feature.origin.page && (
         <button type="button" onClick={() => openPage(feature.origin.sourceId!, feature.origin.page!.start)}>
           Open {feature.name}, {pageText(feature.origin.page)}
+        </button>
+      )}
+      {reportGap && (
+        <button type="button" onClick={() => reportGap(feature.content.contentId)}>
+          Report a gap: {feature.name}
         </button>
       )}
     </li>
@@ -278,19 +476,32 @@ function FeatureItem({
 export function RollResult({
   record,
   resources,
+  features,
   act,
 }: {
   record?: RollRecord;
   resources: ResourceValue[];
+  features: FeatureEntry[];
   act: Act;
 }) {
+  // The typed amount belongs to the roll it was typed for, so a new roll never inherits it.
+  const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
+  const amount = typed.record === record ? typed.value : '';
+  const setAmount = (value: string) => setTyped({ record, value });
   if (!record) return <div role="region" aria-label="Last roll" aria-live="polite" />;
   const p = record.provenance;
-  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic).
+  // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
+  // resource (content v6) is found through the content that defines it.
+  const holder = p?.linkedResourceContent ?? p?.content?.contentId;
   const linked = p?.linkedResourceId
-    ? (resources.find((r) => r.resourceId === p.linkedResourceId && r.content.contentId === p.content?.contentId) ??
+    ? (resources.find((r) => r.resourceId === p.linkedResourceId && r.content.contentId === holder) ??
       resources.find((r) => r.resourceId === p.linkedResourceId))
     : undefined;
+  const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
+  const cost = effect?.cost ?? 1;
+  const most = linked?.current !== undefined ? Math.min(cost, linked.current) : 0;
+  const chosen = Number(amount);
+  const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
     <div role="region" aria-label="Last roll" aria-live="polite" className="roll-result">
       <p>
@@ -310,14 +521,32 @@ export function RollResult({
         {record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('')}
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
-      {linked && linked.current !== undefined && (
+      {linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={linked.current === 0}
-          onClick={() => act({ action: 'spend', amount: 1, contentId: linked.content.contentId, resourceId: linked.resourceId })}
+          disabled={cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
+          onClick={() => act({ action: 'spend', amount: cost, contentId: linked.content.contentId, resourceId: linked.resourceId })}
         >
-          Spend 1 {linked.label} ({linked.current} left)
+          Spend {cost} {linked.label} ({linked.current} left)
         </button>
+      )}
+      {linked && linked.current !== undefined && effect?.variableCost && (
+        <div className="inline-form">
+          <label className="field">
+            {linked.label} to spend (1 to {most})
+            <input type="number" min={1} max={most} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            disabled={!validChoice}
+            onClick={() => {
+              act({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId });
+              setAmount('');
+            }}
+          >
+            Spend {validChoice ? chosen : ''} {linked.label} ({linked.current} left)
+          </button>
+        </div>
       )}
     </div>
   );

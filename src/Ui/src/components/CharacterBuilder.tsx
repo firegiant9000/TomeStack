@@ -12,8 +12,10 @@ import type {
   ContentKind,
   ContentOption,
   ContentReference,
+  KnownSpell,
   RulesFamilyId,
   RulesFamilyPolicy,
+  SpellcastingEntry,
 } from '../api/types';
 
 const abilities: { key: Ability; label: string }[] = [
@@ -115,7 +117,9 @@ function BasicsStep(props: {
   const { basics, options, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const ofKind = (kind: ContentKind) => options.filter((o) => o.kind === kind);
-  const other = options.filter((o) => !['species', 'background', 'class', 'subclass'].includes(o.kind));
+  // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
+  // offers (class features, skill options) arrives through it, so only standalone content is listed here.
+  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false);
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -323,10 +327,23 @@ function LevelStep(props: {
 function ChoicePicker(props: {
   choice: ChoiceStatus;
   optionOf: (ref: ContentReference) => ContentOption | undefined;
-  onChange: (selected: ContentReference[]) => void;
+  /** False until `content.list` answers: options are then "loading", not "missing". */
+  optionsLoaded: boolean;
+  /** Ticks (`add`) or unticks one option; the builder applies it to the latest draft. */
+  onChange: (ref: ContentReference, add: boolean) => void;
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
+  if (!props.optionsLoaded) {
+    return (
+      <fieldset className="choice-picker" aria-busy="true">
+        <legend>
+          {choice.sourceName}: choose {choice.count}
+        </legend>
+        <p className="hint">Loading the options…</p>
+      </fieldset>
+    );
+  }
   return (
     <fieldset className="choice-picker">
       <legend>
@@ -347,7 +364,7 @@ function ChoicePicker(props: {
                 type="checkbox"
                 checked={checked}
                 disabled={!checked && (full || unavailable)}
-                onChange={() => props.onChange(checked ? choice.selected.filter((s) => !sameRef(s, ref)) : [...choice.selected, ref])}
+                onChange={() => props.onChange(ref, !checked)}
               />
               <label htmlFor={id}>
                 <span className="option-name">{option?.name ?? `Missing content ${ref.revisionId}`}</span>
@@ -361,11 +378,72 @@ function ChoicePicker(props: {
   );
 }
 
+const levelName = (level: number) => (level === 0 ? 'Cantrips' : `Level ${level}`);
+
+/**
+ * D04: the spells of one caster. Options are the spells on its list, up to the highest level it has a slot for; they are
+ * recorded on the draft (character schema v6). Counts are shown, and going over is flagged on the sheet, not blocked.
+ */
+function SpellPicker(props: {
+  entry: SpellcastingEntry;
+  spells: ContentOption[];
+  recorded: KnownSpell[];
+  /** Records (`add`) or removes one spell of this caster; the builder applies it to the latest draft. */
+  onChange: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
+}) {
+  const { entry } = props;
+  const highest = entry.slots.reduce((top, count, i) => (count > 0 ? i + 1 : top), 0);
+  const options = props.spells.filter((o) => o.compatible && o.spell && o.spell.lists.includes(entry.spellList) && o.spell.level <= highest);
+  const levels = [...new Set(options.map((o) => o.spell!.level))].sort((a, b) => a - b);
+  const mine = props.recorded.filter((s) => s.caster === entry.content.contentId);
+  const cantrips = mine.filter((s) => props.spells.find((o) => sameRef(o.reference, s.spell))?.spell?.level === 0).length;
+  const counts = [
+    entry.cantripsAllowed !== undefined ? `${cantrips} of ${entry.cantripsAllowed} cantrips` : undefined,
+    entry.spellsAllowed !== undefined ? `${mine.length - cantrips} of ${entry.spellsAllowed} ${entry.preparation === 'known' ? 'known' : 'prepared'} spells` : undefined,
+  ].filter(Boolean);
+
+  function toggle(option: ContentOption) {
+    props.onChange(entry.content.contentId, option.reference, !mine.some((s) => sameRef(s.spell, option.reference)));
+  }
+
+  return (
+    <fieldset className="choice-picker">
+      <legend>
+        {entry.name} spells{counts.length > 0 ? ` (${counts.join(', ')})` : ''}
+      </legend>
+      {options.length === 0 && <p className="hint">No spells on the {entry.spellList} list are installed for this level.</p>}
+      {levels.map((level) => (
+        <fieldset key={level}>
+          <legend>{levelName(level)}</legend>
+          <ul className="options">
+            {options
+              .filter((o) => o.spell!.level === level)
+              .map((option) => {
+                const id = `spell-${entry.content.contentId}-${option.reference.revisionId}`;
+                return (
+                  <li key={option.reference.revisionId}>
+                    <input id={id} type="checkbox" checked={mine.some((s) => sameRef(s.spell, option.reference))} onChange={() => toggle(option)} />
+                    <label htmlFor={id}>
+                      <span className="option-name">{option.name}</span> {sourceLine(option)}
+                    </label>
+                  </li>
+                );
+              })}
+          </ul>
+        </fieldset>
+      ))}
+    </fieldset>
+  );
+}
+
 function ChoicesStep(props: {
   view: CharacterView;
   commitLabel: string;
   optionOf: (ref: ContentReference) => ContentOption | undefined;
-  onChoose: (choice: ChoiceStatus, selected: ContentReference[]) => void;
+  optionsLoaded: boolean;
+  spellOptions: ContentOption[];
+  onChoose: (choice: ChoiceStatus, ref: ContentReference, add: boolean) => void;
+  onSpells: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
   onBack?: () => void;
   onCommit: () => void;
   onCancel: () => void;
@@ -373,6 +451,7 @@ function ChoicesStep(props: {
 }) {
   const choices = props.view.sheet.choices ?? [];
   const open = choices.filter((c) => !c.resolved);
+  const casters = props.view.sheet.spellcasting ?? [];
   return (
     <div role="group" aria-label="Choices">
       {choices.length === 0 ? (
@@ -389,7 +468,17 @@ function ChoicesStep(props: {
           key={`${choice.source.revisionId}-${choice.choiceId}`}
           choice={choice}
           optionOf={props.optionOf}
-          onChange={(selected) => props.onChoose(choice, selected)}
+          optionsLoaded={props.optionsLoaded}
+          onChange={(ref, add) => props.onChoose(choice, ref, add)}
+        />
+      ))}
+      {casters.map((entry) => (
+        <SpellPicker
+          key={entry.content.revisionId}
+          entry={entry}
+          spells={props.spellOptions}
+          recorded={props.view.character.spells ?? []}
+          onChange={props.onSpells}
         />
       ))}
       <div className="actions">
@@ -412,7 +501,7 @@ function ChoicesStep(props: {
 function draftOf(basics: Basics, id: string, previous?: Character): Character {
   return {
     id,
-    schemaVersion: 4,
+    schemaVersion: 6,
     name: basics.name.trim(),
     rulesFamily: basics.rulesFamily,
     level: 1,
@@ -422,6 +511,7 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
     crossFamilyExceptions: [],
     campaignId: basics.campaignId,
     campaignExceptions: previous?.campaignExceptions ?? [],
+    spells: previous?.spells ?? [],
     baseAbilities: basics.scores,
     pins: [basics.species, basics.background, ...basics.other].filter((p): p is ContentReference => !!p),
     overrides: [],
@@ -440,6 +530,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [draftId] = useState(() => crypto.randomUUID());
   const [view, setView] = useState<CharacterView | undefined>(mode.kind === 'create' ? undefined : mode.view);
   const [listed, setListed] = useState<ContentOption[]>([]);
+  // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
+  const [listedFor, setListedFor] = useState<string>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [outside, setOutside] = useState({ allow: false, reason: '' });
   const [busy, setBusy] = useState(false);
@@ -460,6 +552,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       .then((result) => {
         if (!current) return;
         setListed(result);
+        setListedFor(`${family}|${campaignId ?? ''}`);
         // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
         const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
         setBasics((b) => ({
@@ -499,6 +592,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     if (step !== 'basics') heading.current?.focus();
   }, [step]);
 
+  // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
+  const pickable = options.filter((o) => !o.superseded);
   const byRevision = new Map(options.map((o) => [o.reference.revisionId, o]));
   const optionOf = (ref: ContentReference) => byRevision.get(ref.revisionId);
   const nameOf = (ref: ContentReference) => optionOf(ref)?.name ?? ref.revisionId;
@@ -512,13 +607,43 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     }
   }
 
-  async function choose(choice: ChoiceStatus, selected: ContentReference[]) {
-    if (!view) return;
-    try {
-      setView(await client.previewChoice(view.character, choice.source, choice.choiceId, selected));
-    } catch (error) {
-      onError(error);
-    }
+  // Ticks can come faster than character.previewChoice answers. Each one waits for the previous answer and applies to the
+  // draft it returned; built from the rendered selection, a second quick tick would drop the first.
+  const latest = useRef(view);
+  useEffect(() => {
+    latest.current = view;
+  }, [view]);
+  const choosing = useRef<Promise<void>>(Promise.resolve());
+
+  function choose(choice: ChoiceStatus, ref: ContentReference, add: boolean) {
+    choosing.current = choosing.current.then(async () => {
+      const current = latest.current;
+      if (!current) return;
+      const now = (current.sheet.choices ?? []).find((c) => sameRef(c.source, choice.source) && c.choiceId === choice.choiceId) ?? choice;
+      const others = now.selected.filter((s) => !sameRef(s, ref));
+      try {
+        const next = await client.previewChoice(current.character, choice.source, choice.choiceId, add ? [...others, ref] : others);
+        latest.current = next;
+        setView(next);
+      } catch (error) {
+        onError(error);
+      }
+    });
+  }
+
+  function toggleSpell(caster: KnownSpell['caster'], spell: ContentReference, add: boolean) {
+    choosing.current = choosing.current.then(async () => {
+      const current = latest.current;
+      if (!current) return;
+      const others = (current.character.spells ?? []).filter((s) => !(s.caster === caster && sameRef(s.spell, spell)));
+      try {
+        const next = await client.preview({ ...current.character, spells: add ? [...others, { caster, spell, prepared: true }] : others });
+        latest.current = next;
+        setView(next);
+      } catch (error) {
+        onError(error);
+      }
+    });
   }
 
   async function commit() {
@@ -537,6 +662,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               choices: draft.choices,
               campaignId: draft.campaignId,
               campaignExceptions: draft.campaignExceptions,
+              spells: draft.spells,
             })
           : await client.saveCharacter(draft),
       );
@@ -579,7 +705,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           basics={basics}
           rulesFamilies={rulesFamilies}
           campaigns={campaigns}
-          options={options}
+          options={pickable}
           onChange={setBasics}
           onNext={() => preview(draftOf(basics, draftId, view?.character))}
           onCancel={onCancel}
@@ -588,7 +714,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
           character={mode.view.character}
-          options={options}
+          options={pickable}
           nameOf={nameOf}
           onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes })}
           onCancel={onCancel}
@@ -599,7 +725,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           view={view}
           commitLabel={mode.kind === 'create' ? 'Create and save' : mode.kind === 'levelUp' ? 'Save level-up' : 'Save choices'}
           optionOf={optionOf}
+          optionsLoaded={listedFor === `${family}|${campaignId ?? ''}`}
+          spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
+          onSpells={toggleSpell}
           onBack={mode.kind === 'create' ? () => setStep('basics') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
           onCancel={onCancel}

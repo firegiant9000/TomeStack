@@ -75,6 +75,10 @@ public sealed record ChoiceStatus(
 /// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
 /// <param name="Features">M2 item 2: every active revision with its text, automation status, effects and rolls, in resolution order.</param>
 /// <param name="HitPoints">M2 item 2: the displayed maximum with current and temporary hit points from the play state.</param>
+/// <param name="HitDice">The hit dice pool per die size, largest first, with what is spent (character schema v5).</param>
+/// <param name="Spellcasting">Every caster with its spells (D04), primary first.</param>
+/// <param name="SpellSlots">Spell slots per spell level that has any, from the <c>spellSlots.N</c> fields.</param>
+/// <param name="PactSlots">Pact Magic slots, when a caster has them.</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
@@ -84,7 +88,13 @@ public sealed record CharacterSheet(
     IReadOnlyList<ContentReference>? Active = null,
     IReadOnlyList<ResourceValue>? Resources = null,
     IReadOnlyList<FeatureEntry>? Features = null,
-    HitPointState? HitPoints = null)
+    HitPointState? HitPoints = null,
+    IReadOnlyList<HitDiceValue>? HitDice = null,
+    IReadOnlyList<SpellcastingEntry>? Spellcasting = null,
+    IReadOnlyList<SlotValue>? SpellSlots = null,
+    SlotValue? PactSlots = null,
+    IReadOnlyList<AttackEntry>? Attacks = null,
+    IReadOnlyList<ToggleValue>? Toggles = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -134,13 +144,106 @@ public sealed record FeatureEntry(
     IReadOnlyList<Diagnostic> Diagnostics);
 
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
-public sealed record FeatureEffect(string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null);
+/// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
+/// <param name="Cost">Content v6: uses the action spends (its formula evaluated), or the most it may spend when <paramref name="VariableCost"/>.</param>
+public sealed record FeatureEffect(
+    string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false);
+
+/// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
+public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
 
 /// <summary>Hit points for play: the displayed maximum (after any override), current (at most the maximum) and temporary.</summary>
 public sealed record HitPointState(int Maximum, int Current, int Temporary);
+
+/// <summary>
+/// Hit dice of one size: one per level in every class with that hit die (SRD: hit dice of the same size pool together).
+/// <paramref name="Remaining"/> is the total less what is spent, never below 0 (a lower total after an update does not go negative).
+/// </summary>
+public sealed record HitDiceValue(int Die, int Total, int Spent, int Remaining, IReadOnlyList<string> Classes);
+
+/// <summary>
+/// Slots of one spell level (or the Pact Magic slots, <paramref name="Level"/> being their spell level) for play: the
+/// maximum is the displayed field (after any override), remaining = maximum − spent, never below 0.
+/// </summary>
+public sealed record SlotValue(int Level, int Maximum, int Spent, int Remaining, string Field);
+
+/// <summary>
+/// D04: one caster (a class or subclass with a <c>spellcasting</c> effect) at its class level. The first one in class order
+/// is <paramref name="Primary"/>: its attack bonus, save DC and slots are the sheet fields. Others are calculated here the
+/// same way; their spell slots are not combined (the SRD multiclass table is a manual step, D04).
+/// </summary>
+public sealed record SpellcastingEntry(
+    ContentReference Content,
+    string Name,
+    string EffectId,
+    int ClassLevel,
+    Ability Ability,
+    int AttackBonus,
+    int SaveDc,
+    SpellPreparation Preparation,
+    string SpellList,
+    SpellSlotKind SlotKind,
+    IReadOnlyList<int> Slots,
+    int? CantripsAllowed,
+    int? SpellsAllowed,
+    bool Primary,
+    TraceOrigin Origin,
+    IReadOnlyList<SpellEntry> Spells,
+    IReadOnlyList<Diagnostic> Warnings)
+{
+    /// <summary>The highest spell level this caster has a slot for (0: cantrips only).</summary>
+    public int HighestSlotLevel => Slots.Select((count, i) => (count, level: i + 1)).Where(s => s.count > 0).Select(s => s.level).DefaultIfEmpty(0).Max();
+}
+
+/// <summary>
+/// SPEC C-02, C-04: an attack with an equipped weapon. <paramref name="ToHit"/> = the ability modifier (Strength for
+/// melee, Dexterity for ranged, the better one with finesse) + the proficiency bonus if proficient + the weapon's own
+/// bonus; <paramref name="Damage"/> is the dice plus the same modifier and bonus. <paramref name="Trace"/> explains to-hit.
+/// </summary>
+public sealed record AttackEntry(
+    ContentReference Item,
+    string Name,
+    string EffectId,
+    WeaponAttack Attack,
+    WeaponCategory Category,
+    Ability Ability,
+    int ToHit,
+    string Damage,
+    string? VersatileDamage,
+    string DamageType,
+    IReadOnlyList<string> Properties,
+    string? Range,
+    string? Mastery,
+    bool Proficient,
+    AutomationStatus Automation,
+    IReadOnlyList<TraceEntry> Trace,
+    IReadOnlyList<Diagnostic> Warnings,
+    TraceOrigin Origin);
+
+/// <summary>A known or prepared spell with its game data, for the sheet (a spell is never active content).</summary>
+public sealed record SpellEntry(
+    ContentReference Spell,
+    string Name,
+    int Level,
+    bool Prepared,
+    string? Summary,
+    string? Text,
+    string? School,
+    string? CastingTime,
+    string? Range,
+    string? Components,
+    string? Duration,
+    bool Concentration,
+    bool Ritual,
+    SpellAttackKind Attack,
+    Ability? Save,
+    string? Dice,
+    TraceOrigin Origin,
+    IReadOnlyList<Diagnostic> Diagnostics);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -223,38 +326,78 @@ public static class CharacterCalculator
 
         var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>());
         var unmet = new List<(ContentReference Content, Diagnostic Diagnostic)>();
-        foreach (var restricted in first.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsEvaluated)))
+        foreach (var restricted in first.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsPrerequisite)))
         {
             var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference });
-            foreach (var restriction in restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsEvaluated))
+            foreach (var failed in Unmet(restricted.Revision, restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsPrerequisite), without.Sheet, "without it", "Its effects are not applied."))
+                unmet.Add((restricted.Revision.Reference, failed));
+        }
+        var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet());
+
+        // D04: multiclass prerequisites are checked once the character has two or more classes, against the sheet as it is
+        // (a class's own features count: its levels are already taken). Unmet ones warn; the class stays applied.
+        var multiclass = new List<Diagnostic>();
+        if (character.Classes.Count >= 2)
+        {
+            foreach (var item in final.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsMulticlassPrerequisite)))
             {
-                if (!SpecIndex.TryGetValue(restriction.Field, out var index))
-                {
-                    unmet.Add((restricted.Revision.Reference, new(
-                        "effect.unknown-target",
-                        $"'{restricted.Revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
-                        restricted.Revision.Reference, restriction.Id)));
-                    continue;
-                }
-                var actual = without.Sheet.Field(restriction.Field).Value;
-                if (actual < restriction.Minimum)
-                {
-                    unmet.Add((restricted.Revision.Reference, new(
-                        "restriction.unmet",
-                        $"'{restricted.Revision.Name}' requires {Specs[index].Label} {restriction.Minimum} or higher; this character has {actual} without it. Its effects are not applied.",
-                        restricted.Revision.Reference, restriction.Id)));
-                }
+                multiclass.AddRange(Unmet(item.Revision, item.Revision.Effects.OfType<RestrictionEffect>().Where(IsMulticlassPrerequisite), final.Sheet, "",
+                    "Multiclassing into or out of it needs it; the class stays applied, so check the character.", "restriction.multiclass-unmet"));
             }
         }
-        if (unmet.Count == 0)
-            return first.Sheet;
-
-        var final = Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet());
-        return final.Sheet with { Diagnostics = [.. unmet.Select(u => u.Diagnostic), .. final.Sheet.Diagnostics] };
+        if (unmet.Count == 0 && multiclass.Count == 0)
+            return final.Sheet;
+        return final.Sheet with { Diagnostics = [.. unmet.Select(u => u.Diagnostic), .. multiclass, .. final.Sheet.Diagnostics] };
     }
 
     private static bool IsEvaluated(RestrictionEffect restriction) =>
         restriction.Automation == AutomationStatus.Automatic && restriction.Timing == EffectTiming.Always;
+
+    private static bool IsPrerequisite(RestrictionEffect restriction) => IsEvaluated(restriction) && restriction.Multiclass != true;
+
+    private static bool IsMulticlassPrerequisite(RestrictionEffect restriction) => IsEvaluated(restriction) && restriction.Multiclass == true;
+
+    /// <summary>
+    /// The restrictions of <paramref name="revision"/> that <paramref name="sheet"/> does not meet. Restrictions without a
+    /// group each must be met; within a group (content v5), meeting any one is enough, and an unmet group is reported once.
+    /// </summary>
+    private static IEnumerable<Diagnostic> Unmet(
+        ContentRevision revision, IEnumerable<RestrictionEffect> restrictions, CharacterSheet sheet, string basis, string consequence, string code = "restriction.unmet")
+    {
+        var on = basis.Length > 0 ? $" {basis}" : "";
+        foreach (var group in restrictions.GroupBy(r => r.Group))
+        {
+            var failed = new List<(RestrictionEffect Restriction, string Label, int Actual)>();
+            var met = false;
+            foreach (var restriction in group)
+            {
+                if (!SpecIndex.TryGetValue(restriction.Field, out var index))
+                {
+                    yield return new(
+                        "effect.unknown-target",
+                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
+                        revision.Reference, restriction.Id);
+                    continue;
+                }
+                var actual = sheet.Field(restriction.Field).Value;
+                if (actual >= restriction.Minimum)
+                    met = true;
+                else
+                    failed.Add((restriction, Specs[index].Label, actual));
+            }
+            if (group.Key is null)
+            {
+                foreach (var (restriction, label, actual) in failed)
+                    yield return new(code, $"'{revision.Name}' requires {label} {restriction.Minimum} or higher; this character has {actual}{on}. {consequence}", revision.Reference, restriction.Id);
+            }
+            else if (!met && failed.Count > 0)
+            {
+                var options = string.Join(" or ", failed.Select(f => $"{f.Label} {f.Restriction.Minimum}"));
+                var has = string.Join(", ", failed.Select(f => $"{f.Label} {f.Actual}"));
+                yield return new(code, $"'{revision.Name}' requires {options} or higher; this character has {has}{on}. {consequence}", revision.Reference, failed[0].Restriction.Id);
+            }
+        }
+    }
 
     private sealed record Calculation(CharacterSheet Sheet, IReadOnlyList<ActiveContent> Active);
 
@@ -283,11 +426,13 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
         AddArmor(active, modifiers, diagnostics);
-        var proficiencies = CollectProficiencies(active, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels));
+        var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
+        var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
 
         var values = new Dictionary<string, int>(StringComparer.Ordinal);
         var ownSteps = new Dictionary<string, List<Step>>(StringComparer.Ordinal);
@@ -296,7 +441,7 @@ public static class CharacterCalculator
         {
             var spec = Specs[SpecIndex[id]];
             var steps = new List<Step>();
-            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual);
+            var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
 
@@ -313,9 +458,15 @@ public static class CharacterCalculator
             results[id] = (value, computed, fieldOverride);
         }
 
+        IReadOnlyList<string> casterReads = casters.Count == 0 ? [] : [FieldIds.ProficiencyBonus, FieldIds.Modifier(casters[0].Effect.Ability)];
+        var actualReads = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            [FieldIds.SpellAttack] = casterReads,
+            [FieldIds.SpellSaveDc] = casterReads,
+        };
         var fields = Specs.Select(spec =>
         {
-            var closure = Closure(spec.Id, modifiers);
+            var closure = Closure(spec.Id, modifiers, actualReads);
             return new DerivedValue(
                 spec.Id,
                 spec.Label,
@@ -331,11 +482,262 @@ public static class CharacterCalculator
 
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)])).ToList();
+        int? Evaluate(ActiveContent item, string source) =>
+            Formula.TryParse(source, out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
+                ? Math.Max(value, 0)
+                : null;
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Evaluate)).ToList();
+        var toggles = active
+            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
+                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
+            .ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+        var hitDice = resolved.Classes
+            .Where(c => c.Die is not null && c.Level > 0)
+            .GroupBy(c => c.Die!.Die)
+            .OrderByDescending(g => g.Key)
+            .Select(g =>
+            {
+                var total = g.Sum(c => c.Level);
+                var spent = character.Play.HitDiceSpentOf(g.Key);
+                return new HitDiceValue(g.Key, total, spent, Math.Max(total - spent, 0), [.. g.Select(c => c.Content.Revision.Name)]);
+            })
+            .ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints), active);
+        var spellcasting = SpellcastingEntries(casters, character, catalog, resolved.ClassLevels, values, family, diagnostics);
+        SlotValue Slot(int level, string field, int spent)
+        {
+            var maximum = Math.Max(values[field], 0);
+            return new(level, maximum, spent, Math.Max(maximum - spent, 0), field);
+        }
+        var spellSlots = Enumerable.Range(1, SpellcastingEffect.MaxSpellLevel)
+            .Where(level => values[FieldIds.SpellSlots(level)] > 0 || character.Play.SlotsSpentOf(level) > 0)
+            .Select(level => Slot(level, FieldIds.SpellSlots(level), character.Play.SlotsSpentOf(level)))
+            .ToList();
+        var pactCaster = casters.FirstOrDefault(c => c.Effect.SlotKind == SpellSlotKind.PactMagic);
+        var pactSlots = values[FieldIds.PactSlots] > 0 || character.Play.PactSlotsSpent > 0
+            ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
+            : null;
+
+        var attacks = CollectAttacks(active, values, family, weaponProficiencies);
+
+        return new(new CharacterSheet(
+            character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
+            spellcasting, spellSlots, pactSlots, attacks, toggles), active);
+    }
+
+    // ---- attacks (content schema v5; SPEC C-02, C-04) --------------------------------------------------------
+
+    private static List<AttackEntry> CollectAttacks(List<ActiveContent> active, Dictionary<string, int> values, string family, Dictionary<string, Proficiency> weapons)
+    {
+        var attacks = new List<AttackEntry>();
+        var rules = new TraceOrigin(TraceOriginKind.RulesPolicy, family);
+        foreach (var item in active.Where(a => a.Revision.Kind == ContentKind.Item))
+        {
+            foreach (var weapon in item.Revision.Effects.OfType<WeaponEffect>().Where(w => w.Automation != AutomationStatus.Reference))
+            {
+                var str = values[FieldIds.Modifier(Ability.Str)];
+                var dex = values[FieldIds.Modifier(Ability.Dex)];
+                var ability = weapon.Attack == WeaponAttack.Ranged ? Ability.Dex
+                    : weapon.Has("finesse") && dex > str ? Ability.Dex
+                    : Ability.Str;
+                var mod = ability == Ability.Dex ? dex : str;
+                var pb = values[FieldIds.ProficiencyBonus];
+                var category = weapon.Category == WeaponCategory.Simple ? "simple" : "martial";
+                var proficiency = weapons.GetValueOrDefault(category) ?? weapons.GetValueOrDefault(weapon.WeaponKey);
+                var warnings = new List<Diagnostic>();
+                var automation = weapon.Automation;
+                var trace = new List<TraceEntry>();
+                var why = weapon.Has("finesse") && weapon.Attack == WeaponAttack.Melee ? " (finesse: the better of Strength and Dexterity)" : "";
+                trace.Add(new(1, "base", $"{AbilityNames[ability]} modifier{why}", mod, mod, rules, FieldIds.Modifier(ability), [new(FieldIds.Modifier(ability), mod)]));
+                var toHit = mod;
+                if (proficiency is not null)
+                {
+                    toHit += pb;
+                    trace.Add(new(2, "add", $"Proficiency bonus: proficient with {category} weapons or {weapon.WeaponKey}, from {Describe(proficiency.Content)}", pb, toHit, ContentOrigin(family, proficiency.Content, proficiency.Effect), null, [new(FieldIds.ProficiencyBonus, pb)]));
+                }
+                else if (weapons.Count == 0)
+                {
+                    // No content says which weapons the character knows (for example classes published before weapons existed).
+                    automation = AutomationStatus.Assisted;
+                    warnings.Add(new("attack.proficiency-unknown", $"No content records weapon proficiencies for this character, so the proficiency bonus (+{pb}) is not added to '{item.Revision.Name}'. Add it if the character is proficient.", item.Revision.Reference, weapon.Id));
+                }
+                else
+                {
+                    warnings.Add(new("attack.not-proficient", $"Not proficient with '{item.Revision.Name}' ({category}): no proficiency bonus.", item.Revision.Reference, weapon.Id));
+                }
+                var damageBonus = mod;
+                attacks.Add(new(
+                    item.Revision.Reference, item.Revision.Name, weapon.Id, weapon.Attack, weapon.Category, ability, toHit,
+                    WithBonus(weapon.Damage, damageBonus), weapon.Versatile is { } versatile ? WithBonus(versatile, damageBonus) : null,
+                    weapon.DamageType, weapon.Properties, weapon.Range, weapon.Mastery, proficiency is not null, automation, trace, warnings,
+                    ContentOrigin(family, item, weapon)));
+            }
+        }
+        return attacks;
+    }
+
+    /// <summary>Dice plus a flat modifier, as a dice expression: <c>1d8+3</c>, <c>1d8-1</c>, or <c>1d8</c> for 0.</summary>
+    internal static string WithBonus(string dice, int bonus) =>
+        bonus switch
+        {
+            0 => dice,
+            > 0 => $"{dice}+{bonus}",
+            _ => $"{dice}{bonus}",
+        };
+
+    // ---- spellcasting (content schema v5, D04) --------------------------------------------------------------
+
+    /// <param name="ClassLevel">The level in the class the spellcasting content belongs to; its tables are read at this row.</param>
+    private sealed record CasterInfo(ActiveContent Content, SpellcastingEffect Effect, int ClassLevel);
+
+    /// <summary>
+    /// Every active revision with a <c>spellcasting</c> effect that is not reference-only (the first one per revision), in
+    /// the order the classes were taken. Spellcasting outside a class, or with tables that are not 20 rows of at most 9
+    /// levels, is disabled with a diagnostic (SPEC C-03); validation refuses both on publish.
+    /// </summary>
+    private static List<CasterInfo> CollectCasters(List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, List<Diagnostic> diagnostics)
+    {
+        var casters = new List<CasterInfo>();
+        foreach (var item in active)
+        {
+            var effect = item.Revision.Effects.OfType<SpellcastingEffect>().FirstOrDefault(e => e.Automation != AutomationStatus.Reference);
+            if (effect is null)
+                continue;
+            if (item.ClassRoot is not { } root || !classLevels.TryGetValue(root, out var level))
+            {
+                diagnostics.Add(new("spellcasting.no-class", $"'{item.Revision.Name}' has spellcasting, but it does not belong to a class the character has levels in; it is not calculated.", item.Revision.Reference, effect.Id));
+                continue;
+            }
+            if (SpellcastingProblem(effect) is { } problem)
+            {
+                diagnostics.Add(new("spellcasting.table-invalid", $"'{item.Revision.Name}' spellcasting '{effect.Id}': {problem}; it is not calculated.", item.Revision.Reference, effect.Id));
+                continue;
+            }
+            casters.Add(new(item, effect, level));
+        }
+        var order = character.Classes.Select((c, i) => (c.Class, i)).DistinctBy(p => p.Class).ToDictionary(p => p.Class, p => p.i);
+        return [.. casters.OrderBy(c => order.GetValueOrDefault(c.Content.ClassRoot!, int.MaxValue))];
+    }
+
+    /// <summary>What is wrong with a spellcasting effect's tables, or <c>null</c>. Shared with content validation.</summary>
+    internal static string? SpellcastingProblem(SpellcastingEffect effect)
+    {
+        if (effect.Slots is null || effect.Slots.Count != Character.MaxLevel || effect.Slots.Any(r => r is null || r.Count > SpellcastingEffect.MaxSpellLevel || r.Any(n => n is < 0 or > 20)))
+            return $"the slot table needs {Character.MaxLevel} rows (class levels 1–{Character.MaxLevel}) of at most {SpellcastingEffect.MaxSpellLevel} counts between 0 and 20";
+        if (effect.SlotKind == SpellSlotKind.PactMagic && effect.Slots.Any(r => r.Count(n => n > 0) > 1))
+            return "Pact Magic slots are all of one level, so each row may have one non-zero count";
+        if (effect.Cantrips is { } cantrips && (cantrips.Count != Character.MaxLevel || cantrips.Any(n => n is < 0 or > 50)))
+            return $"the cantrips table needs {Character.MaxLevel} counts between 0 and 50";
+        if (effect.SpellsTable is { } spells && (spells.Count != Character.MaxLevel || spells.Any(n => n is < 0 or > 100)))
+            return $"the spells table needs {Character.MaxLevel} counts between 0 and 100";
+        if (effect.SpellsTable is not null && effect.SpellsFormula is not null)
+            return "give the number of spells as a table or a formula, not both";
+        if (string.IsNullOrWhiteSpace(effect.SpellList))
+            return "a spell list key is required";
+        return null;
+    }
+
+    /// <summary>The slot counts at <paramref name="classLevel"/>, padded to 9 spell levels.</summary>
+    private static IReadOnlyList<int> Row(IReadOnlyList<IReadOnlyList<int>> table, int classLevel)
+    {
+        var row = table[Math.Clamp(classLevel, 1, Character.MaxLevel) - 1];
+        return [.. Enumerable.Range(0, SpellcastingEffect.MaxSpellLevel).Select(i => i < row.Count ? row[i] : 0)];
+    }
+
+    private static int PactSlotLevel(IReadOnlyList<int> row) => row.Select((n, i) => (n, i + 1)).Where(p => p.n > 0).Select(p => p.Item2).DefaultIfEmpty(0).Max();
+
+    private static List<SpellcastingEntry> SpellcastingEntries(
+        List<CasterInfo> casters, Character character, IContentCatalog catalog, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics)
+    {
+        var entries = new List<SpellcastingEntry>();
+        var pb = values[FieldIds.ProficiencyBonus];
+        for (var i = 0; i < casters.Count; i++)
+        {
+            var (content, effect, level) = casters[i];
+            var warnings = new List<Diagnostic>();
+            var mod = values[FieldIds.Modifier(effect.Ability)];
+            var row = Row(effect.Slots, level);
+            int? cantrips = effect.Cantrips?[level - 1];
+            int? allowed = effect.SpellsTable?[level - 1];
+            if (effect.SpellsFormula is { } source)
+            {
+                if (Formula.TryParse(source, out var formula, out var failure)
+                    && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
+                {
+                    allowed = Math.Max(value, 0);
+                }
+                else
+                {
+                    warnings.Add(InvalidFormula(content.Revision, effect, failure!));
+                }
+            }
+
+            var casterSpells = character.Spells.Where(s => s.Caster == content.Revision.ContentId).ToList();
+            var spells = new List<SpellEntry>();
+            var highest = effect.SlotKind == SpellSlotKind.PactMagic ? PactSlotLevel(row) : row.Select((n, x) => n > 0 ? x + 1 : 0).Max();
+            foreach (var known in casterSpells)
+            {
+                if (Spell(known, catalog, character, family, effect, highest, warnings) is { } entry)
+                    spells.Add(entry);
+            }
+            var cantripCount = spells.Count(s => s.Level == 0);
+            var readyCount = spells.Count(s => s.Level > 0 && (s.Prepared || effect.Preparation == SpellPreparation.Known));
+            if (cantrips is { } maxCantrips && cantripCount > maxCantrips)
+                warnings.Add(new("spells.too-many-cantrips", $"'{content.Revision.Name}' knows {maxCantrips} cantrip(s) at level {level}; {cantripCount} are recorded.", content.Revision.Reference, effect.Id));
+            if (allowed is { } maxSpells && readyCount > maxSpells)
+            {
+                var what = effect.Preparation == SpellPreparation.Known ? "knows" : "prepares";
+                warnings.Add(new("spells.too-many", $"'{content.Revision.Name}' {what} {maxSpells} spell(s) at level {level}; {readyCount} are recorded.", content.Revision.Reference, effect.Id));
+            }
+
+            var primary = i == 0;
+            entries.Add(new(
+                content.Revision.Reference, content.Revision.Name, effect.Id, level, effect.Ability,
+                primary ? values[FieldIds.SpellAttack] : pb + mod,
+                primary ? values[FieldIds.SpellSaveDc] : 8 + pb + mod,
+                effect.Preparation, effect.SpellList, effect.SlotKind, row, cantrips, allowed, primary,
+                ContentOrigin(family, content, effect), spells, warnings));
+        }
+        var casterIds = casters.Select(c => c.Content.Revision.ContentId).ToHashSet();
+        foreach (var orphan in character.Spells.Where(s => !casterIds.Contains(s.Caster)))
+            diagnostics.Add(new("spells.caster-missing", $"A spell is recorded for caster {orphan.Caster}, which gives this character no spellcasting; it is not listed.", orphan.Spell));
+        return entries;
+    }
+
+    /// <summary>One recorded spell, or <c>null</c> (with a warning) when it cannot be used at all.</summary>
+    private static SpellEntry? Spell(
+        KnownSpell known, IContentCatalog catalog, Character character, string family, SpellcastingEffect caster, int highest, List<Diagnostic> warnings)
+    {
+        var revision = catalog.FindRevision(known.Spell);
+        string? refused = revision switch
+        {
+            null => "is not available",
+            { Status: not RevisionStatus.Published } => "is not published",
+            { SchemaVersion: > ContentRevision.CurrentSchemaVersion } => "needs a newer version of TomeStack",
+            _ when !revision.RulesFamilies.Contains(character.RulesFamily) => $"supports {string.Join(", ", revision.RulesFamilies)}, not {character.RulesFamily}",
+            _ when revision.Kind != ContentKind.Spell || !revision.Effects.OfType<SpellEffect>().Any() => "is not a spell",
+            _ => null,
+        };
+        if (refused is not null)
+        {
+            warnings.Add(new("spells.unusable", $"Spell {revision?.Name ?? known.Spell.RevisionId.ToString()} {refused}; it is not listed.", known.Spell));
+            return null;
+        }
+        var data = revision!.Effects.OfType<SpellEffect>().First();
+        var diagnostics = new List<Diagnostic>();
+        if (!data.Lists.Contains(caster.SpellList, StringComparer.Ordinal))
+            diagnostics.Add(new("spells.not-on-list", $"'{revision.Name}' is not on the {caster.SpellList} spell list. Keep it only if a feature adds it.", known.Spell));
+        if (data.Level > 0 && data.Level > highest)
+            diagnostics.Add(new("spells.level-too-high", $"'{revision.Name}' is a level {data.Level} spell; this caster has slots up to level {highest}.", known.Spell));
+        warnings.AddRange(diagnostics);
+        var source = catalog.FindSource(revision.Provenance.SourceId);
+        var origin = new TraceOrigin(TraceOriginKind.Content, family, revision.Reference, revision.Name, data.Id, source?.Id, source?.Title, revision.Provenance.Page);
+        return new(
+            revision.Reference, revision.Name, data.Level, known.Prepared || caster.Preparation == SpellPreparation.Known, revision.Summary, data.Text,
+            data.School, data.CastingTime, data.Range, data.Components, data.Duration, data.Concentration, data.Ritual, data.Attack, data.Save, data.Dice,
+            origin, diagnostics);
     }
 
     // ---- resources and features (M2 item 2) -----------------------------------------------------------------
@@ -416,12 +818,14 @@ public static class CharacterCalculator
         return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
     }
 
-    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics)
+    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> evaluate)
     {
         var revision = item.Revision;
         var effects = revision.Effects.Select(e => e switch
         {
-            RollEffect roll => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId),
+            RollEffect roll => new FeatureEffect(
+                e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
@@ -623,6 +1027,8 @@ public static class CharacterCalculator
                         continue;
                     if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
                         continue; // not reached yet: a level-3 feature at class level 2 is simply not there
+                    if (!EntryApplies(item, grant.OnlyAs, character))
+                        continue; // D04: only for the starting class, or only for a later class
                     if (grant.Content is not { } reference)
                     {
                         diagnostics.Add(new("effect.grant-content-missing", $"'{revision.Name}' effect '{grant.Id}' grants content but names none; it is ignored.", revision.Reference, grant.Id));
@@ -645,6 +1051,8 @@ public static class CharacterCalculator
             {
                 if (choice.Level is { } needed && GateLevel(item, character, classLevels) < needed)
                     continue; // not offered yet, so not unresolved either
+                if (!EntryApplies(item, choice.OnlyAs, character))
+                    continue; // D04: not offered to this class's entry (starting or later), so not unresolved either
                 var key = (revision.Reference, choice.ChoiceId);
                 if (!answered.Add(key))
                     continue;
@@ -713,6 +1121,18 @@ public static class CharacterCalculator
         return new(active, classes, classLevels, choices);
     }
 
+    /// <summary>
+    /// D04 (content v5 <c>onlyAs</c>): whether a class's grant or choice applies to this class's entry. The starting class is
+    /// the first class taken; content outside a class ignores <paramref name="onlyAs"/>.
+    /// </summary>
+    private static bool EntryApplies(ActiveContent item, ClassEntry? onlyAs, Character character)
+    {
+        if (onlyAs is null || item.ClassRoot is not { } root)
+            return true;
+        var starting = character.Classes.Count > 0 && character.Classes[0].Class == root;
+        return onlyAs == ClassEntry.StartingClass ? starting : !starting;
+    }
+
     /// <summary>The level that gates <paramref name="content"/>'s grants: its class's level, or the character level.</summary>
     private static int GateLevel(ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels) =>
         content.ClassRoot is { } root ? classLevels.GetValueOrDefault(root) : character.TotalLevel;
@@ -772,7 +1192,7 @@ public static class CharacterCalculator
     }
 
     private static List<Modifier> CollectModifiers(
-        List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
+        List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
         HashSet<string> manual)
     {
         var modifiers = new List<Modifier>();
@@ -781,7 +1201,15 @@ public static class CharacterCalculator
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
-                if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
+                // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
+                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
+                    && revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                {
+                    if (!character.Play.IsOn(revision.ContentId, toggle))
+                        continue;
+                }
+                else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
@@ -840,8 +1268,12 @@ public static class CharacterCalculator
 
     private sealed record Proficiency(GrantKind Grant, ActiveContent Content, GrantEffect Effect);
 
+    /// <summary>The prefix of weapon proficiency grant targets (content v5): <c>weapon.simple</c>, <c>weapon.martial</c> or <c>weapon.&lt;key&gt;</c>.</summary>
+    public const string WeaponProficiencyPrefix = "weapon.";
+
     private static Dictionary<string, Proficiency> CollectProficiencies(
-        List<ActiveContent> active, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel)
+        List<ActiveContent> active, Character character, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel,
+        Dictionary<string, Proficiency> weapons)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -852,6 +1284,14 @@ public static class CharacterCalculator
                     continue;
                 if (grant.Level is { } needed && gateLevel(item) < needed)
                     continue;
+                if (!EntryApplies(item, grant.OnlyAs, character))
+                    continue;
+                if (grant.Target is { } weapon && weapon.StartsWith(WeaponProficiencyPrefix, StringComparison.Ordinal) && weapon.Length > WeaponProficiencyPrefix.Length)
+                {
+                    if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
+                        weapons.TryAdd(weapon[WeaponProficiencyPrefix.Length..], new(GrantKind.Proficiency, item, grant));
+                    continue;
+                }
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
                 {
                     if (grant.Target is { } pending && SpecIndex.ContainsKey(pending))
@@ -1128,10 +1568,17 @@ public static class CharacterCalculator
         return value;
     }
 
-    /// <summary>The field plus every field it transitively reads (base inputs and effect formulas).</summary>
-    private static HashSet<string> Closure(string field, List<Modifier> modifiers)
+    /// <summary>
+    /// The field plus every field it transitively reads (base inputs and effect formulas). <paramref name="actualReads"/>
+    /// narrows a spec's static inputs for this character: the spell fields statically read every ability modifier (for
+    /// ordering), but depend only on the proficiency bonus and the primary caster's ability.
+    /// </summary>
+    private static HashSet<string> Closure(string field, List<Modifier> modifiers, IReadOnlyDictionary<string, IReadOnlyList<string>> actualReads)
     {
-        var reads = Specs.ToDictionary(s => s.Id, s => new HashSet<string>(s.Reads, StringComparer.Ordinal), StringComparer.Ordinal);
+        var reads = Specs.ToDictionary(
+            s => s.Id,
+            s => new HashSet<string>(actualReads.TryGetValue(s.Id, out var actual) ? actual : s.Reads, StringComparer.Ordinal),
+            StringComparer.Ordinal);
         foreach (var modifier in modifiers)
             reads[modifier.Effect.Target].UnionWith(modifier.ReadsFields);
 
@@ -1182,7 +1629,7 @@ public static class CharacterCalculator
     /// <param name="Manual">Fields that are only assisted; a base derivation that cannot complete adds its field.</param>
     private sealed record BaseContext(
         Character Character, string Family, Dictionary<string, int> Values, Dictionary<string, Proficiency> Proficiencies,
-        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual);
+        IReadOnlyList<ClassInfo> Classes, List<Diagnostic> Warnings, HashSet<string> Manual, IReadOnlyList<CasterInfo> Casters);
 
     private sealed record FieldSpec(string Id, string Label, string Units, IReadOnlyList<string> Reads, Func<BaseContext, List<Step>, int> Base);
 
@@ -1241,7 +1688,116 @@ public static class CharacterCalculator
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));
+
+        // Spellcasting (content schema v5, D04). Every ability modifier is an input, because the caster's ability is data.
+        IReadOnlyList<string> casterInputs = [FieldIds.ProficiencyBonus, .. Enum.GetValues<Ability>().Select(FieldIds.Modifier)];
+        specs.Add(new(FieldIds.SpellAttack, "Spell attack bonus", "modifier", casterInputs, (c, steps) => CasterBase(c, steps, FieldIds.SpellAttack, 0, "Spell attack bonus = proficiency bonus + {0} modifier")));
+        specs.Add(new(FieldIds.SpellSaveDc, "Spell save DC", "score", casterInputs, (c, steps) => CasterBase(c, steps, FieldIds.SpellSaveDc, 8, "Spell save DC = 8 + proficiency bonus + {0} modifier")));
+        for (var level = 1; level <= SpellcastingEffect.MaxSpellLevel; level++)
+        {
+            var spellLevel = level;
+            specs.Add(new(FieldIds.SpellSlots(level), $"Level {level} spell slots", "slots", [], (c, steps) => SlotBase(c, steps, spellLevel)));
+        }
+        specs.Add(new(FieldIds.PactSlots, "Pact Magic slots", "slots", [], PactBase));
         return specs;
+    }
+
+    private static int CasterBase(BaseContext c, List<Step> steps, string field, int constant, string description)
+    {
+        if (c.Casters.Count == 0)
+        {
+            steps.Add(new(field, "base", "No spellcasting", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        var (content, effect, _) = c.Casters[0];
+        var modifier = FieldIds.Modifier(effect.Ability);
+        var mod = c.Values[modifier];
+        var pb = c.Values[FieldIds.ProficiencyBonus];
+        var value = constant + pb + mod;
+        var text = string.Format(System.Globalization.CultureInfo.InvariantCulture, description, AbilityNames[effect.Ability]);
+        steps.Add(new(field, "base", $"{text}, from {Describe(content)}", constant, value, ContentOrigin(c.Family, content, effect), [new(FieldIds.ProficiencyBonus, pb), new(modifier, mod)]));
+        if (c.Casters.Count > 1)
+            c.Warnings.Add(new("spellcasting.multiclass", $"This character has {c.Casters.Count} casters. The sheet's spell attack and save DC are '{content.Revision.Name}''s; each caster's own are listed with its spells.", content.Revision.Reference, effect.Id));
+        return value;
+    }
+
+    /// <summary>
+    /// D04: slots come from the one caster with ordinary spell slots, at its class level. With two or more, and when each
+    /// declares how its levels count (<see cref="SpellcastingEffect.MulticlassCaster"/>, content v7), the SRD Multiclass
+    /// Spellcaster table gives the slots (M3 C3). Otherwise TomeStack cannot combine them: the field shows the first
+    /// caster's slots, assisted, and the player records the total as an override. Pact Magic is never combined.
+    /// </summary>
+    private static int SlotBase(BaseContext c, List<Step> steps, int level)
+    {
+        var field = FieldIds.SpellSlots(level);
+        var slotCasters = c.Casters.Where(x => x.Effect.SlotKind == SpellSlotKind.SpellSlots).ToList();
+        if (slotCasters.Count == 0)
+        {
+            steps.Add(new(field, "base", "No spell slots", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        if (slotCasters.Count > 1 && slotCasters.All(x => x.Effect.MulticlassCaster is not null))
+            return CombinedSlots(c, steps, level, slotCasters);
+        var (content, effect, classLevel) = slotCasters[0];
+        var value = Row(effect.Slots, classLevel)[level - 1];
+        steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel}: {value} level {level} slot(s), from its table", value, value, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
+        if (slotCasters.Count > 1)
+        {
+            var others = string.Join(", ", slotCasters.Skip(1).Select(x => $"'{x.Content.Revision.Name}' {x.ClassLevel}"));
+            c.Warnings.Add(new(
+                "spellcasting.multiclass-slots",
+                $"Spell slots of several classes ({others}) are not combined yet. TomeStack shows '{content.Revision.Name}''s slots; work out the total with the multiclass spellcaster table and record it as an override.",
+                content.Revision.Reference,
+                effect.Id));
+            c.Manual.Add(field);
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// SRD multiclass spellcasting (both families): add every full caster's class levels, half of each half caster's and a
+    /// third of each third caster's, rounded as the family's policy says, then read the Multiclass Spellcaster table at
+    /// that caster level. Each caster's own spells, counts and highest spell level stay per class (<see cref="SpellcastingEntry"/>).
+    /// </summary>
+    private static int CombinedSlots(BaseContext c, List<Step> steps, int level, IReadOnlyList<CasterInfo> casters)
+    {
+        var field = FieldIds.SpellSlots(level);
+        var policy = RulesFamilies.Get(c.Family);
+        var total = 0;
+        foreach (var (content, effect, classLevel) in casters)
+        {
+            var (part, how) = effect.MulticlassCaster switch
+            {
+                MulticlassCaster.Half => (Fraction(classLevel, 2, policy.HalfCasterLevels), $"half, rounded {Rounding(policy.HalfCasterLevels)}"),
+                MulticlassCaster.Third => (Fraction(classLevel, 3, policy.ThirdCasterLevels), $"a third, rounded {Rounding(policy.ThirdCasterLevels)}"),
+                _ => (classLevel, "all levels"),
+            };
+            total += part;
+            steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel} counts {part} caster level(s) ({how})", part, total, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
+        }
+        var casterLevel = Math.Min(total, Character.MaxLevel);
+        var value = casterLevel == 0 ? 0 : Row(policy.MulticlassSpellSlots, casterLevel)[level - 1];
+        steps.Add(new(field, "base", $"Multiclass Spellcaster table at caster level {casterLevel}: {value} level {level} slot(s)", casterLevel, value, new(TraceOriginKind.RulesPolicy, c.Family)));
+        return value;
+    }
+
+    private static int Fraction(int classLevel, int divisor, CasterLevelRounding rounding) =>
+        rounding == CasterLevelRounding.Up ? (classLevel + divisor - 1) / divisor : classLevel / divisor;
+
+    private static string Rounding(CasterLevelRounding rounding) => rounding == CasterLevelRounding.Up ? "up" : "down";
+
+    private static int PactBase(BaseContext c, List<Step> steps)
+    {
+        var pact = c.Casters.FirstOrDefault(x => x.Effect.SlotKind == SpellSlotKind.PactMagic);
+        if (pact is null)
+        {
+            steps.Add(new(FieldIds.PactSlots, "base", "No Pact Magic", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
+        }
+        var row = Row(pact.Effect.Slots, pact.ClassLevel);
+        var value = row.Sum();
+        steps.Add(new(FieldIds.PactSlots, "base", $"{Describe(pact.Content)} at class level {pact.ClassLevel}: {value} Pact Magic slot(s) of level {PactSlotLevel(row)}", value, value, ContentOrigin(c.Family, pact.Content, pact.Effect), [new(FormulaIdentifiers.ClassLevel, pact.ClassLevel)]));
+        return value;
     }
 
     /// <summary>

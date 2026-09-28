@@ -46,6 +46,8 @@ export interface Character {
   play?: PlayState;
   /** Items carried; only equipped ones apply (M2 item 4). */
   equipment?: EquipmentEntry[];
+  /** Spells known or prepared, per caster (character schema v6, D04). */
+  spells?: KnownSpell[];
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
@@ -163,6 +165,49 @@ export interface FeatureEffect {
   label?: string;
   dice?: string;
   resourceId?: string;
+  /** SPEC C-04 (content v5): when the roll's action is used; absent is "other". */
+  activation?: Activation;
+  /** Content v6: the content id that defines `resourceId` (a shared resource). */
+  resourceContent?: string;
+  /** Content v6: uses spent, or the most with `variableCost`. */
+  cost?: number;
+  variableCost?: boolean;
+}
+
+/** Content v6 (M3 B2): something switched on and off at the table. */
+export interface ToggleValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  toggleId: string;
+  label: string;
+  on: boolean;
+  resourceId?: string;
+  text?: string;
+}
+
+export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
+
+/** SPEC C-02, C-04: an attack with an equipped weapon. */
+export interface AttackEntry {
+  item: ContentReference;
+  name: string;
+  effectId: string;
+  attack: 'melee' | 'ranged';
+  category: 'simple' | 'martial';
+  ability: Ability;
+  toHit: number;
+  damage: string;
+  versatileDamage?: string;
+  damageType: string;
+  properties: string[];
+  range?: string;
+  mastery?: string;
+  proficient: boolean;
+  automation: AutomationStatus;
+  trace: TraceEntry[];
+  warnings: Diagnostic[];
+  origin: TraceOrigin;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -184,6 +229,21 @@ export interface HitPointState {
   temporary: number;
 }
 
+/** Hit dice of one size; sizes pool across classes (character schema v5). */
+export interface HitDiceValue {
+  die: number;
+  total: number;
+  spent: number;
+  remaining: number;
+  classes: string[];
+}
+
+/** One hit die spent on a short rest and what it shows (1 to `die`). */
+export interface HitDieRoll {
+  die: number;
+  roll: number;
+}
+
 export interface CharacterSheet {
   characterId: string;
   rulesFamily: RulesFamilyId;
@@ -194,6 +254,12 @@ export interface CharacterSheet {
   resources?: ResourceValue[];
   features?: FeatureEntry[];
   hitPoints?: HitPointState;
+  hitDice?: HitDiceValue[];
+  spellcasting?: SpellcastingEntry[];
+  spellSlots?: SlotValue[];
+  pactSlots?: SlotValue;
+  attacks?: AttackEntry[];
+  toggles?: ToggleValue[];
 }
 
 export interface ResourceUse {
@@ -202,7 +268,7 @@ export interface ResourceUse {
   spent: number;
 }
 
-/** SPEC C-05, character schema v4: changed only by the confirmed `character.play` command. */
+/** SPEC C-05, character schema v5: changed only by the confirmed `character.play` command and confirmed rests. */
 export interface PlayState {
   /** Absent or null: at the maximum. */
   currentHitPoints?: number | null;
@@ -210,6 +276,9 @@ export interface PlayState {
   resources: ResourceUse[];
   conditions: string[];
   exhaustion: number;
+  hitDiceSpent?: { die: number; spent: number }[];
+  deathSaves?: { successes: number; failures: number };
+  inspiration?: boolean;
 }
 
 export type PlayActionKind =
@@ -221,7 +290,17 @@ export type PlayActionKind =
   | 'setHitPoints'
   | 'addCondition'
   | 'removeCondition'
-  | 'setExhaustion';
+  | 'setExhaustion'
+  | 'recordDeathSave'
+  | 'addDeathSaveFailure'
+  | 'clearDeathSaves'
+  | 'setInspiration'
+  | 'spendSlot'
+  | 'regainSlot'
+  | 'spendPactSlot'
+  | 'regainPactSlot'
+  | 'toggleOn'
+  | 'toggleOff';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -229,11 +308,17 @@ export interface PlayAction {
   contentId?: string;
   resourceId?: string;
   condition?: string;
+  /** Content v6: the toggle to switch on or off (with `contentId`). */
+  toggleId?: string;
 }
 
 export interface RestChange {
   id: string;
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion';
+  /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle';
+  slotLevel?: number;
+  die?: number;
+  amount?: number;
   label: string;
   from: number;
   to: number;
@@ -279,6 +364,8 @@ export interface RollProvenance {
   sourceTitle?: string;
   page?: PageRef;
   linkedResourceId?: string;
+  /** The content that defines the linked resource (another feature's, for a shared one). */
+  linkedResourceContent?: string;
 }
 
 /** SPEC C-04: a roll record. Rolling never changes the character. */
@@ -301,6 +388,17 @@ export interface RollTarget {
   field?: string;
   mode?: RollMode;
   critical?: boolean;
+  /** One of the character's hit dice (d6–d12), the die alone. */
+  hitDie?: number;
+  /** A death saving throw: a d20 with no modifier. */
+  deathSave?: boolean;
+  /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
+  spell?: ContentReference;
+  spellAttack?: boolean;
+  /** An equipped weapon: its attack roll, or its damage (`damage`), two-handed (`versatile`). */
+  weapon?: ContentReference;
+  damage?: boolean;
+  versatile?: boolean;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */
@@ -377,6 +475,69 @@ export interface ContentOption {
   summary?: string;
   /** Set when listed for a campaign: whether it allows this option's source. */
   allowedInCampaign?: boolean;
+  /** A newer published revision of the same content exists: listed so pinned names resolve, but not offered for new picks. */
+  superseded?: boolean;
+  /** False when another revision grants it or offers it in a choice (class features, skill options): it is not pinned directly. */
+  standalone?: boolean;
+  /** Spell options only (content schema v5). */
+  spell?: { level: number; lists: string[]; school?: string; concentration: boolean; ritual: boolean };
+}
+
+/** A spell recorded for one caster; `caster` is the content id of the class or subclass with spellcasting. */
+export interface KnownSpell {
+  caster: string;
+  spell: ContentReference;
+  prepared?: boolean;
+}
+
+export interface SlotValue {
+  level: number;
+  maximum: number;
+  spent: number;
+  remaining: number;
+  field: string;
+}
+
+export interface SpellEntry {
+  spell: ContentReference;
+  name: string;
+  level: number;
+  prepared: boolean;
+  summary?: string;
+  text?: string;
+  school?: string;
+  castingTime?: string;
+  range?: string;
+  components?: string;
+  duration?: string;
+  concentration: boolean;
+  ritual: boolean;
+  attack: 'none' | 'melee' | 'ranged';
+  save?: Ability;
+  dice?: string;
+  origin: TraceOrigin;
+  diagnostics: Diagnostic[];
+}
+
+/** One caster (D04); the primary one's attack, save DC and slots are sheet fields. */
+export interface SpellcastingEntry {
+  content: ContentReference;
+  name: string;
+  effectId: string;
+  classLevel: number;
+  ability: Ability;
+  attackBonus: number;
+  saveDc: number;
+  preparation: 'prepared' | 'known';
+  spellList: string;
+  slotKind: 'spellSlots' | 'pactMagic';
+  slots: number[];
+  cantripsAllowed?: number;
+  spellsAllowed?: number;
+  primary: boolean;
+  origin: TraceOrigin;
+  spells: SpellEntry[];
+  warnings: Diagnostic[];
 }
 
 export interface CreateCharacterRequest {
@@ -390,6 +551,7 @@ export interface CreateCharacterRequest {
   choices?: ChoiceSelection[];
   campaignId?: string;
   campaignExceptions?: CampaignException[];
+  spells?: KnownSpell[];
 }
 
 export interface LicenseNotice {
@@ -439,6 +601,133 @@ export interface ExportPreview {
   characters: string[];
   included: LicenseNotice[];
   omitted: OmittedSource[];
+  /** Gap notes the package would carry: all of the characters' notes in a backup, 0 in a share (M3 B3). */
+  gapNotes: number;
+}
+
+export type GapTargetKind = 'feature' | 'field';
+
+export type GapNoteStatus = 'open' | 'resolved';
+
+/** What a gap note is about. `label` is filled in by the service from the sheet. */
+export interface GapTarget {
+  kind: GapTargetKind;
+  contentId?: string | null;
+  effectId?: string | null;
+  fieldId?: string | null;
+  label?: string | null;
+}
+
+/** M3 B3: a local session feedback note. Never transmitted; it leaves the machine only in a personal backup. */
+export interface GapNote {
+  id: string;
+  schemaVersion: number;
+  characterId: string;
+  target: GapTarget;
+  text: string;
+  status: GapNoteStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---- PDF import (M4; docs/features/pdf-import.md) ----
+
+export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed' | 'interrupted';
+
+/** An import job: extraction of one source's PDF, then candidate detection. Local only; never exported. */
+export interface ImportJob {
+  id: string;
+  sourceId: string;
+  firstPage: number;
+  lastPage?: number;
+  wholeDocument: boolean;
+  status: ImportJobStatus;
+  pageCount?: number;
+  nextPage?: number;
+  pagesDone: number;
+  pagesFailed: number;
+  pagesFromOcr: number;
+  pagesWithoutText: number;
+  /** A code such as `pdf.encrypted`; never text from the PDF. */
+  failureCode?: string;
+  failureMessage?: string;
+  candidates: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportSearchHit {
+  page: number;
+  snippet: string;
+}
+
+export interface DraftCandidate {
+  id: string;
+  sourceId: string;
+  page: PageRef;
+  excerpt: string;
+  proposedKind: ContentKind;
+  proposedName: string;
+  rulesFamilies: RulesFamilyId[];
+  proposedEffects: (Effect | Record<string, unknown>)[];
+  /** A UI hint, never permission (ADR-004). */
+  confidence: number;
+  uncertainties: string[];
+  unresolvedReferences: string[];
+  fields: Record<string, string>;
+  lowConfidenceFields: string[];
+  summary?: string;
+}
+
+export type CandidateStatus = 'pending' | 'accepted' | 'acceptedAsReference' | 'ignored';
+
+export interface StoredCandidate {
+  id: string;
+  jobId: string;
+  candidate: DraftCandidate;
+  /** The reviewer's version, when edited. */
+  edited?: DraftCandidate;
+  status: CandidateStatus;
+  draft?: ContentReference;
+  updatedAt: string;
+}
+
+export interface CandidateDependency {
+  kind: 'source' | 'content' | 'missing-content' | 'unresolved-name';
+  name: string;
+  reference?: ContentReference;
+}
+
+export interface CandidateCheck {
+  candidateId: string;
+  report: ValidationReport;
+  dependencies: CandidateDependency[];
+  blockers: Diagnostic[];
+  canAccept: boolean;
+  canAcceptAsReference: boolean;
+}
+
+export interface CandidateFilter {
+  page?: number;
+  kind?: ContentKind;
+  minConfidence?: number;
+  maxConfidence?: number;
+  status?: CandidateStatus;
+}
+
+export interface CandidateEdit {
+  name?: string;
+  kind?: ContentKind;
+  rulesFamilies?: RulesFamilyId[];
+  summary?: string;
+  effects?: unknown[];
+  dismissReferences?: string[];
+}
+
+/** `gap.listAll` (M3 C5): a note with its character's name. */
+export interface GapNoteListing {
+  note: GapNote;
+  characterName: string;
 }
 
 export interface ExportedPackage {
@@ -563,7 +852,7 @@ export interface StudioEntry {
   latestPublished?: ContentRevision;
 }
 
-export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment';
+export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment' | 'spell';
 
 export interface AffectedCharacter {
   characterId: string;
@@ -571,6 +860,17 @@ export interface AffectedCharacter {
   pinned: ContentReference;
   role: ReferenceRole;
   via?: string;
+}
+
+/** `character.updates` (M3 C7): a newer published revision of content the character uses; an offer, never applied by itself. */
+export interface UpdateOffer {
+  from: ContentReference;
+  to: ContentReference;
+  name: string;
+  role: ReferenceRole;
+  sourceTitle: string;
+  /** The source ships with TomeStack (an SRD pack) rather than being made in TomeStack. */
+  bundled: boolean;
 }
 
 export interface PublishResult {

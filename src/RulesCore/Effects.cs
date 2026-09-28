@@ -11,6 +11,18 @@ public static class FieldIds
     public const string ArmorClass = "armorClass";
     public const string HitPoints = "hitPoints";
 
+    /// <summary>The primary caster's spell attack bonus (content schema v5; D04).</summary>
+    public const string SpellAttack = "spellAttack";
+
+    /// <summary>The primary caster's spell save DC.</summary>
+    public const string SpellSaveDc = "spellSaveDc";
+
+    /// <summary>Pact Magic slots (all of one level).</summary>
+    public const string PactSlots = "pactSlots";
+
+    /// <summary>Spell slots of spell level <paramref name="level"/> (1–9).</summary>
+    public static string SpellSlots(int level) => $"spellSlots.{level}";
+
     public static string Score(Ability ability) => $"ability.{Key(ability)}.score";
 
     public static string Modifier(Ability ability) => $"ability.{Key(ability)}.mod";
@@ -42,6 +54,16 @@ public enum StackingRule { Stack, HighestInGroup }
 public enum EffectTiming { Always, WhileActive, OnRoll, OnShortRest, OnLongRest }
 
 public enum GrantKind { Proficiency, Expertise, Content }
+
+/// <summary>
+/// Content schema v5 (D04 multiclass proficiency subsets): a class's grant or choice that applies only when the class is
+/// the character's starting class (for example saving throws and the full skill choice), or only when it was taken as a
+/// later class (the SRD "as a multiclass character" subset).
+/// </summary>
+public enum ClassEntry { StartingClass, Multiclass }
+
+/// <summary>SPEC C-04: when a roll's action is used, so the sheet can group actions.</summary>
+public enum Activation { Action, BonusAction, Reaction, Other }
 
 public enum RestPeriod { ShortRest, LongRest }
 
@@ -88,6 +110,12 @@ public sealed record ModifierEffect : Effect
 
     /// <summary>Required with <see cref="StackingRule.HighestInGroup"/>.</summary>
     public string? StackGroup { get; init; }
+
+    /// <summary>
+    /// Content schema v6 (M3 B2): with <see cref="EffectTiming.WhileActive"/>, the <c>toggle</c> of this revision that
+    /// switches the modifier on. It applies only while that toggle is on. Null: a whileActive modifier stays assisted.
+    /// </summary>
+    public string? Toggle { get; init; }
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -108,6 +136,9 @@ public sealed record GrantEffect : Effect
     /// that belongs to a class (granted by it or chosen from it), and the character level for anything else.
     /// </summary>
     public int? Level { get; init; }
+
+    /// <summary>Content schema v5: only as the starting class, or only as a later class (<see cref="ClassEntry"/>). Null: always.</summary>
+    public ClassEntry? OnlyAs { get; init; }
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -151,6 +182,9 @@ public sealed record ChoiceEffect : Effect
 
     /// <summary>Content schema v3: the choice is made from this level on (class level inside a class; see <see cref="GrantEffect.Level"/>).</summary>
     public int? Level { get; init; }
+
+    /// <summary>Content schema v5: only as the starting class, or only as a later class. Null: always.</summary>
+    public ClassEntry? OnlyAs { get; init; }
 }
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>
@@ -163,6 +197,16 @@ public sealed record RestrictionEffect : Effect
     public required string Field { get; init; }
 
     public required int Minimum { get; init; }
+
+    /// <summary>
+    /// Content schema v5 (D04): a multiclass prerequisite. Checked only when the character has levels in two or more
+    /// classes, against the calculated sheet; an unmet one is a warning on the class, which stays applied (its levels are
+    /// already taken). Null: an ordinary prerequisite.
+    /// </summary>
+    public bool? Multiclass { get; init; }
+
+    /// <summary>Content schema v5: restrictions of one revision with the same group are alternatives; meeting any one is enough.</summary>
+    public string? Group { get; init; }
 }
 
 /// <summary>Restores a resource on a rest. Previewed and confirmed by a command, never applied by calculation.</summary>
@@ -196,6 +240,89 @@ public sealed record RollEffect : Effect
 
     /// <summary>Optional resource the associated action spends; only an explicit action command spends it.</summary>
     public string? ResourceId { get; init; }
+
+    /// <summary>Content schema v5 (SPEC C-04): action, bonus action, reaction or other; null is listed under "Other".</summary>
+    public Activation? Activation { get; init; }
+
+    /// <summary>
+    /// Content schema v6 (M3 B2, shared resources): the content id that defines <see cref="ResourceId"/>, when the resource
+    /// belongs to another feature (for example one pool several features spend). Null: this revision defines it.
+    /// </summary>
+    public Guid? ResourceContent { get; init; }
+
+    /// <summary>Content schema v6: uses the action spends (a formula; default 1). With <see cref="VariableCost"/>, the most it may spend.</summary>
+    public string? Cost { get; init; }
+
+    /// <summary>Content schema v6 (variable spend): the player chooses how many uses to spend, from 1 to <see cref="Cost"/> (or what is left).</summary>
+    public bool? VariableCost { get; init; }
+}
+
+/// <summary>
+/// Content schema v6 (M3 B2, SPEC I-05 "assisted actions"): something the player switches on and off at the table, such
+/// as a stance or an aura. While it is on (play state, character schema v7), the revision's modifiers that name it apply.
+/// Turning it on can spend one use of a resource. Turning it on or off is a confirmed play action, and the long rest
+/// proposes turning it off.
+/// </summary>
+public sealed record ToggleEffect : Effect
+{
+    public const string TypeName = "toggle";
+
+    public const int SchemaVersion = 6;
+
+    public override string Type => TypeName;
+
+    public required string ToggleId { get; init; }
+
+    public required string Label { get; init; }
+
+    /// <summary>A resource of this revision that turning the toggle on spends one use of.</summary>
+    public string? ResourceId { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ToggleEffect>(unknown);
+}
+
+public enum WeaponCategory { Simple, Martial }
+
+public enum WeaponAttack { Melee, Ranged }
+
+/// <summary>
+/// Content schema v5 (SPEC C-02, C-04): a weapon on an item. An equipped weapon gives an attack: to hit = the ability
+/// modifier (Strength for melee, Dexterity for ranged, the better of the two with <c>finesse</c>) plus the proficiency bonus
+/// when proficient; damage = <see cref="Damage"/> plus the same modifier. The same in both SRDs.
+/// </summary>
+public sealed record WeaponEffect : Effect
+{
+    public const string TypeName = "weapon";
+
+    public override string Type => TypeName;
+
+    public required WeaponCategory Category { get; init; }
+
+    public required WeaponAttack Attack { get; init; }
+
+    /// <summary>Damage dice, for example <c>1d8</c>.</summary>
+    public required string Damage { get; init; }
+
+    public required string DamageType { get; init; }
+
+    /// <summary>Property keys, for example <c>finesse</c>, <c>light</c>, <c>thrown</c>, <c>versatile</c>, <c>two-handed</c>.</summary>
+    public IReadOnlyList<string> Properties { get; init; } = [];
+
+    /// <summary>Damage dice when used with two hands (the versatile property).</summary>
+    public string? Versatile { get; init; }
+
+    /// <summary>Normal and long range, for example <c>80/320</c>.</summary>
+    public string? Range { get; init; }
+
+    /// <summary>The key a specific weapon proficiency names (<c>weapon.&lt;key&gt;</c>), for example <c>rapier</c>. A key, never a display name.</summary>
+    public required string WeaponKey { get; init; }
+
+    /// <summary>The 2024 Weapon Mastery property, as text (it is not automated).</summary>
+    public string? Mastery { get; init; }
+
+    public bool Has(string property) => Properties.Contains(property, StringComparer.Ordinal);
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<WeaponEffect>(unknown);
 }
 
 public enum ArmorCategory { Light, Medium, Heavy, Shield }
@@ -215,17 +342,7 @@ public sealed record ArmorEffect : Effect
     public const int SchemaVersion = 4;
 
     /// <summary>An <c>armor</c> effect read from a v4 revision; a malformed body stays reference-only.</summary>
-    internal static Effect FromUnknown(UnknownEffect unknown)
-    {
-        try
-        {
-            return unknown.Raw.Deserialize<ArmorEffect>(RulesJson.Compact) ?? (Effect)unknown;
-        }
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
-        {
-            return unknown;
-        }
-    }
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ArmorEffect>(unknown);
 
     public const int DefaultMediumDexterityCap = 2;
 
@@ -238,6 +355,140 @@ public sealed record ArmorEffect : Effect
 
     /// <summary>Medium armor only: the most the Dexterity modifier adds (default 2).</summary>
     public int? DexterityCap { get; init; }
+}
+
+/// <summary>How a caster readies spells: <see cref="Prepared"/> from a list (or spellbook) that can change, or a fixed <see cref="Known"/> set.</summary>
+public enum SpellPreparation { Prepared, Known }
+
+/// <summary>Which pool a caster's slots belong to: ordinary spell slots (long rest) or Pact Magic (short or long rest).</summary>
+public enum SpellSlotKind { SpellSlots, PactMagic }
+
+/// <summary>
+/// Content schema v7 (M3 C3): how a caster's class levels count toward the SRD Multiclass Spellcaster table: all of them,
+/// half, or a third. The rounding of the fractions is rules-family policy (<see cref="RulesFamilyPolicy.HalfCasterLevels"/>).
+/// </summary>
+public enum MulticlassCaster { Full, Half, Third }
+
+/// <summary>
+/// Content schema v5 (M2, D04): a class's (or subclass's) Spellcasting feature. Spell attack bonus = PB + the ability
+/// modifier and save DC = 8 + PB + the ability modifier, in both SRDs. Tables are indexed by the level in the class the
+/// content belongs to (row 0 = level 1), so each SRD revision states its own progression and the 2014/2024 differences
+/// (for example half casters with slots at level 1 in 2024) are content, not code. Typed only in a v5 (or newer) revision,
+/// like <see cref="ArmorEffect"/>.
+/// </summary>
+public sealed record SpellcastingEffect : Effect
+{
+    public const string TypeName = "spellcasting";
+
+    public const int SchemaVersion = 5;
+
+    public const int MaxSpellLevel = 9;
+
+    public override string Type => TypeName;
+
+    /// <summary>The spellcasting ability (Intelligence, Wisdom or Charisma in the SRDs).</summary>
+    public required Ability Ability { get; init; }
+
+    public SpellPreparation Preparation { get; init; } = SpellPreparation.Prepared;
+
+    /// <summary>The key of the spell list this caster uses; spells name the lists they are on (<see cref="SpellEffect.Lists"/>). A key, never a display name.</summary>
+    public required string SpellList { get; init; }
+
+    public SpellSlotKind SlotKind { get; init; } = SpellSlotKind.SpellSlots;
+
+    /// <summary>20 rows (class levels 1–20), each the number of slots of spell levels 1, 2, … (at most 9 entries).</summary>
+    public required IReadOnlyList<IReadOnlyList<int>> Slots { get; init; }
+
+    /// <summary>Optional, 20 entries: cantrips known at each class level.</summary>
+    public IReadOnlyList<int>? Cantrips { get; init; }
+
+    /// <summary>Optional, 20 entries: spells known (known casters) or prepared (a 2024 table) at each class level.</summary>
+    public IReadOnlyList<int>? SpellsTable { get; init; }
+
+    /// <summary>Optional formula for the number of prepared spells, for example <c>max(1, WIS.MOD + CLASS_LEVEL)</c> (2014 rules).</summary>
+    public string? SpellsFormula { get; init; }
+
+    /// <summary>
+    /// Content schema v7 (M3 C3): how this caster's levels combine with other casters' through the Multiclass Spellcaster
+    /// table. Absent (the default, so older revisions serialize unchanged): its slots are not combined, and a character
+    /// with a second slot caster gets the slot total as a manual step. Ordinary spell slots only; Pact Magic stays separate.
+    /// </summary>
+    public MulticlassCaster? MulticlassCaster { get; init; }
+
+    /// <summary>The content schema version that adds <see cref="MulticlassCaster"/>.</summary>
+    public const int MulticlassSchemaVersion = 7;
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellcastingEffect>(unknown);
+}
+
+/// <summary>Whether a spell needs an attack roll.</summary>
+public enum SpellAttackKind { None, Melee, Ranged }
+
+/// <summary>
+/// Content schema v5: the game data of a spell, on a <see cref="ContentKind.Spell"/> revision. The revision's summary and
+/// this effect's text carry the description. A spell is never active content: it applies only through a caster's list,
+/// and nothing on it changes calculated fields.
+/// </summary>
+public sealed record SpellEffect : Effect
+{
+    public const string TypeName = "spell";
+
+    public override string Type => TypeName;
+
+    /// <summary>0 for a cantrip, else 1–9.</summary>
+    public required int Level { get; init; }
+
+    public string? School { get; init; }
+    public string? CastingTime { get; init; }
+    public string? Range { get; init; }
+    public string? Components { get; init; }
+    public string? Duration { get; init; }
+    public bool Concentration { get; init; }
+    public bool Ritual { get; init; }
+
+    /// <summary>The spell lists (keys) this spell is on, for example <c>wizard</c>.</summary>
+    public IReadOnlyList<string> Lists { get; init; } = [];
+
+    public SpellAttackKind Attack { get; init; } = SpellAttackKind.None;
+
+    /// <summary>The saving throw a target makes, if any.</summary>
+    public Ability? Save { get; init; }
+
+    /// <summary>Optional dice the sheet can roll (damage or healing at the spell's base level), for example <c>8d6</c>.</summary>
+    public string? Dice { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellEffect>(unknown);
+}
+
+/// <summary>
+/// Effect types added after v3 are typed only in a revision of their content schema version or newer. An older revision
+/// may carry the same type name as an unknown effect stored byte for byte; typing it would change its hash and meaning
+/// (ADR-003, the <c>armor</c> lesson).
+/// </summary>
+internal static class VersionedEffects
+{
+    public static readonly IReadOnlyDictionary<string, (int Version, Func<UnknownEffect, Effect> Type)> ByName =
+        new Dictionary<string, (int, Func<UnknownEffect, Effect>)>(StringComparer.Ordinal)
+        {
+            [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, ArmorEffect.FromUnknown),
+            [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
+            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
+            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
+            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
+        };
+
+    /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
+    public static Effect Typed<T>(UnknownEffect unknown) where T : Effect
+    {
+        try
+        {
+            return unknown.Raw.Deserialize<T>(RulesJson.Compact) ?? (Effect)unknown;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return unknown;
+        }
+    }
 }
 
 /// <summary>
@@ -291,8 +542,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RecoveryEffect.TypeName => element.Deserialize<RecoveryEffect>(options),
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
-                // Typed only in content v4 revisions (ContentRevision.OnDeserialized); older ones keep it as written.
-                ArmorEffect.TypeName => UnknownEffect.From(element),
+                // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

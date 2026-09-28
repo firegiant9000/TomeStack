@@ -10,13 +10,15 @@ public sealed record PackageManifest
     public const string FormatName = "tomestack.package";
 
     /// <summary>
+    /// v5 (M3 B3): <c>gaps/</c> entries (session gap notes), in backups only. A share package never has them, and an
+    /// import refuses one that does. Older builds refuse v5 instead of rejecting the unknown path mid-preview.
     /// v4 (M2 items 5–7): <c>campaigns/</c> entries (SPEC P-01), and entries may use content schema v4 and character
     /// schema v4. Older builds refuse v4 instead of dropping the campaign or misreading the entries.
     /// v3 (ADR-007, D03): <see cref="Purpose"/> and <see cref="Omitted"/>. A share package may leave out pinned
     /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
     /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
     /// </summary>
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
@@ -50,7 +52,8 @@ public sealed record OmittedSource(Guid SourceId, string Title, string Publisher
 public sealed record OmittedRevision(ContentReference Reference, string Name, IReadOnlyList<Guid> Characters);
 
 /// <summary>What an export with a given purpose would contain, before anything is written (<c>package.exportPreview</c>).</summary>
-public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted);
+/// <param name="GapNotes">The number of gap notes included: all of the characters' notes in a backup, always 0 in a share (M3 B3).</param>
+public sealed record ExportPreview(ExportPurpose Purpose, string FileName, IReadOnlyList<Guid> Characters, IReadOnlyList<LicenseNotice> Included, IReadOnlyList<OmittedSource> Omitted, int GapNotes = 0);
 
 public enum PackageItemAction { Add, Unchanged, Replace, Conflict }
 

@@ -5,6 +5,9 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This product includes third-party software. Their names, versions, licenses and
 copyright notices are listed in ATTRIBUTION.md, which ships with every build.
+Microsoft.Windows.SDK.NET.dll and WinRT.Runtime.dll are Microsoft Windows SDK
+Distributable Code under Microsoft's Windows SDK license, not under the Apache
+License; see ATTRIBUTION.md.
 
 This work includes material taken from the System Reference Document 5.1
 ("SRD 5.1") by Wizards of the Coast LLC and available at

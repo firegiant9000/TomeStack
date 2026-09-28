@@ -38,7 +38,8 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
     }
   }
 
-  const addable = items.filter((o) => o.compatible && !equipment.some((e) => sameRef(e.item, o.reference)));
+  // Carried items keep their names from every revision; new items are offered at their newest revision (SPEC I-06).
+  const addable = items.filter((o) => o.compatible && !o.superseded && !equipment.some((e) => sameRef(e.item, o.reference)));
 
   return (
     <section aria-labelledby="equipment-heading" className="play-panel">

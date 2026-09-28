@@ -1,5 +1,158 @@
 # Changelog
 
+## Unreleased (M3 and M4)
+
+### Added
+
+- **M4 exit evidence (`docs/features/m4-acceptance.md`):** the original fixture book is imported through the real worker in the gate, reviewed, and nothing is active without approval. The run on a third-party test PDF is prepared (it reads a private local folder and reports counts only) and still owed, so the version stays 0.3.0.
+
+- **Import review (M4 D5; `docs/features/pdf-import.md`):** on the Sources screen, a source of your own with a PDF has "Read the text and find candidates". Read some pages or the whole book, watch the progress, cancel or resume, and search the text. Then review the candidates, filtered by page, kind, confidence and status. Each shows its excerpt next to "Open page", what was read, what is unsure, and what it depends on. Edit it, accept it as a draft or as a reference entry, or ignore it. Accepted entries are drafts in the studio, where publishing checks them again.
+
+- **Reviewing candidates (M4 D4; `docs/features/pdf-import.md`):** before a candidate is accepted, TomeStack checks the entry it would become (rules, references, formulas) and shows what it depends on. It stays blocked while a field is unsure or a name it refers to is missing, until you edit it or accept it as a reference entry only. Accepting creates a draft; nothing applies until you publish it in the studio.
+
+- **Candidate detection (M4 D3; `docs/features/pdf-import.md`):** an import proposes candidates found in the book's text: spells, feats, class features, weapon and armor table rows, and class feature tables. Each has its excerpt, page, proposed rules, a confidence and what it is unsure of, and the names it mentions that are not installed. Nothing becomes content until you review it. Measured on the two SRDs: every spell is found with its level, and every bundled weapon and class is found.
+
+- **Import jobs (M4 D2; `docs/features/pdf-import.md`):** extracting a PDF runs as a job you can cancel and resume. It survives closing the app and keeps a local audit log with no text from the book. Extracted text is searchable within its source. Imported text stays on this computer: no backup or share includes it.
+
+- **PDF text extraction (M4 D1, ADR-009; `docs/features/pdf-import.md`):** TomeStack can read the text of a PDF page by page, with its layout, and reads pages without a text layer with Windows' built-in OCR. The reading happens in a separate worker process with size, page, time and memory limits, so a damaged or hostile PDF cannot take the app down. Nothing is imported yet: import jobs and candidates follow.
+- **Third-party components:** PdfPig 0.1.16 (Apache-2.0), and the Windows SDK C#/WinRT projection (Microsoft Windows SDK license) for OCR. The self-contained install grows by about 31 MB (`ATTRIBUTION.md`).
+
+- **M3 exit evidence (`docs/features/m3-acceptance.md`):** every M3 item is mapped to its executable acceptance. The exit gate is not met yet, because the owner's Stardust Guardian material and a played session are needed. The version stays 0.3.0.
+
+- **Source updates (M3 C7, SPEC I-06; `docs/features/publishing-and-updates.md`):** when a newer revision of something a character uses arrives, from an updated SRD pack or your own homebrew, the sheet's "Updates available" panel offers it. Review it to see what changes, then apply it or keep the current revision. Nothing updates by itself.
+
+- **Gap notes follow-ups (M3 C5; `docs/features/gap-notes.md`):**
+  - **Report a gap:** a button on every feature and field fills in the gap note's "About" and puts the cursor in the text box.
+  - **All characters:** a new "Gap notes" screen in the sidebar lists every character's notes, open first, with "Mark resolved" and a way to open the character.
+  - Notes still stay on this computer and travel only in a personal backup.
+
+- **Printable backup (M3 C4; `docs/features/printable-backup.md`):** "Print…" on the sheet opens a print preview of the character: abilities, saves, skills, combat numbers, attacks, resources, spells, every feature with its source, page and manual step, and overrides. It ends with the license notices. Print it on paper or with "Microsoft Print to PDF" from the app's own print dialog. Gap notes are printed only if you tick them in. Nothing is sent anywhere, and no file path appears.
+
+- **Combined multiclass spell slots (M3 C3, D04's M3 part; `docs/features/spellcasting.md`):** a character with two or more spellcasting classes gets its spell slots from the SRD Multiclass Spellcaster table instead of recording the total by hand. Full casters count every level, and half casters (Paladin, Ranger) count half: rounded down under 2014 rules, up under 2024 rules. The trace shows each class's share and the table row. Pact Magic stays its own pool. Characters built before this keep their pinned SRD classes (and the manual step) until they take the update.
+
+### Fixed
+
+- **Import review fixes (M4, independent review 2026-09-28; ADR-009, `docs/features/pdf-import.md`):**
+  - A page that crashes the worker, runs out of time or memory, or cannot be read by OCR now fails alone: it is marked unreadable and the rest of the book is read. Resuming used to stop on the same page every time. After 5 such pages in one run the import stops, and "Resume" continues after them.
+  - What one page can send to the app is now bounded: the character limit covers its blocks and lines too, and the app refuses any worker message longer than a page can hold. The app also checks that the worker really runs under its memory cap before it reads the PDF, watches committed memory as well as the working set, and a worker left behind by a crashed app now exits.
+  - Finding candidates holds a bounded amount of text in memory. A job past it detects its first pages and says so in its audit; import the rest as a page range.
+  - Cancelling an import, or removing its PDF, now also stops candidate detection.
+  - Accepting a candidate saves the draft and marks the candidate accepted together, so a crash cannot lead to a duplicate draft.
+  - Importing the same PDF into the same source again no longer proposes entries you already accepted or ignored.
+  - A linked PDF that changed on disk is caught when a run starts, not only when it is resumed.
+- **Accessibility (import review):** after you accept or ignore a candidate, focus returns to the candidate list instead of being lost, and the final import status ("completed") is announced.
+- **Builder choices and spells:** ticking two options quickly (two skills of a choice, or two spells) could drop the first one. Each tick now applies to the latest draft. This also made an end-to-end test flaky.
+
+### Migration
+
+- **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
+- **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
+- **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
+
+## 0.3.0 (M2 delivered)
+
+M2 "Usable MVP" is delivered (ADR-008: MINOR for a delivered milestone). The owner checks passed on the installed 0.2.2 on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal (`docs/features/m2-acceptance.md`). This build also carries M3 B1–B3 below.
+
+### Added
+
+- **Session gap notes (M3 B3; `docs/features/gap-notes.md`):** in the sheet's "Gap notes" panel, the player writes down where TomeStack fell short on a feature or field, then marks each note resolved or deletes it after confirming.
+  - Notes are stored only on this computer and never sent anywhere. A personal backup includes them; a share never does.
+  - No error message or log quotes a note's text.
+
+- **Toggled effects, shared resources and variable costs (M3 B2; `docs/features/m3-effects.md`):**
+  - **Toggles:** content can declare a toggle (a stance, an aura) that the player switches on and off in "Attacks and actions". Turning it on can spend a use, in the same confirmed change. Modifiers bound to it apply only while it is on: for example +2 Armor Class, traced and still automatic. The long rest proposes switching active toggles off.
+  - **Shared resources:** an action can spend another feature's resource.
+  - **Variable costs:** an action can cost several uses, or let the player choose how many, in the roll's "Spend" control.
+
+- **The Stardust Guardian acceptance (M3 B1; MVP definition of done 3; `docs/features/m3-stardust-guardian.md`):**
+  - **The test:** it imports the owner's private backup of the character from the gitignored `tests/RulesFixtures/local/stardust-guardian/`. It checks the four DoD 3 mechanics and lists every mechanic as automatic, assisted or reference, with its manual step. It compares them with the owner's optional expectations, and writes the full report only inside that local folder.
+  - **Without the material,** it is skipped. A synthetic stand-in runs the same pipeline in the gate.
+  - **`character.mechanics`:** a new command that returns that inventory for any character.
+
+### Fixed
+
+- A new roll no longer inherits the amount typed for the previous roll's variable spend.
+- "Spend" is disabled when an action's cost evaluates to 0, instead of failing with `play.amount-out-of-range` (review of #7).
+
+### Migration
+
+- **Content schema v6** (`docs/schemas/content-revision.v6.schema.json`) adds the `toggle` effect, `modifier.toggle`, and roll `resourceContent`, `cost` and `variableCost`. They are typed only in v6 revisions, and the new fields are absent by default, so older revisions are unchanged. 0.2.2 refuses v6 revisions.
+- **Character schema v7** (`docs/schemas/character.v7.schema.json`) adds `play.toggles`. v1–v6 characters are upcast with every toggle off. There is no database migration.
+- **Database schema 5** adds the `gap_notes` table. The data folder is backed up first (`tomestack.db.v4.bak`), as for every upgrade. After the upgrade, 0.2.2 refuses the data folder (`NewerDatabaseException`); restore that backup to go back.
+- **Package format v5** (`docs/schemas/package-manifest.v5.schema.json`, `gap-note.v1.schema.json`) adds `gaps/` entries, in backups only. 0.2.2 refuses v5 packages.
+
+## 0.2.2 (M2 exit candidate)
+
+The build for the M2 owner checks (ADR-008: PATCH for a build given to a user; 0.3.0 once every MVP.md check passes on an installed build). Evidence per check: `docs/features/m2-acceptance.md`.
+
+### Added
+
+- **M2 acceptance evidence (`docs/features/m2-acceptance.md`):** every MVP.md check is mapped to its executable acceptance, plus the owner checks and what could not be verified here. A new `M2AcceptanceTests` plays a scripted encounter with an SRD Wizard in each family (damage, a cantrip attack, a weapon attack, a spell slot, a short rest with a hit die, a long rest), then round-trips it through a backup to a clean data folder.
+
+- **The SRD spellcasting classes, levels 1–20, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):**
+  - **Classes:** Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard. Each has every class feature from level 1 to 20, its SRD subclass, its spellcasting tables, and its multiclass prerequisites and proficiencies.
+  - **Resources:** the main per-rest ones are tracked (Bardic Inspiration, Channel Divinity, Wild Shape, Lay on Hands, Sorcery Points, Arcane Recovery and others). Other features are shown as text.
+  - **2014/2024 differences, as content:**
+    - 2024 Paladins and Rangers cast from level 1;
+    - 2014 prepared casters use a formula and 2024 casters a table;
+    - 2014 known casters have fixed spell counts.
+- **The SRD weapon tables and the Barbarian's multiclass data (`docs/licensing/srd-pack-review.md`):**
+  - **Weapons:** the 37 SRD 5.1 and 38 SRD 5.2.1 weapons are items with their damage, properties and range (and the 2024 mastery property's name), ready to equip and attack with.
+  - **Barbarian:** a new revision of the SRD Barbarian in each family records its weapon proficiencies, its multiclass prerequisite (Strength 13) and its multiclass proficiencies. Under 2024 rules, a later-class Barbarian gains martial weapons but not simple ones.
+  - **Pickers:** the builder and the equipment list offer only the newest revision of each content. Older revisions stay for the characters that use them.
+- **The SRD spells, both families (owner decision 2026-09-27; `docs/licensing/srd-pack-review.md`):** all 319 SRD 5.1 spells and all 339 SRD 5.2.1 spells ship as content (CC-BY-4.0, attributed like the other SRD content). Each has its level, school, casting time, range, components, duration, class lists, attack or save, base dice and full description, with its page. They are in two new bundled packs that share each family's source record. A caster lists them in the builder once the SRD caster classes are bundled (next).
+
+- **Short rest, hit dice, death saves and inspiration (D01 follow-up, owner 2026-09-27: SRD rules, previewed; SPEC C-05; `docs/features/rests.md`, `docs/features/sheet-play.md`):**
+  - **Hit dice:** the sheet shows the hit dice left per die size. "Short rest…" spends the hit dice the player picks, each rolled in TomeStack or entered from the table, and shows the hit points each restores (roll plus the Con modifier). Short-rest recoveries such as the 2024 Rage are ticked changes, as on the long rest. The long rest now also gives spent hit dice back.
+  - **Death saving throws:** they appear at 0 hit points. Roll one or enter a physical roll, and TomeStack records the SRD outcome (a 1 is two failures, a 20 regains 1 hit point). "Add a failure" covers damage at 0. Regaining hit points clears them.
+  - **Inspiration:** Inspiration (2014) or Heroic Inspiration (2024) is a checkbox.
+  - Every change is still confirmed.
+- **Three new rules-family differences, tested side by side:**
+  - `LongRestHitDice`: half the hit dice (2014) or all of them (2024) come back on a long rest.
+  - `HitDieHealingMinimum`: 0 (2014) or 1 (2024) hit point per die.
+  - `ShortRestNeedsOneHitPoint`: no (2014) or yes (2024).
+  - A long rest at 0 hit points is refused under both families, as the SRDs say (`rest.needs-hit-points`).
+
+- **Spellcasting engine (D04; `docs/features/spellcasting.md`):**
+  - **Casters:** a class (or subclass) can declare spellcasting with its ability, prepared or known spells, a spell list, and slot and count tables by class level (spell slots or Pact Magic).
+  - **Spells** are a content kind with level, lists, attack or save, and dice.
+  - **Sheet fields:** spell attack bonus, spell save DC, spell slots per level and Pact Magic slots, each traced and overridable.
+  - **Builder:** picks spells per caster, from the caster's list and castable levels, with the counts shown. Going over a count is flagged, not blocked.
+  - **"Spells and slots" panel:** spend and regain slots, cast (spends the lowest free slot), roll a spell's attack or dice (rolling spends nothing), and mark spells prepared.
+  - **Rests:** the long rest restores slots; both rests restore Pact Magic slots.
+  - **A second caster** is calculated separately. Combined multiclass slots are an assisted field; record the total as an override.
+  - **Fixtures:** development builds get original fixture casters and spells. The SRD casters are not bundled yet.
+
+- **Multiclass prerequisites, proficiency subsets, weapons and attacks (M2 item 2; D04; SPEC C-02, C-04; `docs/features/multiclass-and-attacks.md`):**
+  - **Multiclass prerequisites:** a class can declare them ("Strength 13 or Dexterity 13"). With two or more classes, an unmet one warns on the class.
+  - **Proficiency subsets:** grants and choices can apply only to the starting class (saving throws, the full skill choice) or only to a later class (the multiclass subset).
+  - **Weapons:** items can be weapons. Each equipped weapon gives an attack with to-hit and damage (finesse uses the better of Strength and Dexterity, versatile has two-handed damage), traced and rollable with advantage, disadvantage and critical hits.
+  - **Proficiency not recorded:** when no content records weapon proficiencies, the attack says so and leaves the bonus to the player.
+  - **"Attacks and actions" panel:** feature rolls are grouped by action, bonus action, reaction and other.
+  - **Fixtures:** original fixtures only; the SRD weapon table comes with the SRD content.
+
+- **Import PDF pages as reference (M2 item 4; SPEC I-01, I-03; owner decision 2026-09-27: no text extraction in M2; `docs/features/pdf-attachments.md`):**
+  - **Import:** on the Sources screen, a page range or the whole document of your own source's PDF becomes a draft reference entry that cites the pages. Nothing is read from the PDF.
+  - **Review:** you review and publish it in the homebrew studio, where it can also get effects by hand; until then it does nothing.
+  - **Play:** pinned, it shows "Open …, p. N" on the sheet.
+
+### Fixed
+
+- **The builder no longer shows choice options as "Missing content" while they load.** The choices appeared before the option list had arrived, so options were briefly disabled and named by id. The bundled spells made the list big enough for this to show up in the e2e test. A choice now says "Loading the options…" until the list is there.
+- **Attaching a PDF in browser development no longer drops the file.** The Sources screen recorded which source the browser file picker was for only after the host's "no native dialog" reply, so a file picked before that was silently ignored. This was the cause of the intermittent e2e failure "attaches a PDF…". The target is now recorded when the button is pressed.
+
+### Changed
+
+- **The builder's "Other content" lists only content that is picked directly** (feats, items and the like), not class features or skill options, which arrive through their class. Content listings carry only the first 200 characters of each summary. With the bundled SRD classes, the full list made the builder slow.
+- The "Remove PDF" confirmation lists the entries that cite the PDF in alphabetical order.
+- Feature roll buttons moved from the features list to the new "Attacks and actions" panel, with the "Critical hit" toggle.
+
+### Migration
+
+- **Content schema v5** (`docs/schemas/content-revision.v5.schema.json`) adds the `spellcasting`, `spell` and `weapon` effects, the spell fields, weapon proficiency grants, `onlyAs`, restriction `multiclass` and `group`, and roll `activation`. The new fields on existing effect types are optional and absent by default, so existing revisions are unchanged. They are typed only in v5 revisions; in older ones they stay unknown and unchanged. No revision is upcast, and no database migration is needed. New revisions are written as v5, and 0.2.1 refuses them.
+- **Character schema v6** (`docs/schemas/character.v6.schema.json`) adds `spells` and spent spell and Pact Magic slots. v1–v5 characters are upcast with none. There is no database migration.
+- **Character schema v5** (`docs/schemas/character.v5.schema.json`) adds `play.hitDiceSpent`, `play.deathSaves` and `play.inspiration`. v1–v4 characters are upcast on read with nothing spent, no saves and no inspiration. There is no database migration, because characters are unhashed JSON. 0.2.1 refuses v5 characters and packages that contain them (`character.schema-unsupported`, `package.schema-unsupported`).
+
 ## 0.2.1 (M2 in progress; items 1–7)
 
 The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to a user; MINOR when M2 is delivered).

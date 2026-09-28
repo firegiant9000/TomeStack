@@ -172,7 +172,10 @@ public sealed class DiceExpression
 /// <summary>A flat modifier added to a roll, with where it came from (for example the sheet's initiative trace).</summary>
 public sealed record RollModifier(string Label, int Amount, TraceOrigin? Origin = null);
 
-/// <summary>What the roll is for. <see cref="LinkedResourceId"/> is informational: spending it is a separate command.</summary>
+/// <summary>
+/// What the roll is for. <see cref="LinkedResourceId"/> is informational: spending it is a separate command.
+/// <see cref="LinkedResourceContent"/> is the content that defines that resource (another feature's, for a shared one).
+/// </summary>
 public sealed record RollProvenance(
     string RollId,
     string Label,
@@ -182,7 +185,8 @@ public sealed record RollProvenance(
     Guid? SourceId = null,
     string? SourceTitle = null,
     PageRef? Page = null,
-    string? LinkedResourceId = null);
+    string? LinkedResourceId = null,
+    Guid? LinkedResourceContent = null);
 
 public sealed record RollRequest(
     string Formula,
@@ -288,6 +292,6 @@ public static class DiceRoller
             modifiers,
             new RollProvenance(
                 effect.RollId, effect.Label, revision.Reference, revision.Name, effect.Id,
-                source?.Id, source?.Title, revision.Provenance.Page, effect.ResourceId));
+                source?.Id, source?.Title, revision.Provenance.Page, effect.ResourceId, effect.ResourceContent ?? (effect.ResourceId is null ? null : revision.ContentId)));
     }
 }

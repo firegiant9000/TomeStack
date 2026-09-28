@@ -157,7 +157,7 @@ public class HomebrewStudioTests
         var report = temp.App.ValidateContent(null, bad);
 
         Assert.Contains(report.Errors, e => e.Code == "validate.extends-choice-unknown");
-        Assert.Equal(4, bad.SchemaVersion);
+        Assert.Equal(ContentRevision.CurrentSchemaVersion, bad.SchemaVersion); // new revisions are written in the current version
     }
 
     [Fact]
@@ -195,12 +195,12 @@ public class HomebrewStudioTests
         restored.App.ApplyImport(backup);
         Assert.Equal(TempApp.Json(view.Sheet), TempApp.Json(restored.App.GetCharacter(id).Sheet));
 
-        // The exported v4 revisions and the v4 character match docs/schemas.
+        // The exported revisions (written in the current content schema) and the character match docs/schemas.
         using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(backup));
         var path = zip.GetEntry($"content/{authored.Path.RevisionId:D}.json")!;
         using (var document = System.Text.Json.JsonDocument.Parse(new StreamReader(path.Open()).ReadToEnd()))
         {
-            Assert.Equal(4, document.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(ContentRevision.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("", SchemaTests.Validate("content-revision", document.RootElement));
         }
         using (var character = System.Text.Json.JsonDocument.Parse(new StreamReader(zip.GetEntry($"characters/{id:D}.json")!.Open()).ReadToEnd()))

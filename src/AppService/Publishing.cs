@@ -4,12 +4,19 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService;
 
 /// <summary>How a character references a content revision.</summary>
-public enum ReferenceRole { Pin, Class, Choice, Grant, Equipment }
+public enum ReferenceRole { Pin, Class, Choice, Grant, Equipment, Spell }
 
 /// <param name="Via">For <see cref="ReferenceRole.Grant"/>: the name of the referenced revision that grants it.</param>
 public sealed record AffectedCharacter(Guid CharacterId, string Name, ContentReference Pinned, ReferenceRole Role, string? Via = null);
 
 public sealed record PublishResult(ContentReference Draft, ContentReference Published, ValidationReport Report, IReadOnlyList<AffectedCharacter> Affected);
+
+/// <summary>
+/// M3 C7 (SPEC I-06): a newer published revision of content the character references directly, from a bundled pack or
+/// the user's own source. An offer only: <c>character.reviewUpdate</c> shows it and <c>character.applyUpdate</c> adopts it.
+/// </summary>
+/// <param name="Bundled">The source ships with TomeStack (an SRD pack), rather than being made in TomeStack.</param>
+public sealed record UpdateOffer(ContentReference From, ContentReference To, string Name, ReferenceRole Role, string SourceTitle, bool Bundled);
 
 /// <summary>A displayed value that an update would change.</summary>
 public sealed record FieldDelta(string Field, string Label, int Before, int After);
@@ -101,6 +108,8 @@ public sealed partial class TomeStackApp
                 Add(selected, ReferenceRole.Choice);
             foreach (var entry in character.Equipment)
                 Add(entry.Item, ReferenceRole.Equipment);
+            foreach (var spell in character.Spells)
+                Add(spell.Spell, ReferenceRole.Spell);
             foreach (var reference in character.AllReferences())
             {
                 if (_store.FindRevision(reference) is not { } revision)
@@ -110,6 +119,43 @@ public sealed partial class TomeStackApp
             }
         }
         return affected;
+    }
+
+    /// <summary>
+    /// <c>character.updates</c> (M3 C7, SPEC I-06): for each revision the character references directly (pins, classes,
+    /// choice selections, equipment and spells), the newest published revision of the same content that supports the
+    /// character's family (or is covered by its recorded exception), when that is a different revision. Granted content moves with its
+    /// granter, so it is not offered on its own. Writes nothing; nothing is ever updated automatically.
+    /// </summary>
+    public IReadOnlyList<UpdateOffer> AvailableUpdates(Guid characterId)
+    {
+        var character = _store.FindCharacter(characterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
+        var sources = _store.ListSources().ToDictionary(s => s.Id);
+        var offers = new List<UpdateOffer>();
+        void Consider(ContentReference reference, ReferenceRole role)
+        {
+            if (offers.Any(o => o.From == reference) || _store.FindRevision(reference) is null)
+                return;
+            var exception = character.CrossFamilyExceptions.Any(e => e.Content == reference);
+            var newest = _store.ListRevisions(reference.ContentId)
+                .LastOrDefault(r => r.Status == RevisionStatus.Published && (exception || r.RulesFamilies.Contains(character.RulesFamily)));
+            if (newest is null || newest.RevisionId == reference.RevisionId)
+                return;
+            var source = sources.GetValueOrDefault(newest.Provenance.SourceId);
+            offers.Add(new(reference, newest.Reference, newest.Name, role, source?.Title ?? "(unknown source)", source is not null && source.EditionVersion != "homebrew"));
+        }
+        foreach (var pin in character.Pins)
+            Consider(pin, ReferenceRole.Pin);
+        foreach (var entry in character.Classes)
+            Consider(entry.Class, ReferenceRole.Class);
+        foreach (var selected in character.Choices.SelectMany(c => c.Selected))
+            Consider(selected, ReferenceRole.Choice);
+        foreach (var entry in character.Equipment)
+            Consider(entry.Item, ReferenceRole.Equipment);
+        foreach (var spell in character.Spells)
+            Consider(spell.Spell, ReferenceRole.Spell);
+        return offers;
     }
 
     /// <summary>SPEC I-06: the diff and recalculated fields for moving a character from one revision to another. Changes nothing.</summary>

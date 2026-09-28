@@ -22,7 +22,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 - **Current** = maximum − spent, never below 0 (a lower maximum after an update does not go negative).
 - **Recoveries:** the `recovery` effects of the same revision for that resource, with the amount evaluated (`value`) unless it is `all`. They are listed only; the long rest previews them ([rests.md](rests.md)).
 
-## Play state (character schema v4)
+## Play state (character schema v4, v5)
 
 `character.play` stores what changes at the table, separately from choices:
 
@@ -33,8 +33,13 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `resources[]` | `{ contentId, resourceId, spent }`. Keyed by content id, not revision, so an update to a new revision keeps the count |
 | `conditions[]` | Keys of the 14 conditions both SRDs define (`blinded` … `unconscious`). Reminders only: they do not change calculated values |
 | `exhaustion` | 0–6 |
+| `hitDiceSpent[]` (v5) | `{ die, spent }` per hit die size (d6–d12, 0–20). Spent on a short rest, given back by a long rest ([rests.md](rests.md)) |
+| `deathSaves` (v5) | `{ successes, failures }`, 0–3 each. Three successes: Stable (the 3 stays as the marker). Three failures: dead |
+| `inspiration` (v5) | Inspiration (2014) or Heroic Inspiration (2024): you have it or not |
+| `toggles[]` (v7) | Active toggles (`{ contentId, toggleId }`; actions `toggleOn`, `toggleOff`; [m3-effects.md](m3-effects.md)) |
+| `spellSlotsSpent[]`, `pactSlotsSpent` (v6) | Spent spell slots per spell level and spent Pact Magic slots ([spellcasting.md](spellcasting.md); actions `spendSlot`, `regainSlot`, `spendPactSlot`, `regainPactSlot`) |
 
-**Migration on read:** character schema v1–v3 are upcast to v4 with a fresh play state (full hit points, nothing spent, no conditions), which is exactly their meaning. Characters are stored as JSON and are not hashed, so no database migration is needed. A build before this one refuses v4 characters (`character.schema-unsupported`, `package.schema-unsupported`) instead of dropping the play state.
+**Migration on read:** character schema v1–v4 are upcast to v5 with the new state at its default (full hit points, nothing spent, no conditions, no hit dice spent, no death saves, no inspiration), which is exactly their meaning. Characters are stored as JSON and are not hashed, so no database migration is needed. A build before each version refuses its characters (`character.schema-unsupported`, `package.schema-unsupported`) instead of dropping the play state; 0.2.1 refuses v5.
 
 ## `character.play` (confirmed changes only)
 
@@ -51,15 +56,22 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `setHitPoints` | 0 to the maximum | `play.hit-points-above-maximum` |
 | `addCondition` / `removeCondition` | A known condition key | `play.condition-unknown` |
 | `setExhaustion` | 0–6 | `play.exhaustion-out-of-range` |
+| `recordDeathSave` | Records a death saving throw whose d20 showed `amount` (1–20), with the SRD outcome (SRD 5.1 p. 98, SRD 5.2.1 p. 17; the same in both): 10 or higher is a success, below 10 a failure, a 1 two failures, and a 20 regains 1 hit point and clears the saves | `play.not-dying` (above 0 hit points), `play.amount-out-of-range` |
+| `addDeathSaveFailure` | Adds `amount` (1–3) failures, for example damage at 0 hit points (a critical hit is 2) | `play.amount-out-of-range` |
+| `clearDeathSaves` | Resets both to 0 | |
+| `setInspiration` | `amount` 1 gives Inspiration, 0 spends or removes it | `play.amount-out-of-range` |
 
-Amounts are 0–10,000 (`play.amount-out-of-range`).
+Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clears death saving throws** (SRD): `heal` or `setHitPoints` from 0 to above 0 resets them in the same confirmed change.
 
 ## Rolls on the sheet (SPEC C-04)
 
-- Every ability modifier, saving throw, skill and initiative field has a "Roll" button (a d20 test through the `roll` command). The "d20 rolls" radio group chooses normal, advantage or disadvantage. Features with a `roll` effect have a button, and "Critical hit" doubles their dice.
+- Every ability modifier, saving throw, skill and initiative field has a "Roll" button (a d20 test through the `roll` command). The "d20 rolls" radio group chooses normal, advantage or disadvantage.
+- **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice.
 - The **Last roll** region (`aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page).
 - **Rolling never spends anything.** If the roll names a resource (`linkedResourceId`), the record offers a separate "Spend 1 …" button, which is a confirmed `character.play`.
+- **Death saving throws** (the panel appears at 0 hit points, or while saves are recorded): "Roll death saving throw" rolls a d20 (`roll` with `deathSave: true`), and "Record death saving throw (N)" records it. "d20 rolled at the table" + "Record this roll" records a physical roll. The heading reads "Death saving throws: 1 of 3 successes, 2 of 3 failures".
+- The hit points panel shows the hit dice left and an "Inspiration" / "Heroic Inspiration" checkbox.
 
 ## Not in this slice
 
-Attacks and weapon damage (no weapons yet; item 4 adds armor only), death saves, inspiration, hit dice and spell slots (spellcasting slice), and conditions that change calculations.
+Conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

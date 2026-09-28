@@ -26,6 +26,59 @@ public class PlayCommandTests
         response.GetProperty("error").GetProperty("diagnostics").EnumerateArray().First().GetProperty("code").GetString()!;
 
     [Fact]
+    public void Death_saves_follow_the_srd_and_regaining_hit_points_resets_them()
+    {
+        var (temp, id) = Brenna();
+        using var _ = temp;
+
+        Assert.Equal("play.not-dying", Code(Dispatch(temp, new { characterId = id, action = "recordDeathSave", amount = 12, confirm = true })));
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 40));
+        Assert.Equal("play.confirmation-required", Code(Dispatch(temp, new { characterId = id, action = "recordDeathSave", amount = 12 })));
+        Assert.Equal("play.amount-out-of-range", Code(Dispatch(temp, new { characterId = id, action = "recordDeathSave", amount = 21, confirm = true })));
+
+        temp.App.Play(new(id, PlayActionKind.RecordDeathSave, Confirm: true, Amount: 12)); // success
+        var view = temp.App.Play(new(id, PlayActionKind.RecordDeathSave, Confirm: true, Amount: 1)); // natural 1: two failures
+        Assert.Equal(new DeathSaves(1, 2), view.Character.Play.DeathSaves);
+
+        view = temp.App.Play(new(id, PlayActionKind.RecordDeathSave, Confirm: true, Amount: 20)); // natural 20: 1 hit point
+        Assert.Equal((1, new DeathSaves()), (view.Sheet.HitPoints!.Current, view.Character.Play.DeathSaves));
+
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 5));
+        temp.App.Play(new(id, PlayActionKind.AddDeathSaveFailure, Confirm: true, Amount: 2)); // a critical hit at 0
+        view = temp.App.Play(new(id, PlayActionKind.Heal, Confirm: true, Amount: 4));
+        Assert.Equal((4, new DeathSaves()), (view.Sheet.HitPoints!.Current, view.Character.Play.DeathSaves));
+    }
+
+    [Fact]
+    public void Inspiration_is_a_confirmed_toggle()
+    {
+        var (temp, id) = Brenna();
+        using var _ = temp;
+
+        Assert.True(temp.App.Play(new(id, PlayActionKind.SetInspiration, Confirm: true, Amount: 1)).Character.Play.Inspiration);
+        Assert.Equal("play.amount-out-of-range", Code(Dispatch(temp, new { characterId = id, action = "setInspiration", amount = 2, confirm = true })));
+        Assert.False(temp.App.Play(new(id, PlayActionKind.SetInspiration, Confirm: true, Amount: 0)).Character.Play.Inspiration);
+    }
+
+    [Fact]
+    public void A_hit_die_roll_rolls_only_a_die_the_character_has_and_changes_nothing()
+    {
+        var (temp, id) = Brenna();
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        var record = temp.App.Roll(new(id, HitDie: 12));
+        var save = temp.App.Roll(new(id, DeathSave: true));
+
+        Assert.Equal(("1d12", "Hit die (d12)"), (record.Formula, record.Provenance!.Label));
+        Assert.InRange(record.Total, 1, 12);
+        Assert.Equal("1d20", save.Formula);
+        Assert.Equal("rest.hit-die-unknown", Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, HitDie: 8))).Problems[0].Code);
+        Assert.Equal("roll.ambiguous", Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, HitDie: 12, DeathSave: true))).Problems[0].Code);
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
     public void The_sheet_shows_SRD_resources_with_calculated_maximums_and_their_recoveries()
     {
         var (temp, id) = Brenna();
@@ -122,18 +175,25 @@ public class PlayCommandTests
         temp.App.Play(new(id, PlayActionKind.AddCondition, Confirm: true, Condition: "poisoned"));
         temp.App.Play(new(id, PlayActionKind.SetExhaustion, Confirm: true, Amount: 2));
         temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, ContentId: RageContent, ResourceId: "rage"));
+        temp.App.Play(new(id, PlayActionKind.SetInspiration, Confirm: true, Amount: 1));
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 10));
+        var shortRest = temp.App.PreviewRest(id, RestPeriod.ShortRest, [new(12, 4)]);
+        temp.App.Rest(new(id, RestPeriod.ShortRest, Confirm: true, Basis: shortRest.Basis, HitDice: [new(12, 4)]));
         Assert.Equal("play.condition-unknown", Assert.Throws<AppValidationException>(() => temp.App.Play(new(id, PlayActionKind.AddCondition, Confirm: true, Condition: "sleepy"))).Problems[0].Code);
         temp.Reopen();
 
         var stored = temp.App.GetCharacter(id);
         Assert.Equal(["poisoned"], stored.Character.Play.Conditions);
         Assert.Equal(2, stored.Character.Play.Exhaustion);
-        Assert.Equal(4, stored.Character.SchemaVersion);
+        Assert.True(stored.Character.Play.Inspiration);
+        Assert.Equal([new HitDiceUse(12, 1)], stored.Character.Play.HitDiceSpent);
+        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
 
         using var destination = new TempApp();
         destination.App.ApplyImport(temp.App.ExportCharacters([id]).Content);
         var imported = destination.App.GetCharacter(id);
         Assert.Equal(TempApp.Json(stored.Character.Play), TempApp.Json(imported.Character.Play));
-        Assert.Equal(2, imported.Sheet.Resources!.Single(r => r.ResourceId == "rage").Current);
+        Assert.Equal(3, imported.Sheet.Resources!.Single(r => r.ResourceId == "rage").Current); // the short rest gave the Rage back
+        Assert.Equal(2, Assert.Single(imported.Sheet.HitDice!).Remaining);
     }
 }

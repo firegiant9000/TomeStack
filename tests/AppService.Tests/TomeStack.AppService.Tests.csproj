@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Windows TFM: the M4 acceptance runs imports in the real worker process (TomeStack.ImportWorker.Host.exe, ADR-009). -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
@@ -20,10 +22,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AppService\TomeStack.AppService.csproj" />
     <ProjectReference Include="..\..\src\ImportWorker\TomeStack.ImportWorker.csproj" />
+    <!-- Copied next to the tests, which start it as a child process like the app does. -->
+    <ProjectReference Include="..\..\src\ImportWorker.Host\TomeStack.ImportWorker.Host.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="..\RulesFixtures\**\*.json" LinkBase="RulesFixtures" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\AppService\Content\*.json" LinkBase="Content" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\licensing\*.md" LinkBase="licensing" CopyToOutputDirectory="PreserveNewest" />

@@ -28,6 +28,39 @@ public enum PlayActionKind
 
     /// <summary>The exhaustion level becomes <c>amount</c> (0–6).</summary>
     SetExhaustion,
+
+    /// <summary>
+    /// Records one death saving throw whose d20 showed <c>amount</c> (1–20), with the SRD outcome
+    /// (<see cref="DeathSaves.Outcome"/>). Only at 0 hit points. A natural 20 sets hit points to 1 and resets the saves.
+    /// </summary>
+    RecordDeathSave,
+
+    /// <summary>Adds <c>amount</c> (1–3) death saving throw failures, for example damage at 0 hit points (2 on a critical hit).</summary>
+    AddDeathSaveFailure,
+
+    /// <summary>Resets death saving throw successes and failures to 0.</summary>
+    ClearDeathSaves,
+
+    /// <summary>Inspiration (2014) or Heroic Inspiration (2024): <c>amount</c> 1 gives it, 0 spends or removes it.</summary>
+    SetInspiration,
+
+    /// <summary>Spends one spell slot of spell level <c>amount</c> (1–9), for example to cast a spell at that level (D04).</summary>
+    SpendSlot,
+
+    /// <summary>Regains one spent spell slot of spell level <c>amount</c> by hand.</summary>
+    RegainSlot,
+
+    /// <summary>Spends one Pact Magic slot.</summary>
+    SpendPactSlot,
+
+    /// <summary>Regains one spent Pact Magic slot by hand.</summary>
+    RegainPactSlot,
+
+    /// <summary>Content v6 (M3 B2): switches a toggle on (<c>contentId</c>, <c>toggleId</c>); if it names a resource, one use is spent in the same change.</summary>
+    ToggleOn,
+
+    /// <summary>Switches a toggle off.</summary>
+    ToggleOff,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -39,7 +72,8 @@ public sealed record PlayCommand(
     int Amount = 1,
     Guid? ContentId = null,
     string? ResourceId = null,
-    string? Condition = null);
+    string? Condition = null,
+    string? ToggleId = null);
 
 public sealed partial class TomeStackApp
 {
@@ -79,9 +113,78 @@ public sealed partial class TomeStackApp
             PlayActionKind.SetExhaustion => command.Amount <= PlayState.MaxExhaustion
                 ? play with { Exhaustion = command.Amount }
                 : throw new AppValidationException([new("play.exhaustion-out-of-range", $"Exhaustion level {command.Amount} must be between 0 and {PlayState.MaxExhaustion}.")]),
+            PlayActionKind.RecordDeathSave => RecordDeathSave(play, hp, command.Amount),
+            PlayActionKind.AddDeathSaveFailure => command.Amount is >= 1 and <= DeathSaves.Maximum
+                ? play with { DeathSaves = play.DeathSaves.After(new(0, command.Amount, false, "")) }
+                : throw new AppValidationException([new("play.amount-out-of-range", $"Add 1 to {DeathSaves.Maximum} death saving throw failures.")]),
+            PlayActionKind.ClearDeathSaves => play with { DeathSaves = new() },
+            PlayActionKind.SetInspiration => command.Amount is 0 or 1
+                ? play with { Inspiration = command.Amount == 1 }
+                : throw new AppValidationException([new("play.amount-out-of-range", "Inspiration is 1 (have it) or 0 (do not).")]),
+            PlayActionKind.SpendSlot or PlayActionKind.RegainSlot => ChangeSlot(play, sheet, command),
+            PlayActionKind.SpendPactSlot => sheet.PactSlots is { Remaining: > 0 }
+                ? play with { PactSlotsSpent = play.PactSlotsSpent + 1 }
+                : throw new AppValidationException([new("slots.none-left", "No Pact Magic slots are left.")]),
+            PlayActionKind.RegainPactSlot => play.PactSlotsSpent > 0
+                ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
+                : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
+            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(play, sheet, command),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
+        // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
+        if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
+            play = play with { DeathSaves = new() };
         return SaveWithPlay(character with { Play = play });
+    }
+
+    private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)
+    {
+        var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
+            ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
+        var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
+        if (command.Action == PlayActionKind.ToggleOff)
+        {
+            return toggle.On
+                ? play with { Toggles = others }
+                : throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+        }
+        if (toggle.On)
+            throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
+        if (toggle.ResourceId is { } resourceId)
+        {
+            // Turning it on spends one use, in the same confirmed change (a use that is not there refuses the whole change).
+            play = ChangeResource(play, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: 1, ContentId: toggle.Content.ContentId, ResourceId: resourceId));
+        }
+        return play with { Toggles = [.. others, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
+    }
+
+    private static PlayState ChangeSlot(PlayState play, CharacterSheet sheet, PlayCommand command)
+    {
+        if (command.Amount is < 1 or > SpellcastingEffect.MaxSpellLevel)
+            throw new AppValidationException([new("play.amount-out-of-range", $"A spell slot level is 1 to {SpellcastingEffect.MaxSpellLevel}.")]);
+        var slots = sheet.SpellSlots?.FirstOrDefault(s => s.Level == command.Amount);
+        var spent = play.SlotsSpentOf(command.Amount);
+        if (command.Action == PlayActionKind.SpendSlot)
+        {
+            return slots is { Remaining: > 0 }
+                ? play.WithSlotsSpent(command.Amount, spent + 1)
+                : throw new AppValidationException([new("slots.none-left", $"No level {command.Amount} spell slots are left.")]);
+        }
+        return spent > 0
+            ? play.WithSlotsSpent(command.Amount, spent - 1)
+            : throw new AppValidationException([new("slots.nothing-spent", $"No level {command.Amount} spell slots are spent.")]);
+    }
+
+    private static PlayState RecordDeathSave(PlayState play, HitPointState hp, int d20)
+    {
+        if (hp.Current > 0)
+            throw new AppValidationException([new("play.not-dying", "Death saving throws are made only at 0 hit points.")]);
+        if (d20 is < 1 or > 20)
+            throw new AppValidationException([new("play.amount-out-of-range", "A d20 shows 1 to 20.")]);
+        var outcome = DeathSaves.Outcome(d20);
+        return outcome.RegainsOneHitPoint
+            ? play with { CurrentHitPoints = hp.Maximum > 1 ? 1 : null, DeathSaves = new() }
+            : play with { DeathSaves = play.DeathSaves.After(outcome) };
     }
 
     private static PlayState Damage(PlayState play, HitPointState hp, int amount)

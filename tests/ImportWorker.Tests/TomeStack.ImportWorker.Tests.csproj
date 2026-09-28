@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows TFM: the OCR tests use Windows.Data.Pdf and Windows.Media.Ocr, like the worker (ADR-009). -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ImportWorker\TomeStack.ImportWorker.csproj" />
+    <!-- An executable reference: TomeStack.ImportWorker.Host.exe is copied next to the tests, which start it as a child process. -->
+    <ProjectReference Include="..\..\src\ImportWorker.Host\TomeStack.ImportWorker.Host.csproj" />
+  </ItemGroup>
+
+</Project>

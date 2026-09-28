@@ -66,6 +66,48 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             json TEXT NOT NULL
         );
         """),
+        // v5 (M3 B3): session gap notes. Local only; they leave the machine only inside a personal backup.
+        new("""
+        CREATE TABLE gap_notes (
+            id TEXT PRIMARY KEY,
+            character_id TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX ix_gap_notes_character_id ON gap_notes (character_id);
+        """),
+        // v6 (M4 D2, ADR-009 (d)): import jobs, extracted page text keyed by the PDF's hash, candidates and an audit log.
+        // Local only: no package ever includes these tables (a share or a backup).
+        new("""
+        CREATE TABLE import_jobs (
+            id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX ix_import_jobs_source_id ON import_jobs (source_id);
+        CREATE TABLE import_pages (
+            sha256 TEXT NOT NULL,
+            page INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            json TEXT NOT NULL,
+            PRIMARY KEY (sha256, page)
+        );
+        CREATE TABLE import_candidates (
+            id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX ix_import_candidates_job_id ON import_candidates (job_id);
+        CREATE TABLE import_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT NOT NULL,
+            at TEXT NOT NULL,
+            event TEXT NOT NULL,
+            detail TEXT
+        );
+        CREATE INDEX ix_import_audit_job_id ON import_audit (job_id);
+        """),
     ];
 
     private readonly SqliteConnection _connection;
@@ -170,6 +212,174 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<Campaign> ListCampaigns() => Query<Campaign>("SELECT json FROM campaigns ORDER BY name, id;");
 
     public void DeleteCampaign(Guid id) => Execute("DELETE FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- gap notes (M3 B3) ----
+
+    public void SaveGapNote(GapNote note)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+        Execute(
+            "INSERT INTO gap_notes (id, character_id, json) VALUES ($id, $character, $json) ON CONFLICT(id) DO UPDATE SET character_id = excluded.character_id, json = excluded.json;",
+            ("$id", Key(note.Id)),
+            ("$character", Key(note.CharacterId)),
+            ("$json", Serialize(note)));
+    }
+
+    public GapNote? FindGapNote(Guid id) => QuerySingle<GapNote>("SELECT json FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<GapNote> ListGapNotes(Guid characterId) =>
+        Query<GapNote>("SELECT json FROM gap_notes WHERE character_id = $character ORDER BY rowid;", ("$character", Key(characterId)));
+
+    public IReadOnlyList<GapNote> ListAllGapNotes() => Query<GapNote>("SELECT json FROM gap_notes ORDER BY rowid;");
+
+    public void DeleteGapNote(Guid id) => Execute("DELETE FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- imports (M4 D2, ADR-009 (d)): local only, never exported ----
+
+    public void SaveImportJob(ImportJobRecord job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        Execute(
+            "INSERT INTO import_jobs (id, source_id, status, json) VALUES ($id, $source, $status, $json) ON CONFLICT(id) DO UPDATE SET status = excluded.status, json = excluded.json;",
+            ("$id", Key(job.Id)),
+            ("$source", Key(job.SourceId)),
+            ("$status", job.Status.ToString()),
+            ("$json", Serialize(job)));
+    }
+
+    public ImportJobRecord? FindImportJob(Guid id) => QuerySingle<ImportJobRecord>("SELECT json FROM import_jobs WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<ImportJobRecord> ListImportJobs() => Query<ImportJobRecord>("SELECT json FROM import_jobs ORDER BY rowid;");
+
+    /// <summary>One extracted page of the PDF with this hash; a later extraction of the same page replaces it.</summary>
+    public void SaveImportPage(string sha256, StoredPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        Execute(
+            "INSERT INTO import_pages (sha256, page, text, json) VALUES ($sha, $page, $text, $json) ON CONFLICT(sha256, page) DO UPDATE SET text = excluded.text, json = excluded.json;",
+            ("$sha", sha256),
+            ("$page", page.Page),
+            ("$text", page.Text),
+            ("$json", Serialize(page with { Text = "" })));
+    }
+
+    public StoredPage? FindImportPage(string sha256, int page)
+    {
+        lock (_gate)
+        {
+            using var command = Command("SELECT text, json FROM import_pages WHERE sha256 = $sha AND page = $page;", [("$sha", sha256), ("$page", page)]);
+            using var reader = command.ExecuteReader();
+            return reader.Read() ? JsonSerializer.Deserialize<StoredPage>(reader.GetString(1), RulesJson.Compact)! with { Text = reader.GetString(0) } : null;
+        }
+    }
+
+    public IReadOnlyList<StoredPage> ListImportPages(string sha256)
+    {
+        lock (_gate)
+        {
+            using var command = Command("SELECT text, json FROM import_pages WHERE sha256 = $sha ORDER BY page;", [("$sha", sha256)]);
+            using var reader = command.ExecuteReader();
+            var pages = new List<StoredPage>();
+            while (reader.Read())
+                pages.Add(JsonSerializer.Deserialize<StoredPage>(reader.GetString(1), RulesJson.Compact)! with { Text = reader.GetString(0) });
+            return pages;
+        }
+    }
+
+    /// <summary>
+    /// Pages <paramref name="first"/> to <paramref name="last"/> for detection: blocks and lines only (detection never reads
+    /// the joined text), in page order, until their stored size passes <paramref name="maxChars"/>. <paramref name="stoppedBefore"/>
+    /// is the first page left out, or null when every page fits. This bounds what detection holds in the app's memory.
+    /// </summary>
+    public IReadOnlyList<StoredPage> ListImportPagesForDetection(string sha256, int first, int last, long maxChars, out int? stoppedBefore)
+    {
+        stoppedBefore = null;
+        lock (_gate)
+        {
+            using var command = Command(
+                "SELECT page, json FROM import_pages WHERE sha256 = $sha AND page >= $first AND page <= $last ORDER BY page;",
+                [("$sha", sha256), ("$first", first), ("$last", last)]);
+            using var reader = command.ExecuteReader();
+            var pages = new List<StoredPage>();
+            long used = 0;
+            while (reader.Read())
+            {
+                var json = reader.GetString(1);
+                used += json.Length;
+                if (used > maxChars)
+                {
+                    stoppedBefore = reader.GetInt32(0);
+                    break;
+                }
+                pages.Add(JsonSerializer.Deserialize<StoredPage>(json, RulesJson.Compact)!);
+            }
+            return pages;
+        }
+    }
+
+    /// <summary>SPEC I-03: pages of one PDF whose text contains <paramref name="query"/> (case-insensitive for ASCII), in page order.</summary>
+    public IReadOnlyList<(int Page, string Text)> SearchImportPages(string sha256, string query, int limit)
+    {
+        lock (_gate)
+        {
+            using var command = Command(
+                "SELECT page, text FROM import_pages WHERE sha256 = $sha AND instr(lower(text), lower($query)) > 0 ORDER BY page LIMIT $limit;",
+                [("$sha", sha256), ("$query", query), ("$limit", limit)]);
+            using var reader = command.ExecuteReader();
+            var results = new List<(int, string)>();
+            while (reader.Read())
+                results.Add((reader.GetInt32(0), reader.GetString(1)));
+            return results;
+        }
+    }
+
+    public void SaveImportCandidate(StoredCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        Execute(
+            "INSERT INTO import_candidates (id, job_id, status, json) VALUES ($id, $job, $status, $json) ON CONFLICT(id) DO UPDATE SET status = excluded.status, json = excluded.json;",
+            ("$id", Key(candidate.Id)),
+            ("$job", Key(candidate.JobId)),
+            ("$status", candidate.Status.ToString()),
+            ("$json", Serialize(candidate)));
+    }
+
+    public StoredCandidate? FindImportCandidate(Guid id) =>
+        QuerySingle<StoredCandidate>("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id))) is { } found ? Typed(found) : null;
+
+    public IReadOnlyList<StoredCandidate> ListImportCandidates(Guid jobId) =>
+        [.. Query<StoredCandidate>("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId))).Select(Typed)];
+
+    /// <summary>Versioned effect types are typed only inside a revision, so a stored candidate's effects are typed on read (ADR-003).</summary>
+    private static StoredCandidate Typed(StoredCandidate stored) => stored with
+    {
+        Candidate = ImportWorker.CandidateQuarantine.WithTypedEffects(stored.Candidate),
+        Edited = stored.Edited is { } edited ? ImportWorker.CandidateQuarantine.WithTypedEffects(edited) : null,
+    };
+
+    /// <summary>Candidates still pending review are replaced when a job detects again; reviewed ones stay.</summary>
+    public void DeletePendingImportCandidates(Guid jobId) =>
+        Execute("DELETE FROM import_candidates WHERE job_id = $job AND status = 'Pending';", ("$job", Key(jobId)));
+
+    public void AddImportAudit(Guid jobId, DateTimeOffset at, string eventName, string? detail) => Execute(
+        "INSERT INTO import_audit (job_id, at, event, detail) VALUES ($job, $at, $event, $detail);",
+        ("$job", Key(jobId)),
+        ("$at", at.ToString("O", System.Globalization.CultureInfo.InvariantCulture)),
+        ("$event", eventName),
+        ("$detail", (object?)detail ?? DBNull.Value));
+
+    public IReadOnlyList<ImportAuditEntry> ListImportAudit(Guid jobId)
+    {
+        lock (_gate)
+        {
+            using var command = Command("SELECT at, event, detail FROM import_audit WHERE job_id = $job ORDER BY id;", [("$job", Key(jobId))]);
+            using var reader = command.ExecuteReader();
+            var entries = new List<ImportAuditEntry>();
+            while (reader.Read())
+                entries.Add(new(DateTimeOffset.Parse(reader.GetString(0), System.Globalization.CultureInfo.InvariantCulture), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2)));
+            return entries;
+        }
+    }
 
     // ---- attachments (ADR-005) ----
 

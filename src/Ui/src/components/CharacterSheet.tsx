@@ -8,15 +8,20 @@ import type {
   ExportPurpose,
   FieldOverride,
   PlayAction,
+  RestPeriod,
   RollMode,
   RollRecord,
   RollTarget,
   TraceOrigin,
 } from '../api/types';
 import { downloadBase64 } from '../files';
-import { ConditionsPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
+import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
+import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
+import { SpellsPanel } from './SpellsPanel';
+import { UpdatesPanel } from './UpdatesPanel';
 
 function describeOrigin(origin: TraceOrigin): string {
   switch (origin.kind) {
@@ -43,7 +48,11 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
   { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' },
+  // D04: the primary caster's numbers, with traces and overrides (the manual step for combined multiclass slots).
+  { title: 'Spellcasting', match: (f) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.') },
 ];
+
+const isSpellField = (f: string) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.');
 
 function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string, string> }) {
   return (
@@ -84,10 +93,11 @@ interface FieldProps {
   labels: Map<string, string>;
   onOverride: (field: string, change: FieldOverride | undefined) => void;
   onRoll: (field: string) => void;
+  onReportGap: (field: string) => void;
 }
 
 /** One field: its own override form state, so fields never share input values. */
-function FieldCard({ value, labels, onOverride, onRoll }: FieldProps) {
+function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProps) {
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const headingId = `field-${value.field}`;
@@ -140,6 +150,9 @@ function FieldCard({ value, labels, onOverride, onRoll }: FieldProps) {
             </button>
           )}
         </form>
+        <button type="button" onClick={() => onReportGap(value.field)}>
+          Report a gap: {value.label}
+        </button>
       </details>
     </section>
   );
@@ -193,11 +206,11 @@ function ExportPanel({ characterId, onError, onStatus }: ExportProps) {
         <legend>What is this package for?</legend>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'backup'} onChange={() => choose('backup')} />
-          Personal backup: includes everything. Do not share it.
+          Personal backup: includes everything, your gap notes too. Do not share it.
         </label>
         <label>
           <input type="radio" name="export-purpose" checked={purpose === 'share'} onChange={() => choose('share')} />
-          Share with someone: leaves out content you may not share
+          Share with someone: leaves out content you may not share, and never includes gap notes
         </label>
       </fieldset>
       {purpose === 'share' && preview && (
@@ -240,6 +253,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const { character, sheet } = view;
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
+  const printButton = useRef<HTMLButtonElement>(null);
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -247,7 +261,16 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
-  const [resting, setResting] = useState(false);
+  const [resting, setResting] = useState<RestPeriod>();
+  const [printing, setPrinting] = useState(false);
+  const [gapAbout, setGapAbout] = useState('');
+  const gapText = useRef<HTMLTextAreaElement>(null);
+
+  /** M3 C5: "Report a gap" pre-fills the gap note form and moves focus to its text box. */
+  function reportGap(about: string) {
+    setGapAbout(about);
+    gapText.current?.focus();
+  }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -311,7 +334,21 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
+        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing}>
+          Print…
+        </button>
       </header>
+
+      {printing && (
+        <PrintView
+          view={view}
+          onError={onError}
+          onClose={() => {
+            setPrinting(false);
+            printButton.current?.focus();
+          }}
+        />
+      )}
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
@@ -324,23 +361,32 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </section>
       )}
 
+      <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       <HitPointsPanel view={view} act={act} />
+      <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
       {resting ? (
         <RestPanel
+          key={resting}
           characterId={character.id}
+          kind={resting}
+          hitDice={sheet.hitDice ?? []}
           onError={onError}
-          onCancel={() => setResting(false)}
+          onCancel={() => setResting(undefined)}
           onRested={(rested, applied) => {
-            setResting(false);
+            setResting(undefined);
             onChanged(rested);
-            onStatus(`Long rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+            onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
           }}
         />
       ) : (
         <div className="actions">
-          <button type="button" onClick={() => setResting(true)}>
+          <button type="button" onClick={() => setResting('shortRest')}>
+            Short rest…
+          </button>
+          <button type="button" onClick={() => setResting('longRest')}>
             Long rest…
           </button>
         </div>
@@ -348,16 +394,31 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <ConditionsPanel view={view} act={act} />
       <ResourcesPanel view={view} act={act} />
       <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+      <SpellsPanel
+        view={view}
+        act={act}
+        roll={roll}
+        onSave={(changed) =>
+          client
+            .saveCharacter(changed)
+            .then(onChanged)
+            .catch(onError)
+        }
+      />
       <section aria-labelledby="rolls-heading" className="play-panel">
         <h3 id="rolls-heading">Rolls</h3>
         <RollModePicker mode={rollMode} onChange={setRollMode} />
         <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} act={act} />
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
       </section>
-      <FeaturesPanel view={view} roll={roll} pdfSources={pdfSources} openPage={openPage} />
+      <ActionsPanel view={view} roll={roll} act={act} />
+      <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
+      <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
 
       {groups.map((group) => {
-        const fields = sheet.fields.filter((f) => group.match(f.field));
+        const caster = (sheet.spellcasting ?? []).length > 0;
+        // Spell fields of a non-caster are all 0; they are shown only for a caster, or when a value or override exists.
+        const fields = sheet.fields.filter((f) => group.match(f.field) && (!isSpellField(f.field) || caster || f.value !== 0 || !!f.override));
         if (fields.length === 0) return null;
         return (
           <section key={group.title} aria-label={group.title} className="field-group">
@@ -369,6 +430,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
                 labels={labels}
                 onOverride={changeOverride}
                 onRoll={(f) => roll({ field: f, mode: rollMode })}
+                onReportGap={(f) => reportGap(gapAboutField(f))}
               />
             ))}
           </section>

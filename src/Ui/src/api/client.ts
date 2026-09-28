@@ -4,12 +4,19 @@ import type {
   AppInfo,
   AttachmentInfo,
   Campaign,
+  CandidateCheck,
+  CandidateEdit,
+  CandidateFilter,
+  ImportJob,
+  ImportSearchHit,
+  StoredCandidate,
   DetachPreview,
   OpenPageOutcome,
   ContentRevision,
   PublishResult,
   SourceRecord,
   StudioEntry,
+  UpdateOffer,
   UpdateReview,
   Character,
   CharacterSummary,
@@ -20,9 +27,15 @@ import type {
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
+  GapNote,
+  GapNoteListing,
+  GapNoteStatus,
+  GapTarget,
   ImportResult,
+  HitDieRoll,
   PackagePreview,
   PlayAction,
+  RestPeriod,
   RestPreview,
   RollRecord,
   RollTarget,
@@ -73,9 +86,31 @@ export function createClient(transport: Transport) {
     detach: (sourceId: string) => call<{ detached: boolean }>('source.detach', { sourceId, confirm: true }),
     /** Opens the cited page in the shell's offline PDF viewer (fails with `unsupported` outside the desktop app). */
     openPage: (sourceId: string, page: number) => call<OpenPageOutcome>('source.openPage', { sourceId, page }),
+    /** SPEC I-03: a page range (or the whole document) of an attached PDF as a draft reference-only entry; nothing is extracted. */
+    importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
+      call<ContentRevision>('source.importPages', { sourceId, ...request }),
+    // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
+    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) =>
+      call<ImportJob>('import.start', { sourceId, ...request }),
+    importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
+    listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
+    cancelImport: (jobId: string) => call<ImportJob>('import.cancel', { jobId }, { timeoutMs: null }),
+    resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
+    /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
+    searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
+    candidates: (jobId: string, filter: CandidateFilter = {}) => call<StoredCandidate[]>('import.candidates', { jobId, ...filter }),
+    /** Validation, dependencies and blockers of accepting; writes nothing. */
+    checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
+    editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
+    /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
+    acceptCandidate: (candidateId: string, asReference: boolean) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true }),
+    ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),
+    /** Newer revisions of content the character uses (M3 C7); writes nothing. */
+    availableUpdates: (characterId: string) => call<UpdateOffer[]>('character.updates', { characterId }),
     /** Applies a reviewed update; only the "Apply update" button calls this. */
     applyUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<CharacterView>('character.applyUpdate', { characterId, from, to, confirm: true }),
@@ -93,13 +128,23 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
-    /** What a long rest would change; writes nothing (M2 has the long rest only, D01). */
-    restPreview: (characterId: string) => call<RestPreview>('character.restPreview', { characterId, kind: 'longRest' }),
-    /** Applies exactly the previewed rest, minus the unticked changes. Only the "Finish long rest" button calls this. */
-    rest: (characterId: string, basis: string, skip: string[]) =>
-      call<CharacterView>('character.rest', { characterId, kind: 'longRest', basis, skip, confirm: true }),
+    /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
+    restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = []) =>
+      call<RestPreview>('character.restPreview', { characterId, kind, hitDice }),
+    /** Applies exactly the previewed rest (same hit dice), minus the unticked changes. Only the "Finish … rest" button calls this. */
+    rest: (characterId: string, kind: RestPeriod, basis: string, skip: string[], hitDice: HitDieRoll[] = []) =>
+      call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, confirm: true }),
     /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
+    /** The character's gap notes, open first (M3 B3). Stored locally; never sent anywhere. */
+    listGapNotes: (characterId: string) => call<GapNote[]>('gap.list', { characterId }),
+    /** Every character's notes with the character's name, open first (M3 C5). Writes nothing. */
+    listAllGapNotes: () => call<GapNoteListing[]>('gap.listAll'),
+    /** Only the note's "Save note" button calls this. */
+    addGapNote: (characterId: string, target: GapTarget, text: string) => call<GapNote>('gap.add', { characterId, target, text }),
+    setGapNoteStatus: (id: string, status: GapNoteStatus) => call<GapNote>('gap.setStatus', { id, status }),
+    /** Only the "Delete note" confirmation calls this. */
+    deleteGapNote: (id: string) => call<{ deleted: boolean }>('gap.delete', { id, confirm: true }),
     /** What an export would contain and leave out, without writing anything (ADR-007). */
     previewExport: (characterIds: string[], purpose: ExportPurpose) =>
       call<ExportPreview>('package.exportPreview', { characterIds, purpose }),

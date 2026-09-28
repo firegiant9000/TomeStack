@@ -82,6 +82,8 @@ This proves R3, R4 and R6 for Velopack on this machine, and R1 as far as "no ele
 
 ## Clean VM only (cannot be proven on the development machine)
 
-A first install on a machine that never had TomeStack, a standard user without admin rights (R1), a truly absent WebView2 Runtime and the runtime bootstrap (R5), an offline install (R2), SmartScreen and antivirus behavior for the unsigned build (R7), the installed app on the real default data folder, and Windows 10 (best-effort).
+**Owner report (2026-09-28, 0.2.2):** the clean-VM install passed, and so did the upgrade from 0.2.0 (`docs/features/m2-acceptance.md`). The development session did not observe it. Windows 10 stays best-effort and untested.
+
+The checks were: a first install on a machine that never had TomeStack, a standard user without admin rights (R1), a truly absent WebView2 Runtime and the runtime bootstrap (R5), an offline install (R2), SmartScreen and antivirus behavior for the unsigned build (R7), the installed app on the real default data folder, and Windows 10 (best-effort).
 
 Supersedes: none. Completes the open part of LIVING_SPECS D06 once accepted.

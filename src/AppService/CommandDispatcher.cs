@@ -21,9 +21,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
         "content.bySource", "source.list", "source.createHomebrew",
-        "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage",
+        "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
-        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
+        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
+        "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
+        "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
+        "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -95,7 +98,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.detachPreview" => app.PreviewDetach(Payload<SourceIdPayload>(payload).SourceId),
         "source.detach" => Detach(Payload<DetachPayload>(payload)),
         "source.openPage" => OpenPage(Payload<OpenPagePayload>(payload)),
+        "source.importPages" => app.ImportPages(Payload<PageImportRequest>(payload)),
         "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
+        "character.updates" => app.AvailableUpdates(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
         "roll" => app.Roll(Payload<RollCommand>(payload)),
         "character.list" => app.ListCharacters(),
@@ -108,6 +113,25 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.play" => app.Play(Payload<PlayCommand>(payload)),
         "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
         "character.rest" => app.Rest(Payload<RestRequest>(payload)),
+        "character.mechanics" => app.Mechanics(Payload<MechanicsRequest>(payload)),
+        "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
+        "gap.listAll" => app.ListAllGapNotes(),
+        "import.start" => app.StartImport(Payload<ImportStartRequest>(payload)),
+        "import.status" => app.ImportStatus(Payload<ImportJobRequest>(payload).JobId),
+        "import.list" => app.ListImports(payload is { ValueKind: JsonValueKind.Object } ? Payload<ImportListRequest>(payload).SourceId : null),
+        "import.cancel" => app.CancelImport(Payload<ImportJobRequest>(payload).JobId),
+        "import.resume" => app.ResumeImport(Payload<ImportJobRequest>(payload).JobId),
+        "import.audit" => app.ImportAudit(Payload<ImportJobRequest>(payload).JobId),
+        "import.search" => app.SearchImportedText(Payload<ImportSearchRequest>(payload)),
+        "import.page" => app.ImportedPage(Payload<ImportPageRequest>(payload)),
+        "import.candidates" => app.ListCandidates(Payload<ImportCandidatesRequest>(payload)),
+        "import.candidate.check" => app.CheckCandidate(Payload<CandidateRequest>(payload).CandidateId),
+        "import.candidate.edit" => app.EditCandidate(Payload<CandidateEditRequest>(payload)),
+        "import.candidate.accept" => app.AcceptCandidate(Payload<CandidateAcceptRequest>(payload)),
+        "import.candidate.ignore" => app.IgnoreCandidate(Payload<CandidateRequest>(payload).CandidateId),
+        "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
+        "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
+        "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
@@ -130,7 +154,13 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         return new { deleted = true };
     }
 
-    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind);
+    private object DeleteGapNote(DeleteGapNoteRequest payload)
+    {
+        app.DeleteGapNote(payload);
+        return new { deleted = true };
+    }
+
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
 
     /// <summary>ADR-005: the native Open dialog picks the PDF; its path never crosses the bridge.</summary>
     private AttachOutcome AttachPdf(AttachPayload payload)
@@ -217,7 +247,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record IdPayload(Guid Id);
 
-    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest);
+    private sealed record CharacterIdPayload(Guid CharacterId);
+
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 
     private sealed record ContentIdPayload(Guid ContentId);
 

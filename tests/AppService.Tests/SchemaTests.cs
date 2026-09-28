@@ -72,10 +72,13 @@ public class SchemaTests
         var ids = new[] { "srd51-quickfoot.json", "srd521-courier.json" }
             .Select(f => temp.App.SaveCharacter(TempApp.LoadFixture<Character>($"characters/{f}")).Character.Id)
             .ToList();
+        var sheet = temp.App.GetCharacter(ids[0]).Sheet;
+        temp.App.AddGapNote(new(ids[0], new(GapTargetKind.Field, FieldId: FieldIds.ArmorClass), "Field note."));
+        temp.App.AddGapNote(new(ids[0], new(GapTargetKind.Feature, sheet.Features![0].Content.ContentId), "Feature note."));
         var package = temp.App.ExportCharacters(ids).Content;
 
         using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
-        var kinds = new Dictionary<string, string> { ["sources"] = "source", ["content"] = "content-revision", ["characters"] = "character", ["campaigns"] = "campaign" };
+        var kinds = new Dictionary<string, string> { ["sources"] = "source", ["content"] = "content-revision", ["characters"] = "character", ["campaigns"] = "campaign", ["gaps"] = "gap-note" };
         foreach (var entry in zip.Entries)
         {
             using var reader = new StreamReader(entry.Open());
@@ -84,6 +87,7 @@ public class SchemaTests
             AssertValid(kind, document.RootElement, entry.FullName);
         }
         Assert.Contains(zip.Entries, e => e.FullName.StartsWith("content/", StringComparison.Ordinal));
+        Assert.Equal(2, zip.Entries.Count(e => e.FullName.StartsWith("gaps/", StringComparison.Ordinal)));
     }
 
     [Fact]

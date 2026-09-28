@@ -17,12 +17,12 @@ The primary user is a fifth-edition player or DM who wants a reliable local char
 
 ### Import and authoring
 
-- **I-01** A user can import a whole PDF or a page range/selection. Text extraction, OCR if needed, and content detection produce **draft candidates**, never active rules.
-- **I-02** A candidate shows original excerpt/page, proposed entity, extracted fields, mechanical effects, confidence/uncertainties and unresolved references. Each candidate can be edited, accepted or ignored; accepting runs schema and reference validation.
-- **I-03** The first release may import PDFs as searchable/reference sources and manually author structured entries. Automated interpretation expands later. Source navigation works even for reference-only material.
+- **I-01** A user can import a whole PDF or a page range/selection. Text extraction, OCR if needed, and content detection produce **draft candidates**, never active rules. *(M4, 2026-09-28: implemented as import jobs on the user's own sources, ADR-009.)*
+- **I-02** A candidate shows original excerpt/page, proposed entity, extracted fields, mechanical effects, confidence/uncertainties and unresolved references. Each candidate can be edited, accepted or ignored; accepting runs schema and reference validation. *(M4, 2026-09-28: implemented on the Sources screen. Unsure fields and unresolved references block acceptance until edited, or the candidate is accepted as reference only; accepting yields a draft that the studio publishes. `features/pdf-import.md`)*
+- **I-03** The first release may import PDFs as searchable/reference sources and manually author structured entries. Automated interpretation expands later. Source navigation works even for reference-only material. *(M2, owner decision 2026-09-27: page ranges and whole documents are imported as draft reference entries that cite their pages, with no text extraction; searchable text is M4. `features/pdf-attachments.md`)*
 - **I-04** The homebrew studio can create/edit subclasses, features, species, backgrounds, feats, spells, items and other supported entities through guided controls. Advanced formulas are optional; no arbitrary imported script executes.
 - **I-05** Feature automation is marked `automatic`, `assisted` or `reference`. Assisted actions track eligible resources/rolls but require a player choice. Unhandled mechanics retain their full text.
-- **I-06** Drafts can be previewed; publishing creates an immutable content revision. Existing characters remain pinned until an explicit update with a diff and migration review. Authors can see affected characters and dependency errors.
+- **I-06** Drafts can be previewed; publishing creates an immutable content revision. Existing characters remain pinned until an explicit update with a diff and migration review. Authors can see affected characters and dependency errors. *(M3 C7: the sheet offers every newer revision of content the character uses, from a bundled pack or the user's own source, and applies one only after its review is confirmed. `features/publishing-and-updates.md`)*
 - **I-07** Optional local AI may propose interpretations or design feedback in a later milestone; every suggestion must cite its local excerpt and require acceptance. Turning AI off preserves core workflows.
 
 ### Building and playing a character
@@ -39,7 +39,7 @@ The primary user is a fifth-edition player or DM who wants a reliable local char
 
 - **P-01** A local campaign groups characters, allowed sources, rule family, house rules and homebrew; an incompatible selection warns and allows a deliberate exception.
 - **P-02** Exports use a documented, versioned JSON manifest inside a portable archive; include selected content revisions, character state and any permitted assets. The importer previews dependencies and conflicts before applying. Do not bundle third-party PDFs by default.
-- **P-03** The digital sheet is keyboard accessible and usable at common desktop sizes. Printable and condensed PDF sheets are planned after the first release; no mimicry of D&D Beyond trade dress.
+- **P-03** The digital sheet is keyboard accessible and usable at common desktop sizes. Printable and condensed PDF sheets are planned after the first release; no mimicry of D&D Beyond trade dress. *(M3, owner decision 2026-09-28: a printable backup, meaning a print view of the sheet printed with the app's own print dialog, offline, with no local paths and with gap notes only when the player ticks them in. `features/printable-backup.md`)*
 - **P-04** Search covers structured content from enabled sources; later phases add full PDF text, facets, tags and commands.
 - **P-05** A future extension API exposes versioned, permissioned data/import/export hooks; it does not grant raw code execution to content packs. Plugins are a later design and implementation milestone.
 

@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- ADR-009: the Windows 10 TFM, like the import worker it ships (TomeStack.ImportWorker.Host.exe). The output folder
+         keeps its name, so the gate, the scripts and CI find TomeStack.exe where they always did. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <OutputPath>bin\$(Configuration)\net10.0-windows\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <UseWPF>true</UseWPF>
     <AssemblyName>TomeStack</AssemblyName>
     <RootNamespace>TomeStack.DesktopShell</RootNamespace>
@@ -29,6 +34,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AppService\TomeStack.AppService.csproj" />
+    <!-- The isolated PDF extraction process (ADR-009 (c)), copied next to TomeStack.exe. -->
+    <ProjectReference Include="..\ImportWorker.Host\TomeStack.ImportWorker.Host.csproj" />
   </ItemGroup>
 
   <!-- The shell serves the prebuilt React bundle from its own folder via a WebView2 virtual host. -->
