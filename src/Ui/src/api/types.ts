@@ -184,6 +184,21 @@ export interface HitPointState {
   temporary: number;
 }
 
+/** Hit dice of one size; sizes pool across classes (character schema v5). */
+export interface HitDiceValue {
+  die: number;
+  total: number;
+  spent: number;
+  remaining: number;
+  classes: string[];
+}
+
+/** One hit die spent on a short rest and what it shows (1 to `die`). */
+export interface HitDieRoll {
+  die: number;
+  roll: number;
+}
+
 export interface CharacterSheet {
   characterId: string;
   rulesFamily: RulesFamilyId;
@@ -194,6 +209,7 @@ export interface CharacterSheet {
   resources?: ResourceValue[];
   features?: FeatureEntry[];
   hitPoints?: HitPointState;
+  hitDice?: HitDiceValue[];
 }
 
 export interface ResourceUse {
@@ -202,7 +218,7 @@ export interface ResourceUse {
   spent: number;
 }
 
-/** SPEC C-05, character schema v4: changed only by the confirmed `character.play` command. */
+/** SPEC C-05, character schema v5: changed only by the confirmed `character.play` command and confirmed rests. */
 export interface PlayState {
   /** Absent or null: at the maximum. */
   currentHitPoints?: number | null;
@@ -210,6 +226,9 @@ export interface PlayState {
   resources: ResourceUse[];
   conditions: string[];
   exhaustion: number;
+  hitDiceSpent?: { die: number; spent: number }[];
+  deathSaves?: { successes: number; failures: number };
+  inspiration?: boolean;
 }
 
 export type PlayActionKind =
@@ -221,7 +240,11 @@ export type PlayActionKind =
   | 'setHitPoints'
   | 'addCondition'
   | 'removeCondition'
-  | 'setExhaustion';
+  | 'setExhaustion'
+  | 'recordDeathSave'
+  | 'addDeathSaveFailure'
+  | 'clearDeathSaves'
+  | 'setInspiration';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -233,7 +256,10 @@ export interface PlayAction {
 
 export interface RestChange {
   id: string;
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion';
+  /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves';
+  die?: number;
+  amount?: number;
   label: string;
   from: number;
   to: number;
@@ -301,6 +327,10 @@ export interface RollTarget {
   field?: string;
   mode?: RollMode;
   critical?: boolean;
+  /** One of the character's hit dice (d6–d12), the die alone. */
+  hitDie?: number;
+  /** A death saving throw: a d20 with no modifier. */
+  deathSave?: boolean;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */

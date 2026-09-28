@@ -75,6 +75,7 @@ public sealed record ChoiceStatus(
 /// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
 /// <param name="Features">M2 item 2: every active revision with its text, automation status, effects and rolls, in resolution order.</param>
 /// <param name="HitPoints">M2 item 2: the displayed maximum with current and temporary hit points from the play state.</param>
+/// <param name="HitDice">The hit dice pool per die size, largest first, with what is spent (character schema v5).</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
@@ -84,7 +85,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<ContentReference>? Active = null,
     IReadOnlyList<ResourceValue>? Resources = null,
     IReadOnlyList<FeatureEntry>? Features = null,
-    HitPointState? HitPoints = null)
+    HitPointState? HitPoints = null,
+    IReadOnlyList<HitDiceValue>? HitDice = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -141,6 +143,12 @@ public sealed record FieldInfo(string Id, string Label);
 
 /// <summary>Hit points for play: the displayed maximum (after any override), current (at most the maximum) and temporary.</summary>
 public sealed record HitPointState(int Maximum, int Current, int Temporary);
+
+/// <summary>
+/// Hit dice of one size: one per level in every class with that hit die (SRD: hit dice of the same size pool together).
+/// <paramref name="Remaining"/> is the total less what is spent, never below 0 (a lower total after an update does not go negative).
+/// </summary>
+public sealed record HitDiceValue(int Die, int Total, int Spent, int Remaining, IReadOnlyList<string> Classes);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -334,8 +342,19 @@ public static class CharacterCalculator
         var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)])).ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+        var hitDice = resolved.Classes
+            .Where(c => c.Die is not null && c.Level > 0)
+            .GroupBy(c => c.Die!.Die)
+            .OrderByDescending(g => g.Key)
+            .Select(g =>
+            {
+                var total = g.Sum(c => c.Level);
+                var spent = character.Play.HitDiceSpentOf(g.Key);
+                return new HitDiceValue(g.Key, total, spent, Math.Max(total - spent, 0), [.. g.Select(c => c.Content.Revision.Name)]);
+            })
+            .ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints), active);
+        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice), active);
     }
 
     // ---- resources and features (M2 item 2) -----------------------------------------------------------------

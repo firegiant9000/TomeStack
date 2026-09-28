@@ -130,7 +130,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         return new { deleted = true };
     }
 
-    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind);
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
 
     /// <summary>ADR-005: the native Open dialog picks the PDF; its path never crosses the bridge.</summary>
     private AttachOutcome AttachPdf(AttachPayload payload)
@@ -217,7 +217,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record IdPayload(Guid Id);
 
-    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest);
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 
     private sealed record ContentIdPayload(Guid ContentId);
 

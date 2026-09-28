@@ -10,11 +10,12 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
+    /// v5 adds spent hit dice, death saves and inspiration to <see cref="Play"/> (the short rest, M2).
     /// v4 adds <see cref="Play"/> (M2 item 2) and <see cref="Equipment"/> (M2 item 4). v3 adds <see cref="Classes"/> (M1 item 5) and <see cref="Choices"/> (M1 item 4).
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
@@ -172,11 +173,15 @@ public sealed record Character : IJsonOnDeserialized
         Check("overrides", Overrides is null || Overrides.Any(o => o?.Field is null));
         Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
         Check("campaign exceptions", CampaignExceptions is null || CampaignExceptions.Any(e => e?.Content is null));
-        Check("play state",Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null));
+        Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null)
+            || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null);
         return problems;
     }
 
-    /// <summary>v1 has no level, v2 no classes and v3 no play state; the defaults (level 1, none, full) are exactly their meaning.</summary>
+    /// <summary>
+    /// v1 has no level, v2 no classes, v3 no play state and v4 no hit dice, death saves or inspiration; the defaults
+    /// (level 1, none, full, nothing spent) are exactly their meaning.
+    /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
         if (_schemaVersion is >= 1 and < CurrentSchemaVersion)

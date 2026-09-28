@@ -11,8 +11,10 @@ public static class RulesFamilies
 
     public static IReadOnlyList<RulesFamilyPolicy> All { get; } =
     [
-        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true),
-        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false),
+        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true,
+            LongRestHitDice: HitDiceRecovery.HalfTotal, HitDieHealingMinimum: 0, ShortRestNeedsOneHitPoint: false),
+        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
+            LongRestHitDice: HitDiceRecovery.All, HitDieHealingMinimum: 1, ShortRestNeedsOneHitPoint: true),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -38,5 +40,27 @@ public static class RulesFamilies
 /// (SRD 5.1, exhaustion), no under 2024 rules (SRD 5.2.1 removes one level per long rest). The rest preview proposes the
 /// reduction either way and, where this is true, says it depends on food and drink so the player can untick it.
 /// </param>
+/// <param name="LongRestHitDice">
+/// How many spent hit dice a long rest gives back: up to half the character's total number of hit dice, at least one,
+/// under 2014 rules (SRD 5.1 p. 87); all of them under 2024 rules (SRD 5.2.1 p. 185, "Regain All HP").
+/// </param>
+/// <param name="HitDieHealingMinimum">
+/// The fewest hit points one spent hit die restores (roll + Constitution modifier): 1 under 2024 rules (SRD 5.2.1 p. 187,
+/// "minimum of 1 Hit Point"). SRD 5.1 (p. 87) states no minimum; TomeStack uses 0, so a hit die never takes hit points away.
+/// </param>
+/// <param name="ShortRestNeedsOneHitPoint">
+/// Whether a short rest needs at least 1 hit point to start: yes under 2024 rules (SRD 5.2.1 p. 187), not stated under 2014
+/// rules (SRD 5.1 p. 87). A long rest needs 1 hit point under both.
+/// </param>
 public sealed record RulesFamilyPolicy(
-    string Id, string DisplayName, ContentKind AbilityIncreaseSource, bool BackgroundGrantsFeat, bool LongRestExhaustionNeedsFoodAndDrink);
+    string Id,
+    string DisplayName,
+    ContentKind AbilityIncreaseSource,
+    bool BackgroundGrantsFeat,
+    bool LongRestExhaustionNeedsFoodAndDrink,
+    HitDiceRecovery LongRestHitDice,
+    int HitDieHealingMinimum,
+    bool ShortRestNeedsOneHitPoint);
+
+/// <summary>How many spent hit dice a long rest gives back (<see cref="RulesFamilyPolicy.LongRestHitDice"/>).</summary>
+public enum HitDiceRecovery { HalfTotal, All }

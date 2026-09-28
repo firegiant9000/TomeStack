@@ -227,6 +227,43 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 
+  // Short rest (D01 follow-up): spend a hit die rolled at the table (5 + Con 2 = 7), and Rage regains one use (2024).
+  const hpPanel = () => screen.getByRole('region', { name: /^Hit points:/ });
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 25 of 35' })).toBeTruthy());
+  expect(hpPanel().textContent).toMatch(/Hit dice: d12 3 of 3/);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  rest = await screen.findByRole('region', { name: 'Short rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Short rest' })));
+  expect(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })).toBeTruthy();
+  await user.type(within(rest).getByRole('spinbutton', { name: 'd12 rolled at the table' }), '5');
+  await user.click(within(rest).getByRole('button', { name: 'Add d12' }));
+  const spend = await within(rest).findByRole('list', { name: 'Hit dice to spend' });
+  expect(spend.textContent).toMatch(/Rolled 5, Constitution modifier \+2: 7 hit point\(s\)\. Hit points 25 → 32/);
+  await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Short rest finished: 2 changes applied/);
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
+  expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
+  expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
+
+  // Heroic Inspiration (2024) and death saving throws (SPEC C-05): a 20 at the table regains 1 hit point.
+  await user.click(within(hpPanel()).getByRole('checkbox', { name: 'Heroic Inspiration' }));
+  await waitFor(() => expect(within(hpPanel()).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(true));
+  expect(screen.queryByRole('region', { name: /^Death saving throws/ })).toBeNull();
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '40');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  const deathSaves = await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
+  await user.click(within(deathSaves).getByRole('button', { name: 'Add a failure (damage at 0)' }));
+  await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 1 of 3 failures/ });
+  await user.type(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('spinbutton', { name: 'd20 rolled at the table' }), '20');
+  await user.click(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('button', { name: 'Record this roll' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
+  expect(screen.queryByRole('region', { name: /^Death saving throws/ })).toBeNull(); // regaining hit points cleared them
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '34');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });
   await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Scale Vest/ })).toBeTruthy());

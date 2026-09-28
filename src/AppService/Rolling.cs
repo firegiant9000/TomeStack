@@ -3,8 +3,10 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService;
 
 /// <summary>
-/// What to roll: a content roll effect (<paramref name="Content"/> and <paramref name="EffectId"/>), or a sheet field as
-/// a d20 test (<paramref name="Field"/>: an ability modifier, saving throw, skill or initiative).
+/// What to roll: a content roll effect (<paramref name="Content"/> and <paramref name="EffectId"/>), a sheet field as
+/// a d20 test (<paramref name="Field"/>: an ability modifier, saving throw, skill or initiative), one of the character's
+/// hit dice (<paramref name="HitDie"/>: the die alone; a short rest adds the Constitution modifier), or a death saving
+/// throw (<paramref name="DeathSave"/>: a d20 with no modifier).
 /// </summary>
 public sealed record RollCommand(
     Guid CharacterId,
@@ -12,7 +14,9 @@ public sealed record RollCommand(
     string? EffectId = null,
     string? Field = null,
     RollMode Mode = RollMode.Normal,
-    bool Critical = false);
+    bool Critical = false,
+    int? HitDie = null,
+    bool DeathSave = false);
 
 public sealed partial class TomeStackApp
 {
@@ -32,10 +36,20 @@ public sealed partial class TomeStackApp
         var sheet = CharacterCalculator.Calculate(character, _store);
 
         RollRequest request;
-        if (command.Content is { } reference)
+        if ((command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0) + (command.DeathSave ? 1 : 0) > 1)
+            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die or a death saving throw.")]);
+        if (command.HitDie is { } die)
         {
-            if (command.Field is not null)
-                throw new AppValidationException([new("roll.ambiguous", "Roll either a content effect or a field, not both.")]);
+            if (sheet.HitDice?.Any(h => h.Die == die) != true)
+                throw new AppValidationException([new("rest.hit-die-unknown", $"This character has no d{die} hit dice.")]);
+            request = new RollRequest($"1d{die}", RollMode.Normal, false, [], new RollProvenance($"hitDie.d{die}", $"Hit die (d{die})"));
+        }
+        else if (command.DeathSave)
+        {
+            request = new RollRequest("1d20", command.Mode, false, [], new RollProvenance("deathSave", "Death saving throw"));
+        }
+        else if (command.Content is { } reference)
+        {
             if (sheet.Active?.Contains(reference) != true)
                 throw new AppValidationException([new("roll.content-inactive", $"Revision {reference.RevisionId} does not apply to this character, so its rolls are not available.", reference)]);
             var revision = _store.FindRevision(reference)!;

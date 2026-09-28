@@ -28,6 +28,21 @@ public enum PlayActionKind
 
     /// <summary>The exhaustion level becomes <c>amount</c> (0–6).</summary>
     SetExhaustion,
+
+    /// <summary>
+    /// Records one death saving throw whose d20 showed <c>amount</c> (1–20), with the SRD outcome
+    /// (<see cref="DeathSaves.Outcome"/>). Only at 0 hit points. A natural 20 sets hit points to 1 and resets the saves.
+    /// </summary>
+    RecordDeathSave,
+
+    /// <summary>Adds <c>amount</c> (1–3) death saving throw failures, for example damage at 0 hit points (2 on a critical hit).</summary>
+    AddDeathSaveFailure,
+
+    /// <summary>Resets death saving throw successes and failures to 0.</summary>
+    ClearDeathSaves,
+
+    /// <summary>Inspiration (2014) or Heroic Inspiration (2024): <c>amount</c> 1 gives it, 0 spends or removes it.</summary>
+    SetInspiration,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -79,9 +94,32 @@ public sealed partial class TomeStackApp
             PlayActionKind.SetExhaustion => command.Amount <= PlayState.MaxExhaustion
                 ? play with { Exhaustion = command.Amount }
                 : throw new AppValidationException([new("play.exhaustion-out-of-range", $"Exhaustion level {command.Amount} must be between 0 and {PlayState.MaxExhaustion}.")]),
+            PlayActionKind.RecordDeathSave => RecordDeathSave(play, hp, command.Amount),
+            PlayActionKind.AddDeathSaveFailure => command.Amount is >= 1 and <= DeathSaves.Maximum
+                ? play with { DeathSaves = play.DeathSaves.After(new(0, command.Amount, false, "")) }
+                : throw new AppValidationException([new("play.amount-out-of-range", $"Add 1 to {DeathSaves.Maximum} death saving throw failures.")]),
+            PlayActionKind.ClearDeathSaves => play with { DeathSaves = new() },
+            PlayActionKind.SetInspiration => command.Amount is 0 or 1
+                ? play with { Inspiration = command.Amount == 1 }
+                : throw new AppValidationException([new("play.amount-out-of-range", "Inspiration is 1 (have it) or 0 (do not).")]),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
+        // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
+        if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
+            play = play with { DeathSaves = new() };
         return SaveWithPlay(character with { Play = play });
+    }
+
+    private static PlayState RecordDeathSave(PlayState play, HitPointState hp, int d20)
+    {
+        if (hp.Current > 0)
+            throw new AppValidationException([new("play.not-dying", "Death saving throws are made only at 0 hit points.")]);
+        if (d20 is < 1 or > 20)
+            throw new AppValidationException([new("play.amount-out-of-range", "A d20 shows 1 to 20.")]);
+        var outcome = DeathSaves.Outcome(d20);
+        return outcome.RegainsOneHitPoint
+            ? play with { CurrentHitPoints = hp.Maximum > 1 ? 1 : null, DeathSaves = new() }
+            : play with { DeathSaves = play.DeathSaves.After(outcome) };
     }
 
     private static PlayState Damage(PlayState play, HitPointState hp, int amount)

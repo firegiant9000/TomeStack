@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Short rest, hit dice, death saves and inspiration (D01 follow-up, owner 2026-09-27: SRD rules, previewed; SPEC C-05; `docs/features/rests.md`, `docs/features/sheet-play.md`):**
+  - **Hit dice:** the sheet shows the hit dice left per die size. "Short rest…" spends the hit dice the player picks, each rolled in TomeStack or entered from the table, and shows the hit points each restores (roll plus the Con modifier). Short-rest recoveries such as the 2024 Rage are ticked changes, as on the long rest. The long rest now also gives spent hit dice back.
+  - **Death saving throws:** they appear at 0 hit points. Roll one or enter a physical roll, and TomeStack records the SRD outcome (a 1 is two failures, a 20 regains 1 hit point). "Add a failure" covers damage at 0. Regaining hit points clears them.
+  - **Inspiration:** Inspiration (2014) or Heroic Inspiration (2024) is a checkbox.
+  - Every change is still confirmed.
+- **Three new rules-family differences, tested side by side:**
+  - `LongRestHitDice`: half the hit dice (2014) or all of them (2024) come back on a long rest.
+  - `HitDieHealingMinimum`: 0 (2014) or 1 (2024) hit point per die.
+  - `ShortRestNeedsOneHitPoint`: no (2014) or yes (2024).
+  - A long rest at 0 hit points is refused under both families, as the SRDs say (`rest.needs-hit-points`).
+
+### Migration
+
+- **Character schema v5** (`docs/schemas/character.v5.schema.json`) adds `play.hitDiceSpent`, `play.deathSaves` and `play.inspiration`. v1–v4 characters are upcast on read with nothing spent, no saves and no inspiration. There is no database migration, because characters are unhashed JSON. 0.2.1 refuses v5 characters and packages that contain them (`character.schema-unsupported`, `package.schema-unsupported`).
+
 ## 0.2.1 (M2 in progress; items 1–7)
 
 The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to a user; MINOR when M2 is delivered).

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace TomeStack.RulesCore;
 
 /// <summary>
-/// SPEC C-05, character schema v4: what changes during play. Never derived and never changed by calculation; only an
+/// SPEC C-05, character schema v4 (v5 adds hit dice, death saves and inspiration): what changes during play. Never derived and never changed by calculation; only an
 /// explicit, confirmed command writes it (ARCHITECTURE "commands vs calculation"). The defaults mean "fresh": at the hit
 /// point maximum, no temporary hit points, nothing spent, no conditions.
 /// </summary>
@@ -27,6 +27,18 @@ public sealed record PlayState
     /// <summary>Exhaustion level, 0–6 in both SRDs.</summary>
     public int Exhaustion { get; init; }
 
+    /// <summary>
+    /// Character schema v5 (M2 item 3 follow-up, D01): spent hit dice per die size. Hit dice of the same size form one pool,
+    /// whichever class gave them, so the key is the die, not the class.
+    /// </summary>
+    public IReadOnlyList<HitDiceUse> HitDiceSpent { get; init; } = [];
+
+    /// <summary>Character schema v5 (SPEC C-05): death saving throw successes and failures, 0–3 each.</summary>
+    public DeathSaves DeathSaves { get; init; } = new();
+
+    /// <summary>Character schema v5 (SPEC C-05): Inspiration (2014) or Heroic Inspiration (2024). Either you have it or not.</summary>
+    public bool Inspiration { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 
@@ -40,6 +52,18 @@ public sealed record PlayState
         [
             .. Resources.Where(r => !(r.ContentId == contentId && r.ResourceId == resourceId)),
             .. spent > 0 ? [new ResourceUse(contentId, resourceId, spent)] : Array.Empty<ResourceUse>(),
+        ],
+    };
+
+    public int HitDiceSpentOf(int die) => HitDiceSpent.LastOrDefault(h => h.Die == die)?.Spent ?? 0;
+
+    /// <summary>The same state with <paramref name="spent"/> hit dice of size <paramref name="die"/> spent (0 removes the entry).</summary>
+    public PlayState WithHitDiceSpent(int die, int spent) => this with
+    {
+        HitDiceSpent =
+        [
+            .. HitDiceSpent.Where(h => h.Die != die),
+            .. spent > 0 ? [new HitDiceUse(die, spent)] : Array.Empty<HitDiceUse>(),
         ],
     };
 
@@ -59,11 +83,50 @@ public sealed record PlayState
             yield return new("play.condition-unknown", $"'{condition}' is not a condition TomeStack knows.");
         if (Conditions.Distinct().Count() != Conditions.Count)
             yield return new("play.condition-duplicate", "A condition is recorded more than once.");
+        foreach (var use in HitDiceSpent.Where(h => !HitDieEffect.AllowedDice.Contains(h.Die) || h.Spent is < 0 or > Character.MaxLevel))
+            yield return new("play.hit-dice-invalid", $"Spent d{use.Die} hit dice ({use.Spent}) must be a d6, d8, d10 or d12, and between 0 and {Character.MaxLevel}.");
+        if (HitDiceSpent.GroupBy(h => h.Die).Any(g => g.Count() > 1))
+            yield return new("play.hit-dice-duplicate", "A hit die size is recorded more than once.");
+        if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
+            yield return new("play.death-saves-out-of-range", $"Death saving throw successes and failures must each be between 0 and {DeathSaves.Maximum}.");
     }
 }
 
 /// <summary>How many uses of one resource are spent. <paramref name="ContentId"/> is the content that defines it.</summary>
 public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
+
+/// <summary>How many hit dice of one size (d6, d8, d10 or d12) are spent.</summary>
+public sealed record HitDiceUse(int Die, int Spent);
+
+/// <summary>
+/// Death saving throws (SRD 5.1 p. 98, SRD 5.2.1 p. 17; the same in both). Three successes: the character is Stable, and
+/// TomeStack keeps the 3 as the marker until hit points are regained or the saves are cleared. Three failures: the
+/// character dies. Both reset to 0 when the character regains any hit points.
+/// </summary>
+public sealed record DeathSaves(int Successes = 0, int Failures = 0)
+{
+    public const int Maximum = 3;
+
+    /// <summary>
+    /// The SRD outcome of one death saving throw with the d20 showing <paramref name="d20"/> (1–20): a 20 regains 1 hit point
+    /// (and so resets the saves), a 1 counts as two failures, 10 or higher is a success, and anything else is a failure.
+    /// </summary>
+    public static DeathSaveOutcome Outcome(int d20) => d20 switch
+    {
+        < 1 or > 20 => throw new ArgumentOutOfRangeException(nameof(d20), d20, "A d20 shows 1 to 20."),
+        20 => new(0, 0, RegainsOneHitPoint: true, "a natural 20: the character regains 1 hit point"),
+        1 => new(0, 2, RegainsOneHitPoint: false, "a natural 1: two failures"),
+        >= 10 => new(1, 0, RegainsOneHitPoint: false, "10 or higher: a success"),
+        _ => new(0, 1, RegainsOneHitPoint: false, "below 10: a failure"),
+    };
+
+    /// <summary>These saves after <paramref name="outcome"/>, each count stopping at 3.</summary>
+    public DeathSaves After(DeathSaveOutcome outcome) =>
+        new(Math.Min(Successes + outcome.Successes, Maximum), Math.Min(Failures + outcome.Failures, Maximum));
+}
+
+/// <summary>What one death saving throw adds (<see cref="DeathSaves.Outcome"/>), and a description of why.</summary>
+public sealed record DeathSaveOutcome(int Successes, int Failures, bool RegainsOneHitPoint, string Description);
 
 /// <summary>
 /// The conditions both SRDs define (exhaustion is a level, <see cref="PlayState.Exhaustion"/>). Keys only: the rules text

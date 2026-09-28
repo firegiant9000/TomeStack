@@ -117,16 +117,31 @@ public class ResourceAndFeatureTests
     }
 
     [Fact]
-    public void A_v3_character_reads_as_v4_with_a_fresh_play_state()
+    public void A_v3_character_reads_as_the_current_schema_with_a_fresh_play_state()
     {
         var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "characters", "m1-acceptance-srd51-korga.json"));
         Assert.Contains("\"schemaVersion\": 3", json, StringComparison.Ordinal);
 
         var character = JsonSerializer.Deserialize<Character>(json, RulesJson.Options)!;
 
-        Assert.Equal(4, character.SchemaVersion);
+        Assert.Equal(Character.CurrentSchemaVersion, character.SchemaVersion);
         Assert.Equal(new PlayState().CurrentHitPoints, character.Play.CurrentHitPoints);
         Assert.Empty(character.Play.Resources);
+        Assert.Empty(character.Validate());
+    }
+
+    [Fact]
+    public void A_v4_character_reads_as_v5_with_no_hit_dice_spent_no_death_saves_and_no_inspiration()
+    {
+        var json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "characters", "m1-acceptance-srd51-korga.json"))
+            .Replace("\"schemaVersion\": 3", "\"schemaVersion\": 4", StringComparison.Ordinal)
+            .Replace("\"rulesFamily\"", "\"play\": { \"currentHitPoints\": 7, \"temporaryHitPoints\": 0, \"resources\": [], \"conditions\": [], \"exhaustion\": 1 }, \"rulesFamily\"", StringComparison.Ordinal);
+
+        var character = JsonSerializer.Deserialize<Character>(json, RulesJson.Options)!;
+
+        Assert.Equal(5, character.SchemaVersion);
+        Assert.Equal((7, 1), (character.Play.CurrentHitPoints, character.Play.Exhaustion));
+        Assert.Equal((0, new DeathSaves(), false), (character.Play.HitDiceSpent.Count, character.Play.DeathSaves, character.Play.Inspiration));
         Assert.Empty(character.Validate());
     }
 

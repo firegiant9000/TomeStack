@@ -79,6 +79,87 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
         </button>
       </form>
       <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
+      {(view.sheet.hitDice ?? []).length > 0 && (
+        <p>
+          Hit dice: {(view.sheet.hitDice ?? []).map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}
+        </p>
+      )}
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={view.character.play?.inspiration ?? false}
+          onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
+        />
+        {view.character.rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration'}
+      </label>
+    </section>
+  );
+}
+
+/**
+ * SPEC C-05, SRD death saving throws (the same in both families): shown at 0 hit points, or while saves are recorded.
+ * A roll is only a suggestion; "Record" is the confirmed change, and TomeStack applies the SRD outcome of the number.
+ */
+export function DeathSavesPanel({
+  view,
+  act,
+  roll,
+  lastRoll,
+}: {
+  view: CharacterView;
+  act: Act;
+  roll: (target: RollTarget) => void;
+  lastRoll?: RollRecord;
+}) {
+  const hp = view.sheet.hitPoints;
+  const saves = view.character.play?.deathSaves ?? { successes: 0, failures: 0 };
+  const [entered, setEntered] = useState('');
+  if (!hp || (hp.current > 0 && saves.successes === 0 && saves.failures === 0)) return null;
+  const rolled = lastRoll?.provenance?.rollId === 'deathSave' ? lastRoll.dice.find((d) => d.kept)?.value : undefined;
+  const value = Number(entered);
+  const valid = entered !== '' && Number.isInteger(value) && value >= 1 && value <= 20;
+  const state = saves.failures >= 3 ? ' (dead)' : saves.successes >= 3 ? ' (stable)' : '';
+  return (
+    <section aria-labelledby="death-saves-heading" className="play-panel">
+      <h3 id="death-saves-heading">
+        Death saving throws: {saves.successes} of 3 successes, {saves.failures} of 3 failures{state}
+      </h3>
+      {hp.current === 0 && (
+        <div className="actions">
+          <button type="button" onClick={() => roll({ deathSave: true })}>
+            Roll death saving throw
+          </button>
+          {rolled !== undefined && (
+            <button type="button" onClick={() => act({ action: 'recordDeathSave', amount: rolled })}>
+              Record death saving throw ({rolled})
+            </button>
+          )}
+          <label className="field">
+            d20 rolled at the table
+            <input type="number" min={1} max={20} value={entered} onChange={(e) => setEntered(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            disabled={!valid}
+            onClick={() => {
+              act({ action: 'recordDeathSave', amount: value });
+              setEntered('');
+            }}
+          >
+            Record this roll
+          </button>
+          <button type="button" onClick={() => act({ action: 'addDeathSaveFailure', amount: 1 })}>
+            Add a failure (damage at 0)
+          </button>
+        </div>
+      )}
+      <button type="button" onClick={() => act({ action: 'clearDeathSaves' })}>
+        Clear death saving throws
+      </button>
+      <p className="hint">
+        10 or higher is a success; a 1 counts as two failures; a 20 regains 1 hit point. A critical hit at 0 hit points is two
+        failures. Regaining hit points clears them.
+      </p>
     </section>
   );
 }

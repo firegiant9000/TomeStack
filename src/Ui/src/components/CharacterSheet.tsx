@@ -8,13 +8,14 @@ import type {
   ExportPurpose,
   FieldOverride,
   PlayAction,
+  RestPeriod,
   RollMode,
   RollRecord,
   RollTarget,
   TraceOrigin,
 } from '../api/types';
 import { downloadBase64 } from '../files';
-import { ConditionsPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { RestPanel } from './RestPanel';
 
@@ -247,7 +248,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
-  const [resting, setResting] = useState(false);
+  const [resting, setResting] = useState<RestPeriod>();
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -327,20 +328,27 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       <HitPointsPanel view={view} act={act} />
+      <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
       {resting ? (
         <RestPanel
+          key={resting}
           characterId={character.id}
+          kind={resting}
+          hitDice={sheet.hitDice ?? []}
           onError={onError}
-          onCancel={() => setResting(false)}
+          onCancel={() => setResting(undefined)}
           onRested={(rested, applied) => {
-            setResting(false);
+            setResting(undefined);
             onChanged(rested);
-            onStatus(`Long rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+            onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
           }}
         />
       ) : (
         <div className="actions">
-          <button type="button" onClick={() => setResting(true)}>
+          <button type="button" onClick={() => setResting('shortRest')}>
+            Short rest…
+          </button>
+          <button type="button" onClick={() => setResting('longRest')}>
             Long rest…
           </button>
         </div>
