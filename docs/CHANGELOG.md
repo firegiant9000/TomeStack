@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Candidate detection (M4 D3; `docs/features/pdf-import.md`):** an import proposes candidates found in the book's text: spells, feats, class features, weapon and armor table rows, and class feature tables. Each has its excerpt, page, proposed rules, a confidence and what it is unsure of, and the names it mentions that are not installed. Nothing becomes content until you review it. Measured on the two SRDs: every spell is found with its level, and every bundled weapon and class is found.
+
 - **Import jobs (M4 D2; `docs/features/pdf-import.md`):** extracting a PDF runs as a job you can cancel and resume. It survives closing the app and keeps a local audit log with no text from the book. Extracted text is searchable within its source. Imported text stays on this computer: no backup or share includes it.
 
 - **PDF text extraction (M4 D1, ADR-009; `docs/features/pdf-import.md`):** TomeStack can read the text of a PDF page by page, with its layout, and reads pages without a text layer with Windows' built-in OCR. The reading happens in a separate worker process with size, page, time and memory limits, so a damaged or hostile PDF cannot take the app down. Nothing is imported yet: import jobs and candidates follow.

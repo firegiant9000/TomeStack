@@ -25,7 +25,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
-        "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page",
+        "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -123,6 +123,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.audit" => app.ImportAudit(Payload<ImportJobRequest>(payload).JobId),
         "import.search" => app.SearchImportedText(Payload<ImportSearchRequest>(payload)),
         "import.page" => app.ImportedPage(Payload<ImportPageRequest>(payload)),
+        "import.candidates" => app.ListCandidates(Payload<ImportCandidatesRequest>(payload)),
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),

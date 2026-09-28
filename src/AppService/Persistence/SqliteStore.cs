@@ -302,6 +302,26 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    public void SaveImportCandidate(StoredCandidate candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        Execute(
+            "INSERT INTO import_candidates (id, job_id, status, json) VALUES ($id, $job, $status, $json) ON CONFLICT(id) DO UPDATE SET status = excluded.status, json = excluded.json;",
+            ("$id", Key(candidate.Id)),
+            ("$job", Key(candidate.JobId)),
+            ("$status", candidate.Status.ToString()),
+            ("$json", Serialize(candidate)));
+    }
+
+    public StoredCandidate? FindImportCandidate(Guid id) => QuerySingle<StoredCandidate>("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<StoredCandidate> ListImportCandidates(Guid jobId) =>
+        Query<StoredCandidate>("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId)));
+
+    /// <summary>Candidates still pending review are replaced when a job detects again; reviewed ones stay.</summary>
+    public void DeletePendingImportCandidates(Guid jobId) =>
+        Execute("DELETE FROM import_candidates WHERE job_id = $job AND status = 'Pending';", ("$job", Key(jobId)));
+
     public void AddImportAudit(Guid jobId, DateTimeOffset at, string eventName, string? detail) => Execute(
         "INSERT INTO import_audit (job_id, at, event, detail) VALUES ($job, $at, $event, $detail);",
         ("$job", Key(jobId)),

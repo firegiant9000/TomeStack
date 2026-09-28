@@ -14,6 +14,7 @@ SPEC I-01, I-02 and I-06 and ARCHITECTURE "Import lifecycle": PDF extraction and
 - The calculator applies only `published` revisions. Drafts are isolated with a `content.unpublished` diagnostic and never contribute to a trace.
 - The same rule holds for packages: drafts inside a package stay drafts and inactive after import. A *published* revision in a package becomes active, so each new one gets the same validation as `content.publish`, shown in the import preview. For content schema v3 (always validated before publishing), errors refuse the import. For older revisions (published by v0.1, before validation existed) they are warnings, and the calculator isolates what it cannot apply (`docs/features/validation-and-restrictions.md`, 2026-09-26 M1 review).
 - Imported content never executes code. Effects are declarative data, and formulas use a bounded grammar with no `eval` (ADR-003).
+- **M4 D3 (2026-09-28):** `DraftCandidate` also carries `unresolvedReferences`, `fields`, `lowConfidenceFields` and a `summary`. Detection is rule-based (`CandidateDetector`) and stores candidates per import job, locally, for review. It never writes a revision.
 
 ## Consequences
 

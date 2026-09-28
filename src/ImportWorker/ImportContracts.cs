@@ -19,7 +19,11 @@ public sealed record PageScope(int? FirstPage = null, int? LastPage = null)
 /// <summary>A block of text in reading order, in PDF points from the page's bottom-left corner (ADR-009: page coordinates where available).</summary>
 /// <param name="FontSize">The block's most common letter size, in points (0 for OCR text, which has none).</param>
 /// <param name="Bold">Most letters come from a bold font (a heading hint for detection).</param>
-public sealed record TextBlock(string Text, double X, double Y, double Width, double Height, double FontSize, bool Bold);
+/// <param name="Lines">The block's lines with their own boxes (M4 D3): tables print as columns, so rows are rebuilt from line positions.</param>
+public sealed record TextBlock(string Text, double X, double Y, double Width, double Height, double FontSize, bool Bold, IReadOnlyList<TextLine>? Lines = null);
+
+/// <summary>One line of a block, in PDF points.</summary>
+public sealed record TextLine(string Text, double X, double Y, double Width, double Height);
 
 /// <summary>Something the extractor reports while it reads a document.</summary>
 public abstract record ExtractionEvent;
@@ -100,9 +104,23 @@ public sealed record DraftCandidate(
     IReadOnlyList<string> RulesFamilies,
     IReadOnlyList<Effect> ProposedEffects,
     double Confidence,
-    IReadOnlyList<string> Uncertainties);
+    IReadOnlyList<string> Uncertainties)
+{
+    /// <summary>Names the candidate refers to that are neither installed nor another candidate of the job (SPEC I-02), for example a spell a feature casts.</summary>
+    public IReadOnlyList<string> UnresolvedReferences { get; init; } = [];
 
-public sealed record ImportJob(Guid Id, Guid SourceId, PageScope Scope, IReadOnlyList<DraftCandidate> Candidates, IReadOnlyList<string> Warnings);
+    /// <summary>What the detector read, by field (for example <c>level</c> → <c>2</c>), shown for review.</summary>
+    public IReadOnlyDictionary<string, string> Fields { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Fields the detector is unsure of (M4 D4): with <see cref="UnresolvedReferences"/>, they block acceptance until the
+    /// candidate is edited or accepted as reference only.
+    /// </summary>
+    public IReadOnlyList<string> LowConfidenceFields { get; init; } = [];
+
+    /// <summary>The entry's text for the draft (the description), when it differs from the excerpt.</summary>
+    public string? Summary { get; init; }
+}
 
 public static class CandidateQuarantine
 {
@@ -122,7 +140,7 @@ public static class CandidateQuarantine
             RulesFamilies = candidate.RulesFamilies,
             Provenance = new Provenance(candidate.SourceId, candidate.Page),
             Status = RevisionStatus.Draft,
-            Summary = candidate.Excerpt,
+            Summary = candidate.Summary ?? candidate.Excerpt,
             Effects = [.. candidate.ProposedEffects.Select(e => e with { Automation = AutomationStatus.Reference })],
         };
     }

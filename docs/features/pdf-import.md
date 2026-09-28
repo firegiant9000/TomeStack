@@ -1,6 +1,43 @@
 # M4: PDF import (extraction, jobs, candidates, review)
 
-ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction and D2 import jobs implemented**; detection (D3), acceptance validation (D4) and the review UI (D5) follow in this document.
+ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-009 · status: **D1 extraction, D2 import jobs and D3 candidate detection implemented**; acceptance validation (D4) and the review UI (D5) follow in this document.
+
+## D3: candidate detection
+
+Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it when a job's extraction completes (`src/AppService/ImportCandidates.cs`). Acceptance: `tests/ImportWorker.Tests/DetectionTests.cs` (the original fixture book), `ImportJobTests.A_completed_import_lists_its_candidates…`, and the measurement below.
+
+**Deterministic and rule-based**, with no AI (an optional local model is M7). It reads the extracted blocks and their positioned lines, not PDF bytes, so it runs in the app. Every pattern is anchored and has a 100 ms match timeout.
+
+| Detector | Recognizes | Proposes |
+| --- | --- | --- |
+| Spell | A name, then "Level 2 Evocation (Sorcerer, Wizard)" / "Evocation Cantrip (…)" (SRD 5.2.1 layout) or "2nd-level evocation (ritual)" / "Evocation cantrip" (SRD 5.1), then the Casting Time, Range, Components and Duration lines | A `spell` effect: level, school, the four details, concentration, ritual, class lists (5.2.1), the attack kind, a saving throw and the first dice, plus the description |
+| Feat | A name, then "Origin Feat" / "General Feat (Prerequisite: …)" (5.2.1), or a heading followed by "Prerequisite: …" (5.1) | "+N bonus to initiative / AC" modifiers and "proficiency in the X skill" grants read from the text |
+| Class feature | "Level 3: Name" (5.2.1) or a name with "Level 3 X Feature"; in SRD 5.1 a bold heading or a run-in heading whose first sentence gives the level, and bold headings inside a "Class Features" section | Text only (the level and class as fields). Grants, resources and uses are added by hand |
+| Weapon row | A row whose damage cell is exactly "1d8 slashing". Tables print as columns, so rows are rebuilt from line positions and work across a page break without the header | A `weapon` effect: category from the "Martial Melee Weapons" line above, attack, damage, type, properties, range, versatile dice and the 2024 mastery |
+| Armor row | On a page with an armor section: "11 + Dex modifier", "14 + Dex modifier (max 2)", "17" or "+2" | An `armor` effect: category (from the section, or the column), Armor Class and the medium Dexterity cap |
+| Class table | A "The Bard" or "Bard Features" title and a "Level … Features" table | A class with its features per level as fields, and the feature names found nowhere as unresolved references |
+
+- **Every candidate** carries an excerpt (at most 4,000 characters), its page or page range, the proposed kind, name and rules family, the proposed effects, a confidence (0.05 to 0.99), uncertainties, the fields it read, **low-confidence fields**, and **unresolved references**: names it refers to that are neither installed (published content of the source's families) nor another candidate of the job. For example, "Fixture Stormcall" casts "Fixture Thunder Word".
+- **Rules family:** the layout suggests one (the 2014 or 2024 style), within the source's declared families. A layout the source does not declare falls back to the source's families, with an uncertainty.
+- **Running headers and footers** (the same text, digits ignored, on at least a third of the pages) are ignored.
+- **Nothing becomes content:** candidates are stored per job for review (`import_candidates`, local only). A re-run replaces only candidates still pending.
+
+`import.candidates { jobId, page?, kind?, minConfidence?, maxConfidence?, status? }` lists them in page order and writes nothing.
+
+### Precision and recall on the SRDs (measured 2026-09-28)
+
+`SrdDetectionMeasurementTests` extracts both SRD PDFs, the same files whose hashes `licensing/srd-pack-review.md` records (the test checks them), and compares the candidates with the bundled packs. A match is the same kind, the same name (case, spacing and apostrophes aside), and a page within one of the pack's. The PDFs stay outside the repository, and the test skips without `TOMESTACK_SRD_PDF_DIR`.
+
+| Kind | SRD 5.1: candidates / truth, precision, recall | SRD 5.2.1: candidates / truth, precision, recall | Notes |
+| --- | --- | --- | --- |
+| Spells | 319 / 319, **100 %**, **100 %**; level right 319/319 | 339 / 339, **100 %**, **100 %**; level right 339/339 | The packs bundle every SRD spell |
+| Weapons | 36 / 35, 97.2 %, **100 %**; damage right 35/35 | 38 / 37, 97.4 %, **100 %**; damage right 37/37 | The one extra in each is the blowgun, which the packs leave out on purpose (its damage is not a dice roll) |
+| Classes | 12 / 9, 75 %, **100 %** | 12 / 9, 75 %, **100 %** | The extras are the Fighter, Monk and Rogue, real SRD classes the packs do not bundle |
+| Class features | 179 / 115, precision n/a, recall **87.0 %** | 240 / 145, precision n/a, recall **100 %** | The packs hold only some classes and levels, so precision cannot be computed against them. By hand, the 5.2.1 extras are the "Level N:" features of the unbundled classes and levels. About two-thirds of the 5.1 extras are real features (Barbarian 4–20, Fighter, Monk, Rogue). The rest are subclass names and sub-section headings (circle terrains, "… Spells" lists), about 20 of 179. The 5.1 misses are subclass features with no level in their first sentence |
+| Feats | 1 / 1 bundled; 1 candidate | 1 / 1 bundled; 17 candidates | The 17 are exactly the SRD 5.2.1 feats (the packs bundle one) |
+| Armor | 13 rows | 13 rows | Not bundled, so not measured; 13 is each SRD's armor table (12 armors and the shield) |
+
+**What these numbers do not show:** they measure the SRD layouts the detectors were written against. A third-party book with its own layout will score lower, especially on class features and tables. That is why every candidate needs review (ADR-004), and why the M4 exit gate runs a third-party test PDF (D6).
 
 ## D2: import jobs (ARCHITECTURE "Import lifecycle")
 

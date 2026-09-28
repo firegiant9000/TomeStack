@@ -348,8 +348,8 @@ public sealed partial class TomeStackApp
         }
     }
 
-    /// <summary>After extraction, before the job completes (candidate detection, M4 D3).</summary>
-    private ImportJobRecord OnPagesExtracted(ImportJobRecord job) => job;
+    /// <summary>After extraction, before the job completes: candidate detection (M4 D3).</summary>
+    private ImportJobRecord OnPagesExtracted(ImportJobRecord job) => DetectCandidates(job);
 
     private void Finish(ImportJobRecord job, ImportJobStatus status, string eventName, string? detail, (string Code, string Message)? failure)
     {

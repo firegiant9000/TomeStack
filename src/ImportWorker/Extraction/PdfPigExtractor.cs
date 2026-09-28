@@ -15,7 +15,7 @@ namespace TomeStack.ImportWorker.Extraction;
 /// by column. A page with no letters is read by <see cref="IOcrEngine"/> when one is available. This class parses
 /// untrusted bytes, so it runs only inside the worker process (<see cref="WorkerMain"/>), never in the app.
 /// </summary>
-public sealed class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLimits? limits = null) : IDocumentExtractor
+public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLimits? limits = null) : IDocumentExtractor
 {
     private readonly ExtractionLimits _limits = limits ?? ExtractionLimits.Default;
 
@@ -126,11 +126,23 @@ public sealed class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLimits? li
                 var size = letters.Count == 0 ? 0 : letters.GroupBy(l => Math.Round(l.PointSize, 1)).MaxBy(g => g.Count())!.Key;
                 var bold = letters.Count > 0 && letters.Count(l => l.FontName?.Contains("Bold", StringComparison.OrdinalIgnoreCase) == true) * 2 > letters.Count;
                 var box = block.BoundingBox;
-                return new TextBlock(Normalize(block.Text), box.Left, box.Bottom, box.Width, box.Height, size, bold);
+                var lines = block.TextLines.Select(l => new TextLine(Normalize(l.Text), l.BoundingBox.Left, l.BoundingBox.Bottom, l.BoundingBox.Width, l.BoundingBox.Height)).ToList();
+                return new TextBlock(Normalize(block.Text), box.Left, box.Bottom, box.Width, box.Height, size, bold, lines);
             }),
         ];
     }
 
-    /// <summary>Compatibility forms (ligatures such as "ﬁ") become plain letters, and line breaks inside a block become "\n".</summary>
-    private static string Normalize(string text) => text.Normalize(NormalizationForm.FormKC).Replace("\r\n", "\n", StringComparison.Ordinal);
+    /// <summary>
+    /// Compatibility forms (ligatures such as "ﬁ") become plain letters, and line breaks inside a block become "\n".
+    /// Soft hyphens are dropped, and the hyphen variants some PDFs print for one hyphen ("1st-­‐‐level")
+    /// become one "-". Em and en dashes stay.
+    /// </summary>
+    internal static string Normalize(string text)
+    {
+        var normalized = text.Normalize(NormalizationForm.FormKC).Replace("\r\n", "\n", StringComparison.Ordinal).Replace("­", "", StringComparison.Ordinal);
+        return HyphenRun().Replace(normalized, "-");
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex("[-‐‑]{2,}|[‐‑]")]
+    private static partial System.Text.RegularExpressions.Regex HyphenRun();
 }

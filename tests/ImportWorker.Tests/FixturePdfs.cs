@@ -96,11 +96,14 @@ internal static class FixturePdfs
         [
             H("Fixture Weapons"),
             B("Name  Damage  Properties  Weight  Cost"),
+            B("Martial Melee Weapons"),
             B("Fixture Hookblade  1d8 slashing  Finesse, Light  2 lb.  12 GP"),
             B("Fixture Longstaff  1d10 bludgeoning  Heavy, Reach, Two-Handed  6 lb.  8 GP"), Gap(), Gap(),
             H("Fixture Armor"),
             B("Armor  Armor Class (AC)  Strength  Stealth  Weight  Cost"),
+            B("Light Armor"),
             B("Fixture Quilted Coat  11 + Dex modifier  -  -  8 lb.  6 GP"),
+            B("Heavy Armor"),
             B("Fixture Plate Shell  17  Str 15  Disadvantage  60 lb.  900 GP"),
         ]);
 

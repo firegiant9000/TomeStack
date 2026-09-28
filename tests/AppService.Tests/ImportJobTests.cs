@@ -95,10 +95,35 @@ public class ImportJobTests
 
         var audit = temp.App.ImportAudit(job.Id);
         Assert.Equal(["created", "started", "completed"], audit.Select(a => a.Event));
-        Assert.Equal("6 pages, 0 unreadable, 0 by OCR, 1 without text, 0 candidates", audit[^1].Detail);
+        Assert.Equal("6 pages, 0 unreadable, 0 by OCR, 1 without text, 9 candidates", audit[^1].Detail);
         Assert.All(audit, a => Assert.DoesNotContain("Fixture", a.Detail ?? "", StringComparison.Ordinal));
         // Extraction changes no content: no revision cites the source.
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+    }
+
+    [Fact]
+    public void A_completed_import_lists_its_candidates_filtered_by_page_kind_and_confidence_and_changes_no_content()
+    {
+        // M4 D3: detection runs after extraction; the candidates are proposals only (ADR-004).
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var revisions = temp.App.Store.ListRevisions().Count;
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        var all = temp.App.ListCandidates(new(job.Id));
+
+        Assert.Equal(9, job.Candidates);
+        Assert.Equal(9, all.Count);
+        Assert.All(all, c => Assert.Equal(CandidateStatus.Pending, c.Status));
+        Assert.Equal(["Fixture Ember Lance", "Fixture Frost Veil"], temp.App.ListCandidates(new(job.Id, Kind: ContentKind.Spell)).Select(c => c.Current.ProposedName));
+        Assert.Equal(4, temp.App.ListCandidates(new(job.Id, Page: 4)).Count);
+        Assert.All(temp.App.ListCandidates(new(job.Id, MaxConfidence: 0.7)), c => Assert.True(c.Current.Confidence <= 0.7));
+        Assert.Equal(revisions, temp.App.Store.ListRevisions().Count); // no content was created
+        // The source's families (SRD 5.2.1 only) bound the candidates' families.
+        Assert.All(all, c => Assert.Equal([RulesFamilies.Srd521], c.Current.RulesFamilies));
+
+        // Detecting again (a resumed or re-run job) replaces only what is still pending.
+        Assert.Equal(9, temp.App.ListCandidates(new(job.Id)).Select(c => c.Id).Distinct().Count());
     }
 
     [Fact]
