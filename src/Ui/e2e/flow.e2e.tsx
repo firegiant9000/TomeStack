@@ -29,6 +29,15 @@ function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
+/**
+ * Waits until the status line says `text`. The status line stays on screen, so `findByRole('status')` would return at
+ * once with the previous message (lint forbids it here).
+ */
+async function expectStatus(text: RegExp): Promise<HTMLElement> {
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(text));
+  return screen.getByRole('status');
+}
+
 it('creates a character, shows its traced sheet, overrides, exports and re-imports it', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -81,9 +90,8 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   expect(within(preview).getByText(/already exists and will be replaced/)).toBeTruthy();
   await user.click(within(preview).getByRole('button', { name: 'Apply import' }));
 
-  const status = await screen.findByRole('status');
+  const status = await expectStatus(/1 replaced/);
   expect(status.getAttribute('role')).toBe('status');
-  expect(status.textContent).toMatch(/1 replaced/);
   expect(status.textContent).toMatch(/backed up to backups\/pre-import-/);
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 });
@@ -138,7 +146,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   expect(await screen.findByText('All choices are made.')).toBeTruthy(); // level 2 offers no new choice
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Draft discarded/);
+  await expectStatus(/Draft discarded/);
   sheet = await screen.findByRole('article', { name: 'E2E Brenna' });
   expect(within(sheet).getByText('Level 1')).toBeTruthy();
 
@@ -225,7 +233,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   rest = await screen.findByRole('region', { name: 'Long rest' });
   await user.click(await within(rest).findByRole('checkbox', { name: /^Rages: 2 → 3/ })); // untick: keep Rages as they are
   await user.click(within(rest).getByRole('button', { name: 'Finish long rest' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Long rest finished: 1 change applied/);
+  await expectStatus(/Long rest finished: 1 change applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 
@@ -244,7 +252,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   const spend = await within(rest).findByRole('list', { name: 'Hit dice to spend' });
   expect(spend.textContent).toMatch(/Rolled 5, Constitution modifier \+2: 7 hit point\(s\)\. Hit points 25 → 32/);
   await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Short rest finished: 2 changes applied/);
+  await expectStatus(/Short rest finished: 2 changes applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
   expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
@@ -439,7 +447,7 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.type(within(pages).getByRole('spinbutton', { name: 'Last page (optional)' }), '4');
   await user.type(within(pages).getByRole('textbox', { name: 'Title (optional)' }), 'E2E Chapter');
   await user.click(within(pages).getByRole('button', { name: 'Import pages' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Draft reference entry "E2E Chapter" created/);
+  await expectStatus(/Draft reference entry "E2E Chapter" created/);
   const drafts = await client.contentBySource(source.id);
   expect(drafts.find((e) => e.name === 'E2E Chapter')?.revisions[0]).toMatchObject({ status: 'draft', provenance: { page: { start: 3, end: 4 } } });
 

@@ -68,13 +68,19 @@ jobs:
           "WebView2 loader policy keys: $(if ($policy) { $policy -join ', ' } else { 'none' })"
 
       # Launches the real WPF + WebView2 shell, loads the bundled UI, round-trips commands over the message bridge,
-      # then creates, exports and previews a fixture character. Non-blocking until it has passed on hosted runners;
-      # promote it to blocking after three consecutive green runs (ADR-006 "Not yet proven").
-      - name: Desktop shell smoke (non-blocking)
+      # then creates, exports and previews a fixture character. Blocking since M2.1: every hosted run that reached it
+      # logged PASS (8 of 8 on 2026-09-28), past the "three consecutive green runs" rule (ADR-006).
+      - name: Desktop shell smoke
         id: smoke
-        continue-on-error: true
         shell: pwsh
         run: scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe -Report "$env:RUNNER_TEMP/smoke-result.json"
+
+      # M2.1: two real TomeStack.exe processes on one data folder; the second hands over and exits, and the folder
+      # still works once the first closes. Non-blocking until three consecutive green hosted runs, like the smoke was.
+      - name: Two instances on one data folder (non-blocking)
+        continue-on-error: true
+        shell: pwsh
+        run: scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
 
       # Uses the smoke-only --simulate-missing-webview2 flag; the loader env override was ignored on this runner.
       - name: Missing WebView2 runtime path (non-blocking)

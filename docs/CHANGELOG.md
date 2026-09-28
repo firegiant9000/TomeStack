@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder; it stays non-blocking until it passes three hosted runs in a row.
+
 - **A second spellcasting class gets its bonuses, with a trace (M2.1; `docs/features/spellcasting.md`):** a bonus to spell attacks or spell save DCs (from an item or a feature) used to reach only the first spellcasting class. A multiclass character's other casters showed a bare proficiency bonus + ability modifier, without saying how it was calculated. Every caster now gets those bonuses, and the Spells panel explains each caster's attack bonus and save DC step by step.
 
 - **One TomeStack per data folder (M2.1; ARCHITECTURE "Data folder"):** starting TomeStack again while it is open now brings the open window to the front instead of opening the same data a second time. Before, the second copy marked the first copy's running PDF import as interrupted, so resuming it could run two imports of one job at once. Its start-up clean-up could also delete a PDF the first copy was still attaching. TomeStack now holds `tomestack.lock` in the data folder while it runs, and Windows releases it when TomeStack exits or crashes. The DevHost is refused on a folder the app has open, and the app on one the DevHost has open.

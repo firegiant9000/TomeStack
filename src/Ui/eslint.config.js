@@ -30,4 +30,18 @@ export default defineConfig([
     files: ['src/api/transport.ts', 'e2e/devhost.setup.ts'],
     rules: { 'no-restricted-globals': 'off', 'no-restricted-properties': 'off' },
   },
+  {
+    // M2.1: the status line is always on screen, so findByRole('status') resolves at once to the *previous* message and
+    // the assertion races the command (CI flakes on 2026-09-27/28). Wait for the text instead.
+    files: ['e2e/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name=/^findAllByRole$|^findByRole$/][arguments.0.value='status']",
+          message: "The status line already shows the previous message: use expectStatus(/…/) (a waitFor on its text), not findByRole('status').",
+        },
+      ],
+    },
+  },
 ]);
