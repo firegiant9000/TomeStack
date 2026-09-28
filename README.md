@@ -99,4 +99,4 @@ It installs to `%LOCALAPPDATA%\TomeStack.App`. Uninstalling removes only that fo
 
 ## License
 
-TomeStack's code is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE) (LIVING_SPECS D07). Fixture content is original to this project. Third-party components are listed in [ATTRIBUTION.md](ATTRIBUTION.md), and export and license policy is in [ADR-007](docs/decisions/ADR-007-export-package-and-license-policy.md).
+TomeStack's code is licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE) (LIVING_SPECS D07). Fixture content is original to this project. Third-party components are listed in [ATTRIBUTION.md](ATTRIBUTION.md), and export and license policy is in [ADR-007](docs/decisions/ADR-007-export-package-and-license-policy.md). TomeStack is not affiliated with or endorsed by Wizards of the Coast.
