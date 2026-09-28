@@ -40,7 +40,7 @@ Every accepted candidate is a draft, and every effect in it is reference-only.
 
 ## Precision and recall (D3)
 
-Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-review.md`, against the bundled packs (`SrdDetectionMeasurementTests`; the PDFs stay outside the repository). Details and the match rule are in `pdf-import.md`. The test now fails below floors set a little under these numbers. The floors were added after this measurement and have not run yet: the PDFs were not on the machine when they were added.
+Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-review.md`, against the bundled packs (`SrdDetectionMeasurementTests`; the PDFs stay outside the repository). Details and the match rule are in `pdf-import.md`. The test now fails below floors set a little under these numbers. The floors were added after this measurement, and first ran later the same day (below).
 
 | Kind | SRD 5.1 precision / recall | SRD 5.2.1 precision / recall |
 | --- | --- | --- |
@@ -50,6 +50,21 @@ Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-rev
 | Class features | n/a / 87.0 % | n/a / 100 % |
 
 The extra weapons (the blowgun) and classes (Fighter, Monk, Rogue) are real SRD entries the packs do not bundle. Feature precision cannot be computed against packs that bundle only some classes. By hand, about 20 of the 179 SRD 5.1 feature candidates are subclass names or sub-section headings. Feats and armor are not fully bundled, so they are counted rather than measured: all 17 SRD 5.2.1 feats, and both SRDs' 13 armor rows.
+
+### The floors ran (2026-09-28, build on branch `m2.2-fighter`)
+
+`SrdDetectionMeasurementTests` ran with `TOMESTACK_SRD_PDF_DIR` pointing to both SRD PDFs, hash-checked again on this date and kept outside the repository. **Every floor passed.** The Fighter and the armor table are now bundled (M2.2), so both count as truth, and armor has its own measurement with a recall floor and an exact Armor Class check.
+
+| Kind | SRD 5.1 precision / recall | SRD 5.2.1 precision / recall |
+| --- | --- | --- |
+| Spells | 100 % / 100 % (levels 319/319) | 100 % / 100 % (levels 339/339) |
+| Weapons | 97.2 % / 100 % (damage 35/35) | 97.4 % / 100 % (damage 37/37) |
+| Armor | 100 % / 100 % (Armor Class 13/13) | 100 % / 100 % (Armor Class 13/13) |
+| Classes | 83.3 % / 100 % (the extras: Monk, Rogue) | 83.3 % / 100 % |
+| Class features | n/a / 88.2 % | n/a / 100 % |
+| Feats | n/a / 100 % (1 of 1) | n/a / 100 % (5 of 5) |
+
+The class precision floor went from 70 % to 80 %; the other floors are unchanged. These are the SRDs, the layouts detection was tuned on. **They do not stand in for the third-party run**, which is still owed, so M4 stays experimental and its gate is not met.
 
 ## Could not be verified here
 

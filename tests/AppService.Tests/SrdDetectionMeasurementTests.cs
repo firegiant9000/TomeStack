@@ -44,30 +44,37 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
         [("5.2.1", ContentKind.Spell)] = (0.99, 0.99),
         [("5.1", ContentKind.Item)] = (0.95, 0.99),
         [("5.2.1", ContentKind.Item)] = (0.95, 0.99),
-        [("5.1", ContentKind.Class)] = (0.70, 0.99),
-        [("5.2.1", ContentKind.Class)] = (0.70, 0.99),
+        // 83.3% since M2.2 (the Fighter is truth now; Monk and Rogue are the unbundled extras).
+        [("5.1", ContentKind.Class)] = (0.80, 0.99),
+        [("5.2.1", ContentKind.Class)] = (0.80, 0.99),
         [("5.1", ContentKind.Feature)] = (null, 0.85),
         [("5.2.1", ContentKind.Feature)] = (null, 0.99),
     };
 
-    private sealed record Truth(ContentKind Kind, string Name, int Start, int End, SpellEffect? Spell, WeaponEffect? Weapon);
+    /// <summary>M2.2, the first armor measurement (2026-09-28): 13 of 13 rows in each SRD, every Armor Class right.</summary>
+    private const double ArmorRecallFloor = 0.99;
 
+    private sealed record Truth(ContentKind Kind, string Name, int Start, int End, SpellEffect? Spell, WeaponEffect? Weapon, ArmorEffect? Armor = null);
+
+    /// <summary>Weapons and armor are measured separately: the detector proposes both as items.</summary>
     private static IEnumerable<Truth> GroundTruth(string version)
     {
-        var packs = new[] { $"srd-{version}.json", $"srd-{version}-classes.json", $"srd-{version}-spells.json", $"srd-{version}-equipment.json" }
+        // M2.2: the Fighter and the armor table are bundled too.
+        var packs = new[] { $"srd-{version}.json", $"srd-{version}-classes.json", $"srd-{version}-spells.json", $"srd-{version}-equipment.json", $"srd-{version}-fighter.json", $"srd-{version}-armor.json" }
             .Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}"));
-        // The newest revision of each content: later revisions (M2, M3 C3) repeat the same entries.
+        // The newest revision of each content: later revisions (M2, M3 C3, M2.2) repeat the same entries.
         var newest = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last());
         foreach (var revision in newest)
         {
             if (revision.Provenance.Page is not { } page)
                 continue;
             var weapon = revision.Effects.OfType<WeaponEffect>().FirstOrDefault();
-            if (revision.Kind == ContentKind.Item && weapon is null)
-                continue; // only the weapon table is bundled
+            var armor = revision.Effects.OfType<ArmorEffect>().FirstOrDefault();
+            if (revision.Kind == ContentKind.Item && weapon is null && armor is null)
+                continue; // only the weapon and armor tables are bundled
             if (revision.Name.Contains(':', StringComparison.Ordinal))
                 continue; // option entries such as "Barbarian Skill: Athletics" are not headings in the book
-            yield return new(revision.Kind, revision.Name, page.Start, page.End ?? page.Start, revision.Effects.OfType<SpellEffect>().FirstOrDefault(), weapon);
+            yield return new(revision.Kind, revision.Name, page.Start, page.End ?? page.Start, revision.Effects.OfType<SpellEffect>().FirstOrDefault(), weapon, armor);
         }
     }
 
@@ -93,7 +100,7 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
 
             foreach (var kind in new[] { ContentKind.Spell, ContentKind.Item, ContentKind.Feature, ContentKind.Feat, ContentKind.Class })
             {
-                var expected = truth.Where(t => t.Kind == kind).ToList();
+                var expected = truth.Where(t => t.Kind == kind && (kind != ContentKind.Item || t.Weapon is not null)).ToList();
                 // Items are measured as weapons: the weapon table is the only item table the packs bundle.
                 var proposed = candidates.Where(c => c.ProposedKind == kind && (kind != ContentKind.Item || c.ProposedEffects.OfType<WeaponEffect>().Any())).ToList();
                 var unmatched = new List<Truth>(expected);
@@ -111,7 +118,7 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
                         matched.Add((candidate, hit));
                     }
                 }
-                // Armor is not bundled and the packs hold only some feats, so their "precision" counts entries the packs lack.
+                // The packs hold only some features and feats, so their "precision" counts entries the packs lack.
                 var complete = kind is ContentKind.Spell or ContentKind.Item or ContentKind.Class;
                 var precision = proposed.Count == 0 ? 0 : (double)matched.Count / proposed.Count;
                 var recall = expected.Count == 0 ? 0 : (double)matched.Count / expected.Count;
@@ -138,8 +145,31 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
                 report.AppendLine($"  missed: {string.Join("; ", unmatched.Select(t => $"{t.Name} p{t.Start}"))}");
                 report.AppendLine($"  extra: {string.Join("; ", extra.Select(c => $"{c.ProposedName} p{c.Page.Start}"))}");
             }
-            var armor = candidates.Count(c => c.ProposedKind == ContentKind.Item && c.ProposedEffects.OfType<ArmorEffect>().Any());
-            output.WriteLine($"{version}: {pages.Count} pages, {candidates.Count} candidates ({armor} armor rows; armor is not bundled, so it is not measured)");
+            // M2.2: the armor table is bundled, so armor rows are measured too, with their Armor Class.
+            var armorTruth = truth.Where(t => t.Armor is not null).ToList();
+            var armorProposed = candidates.Where(c => c.ProposedKind == ContentKind.Item && c.ProposedEffects.OfType<ArmorEffect>().Any()).ToList();
+            var armorLeft = new List<Truth>(armorTruth);
+            var armorMatched = new List<(DraftCandidate Candidate, Truth Truth)>();
+            foreach (var candidate in armorProposed)
+            {
+                var hit = armorLeft.FirstOrDefault(t => CandidateDetector.Key(t.Name) == CandidateDetector.Key(candidate.ProposedName) && candidate.Page.Start >= t.Start - 1 && candidate.Page.Start <= t.End + 1);
+                if (hit is null)
+                    continue;
+                armorLeft.Remove(hit);
+                armorMatched.Add((candidate, hit));
+            }
+            var acRight = armorMatched.Count(m => m.Candidate.ProposedEffects.OfType<ArmorEffect>().First().ArmorClass == m.Truth.Armor!.ArmorClass);
+            var armorPrecision = armorProposed.Count == 0 ? 0 : (double)armorMatched.Count / armorProposed.Count;
+            var armorRecall = armorTruth.Count == 0 ? 0 : (double)armorMatched.Count / armorTruth.Count;
+            var armorLine = $"{version} Armor: truth {armorTruth.Count}, candidates {armorProposed.Count}, matched {armorMatched.Count}, precision {armorPrecision:P1}, recall {armorRecall:P1}, armor class correct {acRight}/{armorMatched.Count}";
+            output.WriteLine(armorLine);
+            report.AppendLine(armorLine);
+            report.AppendLine($"  missed: {string.Join("; ", armorLeft.Select(t => $"{t.Name} p{t.Start}"))}");
+            if (armorRecall < ArmorRecallFloor)
+                belowFloor.Add($"{version} armor recall {armorRecall:P1} < {ArmorRecallFloor:P0}");
+            if (acRight < armorMatched.Count)
+                belowFloor.Add($"{version} armor class {acRight}/{armorMatched.Count}");
+            output.WriteLine($"{version}: {pages.Count} pages, {candidates.Count} candidates");
             Assert.NotEmpty(candidates);
         }
         if (Environment.GetEnvironmentVariable("TOMESTACK_MEASURE_OUT") is { Length: > 0 } outFile)
