@@ -5,6 +5,12 @@ public interface IContentCatalog
 {
     ContentRevision? FindRevision(ContentReference reference);
     SourceRecord? FindSource(Guid sourceId);
+
+    /// <summary>Published revisions that declare themselves an option of the choice (content schema v4, M2 item 5).</summary>
+    IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) => [];
+
+    /// <summary>Every stored revision of one content id, any status (validation of <see cref="ContentRevision.ExtendsChoice"/>).</summary>
+    IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => [];
 }
 
 public sealed record Diagnostic(string Code, string Message, ContentReference? Content = null, string? EffectId = null);
@@ -66,16 +72,75 @@ public sealed record ChoiceStatus(
     bool Resolved);
 
 /// <param name="Active">Every content revision that applies to the character (pinned, class, granted or chosen), in resolution order.</param>
+/// <param name="Resources">M2 item 2: every resource an active revision defines, with its calculated maximum and what is spent.</param>
+/// <param name="Features">M2 item 2: every active revision with its text, automation status, effects and rolls, in resolution order.</param>
+/// <param name="HitPoints">M2 item 2: the displayed maximum with current and temporary hit points from the play state.</param>
 public sealed record CharacterSheet(
     Guid CharacterId,
     string RulesFamily,
     IReadOnlyList<DerivedValue> Fields,
     IReadOnlyList<Diagnostic> Diagnostics,
     IReadOnlyList<ChoiceStatus>? Choices = null,
-    IReadOnlyList<ContentReference>? Active = null)
+    IReadOnlyList<ContentReference>? Active = null,
+    IReadOnlyList<ResourceValue>? Resources = null,
+    IReadOnlyList<FeatureEntry>? Features = null,
+    HitPointState? HitPoints = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>
+/// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's
+/// own context (<c>CLASS_LEVEL</c> is the level in its class), or <c>null</c> when it cannot be calculated (a reference-only
+/// resource, or a formula that fails, with a warning). <paramref name="Current"/> is the maximum less what is spent, never
+/// below 0. The key for spending is the content id and <paramref name="ResourceId"/>.
+/// </summary>
+public sealed record ResourceValue(
+    ContentReference Content,
+    string ContentName,
+    string EffectId,
+    string ResourceId,
+    string Label,
+    int? Maximum,
+    int Spent,
+    int? Current,
+    IReadOnlyList<TraceEntry> Trace,
+    IReadOnlyList<Diagnostic> Warnings,
+    AutomationStatus Automation,
+    IReadOnlyList<RecoveryInfo> Recoveries,
+    string? Text);
+
+/// <summary>
+/// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
+/// <paramref name="Value"/> is <paramref name="Amount"/> evaluated in the content's context, or <c>null</c> for <c>all</c>
+/// and for a formula that fails (with a warning on the resource), which the rest leaves to the player.
+/// </summary>
+public sealed record RecoveryInfo(string EffectId, RestPeriod On, string Amount, string? Text, int? Value = null, bool All = false);
+
+/// <summary>
+/// SPEC I-05: one active revision as the sheet lists it. <paramref name="Automation"/> is the least automated of its
+/// effects (<c>reference</c> when it has none, so pure text is never mistaken for automation), and at most
+/// <c>assisted</c> when a diagnostic names one of its effects. <paramref name="Diagnostics"/> are the problems scoped to it.
+/// </summary>
+public sealed record FeatureEntry(
+    ContentReference Content,
+    string Name,
+    ContentKind Kind,
+    string? Summary,
+    string? Via,
+    TraceOrigin Origin,
+    AutomationStatus Automation,
+    IReadOnlyList<FeatureEffect> Effects,
+    IReadOnlyList<Diagnostic> Diagnostics);
+
+/// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
+public sealed record FeatureEffect(string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null);
+
+/// <summary>A calculated field id and its display label.</summary>
+public sealed record FieldInfo(string Id, string Label);
+
+/// <summary>Hit points for play: the displayed maximum (after any override), current (at most the maximum) and temporary.</summary>
+public sealed record HitPointState(int Maximum, int Current, int Temporary);
 
 /// <summary>
 /// Pure, dependency-ordered calculation of derived character values (ARCHITECTURE "Rules execution"; ADR-003).
@@ -113,6 +178,9 @@ public static class CharacterCalculator
         Specs.Select((s, i) => (s.Id, i)).ToDictionary(p => p.Id, p => p.i, StringComparer.Ordinal);
 
     public static IEnumerable<string> Fields => Specs.Select(s => s.Id);
+
+    /// <summary>Every calculated field with its label, for authoring UIs (modifier targets, restrictions).</summary>
+    public static IReadOnlyList<FieldInfo> FieldInfos { get; } = [.. Specs.Select(s => new FieldInfo(s.Id, s.Label))];
 
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
@@ -216,6 +284,7 @@ public static class CharacterCalculator
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
         var modifiers = CollectModifiers(active, policy, diagnostics, warnings, manual);
+        AddArmor(active, modifiers, diagnostics);
         var proficiencies = CollectProficiencies(active, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels));
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
@@ -260,7 +329,130 @@ public static class CharacterCalculator
                 spec.Units);
         }).ToList();
 
-        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)]), active);
+        var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)])).ToList();
+        var maximum = values[FieldIds.HitPoints];
+        var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+
+        return new(new CharacterSheet(character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints), active);
+    }
+
+    // ---- resources and features (M2 item 2) -----------------------------------------------------------------
+
+    /// <summary>
+    /// Every resource of every active revision (the first definition of a resource id per revision). The maximum is the
+    /// formula evaluated like a modifier in the content's context; a reference-only resource is listed with no maximum,
+    /// and a failing formula disables only that resource, with a warning (SPEC C-03).
+    /// </summary>
+    private static List<ResourceValue> CollectResources(
+        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family)
+    {
+        var resources = new List<ResourceValue>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var effect in revision.Effects.OfType<ResourceEffect>())
+            {
+                if (!seen.Add(effect.ResourceId))
+                    continue; // validation refuses duplicates on publish; the first definition counts
+                var warnings = new List<Diagnostic>();
+                var recoveries = revision.Effects.OfType<RecoveryEffect>()
+                    .Where(r => r.ResourceId == effect.ResourceId)
+                    .Select(r => Recovery(r, item, character, classLevels, values, warnings))
+                    .ToList();
+                var spent = character.Play.SpentOf(revision.ContentId, effect.ResourceId);
+                var origin = ContentOrigin(family, item, effect);
+                int? maximum = null;
+                var trace = new List<TraceEntry>();
+                if (effect.Automation == AutomationStatus.Reference)
+                {
+                    trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
+                }
+                else if (!Formula.TryParse(effect.Maximum, out var formula, out var parseError))
+                {
+                    warnings.Add(InvalidFormula(revision, effect, parseError!));
+                }
+                else
+                {
+                    var inputs = new List<TraceInput>();
+                    if (formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, inputs), out var value, out var error))
+                    {
+                        maximum = Math.Max(value, 0);
+                        trace.Add(new(1, "derive", $"Maximum from {Describe(item)}: {formula.Source}", value, maximum.Value, origin, null, inputs.Count > 0 ? inputs : null));
+                    }
+                    else
+                    {
+                        warnings.Add(InvalidFormula(revision, effect, error!));
+                    }
+                }
+                var automation = maximum is null
+                    ? (effect.Automation == AutomationStatus.Reference ? AutomationStatus.Reference : AutomationStatus.Assisted)
+                    : effect.Automation;
+                resources.Add(new(
+                    revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text));
+            }
+        }
+        return resources;
+    }
+
+    /// <summary>A recovery amount: <c>all</c>, or its formula evaluated in the content's context (a failure is a warning).</summary>
+    private static RecoveryInfo Recovery(
+        RecoveryEffect recovery, ActiveContent item, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> warnings)
+    {
+        if (string.Equals(recovery.Amount.Trim(), "all", StringComparison.OrdinalIgnoreCase))
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, All: true);
+        if (recovery.Automation != AutomationStatus.Automatic)
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
+        FormulaError? failure;
+        if (Formula.TryParse(recovery.Amount, out var formula, out failure)
+            && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+        {
+            return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
+        }
+        warnings.Add(InvalidFormula(item.Revision, recovery, failure!));
+        return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
+    }
+
+    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics)
+    {
+        var revision = item.Revision;
+        var effects = revision.Effects.Select(e => e switch
+        {
+            RollEffect roll => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId),
+            ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
+            RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
+            _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
+        }).ToList();
+        var automation = effects.Count == 0 ? AutomationStatus.Reference : effects.Max(e => e.Automation);
+        if (automation == AutomationStatus.Automatic && diagnostics.Any(d => d.EffectId is not null))
+            automation = AutomationStatus.Assisted;
+        var via = item.GrantedBy is { } by ? $"granted by {by.Kind.ToString().ToLowerInvariant()} '{by.Name}'"
+            : item.ChosenFrom is { } chooser ? $"chosen from {chooser.Kind.ToString().ToLowerInvariant()} '{chooser.Name}'"
+            : null;
+        var origin = new TraceOrigin(TraceOriginKind.Content, family, revision.Reference, revision.Name, null, item.Source.Id, item.Source.Title, revision.Provenance.Page);
+        return new(revision.Reference, revision.Name, revision.Kind, revision.Summary, via, origin, automation, effects, diagnostics);
+    }
+
+    /// <summary>
+    /// A formula identifier in the context of <paramref name="content"/>: <c>LEVEL</c>, <c>CLASS_LEVEL</c> (the level in the
+    /// class the content belongs to; unavailable outside a class) or a field value calculated so far. Records what it read.
+    /// </summary>
+    private static int? Resolve(
+        string identifier, ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<TraceInput> inputs)
+    {
+        int? resolved = identifier switch
+        {
+            FormulaIdentifiers.Level => character.TotalLevel,
+            FormulaIdentifiers.ClassLevel => content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
+            _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
+            _ => null,
+        };
+        if (resolved is { } r)
+            inputs.Add(new(identifier, r));
+        return resolved;
     }
 
     // ---- content resolution ---------------------------------------------------------------------------------
@@ -376,6 +568,18 @@ public static class CharacterCalculator
             if (seen.Add(pin) && Admit(pin, null) is { } item)
                 active.Add(item);
         }
+        // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
+        foreach (var entry in character.Equipment.Where(e => e.Equipped))
+        {
+            if (!seen.Add(entry.Item) || Admit(entry.Item, null) is not { } item)
+                continue;
+            if (item.Revision.Kind != ContentKind.Item)
+            {
+                diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
+                continue;
+            }
+            active.Add(item);
+        }
 
         var classes = new List<ClassInfo>();
         foreach (var entry in character.Classes)
@@ -451,10 +655,20 @@ public static class CharacterCalculator
                     continue;
                 }
                 var selected = character.Choices.LastOrDefault(c => c.Source == revision.Reference && c.ChoiceId == choice.ChoiceId)?.Selected ?? [];
+                // Content schema v4: published revisions that name this choice (by content id, any revision of it) are
+                // options too, after the declared ones; for example a homebrew subclass for the SRD Barbarian.
+                IReadOnlyList<ContentReference> options =
+                [
+                    .. choice.Options,
+                    .. catalog.ChoiceExtensions(revision.ContentId, choice.ChoiceId)
+                        .OrderBy(r => r.Name, StringComparer.Ordinal).ThenBy(r => r.RevisionId)
+                        .Select(r => r.Reference)
+                        .Where(r => !choice.Options.Contains(r)),
+                ];
                 var applied = new List<ContentReference>();
                 foreach (var option in selected.Distinct())
                 {
-                    if (!choice.Options.Contains(option))
+                    if (!options.Contains(option))
                     {
                         diagnostics.Add(new("choice.invalid-option", $"'{revision.Name}' choice '{choice.ChoiceId}': revision {option.RevisionId} is not one of its options; it is not applied.", option, choice.Id));
                         continue;
@@ -490,7 +704,7 @@ public static class CharacterCalculator
                         revision.Reference,
                         choice.Id));
                 }
-                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, choice.Options, applied, resolved));
+                choices.Add(new(revision.Reference, revision.Name, choice.ChoiceId, choice.Text, choice.Count, options, applied, resolved));
             }
         }
 
@@ -505,7 +719,57 @@ public static class CharacterCalculator
 
     // ---- effects --------------------------------------------------------------------------------------------
 
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields);
+    /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null);
+
+    /// <summary>
+    /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
+    /// Dex; medium: AC + Dex up to the cap; heavy: AC), and while it is worn every other Armor Class replacement is an
+    /// unarmored alternative that does not apply, traced as such. (All SRD alternatives, such as Unarmored Defense,
+    /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
+    /// count; extra ones get a diagnostic.
+    /// </summary>
+    private static void AddArmor(List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics)
+    {
+        var armor = active
+            .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
+                .Where(e => e.Automation == AutomationStatus.Automatic && e.Timing == EffectTiming.Always)
+                .Select(e => (Content: a, Effect: e)))
+            .ToList();
+        var body = armor.Where(a => a.Effect.Category != ArmorCategory.Shield).ToList();
+        var shields = armor.Where(a => a.Effect.Category == ArmorCategory.Shield).ToList();
+        foreach (var extra in body.Skip(1))
+            diagnostics.Add(new("equipment.multiple-armor", $"'{extra.Content.Revision.Name}' is armor, but '{body[0].Content.Revision.Name}' is already worn; only one armor counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+        foreach (var extra in shields.Skip(1))
+            diagnostics.Add(new("equipment.multiple-shields", $"'{extra.Content.Revision.Name}' is a shield, but '{shields[0].Content.Revision.Name}' is already used; only one shield counts.", extra.Content.Revision.Reference, extra.Effect.Id));
+
+        if (body.Count > 0)
+        {
+            var (content, effect) = body[0];
+            var reason = $"it applies only while no armor is worn, and {Describe(content)} is worn";
+            for (var i = 0; i < modifiers.Count; i++)
+            {
+                if (modifiers[i].Effect.Target == FieldIds.ArmorClass && modifiers[i].Effect.Operation == ModifierOperation.Replace)
+                    modifiers[i] = modifiers[i] with { SkipReason = reason };
+            }
+            var value = effect.Category switch
+            {
+                ArmorCategory.Light => $"{effect.ArmorClass} + DEX.MOD",
+                ArmorCategory.Medium => $"{effect.ArmorClass} + min(DEX.MOD, {effect.DexterityCap ?? ArmorEffect.DefaultMediumDexterityCap})",
+                _ => $"{effect.ArmorClass}",
+            };
+            modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+        }
+        if (shields.Count > 0)
+            modifiers.Add(Synthetic(shields[0].Content, shields[0].Effect, ModifierOperation.Bonus, $"{shields[0].Effect.ArmorClass}"));
+    }
+
+    private static Modifier Synthetic(ActiveContent content, ArmorEffect armor, ModifierOperation operation, string value)
+    {
+        var effect = new ModifierEffect { Id = armor.Id, Operation = operation, Target = FieldIds.ArmorClass, Value = value, Text = armor.Text };
+        var formula = Formula.TryParse(value, out var parsed, out _) ? parsed! : throw new InvalidOperationException($"Armor formula '{value}' does not parse."); // built from integers above
+        return new(content, effect, formula, [.. formula.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]);
+    }
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
@@ -565,6 +829,12 @@ public static class CharacterCalculator
     // both families, so they are not restricted. A feature chosen from or granted by origin content, however many
     // features away, counts as that origin (a background's "+2 Str, +1 Con" option must not bypass the policy by being
     // a separate feature). Every operation counts, so `set` or `replace` cannot bypass it either.
+    /// <summary>SRD: ability score increases stop at 20 (both families, so a rules constant rather than a policy field).</summary>
+    public const int AbilityScoreIncreaseCap = 20;
+
+    private static bool IsAbilityScoreField(string field) =>
+        field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".score", StringComparison.Ordinal);
+
     private static bool IsAbilityScore(ModifierEffect effect) =>
         effect.Target.StartsWith("ability.", StringComparison.Ordinal) && effect.Target.EndsWith(".score", StringComparison.Ordinal);
 
@@ -767,24 +1037,16 @@ public static class CharacterCalculator
         Dictionary<string, int> values, string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
     {
         var evaluated = new List<(Modifier Modifier, int Amount, List<TraceInput> Inputs)>();
+        var skipped = new List<Modifier>();
         foreach (var modifier in modifiers)
         {
-            var inputs = new List<TraceInput>();
-            int? Resolve(string identifier)
+            if (modifier.SkipReason is not null)
             {
-                int? resolved = identifier switch
-                {
-                    FormulaIdentifiers.Level => character.TotalLevel,
-                    // CLASS_LEVEL: the level in the class this content belongs to; unavailable outside a class.
-                    FormulaIdentifiers.ClassLevel => modifier.Content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
-                    _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
-                    _ => null,
-                };
-                if (resolved is { } r)
-                    inputs.Add(new(identifier, r));
-                return resolved;
+                skipped.Add(modifier);
+                continue;
             }
-            if (modifier.Formula.TryEvaluate(Resolve, out var amount, out var error))
+            var inputs = new List<TraceInput>();
+            if (modifier.Formula.TryEvaluate(id => Resolve(id, modifier.Content, character, classLevels, values, inputs), out var amount, out var error))
                 evaluated.Add((modifier, amount, inputs));
             else
             {
@@ -806,8 +1068,14 @@ public static class CharacterCalculator
             foreach (var other in replacements.Where(r => r != best))
                 steps.Add(new(field, "ignored", $"Replacement from {Name(other.Modifier)} not used; the highest replacement applies", other.Amount, value, Origin(other.Modifier), Inputs(other.Inputs)));
         }
+        foreach (var modifier in skipped)
+            steps.Add(new(field, "ignored", $"{Name(modifier)} not used: {modifier.SkipReason}", null, value, Origin(modifier)));
 
-        var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus).ToList();
+        // Ability scores: increases first (capped at 20 below), then penalties, so the result does not depend on the
+        // order of the content (19 + 2 - 2 is 18 either way). A stable sort keeps content order within each group.
+        var bonuses = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Bonus)
+            .OrderBy(e => IsAbilityScoreField(field) && e.Amount < 0)
+            .ToList();
         var winners = bonuses
             .Where(b => b.Modifier.Effect.Stacking == StackingRule.HighestInGroup)
             .GroupBy(b => b.Modifier.Effect.StackGroup, StringComparer.Ordinal)
@@ -832,6 +1100,16 @@ public static class CharacterCalculator
                     bonus.Modifier.Effect.Id));
                 manual.Add(field);
                 steps.Add(new(field, "ignored", $"Bonus from {Name(bonus.Modifier)} not applied; the result would be out of range", bonus.Amount, value, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                continue;
+            }
+            // SRD (both families, owner decision 2026-09-27): increases cannot raise an ability score above 20. A bonus
+            // stops at 20 (or at the score it started from, if that was already higher); set effects and overrides may
+            // exceed it. A higher content-declared maximum (for example 24) is not modeled yet.
+            if (IsAbilityScoreField(field) && bonus.Amount > 0 && next > Math.Max(AbilityScoreIncreaseCap, value))
+            {
+                var capped = Math.Max(AbilityScoreIncreaseCap, value);
+                steps.Add(new(field, "add", $"Bonus from {Name(bonus.Modifier)}, capped: increases cannot raise an ability score above {AbilityScoreIncreaseCap} (+{bonus.Amount} would give {next})", capped - value, capped, Origin(bonus.Modifier), Inputs(bonus.Inputs)));
+                value = capped;
                 continue;
             }
             value = (int)next;
@@ -892,7 +1170,7 @@ public static class CharacterCalculator
         return $"{revision.Kind.ToString().ToLowerInvariant()} '{revision.Name}'{from}";
     }
 
-    private static Diagnostic InvalidFormula(ContentRevision revision, ModifierEffect effect, FormulaError error) =>
+    private static Diagnostic InvalidFormula(ContentRevision revision, Effect effect, FormulaError error) =>
         new("effect.invalid-formula", $"'{revision.Name}' effect '{effect.Id}' is disabled: {error.Message} ({error.Code})", revision.Reference, effect.Id);
 
     private static TraceOrigin ContentOrigin(string family, ActiveContent content, Effect effect) =>
@@ -956,9 +1234,10 @@ public static class CharacterCalculator
         {
             var dex = c.Values[FieldIds.Modifier(Ability.Dex)];
             var value = 10 + dex;
-            // Armor and shields are not modeled yet (M2 equipment): this is the unarmored base. Alternatives such as
-            // Unarmored Defense are content `replace` effects; the highest replacement wins (ADR-003).
-            steps.Add(new(FieldIds.ArmorClass, "base", "Armor Class without armor = 10 + Dexterity modifier (armor is not modeled yet)", 10, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), dex)]));
+            // The unarmored base. Worn armor and alternatives such as Unarmored Defense are `replace` effects (armor is
+            // synthesized from equipped items, M2 item 4); the highest replacement wins, and while armor is worn only the
+            // armor replaces it (ADR-003). A shield is a bonus.
+            steps.Add(new(FieldIds.ArmorClass, "base", "Armor Class without armor = 10 + Dexterity modifier", 10, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(FieldIds.Modifier(Ability.Dex), dex)]));
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));

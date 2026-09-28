@@ -1,6 +1,6 @@
 # ADR-005: Managed PDF attachment versus external link
 
-Status: **accepted** (owner decision D02, 2026-09-26). The data-folder warning is implemented. PDF attachment itself, and the `pdfRef` migration below, are M2.
+Status: **accepted** (owner decision D02, 2026-09-26). The data-folder warning is implemented. PDF attachment, page navigation and the `pdfRef` migration are implemented (M2 item 6, database schema 3; `features/pdf-attachments.md`). One deviation from the plan, recorded under "Implementation (M2 item 6)".
 Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context
@@ -41,6 +41,15 @@ A numbered database migration, so the pre-upgrade backup `tomestack.db.v<old>.ba
 3. Bump the source schema to v2 (`attachmentId` replaces `pdfRef`). v1 sources on import still have no `pdfRef` (exports never carried one), so packages need no change.
 4. Keep the original `pdfRef` in a `legacy_pdf_ref` column for one release, then drop it in a later migration.
 5. Tests: a folder with an existing PDF, a missing PDF, and two sources pointing at the same file (one attachment, de-duplicated).
+
+### Implementation (M2 item 6, 2026-09-27)
+
+- As planned: the attachment record and table, managed copies at `attachments/<sha256>.pdf` (read-only, de-duplicated), linked files with a hash check on open, removal with a preview of the page links it breaks, and migration v3 with `tomestack.db.v2.bak` and `legacy_pdf_ref`. The tests from step 5 are in `AttachmentTests`.
+- M2 review fix (2026-09-27): deleting an unused managed copy is best effort, after the commit. A file held open elsewhere stays until the next start, which deletes unused `<sha256>.pdf` copies and `.partial` leftovers (including any from a rolled-back migration v3). Before this, detaching such a file committed the change but replied with an internal error.
+- **Deviation from step 3:** the source record gained `attachmentId` next to the obsolete `pdfRef`, without a source `schemaVersion`. Both fields are machine-local and stripped from every export, so the *exported* source document is unchanged. A version bump would have forced a package format change for nothing.
+- **Page navigation:** a separate shell window with WebView2's built-in PDF viewer and `#page=N`. The same request blocking as the main window, so no listening socket and no network (ADR-006).
+- **Corrected by the M2 review (2026-09-27):** the viewer first mapped the PDF's folder to its own virtual host and allowed anything on that host. A linked PDF in Downloads or Documents therefore exposed that whole folder, with scripts on, to any link inside the PDF. Now no folder is mapped. The window loads exactly one URL, `https://pdf.tomestack.localhost/document.pdf#page=N`, and answers it with the PDF's bytes, opened with delete sharing, so removing an open attachment still works. Every other request and navigation is refused and reported (`PdfViewerRequests`, `PdfViewerRequestsTests`; the smoke still opens page 2 with no blocked requests).
+- Size limit 1 GiB. Only the `%PDF-` signature is checked; TomeStack never parses the PDF.
 
 ## Consequences
 

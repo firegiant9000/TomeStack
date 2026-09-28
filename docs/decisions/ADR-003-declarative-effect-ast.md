@@ -18,10 +18,11 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `modifier` | `operation` (`bonus` / `set` / `replace`), `target` (field id), `value` (formula), `stacking` (`stack` / `highestInGroup`), `stackGroup` | calculator |
 | `grant` | `grant` (`proficiency` / `expertise` / `content`), `target` (field id) or `content` (a pin), optional `level` (v3) | calculator (item 11–12; levels M1 item 5) |
 | `hitDie` (v3) | `die` (6 / 8 / 10 / 12) | hit points (M1 item 5) |
-| `resource` | `resourceId`, `label`, `maximum` (formula) | sheet / commands (M2) |
+| `armor` (M2 item 4; content v4 only, see "Content schema v4") | `category` (`light` / `medium` / `heavy` / `shield`), `armorClass`, `dexterityCap?` | Armor Class of equipped items: body armor is a `replace` of the base, and while it is worn other Armor Class replacements do not apply; a shield is a `bonus` (`features/equipment.md`) |
+| `resource` | `resourceId`, `label`, `maximum` (formula) | sheet maximum with trace, and `character.play` spending (M2 item 2, `features/sheet-play.md`) |
 | `choice` | `choiceId`, `count`, `options[]` (pins), optional `level` (v3) | calculator and `character.choose` (M1 item 4, `features/choices.md`); builder UI (M2) |
 | `restriction` | `field`, `minimum` | prerequisite check in the calculator (M1 item 3, `features/validation-and-restrictions.md`) |
-| `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | rest preview command (M2) |
+| `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | long rest preview and confirmed rest (M2 item 3, `features/rests.md`); short rest after M2 |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 
 **Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON and writes it back with the same properties, order and values (whitespace and string escaping are normalized), and is always reference-only (`effect.unsupported`). A *known* type with a malformed body, including wrong value kinds such as a numeric `id`, degrades the same way instead of failing the whole revision. Only an effect that is not a JSON object fails its revision.
@@ -31,7 +32,7 @@ Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability
 ### Stacking and order (per field)
 
 1. **base**: the character's choice or the rules' derivation. The highest `replace` substitutes for it, and the other replacements are traced as not applied.
-2. **bonus** in content order. `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack". A bonus that would take the running value outside ±1,000,000 is not applied (`effect.out-of-range`), so many bounded bonuses cannot overflow.
+2. **bonus** in content order. A bonus to an ability score stops at 20 (the SRD rule, since M2 item 4). `stack` bonuses all add. Among `highestInGroup` bonuses with the same `stackGroup`, only the highest applies, and the rest are traced as "does not stack". A bonus that would take the running value outside ±1,000,000 is not applied (`effect.out-of-range`), so many bounded bonuses cannot overflow.
 3. The highest **set** (if any) replaces the running value.
 4. **Rounding:** any fraction rounds down at the end of a formula (the 5e default).
 5. **User override** last (SPEC C-06). The computed value and its trace are kept.
@@ -70,7 +71,14 @@ NUMBER  := [0-9]+
 
 - **Adds** `grant.level`, `choice.level`, the `hitDie` effect type, and the `armorClass` and `hitPoints` targets. `CLASS_LEVEL` now resolves: it is the level in the class the content belongs to (`features/levels-and-classes.md`).
 - **No upcast from v2.** v2 is a subset of v3, so v2 revisions keep `schemaVersion: 2` and their serialized form, which means their hashes do not change and no database migration is needed. v1 still upcasts to exactly v2. New revisions are written as v3.
-- **Why a version and not an extension field:** a v2-only build would read `level` as an unknown extension and apply a level-3 feature at level 1. Refusing v3 (`content.schema-unsupported`, `package.schema-unsupported`) is safer than silently calculating differently. New effect *types*, by contrast, are forward-compatible (they become `UnknownEffect`), but new *fields* on existing types are not.
+- **Why a version and not an extension field:** a v2-only build would read `level` as an unknown extension and apply a level-3 feature at level 1. Refusing v3 (`content.schema-unsupported`, `package.schema-unsupported`) is safer than silently calculating differently. New effect *types*, by contrast, are forward-compatible for older builds (they become `UnknownEffect`), but new *fields* on existing types are not. A new type still needs a version for *newer* builds, because existing revisions may already use that type name as an unknown effect (see `armor` under v4).
+
+## Content schema v4 (M2 item 5, 2026-09-27)
+
+- **Adds** `extendsChoice: { contentId, choiceId }` on a revision: it is also an option of that content's choice (a homebrew subclass for an SRD class; `features/homebrew-studio.md`). The calculator offers published extensions after the declared options, looked up through `IContentCatalog.ChoiceExtensions`.
+- **No upcast**, as for v3: v2 and v3 revisions keep their version and serialized form, so their hashes and the bundled SRD packs are unchanged and no database migration is needed. New revisions are written as v4.
+- **Why a version:** a v3 build would read `extendsChoice` as an unknown extension. It would then refuse the character's selection of the homebrew subclass (`choice.invalid-option`) instead of saying it needs a newer build. Refusing v4 (`content.schema-unsupported`) is clearer.
+- **Also adds the `armor` effect type (M2 item 4; corrected 2026-09-27 by the M2 review).** It first shipped as a new type with no version change, on the assumption that new types are always forward-compatible. They are not in the other direction: a revision stored by 0.2.0 may already carry `"type": "armor"` as an `UnknownEffect`, written byte for byte. Typing it re-serializes it in a different layout, so its hash changes. Re-adding the identical revision then fails (`ImmutableRevisionException`, `package.revision-conflict`), and published content silently starts changing Armor Class. So `armor` is typed only in a v4 revision (`ContentRevision.OnDeserialized`). In a v2 or v3 revision it stays unknown, reference-only and unchanged. Validation refuses armor on a revision below v4 (`validate.requires-v4`). Evidence: `EffectModelTests.Armor_in_a_revision_older_than_v4_stays_unknown_and_byte_for_byte`, `EquipmentTests.A_v3_armor_revision_stored_by_0_2_0_re_adds_unchanged_and_stays_reference_only`.
 
 ## Consequences
 

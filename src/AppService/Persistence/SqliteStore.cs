@@ -41,12 +41,40 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         // v2 (ADR-003): content revisions move to typed effects. Stored JSON and hashes are rewritten in the new
         // representation so the insert-only check keeps working. The original bytes stay in legacy_json.
         new("ALTER TABLE content_revisions ADD COLUMN legacy_json TEXT;", store => store.RewriteUpgradedRevisions()),
+        // v3 (ADR-005, M2 item 6): PDF attachments. Each source's free-form pdfRef becomes an attachment record (a managed
+        // copy when the file is a readable PDF, otherwise "linked" and flagged missing). The old value stays in
+        // legacy_pdf_ref for one release. Never fails because of a missing file.
+        new("""
+        CREATE TABLE attachments (
+            attachment_id TEXT PRIMARY KEY,
+            sha256 TEXT,
+            original_file_name TEXT NOT NULL,
+            byte_length INTEGER NOT NULL,
+            mode TEXT NOT NULL,
+            linked_path TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX ix_attachments_sha256 ON attachments (sha256);
+        ALTER TABLE sources ADD COLUMN attachment_id TEXT;
+        ALTER TABLE sources ADD COLUMN legacy_pdf_ref TEXT;
+        """, store => store.MigratePdfReferences()),
+        // v4 (SPEC P-01, BACKLOG B12, M2 item 7): local campaign profiles.
+        new("""
+        CREATE TABLE campaigns (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        """),
     ];
 
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
     private readonly IReadOnlyList<Migration> _migrations;
     private SqliteTransaction? _transaction;
+
+    /// <summary>Published choice extensions by the choice they extend; null until read or after a change (see <see cref="ChoiceExtensions"/>).</summary>
+    private Dictionary<ChoiceExtension, ContentRevision[]>? _choiceExtensions;
 
     public SqliteStore(string databasePath)
         : this(databasePath, Migrations)
@@ -103,6 +131,11 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 action();
                 transaction.Commit();
             }
+            catch
+            {
+                _choiceExtensions = null; // it may hold a revision the rollback removes
+                throw;
+            }
             finally
             {
                 _transaction = null;
@@ -114,9 +147,100 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     {
         ArgumentNullException.ThrowIfNull(source);
         Execute(
-            "INSERT INTO sources (id, json) VALUES ($id, $json) ON CONFLICT(id) DO UPDATE SET json = excluded.json;",
+            "INSERT INTO sources (id, json, attachment_id) VALUES ($id, $json, $attachment) ON CONFLICT(id) DO UPDATE SET json = excluded.json, attachment_id = excluded.attachment_id;",
             ("$id", Key(source.Id)),
-            ("$json", Serialize(source)));
+            ("$json", Serialize(source)),
+            ("$attachment", source.AttachmentId is { } a ? Key(a) : DBNull.Value));
+    }
+
+    // ---- campaigns (SPEC P-01) ----
+
+    public void SaveCampaign(Campaign campaign)
+    {
+        ArgumentNullException.ThrowIfNull(campaign);
+        Execute(
+            "INSERT INTO campaigns (id, name, json) VALUES ($id, $name, $json) ON CONFLICT(id) DO UPDATE SET name = excluded.name, json = excluded.json;",
+            ("$id", Key(campaign.Id)),
+            ("$name", campaign.Name),
+            ("$json", Serialize(campaign)));
+    }
+
+    public Campaign? FindCampaign(Guid id) => QuerySingle<Campaign>("SELECT json FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<Campaign> ListCampaigns() => Query<Campaign>("SELECT json FROM campaigns ORDER BY name, id;");
+
+    public void DeleteCampaign(Guid id) => Execute("DELETE FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- attachments (ADR-005) ----
+
+    /// <summary>The folder for managed copies: <c>&lt;data dir&gt;/attachments/&lt;sha256&gt;.pdf</c>.</summary>
+    public string AttachmentsDirectory => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!, "attachments");
+
+    public void AddAttachment(Attachment attachment)
+    {
+        ArgumentNullException.ThrowIfNull(attachment);
+        Execute(
+            "INSERT INTO attachments (attachment_id, sha256, original_file_name, byte_length, mode, linked_path, created_at) VALUES ($id, $sha, $name, $length, $mode, $path, $created);",
+            ("$id", Key(attachment.AttachmentId)),
+            ("$sha", (object?)attachment.Sha256 ?? DBNull.Value),
+            ("$name", attachment.OriginalFileName),
+            ("$length", attachment.ByteLength),
+            ("$mode", attachment.Mode.ToString()),
+            ("$path", (object?)attachment.LinkedPath ?? DBNull.Value),
+            ("$created", attachment.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    public Attachment? FindAttachment(Guid attachmentId) =>
+        Attachments("WHERE attachment_id = $id", ("$id", Key(attachmentId))).SingleOrDefault();
+
+    /// <summary>A managed attachment with this content hash, so the same PDF is stored once.</summary>
+    public Attachment? FindManagedAttachment(string sha256) =>
+        Attachments("WHERE sha256 = $sha AND mode = 'Managed'", ("$sha", sha256)).FirstOrDefault();
+
+    /// <summary>A linked attachment for this exact path (the migration de-duplicates missing files this way).</summary>
+    public Attachment? FindLinkedAttachment(string path) =>
+        Attachments("WHERE linked_path = $path AND mode = 'Linked'", ("$path", path)).FirstOrDefault();
+
+    public void DeleteAttachment(Guid attachmentId) =>
+        Execute("DELETE FROM attachments WHERE attachment_id = $id;", ("$id", Key(attachmentId)));
+
+    /// <summary>How many sources still point at this attachment.</summary>
+    public int SourcesUsing(Guid attachmentId) =>
+        Convert.ToInt32(Scalar("SELECT COUNT(*) FROM sources WHERE attachment_id = $id;", ("$id", Key(attachmentId))), System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>How many attachment records share this content hash (the managed file is deleted only at zero).</summary>
+    public int AttachmentsWithHash(string sha256) =>
+        Convert.ToInt32(Scalar("SELECT COUNT(*) FROM attachments WHERE sha256 = $sha;", ("$sha", sha256)), System.Globalization.CultureInfo.InvariantCulture);
+
+    private List<Attachment> Attachments(string where, params (string Name, object Value)[] parameters)
+    {
+        lock (_gate)
+        {
+            using var command = Command($"SELECT attachment_id, sha256, original_file_name, byte_length, mode, linked_path, created_at FROM attachments {where};", parameters);
+            using var reader = command.ExecuteReader();
+            var results = new List<Attachment>();
+            while (reader.Read())
+            {
+                results.Add(new(
+                    Guid.Parse(reader.GetString(0)),
+                    reader.IsDBNull(1) ? null : reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt64(3),
+                    Enum.Parse<AttachmentMode>(reader.GetString(4)),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    DateTimeOffset.Parse(reader.GetString(6), System.Globalization.CultureInfo.InvariantCulture)));
+            }
+            return results;
+        }
+    }
+
+    private object? Scalar(string sql, params (string Name, object Value)[] parameters)
+    {
+        lock (_gate)
+        {
+            using var command = Command(sql, parameters);
+            return command.ExecuteScalar();
+        }
     }
 
     public SourceRecord? FindSource(Guid sourceId) =>
@@ -147,6 +271,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 ("$status", revision.Status.ToString()),
                 ("$hash", hash),
                 ("$json", json));
+            _choiceExtensions = null;
             return true;
         }
     }
@@ -162,6 +287,36 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$rid", Key(reference.RevisionId)),
             ("$cid", Key(reference.ContentId)));
     }
+
+    /// <summary>
+    /// Published revisions that extend one choice. Every calculation asks this for every offered choice, so the table
+    /// is read once (a LIKE pre-filter, then the typed test) and kept in memory. Revisions are insert-only, so the copy
+    /// is dropped only when a revision is added and when a transaction rolls back.
+    /// </summary>
+    public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId)
+    {
+        lock (_gate)
+        {
+            if (_choiceExtensions is null)
+            {
+                ChoiceExtensionScans++;
+                _choiceExtensions = Query<ContentRevision>("SELECT json FROM content_revisions WHERE status = 'Published' AND json LIKE '%\"extendsChoice\"%' ORDER BY rowid;")
+                    .Where(r => r.ExtendsChoice is not null)
+                    .GroupBy(r => r.ExtendsChoice!)
+                    .ToDictionary(g => g.Key, g => g.ToArray());
+            }
+            return _choiceExtensions.TryGetValue(new(contentId, choiceId), out var extensions) ? extensions : [];
+        }
+    }
+
+    /// <summary>Test seam: how often <see cref="ChoiceExtensions"/> read the table.</summary>
+    internal int ChoiceExtensionScans { get; private set; }
+
+    public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => ListRevisions(contentId);
+
+    /// <summary>Every stored revision in the order it was added (the homebrew studio's history).</summary>
+    public IReadOnlyList<ContentRevision> ListRevisionsInOrder() =>
+        Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY rowid;");
 
     public IReadOnlyList<ContentRevision> ListRevisions() =>
         Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
@@ -272,6 +427,32 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 ("$json", upgraded),
                 ("$hash", Sha256(upgraded)),
                 ("$legacy", json),
+                ("$id", id));
+        }
+    }
+
+    /// <summary>Migration v3 data step (ADR-005 "Migration plan"). Runs inside the migration's transaction.</summary>
+    private void MigratePdfReferences()
+    {
+        var rows = new List<(string Id, string Json)>();
+        lock (_gate)
+        {
+            using var command = Command("SELECT id, json FROM sources;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        foreach (var (id, json) in rows)
+        {
+            var source = JsonSerializer.Deserialize<SourceRecord>(json, RulesJson.Compact)!;
+            if (string.IsNullOrWhiteSpace(source.PdfRef))
+                continue;
+            var attachment = AttachmentFiles.AdoptLegacyPath(this, source.PdfRef, DateTimeOffset.UtcNow);
+            Execute(
+                "UPDATE sources SET json = $json, attachment_id = $attachment, legacy_pdf_ref = $legacy WHERE id = $id;",
+                ("$json", Serialize(source with { PdfRef = null, AttachmentId = attachment.AttachmentId })),
+                ("$attachment", Key(attachment.AttachmentId)),
+                ("$legacy", source.PdfRef),
                 ("$id", id));
         }
     }

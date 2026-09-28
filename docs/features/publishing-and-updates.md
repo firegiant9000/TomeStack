@@ -1,6 +1,6 @@
 # Publishing revisions and updating characters
 
-SPEC I-06 · ADR-002, ADR-004 · status: API implemented and tested (M1 item 2). The authoring and update-review UI is M2.
+SPEC I-06 · ADR-002, ADR-004 · status: API implemented and tested (M1 item 2). The authoring and update-review UI is implemented (M2 item 5, [homebrew-studio.md](homebrew-studio.md)). `content.affected` also reports `equipment` (M2 item 4), and the mechanics diff includes `extendsChoice`.
 
 `src/AppService/Publishing.cs`, `src/RulesCore/ContentDiff.cs`. Tested in `tests/AppService.Tests/PublishingTests.cs`.
 

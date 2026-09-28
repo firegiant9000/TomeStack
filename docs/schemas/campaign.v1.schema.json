@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/campaign.v1.schema.json",
+  "title": "TomeStack campaign profile (schemaVersion 1)",
+  "description": "SPEC P-01, BACKLOG B12 (M2 item 7): a local campaign with its rules family, the sources its characters may use, and free-text house rules. It never changes calculation; content outside the allowed sources is flagged on the character unless an exception is recorded. Unknown properties round-trip.",
+  "type": "object",
+  "required": ["id", "schemaVersion", "name", "rulesFamily", "allowedSources"],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": { "const": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
+    "allowedSources": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "houseRules": { "type": "string", "maxLength": 10000 },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

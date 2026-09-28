@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | M0 Foundation | Repo, CI, license/attribution review, desktop packaging spike, source/data schemas, test fixtures, first diagram and ADRs | Windows offline shell opens; fixture content persists and exports | None |
 | M1 Rules core | Edition packs, revisioned content, effect AST, validation, trace, choices, dice engine | Two rules-family fixture characters calculate and explain outputs. **Delivered 2026-09-26 (v0.2.0):** `M1AcceptanceTests` passes ([features/m1-acceptance.md](features/m1-acceptance.md)) | M0 |
-| M2 Usable MVP | Builder, sheet, homebrew subclass studio, PDF attachment/page links, manual content entry, rests, backup/import/export, campaign source policy | All [MVP.md](MVP.md) checks pass on an installed Windows build | M1 |
+| M2 Usable MVP | Builder, sheet, homebrew subclass studio, PDF attachment/page links, manual content entry, rests, backup/import/export, campaign source policy | All [MVP.md](MVP.md) checks pass on an installed Windows build. **In progress (v0.2.1):** items 1–7 done; spellcasting and the gaps below remain | M1 |
 | M3 Personal replacement | Stardust Guardian migration; complex resource/action mechanics, multiclass/spellcasting polish, source updates and session feedback | Arlo plays that character end to end without D&D Beyond | M2 |
 | M4 Import intelligence | Page and whole-book extraction, OCR fallback, candidate/entity recognition, review UI, confidence and dependency validation | A third-party test PDF produces reviewable candidates; no unapproved active rules | M2; may run alongside M3 |
 | M5 Creation power | Full custom base classes, arbitrary progression, sandbox/diff/debugger, templates, design feedback toggle | A nonstandard class levels and multiclasses without code edits | M1–M4 |
@@ -39,8 +39,17 @@ Each slice includes data migration strategy and an executable acceptance example
 
 Done since v0.1: SRD fixtures for both families with a cross-edition conflict (M1 item 1; spellcasting is scoped by D04), the data directory and PDF default (D02, ADR-005), the shell and transport (ADR-006), and the typed effect and formula schemas (ADR-003).
 
-- Builder UI over the M1 API: class levels, `character.choose`, and a level-up draft (SPEC C-01, C-07).
-- Sheet UI: features list with text, resources, the `roll` command, and the "Choices to make" answers.
-- Authoring and update-review UI over `content.saveDraft` / `publish` / `affected` / `reviewUpdate` (SPEC I-04, I-06).
-- PDF attachments and the `pdfRef` → attachment migration (ADR-005), with page navigation (SPEC S-04, B05).
+- ~~Builder UI over the M1 API: class levels, `character.choose`, and a level-up draft (SPEC C-01, C-07).~~ Done (M2 item 1, [features/builder.md](features/builder.md)); multiclass prerequisites remain.
+- ~~Sheet UI: features list with text, resources, the `roll` command, and the "Choices to make" answers.~~ Done (M2 items 1–2, [features/sheet-play.md](features/sheet-play.md)).
+- ~~Authoring and update-review UI over `content.saveDraft` / `publish` / `affected` / `reviewUpdate` (SPEC I-04, I-06).~~ Done (M2 item 5, [features/homebrew-studio.md](features/homebrew-studio.md)).
+- ~~PDF attachments and the `pdfRef` → attachment migration (ADR-005), with page navigation (SPEC S-04, B05).~~ Done (M2 item 6, [features/pdf-attachments.md](features/pdf-attachments.md)); owner check: the viewer lands on the cited page.
 - Make the Stardust Guardian acceptance fixture (in the gitignored `tests/RulesFixtures/local/`) with at least one mechanic that cannot be fully automated.
+
+## M2 status (2026-09-27, v0.2.1)
+
+Items 1–7 are done: builder, sheet for play, long rest (D01), equipment and armor, homebrew studio with update review, PDF attachments with page navigation (database schema 3), and campaign profiles (database schema 4, package format v4). Still needed for the M2 exit gate:
+
+- **Spellcasting (D04), the next slice, not started:** a `spellcasting` effect on a class (ability, save DC and attack formula, prepared or known, and slots per class level as a table), spell content kind and picker, slots as play state recovered by the long rest, and the "one spellcasting class" rule with a manual step for a second one. A new `spellcasting` effect *type* needs no content schema bump (ADR-003), but known or prepared spells and spent slots on the character are character schema v5. It also needs SRD spell text with a pack review update (SPEC Q-03), and a side-by-side test for any 2014/2024 difference.
+- Multiclass prerequisites and proficiency subsets (D04); weapons, attacks and damage (C-02, C-04); short rest and hit dice (D01 follow-up); death saves and inspiration (C-05).
+- Manual content entry tied to pages is possible in the studio (page field); PDF page-range import as reference (I-01, I-03) is not started.
+- Owner and clean-machine checks: the installed build on a clean VM (ADR-008), the viewer landing on the cited page, keyboard and Narrator passes, and the real Stardust Guardian character (DoD 3).

@@ -2,7 +2,7 @@
 
 A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
 
-> **Status: M1 rules core delivered (v0.2.0).** You can create a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules and see every calculated field with a source-aware trace. You can override it, save it locally, and export or import a portable package (a personal backup, or a share that leaves out content you may not share). The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). There is no builder UI yet (M2).
+> **Status: M2 "Usable MVP" in progress (v0.2.1; M1 rules core delivered in v0.2.0).** You can build a character under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, every choice), and see every calculated field with a source-aware trace. You can play it: hit points, resources, conditions, equipment and armor, rolls with their records, and a confirmed long rest. You can author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, and keep campaign profiles with allowed sources. You can override values, save locally, and export or import a portable package. The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). Spellcasting and the short rest are not in yet.
 
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 

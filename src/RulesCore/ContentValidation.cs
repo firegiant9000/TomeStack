@@ -125,18 +125,44 @@ public static class ContentValidator
                     if (revision.Kind != ContentKind.Class)
                         Warn("validate.hit-die-kind", $"Only a class's hit die is used; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", hitDie.Id);
                     break;
+                case ArmorEffect armor:
+                    if (armor.ArmorClass is < 0 or > 30)
+                        Error("validate.armor-class", $"Armor '{armor.Id}' gives Armor Class {armor.ArmorClass}; it must be between 0 and 30.", armor.Id);
+                    if (armor.DexterityCap is { } cap && (armor.Category != ArmorCategory.Medium || cap is < 0 or > 10))
+                        Error("validate.armor-dexterity-cap", $"Armor '{armor.Id}': a Dexterity cap (0 to 10) applies only to medium armor.", armor.Id);
+                    if (revision.Kind != ContentKind.Item)
+                        Warn("validate.armor-kind", $"Armor counts only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it applies only if pinned.", armor.Id);
+                    break;
             }
         }
+        if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
+            Error("validate.armor-duplicate", "An item is at most one armor and one shield.");
         if (revision.Effects.OfType<HitDieEffect>().Count() > 1)
             Error("validate.hit-die-duplicate", "A class declares one hit die.");
         if (revision.Kind == ContentKind.Class && !revision.Effects.OfType<HitDieEffect>().Any())
             Warn("validate.hit-die-missing", "This class declares no hit die, so it adds no hit points.");
         if (needsV3 && revision.SchemaVersion < 3)
             Error("validate.requires-v3", $"This revision uses content schema v3 features (levels, hitDie, armorClass or hitPoints) but declares v{revision.SchemaVersion}; a v2 build would misread it.");
+        if (revision.ExtendsChoice is not null && revision.SchemaVersion < 4)
+            Error("validate.requires-v4", $"This revision extends a choice (content schema v4) but declares v{revision.SchemaVersion}; a v3 build would ignore it.");
+        if (revision.Effects.OfType<ArmorEffect>().Any() && revision.SchemaVersion < ArmorEffect.SchemaVersion)
+            Error("validate.requires-v4", $"This revision has armor (content schema v4) but declares v{revision.SchemaVersion}; armor in an older revision is reference only.");
 
         // ---- references ----
         if (catalog.FindSource(revision.Provenance.SourceId) is null)
             Error("validate.source-missing", $"Source {revision.Provenance.SourceId} is not installed.");
+        if (revision.ExtendsChoice is { } extends)
+        {
+            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.Values.Where(r => r.ContentId == extends.ContentId)).ToList();
+            if (extends.ContentId == revision.ContentId)
+                Error("validate.self-reference", "A revision cannot add itself to one of its own choices.");
+            else if (targets.Count == 0)
+                Warn("validate.extends-choice-missing", $"The content {extends.ContentId} whose choice '{extends.ChoiceId}' this extends is not installed; the option appears once it is.");
+            else if (!targets.Any(t => t.Effects.OfType<ChoiceEffect>().Any(c => c.ChoiceId == extends.ChoiceId)))
+                Error("validate.extends-choice-unknown", $"'{targets[^1].Name}' offers no choice '{extends.ChoiceId}'.");
+            else if (!targets.Any(t => t.RulesFamilies.Intersect(revision.RulesFamilies).Any()))
+                Error("validate.reference-family", $"'{targets[^1].Name}' supports {string.Join(", ", targets[^1].RulesFamilies)}, none of this revision's families.");
+        }
 
         // ---- cycles ----
         foreach (var cycle in CharacterCalculator.DependencyCycles(revision))

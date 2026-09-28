@@ -1,6 +1,6 @@
-# Portable package format (v3; v1 and v2 still importable)
+# Portable package format (v4; v1 to v3 still importable)
 
-SPEC P-02 · status: implemented for characters (M0). Campaigns and assets are not yet included.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7). Assets (PDFs) are never included (ADR-005, ADR-007).
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -8,14 +8,15 @@ A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 manifest.json
 sources/<sourceId>.json        SourceRecord, including license and redistribution flag
 content/<revisionId>.json      ContentRevision (immutable, pinned by characters)
-characters/<characterId>.json  Character choices, pins and overrides (no derived values)
+characters/<characterId>.json  Character choices, pins, overrides and play state (no derived values)
+campaigns/<campaignId>.json    Campaign profile of an exported character (v4; SPEC P-01)
 ```
 
 `manifest.json`:
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `3` (v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `4` (v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |
@@ -47,7 +48,7 @@ Every limit and check below has its own test in `tests/AppService.Tests/PackageL
 6. A revision with the same ID but different content is a blocking conflict. Published revisions are immutable.
 7. **Preview first:** the user sees what will be added, left unchanged or replaced, plus warnings and license notices. **Apply** re-validates from the bytes and commits in one SQLite transaction.
 8. Draft revisions stay drafts and remain inactive after import.
-9. **Source metadata is never overwritten silently.** If a package's source differs from the local record with the same ID, the preview lists each differing field (local vs. imported). Apply then needs an explicit `sourceChoices[sourceId]` of `keepLocal` or `useImported`, and refuses with `package.source-choice-required` otherwise. `pdfRef` is machine-local. It is never exported, and an import never changes it.
+9. **Source metadata is never overwritten silently.** If a package's source differs from the local record with the same ID, the preview lists each differing field (local vs. imported). Apply then needs an explicit `sourceChoices[sourceId]` of `keepLocal` or `useImported`, and refuses with `package.source-choice-required` otherwise. `pdfRef` and `attachmentId` (ADR-005) are machine-local. They are never exported, and an import never changes them; nor does it bring a PDF.
 10. **Backup before replace (SPEC C-07, Q-01):** if the package replaces characters that already exist locally, apply first exports their current local copies to `<data dir>/backups/pre-import-<UTC timestamp>.tomestack.zip`. That file is an ordinary package, so you restore it by importing it. If the local copy cannot be exported (for example, a pinned revision is missing), the import is refused with `package.backup-failed`, and nothing changes.
 
 ## Decided

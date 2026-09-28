@@ -1,13 +1,14 @@
 using System.IO;
-using System.Windows;
 using Microsoft.Win32;
 using TomeStack.AppService;
 
 namespace TomeStack.DesktopShell;
 
-/// <summary>Native dialogs for the in-process service. Commands run off the UI thread, so dialogs marshal back to it.</summary>
-public sealed class ShellHostServices(Window owner) : IHostServices
+/// <summary>Native dialogs and the PDF viewer for the in-process service. Commands run off the UI thread, so these marshal back to it.</summary>
+public sealed class ShellHostServices(MainWindow owner) : IHostServices
 {
+    public bool CanOpenFiles => true;
+
     public string? ChooseSaveLocation(string suggestedFileName, string filterDescription, string extension) =>
         owner.Dispatcher.Invoke(() =>
         {
@@ -22,4 +23,19 @@ public sealed class ShellHostServices(Window owner) : IHostServices
             };
             return dialog.ShowDialog(owner) == true ? Path.GetFullPath(dialog.FileName) : null;
         });
+
+    public string? ChooseOpenFile(string filterDescription, string extension) =>
+        owner.Dispatcher.Invoke(() =>
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = $"{filterDescription} (*{extension})|*{extension}",
+                CheckFileExists = true,
+                Multiselect = false,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+            return dialog.ShowDialog(owner) == true ? Path.GetFullPath(dialog.FileName) : null;
+        });
+
+    public bool OpenPdf(string path, int page, string title) => owner.Dispatcher.Invoke(() => owner.OpenPdfViewer(path, page, title));
 }

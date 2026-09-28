@@ -53,7 +53,11 @@ public sealed partial class TomeStackApp : IDisposable
         foreach (var pack in BundledPacks)
             app.Seed(pack);
         if (devFixtures)
+        {
             app.Seed("TomeStack.FixturePack.json");
+            app.Seed("TomeStack.FixturePackM2.json"); // original test equipment (M2 item 4)
+        }
+        AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
         return app;
     }
 
@@ -70,12 +74,17 @@ public sealed partial class TomeStackApp : IDisposable
         typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
         _store.SchemaVersion,
         RulesFamilies.All,
-        _warnings);
+        _warnings,
+        CharacterCalculator.FieldInfos);
 
-    public IReadOnlyList<ContentOption> ListContent(string rulesFamily)
+    /// <param name="campaignId">SPEC P-01: when set, each option says whether the campaign allows its source (<see cref="ContentOption.AllowedInCampaign"/>).</param>
+    public IReadOnlyList<ContentOption> ListContent(string rulesFamily, Guid? campaignId = null)
     {
         if (!RulesFamilies.IsKnown(rulesFamily))
             throw new AppValidationException([new("rules-family.unknown", $"Rules family '{rulesFamily}' is not supported.")]);
+        HashSet<Guid>? allowed = null;
+        if (campaignId is { } id)
+            allowed = (_store.FindCampaign(id) ?? throw new AppValidationException([new("campaign.not-found", $"Campaign {id} does not exist.")])).AllowedSources.ToHashSet();
         var sources = _store.ListSources().ToDictionary(s => s.Id);
         return
         [
@@ -86,7 +95,8 @@ public sealed partial class TomeStackApp : IDisposable
                     var source = sources.GetValueOrDefault(r.Provenance.SourceId);
                     return new ContentOption(
                         r.Reference, r.Kind, r.Name, r.RulesFamilies, r.RulesFamilies.Contains(rulesFamily),
-                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary);
+                        r.Provenance.SourceId, source?.Title ?? "(unknown source)", r.Provenance.Page?.ToString(), r.Summary,
+                        allowed?.Contains(r.Provenance.SourceId));
                 })
                 .OrderBy(o => o.Kind).ThenBy(o => o.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(o => o.SourceTitle, StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -122,23 +132,29 @@ public sealed partial class TomeStackApp : IDisposable
             RulesFamily = request.RulesFamily,
             BaseAbilities = request.BaseAbilities,
             Pins = request.Pins ?? [],
+            Classes = request.Classes ?? [],
+            Choices = request.Choices ?? [],
+            CampaignId = request.CampaignId,
+            CampaignExceptions = request.CampaignExceptions ?? [],
         });
     }
 
+    /// <summary>
+    /// <c>character.save</c>. SPEC C-05: the play state of a stored character is kept as stored, whatever the payload
+    /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
+    /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
+    /// play state it is saved with.
+    /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        // With classes recorded, the level is their sum: keep the stored value in step rather than reject a stale one.
-        // (An empty entry is left for Validate to report.)
-        if (character.Classes is { Count: > 0 } classes && classes.All(c => c is not null))
-            character = character with { Level = classes.Sum(c => c.Level) };
-        var problems = character.Validate().ToList();
-        if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
-            problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));
-        if (problems.Count > 0)
-            throw new AppValidationException(problems);
+        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play } : character);
+    }
 
-        var saved = character with { UpdatedAt = _time.GetUtcNow() };
+    /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
+    private CharacterView SaveWithPlay(Character character)
+    {
+        var saved = Checked(character) with { UpdatedAt = _time.GetUtcNow() };
         // Calculate before writing: if the sheet cannot be calculated, nothing is stored (the store never holds a
         // character that cannot be opened).
         var view = View(saved);
@@ -156,9 +172,19 @@ public sealed partial class TomeStackApp : IDisposable
         ArgumentNullException.ThrowIfNull(request);
         var character = _store.FindCharacter(request.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
-        var selected = request.Selected ?? [];
-        if (request.Source is null || selected.Any(o => o is null))
+        return SaveCharacter(WithChoice(character, request.Source, request.ChoiceId, request.Selected));
+    }
+
+    /// <summary>
+    /// The character with one choice answered (or cleared), after the checks <see cref="Choose"/> documents. Shared by
+    /// <see cref="Choose"/> (saved) and <see cref="PreviewChoice"/> (a builder draft, never saved).
+    /// </summary>
+    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull)
+    {
+        var selected = selectedOrNull ?? [];
+        if (source is null || selected.Any(o => o is null))
             throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
+        var request = (Source: source, ChoiceId: choiceId);
         var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
         var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
             ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
@@ -184,9 +210,9 @@ public sealed partial class TomeStackApp : IDisposable
         if (problems.Count > 0)
             throw new AppValidationException(problems);
 
-        return SaveCharacter(selected.Count == 0
+        return selected.Count == 0
             ? without
-            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] });
+            : without with { Choices = [.. without.Choices, new ChoiceSelection(request.Source, request.ChoiceId, selected)] };
     }
 
     public ExportResult ExportCharacters(IReadOnlyList<Guid> characterIds, ExportPurpose purpose = ExportPurpose.Backup) =>
@@ -201,7 +227,11 @@ public sealed partial class TomeStackApp : IDisposable
 
     public void Dispose() => _store.Dispose();
 
-    private CharacterView View(Character character) => new(character, CharacterCalculator.Calculate(character, _store));
+    private CharacterView View(Character character)
+    {
+        var sheet = CharacterCalculator.Calculate(character, _store);
+        return new(character, sheet, CampaignOf(character, sheet));
+    }
 
     /// <summary>Loads an embedded content pack (bundled with this build, so trusted like code).</summary>
     public static ContentPack LoadBundledPack(string resourceName)
@@ -226,7 +256,8 @@ public sealed partial class TomeStackApp : IDisposable
 }
 
 /// <param name="Warnings">Startup warnings for the user, such as a data folder inside a sync root (<c>data-dir.sync-root</c>).</param>
-public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings);
+/// <param name="Fields">Every calculated field and its label, for the homebrew studio (M2 item 5).</param>
+public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings, IReadOnlyList<FieldInfo> Fields);
 
 public sealed record ContentOption(
     ContentReference Reference,
@@ -237,15 +268,30 @@ public sealed record ContentOption(
     Guid SourceId,
     string SourceTitle,
     string? Page,
-    string? Summary);
+    string? Summary,
+    bool? AllowedInCampaign = null);
 
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
 
-public sealed record CharacterView(Character Character, CharacterSheet Sheet);
+/// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
-public sealed record CreateCharacterRequest(string Name, string RulesFamily, AbilityScores BaseAbilities, IReadOnlyList<ContentReference>? Pins);
+/// <param name="Classes">The starting class (and any further levels) from the builder draft (SPEC C-07).</param>
+/// <param name="Choices">Choices answered in the builder draft; the sheet flags any that are no longer valid.</param>
+public sealed record CreateCharacterRequest(
+    string Name,
+    string RulesFamily,
+    AbilityScores BaseAbilities,
+    IReadOnlyList<ContentReference>? Pins,
+    IReadOnlyList<ClassLevel>? Classes = null,
+    IReadOnlyList<ChoiceSelection>? Choices = null,
+    Guid? CampaignId = null,
+    IReadOnlyList<CampaignException>? CampaignExceptions = null);
+
+/// <summary>A choice answered on an unsaved builder draft (<c>character.previewChoice</c>).</summary>
+public sealed record PreviewChoiceRequest(Character Draft, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
 /// <param name="code">Error code at the transport boundary: <c>validation</c>, or <c>unsupported</c> for a missing host capability.</param>
 public sealed class AppValidationException(IReadOnlyList<Diagnostic> problems, string code = "validation")

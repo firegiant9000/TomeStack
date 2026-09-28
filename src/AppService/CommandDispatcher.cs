@@ -19,8 +19,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.reviewUpdate", "character.applyUpdate", "roll",
+        "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "content.bySource", "source.list", "source.createHomebrew",
+        "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage",
+        "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
+        "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
     ];
 
@@ -74,12 +77,24 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private object Execute(string command, JsonElement? payload) => command switch
     {
         "app.info" => app.GetInfo(),
-        "content.list" => app.ListContent(Payload<RulesFamilyPayload>(payload).RulesFamily),
+        "content.list" => ListContent(Payload<RulesFamilyPayload>(payload)),
+        "campaign.list" => app.ListCampaigns(),
+        "campaign.save" => app.SaveCampaign(Payload<Campaign>(payload)),
+        "campaign.delete" => DeleteCampaign(Payload<IdPayload>(payload)),
         "content.validate" => Validate(Payload<ContentPayload>(payload)),
         "content.saveDraft" => app.SaveDraft(Payload<ContentPayload>(payload).Revision ?? throw new JsonException("content.saveDraft needs a revision.")),
         "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
         "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
         "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
+        "content.bySource" => app.ContentBySource(Payload<SourceIdPayload>(payload).SourceId),
+        "source.list" => app.ListSources(),
+        "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
+        "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
+        "source.attachPdf" => AttachPdf(Payload<AttachPayload>(payload)),
+        "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
+        "source.detachPreview" => app.PreviewDetach(Payload<SourceIdPayload>(payload).SourceId),
+        "source.detach" => Detach(Payload<DetachPayload>(payload)),
+        "source.openPage" => OpenPage(Payload<OpenPagePayload>(payload)),
         "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
         "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
         "roll" => app.Roll(Payload<RollCommand>(payload)),
@@ -88,6 +103,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.create" => app.CreateCharacter(Payload<CreateCharacterRequest>(payload)),
         "character.save" => app.SaveCharacter(Payload<Character>(payload)),
         "character.choose" => app.Choose(Payload<ChooseRequest>(payload)),
+        "character.preview" => app.Preview(Payload<Character>(payload)),
+        "character.previewChoice" => app.PreviewChoice(Payload<PreviewChoiceRequest>(payload)),
+        "character.play" => app.Play(Payload<PlayCommand>(payload)),
+        "character.restPreview" => PreviewRest(Payload<RestPreviewPayload>(payload)),
+        "character.rest" => app.Rest(Payload<RestRequest>(payload)),
         "package.exportPreview" => PreviewExport(Payload<ExportPayload>(payload)),
         "package.export" => ExportPackage(Payload<ExportPayload>(payload)),
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
@@ -101,6 +121,36 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
     }
+
+    private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);
+
+    private object DeleteCampaign(IdPayload payload)
+    {
+        app.DeleteCampaign(payload.Id);
+        return new { deleted = true };
+    }
+
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind);
+
+    /// <summary>ADR-005: the native Open dialog picks the PDF; its path never crosses the bridge.</summary>
+    private AttachOutcome AttachPdf(AttachPayload payload)
+    {
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("PDF document", ".pdf");
+        return path is null ? new AttachOutcome(false, null) : new AttachOutcome(true, app.AttachPdfFile(payload.SourceId, path, payload.Mode));
+    }
+
+    private AttachmentInfo AttachPdfData(AttachDataPayload payload) =>
+        app.AttachPdf(payload.SourceId, payload.FileName, Convert.FromBase64String(payload.Base64));
+
+    private object Detach(DetachPayload payload)
+    {
+        app.Detach(payload.SourceId, payload.Confirm);
+        return new { detached = true };
+    }
+
+    private OpenPageOutcome OpenPage(OpenPagePayload payload) => app.OpenPage(host, payload.SourceId, payload.Page);
 
     private UpdateReview ReviewUpdate(UpdatePayload payload) => app.ReviewUpdate(payload.CharacterId, payload.From, payload.To);
 
@@ -163,11 +213,24 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record CommandRequest(string Id, string Command, JsonElement? Payload);
 
-    private sealed record RulesFamilyPayload(string RulesFamily);
+    private sealed record RulesFamilyPayload(string RulesFamily, Guid? CampaignId = null);
 
     private sealed record IdPayload(Guid Id);
 
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest);
+
     private sealed record ContentIdPayload(Guid ContentId);
+
+    private sealed record SourceIdPayload(Guid SourceId);
+
+    private sealed record AttachPayload(Guid SourceId, AttachmentMode Mode = AttachmentMode.Managed);
+
+    private sealed record AttachDataPayload(Guid SourceId, string FileName, string Base64);
+
+    /// <param name="Confirm">Must be true: the UI shows <c>source.detachPreview</c> first (SPEC S-04).</param>
+    private sealed record DetachPayload(Guid SourceId, bool Confirm = false);
+
+    private sealed record OpenPagePayload(Guid SourceId, int Page);
 
     /// <param name="Confirm">Must be true to apply; the review never changes anything (SPEC I-06).</param>
     private sealed record UpdatePayload(Guid CharacterId, ContentReference From, ContentReference To, bool Confirm = false);

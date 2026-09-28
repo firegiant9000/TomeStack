@@ -75,7 +75,7 @@ public class SchemaTests
         var package = temp.App.ExportCharacters(ids).Content;
 
         using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
-        var kinds = new Dictionary<string, string> { ["sources"] = "source", ["content"] = "content-revision", ["characters"] = "character" };
+        var kinds = new Dictionary<string, string> { ["sources"] = "source", ["content"] = "content-revision", ["characters"] = "character", ["campaigns"] = "campaign" };
         foreach (var entry in zip.Entries)
         {
             using var reader = new StreamReader(entry.Open());

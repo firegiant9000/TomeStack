@@ -1,6 +1,49 @@
 # Changelog
 
-## Unreleased (0.2.0: M1 delivered)
+## 0.2.1 (M2 in progress; items 1–7)
+
+The build handed over after M2 items 1–7 (ADR-008: PATCH for a build given to a user; MINOR when M2 is delivered).
+
+### Added
+
+- **Campaign profiles (M2 item 7; SPEC P-01; BACKLOG B12; `docs/features/campaigns.md`):** a Campaigns screen holds local profiles with a rules family, the allowed sources and house-rules notes. The builder picks a campaign, and content from other sources is listed as "not allowed in this campaign", so two profiles show different allowed content. Using such content needs a reason, which is recorded as an exception on the character (`campaignExceptions`). The sheet shows the campaign and warns about content outside it. Campaigns never change calculation, and they travel in packages.
+- **Builder (M2 item 1; SPEC C-01, C-07; `docs/features/builder.md`):** create a character, level it up (in an existing class or a new one), and answer every choice it offers, including a subclass at its level. Every flow is a draft that the service previews (`character.preview`, `character.previewChoice`) without writing anything. It is saved in one step, or discarded with Cancel. Unresolved choices are flagged, and the sheet's "Choices to make" opens them in the builder. `character.create` also takes `classes` and `choices`.
+
+- **Sheet for play (M2 item 2; SPEC C-04, C-05, I-05; `docs/features/sheet-play.md`):** a features list with text, source and automation status (pure text is shown as reference only). Resources show current/maximum, with the maximum calculated in the rules core and traced (Rage 3 at Barbarian 3). Hit points, temporary hit points, spent uses, conditions and exhaustion are stored on the character and change only through the confirmed `character.play` command. Every check, save, skill and initiative can be rolled (normal, advantage, disadvantage), and so can feature rolls (with critical doubling). The roll record shows each die, modifier and the source. Rolling never spends a resource; a linked resource gets its own "Spend" button.
+
+- **Long rest (M2 item 3; SPEC C-05; D01 decided: long rest only in M2; `docs/features/rests.md`):** "Long rest…" previews every change (hit points to maximum, temporary hit points cleared, each resource by its long-rest recovery, one exhaustion level). The player unticks what does not apply, then confirms. `character.restPreview` writes nothing, and `character.rest` needs `confirm` and the current preview (`rest.preview-stale` otherwise). Recoveries it cannot calculate, and spent resources without a recovery rule, are listed as manual steps instead of being skipped silently. A new rules-family difference: under 2014 rules, the exhaustion reduction needs food and drink (`RulesFamilyPolicy.LongRestExhaustionNeedsFoodAndDrink`).
+
+- **Equipment groundwork (M2 item 4; `docs/features/equipment.md`):** characters carry items and equip them (`equipment`, character schema v4). A new `armor` effect type covers light, medium and heavy armor and shields. Worn armor sets the Armor Class base, and while it is worn Unarmored Defense and other alternatives are traced as not used; a shield adds its bonus. The sheet has an Equipment panel. The SRD armor table is not bundled yet, because it needs the SRD pack review; development uses original fixture armor.
+- **Ability scores stop at 20 (owner decision 2026-09-27):** bonuses cannot raise an ability score above 20 in either family, and the trace says when a bonus was capped. `set` effects and overrides may exceed it.
+
+- **Homebrew studio (M2 item 5; SPEC I-04, I-06; `docs/features/homebrew-studio.md`):** create a personal homebrew source (not shareable by default), then author subclasses, features, feats and items with guided controls: modifiers, resources, recoveries, rolls and limited-use actions, granted features, armor, and reference-only text. Check, save drafts and publish. A homebrew subclass can be offered in an SRD class's subclass choice (content schema v4 `extendsChoice`). After publishing, the studio lists the characters on an older revision and opens a review (rule changes, values that change, overrides, open choices) with "Apply update". New commands: `source.list`, `source.createHomebrew`, `content.bySource`. `app.info` lists the calculated fields.
+
+- **PDF attachments and page navigation (M2 item 6; ADR-005; SPEC S-04; `docs/features/pdf-attachments.md`):** a Sources screen attaches a PDF to any source. It is copied into the data folder by default (read-only, stored once per content hash), or linked where it is with a hash check on open. A feature that cites a page gets "Open …, p. N", which opens that page in the desktop app's offline PDF viewer window. Removing a PDF first says which entries cite it, and keeps all content. Exports never include PDFs or attachment ids. `--smoke` now also opens a generated PDF in the viewer, offline.
+
+### Changed
+
+- The new-character form is replaced by the builder: species, background and starting class are single picks, and "Next: choices" comes before "Create and save".
+
+### Fixed (M2 review)
+
+- **`armor` is content schema v4 only (ADR-003).** A revision stored by 0.2.0 with a `"type": "armor"` effect (an unknown effect then) was read as typed armor. Its hash changed, so re-importing the same package failed (`package.revision-conflict`), and published content started changing Armor Class. In a v2 or v3 revision, armor now stays unknown, reference-only and byte for byte. Validation refuses armor below v4 (`validate.requires-v4`). The original fixture armor is republished as v4 revisions (new revision ids; the content ids are unchanged).
+- **The ability score cap no longer depends on effect order.** Increases apply first (capped at 20), then penalties. Before, 19 with +2 and −2 gave 18 or 19 depending on which effect came first; now it is 18 either way.
+- **`character.save` no longer writes the play state (SPEC C-05).** It took the payload's `play` as is, so any save, including one from a stale copy, could change hit points, spent uses or conditions without a confirmation. It now keeps the stored play state; only the confirmed `character.play` and `character.rest` change it.
+- **Removing or replacing a PDF that is open elsewhere now succeeds (ADR-005).** The change was committed, but the reply was an internal error and the unused copy was left behind. The file is now deleted best effort, and the next start deletes managed copies that no attachment uses, plus leftover `.partial` files.
+- **Large libraries no longer slow every click.** Each calculation re-read the whole content table for every offered choice to find `extendsChoice` options: 4 table scans per calculation, and about 430 ms per play command with 5,000 revisions. The published extensions are now read once and kept in memory until a revision is added or a transaction rolls back, which brings a play command to about 5 ms. No database migration.
+- **The PDF viewer loads only the one PDF (ADR-005).** It mapped the PDF's folder to its own host and allowed anything there. A link inside a linked PDF could open other files next to it, such as an HTML page in Downloads, with scripts on. Now no folder is mapped: the window loads exactly `https://pdf.tomestack.localhost/document.pdf#page=N`, answers it with the PDF's bytes, and refuses and reports everything else.
+- **Changing the rules family drops picks that no longer fit.** In the builder, a species, background, class or other pin from the old family stayed checked but disabled, and was then silently not applied. In the campaign editor, allowed sources from the old family were hidden but still saved. Both are now dropped when the family changes, as the M1 form did.
+- **Renaming a resource in the homebrew studio no longer unlinks it.** Its id followed the name, so a recovery or roll added earlier pointed at the old id: the resource never recovered, and validation only warned. The id is now set once, when the resource is added.
+
+### Migration
+
+- **Database schema 4** (M2 item 7): adds the `campaigns` table. An M1 data folder (schema 2) upgrades through 3 and 4 in one start, after one backup, `tomestack.db.v2.bak`.
+- **Package format v4**: `campaigns/` entries. Older builds refuse v4 packages.
+- **Database schema 3** (ADR-005): `tomestack.db.v2.bak` is written first. The migration adds the attachments table and turns each source's `pdfRef` into an attachment: a managed copy when the file is a readable PDF, otherwise linked and shown as missing. The old value stays in `sources.legacy_pdf_ref`. Opening a schema-3 data folder with an older build is refused with "update TomeStack", and nothing is changed.
+- **Content schema v4** (`docs/schemas/content-revision.v4.schema.json`) adds the `armor` effect and `extendsChoice`. New revisions are written as v4. v2 and v3 revisions, including the bundled SRD packs, keep their version and hashes, so there is no database migration. Older builds refuse v4 revisions.
+- **Character schema v4** (`docs/schemas/character.v4.schema.json`) adds `play` and `equipment`. v1–v3 characters are upcast on read with a fresh play state. There is no database migration, because characters are unhashed JSON. Builds before this one refuse v4 characters and packages that contain them, with a clear message.
+
+## 0.2.0 (M1 delivered)
 
 ### Added
 

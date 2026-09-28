@@ -11,8 +11,8 @@ public static class RulesFamilies
 
     public static IReadOnlyList<RulesFamilyPolicy> All { get; } =
     [
-        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false),
-        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true),
+        new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true),
+        new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -33,4 +33,10 @@ public static class RulesFamilies
 /// <param name="BackgroundGrantsFeat">
 /// Whether a background may grant a feat (a <c>grant</c> effect of kind <c>content</c>): no under 2014 rules, yes under 2024 rules.
 /// </param>
-public sealed record RulesFamilyPolicy(string Id, string DisplayName, ContentKind AbilityIncreaseSource, bool BackgroundGrantsFeat);
+/// <param name="LongRestExhaustionNeedsFoodAndDrink">
+/// Whether a long rest removes an exhaustion level only if the character has had food and drink: yes under 2014 rules
+/// (SRD 5.1, exhaustion), no under 2024 rules (SRD 5.2.1 removes one level per long rest). The rest preview proposes the
+/// reduction either way and, where this is true, says it depends on food and drink so the player can untick it.
+/// </param>
+public sealed record RulesFamilyPolicy(
+    string Id, string DisplayName, ContentKind AbilityIncreaseSource, bool BackgroundGrantsFeat, bool LongRestExhaustionNeedsFoodAndDrink);

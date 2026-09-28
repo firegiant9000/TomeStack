@@ -4,7 +4,7 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService;
 
 /// <summary>How a character references a content revision.</summary>
-public enum ReferenceRole { Pin, Class, Choice, Grant }
+public enum ReferenceRole { Pin, Class, Choice, Grant, Equipment }
 
 /// <param name="Via">For <see cref="ReferenceRole.Grant"/>: the name of the referenced revision that grants it.</param>
 public sealed record AffectedCharacter(Guid CharacterId, string Name, ContentReference Pinned, ReferenceRole Role, string? Via = null);
@@ -99,6 +99,8 @@ public sealed partial class TomeStackApp
                 Add(entry.Class, ReferenceRole.Class);
             foreach (var selected in character.Choices.SelectMany(c => c.Selected))
                 Add(selected, ReferenceRole.Choice);
+            foreach (var entry in character.Equipment)
+                Add(entry.Item, ReferenceRole.Equipment);
             foreach (var reference in character.AllReferences())
             {
                 if (_store.FindRevision(reference) is not { } revision)

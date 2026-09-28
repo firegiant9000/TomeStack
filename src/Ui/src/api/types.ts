@@ -37,12 +37,24 @@ export interface Character {
   /** Selections for choice effects (character schema v3). */
   choices: ChoiceSelection[];
   crossFamilyExceptions: CrossFamilyException[];
+  /** Content used although the campaign does not allow its source, each with a reason (SPEC P-01). */
+  campaignExceptions?: CampaignException[];
   baseAbilities: AbilityScores;
   pins: ContentReference[];
   overrides: FieldOverride[];
+  /** Character schema v4; absent in a draft means fresh (full hit points, nothing spent). */
+  play?: PlayState;
+  /** Items carried; only equipped ones apply (M2 item 4). */
+  equipment?: EquipmentEntry[];
   updatedAt: string;
   // Unknown fields round-trip; keep them when re-saving.
   [extension: string]: unknown;
+}
+
+export interface EquipmentEntry {
+  item: ContentReference;
+  equipped: boolean;
+  quantity: number;
 }
 
 export interface ClassLevel {
@@ -117,17 +129,208 @@ export interface DerivedValue {
   units: 'score' | 'modifier' | 'bonus' | string;
 }
 
+export type RestPeriod = 'shortRest' | 'longRest';
+
+export interface RecoveryInfo {
+  effectId: string;
+  on: RestPeriod;
+  amount: string;
+  text?: string;
+}
+
+/** A limited-use resource; `maximum`/`current` are absent when it is tracked by hand. */
+export interface ResourceValue {
+  content: ContentReference;
+  contentName: string;
+  effectId: string;
+  resourceId: string;
+  label: string;
+  maximum?: number;
+  spent: number;
+  current?: number;
+  trace: TraceEntry[];
+  warnings: Diagnostic[];
+  automation: AutomationStatus;
+  recoveries: RecoveryInfo[];
+  text?: string;
+}
+
+export interface FeatureEffect {
+  id: string;
+  type: string;
+  automation: AutomationStatus;
+  text?: string;
+  label?: string;
+  dice?: string;
+  resourceId?: string;
+}
+
+/** SPEC I-05: an active revision with its text and automation status. */
+export interface FeatureEntry {
+  content: ContentReference;
+  name: string;
+  kind: ContentKind;
+  summary?: string;
+  via?: string;
+  origin: TraceOrigin;
+  automation: AutomationStatus;
+  effects: FeatureEffect[];
+  diagnostics: Diagnostic[];
+}
+
+export interface HitPointState {
+  maximum: number;
+  current: number;
+  temporary: number;
+}
+
 export interface CharacterSheet {
   characterId: string;
   rulesFamily: RulesFamilyId;
   fields: DerivedValue[];
   diagnostics: Diagnostic[];
   choices?: ChoiceStatus[];
+  active?: ContentReference[];
+  resources?: ResourceValue[];
+  features?: FeatureEntry[];
+  hitPoints?: HitPointState;
+}
+
+export interface ResourceUse {
+  contentId: string;
+  resourceId: string;
+  spent: number;
+}
+
+/** SPEC C-05, character schema v4: changed only by the confirmed `character.play` command. */
+export interface PlayState {
+  /** Absent or null: at the maximum. */
+  currentHitPoints?: number | null;
+  temporaryHitPoints: number;
+  resources: ResourceUse[];
+  conditions: string[];
+  exhaustion: number;
+}
+
+export type PlayActionKind =
+  | 'spend'
+  | 'regain'
+  | 'damage'
+  | 'heal'
+  | 'setTemporaryHitPoints'
+  | 'setHitPoints'
+  | 'addCondition'
+  | 'removeCondition'
+  | 'setExhaustion';
+
+export interface PlayAction {
+  action: PlayActionKind;
+  amount?: number;
+  contentId?: string;
+  resourceId?: string;
+  condition?: string;
+}
+
+export interface RestChange {
+  id: string;
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion';
+  label: string;
+  from: number;
+  to: number;
+  reason: string;
+  origin: TraceOrigin;
+  contentId?: string;
+  resourceId?: string;
+  /** Set when the change depends on the situation; the player decides. */
+  condition?: string;
+}
+
+/** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
+export interface RestPreview {
+  kind: RestPeriod;
+  changes: RestChange[];
+  manual: Diagnostic[];
+  basis: string;
+}
+
+export type RollMode = 'normal' | 'advantage' | 'disadvantage';
+
+export interface RollModifier {
+  label: string;
+  amount: number;
+  origin?: TraceOrigin;
+}
+
+export interface DieResult {
+  term: number;
+  sides: number;
+  value: number;
+  kept: boolean;
+  fromCritical: boolean;
+}
+
+export interface RollProvenance {
+  rollId: string;
+  label: string;
+  content?: ContentReference;
+  contentName?: string;
+  effectId?: string;
+  sourceId?: string;
+  sourceTitle?: string;
+  page?: PageRef;
+  linkedResourceId?: string;
+}
+
+/** SPEC C-04: a roll record. Rolling never changes the character. */
+export interface RollRecord {
+  formula: string;
+  mode: RollMode;
+  critical: boolean;
+  dice: DieResult[];
+  diceTotal: number;
+  expressionConstant: number;
+  modifiers: RollModifier[];
+  total: number;
+  provenance?: RollProvenance;
+}
+
+/** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
+export interface RollTarget {
+  content?: ContentReference;
+  effectId?: string;
+  field?: string;
+  mode?: RollMode;
+  critical?: boolean;
+}
+
+/** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */
+export interface Campaign {
+  id: string;
+  schemaVersion?: number;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  allowedSources: string[];
+  houseRules?: string;
+  updatedAt?: string;
+}
+
+export interface CampaignStatus {
+  campaignId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  warnings: Diagnostic[];
+}
+
+export interface CampaignException {
+  content: ContentReference;
+  reason: string;
+  recordedAt?: string;
 }
 
 export interface CharacterView {
   character: Character;
   sheet: CharacterSheet;
+  campaign?: CampaignStatus;
 }
 
 export interface CharacterSummary {
@@ -142,6 +345,7 @@ export interface RulesFamilyPolicy {
   displayName: string;
   abilityIncreaseSource: ContentKind;
   backgroundGrantsFeat: boolean;
+  longRestExhaustionNeedsFoodAndDrink: boolean;
 }
 
 /** BACKLOG B06: a recorded, deliberate use of a pinned revision outside its rules families. */
@@ -157,6 +361,8 @@ export interface AppInfo {
   rulesFamilies: RulesFamilyPolicy[];
   /** Startup warnings, e.g. `data-dir.sync-root` when the data folder is inside OneDrive (ADR-005). */
   warnings: Diagnostic[];
+  /** Every calculated field and its label (homebrew studio targets). */
+  fields: FieldInfo[];
 }
 
 export interface ContentOption {
@@ -169,6 +375,8 @@ export interface ContentOption {
   sourceTitle: string;
   page?: string;
   summary?: string;
+  /** Set when listed for a campaign: whether it allows this option's source. */
+  allowedInCampaign?: boolean;
 }
 
 export interface CreateCharacterRequest {
@@ -176,6 +384,12 @@ export interface CreateCharacterRequest {
   rulesFamily: RulesFamilyId;
   baseAbilities: AbilityScores;
   pins: ContentReference[];
+  /** The starting class and any further levels from the builder draft (SPEC C-07). */
+  classes?: ClassLevel[];
+  /** Choices answered in the builder draft. */
+  choices?: ChoiceSelection[];
+  campaignId?: string;
+  campaignExceptions?: CampaignException[];
 }
 
 export interface LicenseNotice {
@@ -265,6 +479,130 @@ export interface PackagePreview {
   items: PackageItem[];
   errors: Diagnostic[];
   warnings: Diagnostic[];
+}
+
+// ---- homebrew studio (M2 item 5) ----
+
+export type EffectTiming = 'always' | 'whileActive' | 'onRoll' | 'onShortRest' | 'onLongRest';
+
+interface EffectBase {
+  id: string;
+  automation?: AutomationStatus;
+  timing?: EffectTiming;
+  text?: string;
+}
+
+export type Effect =
+  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string })
+  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number })
+  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
+  | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
+  | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
+  | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number });
+
+export interface ChoiceExtension {
+  contentId: string;
+  choiceId: string;
+}
+
+export interface ContentRevision {
+  contentId: string;
+  revisionId: string;
+  schemaVersion?: number;
+  kind: ContentKind;
+  name: string;
+  rulesFamilies: RulesFamilyId[];
+  provenance: { sourceId: string; page?: PageRef };
+  status: 'draft' | 'published';
+  summary?: string;
+  extendsChoice?: ChoiceExtension;
+  effects: Effect[];
+  [extension: string]: unknown;
+}
+
+export interface SourceRecord {
+  id: string;
+  title: string;
+  publisher: string;
+  rulesFamilies: RulesFamilyId[];
+  editionVersion: string;
+  license: string;
+  redistributable: boolean;
+}
+
+/** ADR-005: a source's PDF, without any path. */
+export interface AttachmentInfo {
+  sourceId: string;
+  attachmentId: string;
+  originalFileName: string;
+  byteLength: number;
+  mode: 'managed' | 'linked';
+  status: 'available' | 'missing' | 'changed';
+}
+
+export interface DetachPreview {
+  sourceId: string;
+  originalFileName: string;
+  pageLinks: number;
+  contentNames: string[];
+}
+
+export interface OpenPageOutcome {
+  opened: boolean;
+  page: number;
+  warnings: Diagnostic[];
+}
+
+export interface StudioEntry {
+  contentId: string;
+  name: string;
+  kind: ContentKind;
+  revisions: ContentRevision[];
+  latest: ContentRevision;
+  latestPublished?: ContentRevision;
+}
+
+export type ReferenceRole = 'pin' | 'class' | 'choice' | 'grant' | 'equipment';
+
+export interface AffectedCharacter {
+  characterId: string;
+  name: string;
+  pinned: ContentReference;
+  role: ReferenceRole;
+  via?: string;
+}
+
+export interface PublishResult {
+  draft: ContentReference;
+  published: ContentReference;
+  report: ValidationReport;
+  affected: AffectedCharacter[];
+}
+
+export interface EffectChange {
+  effectId: string;
+  change: 'added' | 'removed' | 'changed';
+  type?: string;
+  before?: string;
+  after?: string;
+}
+
+export interface UpdateReview {
+  characterId: string;
+  from: ContentReference;
+  to: ContentReference;
+  mechanics: { properties: { property: string; before?: string; after?: string }[]; effects: EffectChange[] };
+  fields: { field: string; label: string; before: number; after: number }[];
+  newDiagnostics: Diagnostic[];
+  resolvedDiagnostics: Diagnostic[];
+  unresolvedChoices: ChoiceStatus[];
+  affectedOverrides: FieldOverride[];
+}
+
+export interface FieldInfo {
+  id: string;
+  label: string;
 }
 
 export interface ValidationReport {

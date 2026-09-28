@@ -33,14 +33,15 @@ No art, logos, trade dress, product names or other publications. No monsters, sp
 
 - `attribution` holds the approved statement **verbatim**. `SrdPackTests` compares it with the approval page.
 - `modificationNotice` is separate so the attribution stays unchanged. Both travel into package `notices[]`.
-- **Judgment call for the owner:** each SRD source's `publisher` is "SRD 5.1 (CC-BY-4.0)" or "SRD 5.2.1 (CC-BY-4.0)", not the rights holder's name. Both legal pages ask for "no other attribution" beyond the statement, so the rights holder is named only inside the statement. If the owner reads the request differently, only this field changes.
+- **Judgment call, decided (owner, 2026-09-27: keep):** each SRD source's `publisher` is "SRD 5.1 (CC-BY-4.0)" or "SRD 5.2.1 (CC-BY-4.0)", not the rights holder's name. Both legal pages ask for "no other attribution" beyond the statement, so the rights holder is named only inside the statement.
 - `ATTRIBUTION.md` and `NOTICE` carry both statements and the modification notice, and the installer ships them.
 - The in-app About / Sources screen is M2.
 
 ## Known limitations of the encoded rules
 
-- "None of these increases can raise a score above 20" (5.2.1 background ability scores) is not enforced by the calculator yet. It is shown in the choice text. It does not affect characters below 19 in a score.
+- "None of these increases can raise a score above 20" (5.2.1 background ability scores) is enforced since M2 item 4 (owner decision 2026-09-27): bonuses to ability scores stop at 20 in both families (`features/equipment.md`).
 - Rages use `min(2 + floor(CLASS_LEVEL / 3), 4)`, which matches both tables for levels 1–11. The slice is levels 1–3.
-- Unarmored Defense assumes no armor is worn, because armor is not modeled (M2 equipment). Its trace says so.
+- Unarmored Defense applies only while no armor is worn since M2 item 4: the calculator treats every Armor Class replacement as an unarmored alternative. Its effect text in the published revisions still says "armor is not modeled yet, so TomeStack assumes none". Published revisions are insert-only, so the note stays until a new SRD pack revision (the trace gives the current behavior).
+- No SRD armor or equipment is bundled. Adding the armor table needs this review extended (SPEC Q-03).
 - Frenzy (5.2.1) offers a 2d6 roll for Rage Damage +2 (Barbarian levels 1–8).
-- Advantage-granting features (Rage, Danger Sense, Reckless Attack) are text only until the sheet's roll UI (M2).
+- Advantage-granting features (Rage, Danger Sense, Reckless Attack) stay text only. Since M2 item 2, the sheet shows them as reference-only features, and the player picks advantage for the roll.

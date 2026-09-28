@@ -10,11 +10,13 @@ public sealed record PackageManifest
     public const string FormatName = "tomestack.package";
 
     /// <summary>
+    /// v4 (M2 items 5–7): <c>campaigns/</c> entries (SPEC P-01), and entries may use content schema v4 and character
+    /// schema v4. Older builds refuse v4 instead of dropping the campaign or misreading the entries.
     /// v3 (ADR-007, D03): <see cref="Purpose"/> and <see cref="Omitted"/>. A share package may leave out pinned
     /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
     /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
     /// </summary>
-    public const int CurrentFormatVersion = 3;
+    public const int CurrentFormatVersion = 4;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;

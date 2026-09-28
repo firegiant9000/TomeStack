@@ -30,7 +30,15 @@ public sealed record SourceRecord
 
     public DateTimeOffset? ImportedAt { get; init; }
     public string? Sha256 { get; init; }
+
+    /// <summary>
+    /// Obsolete machine-local path (M0/M1). Database migration v3 (ADR-005) moves it to an attachment record and keeps
+    /// the old value in <c>sources.legacy_pdf_ref</c>. Never exported.
+    /// </summary>
     public string? PdfRef { get; init; }
+
+    /// <summary>ADR-005 (M2 item 6): the source's PDF attachment on this machine. Machine-local; never exported.</summary>
+    public Guid? AttachmentId { get; init; }
 }
 
 public sealed record PageRef(int Start, int? End = null)
@@ -39,6 +47,12 @@ public sealed record PageRef(int Start, int? End = null)
 }
 
 public sealed record Provenance(Guid SourceId, PageRef? Page = null);
+
+/// <summary>
+/// Names a choice by the content that offers it (any of its revisions) and the <c>choiceId</c>, for
+/// <see cref="ContentRevision.ExtendsChoice"/>.
+/// </summary>
+public sealed record ChoiceExtension(Guid ContentId, string ChoiceId);
 
 /// <summary>An exact pin to one immutable content revision (ARCHITECTURE: ContentReference).</summary>
 public sealed record ContentReference(Guid ContentId, Guid RevisionId);
@@ -54,8 +68,9 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v1 revisions are upcast to v2 on read (<see cref="UpgradedFrom"/>). v2 revisions are not upcast: v2 is a subset
     /// of v3, and keeping the written version keeps their serialized form, and so their hashes, unchanged (ADR-002).
     /// Older builds refuse v3 revisions (<c>content.schema-unsupported</c>) instead of ignoring the level gates.
+    /// v4 (M2 item 5) adds <see cref="ExtendsChoice"/>; v2 and v3 revisions are not upcast, for the same reason.
     /// </summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;
@@ -76,7 +91,16 @@ public sealed record ContentRevision : IJsonOnDeserialized
     public required Provenance Provenance { get; init; }
     public required RevisionStatus Status { get; init; }
     public string? Summary { get; init; }
-    public IReadOnlyList<Effect> Effects { get; init; } = [];
+
+    /// <summary>
+    /// Content schema v4 (M2 item 5): this revision is an additional option of another content's choice, for example a
+    /// homebrew subclass for the SRD Barbarian's subclass choice. Published revisions only; never matched by name.
+    /// </summary>
+    public ChoiceExtension? ExtendsChoice { get; init; }
+
+    public IReadOnlyList<Effect> Effects { get => _effects; init => _effects = value; }
+
+    private IReadOnlyList<Effect> _effects = [];
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
@@ -87,7 +111,8 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <summary>
     /// ADR-003 migration: schemaVersion 1 differs only in the effect shape, which <see cref="EffectJsonConverter"/>
     /// already mapped while reading. Record the upcast to v2. Versions newer than supported are left as they are, so
-    /// callers refuse them with a diagnostic.
+    /// callers refuse them with a diagnostic. An <c>armor</c> effect is typed only in a v4 (or newer) revision
+    /// (<see cref="ArmorEffect"/>); in an older one it stays unknown and is written back unchanged.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
@@ -96,5 +121,7 @@ public sealed record ContentRevision : IJsonOnDeserialized
             UpgradedFrom = _schemaVersion;
             _schemaVersion = TypedEffectsSchemaVersion;
         }
+        if (_schemaVersion >= ArmorEffect.SchemaVersion && _effects.Any(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName }))
+            _effects = [.. _effects.Select(e => e is UnknownEffect { DeclaredType: ArmorEffect.TypeName } armor ? ArmorEffect.FromUnknown(armor) : e)];
     }
 }

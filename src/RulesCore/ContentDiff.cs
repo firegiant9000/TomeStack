@@ -32,6 +32,7 @@ public sealed record ContentDiff(ContentReference From, ContentReference To, IRe
         Property("page", before.Provenance.Page?.ToString(), after.Provenance.Page?.ToString());
         Property("source", before.Provenance.SourceId.ToString(), after.Provenance.SourceId.ToString());
         Property("summary", before.Summary, after.Summary);
+        Property("extendsChoice", Describe(before.ExtendsChoice), Describe(after.ExtendsChoice));
 
         string Json(Effect effect) => JsonSerializer.Serialize(effect, RulesJson.Compact);
         var old = before.Effects.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
@@ -48,4 +49,6 @@ public sealed record ContentDiff(ContentReference From, ContentReference To, IRe
         }
         return new ContentDiff(before.Reference, after.Reference, properties, effects);
     }
+
+    private static string? Describe(ChoiceExtension? extension) => extension is null ? null : $"{extension.ContentId:D}/{extension.ChoiceId}";
 }

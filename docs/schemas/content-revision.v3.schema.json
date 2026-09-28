@@ -139,7 +139,7 @@
           "required": ["die"]
         },
         {
-          "description": "Unknown effect type: kept, reference-only.",
+          "description": "Unknown effect type: kept, reference-only. This includes armor, which is typed only from content v4 (ADR-003).",
           "properties": { "type": { "not": { "enum": ["modifier", "grant", "resource", "choice", "restriction", "recovery", "roll", "hitDie"] } } }
         }
       ]

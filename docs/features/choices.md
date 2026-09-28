@@ -1,6 +1,6 @@
 # Choices
 
-SPEC C-01 · ROADMAP M1 · status: data, calculation and API implemented (M1 item 4). The builder UI is M2.
+SPEC C-01 · ROADMAP M1 · status: data, calculation and API implemented (M1 item 4). The builder UI answers choices on drafts (M2 item 1, [builder.md](builder.md)) with `character.previewChoice`, which makes exactly the checks below.
 
 `src/RulesCore/Calculation.cs` (resolution), `TomeStackApp.Choose` (`character.choose`). Tested in `tests/RulesCore.Tests/ChoiceTests.cs` and `tests/AppService.Tests/ChoiceCommandTests.cs`.
 

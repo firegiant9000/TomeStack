@@ -49,7 +49,7 @@ public class ExportPurposeTests
         var export = origin.App.ExportCharacters([id], ExportPurpose.Backup);
 
         Assert.Equal(ExportPurpose.Backup, export.Manifest.Purpose);
-        Assert.Equal(3, export.Manifest.FormatVersion);
+        Assert.Equal(PackageManifest.CurrentFormatVersion, export.Manifest.FormatVersion); // v4 since M2 item 7 (campaigns)
         Assert.Contains(export.Manifest.Entries, e => e.Path == $"content/{HomebrewFeat.RevisionId:D}.json");
         Assert.Contains(export.Manifest.Notices, n => n.SourceId == HomebrewSource && !n.Redistributable);
         Assert.Empty(export.Manifest.Omitted);
@@ -176,7 +176,7 @@ public class ExportPurposeTests
     }
 
     [Fact]
-    public void Share_manifest_matches_the_v3_schema()
+    public void Share_manifest_matches_its_schema()
     {
         using var origin = new TempApp();
         var id = SaveMixedCharacter(origin);

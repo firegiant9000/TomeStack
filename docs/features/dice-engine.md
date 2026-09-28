@@ -1,6 +1,6 @@
 # Dice engine (skeleton)
 
-SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine and the `roll` command (M1 item 7). The sheet's roll UI is M2.
+SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine and the `roll` command (M1 item 7). The sheet's roll UI is implemented (M2 item 2, [sheet-play.md](sheet-play.md)).
 
 `src/RulesCore/Dice.cs`, tested in `tests/RulesCore.Tests/DiceTests.cs`.
 
@@ -20,7 +20,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 `{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance }`. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
 
-**Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command (M2).
+**Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command: `character.play` with `spend` (M2 item 2).
 
 ## The `roll` command (M1 item 7)
 

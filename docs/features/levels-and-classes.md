@@ -28,7 +28,7 @@ Rolled hit points are recorded as an **override** (SPEC C-06) until the level-up
 
 ## Armor class (`armorClass`)
 
-The base is 10 + Dexterity modifier. Armor and shields are not modeled yet (M2 equipment), and the trace says so. Alternatives such as Unarmored Defense are `replace` effects (`10 + DEX.MOD + CON.MOD`). The highest replacement wins, and the others are traced as not used (ADR-003).
+The base is 10 + Dexterity modifier. Alternatives such as Unarmored Defense are `replace` effects (`10 + DEX.MOD + CON.MOD`). The highest replacement wins, and the others are traced as not used (ADR-003). Since M2 item 4, worn armor replaces the base, alternatives do not apply while armor is worn, and a shield adds its bonus ([equipment.md](equipment.md)).
 
 ## Skills
 
@@ -36,4 +36,4 @@ All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandl
 
 ## Not in scope (M2+)
 
-Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, equipment-based armor class, and speed.
+Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and speed. Equipment-based armor class is M2 item 4.

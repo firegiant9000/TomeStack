@@ -198,6 +198,48 @@ public sealed record RollEffect : Effect
     public string? ResourceId { get; init; }
 }
 
+public enum ArmorCategory { Light, Medium, Heavy, Shield }
+
+/// <summary>
+/// M2 item 4: armor on an item. Body armor (light, medium, heavy) sets the Armor Class base while the item is equipped:
+/// <see cref="ArmorClass"/> plus the Dexterity modifier (light), capped at <see cref="DexterityCap"/> (medium, default 2),
+/// or none (heavy). A shield adds <see cref="ArmorClass"/>. The same in both SRDs. Content schema v4 only: in an older
+/// revision an <c>armor</c> effect stays an <see cref="UnknownEffect"/>, byte for byte, because a 0.2.0 build stored it that
+/// way and typing it would change both its hash and its meaning (ADR-003).
+/// </summary>
+public sealed record ArmorEffect : Effect
+{
+    public const string TypeName = "armor";
+
+    /// <summary>The content schema version that introduced this effect type.</summary>
+    public const int SchemaVersion = 4;
+
+    /// <summary>An <c>armor</c> effect read from a v4 revision; a malformed body stays reference-only.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown)
+    {
+        try
+        {
+            return unknown.Raw.Deserialize<ArmorEffect>(RulesJson.Compact) ?? (Effect)unknown;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return unknown;
+        }
+    }
+
+    public const int DefaultMediumDexterityCap = 2;
+
+    public override string Type => TypeName;
+
+    public required ArmorCategory Category { get; init; }
+
+    /// <summary>The armor's base Armor Class, or a shield's bonus.</summary>
+    public required int ArmorClass { get; init; }
+
+    /// <summary>Medium armor only: the most the Dexterity modifier adds (default 2).</summary>
+    public int? DexterityCap { get; init; }
+}
+
 /// <summary>
 /// An effect type this build does not know. The original JSON is kept and written back with the same properties,
 /// order and values (whitespace and string escaping are normalized), and it is never automated.
@@ -249,6 +291,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RecoveryEffect.TypeName => element.Deserialize<RecoveryEffect>(options),
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
+                // Typed only in content v4 revisions (ContentRevision.OnDeserialized); older ones keep it as written.
+                ArmorEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

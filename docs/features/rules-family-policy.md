@@ -10,6 +10,7 @@ Differences between SRD 5.1 (2014 rules) and SRD 5.2.1 (2024 rules) are either *
 | --- | --- | --- | --- |
 | `AbilityIncreaseSource`: which origin content may change ability scores (every operation; a feature chosen from or granted by that origin, through any chain of features, counts as it) | species | background | `RulesFamilySideBySideTests`, `ChoiceTests`, `SrdRulesFamilyTests` |
 | `BackgroundGrantsFeat`: whether a background, or a feature that comes from one, may bring in a feat, by a grant or as a choice option (other content is allowed under both) | no | yes | `RulesFamilySideBySideTests`, `SrdRulesFamilyTests`, `ChoiceTests` |
+| `LongRestExhaustionNeedsFoodAndDrink` (M2 item 3): a long rest removes one exhaustion level only with food and drink. The rest preview proposes the reduction in both families and, where this is true, names the condition so the player can untick it | yes | no | `RestPlannerTests.Exhaustion_needs_food_and_drink_only_under_2014_rules_side_by_side` |
 
 Origin is carried on the active content: species and background content is its own origin, a feature inherits the origin of whatever granted or offered it, and a feat or class starts none. A policy therefore holds however the content is reached.
 
@@ -27,7 +28,8 @@ Origin is carried on the active content: species and background content is its o
 
 **Considered and not added:**
 
-- "Ability increases cannot raise a score above 20". Both SRDs have this rule, so it is not a difference. It is a calculation gap, recorded in `docs/licensing/srd-pack-review.md`.
+- "Ability increases cannot raise a score above 20". Both SRDs have this rule, so it is not a difference. Since M2 item 4 it is a rules constant (`CharacterCalculator.AbilityScoreIncreaseCap`, `AbilityCapTests` for both families).
+- Armor (M2 item 4): light, medium and heavy armor and shields work the same in both SRDs, so they are content (`armor` effects), not a field.
 - A per-family hit point rule. Both SRDs use "maximum at level 1, then the roll or the fixed value", so a field would encode nothing.
 
 Revisit this table whenever the SRD slice grows (spellcasting in M2 is the likely next difference). A new difference gets a named field and a side-by-side test before any content depends on it.

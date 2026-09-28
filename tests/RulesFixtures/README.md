@@ -6,6 +6,7 @@ All content here is **original** and was written for TomeStack tests. It contain
 | --- | --- | --- | --- |
 | `fixture-pack.json` | content v1 (upcast on read) | development only (DevHost, tests, `TOMESTACK_DEV_FIXTURES=1`); the shipped app seeds the SRD packs instead (owner decision 2026-09-26) | M0: ability-increase policy, draft isolation, an unknown effect type |
 | `fixture-pack-m1.json` | content v2 and v3 | no, tests only | M1: the second policy difference, a cross-edition conflict, grants; classes "Fixture Warden" (d10) and "Fixture Scholar" (d6) with level-gated features, a hit point feat and an armor class item (item 5); choices: Warden skills (2 of 3) and a level-3 path, and the background "Fixture Crossroads" with a chosen ability increase (item 4) |
+| `fixture-pack-m2.json` | content v4 (armor items, revision ids `…0011`–`…0014`) and v3 (the Tome) | development only, like `fixture-pack.json` | M2 item 4: original armor (light "Fixture Padded Jerkin" 11, medium "Fixture Scale Vest" 14 with Dex cap 2, heavy "Fixture Iron Harness" 17), the shield "Fixture Kite Shield" (+2) and "Fixture Tome of Might" (+4 Str, for the cap at 20) |
 | `characters/srd51-quickfoot.json`, `srd521-courier.json` | character v1 | no | M0 initiative traces |
 | `characters/srd51-ash-m1.json`, `srd521-ash-m1.json` | character v2 | no | Side-by-side: the same inputs under each family |
 | `characters/srd521-rook-exception.json` | character v2 | no | A recorded cross-family exception (BACKLOG B06) |
