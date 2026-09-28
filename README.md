@@ -10,7 +10,7 @@ A local-first Windows desktop app for building fifth-edition characters and home
 > - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
 > - **Evidence:** checks are either fixture-verified (automated tests), Windows-install verified (the CI desktop smoke, or an owner check on an installed build), or accepted in real play. Nothing is accepted in real play yet (that is the M3 gate). See [features/m2-acceptance.md](docs/features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
 >
-> The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)).
+> The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). No installer has been published; build from source (below). Milestone evidence is in [ROADMAP](docs/ROADMAP.md) and [`docs/features/*-acceptance.md`](docs/features/).
 
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 
