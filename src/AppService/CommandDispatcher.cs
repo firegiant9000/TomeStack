@@ -21,7 +21,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
         "content.bySource", "source.list", "source.createHomebrew",
-        "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage",
+        "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "roll",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
@@ -95,6 +95,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.detachPreview" => app.PreviewDetach(Payload<SourceIdPayload>(payload).SourceId),
         "source.detach" => Detach(Payload<DetachPayload>(payload)),
         "source.openPage" => OpenPage(Payload<OpenPagePayload>(payload)),
+        "source.importPages" => app.ImportPages(Payload<PageImportRequest>(payload)),
         "character.reviewUpdate" => ReviewUpdate(Payload<UpdatePayload>(payload)),
         "character.applyUpdate" => ApplyUpdate(Payload<UpdatePayload>(payload)),
         "roll" => app.Roll(Payload<RollCommand>(payload)),

@@ -384,7 +384,8 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  expect((await screen.findByRole('status')).textContent).toMatch(/Updated E2E Storm/);
+  // The status line already holds the publish message; wait for the update's own message instead of the first match.
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm/), { timeout: 5000 });
   await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
 });
@@ -416,7 +417,18 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(within(book).getByRole('button', { name: 'Attach PDF…' }));
   const pdf = new File([new TextEncoder().encode('%PDF-1.4\n% e2e\n%%EOF\n')], 'e2e-book.pdf', { type: 'application/pdf' });
   await user.upload(screen.getByLabelText('PDF file'), pdf);
-  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy());
+  // The upload hashes and copies the file, then reloads every source: allow more than the 1 s default under load.
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy(), { timeout: 5000 });
+
+  // SPEC I-03: pages 3-4 become a draft reference entry (nothing is extracted; it stays inactive until published).
+  const pages = within(screen.getByRole('listitem', { name: 'E2E Book' })).getByRole('group', { name: 'Import pages of E2E Book as reference' });
+  await user.type(within(pages).getByRole('spinbutton', { name: 'First page' }), '3');
+  await user.type(within(pages).getByRole('spinbutton', { name: 'Last page (optional)' }), '4');
+  await user.type(within(pages).getByRole('textbox', { name: 'Title (optional)' }), 'E2E Chapter');
+  await user.click(within(pages).getByRole('button', { name: 'Import pages' }));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Draft reference entry "E2E Chapter" created/);
+  const drafts = await client.contentBySource(source.id);
+  expect(drafts.find((e) => e.name === 'E2E Chapter')?.revisions[0]).toMatchObject({ status: 'draft', provenance: { page: { start: 3, end: 4 } } });
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
@@ -428,7 +440,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(screen.getByRole('button', { name: 'Sources' }));
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Book' })).getByRole('button', { name: 'Remove PDF…' }));
   const confirm = await screen.findByRole('alertdialog', { name: 'Remove e2e-book.pdf?' });
-  expect(confirm.textContent).toMatch(/1 entry cites pages in it \(E2E Cited Feat\)/);
+  // The draft reference entry cites pages in it too.
+  expect(confirm.textContent).toMatch(/2 entries cite pages in it \(E2E Chapter, E2E Cited Feat\)/);
   await user.click(within(confirm).getByRole('button', { name: 'Remove PDF' }));
   await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText('No PDF attached.')).toBeTruthy());
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));

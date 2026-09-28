@@ -64,7 +64,9 @@ public sealed partial class TomeStackApp
         var attachment = source.AttachmentId is { } id ? _store.FindAttachment(id) : null;
         if (attachment is null)
             throw new AppValidationException([new("attachment.none", $"'{source.Title}' has no PDF attached.")]);
-        var cited = _store.ListRevisions().Where(r => r.Provenance.SourceId == sourceId && r.Provenance.Page is not null).Select(r => r.Name).Distinct().ToList();
+        // Sorted, so the confirmation reads the same every time (storage order is not meaningful).
+        var cited = _store.ListRevisions().Where(r => r.Provenance.SourceId == sourceId && r.Provenance.Page is not null)
+            .Select(r => r.Name).Distinct().Order(StringComparer.CurrentCultureIgnoreCase).ToList();
         return new(sourceId, attachment.OriginalFileName, cited.Count, cited);
     }
 

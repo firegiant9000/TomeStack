@@ -1,6 +1,6 @@
 # PDF attachments and page navigation
 
-SPEC S-01, S-04, I-03 · ADR-005 · BACKLOG B05 · MVP "Sources" ("open the cited page from a feature offline"), definition of done 4 and 5 · status: implemented (M2 item 6).
+SPEC S-01, S-04, I-01, I-03 · ADR-005 · BACKLOG B05 · MVP "Sources" ("open the cited page from a feature offline"; "import limited page ranges and whole documents as reference"), definition of done 4 and 5 · status: implemented (M2 item 6; page import M2 item 4).
 
 Service: `src/AppService/Attachments.cs`, `src/AppService/Persistence/AttachmentFiles.cs`, database migration v3 in `SqliteStore`. Shell: `src/DesktopShell/PdfViewerWindow.cs`, `ShellHostServices`. UI: `src/Ui/src/components/SourcesPanel.tsx` and "Open … p. N" on sheet features. Acceptance: `tests/AppService.Tests/AttachmentTests.cs`, the e2e test "attaches a PDF to a source…", and the `--smoke` PDF viewer check.
 
@@ -26,6 +26,17 @@ A feature whose source has an available PDF and whose revision cites a page gets
 - Hosts without a viewer (DevHost, tests without a host) report `unsupported`, and the UI says it needs the desktop app.
 
 **Not verified automatically:** that the viewer actually shows page N (the smoke proves that the PDF loads offline, not which page is on screen). That is an owner check on the installed app.
+
+## Importing pages as reference (SPEC I-01, I-03; M2 item 4)
+
+**Owner decision (2026-09-27): no text extraction in M2.** TomeStack does not read the PDF, and text extraction and search stay M4. An import records *which pages* matter:
+
+- `source.importPages { sourceId, start, end?, title?, wholeDocument? }` (service `src/AppService/PageImport.cs`; UI: "Import pages of … as reference" on the Sources screen) creates a **draft** feature with no effects. It cites the pages (`provenance.page`), and its summary says it is a page reference whose text is in the PDF. A whole document cites page 1. The default name is the source title and the pages.
+- **Review before it applies (ADR-004):** the draft is inactive. The player finds it in the homebrew studio, edits it (the name, a summary, or effects authored by hand, which is the "manual entry tied to pages" of MVP "Sources"), and publishes it. Published and pinned, it is a reference-only feature with "Open …, p. N" on the sheet.
+- **Only the user's own sources** (made in TomeStack; the studio lists them) take imports, and only with an available or changed PDF: `source.not-editable` for a bundled source such as an SRD pack, `source.no-pdf`, and `source.page-range-invalid` (pages 1–100,000, the last not before the first). TomeStack cannot check the real last page without reading the PDF.
+- The removal preview counts these entries like any content that cites pages. It lists the names sorted, so it reads the same every time.
+
+Acceptance: `tests/AppService.Tests/PageImportTests.cs` and the import step of the e2e test "attaches a PDF to a source…".
 
 ## Database migration v3 (ADR-005 "Migration plan")
 

@@ -75,6 +75,9 @@ export function createClient(transport: Transport) {
     detach: (sourceId: string) => call<{ detached: boolean }>('source.detach', { sourceId, confirm: true }),
     /** Opens the cited page in the shell's offline PDF viewer (fails with `unsupported` outside the desktop app). */
     openPage: (sourceId: string, page: number) => call<OpenPageOutcome>('source.openPage', { sourceId, page }),
+    /** SPEC I-03: a page range (or the whole document) of an attached PDF as a draft reference-only entry; nothing is extracted. */
+    importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
+      call<ContentRevision>('source.importPages', { sourceId, ...request }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),

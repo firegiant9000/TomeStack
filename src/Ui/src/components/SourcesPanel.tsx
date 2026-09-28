@@ -18,6 +18,58 @@ const statusText: Record<AttachmentInfo['status'], string> = {
 };
 
 /**
+ * SPEC I-01, I-03 (owner decision 2026-09-27: no text extraction in M2): pages of the attached PDF become a draft
+ * reference-only entry citing them. It is inactive until the player publishes it in the studio (ADR-004).
+ */
+function PageImportForm({ source, onError, onStatus }: { source: SourceRecord } & Props) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [title, setTitle] = useState('');
+  const start = Number(from);
+  const end = to === '' ? undefined : Number(to);
+  const valid = from !== '' && Number.isInteger(start) && start >= 1 && (end === undefined || (Number.isInteger(end) && end >= start));
+
+  async function run(request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) {
+    try {
+      const draft = await client.importPages(source.id, request);
+      onStatus(`Draft reference entry "${draft.name}" created. Review and publish it in the studio; until then it does nothing.`);
+      setFrom('');
+      setTo('');
+      setTitle('');
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  return (
+    <fieldset>
+      <legend>Import pages of {source.title} as reference</legend>
+      <p className="hint">Nothing is read from the PDF: the entry cites the pages and opens them. Text stays in your PDF.</p>
+      <div className="inline-form">
+        <label className="field">
+          First page
+          <input type="number" min={1} value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="field">
+          Last page (optional)
+          <input type="number" min={1} value={to} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <label className="field">
+          Title (optional)
+          <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <button type="button" disabled={!valid} onClick={() => run({ start, end, title: title.trim() || undefined })}>
+          Import pages
+        </button>
+        <button type="button" onClick={() => run({ wholeDocument: true, title: title.trim() || undefined })}>
+          Import the whole document
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
  * M2 item 6, ADR-005, SPEC S-01, S-04: every source with its license and its PDF. A PDF is copied into TomeStack's
  * data folder by default (a managed copy survives moving or renaming the original), or linked where it is. Removing it
  * shows what breaks first and keeps all content.
@@ -26,7 +78,7 @@ export function SourcesPanel({ onError, onStatus }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [attachments, setAttachments] = useState<Record<string, AttachmentInfo | undefined>>({});
   const [removing, setRemoving] = useState<DetachPreview>();
-  const [browserTarget, setBrowserTarget] = useState<string>();
+  const browserTarget = useRef<string | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
@@ -51,6 +103,9 @@ export function SourcesPanel({ onError, onStatus }: Props) {
   }, [fetchAll, onError]);
 
   async function attach(source: SourceRecord, mode: 'managed' | 'linked') {
+    // Recorded before the host answers: a file chosen in the browser picker must never find no target (it was dropped
+    // when the pick came before the "unsupported" reply had been handled).
+    browserTarget.current = source.id;
     try {
       const outcome = await client.attachPdf(source.id, mode);
       if (outcome.attached) {
@@ -60,7 +115,6 @@ export function SourcesPanel({ onError, onStatus }: Props) {
     } catch (error) {
       if (error instanceof TomeStackError && error.code === 'unsupported' && mode === 'managed') {
         // Browser development (DevHost) has no native dialog: pick the file here and send its bytes.
-        setBrowserTarget(source.id);
         fileInput.current?.click();
         return;
       }
@@ -71,9 +125,10 @@ export function SourcesPanel({ onError, onStatus }: Props) {
   async function attachFromBrowser(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !browserTarget) return;
+    const target = browserTarget.current;
+    if (!file || !target) return;
     try {
-      const info = await client.attachPdfData(browserTarget, file.name, await readFileAsBase64(file));
+      const info = await client.attachPdfData(target, file.name, await readFileAsBase64(file));
       onStatus(`Attached ${info.originalFileName}.`);
       await load();
     } catch (error) {
@@ -137,6 +192,9 @@ export function SourcesPanel({ onError, onStatus }: Props) {
                   </button>
                 )}
               </div>
+              {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && (
+                <PageImportForm source={source} onError={onError} onStatus={onStatus} />
+              )}
               {removing?.sourceId === source.id && (
                 <div role="alertdialog" aria-label={`Remove ${removing.originalFileName}?`} className="play-panel">
                   <p>

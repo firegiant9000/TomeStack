@@ -33,8 +33,18 @@
   - **"Attacks and actions" panel:** feature rolls are grouped by action, bonus action, reaction and other.
   - **Fixtures:** original fixtures only; the SRD weapon table comes with the SRD content.
 
+- **Import PDF pages as reference (M2 item 4; SPEC I-01, I-03; owner decision 2026-09-27: no text extraction in M2; `docs/features/pdf-attachments.md`):**
+  - **Import:** on the Sources screen, a page range or the whole document of your own source's PDF becomes a draft reference entry that cites the pages. Nothing is read from the PDF.
+  - **Review:** you review and publish it in the homebrew studio, where it can also get effects by hand; until then it does nothing.
+  - **Play:** pinned, it shows "Open …, p. N" on the sheet.
+
+### Fixed
+
+- **Attaching a PDF in browser development no longer drops the file.** The Sources screen recorded which source the browser file picker was for only after the host's "no native dialog" reply, so a file picked before that was silently ignored. This was the cause of the intermittent e2e failure "attaches a PDF…". The target is now recorded when the button is pressed.
+
 ### Changed
 
+- The "Remove PDF" confirmation lists the entries that cite the PDF in alphabetical order.
 - Feature roll buttons moved from the features list to the new "Attacks and actions" panel, with the "Critical hit" toggle.
 
 ### Migration
