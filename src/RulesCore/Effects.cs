@@ -55,6 +55,16 @@ public enum EffectTiming { Always, WhileActive, OnRoll, OnShortRest, OnLongRest 
 
 public enum GrantKind { Proficiency, Expertise, Content }
 
+/// <summary>
+/// Content schema v5 (D04 multiclass proficiency subsets): a class's grant or choice that applies only when the class is
+/// the character's starting class (for example saving throws and the full skill choice), or only when it was taken as a
+/// later class (the SRD "as a multiclass character" subset).
+/// </summary>
+public enum ClassEntry { StartingClass, Multiclass }
+
+/// <summary>SPEC C-04: when a roll's action is used, so the sheet can group actions.</summary>
+public enum Activation { Action, BonusAction, Reaction, Other }
+
 public enum RestPeriod { ShortRest, LongRest }
 
 /// <summary>
@@ -120,6 +130,9 @@ public sealed record GrantEffect : Effect
     /// that belongs to a class (granted by it or chosen from it), and the character level for anything else.
     /// </summary>
     public int? Level { get; init; }
+
+    /// <summary>Content schema v5: only as the starting class, or only as a later class (<see cref="ClassEntry"/>). Null: always.</summary>
+    public ClassEntry? OnlyAs { get; init; }
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -163,6 +176,9 @@ public sealed record ChoiceEffect : Effect
 
     /// <summary>Content schema v3: the choice is made from this level on (class level inside a class; see <see cref="GrantEffect.Level"/>).</summary>
     public int? Level { get; init; }
+
+    /// <summary>Content schema v5: only as the starting class, or only as a later class. Null: always.</summary>
+    public ClassEntry? OnlyAs { get; init; }
 }
 
 /// <summary>A prerequisite or limitation, for example a minimum ability score.</summary>
@@ -175,6 +191,16 @@ public sealed record RestrictionEffect : Effect
     public required string Field { get; init; }
 
     public required int Minimum { get; init; }
+
+    /// <summary>
+    /// Content schema v5 (D04): a multiclass prerequisite. Checked only when the character has levels in two or more
+    /// classes, against the calculated sheet; an unmet one is a warning on the class, which stays applied (its levels are
+    /// already taken). Null: an ordinary prerequisite.
+    /// </summary>
+    public bool? Multiclass { get; init; }
+
+    /// <summary>Content schema v5: restrictions of one revision with the same group are alternatives; meeting any one is enough.</summary>
+    public string? Group { get; init; }
 }
 
 /// <summary>Restores a resource on a rest. Previewed and confirmed by a command, never applied by calculation.</summary>
@@ -208,6 +234,53 @@ public sealed record RollEffect : Effect
 
     /// <summary>Optional resource the associated action spends; only an explicit action command spends it.</summary>
     public string? ResourceId { get; init; }
+
+    /// <summary>Content schema v5 (SPEC C-04): action, bonus action, reaction or other; null is listed under "Other".</summary>
+    public Activation? Activation { get; init; }
+}
+
+public enum WeaponCategory { Simple, Martial }
+
+public enum WeaponAttack { Melee, Ranged }
+
+/// <summary>
+/// Content schema v5 (SPEC C-02, C-04): a weapon on an item. An equipped weapon gives an attack: to hit = the ability
+/// modifier (Strength for melee, Dexterity for ranged, the better of the two with <c>finesse</c>) plus the proficiency bonus
+/// when proficient; damage = <see cref="Damage"/> plus the same modifier. The same in both SRDs.
+/// </summary>
+public sealed record WeaponEffect : Effect
+{
+    public const string TypeName = "weapon";
+
+    public override string Type => TypeName;
+
+    public required WeaponCategory Category { get; init; }
+
+    public required WeaponAttack Attack { get; init; }
+
+    /// <summary>Damage dice, for example <c>1d8</c>.</summary>
+    public required string Damage { get; init; }
+
+    public required string DamageType { get; init; }
+
+    /// <summary>Property keys, for example <c>finesse</c>, <c>light</c>, <c>thrown</c>, <c>versatile</c>, <c>two-handed</c>.</summary>
+    public IReadOnlyList<string> Properties { get; init; } = [];
+
+    /// <summary>Damage dice when used with two hands (the versatile property).</summary>
+    public string? Versatile { get; init; }
+
+    /// <summary>Normal and long range, for example <c>80/320</c>.</summary>
+    public string? Range { get; init; }
+
+    /// <summary>The key a specific weapon proficiency names (<c>weapon.&lt;key&gt;</c>), for example <c>rapier</c>. A key, never a display name.</summary>
+    public required string WeaponKey { get; init; }
+
+    /// <summary>The 2024 Weapon Mastery property, as text (it is not automated).</summary>
+    public string? Mastery { get; init; }
+
+    public bool Has(string property) => Properties.Contains(property, StringComparer.Ordinal);
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<WeaponEffect>(unknown);
 }
 
 public enum ArmorCategory { Light, Medium, Heavy, Shield }
@@ -342,6 +415,7 @@ internal static class VersionedEffects
             [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, ArmorEffect.FromUnknown),
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
             [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
+            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
         };
 
     /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
@@ -410,7 +484,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

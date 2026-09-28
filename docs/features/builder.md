@@ -35,7 +35,7 @@ Radio groups and choice groups are `fieldset`/`legend`. Each step change moves f
 
 ## Not in this slice
 
-- SRD multiclass prerequisites and the multiclass proficiency subsets (D04). The builder allows a second class without checking them.
+- Blocking a level-up that misses a multiclass prerequisite. The engine checks them (content v5, [multiclass-and-attacks.md](multiclass-and-attacks.md)), and the level-up preview and the sheet warn (`restriction.multiclass-unmet`), but saving is allowed. The SRD classes' prerequisite data comes with the SRD content commits.
 - Rolled hit points stored per level (overrides for now).
 - Equipment in the builder (it is on the sheet, M2 item 4).
 - Drafts that survive a restart.

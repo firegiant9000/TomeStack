@@ -165,6 +165,32 @@ export interface FeatureEffect {
   label?: string;
   dice?: string;
   resourceId?: string;
+  /** SPEC C-04 (content v5): when the roll's action is used; absent is "other". */
+  activation?: Activation;
+}
+
+export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
+
+/** SPEC C-02, C-04: an attack with an equipped weapon. */
+export interface AttackEntry {
+  item: ContentReference;
+  name: string;
+  effectId: string;
+  attack: 'melee' | 'ranged';
+  category: 'simple' | 'martial';
+  ability: Ability;
+  toHit: number;
+  damage: string;
+  versatileDamage?: string;
+  damageType: string;
+  properties: string[];
+  range?: string;
+  mastery?: string;
+  proficient: boolean;
+  automation: AutomationStatus;
+  trace: TraceEntry[];
+  warnings: Diagnostic[];
+  origin: TraceOrigin;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -215,6 +241,7 @@ export interface CharacterSheet {
   spellcasting?: SpellcastingEntry[];
   spellSlots?: SlotValue[];
   pactSlots?: SlotValue;
+  attacks?: AttackEntry[];
 }
 
 export interface ResourceUse {
@@ -344,6 +371,10 @@ export interface RollTarget {
   /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
   spell?: ContentReference;
   spellAttack?: boolean;
+  /** An equipped weapon: its attack roll, or its damage (`damage`), two-handed (`versatile`). */
+  weapon?: ContentReference;
+  damage?: boolean;
+  versatile?: boolean;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */

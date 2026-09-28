@@ -7,7 +7,9 @@ namespace TomeStack.AppService;
 /// a d20 test (<paramref name="Field"/>: an ability modifier, saving throw, skill or initiative), one of the character's
 /// hit dice (<paramref name="HitDie"/>: the die alone; a short rest adds the Constitution modifier), or a death saving
 /// throw (<paramref name="DeathSave"/>: a d20 with no modifier), or one of the character's spells (<paramref name="Spell"/>:
-/// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice).
+/// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice), or an
+/// equipped weapon (<paramref name="Weapon"/>: its attack roll, or its damage when <paramref name="Damage"/>, two-handed
+/// when <paramref name="Versatile"/>).
 /// </summary>
 public sealed record RollCommand(
     Guid CharacterId,
@@ -19,7 +21,10 @@ public sealed record RollCommand(
     int? HitDie = null,
     bool DeathSave = false,
     ContentReference? Spell = null,
-    bool SpellAttack = false);
+    bool SpellAttack = false,
+    ContentReference? Weapon = null,
+    bool Damage = false,
+    bool Versatile = false);
 
 public sealed partial class TomeStackApp
 {
@@ -39,9 +44,30 @@ public sealed partial class TomeStackApp
         var sheet = CharacterCalculator.Calculate(character, _store);
 
         RollRequest request;
-        if ((command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0) + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) > 1)
-            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw or a spell.")]);
-        if (command.Spell is { } spellReference)
+        var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
+            + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0);
+        if (targets > 1)
+            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell or a weapon.")]);
+        if (command.Weapon is { } weaponReference)
+        {
+            var attack = sheet.Attacks?.FirstOrDefault(a => a.Item == weaponReference)
+                ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);
+            var provenance = new RollProvenance(
+                $"weapon.{(command.Damage ? "damage" : "attack")}", command.Damage ? $"{attack.Name} damage ({attack.DamageType})" : $"{attack.Name} attack",
+                attack.Item, attack.Name, attack.EffectId, attack.Origin.SourceId, attack.Origin.SourceTitle, attack.Origin.Page);
+            if (!command.Damage)
+            {
+                request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit, attack.Origin)], provenance);
+            }
+            else
+            {
+                var dice = command.Versatile
+                    ? attack.VersatileDamage ?? throw new AppValidationException([new("roll.weapon-not-versatile", $"'{attack.Name}' is not versatile.", weaponReference)])
+                    : attack.Damage;
+                request = new RollRequest(dice, RollMode.Normal, command.Critical, [], provenance);
+            }
+        }
+        else if (command.Spell is { } spellReference)
         {
             var (caster, spell) = sheet.Spellcasting?.SelectMany(c => c.Spells.Select(s => (c, s))).FirstOrDefault(p => p.s.Spell == spellReference) ?? default;
             if (spell is null)

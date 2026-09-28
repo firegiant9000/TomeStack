@@ -14,13 +14,18 @@ A `restriction` effect (`field`, `minimum`), such as "Strength 13 or higher", is
 
 Each restricted revision is checked with the other restricted revisions present. That is exact for independent prerequisites, which is every SRD case in the M1 slice.
 
+**Content schema v5 (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)):**
+
+- Restrictions of one revision with the same `group` are alternatives: meeting any one is enough, and an unmet group is reported once, naming every alternative.
+- `multiclass: true` makes a restriction a multiclass prerequisite. It is checked only with two or more classes, against the sheet with the class. When unmet, it gives the warning `restriction.multiclass-unmet` and does not remove the class.
+
 ## Content validation before publish
 
 `ContentValidator.Validate(revision, catalog, batch?)` in the rules core, and the command `content.validate { reference }` (a stored revision) or `{ revision }` (an unsaved one). It returns `{ errors, warnings, canPublish }` and writes nothing. Publishing refuses a revision with errors (M1 item 2).
 
 | Area | Errors (block publishing) | Warnings |
 | --- | --- | --- |
-| Schema | Missing ids or name; no, unknown or duplicate rules families; invalid page range; duplicate or empty effect ids, choice ids or resource ids; unknown targets; `highestInGroup` without a group; levels outside 1–20; a choice with no options, duplicate options or a count above the options; hit die not d6–d12, or more than one; v3 features (levels, `hitDie`, `armorClass` / `hitPoints`) in a revision that declares v2 | An effect type this build does not automate; a hit die on non-class content; a class without a hit die; a recovery for a resource this revision does not define |
+| Schema | Missing ids or name; no, unknown or duplicate rules families; invalid page range; duplicate or empty effect ids, choice ids or resource ids; unknown targets; `highestInGroup` without a group; levels outside 1–20; a choice with no options, duplicate options or a count above the options; hit die not d6–d12, or more than one; v3 features (levels, `hitDie`, `armorClass` / `hitPoints`) in a revision that declares v2; v5 features (spellcasting, spells, weapons, `onlyAs`, restriction `multiclass` or `group`, weapon proficiencies, roll `activation`) below v5 (`validate.requires-v5`); spellcasting tables that are not 20 rows (`validate.spellcasting`); weapon dice that do not parse | An effect type this build does not automate; a hit die on non-class content; a class without a hit die; a recovery for a resource this revision does not define |
 | References | Source not installed; granted content or a choice option missing, or supporting none of this revision's families; content naming itself | A referenced revision that is still a draft |
 | Formulas | Modifier values, resource maximums, recovery amounts (unless `all`) that do not parse; roll dice that do not parse | |
 | Cycles | Modifiers that would create a dependency cycle with the base field graph (`effect.dependency-cycle`) | |

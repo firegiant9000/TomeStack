@@ -15,7 +15,7 @@ import type {
   TraceOrigin,
 } from '../api/types';
 import { downloadBase64 } from '../files';
-import { ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
@@ -378,7 +378,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
         <RollResult record={lastRoll} resources={sheet.resources ?? []} act={act} />
       </section>
-      <FeaturesPanel view={view} roll={roll} pdfSources={pdfSources} openPage={openPage} />
+      <ActionsPanel view={view} roll={roll} />
+      <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} />
 
       {groups.map((group) => {
         const caster = (sheet.spellcasting ?? []).length > 0;

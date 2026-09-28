@@ -33,7 +33,7 @@ Validation: `armorClass` 0–30 (`validate.armor-class`), a Dex cap only on medi
 
 Brenna (Dex +1, Con +2): unarmored 13 (Unarmored Defense), light 11 → 12, medium 14 → 15, heavy 17, shield +2.
 
-Not modeled yet: armor proficiency, heavy armor's Strength requirement and speed penalty, Stealth disadvantage (text only), a feature that needs "no shield" (for example the Monk's Unarmored Defense, not in the SRD slice), and weapons or attacks.
+Not modeled yet: armor proficiency, heavy armor's Strength requirement and speed penalty, Stealth disadvantage (text only), and a feature that needs "no shield" (for example the Monk's Unarmored Defense, not in the SRD slice). Weapons and attacks: [multiclass-and-attacks.md](multiclass-and-attacks.md) (content v5).
 
 ## "No ability score above 20" (owner decision 2026-09-27)
 

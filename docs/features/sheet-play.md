@@ -64,7 +64,8 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 
 ## Rolls on the sheet (SPEC C-04)
 
-- Every ability modifier, saving throw, skill and initiative field has a "Roll" button (a d20 test through the `roll` command). The "d20 rolls" radio group chooses normal, advantage or disadvantage. Features with a `roll` effect have a button, and "Critical hit" doubles their dice.
+- Every ability modifier, saving throw, skill and initiative field has a "Roll" button (a d20 test through the `roll` command). The "d20 rolls" radio group chooses normal, advantage or disadvantage.
+- **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice.
 - The **Last roll** region (`aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page).
 - **Rolling never spends anything.** If the roll names a resource (`linkedResourceId`), the record offers a separate "Spend 1 …" button, which is a confirmed `character.play`.
 - **Death saving throws** (the panel appears at 0 hit points, or while saves are recorded): "Roll death saving throw" rolls a d20 (`roll` with `deathSave: true`), and "Record death saving throw (N)" records it. "d20 rolled at the table" + "Record this roll" records a physical roll. The heading reads "Death saving throws: 1 of 3 successes, 2 of 3 failures".
@@ -72,4 +73,4 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 
 ## Not in this slice
 
-Attacks and weapon damage (no weapons yet; item 4 adds armor only), conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").
+Conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

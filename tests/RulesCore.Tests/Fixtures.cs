@@ -49,6 +49,26 @@ internal static class Fixtures
 
     public static ContentPack SpellPack() => Load<ContentPack>("fixture-pack-m2-spells.json");
 
+    // M2 combat fixtures (fixture-pack-m2-combat.json): invented weapons and "Fixture Duelist".
+    public static readonly ContentReference Longblade = CombatRef(1);
+    public static readonly ContentReference Needle = CombatRef(2);
+    public static readonly ContentReference Slingbow = CombatRef(3);
+    public static readonly ContentReference Duelist = CombatRef(11);
+    public static readonly ContentReference DuelistAcrobatics = CombatRef(21);
+    public static readonly ContentReference DuelistAthletics = CombatRef(22);
+
+    public static ContentPack CombatPack() => Load<ContentPack>("fixture-pack-m2-combat.json");
+
+    /// <summary>Every fixture pack: M0, M1, spellcasting and combat.</summary>
+    public static InMemoryContentCatalog AllCatalog()
+    {
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack()];
+        return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
+    }
+
+    private static ContentReference CombatRef(int n) =>
+        new(Guid.Parse($"5f6dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f6de000-0000-4000-8000-{n:D12}"));
+
     /// <summary>The M0, M1 and spellcasting fixture packs together.</summary>
     public static InMemoryContentCatalog SpellCatalog()
     {

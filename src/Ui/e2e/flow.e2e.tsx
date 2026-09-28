@@ -567,6 +567,44 @@ it('reaches the primary actions by keyboard alone', async () => {
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
 });
 
+it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions are grouped', async () => {
+  // SPEC C-02, C-04 with the original fixtures "Fixture Duelist" (simple and martial weapons) and "Fixture Needle" (finesse).
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Blade');
+  const scores = screen.getByRole('group', { name: 'Base ability scores' });
+  for (const [label, value] of [['Strength', 14], ['Dexterity', 16]] as const) {
+    const input = within(scores).getByRole('spinbutton', { name: label });
+    await user.clear(input);
+    await user.type(input, String(value));
+  }
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Duelist/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  await screen.findByRole('article', { name: 'E2E Blade' });
+
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^Fixture Needle/ })).toBeTruthy());
+  await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^Fixture Needle/ }));
+  await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+  await user.click(await within(equipment()).findByRole('checkbox', { name: 'Equip Fixture Needle' }));
+
+  // Dex +3 (finesse beats Str +2) + PB 2 = +5; damage 1d4 + 3.
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  await waitFor(() => expect(within(actions()).getByText(/\+5 to hit, 1d4\+3 piercing/)).toBeTruthy());
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Fixture Needle attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Fixture Needle attack: \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Fixture Needle to hit \+5/);
+  const reactions = within(actions()).getByRole('region', { name: 'Reactions' });
+  expect(within(reactions).getByRole('button', { name: 'Roll Riposte damage (1d6)' })).toBeTruthy();
+});
+
 it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell attack and a long rest restores the slot', async () => {
   // D04 (M2 spellcasting) with the original fixture caster "Fixture Arcanist" (invented tables: 2 level 1 slots at level 1).
   const user = userEvent.setup();

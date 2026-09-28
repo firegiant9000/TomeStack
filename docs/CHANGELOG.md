@@ -25,9 +25,21 @@
   - **A second caster** is calculated separately. Combined multiclass slots are an assisted field; record the total as an override.
   - **Fixtures:** development builds get original fixture casters and spells. The SRD casters are not bundled yet.
 
+- **Multiclass prerequisites, proficiency subsets, weapons and attacks (M2 item 2; D04; SPEC C-02, C-04; `docs/features/multiclass-and-attacks.md`):**
+  - **Multiclass prerequisites:** a class can declare them ("Strength 13 or Dexterity 13"). With two or more classes, an unmet one warns on the class.
+  - **Proficiency subsets:** grants and choices can apply only to the starting class (saving throws, the full skill choice) or only to a later class (the multiclass subset).
+  - **Weapons:** items can be weapons. Each equipped weapon gives an attack with to-hit and damage (finesse uses the better of Strength and Dexterity, versatile has two-handed damage), traced and rollable with advantage, disadvantage and critical hits.
+  - **Proficiency not recorded:** when no content records weapon proficiencies, the attack says so and leaves the bonus to the player.
+  - **"Attacks and actions" panel:** feature rolls are grouped by action, bonus action, reaction and other.
+  - **Fixtures:** original fixtures only; the SRD weapon table comes with the SRD content.
+
+### Changed
+
+- Feature roll buttons moved from the features list to the new "Attacks and actions" panel, with the "Critical hit" toggle.
+
 ### Migration
 
-- **Content schema v5** (`docs/schemas/content-revision.v5.schema.json`) adds the `spellcasting` and `spell` effects and the spell fields. They are typed only in v5 revisions; in older ones they stay unknown and unchanged. No revision is upcast, and no database migration is needed. New revisions are written as v5, and 0.2.1 refuses them.
+- **Content schema v5** (`docs/schemas/content-revision.v5.schema.json`) adds the `spellcasting`, `spell` and `weapon` effects, the spell fields, weapon proficiency grants, `onlyAs`, restriction `multiclass` and `group`, and roll `activation`. The new fields on existing effect types are optional and absent by default, so existing revisions are unchanged. They are typed only in v5 revisions; in older ones they stay unknown and unchanged. No revision is upcast, and no database migration is needed. New revisions are written as v5, and 0.2.1 refuses them.
 - **Character schema v6** (`docs/schemas/character.v6.schema.json`) adds `spells` and spent spell and Pact Magic slots. v1–v5 characters are upcast with none. There is no database migration.
 - **Character schema v5** (`docs/schemas/character.v5.schema.json`) adds `play.hitDiceSpent`, `play.deathSaves` and `play.inspiration`. v1–v4 characters are upcast on read with nothing spent, no saves and no inspiration. There is no database migration, because characters are unhashed JSON. 0.2.1 refuses v5 characters and packages that contain them (`character.schema-unsupported`, `package.schema-unsupported`).
 

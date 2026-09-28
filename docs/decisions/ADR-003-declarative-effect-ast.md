@@ -25,6 +25,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `recovery` | `resourceId`, `on` (`shortRest` / `longRest`), `amount` (formula or `all`) | long rest preview and confirmed rest (M2 item 3, `features/rests.md`); short rest after M2 |
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 | `spellcasting` (content v5 only) | `ability`, `preparation`, `spellList`, `slotKind`, `slots` (20 rows), optional `cantrips`, `spellsTable` or `spellsFormula` | spell fields and `sheet.spellcasting` (`features/spellcasting.md`) |
+| `weapon` (content v5 only) | `category`, `attack`, `damage`, `damageType`, `properties`, `versatile`, `range`, `weaponKey`, `mastery` | attacks of equipped items (`features/multiclass-and-attacks.md`) |
 | `spell` (content v5 only) | `level`, `lists`, `school`, `castingTime`, `range`, `components`, `duration`, `concentration`, `ritual`, `attack`, `save`, `dice` | spells of a caster; never active content |
 
 **Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON and writes it back with the same properties, order and values (whitespace and string escaping are normalized), and is always reference-only (`effect.unsupported`). A *known* type with a malformed body, including wrong value kinds such as a numeric `id`, degrades the same way instead of failing the whole revision. Only an effect that is not a JSON object fails its revision.
@@ -87,6 +88,14 @@ NUMBER  := [0-9]+
 - **Adds** the `spellcasting` effect (a class's ability, preparation, spell list key, slot kind and 20-row tables, `features/spellcasting.md`) and the `spell` effect (a spell's level, lists, attack or save, and dice). It also adds the calculated fields `spellAttack`, `spellSaveDc`, `spellSlots.1`–`spellSlots.9` and `pactSlots`, which modifiers, restrictions and overrides can target.
 - **Typed only in v5 revisions**, like `armor` in v4 (the table below is `VersionedEffects` in `Effects.cs`). In a v2 to v4 revision these type names stay unknown, reference-only and byte for byte. No revision is upcast, so no hash changes and no database migration is needed. New revisions are written as v5. Validation refuses the types below v5 (`validate.requires-v5`). Evidence: `SpellcastingTests.A_spellcasting_effect_in_a_revision_older_than_v5_stays_unknown_and_byte_for_byte`.
 - **Why tables in content, not a caster "type":** the SRD progressions differ by family and class (for example, 2024 half casters have slots at level 1). A table per class revision states them exactly. Formula tables would exceed the bounded grammar, and hard-coded progressions would encode differences by name.
+- **Also in v5 (M2 item 2, `features/multiclass-and-attacks.md`):**
+  - The `weapon` effect (typed only in v5).
+  - Weapon proficiency grants (`weapon.simple`, `weapon.martial`, `weapon.<key>`).
+  - `onlyAs` on `grant` and `choice` (starting class or later class).
+  - `multiclass` and `group` on `restriction`.
+  - `activation` on `roll`.
+
+  v5 is still unreleased (0.3.0), so it grows during the M2 exit instead of taking a v6. Each new field on an existing type is **nullable and absent by default**. The serializer writes every non-null value (`WhenWritingNull`), so a non-nullable default such as `false` would have re-serialized every stored revision, changed its hash and broken re-seeding. No existing content uses these property names (checked against the SRD packs and fixtures). Validation refuses them below v5 (`validate.requires-v5`).
 - **The spell fields read the primary caster's ability, which is data.** Statically they read every ability modifier, so the evaluation order is right. The automation closure and the trace use only the proficiency bonus and the actual ability (`Closure`'s `actualReads`). A non-caster's spell fields therefore never turn assisted because some unrelated modifier is.
 
 ## Consequences

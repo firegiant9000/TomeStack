@@ -1,5 +1,7 @@
 import { useState, type SubmitEvent } from 'react';
 import type {
+  Activation,
+  AttackEntry,
   AutomationStatus,
   CharacterView,
   FeatureEntry,
@@ -261,35 +263,128 @@ export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act })
   );
 }
 
+const activationGroups: { key: Activation; title: string }[] = [
+  { key: 'action', title: 'Actions' },
+  { key: 'bonusAction', title: 'Bonus actions' },
+  { key: 'reaction', title: 'Reactions' },
+  { key: 'other', title: 'Other' },
+];
+
+const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
+
+/**
+ * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
+ * a roll that names a resource offers "Spend" in its record.
+ */
+export function ActionsPanel({ view, roll }: { view: CharacterView; roll: (target: RollTarget) => void }) {
+  const [critical, setCritical] = useState(false);
+  const attacks = view.sheet.attacks ?? [];
+  const rolls = (view.sheet.features ?? []).flatMap((feature) =>
+    feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
+  );
+  if (attacks.length === 0 && rolls.length === 0) return null;
+  return (
+    <section aria-labelledby="actions-heading" className="play-panel">
+      <h3 id="actions-heading">Attacks and actions</h3>
+      <label className="choice">
+        <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
+        Critical hit (double the damage dice)
+      </label>
+      {activationGroups.map(({ key, title }) => {
+        const groupAttacks = key === 'action' ? attacks : [];
+        const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
+        if (groupAttacks.length === 0 && groupRolls.length === 0) return null;
+        return (
+          <section key={key} aria-labelledby={`actions-${key}`}>
+            <h4 id={`actions-${key}`}>{title}</h4>
+            <ul className="features">
+              {groupAttacks.map((attack) => (
+                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} roll={roll} />
+              ))}
+              {groupRolls.map(({ feature, effect }) => (
+                <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
+                  <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
+                    Roll {effect.label ?? effect.id} ({effect.dice})
+                  </button>{' '}
+                  <span className="hint">
+                    {feature.name}
+                    {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </section>
+  );
+}
+
+function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical: boolean; roll: (target: RollTarget) => void }) {
+  return (
+    <li className="feature">
+      <details>
+        <summary>
+          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage} {attack.damageType}
+          {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
+          {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
+        </summary>
+        <p className="hint">
+          {attack.category} {attack.attack} weapon
+          {attack.range ? ` · range ${attack.range}` : ''}
+          {attack.properties.length > 0 ? ` · ${attack.properties.join(', ')}` : ''}
+          {attack.mastery ? ` · mastery: ${attack.mastery}` : ''}
+        </p>
+        <ul aria-label={`How the ${attack.name} attack is calculated`}>
+          {attack.trace.map((step) => (
+            <li key={step.order}>
+              {step.description}: {signed(step.amount ?? 0)} = {signed(step.result)}
+            </li>
+          ))}
+        </ul>
+        {attack.warnings.length > 0 && (
+          <ul className="warnings" aria-label={`${attack.name} warnings`}>
+            {attack.warnings.map((w) => (
+              <li key={`${w.code}-${w.effectId ?? ''}`}>{w.message}</li>
+            ))}
+          </ul>
+        )}
+      </details>
+      <button type="button" onClick={() => roll({ weapon: attack.item })}>
+        Roll {attack.name} attack
+      </button>
+      <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, critical })}>
+        Roll {attack.name} damage ({attack.damage})
+      </button>
+      {attack.versatileDamage && (
+        <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, versatile: true, critical })}>
+          Roll {attack.name} two-handed damage ({attack.versatileDamage})
+        </button>
+      )}
+    </li>
+  );
+}
+
 export function FeaturesPanel({
   view,
-  roll,
   pdfSources,
   openPage,
 }: {
   view: CharacterView;
-  roll: (target: RollTarget) => void;
   /** Sources with an available PDF (ADR-005); their cited pages can be opened. */
   pdfSources: ReadonlySet<string>;
   openPage: (sourceId: string, page: number) => void;
 }) {
   const features = view.sheet.features ?? [];
-  const [critical, setCritical] = useState(false);
   if (features.length === 0) return null;
   return (
     <section aria-labelledby="features-heading" className="play-panel">
       <h3 id="features-heading">Features</h3>
-      <label className="choice">
-        <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
-        Critical hit (double the damage dice)
-      </label>
       <ul className="features">
         {features.map((feature) => (
           <FeatureItem
             key={feature.content.revisionId}
             feature={feature}
-            critical={critical}
-            roll={roll}
             openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
           />
         ))}
@@ -298,18 +393,7 @@ export function FeaturesPanel({
   );
 }
 
-function FeatureItem({
-  feature,
-  critical,
-  roll,
-  openPage,
-}: {
-  feature: FeatureEntry;
-  critical: boolean;
-  roll: (target: RollTarget) => void;
-  openPage?: (sourceId: string, page: number) => void;
-}) {
-  const rolls = feature.effects.filter((e) => e.type === 'roll');
+function FeatureItem({ feature, openPage }: { feature: FeatureEntry; openPage?: (sourceId: string, page: number) => void }) {
   const texts = feature.effects.filter((e) => e.text);
   return (
     <li className="feature">
@@ -341,11 +425,6 @@ function FeatureItem({
           </ul>
         )}
       </details>
-      {rolls.map((effect) => (
-        <button key={effect.id} type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-          Roll {effect.label ?? effect.id} ({effect.dice})
-        </button>
-      ))}
       {openPage && feature.origin.sourceId && feature.origin.page && (
         <button type="button" onClick={() => openPage(feature.origin.sourceId!, feature.origin.page!.start)}>
           Open {feature.name}, {pageText(feature.origin.page)}
