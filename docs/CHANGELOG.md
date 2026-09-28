@@ -46,6 +46,9 @@
 
 ### Changed
 
+- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build or together with `--smoke`. A normal launch of the installed app ignores both, so a variable or a shortcut can no longer seed test content into your library or open the browser developer tools.
+- **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
+
 - **Honest status (M2.1; README, MVP, ROADMAP, acceptance docs):** claims now say how far they are proven: implemented, fixture-verified, Windows-install verified, or accepted in real play. The README states the current class, species and background coverage. M2 is "checks passed, limited content", because the MVP goal of any SRD character 1–20 is not met yet. The ROADMAP adds M2.1 (data safety, done) and M2.2 (Fighter baseline and SRD armor), and puts M2.2 before the M3 Stardust Guardian run that depends on it. PDF candidate import is labeled **Experimental** in the app until a real third-party book and the SRD measurements pass.
 
 ### Fixed

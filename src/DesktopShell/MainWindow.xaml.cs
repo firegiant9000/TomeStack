@@ -342,6 +342,9 @@ public partial class MainWindow : Window
             blockedRequests = _blockedRequests,
             webView2Runtime = TryGetRuntimeVersion(),
             simulatedMissingRuntime = _options.SimulateMissingRuntime,
+            // Development switches, honoured only in a Debug build or with --smoke (LIVING_SPECS D11).
+            devTools = _options.DevTools,
+            devFixtures = _options.DevFixtures,
             // Evidence only (no paths): which WebView2 loader overrides this process could see.
             webView2LoaderOverrides = new
             {

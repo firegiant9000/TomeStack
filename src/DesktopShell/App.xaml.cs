@@ -33,8 +33,9 @@ public partial class App : Application
 
         try
         {
-            // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1).
-            _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES") == "1");
+            // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1,
+            // honoured only in a Debug build or with --smoke; LIVING_SPECS D11).
+            _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: options.DevFixtures);
         }
         catch (DataFolderInUseException ex)
         {
@@ -70,21 +71,43 @@ public partial class App : Application
     }
 }
 
+/// <param name="DevTools">
+/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build or with
+/// <c>--smoke</c> (audit 2026-09-28), so a shortcut or script cannot open them in the shipped app.
+/// </param>
 /// <param name="SimulateMissingRuntime">
 /// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
 /// <c>--smoke</c>, so a normal launch cannot be switched into it.
 /// </param>
-public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false)
+/// <param name="DevFixtures">
+/// <c>TOMESTACK_DEV_FIXTURES=1</c>: seed the original test fixtures into the data folder. Honoured only in a Debug build
+/// or with <c>--smoke</c> (LIVING_SPECS D11), so an environment variable cannot seed test content into a user's library.
+/// </param>
+public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false)
 {
-    public static ShellOptions Parse(string[] args)
+#if DEBUG
+    private const bool DebugBuild = true;
+#else
+    private const bool DebugBuild = false;
+#endif
+
+    public static ShellOptions Parse(string[] args) =>
+        Parse(args, Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES"), DebugBuild);
+
+    /// <param name="devFixturesVariable">The value of <c>TOMESTACK_DEV_FIXTURES</c>.</param>
+    /// <param name="debugBuild">Whether this is a Debug build, where the development switches are always honoured.</param>
+    public static ShellOptions Parse(string[] args, string? devFixturesVariable, bool debugBuild)
     {
+        ArgumentNullException.ThrowIfNull(args);
         string? Value(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         var smoke = args.Contains("--smoke");
+        var development = debugBuild || smoke;
         return new ShellOptions(
             Smoke: smoke,
-            DevTools: args.Contains("--devtools"),
+            DevTools: development && args.Contains("--devtools"),
             DataDirectory: Value("--data-dir"),
             SmokeReport: Value("--smoke-report"),
-            SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"));
+            SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"),
+            DevFixtures: development && devFixturesVariable == "1");
     }
 }
