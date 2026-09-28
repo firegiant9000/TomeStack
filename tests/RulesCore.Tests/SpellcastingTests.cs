@@ -118,6 +118,64 @@ public class SpellcastingTests
     }
 
     [Fact]
+    public void A_spell_attack_or_save_dc_modifier_applies_to_every_caster_with_a_trace()
+    {
+        // M2.1 (audit M3): the second caster used to get bare PB + mod, so an item's bonus never reached it. An original
+        // focus: +1 spell attack, and +half the proficiency bonus to save DCs (a formula, to check its inputs are traced).
+        var spells = Fixtures.SpellPack();
+        var focus = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = "Test Resonant Focus", RulesFamilies = [RulesFamilies.Srd51, RulesFamilies.Srd521],
+            Provenance = new(spells.Sources[0].Id, new(9)), Status = RevisionStatus.Published,
+            Effects =
+            [
+                new ModifierEffect { Id = "focus-attack", Operation = ModifierOperation.Bonus, Target = FieldIds.SpellAttack, Value = "1" },
+                new ModifierEffect { Id = "focus-dc", Operation = ModifierOperation.Bonus, Target = FieldIds.SpellSaveDc, Value = "floor(PB / 2)" },
+            ],
+        };
+        var catalog = Fixtures.SpellCatalog();
+        var withFocus = new InMemoryContentCatalog(
+            [.. Fixtures.Pack().Sources, .. Fixtures.M1Pack().Sources, .. spells.Sources],
+            [.. Fixtures.Pack().Revisions, .. Fixtures.M1Pack().Revisions, .. spells.Revisions, focus]);
+
+        foreach (var family in new[] { RulesFamilies.Srd51, RulesFamilies.Srd521 })
+        {
+            var character = Caster(family, null, null, new ClassLevel(Fixtures.Arcanist, 3), new ClassLevel(Fixtures.Chanter, 2)) with { Pins = [focus.Reference] };
+            var without = CharacterCalculator.Calculate(character with { Pins = [] }, catalog);
+            var sheet = CharacterCalculator.Calculate(character, withFocus);
+
+            // PB 3 (total level 5); Arcanist Int +3, Chanter Cha +2. The focus adds 1 to attacks and floor(3 / 2) = 1 to DCs.
+            Assert.Equal([(6, 14), (5, 13)], without.Spellcasting!.Select(c => (c.AttackBonus, c.SaveDc)));
+            Assert.Equal([(7, 15), (6, 14)], sheet.Spellcasting!.Select(c => (c.AttackBonus, c.SaveDc)));
+            Assert.Equal((7, 15), (sheet.Field(FieldIds.SpellAttack).Value, sheet.Field(FieldIds.SpellSaveDc).Value)); // the primary's
+
+            var chanter = sheet.Spellcasting![1];
+            Assert.False(chanter.Primary);
+            var attackSteps = chanter.AttackTrace!.Where(t => t.Field == FieldIds.SpellAttack).ToList();
+            Assert.Equal([("base", 5), ("add", 6)], attackSteps.Select(t => (t.Operation, t.Result)));
+            Assert.Equal(Fixtures.Chanter, attackSteps[0].Origin.Content);
+            Assert.Contains(attackSteps[0].Inputs!, i => i.Name == FieldIds.Modifier(Ability.Cha) && i.Value == 2);
+            Assert.Equal((focus.Reference, "focus-attack"), (attackSteps[1].Origin.Content!, attackSteps[1].Origin.EffectId!));
+            // Like a sheet field, the trace starts with its inputs: the proficiency bonus and the Charisma modifier.
+            Assert.Contains(chanter.AttackTrace!, t => t.Field == FieldIds.ProficiencyBonus);
+            Assert.Contains(chanter.AttackTrace!, t => t.Field == FieldIds.Modifier(Ability.Cha));
+            Assert.DoesNotContain(chanter.AttackTrace!, t => t.Field == FieldIds.Modifier(Ability.Int));
+            var dcAdd = chanter.SaveDcTrace!.Single(t => t.Field == FieldIds.SpellSaveDc && t.Operation == "add");
+            Assert.Equal((1, 14), (dcAdd.Amount, dcAdd.Result));
+            Assert.Contains(dcAdd.Inputs!, i => i.Name == FormulaIdentifiers.ProficiencyBonus && i.Value == 3);
+            Assert.Equal([1, 2], chanter.AttackTrace!.Select(t => t.Order).Take(2)); // numbered like a field's trace
+
+            // The primary's traces are the sheet fields'.
+            Assert.Equal(sheet.Field(FieldIds.SpellAttack).Trace, sheet.Spellcasting![0].AttackTrace);
+            Assert.Equal(sheet.Field(FieldIds.SpellSaveDc).Trace, sheet.Spellcasting![0].SaveDcTrace);
+
+            // A user override of the sheet field is the primary's only; the second caster keeps its calculated numbers.
+            var overridden = CharacterCalculator.Calculate(character with { Overrides = [new(FieldIds.SpellAttack, 9, "Test")] }, withFocus);
+            Assert.Equal([9, 6], overridden.Spellcasting!.Select(c => c.AttackBonus));
+        }
+    }
+
+    [Fact]
     public void Pact_magic_slots_are_their_own_pool_of_one_level()
     {
         var sheet = Sheet(Caster(RulesFamilies.Srd51, [new(Fixtures.Oathbinder.ContentId, Fixtures.Spark)], null, new ClassLevel(Fixtures.Oathbinder, 3), new ClassLevel(Fixtures.Arcanist, 1)));

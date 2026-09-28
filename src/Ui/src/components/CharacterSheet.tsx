@@ -12,7 +12,6 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
-  TraceOrigin,
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
@@ -21,22 +20,8 @@ import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
+import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
-
-function describeOrigin(origin: TraceOrigin): string {
-  switch (origin.kind) {
-    case 'characterChoice':
-      return 'Your choice';
-    case 'rulesPolicy':
-      return `Rules: ${origin.rulesFamily}`;
-    case 'override':
-      return 'Your override';
-    case 'content': {
-      const page = origin.page ? (origin.page.end && origin.page.end !== origin.page.start ? `, pp. ${origin.page.start}-${origin.page.end}` : `, p. ${origin.page.start}`) : '';
-      return `${origin.sourceTitle ?? 'Unknown source'}${page}`;
-    }
-  }
-}
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
@@ -53,36 +38,6 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
 ];
 
 const isSpellField = (f: string) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.');
-
-function TraceTable({ value, labels }: { value: DerivedValue; labels: Map<string, string> }) {
-  return (
-    <table className="trace">
-      <caption>How {value.label.toLowerCase()} is calculated</caption>
-      <thead>
-        <tr>
-          <th scope="col">#</th>
-          <th scope="col">Field</th>
-          <th scope="col">Step</th>
-          <th scope="col">Amount</th>
-          <th scope="col">Result</th>
-          <th scope="col">Source</th>
-        </tr>
-      </thead>
-      <tbody>
-        {value.trace.map((entry) => (
-          <tr key={entry.order} className={`op-${entry.operation}`}>
-            <td>{entry.order}</td>
-            <td>{entry.field ? (labels.get(entry.field) ?? entry.field) : ''}</td>
-            <td>{entry.description}</td>
-            <td>{entry.amount === undefined ? '' : entry.operation === 'add' ? signed(entry.amount) : entry.amount}</td>
-            <td>{entry.result}</td>
-            <td>{describeOrigin(entry.origin)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
 
 /** Fields the `roll` command accepts as a d20 test: ability modifiers, saves, skills and initiative. */
 const isD20 = (field: string) =>
@@ -126,7 +81,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
             Roll {value.label}
           </button>
         )}
-        <TraceTable value={value} labels={labels} />
+        <TraceTable label={value.label} trace={value.trace} labels={labels} />
         {value.warnings.length > 0 && (
           <ul className="warnings" aria-label={`${value.label} warnings`}>
             {value.warnings.map((w) => (

@@ -1,5 +1,6 @@
 import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
 import { pageText } from './PlayPanels';
+import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
   str: 'Strength',
@@ -33,6 +34,7 @@ export function SpellsPanel({
   if (casters.length === 0) return null;
   const slots = view.sheet.spellSlots ?? [];
   const pact = view.sheet.pactSlots;
+  const labels = new Map(view.sheet.fields.map((f) => [f.field, f.label]));
 
   const canCast = (entry: SpellcastingEntry, spell: SpellEntry) =>
     entry.slotKind === 'pactMagic' ? (pact?.remaining ?? 0) > 0 : slots.some((s) => s.level >= spell.level && s.remaining > 0);
@@ -77,6 +79,14 @@ export function SpellsPanel({
             {entry.origin.page ? `, ${pageText(entry.origin.page)}` : ''}
             {!entry.primary && ' · its slots are not combined with the first caster’s (record the total as an override)'}
           </p>
+          {/* M2.1: the primary caster's numbers are the sheet's Spellcasting fields; every other caster explains its own here. */}
+          {!entry.primary && entry.attackTrace && entry.saveDcTrace && (
+            <details>
+              <summary>How {entry.name}’s spell attack and save DC are calculated</summary>
+              <TraceTable label={`${entry.name} spell attack bonus`} trace={entry.attackTrace} labels={labels} />
+              <TraceTable label={`${entry.name} spell save DC`} trace={entry.saveDcTrace} labels={labels} />
+            </details>
+          )}
           {entry.warnings.length > 0 && (
             <ul className="warnings" aria-label={`${entry.name} spell warnings`}>
               {entry.warnings.map((w, i) => (

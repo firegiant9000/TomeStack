@@ -538,6 +538,9 @@ export interface SpellcastingEntry {
   origin: TraceOrigin;
   spells: SpellEntry[];
   warnings: Diagnostic[];
+  /** How the attack bonus and save DC are calculated; the primary's are the sheet fields' traces (M2.1). */
+  attackTrace?: TraceEntry[];
+  saveDcTrace?: TraceEntry[];
 }
 
 export interface CreateCharacterRequest {
