@@ -59,11 +59,50 @@ public class SnapshotTests
         var before = TempApp.Json(new { characters = app.Store.ListCharacters(), snapshots = app.Store.ListSnapshots(hero.Id) });
         Assert.Equal("snapshot.token-unknown", Assert.Throws<AppValidationException>(() => app.RestoreSnapshot(new(preview.Token, Confirm: true))).Problems.Single().Code);
         Assert.Equal(before, TempApp.Json(new { characters = app.Store.ListCharacters(), snapshots = app.Store.ListSnapshots(hero.Id) }));
-        Assert.Equal([restored.Undo.Id, taken.Id], app.Snapshots(hero.Id).Select(s => s.Id)); // newest first
+        Assert.Equal([restored.Undo.Id, taken.Id], app.Snapshots(hero.Id).Items.Select(s => s.Id)); // newest first
 
         // The undo snapshot can itself be restored.
         var back = app.RestoreSnapshot(new(app.PreviewRestore(new(hero.Id, restored.Undo.Id)).Token, Confirm: true));
         Assert.Equal([new ClassLevel(cls, 5)], back.View.Character.Classes);
+    }
+
+    [Fact]
+    public void Older_snapshots_past_one_page_stay_reachable_by_paging()
+    {
+        var (temp, hero, cls) = Setup();
+        using var _ = temp;
+        var app = temp.App;
+        var other = app.CreateCharacter(new("Test Snapshot Other", RulesFamilies.Srd521, new(10, 10, 10, 10, 10, 10), null, [new(cls, 1)])).Character;
+        var otherSnapshot = app.Snapshot(new(other.Id, "Test other"));
+        var oldest = app.Snapshot(new(hero.Id, "Test first"));
+        var total = SqliteStore.MaxListedSnapshots * 2 + 5;
+        var ids = new List<Guid> { oldest.Id };
+        for (var i = 1; i < total; i++)
+            ids.Add(app.Snapshot(new(hero.Id, $"Test {i}")).Id);
+        ids.Reverse(); // newest first
+
+        var first = app.Snapshots(hero.Id);
+        Assert.Equal(SqliteStore.MaxListedSnapshots, first.Items.Count);
+        Assert.True(first.HasMore);
+
+        var seen = new List<Guid>(first.Items.Select(s => s.Id));
+        var page = first;
+        var pages = 1;
+        while (page.HasMore)
+        {
+            page = app.Snapshots(hero.Id, seen[^1]);
+            seen.AddRange(page.Items.Select(s => s.Id));
+            pages++;
+        }
+        Assert.Equal(3, pages);
+        Assert.Equal(ids, seen); // every one, once, newest first, including the very first
+        Assert.Contains(oldest.Id, seen);
+        Assert.False(app.Snapshots(hero.Id, seen[^1]).HasMore);
+        Assert.Empty(app.Snapshots(hero.Id, seen[^1]).Items);
+
+        // A cursor must be a snapshot of this character.
+        Assert.Equal("snapshot.not-found", Assert.Throws<AppValidationException>(() => app.Snapshots(hero.Id, otherSnapshot.Id)).Problems.Single().Code);
+        Assert.Equal("snapshot.not-found", Assert.Throws<AppValidationException>(() => app.Snapshots(hero.Id, Guid.NewGuid())).Problems.Single().Code);
     }
 
     [Fact]
@@ -79,7 +118,7 @@ public class SnapshotTests
         app.SaveCharacter(app.GetCharacter(hero.Id).Character with { Classes = [new(cls, 3)] });
         Assert.Equal("snapshot.character-changed", Assert.Throws<AppValidationException>(() => app.RestoreSnapshot(new(preview.Token, Confirm: true))).Problems.Single().Code);
         Assert.Equal([new ClassLevel(cls, 3)], app.GetCharacter(hero.Id).Character.Classes);
-        Assert.Single(app.Snapshots(hero.Id)); // no undo snapshot: nothing was restored
+        Assert.Single(app.Snapshots(hero.Id).Items); // no undo snapshot: nothing was restored
 
         var other = app.CreateCharacter(new("Test Other", RulesFamilies.Srd521, new(10, 10, 10, 10, 10, 10), null)).Character;
         Assert.Equal("snapshot.not-found", Assert.Throws<AppValidationException>(() => app.PreviewRestore(new(other.Id, taken.Id))).Problems.Single().Code);
@@ -188,7 +227,7 @@ public class SnapshotTests
                 Assert.Contains("insert-only", Assert.Throws<SqliteException>(() => command.ExecuteNonQuery()).Message, StringComparison.Ordinal);
             }
         }
-        Assert.Single(app.Snapshots(hero.Id));
+        Assert.Single(app.Snapshots(hero.Id).Items);
 
         static string Text(byte[] zip)
         {

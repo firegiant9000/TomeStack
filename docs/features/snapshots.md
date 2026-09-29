@@ -7,7 +7,7 @@ A snapshot is a fixed copy of a saved character to come back to: its choices, pi
 - **The sheet's "Snapshots" section:** an optional name, **Take snapshot**, and the list, newest first. Each has **Restore …**.
 - **Commands:**
   - `character.snapshot { characterId, label? }` (label at most 200 characters);
-  - `character.snapshots { characterId }`;
+  - `character.snapshots { characterId, before? }`;
   - `character.restorePreview { characterId, snapshotId }`;
   - `character.restoreSnapshot { token, confirm }`.
 
@@ -24,7 +24,7 @@ Other refusals: `snapshot.confirm-required`, `snapshot.not-found` (also for anot
 - **The archive mark (SPEC C-08):** a snapshot never carries it. A restore keeps the character's current mark, so it never archives or unarchives.
 - **Campaign membership:** a restore keeps the character's current campaign and that campaign's recorded exceptions. So it never moves a character between campaigns, or back into a campaign deleted since (the `campaign.in-use` rule). The preview lists any campaign warning the restored content would bring. It also says when the name or the cross-family exceptions go back to the snapshot's.
 - **One pending restore per character:** a newer preview replaces an older, unused token. A failed restore also uses its token, so the studio closes the preview and asks for a new one. Focus then moves to the "Snapshots" heading, as it does after a restore.
-- **The list** shows the newest 100 snapshots (`SqliteStore.MaxListedSnapshots`). Older ones stay stored, because snapshots are never removed.
+- **The list** is paged: `character.snapshots { characterId, before? }` returns `{ items, hasMore }`, at most 100 items (`SqliteStore.MaxListedSnapshots`), newest first. `before` is the id of the oldest snapshot already shown (it must be a snapshot of this character, else `snapshot.not-found`), and the page then holds the ones stored before it. The sheet shows **Show older snapshots** while `hasMore` is true. Snapshots are never removed and have no cap, so paging reaches every one. No schema change.
 - **Insert-only:** database migration **v7** adds `character_snapshots`. Triggers refuse any `UPDATE` or `DELETE`, so a snapshot never changes or disappears. The migration is forward-only, and the usual `tomestack.db.v6.bak` is taken first. Older builds refuse a v7 data folder (`NewerDatabaseException`), as for every migration.
 - **Local only:** no character package (backup or share) and no full library backup includes snapshots. There is no package format change. The copy of the database taken before a library restore (package-format rule 10) is a full database copy, so it holds them.
 - **No new character or content schema:** a snapshot stores the character JSON as it is (character schema v7).
@@ -37,6 +37,9 @@ Other refusals: `snapshot.confirm-required`, `snapshot.not-found` (also for anot
   - the archive mark both ways, and campaign membership kept (including a campaign deleted since);
   - `content.missing`;
   - a failing restore that leaves no undo snapshot (the one transaction), and a newer preview replacing an older token;
+  - paging past 100 snapshots reaches every one, once, newest first (and refuses a cursor from another character);
   - insert-only triggers, and no export, share or library backup holding them;
   - the v6 → v7 upgrade, keeping a character written by v6, with the v6 copy holding it too.
 - The e2e flow "takes a snapshot of a character, previews the restore, restores it and keeps an undo snapshot".
+
+**Review fixes (2026-09-29):** the list was cut at the newest 100 with no way to reach older snapshots, and snapshots are never removed. It is now paged (see "The list" above) with a "Show older snapshots" button; no database change.

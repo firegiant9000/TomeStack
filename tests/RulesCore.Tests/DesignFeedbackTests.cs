@@ -45,6 +45,17 @@ public class DesignFeedbackTests
     }
 
     [Fact]
+    public void A_gapped_own_row_is_compared_by_its_highest_spell_level_not_its_count_of_levels()
+    {
+        // Level 3 counts 3 caster levels: the shared row is 4 of level 1 and 2 of level 2 (6 slots, up to level 2).
+        // Its own row [0, 6] has as many slots and also reaches level 2, so it is not above the table (review fix).
+        var gapped = Rows(l => l switch { 1 => [2], 2 => [3], _ => [0, 6] });
+        var hints = DesignFeedback.Analyze(Class(Caster(gapped, MulticlassCaster.Full)), Baseline());
+
+        Assert.DoesNotContain(hints, h => h.Code == "design.multiclass-share-above-table" && h.Level <= 3);
+    }
+
+    [Fact]
     public void A_full_share_over_a_half_casters_table_is_a_hint()
     {
         // Slots from level 2 on, like a half caster, but it says every class level counts in multiclassing.

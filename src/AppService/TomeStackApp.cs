@@ -96,10 +96,10 @@ public sealed partial class TomeStackApp : IDisposable
             {
                 var seeded = app.Seed(pack);
                 bundled.UnionWith(seeded.Revisions.Select(r => r.RevisionId));
-                app._bundledSources.UnionWith(seeded.Sources.Select(s => s.Id)); // the SRD sources this build ships (M5 slice 7)
             }
             // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
             bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
+            app._bundledRevisions = bundled; // the design-feedback baseline (M5 slice 7; review fix: by revision id, not source)
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             app._packages.SetBundledSources(app._bundledSources); // M6 slice 1: never replaced by a package, never in a source pack
             if (devFixtures)
@@ -125,8 +125,11 @@ public sealed partial class TomeStackApp : IDisposable
 
     private DataFolderLock? _folderLock;
 
-    /// <summary>The source ids of the bundled SRD packs: the design-feedback baseline, never an imported source.</summary>
-    private readonly HashSet<Guid> _bundledSources = [];
+    /// <summary>
+    /// The revision ids this build seeded from the bundled SRD packs (a revision kept after a seed conflict is left out): the
+    /// design-feedback baseline. Selected by revision id, so nothing a user or a package adds, even under an SRD source id, joins it.
+    /// </summary>
+    private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
@@ -415,7 +418,7 @@ public sealed record ContentOption(
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null);
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

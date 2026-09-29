@@ -454,6 +454,8 @@ export interface CharacterSummary {
   updatedAt: string;
   /** SPEC C-08: set while the character is archived. */
   archivedAt?: string;
+  /** The contents this character records a cross-family exception for (ids only). */
+  exceptionContentIds?: string[];
 }
 
 /** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */
@@ -999,6 +1001,12 @@ export interface SnapshotSummary {
   level: number;
 }
 
+/** One page of a character's snapshots, newest first. Older ones: ask again with `before` = the last item's id. */
+export interface SnapshotPage {
+  items: SnapshotSummary[];
+  hasMore: boolean;
+}
+
 /** `character.restorePreview`: what restoring would change. The token is good for one restore of this exact state. */
 export interface RestorePreview {
   token: string;
@@ -1052,6 +1060,8 @@ export interface TextChange {
   where: string;
   lines: { kind: 'same' | 'added' | 'removed'; text: string }[];
   whole: boolean;
+  /** Lines a whole text left out to stay under the caps (0: nothing cut). */
+  notShown: number;
 }
 
 /** One character with each revision (M5 slice 4, B04): what changes, or why it could not run. */
@@ -1101,7 +1111,7 @@ export interface SandboxView {
   /** The unsaved copy and its sheet, with the draft counted as published. Never stored. */
   view: CharacterView;
   draft: ContentReference;
-  /** For a copy of a saved character: every displayed value the draft changes. */
+  /** For a copy of a saved character: every calculated sheet field the draft changes (not resource maximums or class columns). */
   changes: FieldDelta[];
   validation: ValidationReport;
 }

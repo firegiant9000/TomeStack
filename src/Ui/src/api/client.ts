@@ -53,6 +53,7 @@ import type {
   RestoreResult,
   RulesFamilyId,
   SandboxRequest,
+  SnapshotPage,
   SnapshotSummary,
   SandboxView,
   SaveOutcome,
@@ -149,7 +150,7 @@ export function createClient(transport: Transport) {
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
     /** M5 slice 8: snapshots, taken by hand; a restore needs the preview's one-use token and a confirmation. */
     takeSnapshot: (characterId: string, label?: string) => call<SnapshotSummary>('character.snapshot', { characterId, label }),
-    snapshots: (characterId: string) => call<SnapshotSummary[]>('character.snapshots', { characterId }),
+    snapshots: (characterId: string, before?: string) => call<SnapshotPage>('character.snapshots', { characterId, before }),
     restorePreview: (characterId: string, snapshotId: string) => call<RestorePreview>('character.restorePreview', { characterId, snapshotId }),
     restoreSnapshot: (token: string) => call<RestoreResult>('character.restoreSnapshot', { token, confirm: true }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),

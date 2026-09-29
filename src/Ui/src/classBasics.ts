@@ -23,16 +23,28 @@ type Choice = Extract<Effect, { type: 'choice' }>;
 /** The group "any one of these is enough" puts the prerequisites in (content v5 restriction.group). */
 export const anyOneGroup = 'multiclass';
 
-export const isSave = (e: Effect): e is Grant => e.type === 'grant' && e.grant === 'proficiency' && (e.target ?? '').startsWith('save.');
+/** A starting-class saving throw proficiency: the only save grants the class editor shows (one at a level, or for any class, stays in the rule list). */
+export const isSave = (e: Effect): e is Grant =>
+  e.type === 'grant' && e.grant === 'proficiency' && (e.target ?? '').startsWith('save.') && e.onlyAs === 'startingClass' && e.level === undefined;
 
-/** A multiclass prerequisite on an ability score: the only restrictions the class editor shows. */
-export const isPrerequisite = (e: Effect): e is Restriction =>
-  e.type === 'restriction' && e.multiclass === true && /^ability\.(str|dex|con|int|wis|cha)\.score$/.test(e.field);
+const abilityField = /^ability\.(str|dex|con|int|wis|cha)\.score$/;
+
+/**
+ * A multiclass prerequisite on an ability score that the class editor shows: the first multiclass restriction for its
+ * field, in no group or in the "any one" group. A second one for the same field, or one in another group, stays in the
+ * rule list (review fix), so nothing is hidden that the editor does not show.
+ */
+export const isPrerequisite = (e: Effect, effects: Effect[]): e is Restriction =>
+  e.type === 'restriction' &&
+  e.multiclass === true &&
+  abilityField.test(e.field) &&
+  (e.group === undefined || e.group === anyOneGroup) &&
+  effects.find((x) => x.type === 'restriction' && x.multiclass === true && x.field === e.field) === e;
 
 export const isEditorChoice = (e: Effect): e is Choice => e.type === 'choice' && (e.choiceId === 'skills' || e.choiceId === 'subclass');
 
 /** Exactly what the class editor renders; the rule list shows every other effect, so it can be seen and removed. */
-export const isClassBasic = (e: Effect): boolean => e.type === 'hitDie' || isSave(e) || isPrerequisite(e) || isEditorChoice(e);
+export const isClassBasic = (e: Effect, effects: Effect[]): boolean => e.type === 'hitDie' || isSave(e) || isPrerequisite(e, effects) || isEditorChoice(e);
 
 /** Sets the class's hit die in place (or first, when it has none), or removes it. */
 export function setHitDie(effects: Effect[], die: number | undefined): Effect[] {
@@ -49,13 +61,13 @@ export function toggleSave(effects: Effect[], key: string): Effect[] {
 }
 
 /** Whether the prerequisites are alternatives: any one of them in the "any one" group. */
-export const anyOne = (effects: Effect[]): boolean => effects.some((e) => isPrerequisite(e) && e.group === anyOneGroup);
+export const anyOne = (effects: Effect[]): boolean => effects.some((e) => isPrerequisite(e, effects) && e.group === anyOneGroup);
 
 /** Sets or clears the minimum for one ability, keeping the "any one" choice as it was (review fix). */
 export function setPrerequisite(effects: Effect[], key: string, minimum: number | undefined): Effect[] {
   const field = `ability.${key}.score`;
   const group = anyOne(effects) ? anyOneGroup : undefined;
-  const existing = effects.findIndex((e) => isPrerequisite(e) && e.field === field);
+  const existing = effects.findIndex((e) => isPrerequisite(e, effects) && e.field === field);
   if (minimum === undefined) return existing < 0 ? effects : effects.filter((_, i) => i !== existing);
   if (existing >= 0) return effects.map((e, i) => (i === existing ? { ...(e as Restriction), minimum } : e));
   return [...effects, { type: 'restriction', id: uniqueId(effects, `multiclass-${key}`), field, minimum, multiclass: true, group }];
@@ -67,7 +79,7 @@ export function setPrerequisite(effects: Effect[], key: string, minimum: number 
  */
 export function setAnyOne(effects: Effect[], on: boolean): Effect[] {
   return effects.map((e) =>
-    isPrerequisite(e) && (e.group === undefined || e.group === anyOneGroup) ? { ...e, group: on ? anyOneGroup : undefined } : e,
+    isPrerequisite(e, effects) ?{ ...e, group: on ? anyOneGroup : undefined } : e,
   );
 }
 

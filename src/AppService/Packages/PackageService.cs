@@ -428,7 +428,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     continue; // reported above as package.source-missing
                 // A share package may leave out referenced content (ADR-007), and a backup skips a granted revision that
                 // is already missing locally; the sheet shows either as missing content, so it does not block import.
-                if (blocking && problem.Code != "validate.reference-missing")
+                // Two v9 checks warn here and block only content.publish (review fix, M5 slice 1a): requires-v9 on an
+                // older revision whose inert "scale" or table key an earlier build published (it stays reference-only),
+                // and a scale id clash that the order of publishing allowed (the calculation reports scale.duplicate
+                // and the class's column wins). Refusing them would refuse a backup that publishing produced.
+                if (blocking && problem.Code is not ("validate.reference-missing" or "validate.requires-v9" or "validate.scale-duplicate"))
                     errors.Add(Named(problem));
                 else
                     warnings.Add(Named(problem));
@@ -831,8 +835,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 .Concat(local.ChoiceExtensions(contentId, choiceId))
                 .DistinctBy(r => r.Reference);
 
+        /// <summary>
+        /// This machine's revisions first, in stored order, then the package's: the order they have once the import adds
+        /// them, so "the newest" (the last) means the same during the check as afterwards (review fix).
+        /// </summary>
         public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) =>
-            revisions.Values.Where(r => r.ContentId == contentId).Concat(local.RevisionsOf(contentId)).DistinctBy(r => r.Reference);
+            local.RevisionsOf(contentId).Concat(revisions.Values.Where(r => r.ContentId == contentId)).DistinctBy(r => r.Reference);
     }
 
     private sealed class EntryTooLargeException(string path)

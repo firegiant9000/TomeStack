@@ -36,6 +36,8 @@ public class ContentTreeCommandTests
         Assert.Equal("Class level 2", level.Label);
         var granted = level.Children.Single();
         Assert.Equal((feature, "gift"), (granted.Content, granted.EffectId));
+        // The calculator refuses a draft (content.unpublished), so the tree says so instead of showing it as what characters get.
+        Assert.Equal(ContentTree.DraftPinNote, granted.Note);
         var resource = granted.Children.Single(c => c.Kind == TreeNodeKind.Resource);
         Assert.Equal("zap", resource.Children.Single().EffectId);
         Assert.Equal(before, TempApp.Json(app.Store.ListRevisionsInOrder()));
@@ -43,6 +45,12 @@ public class ContentTreeCommandTests
         // Review fix: "Grant a feature" before any feature is published leaves a grant that names nothing; the tree shows it.
         var unfinished = cls with { Effects = [new GrantEffect { Id = "grant-1", Grant = GrantKind.Content, Content = null, Level = 1 }] };
         Assert.Contains(app.Tree(new(Revision: unfinished)).Root.Children.Single().Children, n => n.EffectId == "grant-1" && n.Kind == TreeNodeKind.Missing);
+
+        // A published feature is what characters get: no draft note.
+        var published = app.Publish(app.SaveDraft(Draft(source, Guid.NewGuid(), ContentKind.Feature, "Test Tree Published",
+            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" }))).Published;
+        var live = cls with { Effects = [new GrantEffect { Id = "live", Grant = GrantKind.Content, Content = published, Level = 1 }] };
+        Assert.Null(app.Tree(new(Revision: live)).Root.Children.Single().Children.Single().Note);
 
         Assert.Equal("tree.scope", Assert.Throws<AppValidationException>(() => app.Tree(new(SourceId: source.Id))).Problems.Single().Code);
         Assert.Equal("tree.scope", Assert.Throws<AppValidationException>(() => app.Tree(new())).Problems.Single().Code);
