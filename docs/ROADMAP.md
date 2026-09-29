@@ -137,7 +137,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
    - An app setting, **off by default**. Hints come from a read-only analyzer and compare a class with the bundled SRD classes of its family, for example:
      - more slots than a full caster at a level;
      - a multiclass share above what its own slot table implies;
-     - a resource that grows faster than PB;
+     - a resource that grows faster than PB (**changed by the owner, 2026-09-29: faster than every SRD pool of the family**, because SRD pools also outgrow PB);
      - a level with no feature.
    - Hints never block, never change a calculation, and are never exported. The hint set is the owner's call.
 8. **B08 character snapshots.** **Done 2026-09-29 (fixture-verified; [features/snapshots.md](features/snapshots.md)): database migration v7, by hand only, not in backups (D14).**

@@ -11,8 +11,8 @@ public sealed record DesignHint(string Code, string Message, string? EffectId = 
 /// <item><c>design.slots-above-full-caster</c>: more slots of a spell level at a class level than any SRD full caster has;</item>
 /// <item><c>design.multiclass-share-above-table</c>: a multiclass share whose Multiclass Spellcaster table row gives more
 /// slots than the class's own table at that level;</item>
-/// <item><c>design.resource-faster-than-pb</c>: a resource maximum that grows more from level 1 to 20 than the proficiency
-/// bonus does (+4);</item>
+/// <item><c>design.resource-faster-than-srd</c>: a resource maximum that grows more from level 1 to 20 than every bundled
+/// SRD pool of the family (owner decision, 2026-09-29: compared with the SRD pools, not the proficiency bonus);</item>
 /// <item><c>design.level-without-feature</c>: class levels where no feature or choice is gained although every bundled
 /// class of the family gains one.</item>
 /// </list>
@@ -35,6 +35,8 @@ public static class DesignFeedback
         var hints = new List<DesignHint>();
         var srd = bundled.ToList();
         var caster = CalculatedSlots(revision);
+        var ownGrowths = Growths(revision);
+        var srdGrowths = srd.Select(r => (r, Growths(r))).Where(s => s.Item2.Count > 0).ToList();
         foreach (var family in revision.RulesFamilies.Where(RulesFamilies.IsKnown).Distinct())
         {
             if (caster is not null)
@@ -44,8 +46,8 @@ public static class DesignFeedback
             }
             if (revision.Kind == ContentKind.Class)
                 LevelsWithoutFeature(revision, family, srd, hints);
+            ResourcesFasterThanSrd(ownGrowths, family, srdGrowths, hints);
         }
-        ResourcesFasterThanPb(revision, hints);
         return hints;
     }
 
@@ -121,34 +123,61 @@ public static class DesignFeedback
     private static string Describe(IReadOnlyList<int> row) =>
         row.All(n => n == 0) ? "no slots" : string.Join(", ", row.Select((n, i) => (n, i)).Where(x => x.n > 0).Select(x => $"{x.n} of level {x.i + 1}"));
 
-    private static void ResourcesFasterThanPb(ContentRevision revision, List<DesignHint> hints)
+    /// <summary>
+    /// Each calculated resource's maximum at class levels 1 and 20, evaluated with <c>CLASS_LEVEL</c> = <c>LEVEL</c> = the
+    /// level, the proficiency bonus by level, the revision's own automatic class columns (as the calculator takes them),
+    /// and ability scores of 10: the growth with level, not a character. A formula that reads something else, such as a
+    /// column of another content's class, or does not parse, gives nothing. Built once per revision (review fix).
+    /// </summary>
+    private static List<(ResourceEffect Resource, int First, int Last)> Growths(ContentRevision revision)
     {
-        var scales = revision.SchemaVersion >= ScaleEffect.SchemaVersion
-            ? revision.Effects.OfType<ScaleEffect>().Where(s => s.Values.Count == Character.MaxLevel).GroupBy(s => s.ScaleId).ToDictionary(g => g.Key, g => g.First().Values, StringComparer.Ordinal)
+        var allowScales = revision.SchemaVersion >= ScaleEffect.SchemaVersion;
+        var scales = allowScales
+            ? revision.Effects.OfType<ScaleEffect>()
+                .Where(s => s.Automation == AutomationStatus.Automatic && s.Values.Count == Character.MaxLevel)
+                .GroupBy(s => s.ScaleId).ToDictionary(g => g.Key, g => g.First().Values, StringComparer.Ordinal)
             : [];
-        var growthOfPb = ProficiencyBonus(Character.MaxLevel) - ProficiencyBonus(Character.MinLevel);
+        var growths = new List<(ResourceEffect, int, int)>();
         foreach (var resource in revision.Effects.OfType<ResourceEffect>().Where(r => r.Automation != AutomationStatus.Reference))
         {
-            if (!Formula.TryParse(resource.Maximum, revision.SchemaVersion >= ScaleEffect.SchemaVersion, out var formula, out _))
+            if (!Formula.TryParse(resource.Maximum, allowScales, out var formula, out _))
                 continue; // validation reports it
             int? At(int level) => formula!.TryEvaluate(id => id switch
             {
                 FormulaIdentifiers.ProficiencyBonus => ProficiencyBonus(level),
                 FormulaIdentifiers.Level or FormulaIdentifiers.ClassLevel => level,
                 _ when FormulaIdentifiers.IsScale(id) => scales.TryGetValue(FormulaIdentifiers.ScaleId(id), out var values) ? values[level - 1] : null,
-                // Ability scores of 10 (modifier +0): the hint is about growth with level, not about a character.
                 _ when id.EndsWith(".MOD", StringComparison.Ordinal) => 0,
                 _ when id.EndsWith(".SCORE", StringComparison.Ordinal) => 10,
                 _ => null,
             }, out var value, out _) ? value : null;
-            if (At(Character.MinLevel) is { } first && At(Character.MaxLevel) is { } last && last - first > growthOfPb)
-            {
-                // The owner's rule is literal: some SRD pools grow faster too (a pool of five times the class level), so
-                // this is a prompt to check the design, not a claim that it is wrong.
-                hints.Add(new("design.resource-faster-than-pb",
-                    $"'{resource.ResourceId}' grows from {first} to {last} uses between levels 1 and 20 (+{last - first}); the proficiency bonus grows by +{growthOfPb}. Some SRD pools grow faster too, so check it is meant.",
-                    resource.Id));
-            }
+            if (At(Character.MinLevel) is { } first && At(Character.MaxLevel) is { } last)
+                growths.Add((resource, first, last));
+        }
+        return growths;
+    }
+
+    /// <summary>
+    /// A resource that grows more between levels 1 and 20 than every bundled SRD pool of the family does (owner decision,
+    /// 2026-09-29: compare against the SRD pools rather than the proficiency bonus). "Pool" is any SRD resource, whatever it
+    /// counts: TomeStack has no unit on a resource and never tells content apart by name, so a pool of hit points counts
+    /// too. The message names the fastest SRD pool.
+    /// </summary>
+    private static void ResourcesFasterThanSrd(
+        List<(ResourceEffect Resource, int First, int Last)> own, string family, List<(ContentRevision Revision, List<(ResourceEffect Resource, int First, int Last)> Growths)> srd, List<DesignHint> hints)
+    {
+        var fastest = srd
+            .Where(s => s.Revision.RulesFamilies.Contains(family))
+            .SelectMany(s => s.Growths.Select(g => (s.Revision.Name, Growth: g.Last - g.First)))
+            .OrderByDescending(p => p.Growth)
+            .FirstOrDefault();
+        if (fastest.Name is null)
+            return; // no SRD pool to compare with
+        foreach (var (resource, first, last) in own.Where(g => g.Last - g.First > fastest.Growth))
+        {
+            hints.Add(new("design.resource-faster-than-srd",
+                $"'{resource.ResourceId}' grows from {first} to {last} between levels 1 and 20 (+{last - first}); the fastest-growing SRD pool, '{fastest.Name}', grows by +{fastest.Growth}.",
+                resource.Id, family));
         }
     }
 

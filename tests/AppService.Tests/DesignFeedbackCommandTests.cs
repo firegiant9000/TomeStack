@@ -72,13 +72,18 @@ public class DesignFeedbackCommandTests
         {
             ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Class, Name = "Test Feedback Class",
             RulesFamilies = [RulesFamilies.Srd521], Provenance = new(source.Id), Status = RevisionStatus.Draft,
-            Effects = [new ResourceEffect { Id = "surge", ResourceId = "surge", Label = "Surge", Maximum = "CLASS_LEVEL" }],
+            // Faster than every SRD pool (the fastest is five times the class level, +95 from level 1 to 20).
+            Effects = [new ResourceEffect { Id = "surge", ResourceId = "surge", Label = "Surge", Maximum = "10 * CLASS_LEVEL" },
+                new ResourceEffect { Id = "focus", ResourceId = "focus", Label = "Focus", Maximum = "CLASS_LEVEL" },
+                new ResourceEffect { Id = "equal", ResourceId = "equal", Label = "Equal", Maximum = "5 * CLASS_LEVEL" }],
         };
         var before = TempApp.Json(app.Store.ListRevisionsInOrder());
 
         var hints = app.Feedback(new(Revision: draft));
 
-        Assert.Contains(hints, h => h.Code == "design.resource-faster-than-pb" && h.EffectId == "surge");
+        var surge = Assert.Single(hints, h => h.Code == "design.resource-faster-than-srd" && h.EffectId == "surge");
+        Assert.Contains("grows by +95", surge.Message, StringComparison.Ordinal); // the documented threshold, today
+        Assert.DoesNotContain(hints, h => h.EffectId is "focus" or "equal"); // ordinary SRD growth, and equal is not faster
         Assert.Equal(before, TempApp.Json(app.Store.ListRevisionsInOrder()));
         Assert.Equal("feedback.scope", Assert.Throws<AppValidationException>(() => app.Feedback(new())).Problems.Single().Code);
 

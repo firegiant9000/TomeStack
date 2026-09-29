@@ -57,15 +57,42 @@ public class DesignFeedbackTests
     }
 
     [Fact]
-    public void A_resource_that_outgrows_the_proficiency_bonus_is_a_hint_and_one_that_follows_it_is_not()
+    public void A_resource_is_a_hint_only_when_it_outgrows_every_SRD_pool_of_the_family()
     {
+        // The baseline's fastest pool grows with the class level (+19 from level 1 to 20).
+        var pool = Class(new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "CLASS_LEVEL" })
+            with { ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = "Baseline Pool", Kind = ContentKind.Feature };
         var hints = DesignFeedback.Analyze(Class(
-            new ResourceEffect { Id = "per-level", ResourceId = "surge", Label = "Surge", Maximum = "CLASS_LEVEL" },
-            new ResourceEffect { Id = "per-pb", ResourceId = "focus", Label = "Focus", Maximum = "PB" },
-            new ResourceEffect { Id = "per-mod", ResourceId = "grit", Label = "Grit", Maximum = "max(1, CON.MOD) + floor(LEVEL / 5)" }), Baseline());
+            new ResourceEffect { Id = "twice-level", ResourceId = "surge", Label = "Surge", Maximum = "2 * CLASS_LEVEL" },
+            new ResourceEffect { Id = "per-level", ResourceId = "focus", Label = "Focus", Maximum = "CLASS_LEVEL" },
+            new ResourceEffect { Id = "per-pb", ResourceId = "grit", Label = "Grit", Maximum = "PB" }), [pool]);
 
-        var faster = hints.Where(h => h.Code == "design.resource-faster-than-pb").Select(h => h.EffectId).ToList();
-        Assert.Equal(["per-level"], faster);
+        var faster = hints.Where(h => h.Code == "design.resource-faster-than-srd").ToList();
+        Assert.Equal(["twice-level", "twice-level"], faster.Select(h => h.EffectId)); // once per family
+        Assert.All(faster, h => Assert.Contains("'Baseline Pool', grows by +19", h.Message, StringComparison.Ordinal));
+        // Growing faster than the proficiency bonus alone is no longer a hint, and with no SRD pool there is nothing to compare.
+        Assert.DoesNotContain(DesignFeedback.Analyze(Class(new ResourceEffect { Id = "per-level", ResourceId = "focus", Label = "Focus", Maximum = "CLASS_LEVEL" }), [pool]), h => h.Code == "design.resource-faster-than-srd");
+        Assert.DoesNotContain(DesignFeedback.Analyze(Class(new ResourceEffect { Id = "x", ResourceId = "x", Label = "X", Maximum = "9 * CLASS_LEVEL" }), []), h => h.Code == "design.resource-faster-than-srd");
+    }
+
+    [Fact]
+    public void The_SRD_pool_baseline_is_per_family_and_counts_only_pools_that_calculate()
+    {
+        ContentRevision Pool(string name, string maximum, string family, AutomationStatus automation = AutomationStatus.Automatic) =>
+            Class(new ResourceEffect { Id = "pool", ResourceId = "pool", Label = name, Maximum = maximum, Automation = automation })
+                with { ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Name = name, Kind = ContentKind.Feature, RulesFamilies = [family] };
+        var baseline = new[]
+        {
+            Pool("Slow 2014 Pool", "CLASS_LEVEL", RulesFamilies.Srd51), // +19
+            Pool("Fast 2024 Pool", "5 * CLASS_LEVEL", RulesFamilies.Srd521), // +95
+            Pool("Reference 2014 Pool", "50 * CLASS_LEVEL", RulesFamilies.Srd51, AutomationStatus.Reference), // never calculated
+            Pool("Broken 2014 Pool", "SCALE.missing * 100", RulesFamilies.Srd51), // does not evaluate here
+        };
+        var twice = Class(new ResourceEffect { Id = "twice", ResourceId = "twice", Label = "Twice", Maximum = "2 * CLASS_LEVEL" });
+
+        var hint = Assert.Single(DesignFeedback.Analyze(twice, baseline), h => h.Code == "design.resource-faster-than-srd");
+        Assert.Equal(RulesFamilies.Srd51, hint.Family); // faster than every 2014 pool, not than the 2024 one
+        Assert.Contains("'Slow 2014 Pool', grows by +19", hint.Message, StringComparison.Ordinal);
     }
 
     private static Effect[] GrantsAt(IEnumerable<int> levels)
