@@ -9,6 +9,7 @@ export default defineConfig({
     include: ['e2e/**/*.e2e.tsx'],
     environment: 'jsdom',
     globalSetup: ['e2e/devhost.setup.ts'],
+    setupFiles: ['e2e/timeouts.setup.ts'],
     // The Barbarian flow alone takes ~23 s locally (2026-09-28); 30 s left too little room for a slower CI runner.
     testTimeout: 60_000,
     hookTimeout: 60_000,
