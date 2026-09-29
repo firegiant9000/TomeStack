@@ -67,6 +67,10 @@ public class ContentValidatorTests
         Assert.Empty(noOptions.Errors);
         Assert.Contains(noOptions.Warnings, w => w.Code == "validate.choice-options-none");
         Assert.Equal(9, noOptions.RequiredSchemaVersion);
+        // Without declared options the count keeps its upper bound (the v9 schema's maximum of 20).
+        Assert.Empty(Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c", Count = ContentValidator.MaxChoiceCountWithoutOptions })));
+        Assert.Contains("validate.choice-count", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c", Count = ContentValidator.MaxChoiceCountWithoutOptions + 1 })));
+        Assert.Contains("validate.choice-count", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c", Count = 50, Options = [] })));
         Assert.Contains("validate.requires-v9", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c" }) with { SchemaVersion = 8 }));
         Assert.Contains("validate.hit-die", Errors(Draft(new HitDieEffect { Id = "d", Die = 20 })));
         Assert.Contains("validate.dice-invalid", Errors(Draft(new RollEffect { Id = "r", RollId = "r", Label = "Roll", Dice = "1d20+d" })));

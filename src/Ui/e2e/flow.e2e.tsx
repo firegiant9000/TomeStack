@@ -1196,7 +1196,7 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy());
 });
 
-it('authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class (M5 exit gate, ADR-010)', async () => {
+it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class (M5 exit gate, ADR-010)', async () => {
   // An original nonstandard class, built in the studio with no code edits: a d8, Int and Wis saves, a multiclass
   // prerequisite, a skill choice, a column ("Ink"), a resource that reads it, and a caster whose multiclass share is its
   // own table (two thirds). Tables are invented for testing.
@@ -1231,6 +1231,15 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   await waitFor(() => expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy());
   expect(within(skills).getByText(/3 new option features published, 0 reused/)).toBeTruthy(); // announced, and focus stays in the group
   expect(document.activeElement).toBe(within(skills).getByText('Skill choice (starting class only)'));
+  // Removing the choice and creating it again reuses the three published features, never publishes duplicates (review fix).
+  await user.click(within(skills).getByRole('button', { name: 'Remove the skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/Skill choice removed/)).toBeTruthy());
+  await user.click(within(skills).getByRole('checkbox', { name: 'History' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Arcana' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
+  await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/0 new option features published, 3 reused/)).toBeTruthy());
+  expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy();
   await user.click(within(within(basics).getByRole('group', { name: 'Subclass' })).getByRole('checkbox', { name: /^This class has subclasses/ }));
 
   await user.click(within(editor()).getByRole('button', { name: 'Add class column' }));
