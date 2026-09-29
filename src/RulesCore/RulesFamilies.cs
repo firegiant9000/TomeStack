@@ -26,10 +26,12 @@ public static class RulesFamilies
     [
         new(Srd51, "SRD 5.1 (2014 rules)", AbilityIncreaseSource: ContentKind.Species, BackgroundGrantsFeat: false, LongRestExhaustionNeedsFoodAndDrink: true,
             LongRestHitDice: HitDiceRecovery.HalfTotal, HitDieHealingMinimum: 0, ShortRestNeedsOneHitPoint: false,
-            HalfCasterLevels: CasterLevelRounding.Down, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots),
+            HalfCasterLevels: CasterLevelRounding.Down, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
+            UntrainedShieldGivesArmorClass: true),
         new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
             LongRestHitDice: HitDiceRecovery.All, HitDieHealingMinimum: 1, ShortRestNeedsOneHitPoint: true,
-            HalfCasterLevels: CasterLevelRounding.Up, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots),
+            HalfCasterLevels: CasterLevelRounding.Up, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
+            UntrainedShieldGivesArmorClass: false),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -79,6 +81,12 @@ public static class RulesFamilies
 /// The Multiclass Spellcaster table: 20 rows (caster levels 1–20), each the slots of spell levels 1, 2, … (trailing zeros
 /// omitted). Used once a character has ordinary spell slots from two or more casters.
 /// </param>
+/// <param name="UntrainedShieldGivesArmorClass">
+/// Whether a shield adds to Armor Class when the character lacks proficiency (training) with shields. Yes under 2014 rules:
+/// SRD 5.1 (p. 62) gives untrained armor only disadvantage and no spellcasting. No under 2024 rules: "You gain the Armor
+/// Class benefit of a Shield only if you have training with it" (SRD 5.2.1 p. 92). Checked only for a character whose
+/// content records armor training at all (M2.2); older classes record none, and nothing changes for them.
+/// </param>
 public sealed record RulesFamilyPolicy(
     string Id,
     string DisplayName,
@@ -90,7 +98,8 @@ public sealed record RulesFamilyPolicy(
     bool ShortRestNeedsOneHitPoint,
     CasterLevelRounding HalfCasterLevels,
     CasterLevelRounding ThirdCasterLevels,
-    IReadOnlyList<IReadOnlyList<int>> MulticlassSpellSlots);
+    IReadOnlyList<IReadOnlyList<int>> MulticlassSpellSlots,
+    bool UntrainedShieldGivesArmorClass);
 
 /// <summary>How many spent hit dice a long rest gives back (<see cref="RulesFamilyPolicy.LongRestHitDice"/>).</summary>
 public enum HitDiceRecovery { HalfTotal, All }

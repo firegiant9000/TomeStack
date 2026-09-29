@@ -80,23 +80,38 @@ export function createBridgeTransport(bridge: WebViewBridge, timeoutMs = 30_000)
     });
 }
 
-/** `headers` lets tests call DevHost directly with its token; in the browser the Vite proxy adds it. */
-export function createHttpTransport(endpoint = '/api/command', headers: Record<string, string> = {}): Transport {
+/**
+ * `headers` lets tests call DevHost directly with its token; in the browser the Vite proxy adds it. Times out like the
+ * bridge: after `timeoutMs` (or the call's own `timeoutMs`; `null` waits indefinitely) the request is aborted and the
+ * call fails with `timeout`.
+ */
+export function createHttpTransport(endpoint = '/api/command', headers: Record<string, string> = {}, timeoutMs = 30_000): Transport {
   let nextId = 1;
-  return async (command, payload) => {
+  return async (command, payload, options) => {
     const id = String(nextId++);
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, command, payload }),
-    });
-    if (!response.ok) {
-      throw new TomeStackError({
-        code: `http-${response.status}`,
-        message: `Dev host returned ${response.status}. Is \`dotnet run --project src/DevHost\` running?`,
+    const limit = options?.timeoutMs === undefined ? timeoutMs : options.timeoutMs;
+    const controller = new AbortController();
+    const timer = limit === null ? undefined : setTimeout(() => controller.abort(), limit);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, command, payload }),
+        signal: controller.signal,
       });
+      if (!response.ok) {
+        throw new TomeStackError({
+          code: `http-${response.status}`,
+          message: `Dev host returned ${response.status}. Is \`dotnet run --project src/DevHost\` running?`,
+        });
+      }
+      return unwrap((await response.json()) as CommandResponse);
+    } catch (error) {
+      if (controller.signal.aborted) throw new TomeStackError({ code: 'timeout', message: `No response to ${command}.` });
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-    return unwrap((await response.json()) as CommandResponse);
   };
 }
 

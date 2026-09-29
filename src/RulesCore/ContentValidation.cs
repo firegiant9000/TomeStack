@@ -4,6 +4,13 @@ namespace TomeStack.RulesCore;
 public sealed record ValidationReport(ContentReference Revision, IReadOnlyList<Diagnostic> Errors, IReadOnlyList<Diagnostic> Warnings)
 {
     public bool CanPublish => Errors.Count == 0;
+
+    /// <summary>
+    /// The lowest content schema version that holds everything the revision uses, and never below
+    /// <see cref="ContentValidator.MinimumPublishedSchemaVersion"/>. <c>content.publish</c> writes it, so homebrew that
+    /// uses no newer field stays readable by older builds.
+    /// </summary>
+    public int RequiredSchemaVersion { get; init; } = ContentValidator.MinimumPublishedSchemaVersion;
 }
 
 /// <summary>
@@ -14,6 +21,16 @@ public sealed record ValidationReport(ContentReference Revision, IReadOnlyList<D
 /// </summary>
 public static class ContentValidator
 {
+    /// <summary>
+    /// The lowest version <c>content.publish</c> writes: builds that write v3 validate before publishing, and a package
+    /// import blocks on validation errors only from v3 (older revisions predate validation).
+    /// </summary>
+    public const int MinimumPublishedSchemaVersion = 3;
+
+    /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
+    private static bool IsSpellField(string field) =>
+        field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
+
     /// <param name="batch">Other unsaved revisions validated together, which may reference each other.</param>
     public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null)
     {
@@ -54,6 +71,8 @@ public static class ContentValidator
         var needsV3 = false;
         var needsV5 = false;
         var needsV6 = false;
+        var needsV8 = false;
+        var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
         {
             switch (effect)
@@ -63,8 +82,18 @@ public static class ContentValidator
                     break;
                 case ModifierEffect modifier:
                     needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
+                    needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
+                    spellTargets |= IsSpellField(modifier.Target);
                     if (!CharacterCalculator.IsField(modifier.Target))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
+                    // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
+                    // bonus (such as -1 for Improved Critical) can lower it.
+                    if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
+                        Error("validate.critical-range-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on criticalRange; only a bonus can change it (for example -1 for a critical hit on 19-20).", modifier.Id);
+                    // Worn armor turns off every Armor Class replacement (they are unarmored alternatives), so a replacement
+                    // that applies only while armored could never apply.
+                    if (modifier.WhileArmored == true && modifier.Target == FieldIds.ArmorClass && modifier.Operation == ModifierOperation.Replace)
+                        Error("validate.while-armored-replace", $"Effect '{modifier.Id}' replaces Armor Class only while armor is worn, but worn armor sets the base Armor Class itself, so it could never apply. Use a bonus.", modifier.Id);
                     if (modifier.Stacking == StackingRule.HighestInGroup && string.IsNullOrWhiteSpace(modifier.StackGroup))
                         Error("validate.stack-group-missing", $"Effect '{modifier.Id}' uses highest-in-group stacking without a stackGroup.", modifier.Id);
                     CheckFormula(modifier.Value, modifier.Id, "value");
@@ -100,6 +129,15 @@ public static class ContentValidator
                         if (weaponTarget.Length == CharacterCalculator.WeaponProficiencyPrefix.Length || grant.Grant != GrantKind.Proficiency)
                             Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in weapon.simple, weapon.martial or weapon.<key>.", grant.Id);
                     }
+                    else if (grant.Target is { } armorTarget && armorTarget.StartsWith(CharacterCalculator.ArmorTrainingPrefix, StringComparison.Ordinal))
+                    {
+                        needsV8 = true;
+                        var armorKey = armorTarget[CharacterCalculator.ArmorTrainingPrefix.Length..];
+                        if (!(CharacterCalculator.ArmorTrainingKeys.Contains(armorKey) || armorKey == CharacterCalculator.NoArmorTrainingKey) || grant.Grant != GrantKind.Proficiency)
+                            Error("validate.unknown-target", $"Effect '{grant.Id}' must grant proficiency in armor.light, armor.medium, armor.heavy or armor.shield, or record armor.none.", grant.Id);
+                        if (armorKey == CharacterCalculator.NoArmorTrainingKey && revision.Kind != ContentKind.Class)
+                            Warn("validate.armor-none-kind", $"armor.none records that a class gives no armor training; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it has no effect.", grant.Id);
+                    }
                     else if (grant.Target is not { } target || !CharacterCalculator.IsField(target) || !(target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal)))
                     {
                         Error("validate.unknown-target", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{grant.Target}', which is not a saving throw, skill or weapon.", grant.Id);
@@ -124,6 +162,8 @@ public static class ContentValidator
                 case RestrictionEffect restriction:
                     needsV3 |= restriction.Field is FieldIds.ArmorClass or FieldIds.HitPoints;
                     needsV5 |= restriction.Multiclass is not null || restriction.Group is not null;
+                    needsV8 |= restriction.Field is FieldIds.Attacks or FieldIds.CriticalRange;
+                    spellTargets |= IsSpellField(restriction.Field);
                     if (restriction.Multiclass == true && revision.Kind != ContentKind.Class)
                         Warn("validate.multiclass-kind", $"A multiclass prerequisite belongs on a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", restriction.Id);
                     if (!CharacterCalculator.IsField(restriction.Field))
@@ -149,6 +189,11 @@ public static class ContentValidator
                     needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
                     if (roll.Cost is { } cost)
                         CheckFormula(cost, roll.Id, "cost");
+                    if (roll.Bonus is { } bonus)
+                    {
+                        needsV8 = true;
+                        CheckFormula(bonus, roll.Id, "bonus");
+                    }
                     if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
@@ -185,6 +230,9 @@ public static class ContentValidator
                         Error("validate.armor-class", $"Armor '{armor.Id}' gives Armor Class {armor.ArmorClass}; it must be between 0 and 30.", armor.Id);
                     if (armor.DexterityCap is { } cap && (armor.Category != ArmorCategory.Medium || cap is < 0 or > 10))
                         Error("validate.armor-dexterity-cap", $"Armor '{armor.Id}': a Dexterity cap (0 to 10) applies only to medium armor.", armor.Id);
+                    needsV8 |= armor.Strength is not null || armor.StealthDisadvantage is not null;
+                    if (armor.Strength is { } strength && (strength is < 1 or > 30 || armor.Category == ArmorCategory.Shield))
+                        Error("validate.armor-strength", $"Armor '{armor.Id}': a Strength requirement (1 to 30) applies only to body armor.", armor.Id);
                     if (revision.Kind != ContentKind.Item)
                         Warn("validate.armor-kind", $"Armor counts only on an equipped item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content, so it applies only if pinned.", armor.Id);
                     break;
@@ -222,6 +270,8 @@ public static class ContentValidator
             Error("validate.requires-v6", $"This revision uses content schema v6 features (toggles, toggled modifiers, shared resources, roll costs) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) && revision.SchemaVersion < SpellcastingEffect.MulticlassSchemaVersion)
             Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
+        if (needsV8 && revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
+            Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
@@ -257,7 +307,16 @@ public static class ContentValidator
         foreach (var cycle in CharacterCalculator.DependencyCycles(revision))
             errors.Add(cycle);
 
-        return new ValidationReport(reference, errors, warnings);
+        // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
+        // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
+        var required =
+            needsV8 ? ContentRevision.CombatDetailsSchemaVersion
+            : revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) ? SpellcastingEffect.MulticlassSchemaVersion
+            : needsV6 ? ToggleEffect.SchemaVersion
+            : needsV5 || spellTargets || revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) ? SpellcastingEffect.SchemaVersion
+            : revision.ExtendsChoice is not null || revision.Effects.OfType<ArmorEffect>().Any() ? ArmorEffect.SchemaVersion
+            : MinimumPublishedSchemaVersion;
+        return new ValidationReport(reference, errors, warnings) { RequiredSchemaVersion = Math.Max(required, MinimumPublishedSchemaVersion) };
 
         void CheckFormula(string source, string effectId, string what)
         {

@@ -1,8 +1,18 @@
 # Changelog
 
-## Unreleased (M2.1, M3 and M4)
+## Unreleased (M2.1, M2.2, M3 and M4)
 
 ### Added
+
+- **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Exporting a character never passes on that it is archived, and importing a package never archives or unarchives one. Older versions of TomeStack show an archived character as active.
+
+- **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
+  - **Automated:** Fighting Style as a choice (Defense adds +1 AC while you wear armor), and Second Wind, Action Surge and Indomitable as resources that come back on rests. Second Wind rolls 1d10 plus your Fighter level. Also automated: the number of attacks (Extra Attack) and the Champion's critical range. The Champion's second Fighting Style is a choice too, and a style can't be picked twice.
+  - **Armor:** light, medium and heavy armor and shields set Armor Class as before. They now also warn when you lack the Strength (speed 10 feet lower) or the training, and Stealth warns about disadvantage. Under 2024 rules a shield without training adds nothing to Armor Class; under 2014 rules it still does.
+  - **Reference text, applied by hand:** the other Fighting Styles, Weapon Mastery (the kinds you choose), Tactical Mind and Tactical Shift, Remarkable Athlete, Heroic Warrior, Survivor and Ability Score Improvements. The feature texts say what to do.
+  - **Homebrew:** a homebrew Fighter subclass joins the Fighter's subclass choice next to the Champion, which is the path the Stardust Guardian will take.
+  - **Paladin and Ranger:** their Extra Attack is now counted too, and their armor training is recorded (the Paladin's heavy armor only as a starting class), in new revisions. New Wizard and Sorcerer revisions record that they have no armor training. Existing characters get them through "Updates available".
+  - **Content schema v8** adds the fields this needs. Older content is unchanged, and older versions of TomeStack refuse v8 content with a clear message. Homebrew you publish is saved in the oldest content version that can hold it, so homebrew that uses none of the new fields can still be shared with TomeStack 0.3.x.
 
 - **Back up everything and restore it (M2.1; `docs/features/package-format.md` "Full library backup", ADR-007 item 10):** a new **Backups** screen.
   - **Back up everything** saves one file with your whole library: characters, campaigns, gap notes, all your homebrew (drafts, older versions and entries no character uses yet) and the PDFs TomeStack keeps a copy of. Before this, only characters and what they used could be backed up, so unfinished homebrew had no backup at all.
@@ -38,9 +48,21 @@
 
 ### Changed
 
+- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build, a smoke run included. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
+- **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
+
 - **Honest status (M2.1; README, MVP, ROADMAP, acceptance docs):** claims now say how far they are proven: implemented, fixture-verified, Windows-install verified, or accepted in real play. The README states the current class, species and background coverage. M2 is "checks passed, limited content", because the MVP goal of any SRD character 1–20 is not met yet. The ROADMAP adds M2.1 (data safety, done) and M2.2 (Fighter baseline and SRD armor), and puts M2.2 before the M3 Stardust Guardian run that depends on it. PDF candidate import is labeled **Experimental** in the app until a real third-party book and the SRD measurements pass.
 
 ### Fixed
+
+- **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
+- **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
+
+- **Fighter review fixes (M2.2, PR #12 review; `docs/features/equipment.md`, `docs/features/multiclass-and-attacks.md`):**
+  - Armor training is checked only when every class the character has levels in records it (and is installed). A Paladin who took a level of Fighter is no longer told they lack training for their plate, and under 2024 rules a Cleric who takes a feat granting light armor keeps the shield's Armor Class. A Wizard who takes a level of Fighter is still warned about heavy armor.
+  - A roll's bonus keeps its sign: a Strength 8 bonus is −1, not 0. The button shows it as "1d6 − 1", and the roll record calls it "<roll> bonus" instead of showing the formula. A bonus that cannot be worked out for the character is shown as a problem on the feature, and the roll is refused instead of rolled without it.
+  - The critical range stays between 1 and 20, and the number of attacks is at least 1, with a warning when content goes past that. Homebrew can lower the critical range only with a bonus (a "set" or "replace" would keep the highest value, which is the wrong way round), and can't make an Armor Class replacement that applies only in armor (it could never apply).
+  - Content that claims an older content version but carries the new Fighter fields (including the attack count and critical range) has those fields ignored, as an older TomeStack would, with a note on the sheet.
 
 - **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. A sixth race: the Barbarian flow read the long-rest proposal as soon as the panel had focus, before the proposal had arrived (reproduced by delaying it 400 ms), and that flow took 23 of its 30 seconds. It now waits for the proposal, and e2e tests have 60 seconds. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder. It passed three hosted runs in a row, so it is blocking too.
 
@@ -63,6 +85,8 @@
 
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
+- **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).
+- **SRD packs (M2.2):** new v8 revisions of the Paladin and Ranger (Extra Attack, then a further revision adding armor training) and of the Wizard and Sorcerer (`armor.none`), in both families (insert-only: a data folder opened by an earlier build of this branch still opens).
 - **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
 
 ## 0.3.0 (M2 delivered)

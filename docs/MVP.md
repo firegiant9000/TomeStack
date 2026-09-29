@@ -4,7 +4,7 @@
 
 A Windows player can install TomeStack, create and play a level-1-to-20 SRD-based character under either 2014 or 2024 rules, add a structured homebrew subclass or feature, and recover/export their work offline. The product is useful before PDF mechanics interpretation or arbitrary custom base classes exist.
 
-**Current build (0.3.0 with M2.1, 2026-09-28): limited content, so this goal is not met yet.** Bundled classes: the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard), levels 1–20 in both families, and the Barbarian at levels 1–3. There is no Fighter, Monk or Rogue, and no SRD armor table. Species and backgrounds: Half-Orc and Acolyte (SRD 5.1), Dwarf and Soldier (SRD 5.2.1). Anything else comes from the homebrew studio. The M2 checks passed on this content ([features/m2-acceptance.md](features/m2-acceptance.md)); the goal stays as written, and the Fighter comes next (ROADMAP M2.2).
+**Current build (0.3.0 with M2.1, 2026-09-28): limited content, so this goal is not met yet.** Bundled classes: the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock and Wizard), levels 1–20 in both families, and the Barbarian at levels 1–3. Since M2.2 (implemented, not released yet), also the Fighter 1–20 with the Champion, and the SRD armor table. There is no Monk or Rogue. Species and backgrounds: Half-Orc and Acolyte (SRD 5.1), Dwarf and Soldier (SRD 5.2.1). Anything else comes from the homebrew studio. The M2 checks passed on this content ([features/m2-acceptance.md](features/m2-acceptance.md)); the goal stays as written.
 
 ## Committed candidate scope
 

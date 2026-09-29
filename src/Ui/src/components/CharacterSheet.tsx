@@ -14,6 +14,7 @@ import type {
   RollTarget,
 } from '../api/types';
 import { downloadBase64 } from '../files';
+import { ArchivePanel } from './ArchivePanel';
 import { ActionsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
@@ -32,7 +33,7 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
   // D04: the primary caster's numbers, with traces and overrides (the manual step for combined multiclass slots).
   { title: 'Spellcasting', match: (f) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.') },
 ];
@@ -203,9 +204,11 @@ interface Props {
   onLevelUp: () => void;
   /** Opens the builder on this character's open choices, as a draft. */
   onMakeChoices: () => void;
+  /** After the character was archived or unarchived (SPEC C-08). */
+  onArchiveChanged: () => Promise<void> | void;
 }
 
-export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, onMakeChoices }: Props) {
+export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged }: Props) {
   const { character, sheet } = view;
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
@@ -320,6 +323,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+
+      <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
 
       <HitPointsPanel view={view} act={act} />
       <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />

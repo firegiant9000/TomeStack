@@ -146,9 +146,13 @@ public sealed record FeatureEntry(
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
 /// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
 /// <param name="Cost">Content v6: uses the action spends (its formula evaluated), or the most it may spend when <paramref name="VariableCost"/>.</param>
+/// <param name="Bonus">
+/// Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level, or a negative
+/// Strength modifier), added to the dice. Null when the roll has none, or when it failed (a diagnostic; the roll is refused).
+/// </param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
 
 /// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
 public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
@@ -383,6 +387,15 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
+                if (IsV8Field(restriction.Field) && IgnoresV8(revision))
+                {
+                    // As in an older build, where the field does not exist: the content is not applied.
+                    yield return new(
+                        "effect.schema-field-ignored",
+                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', a content schema v8 field, but the revision declares v{revision.SchemaVersion}; the content is not applied.",
+                        revision.Reference, restriction.Id);
+                    continue;
+                }
                 var actual = sheet.Field(restriction.Field).Value;
                 if (actual >= restriction.Minimum)
                     met = true;
@@ -425,15 +438,38 @@ public static class CharacterCalculator
                     item.Revision.Reference,
                     effect.Id));
             }
+            if (IgnoresV8(item.Revision))
+            {
+                foreach (var effect in item.Revision.Effects)
+                {
+                    var field = effect switch
+                    {
+                        ModifierEffect { WhileArmored: not null } => "whileArmored",
+                        ArmorEffect a when a.Strength is not null || a.StealthDisadvantage is not null => "armor strength or stealthDisadvantage",
+                        RollEffect { Bonus: not null } => "a roll bonus",
+                        _ => null,
+                    };
+                    if (field is not null)
+                        diagnostics.Add(V8FieldIgnored(item.Revision, effect, field));
+                }
+            }
         }
 
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
-        AddArmor(active, modifiers, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
-        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies);
+        var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining, unseenArmor);
+        // Every class the character records, not only those that resolved: a missing, unsupported or wrong-family class
+        // has unknown training, so it turns the check off too. So does an assisted or conditional armor grant on any
+        // content (a feat, species or item): the calculator cannot tell what it gives.
+        var classes = character.Classes.Where(e => e.Level > 0).ToList();
+        var checkTraining = unseenArmor.Count == 0 && classes.Count > 0 && classes.All(e =>
+            resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
+        var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
         var order = TopologicalOrder(modifiers);
         var casters = CollectCasters(active, character, resolved.ClassLevels, diagnostics);
@@ -448,6 +484,7 @@ public static class CharacterCalculator
             var context = new BaseContext(character, family, values, proficiencies, resolved.Classes, warnings[id], manual, casters);
             var value = spec.Base(context, steps);
             value = ApplyModifiers(id, value, modifiers.Where(m => m.Effect.Target == id).ToList(), character, resolved.ClassLevels, values, family, steps, warnings[id], manual);
+            value = Bound(spec, value, steps, warnings[id], family);
 
             var computed = value;
             var fieldOverride = character.Overrides.LastOrDefault(o => o.Field == id);
@@ -461,6 +498,7 @@ public static class CharacterCalculator
             ownSteps[id] = steps;
             results[id] = (value, computed, fieldOverride);
         }
+        ArmorRequirements(worn, values, warnings);
 
         IReadOnlyList<string> casterReads = casters.Count == 0 ? [] : [FieldIds.ProficiencyBonus, FieldIds.Modifier(casters[0].Effect.Ability)];
         var actualReads = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
@@ -485,12 +523,14 @@ public static class CharacterCalculator
         }).ToList();
 
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        int? Evaluate(ActiveContent item, string source) =>
+        // A roll's cost is a number of uses, so never negative.
+        int? Cost(ActiveContent item, string source) =>
             Formula.TryParse(source, out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
                 ? Math.Max(value, 0)
                 : null;
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Evaluate)).ToList();
+        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
                 item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
@@ -530,6 +570,33 @@ public static class CharacterCalculator
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles), active);
+    }
+
+    /// <summary>
+    /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
+    /// either outside that is bounded, with a trace step and an <c>effect.out-of-range</c> warning naming the last effect
+    /// that changed the field. Overrides are not bounded: they are the player's value.
+    /// </summary>
+    private static int Bound(FieldSpec spec, int value, List<Step> steps, List<Diagnostic> warnings, string family)
+    {
+        var (minimum, maximum) = spec.Id switch
+        {
+            FieldIds.Attacks => (1, int.MaxValue),
+            FieldIds.CriticalRange => (1, 20),
+            _ => (int.MinValue, int.MaxValue),
+        };
+        if (value >= minimum && value <= maximum)
+            return value;
+        var bounded = Math.Clamp(value, minimum, maximum);
+        var cause = steps.LastOrDefault(s => s.Origin.Content is not null)?.Origin;
+        var range = maximum == int.MaxValue ? $"at least {minimum}" : $"{minimum} to {maximum}";
+        warnings.Add(new(
+            "effect.out-of-range",
+            $"{spec.Label} would be {value}{(cause is null ? "" : $" after '{cause.ContentName}'")}; it is {range}, so {bounded} is used.",
+            cause?.Content,
+            cause?.EffectId));
+        steps.Add(new(spec.Id, "bound", $"Bounded to {range} ({value} is out of range)", null, bounded, cause ?? new(TraceOriginKind.RulesPolicy, family)));
+        return bounded;
     }
 
     // ---- attacks (content schema v5; SPEC C-02, C-04) --------------------------------------------------------
@@ -861,14 +928,42 @@ public static class CharacterCalculator
         return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text);
     }
 
-    private static FeatureEntry Feature(ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> evaluate)
+    /// <summary>
+    /// Content v8 (M2.2): each roll's <c>bonus</c> formula for this character, with its sign (a Strength 8 bonus is −1).
+    /// A formula that fails is a content diagnostic (<c>effect.invalid-formula</c>), and the roll is refused rather than
+    /// rolled without it. A revision below v8 has no roll bonus (<see cref="IgnoresV8"/>).
+    /// </summary>
+    private static Dictionary<(ContentReference, string), int> RollBonuses(
+        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var bonuses = new Dictionary<(ContentReference, string), int>();
+        foreach (var item in active.Where(a => !IgnoresV8(a.Revision)))
+        {
+            foreach (var roll in item.Revision.Effects.OfType<RollEffect>())
+            {
+                if (roll.Bonus is not { } source)
+                    continue;
+                FormulaError? failure;
+                if (Formula.TryParse(source, out var formula, out failure)
+                    && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+                    bonuses[(item.Revision.Reference, roll.Id)] = value;
+                else
+                    diagnostics.Add(InvalidFormula(item.Revision, roll, failure!));
+            }
+        }
+        return bonuses;
+    }
+
+    private static FeatureEntry Feature(
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses)
     {
         var revision = item.Revision;
         var effects = revision.Effects.Select(e => e switch
         {
             RollEffect roll => new FeatureEffect(
                 e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } cost ? evaluate(item, cost) : roll.ResourceId is null ? null : 1, roll.VariableCost == true),
+                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
@@ -1192,7 +1287,19 @@ public static class CharacterCalculator
     /// apply only without armor; a shield does not stop them.) A shield is a bonus. Only one body armor and one shield
     /// count; extra ones get a diagnostic.
     /// </summary>
-    private static void AddArmor(List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics)
+    /// <summary>The body armor and shield that count (at most one of each).</summary>
+    private sealed record WornArmor((ActiveContent Content, ArmorEffect Effect)? Body, (ActiveContent Content, ArmorEffect Effect)? Shield);
+
+    /// <remarks>
+    /// Content v8 (M2.2): a <c>whileArmored</c> modifier does not apply without body armor. Armor training is checked only
+    /// when <paramref name="checkTraining"/>: every class the character has levels in records its armor training
+    /// (<see cref="RecordsArmorTraining"/>). A class written before v8 records none, so its training is unknown, and
+    /// neither the training warnings nor the untrained-shield rule apply. Missing training is a warning in both families;
+    /// an untrained shield's bonus follows <see cref="RulesFamilyPolicy.UntrainedShieldGivesArmorClass"/>.
+    /// </remarks>
+    private static WornArmor AddArmor(
+        List<ActiveContent> active, List<Modifier> modifiers, List<Diagnostic> diagnostics, Dictionary<string, Proficiency> training, bool checkTraining,
+        RulesFamilyPolicy policy, Dictionary<string, List<Diagnostic>> warnings)
     {
         var armor = active
             .SelectMany(a => a.Revision.Effects.OfType<ArmorEffect>()
@@ -1222,9 +1329,71 @@ public static class CharacterCalculator
                 _ => $"{effect.ArmorClass}",
             };
             modifiers.Add(Synthetic(content, effect, ModifierOperation.Replace, value));
+            var key = effect.Category.ToString().ToLowerInvariant();
+            if (checkTraining && !training.ContainsKey(key))
+            {
+                warnings[FieldIds.ArmorClass].Add(new(
+                    "equipment.armor-untrained",
+                    $"This character has no training with {key} armor, which '{content.Revision.Name}' is: disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting, while it is worn.",
+                    content.Revision.Reference,
+                    effect.Id));
+            }
+        }
+        else
+        {
+            for (var i = 0; i < modifiers.Count; i++)
+            {
+                if (modifiers[i].Effect.WhileArmored == true && modifiers[i].SkipReason is null && !IgnoresV8(modifiers[i].Content.Revision))
+                    modifiers[i] = modifiers[i] with { SkipReason = "it applies only while armor is worn, and none is" };
+            }
         }
         if (shields.Count > 0)
-            modifiers.Add(Synthetic(shields[0].Content, shields[0].Effect, ModifierOperation.Bonus, $"{shields[0].Effect.ArmorClass}"));
+        {
+            var (content, effect) = shields[0];
+            var shield = Synthetic(content, effect, ModifierOperation.Bonus, $"{effect.ArmorClass}");
+            if (checkTraining && !training.ContainsKey("shield"))
+            {
+                warnings[FieldIds.ArmorClass].Add(new(
+                    "equipment.shield-untrained",
+                    policy.UntrainedShieldGivesArmorClass
+                        ? $"This character has no training with shields: '{content.Revision.Name}' still adds to Armor Class under {policy.DisplayName}, with disadvantage on d20 tests that use Strength or Dexterity, and no spellcasting."
+                        : $"This character has no training with shields, so '{content.Revision.Name}' adds nothing to Armor Class under {policy.DisplayName}.",
+                    content.Revision.Reference,
+                    effect.Id));
+                if (!policy.UntrainedShieldGivesArmorClass)
+                    shield = shield with { SkipReason = "the character has no training with shields" };
+            }
+            modifiers.Add(shield);
+        }
+        return new(body.Count > 0 ? body[0] : null, shields.Count > 0 ? shields[0] : null);
+    }
+
+    /// <summary>
+    /// Content v8 (M2.2): worn armor's Strength requirement (speed 10 feet lower below it; TomeStack has no speed field, so
+    /// Armor Class warns) and Stealth disadvantage (the Stealth field warns). Both SRDs state them alike.
+    /// </summary>
+    private static void ArmorRequirements(WornArmor worn, Dictionary<string, int> values, Dictionary<string, List<Diagnostic>> warnings)
+    {
+        if (worn.Body is not { } body || IgnoresV8(body.Content.Revision))
+            return;
+        var (content, effect) = body;
+        var strength = values[FieldIds.Score(Ability.Str)];
+        if (effect.Strength is { } needed && strength < needed)
+        {
+            warnings[FieldIds.ArmorClass].Add(new(
+                "equipment.armor-strength",
+                $"'{content.Revision.Name}' needs Strength {needed}; with Strength {strength} the wearer's speed is 10 feet lower. Adjust speed by hand.",
+                content.Revision.Reference,
+                effect.Id));
+        }
+        if (effect.StealthDisadvantage == true)
+        {
+            warnings[FieldIds.Skill(Stealth)].Add(new(
+                "equipment.stealth-disadvantage",
+                $"'{content.Revision.Name}' gives disadvantage on Dexterity (Stealth) checks; choose disadvantage when you roll.",
+                content.Revision.Reference,
+                effect.Id));
+        }
     }
 
     private static Modifier Synthetic(ActiveContent content, ArmorEffect armor, ModifierOperation operation, string value)
@@ -1261,6 +1430,11 @@ public static class CharacterCalculator
                 if (!SpecIndex.ContainsKey(effect.Target))
                 {
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
+                    continue;
+                }
+                if (IsV8Field(effect.Target) && IgnoresV8(revision))
+                {
+                    diagnostics.Add(V8FieldIgnored(revision, effect, $"the {effect.Target} field"));
                     continue;
                 }
                 if (item.Origin is { } origin && IsAbilityScore(effect) && origin != policy.AbilityIncreaseSource)
@@ -1314,9 +1488,55 @@ public static class CharacterCalculator
     /// <summary>The prefix of weapon proficiency grant targets (content v5): <c>weapon.simple</c>, <c>weapon.martial</c> or <c>weapon.&lt;key&gt;</c>.</summary>
     public const string WeaponProficiencyPrefix = "weapon.";
 
+    /// <summary>The prefix of armor training grant targets (content v8): <c>armor.light</c>, <c>armor.medium</c>, <c>armor.heavy</c>, <c>armor.shield</c>.</summary>
+    public const string ArmorTrainingPrefix = "armor.";
+
+    /// <summary>The keys an armor training grant may name (the <see cref="ArmorCategory"/> values, in lower case).</summary>
+    public static IReadOnlyList<string> ArmorTrainingKeys { get; } = [.. Enum.GetValues<ArmorCategory>().Select(c => c.ToString().ToLowerInvariant())];
+
+    /// <summary>
+    /// <c>armor.none</c> (content v8): a class records that it gives no armor training (the SRD Wizard and Sorcerer). It
+    /// grants nothing; it lets the armor training check run for a character with such a class.
+    /// </summary>
+    public const string NoArmorTrainingKey = "none";
+
+    /// <summary>
+    /// Whether a class records its armor training (content v8): at least one <c>armor.*</c> grant, gated or not, including
+    /// <c>armor.none</c>, and every one of them automatic and always on (the only ones that grant training). Classes
+    /// written before v8 record none, and a class with an assisted or conditional armor grant has training the
+    /// calculator cannot see, so the training check cannot tell what either gives.
+    /// </summary>
+    private static bool RecordsArmorTraining(ContentRevision revision)
+    {
+        if (revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
+            return false;
+        var grants = revision.Effects.OfType<GrantEffect>()
+            .Where(g => g.Grant == GrantKind.Proficiency && g.Target is { } target && target.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal))
+            .ToList();
+        return grants.Count > 0 && grants.All(g =>
+            g.Automation == AutomationStatus.Automatic && g.Timing == EffectTiming.Always
+            && (ArmorTrainingKeys.Contains(g.Target![ArmorTrainingPrefix.Length..]) || g.Target![ArmorTrainingPrefix.Length..] == NoArmorTrainingKey));
+    }
+
+    /// <summary>
+    /// A content v8 field in a revision that declares an older schema. The validator refuses to publish that, but an
+    /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
+    /// </summary>
+    private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
+
+    /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
+    private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
+
+    private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
+        new("effect.schema-field-ignored", $"'{revision.Name}' effect '{effect.Id}' uses {field}, a content schema v8 field, but the revision declares v{revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
+
+    /// <param name="unseenArmor">
+    /// Armor training grants that apply to the character but that the calculator cannot apply (assisted, reference or
+    /// conditional), on any content. Their training is unknown, so they turn the armor training check off.
+    /// </param>
     private static Dictionary<string, Proficiency> CollectProficiencies(
         List<ActiveContent> active, Character character, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel,
-        Dictionary<string, Proficiency> weapons)
+        Dictionary<string, Proficiency> weapons, Dictionary<string, Proficiency> armor, Dictionary<string, Proficiency> unseenArmor)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -1333,6 +1553,21 @@ public static class CharacterCalculator
                 {
                     if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
                         weapons.TryAdd(weapon[WeaponProficiencyPrefix.Length..], new(GrantKind.Proficiency, item, grant));
+                    continue;
+                }
+                if (grant.Target is { } armorTarget && armorTarget.StartsWith(ArmorTrainingPrefix, StringComparison.Ordinal))
+                {
+                    var key = armorTarget[ArmorTrainingPrefix.Length..];
+                    if (IgnoresV8(item.Revision))
+                        diagnostics.Add(V8FieldIgnored(item.Revision, grant, "armor training"));
+                    else if (key == NoArmorTrainingKey)
+                        continue; // a record only (RecordsArmorTraining)
+                    else if (!ArmorTrainingKeys.Contains(key))
+                        diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy, armor.shield or armor.none; it is ignored.", item.Revision.Reference, grant.Id));
+                    else if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
+                        armor.TryAdd(key, new(GrantKind.Proficiency, item, grant));
+                    else
+                        unseenArmor.TryAdd(key, new(GrantKind.Proficiency, item, grant)); // training the calculator cannot apply
                     continue;
                 }
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
@@ -1731,6 +1966,17 @@ public static class CharacterCalculator
             return value;
         }));
         specs.Add(new(FieldIds.HitPoints, "Hit point maximum", "score", [FieldIds.Modifier(Ability.Con)], HitPoints));
+        // Content v8 (M2.2). Extra Attack sets the count (highest wins); Improved and Superior Critical lower the range.
+        specs.Add(new(FieldIds.Attacks, "Attacks per Attack action", "score", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.Attacks, "base", "One attack when you take the Attack action", 1, 1, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 1;
+        }));
+        specs.Add(new(FieldIds.CriticalRange, "Weapon critical hit on a d20 roll of at least", "score", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.CriticalRange, "base", "A weapon attack is a critical hit on a roll of 20", 20, 20, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 20;
+        }));
 
         // Spellcasting (content schema v5, D04). Every ability modifier is an input, because the caster's ability is data.
         IReadOnlyList<string> casterInputs = [FieldIds.ProficiencyBonus, .. Enum.GetValues<Ability>().Select(FieldIds.Modifier)];

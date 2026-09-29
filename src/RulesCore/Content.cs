@@ -72,8 +72,14 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v5 (M2 spellcasting) adds the <c>spellcasting</c> and <c>spell</c> effect types; older revisions are not upcast.
     /// v6 (M3 B2) adds the <c>toggle</c> effect, <c>modifier.toggle</c>, and <c>roll</c> resourceContent, cost and variableCost.
     /// v7 (M3 C3) adds <c>spellcasting.multiclassCaster</c>.
+    /// v8 (M2.2, the Fighter) adds the <c>attacks</c> and <c>criticalRange</c> fields as targets, armor proficiency grants
+    /// (<c>armor.light</c> and so on), <c>armor.strength</c> and <c>armor.stealthDisadvantage</c>, <c>modifier.whileArmored</c>
+    /// and <c>roll.bonus</c>. All are optional, so older revisions serialize unchanged.
     /// </summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
+
+    /// <summary>The content schema version that adds the M2.2 combat details listed above.</summary>
+    public const int CombatDetailsSchemaVersion = 8;
 
     /// <summary>The version the ADR-003 effect migration upcasts v1 revisions to.</summary>
     public const int TypedEffectsSchemaVersion = 2;

@@ -40,7 +40,7 @@ The architecture proposed a WPF + WebView2 Windows shell that hosts the React UI
 - Navigation outside the app origin is cancelled, and new windows are suppressed.
 - A `WebResourceRequested` filter refuses every http(s) request outside the app origin. This makes "offline by default" a shell guarantee that does not depend on the page. The smoke fails if the UI tries.
 - The production bundle carries a CSP (`default-src 'self'`, no remote origins, `object-src 'none'`).
-- DevTools and the default context menu are off unless `--devtools` is passed. Autofill and password save are off.
+- DevTools and the default context menu are off unless `--devtools` is passed in a Debug build (audit 2026-09-28; a Release `--smoke` run included). A Release build also clears `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` before creating the WebView2 environment, so no variable can open a remote debugging port (no listening socket). A per-user WebView2 `AdditionalBrowserArguments` policy cannot be cleared by the app; the smoke report records whether one is set. Autofill and password save are off.
 - The WebView2 user-data folder lives inside the TomeStack data directory.
 - Error responses carry only messages written for the UI. An unexpected exception becomes `internal` with a correlation id, and its details are written to the local `logs/errors.log` only, never across the bridge.
 

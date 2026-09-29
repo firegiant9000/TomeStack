@@ -2,6 +2,7 @@ import { detectTransport, type CallOptions, type Transport } from './transport';
 import type {
   AffectedCharacter,
   AppInfo,
+  ArchivePreview,
   AttachmentInfo,
   Campaign,
   CandidateCheck,
@@ -119,6 +120,11 @@ export function createClient(transport: Transport) {
     applyUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<CharacterView>('character.applyUpdate', { characterId, from, to, confirm: true }),
     listCharacters: () => call<CharacterSummary[]>('character.list'),
+    /** What archiving would do (SPEC C-08); writes nothing. */
+    archivePreview: (characterId: string) => call<ArchivePreview>('character.archivePreview', { characterId }),
+    /** Only the "Archive" confirmation calls this; nothing is deleted. */
+    archiveCharacter: (characterId: string) => call<CharacterSummary>('character.archive', { characterId, confirm: true }),
+    unarchiveCharacter: (characterId: string) => call<CharacterSummary>('character.unarchive', { characterId }),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),

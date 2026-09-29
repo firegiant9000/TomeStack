@@ -36,8 +36,10 @@ public class FieldGraphTests
     {
         var sheet = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
 
-        // scores, modifiers, PB, saves, skills, initiative, AC, HP; spell attack, save DC, 9 slot levels, pact slots (v5)
-        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 9 + 1, sheet.Fields.Count);
+        // scores, modifiers, PB, saves, skills, initiative, AC, HP; attacks and critical range (v8); spell attack, save DC,
+        // 9 slot levels, pact slots (v5)
+        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 2 + 9 + 1, sheet.Fields.Count);
+        Assert.Equal((1, 20), (sheet.Field(FieldIds.Attacks).Value, sheet.Field(FieldIds.CriticalRange).Value));
         Assert.Equal(
             ["score", "modifier", "bonus", "modifier", "modifier", "modifier", "modifier", "score", "score"],
             new[] { "ability.str.score", "ability.str.mod", FieldIds.ProficiencyBonus, FieldIds.Save(Ability.Wis), FieldIds.Skill("stealth"), FieldIds.Skill("animalHandling"), FieldIds.Initiative, FieldIds.ArmorClass, FieldIds.HitPoints }

@@ -1,0 +1,402 @@
+{
+  "packId": "srd-5.1-armor",
+  "formatVersion": 1,
+  "notice": "The armor table of the System Reference Document 5.1 (CC-BY-4.0), pp. 62-64. Taken from SRD_CC_v5.1.pdf (SHA-256 2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0). See docs/licensing/srd-pack-review.md.",
+  "sources": [
+    {
+      "id": "51500000-0000-4000-8000-000000000001",
+      "title": "System Reference Document 5.1",
+      "publisher": "SRD 5.1 (CC-BY-4.0)",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "editionVersion": "5.1",
+      "license": "CC-BY-4.0",
+      "redistributable": true,
+      "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+      "modificationNotice": "Modified: TomeStack adapted this material into structured data. Selected passages are excerpted or shortened, with line breaks and hyphenation repaired, and rules are encoded as machine-readable effects.",
+      "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0"
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201001",
+      "revisionId": "51e00000-0000-4000-8000-000000201001",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Padded",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Padded (Light Armor): Armor Class 11 + Dex modifier; Strength —; Stealth Disadvantage; 8 lb.; 5 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear light armor, you add your Dexterity modifier to the base number from your armor type to determine your Armor Class. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 11,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201002",
+      "revisionId": "51e00000-0000-4000-8000-000000201002",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Leather",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Leather (Light Armor): Armor Class 11 + Dex modifier; Strength —; Stealth —; 10 lb.; 10 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear light armor, you add your Dexterity modifier to the base number from your armor type to determine your Armor Class. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 11
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201003",
+      "revisionId": "51e00000-0000-4000-8000-000000201003",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Studded leather",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Studded leather (Light Armor): Armor Class 12 + Dex modifier; Strength —; Stealth —; 13 lb.; 45 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear light armor, you add your Dexterity modifier to the base number from your armor type to determine your Armor Class. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "light",
+          "armorClass": 12
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201004",
+      "revisionId": "51e00000-0000-4000-8000-000000201004",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Hide",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Hide (Medium Armor): Armor Class 12 + Dex modifier (max 2); Strength —; Stealth —; 12 lb.; 10 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear medium armor, you add your Dexterity modifier, to a maximum of +2, to the base number from your armor type to determine your Armor Class. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 12,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201005",
+      "revisionId": "51e00000-0000-4000-8000-000000201005",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Chain shirt",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Chain shirt (Medium Armor): Armor Class 13 + Dex modifier (max 2); Strength —; Stealth —; 20 lb.; 50 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear medium armor, you add your Dexterity modifier, to a maximum of +2, to the base number from your armor type to determine your Armor Class. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 13,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201006",
+      "revisionId": "51e00000-0000-4000-8000-000000201006",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Scale mail",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Scale mail (Medium Armor): Armor Class 14 + Dex modifier (max 2); Strength —; Stealth Disadvantage; 45 lb.; 50 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear medium armor, you add your Dexterity modifier, to a maximum of +2, to the base number from your armor type to determine your Armor Class. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 14,
+          "dexterityCap": 2,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201007",
+      "revisionId": "51e00000-0000-4000-8000-000000201007",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Breastplate",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Breastplate (Medium Armor): Armor Class 14 + Dex modifier (max 2); Strength —; Stealth —; 20 lb.; 400 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear medium armor, you add your Dexterity modifier, to a maximum of +2, to the base number from your armor type to determine your Armor Class. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 14,
+          "dexterityCap": 2
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201008",
+      "revisionId": "51e00000-0000-4000-8000-000000201008",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Half plate",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Half plate (Medium Armor): Armor Class 15 + Dex modifier (max 2); Strength —; Stealth Disadvantage; 40 lb.; 750 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "If you wear medium armor, you add your Dexterity modifier, to a maximum of +2, to the base number from your armor type to determine your Armor Class. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "medium",
+          "armorClass": 15,
+          "dexterityCap": 2,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201009",
+      "revisionId": "51e00000-0000-4000-8000-000000201009",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Ring mail",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Ring mail (Heavy Armor): Armor Class 14; Strength —; Stealth Disadvantage; 40 lb.; 30 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy armor doesn’t let you add your Dexterity modifier to your Armor Class, but it also doesn’t penalize you if your Dexterity modifier is negative. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 14,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201010",
+      "revisionId": "51e00000-0000-4000-8000-000000201010",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Chain mail",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Chain mail (Heavy Armor): Armor Class 16; Strength Str 13; Stealth Disadvantage; 55 lb.; 75 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy armor doesn’t let you add your Dexterity modifier to your Armor Class, but it also doesn’t penalize you if your Dexterity modifier is negative. If the Armor table shows “Str 13” or “Str 15” in the Strength column for an armor type, the armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 16,
+          "strength": 13,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201011",
+      "revisionId": "51e00000-0000-4000-8000-000000201011",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Splint",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Splint (Heavy Armor): Armor Class 17; Strength Str 15; Stealth Disadvantage; 60 lb.; 200 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy armor doesn’t let you add your Dexterity modifier to your Armor Class, but it also doesn’t penalize you if your Dexterity modifier is negative. If the Armor table shows “Str 13” or “Str 15” in the Strength column for an armor type, the armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 17,
+          "strength": 15,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201012",
+      "revisionId": "51e00000-0000-4000-8000-000000201012",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Plate",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Plate (Heavy Armor): Armor Class 18; Strength Str 15; Stealth Disadvantage; 65 lb.; 1,500 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "armor",
+          "text": "Heavy armor doesn’t let you add your Dexterity modifier to your Armor Class, but it also doesn’t penalize you if your Dexterity modifier is negative. If the Armor table shows “Str 13” or “Str 15” in the Strength column for an armor type, the armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score. If the Armor table shows “Disadvantage” in the Stealth column, the wearer has disadvantage on Dexterity (Stealth) checks. Only those proficient in the armor’s use know how to wear it effectively. If you wear armor that you lack proficiency with, you have disadvantage on any ability check, saving throw, or attack roll that involves Strength or Dexterity, and you can’t cast spells.",
+          "category": "heavy",
+          "armorClass": 18,
+          "strength": 15,
+          "stealthDisadvantage": true
+        }
+      ]
+    },
+    {
+      "contentId": "51c00000-0000-4000-8000-000000201013",
+      "revisionId": "51e00000-0000-4000-8000-000000201013",
+      "schemaVersion": 8,
+      "kind": "item",
+      "name": "Shield",
+      "rulesFamilies": [
+        "srd-5.1"
+      ],
+      "provenance": {
+        "sourceId": "51500000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 63,
+          "end": 64
+        }
+      },
+      "status": "published",
+      "summary": "Shield: Armor Class +2; Strength —; Stealth —; 6 lb.; 10 gp.",
+      "effects": [
+        {
+          "type": "armor",
+          "id": "shield",
+          "text": "A shield is made from wood or metal and is carried in one hand. Wielding a shield increases your Armor Class by 2. You can benefit from only one shield at a time.",
+          "category": "shield",
+          "armorClass": 2
+        }
+      ]
+    }
+  ]
+}

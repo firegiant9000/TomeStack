@@ -17,9 +17,10 @@ public sealed partial class TomeStackApp : IDisposable
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
 
-    private readonly IReadOnlyList<Diagnostic> _warnings;
+    /// <summary>Startup warnings (<see cref="AppInfo.Warnings"/>): a sync-root data folder, and bundled revisions that could not be seeded.</summary>
+    private readonly List<Diagnostic> _warnings;
 
-    private TomeStackApp(string dataDirectory, TimeProvider time, IReadOnlyList<Diagnostic> warnings)
+    private TomeStackApp(string dataDirectory, TimeProvider time, List<Diagnostic> warnings)
     {
         DataDirectory = dataDirectory;
         _time = time;
@@ -46,6 +47,9 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-spells.json", "TomeStack.Content.srd-5.2.1-spells.json",
         "TomeStack.Content.srd-5.1-equipment.json", "TomeStack.Content.srd-5.2.1-equipment.json",
         "TomeStack.Content.srd-5.1-classes.json", "TomeStack.Content.srd-5.2.1-classes.json",
+        // M2.2: armor before the Fighter, which is proficient with it; the Fighter after the classes it may multiclass with.
+        "TomeStack.Content.srd-5.1-armor.json", "TomeStack.Content.srd-5.2.1-armor.json",
+        "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
     ];
 
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
@@ -70,6 +74,8 @@ public sealed partial class TomeStackApp : IDisposable
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
                 bundled.UnionWith(app.Seed(pack).Revisions.Select(r => r.RevisionId));
+            // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
+            bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             if (devFixtures)
             {
@@ -168,7 +174,7 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     public IReadOnlyList<CharacterSummary> ListCharacters() =>
-        [.. _store.ListCharacters().Select(c => new CharacterSummary(c.Id, c.Name, c.RulesFamily, c.UpdatedAt))];
+        [.. _store.ListCharacters().Select(Summary)];
 
     public CharacterView GetCharacter(Guid id) =>
         _store.FindCharacter(id) is { } character
@@ -197,12 +203,15 @@ public sealed partial class TomeStackApp : IDisposable
     /// <c>character.save</c>. SPEC C-05: the play state of a stored character is kept as stored, whatever the payload
     /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
-    /// play state it is saved with.
+    /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
+    /// <c>character.unarchive</c> change it.
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored ? character with { Play = stored.Play } : character);
+        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
+            ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt }
+            : character with { ArchivedAt = null }); // a save never creates an archived character
     }
 
     /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
@@ -313,6 +322,14 @@ public sealed partial class TomeStackApp : IDisposable
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is empty.");
     }
 
+    /// <summary>Bundled revisions whose id was already stored with other data (see <see cref="Seed"/>).</summary>
+    private readonly List<ContentReference> _seedConflicts = [];
+
+    /// <summary>
+    /// Seeds a bundled pack (insert-only). A stored revision with the same id but different data (for example one a package
+    /// brought in under an id that a later build bundles) is kept, and the bundled revision is skipped with a startup
+    /// warning, instead of the data folder failing to open on every launch. Published revisions are never overwritten.
+    /// </summary>
     private ContentPack Seed(string resourceName)
     {
         var pack = LoadBundledPack(resourceName);
@@ -321,7 +338,21 @@ public sealed partial class TomeStackApp : IDisposable
             foreach (var source in pack.Sources.Where(s => _store.FindSource(s.Id) is null))
                 _store.UpsertSource(source);
             foreach (var revision in pack.Revisions)
-                _store.AddRevision(revision);
+            {
+                try
+                {
+                    _store.AddRevision(revision);
+                }
+                catch (ImmutableRevisionException conflict) // thrown before anything is written
+                {
+                    _seedConflicts.Add(conflict.Reference);
+                    // Ids and the bundled name only: never text from the stored revision, which may be the user's (gotcha: error logs).
+                    _warnings.Add(new(
+                        "content.bundled-conflict",
+                        $"TomeStack could not add the bundled revision '{revision.Name}' ({revision.RevisionId}): your library already has different content under that id, which is kept. Characters that use this revision may calculate differently from the bundled rules.",
+                        conflict.Reference));
+                }
+            }
         });
         return pack;
     }
@@ -349,7 +380,8 @@ public sealed record ContentOption(
 /// <summary>What the builder's spell picker needs to filter and sort a spell option (content schema v5).</summary>
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt);
+/// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

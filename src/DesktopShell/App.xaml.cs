@@ -33,8 +33,9 @@ public partial class App : Application
 
         try
         {
-            // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1).
-            _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES") == "1");
+            // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1,
+            // honoured only in a Debug build; LIVING_SPECS D11).
+            _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: options.DevFixtures);
         }
         catch (DataFolderInUseException ex)
         {
@@ -70,21 +71,54 @@ public partial class App : Application
     }
 }
 
+/// <param name="DevTools">
+/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build (audit 2026-09-28),
+/// <c>--smoke</c> included. A Release build also clears <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c>, so no variable can
+/// open a debugging port either.
+/// </param>
 /// <param name="SimulateMissingRuntime">
 /// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
 /// <c>--smoke</c>, so a normal launch cannot be switched into it.
 /// </param>
-public sealed record ShellOptions(bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false)
+/// <param name="DevFixtures">
+/// <c>TOMESTACK_DEV_FIXTURES=1</c>: seed the original test fixtures into the data folder. Honoured only in a Debug build
+/// (LIVING_SPECS D11): seeded revisions cannot be removed, so no Release launch, smoke included, seeds them.
+/// </param>
+/// <param name="AllowBrowserArguments">
+/// Whether WebView2 may apply <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c> (for example a remote debugging port). Only in a
+/// Debug build; otherwise the shell clears the variable first.
+/// </param>
+public sealed record ShellOptions(
+    bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false,
+    bool AllowBrowserArguments = false)
 {
-    public static ShellOptions Parse(string[] args)
+#if DEBUG
+    private const bool DebugBuild = true;
+#else
+    private const bool DebugBuild = false;
+#endif
+
+    public static ShellOptions Parse(string[] args) =>
+        Parse(args, Environment.GetEnvironmentVariable("TOMESTACK_DEV_FIXTURES"), DebugBuild);
+
+    /// <param name="devFixturesVariable">The value of <c>TOMESTACK_DEV_FIXTURES</c>.</param>
+    /// <param name="debugBuild">Whether this is a Debug build, where the development switches are always honoured.</param>
+    public static ShellOptions Parse(string[] args, string? devFixturesVariable, bool debugBuild)
     {
+        ArgumentNullException.ThrowIfNull(args);
         string? Value(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         var smoke = args.Contains("--smoke");
+        var dataDirectory = Value("--data-dir");
+        // Only a Debug build is a development session: no Release launch, --smoke included, gets DevTools or extra
+        // browser arguments (a debugging port would be a listening socket, ADR-006). The smoke needs neither.
         return new ShellOptions(
             Smoke: smoke,
-            DevTools: args.Contains("--devtools"),
-            DataDirectory: Value("--data-dir"),
+            DevTools: debugBuild && args.Contains("--devtools"),
+            AllowBrowserArguments: debugBuild,
+            DataDirectory: dataDirectory,
             SmokeReport: Value("--smoke-report"),
-            SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"));
+            SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"),
+            // Seeded fixtures cannot be removed (published revisions are insert-only), so only a Debug build seeds them.
+            DevFixtures: debugBuild && devFixturesVariable == "1");
     }
 }

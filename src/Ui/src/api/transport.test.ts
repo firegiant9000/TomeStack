@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from './client';
-import { createBridgeTransport, TomeStackError, type WebViewBridge } from './transport';
+import { createBridgeTransport, createHttpTransport, TomeStackError, type WebViewBridge } from './transport';
 
 function fakeBridge(reply: (message: { id: string; command: string }) => unknown) {
   let listener: ((event: { data: unknown }) => void) | undefined;
@@ -72,6 +72,58 @@ describe('bridge transport', () => {
     answer?.();
 
     await expect(pending).resolves.toEqual({ saved: true, fileName: 'a.tomestack.zip' });
+  });
+});
+
+/** A DevHost stand-in: answers after `delayMs`, and rejects like the real fetch when the request is aborted. */
+function stubFetch(delayMs: number, body: unknown = { id: '1', ok: true, result: 'done' }) {
+  const stub = vi.fn(
+    (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve({ ok: true, status: 200, json: async () => body }), delayMs);
+        init.signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      }),
+  );
+  vi.stubGlobal('fetch', stub);
+  return stub;
+}
+
+describe('http transport', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the result of a timely response', async () => {
+    stubFetch(5);
+    await expect(createHttpTransport('/api/command', {}, 200)('app.info')).resolves.toBe('done');
+  });
+
+  it('aborts a request that takes too long and fails with timeout, like the bridge', async () => {
+    const stub = stubFetch(200);
+    const call = createHttpTransport('/api/command', {}, 20);
+
+    const error = await call('app.info').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(TomeStackError);
+    expect((error as TomeStackError).code).toBe('timeout');
+    expect(stub.mock.calls[0]![1].signal.aborted).toBe(true);
+  });
+
+  it('honours a per-call timeout, and null waits indefinitely', async () => {
+    stubFetch(60);
+    const call = createHttpTransport('/api/command', {}, 20);
+
+    await expect(call('package.saveAs', {}, { timeoutMs: null })).resolves.toBe('done');
+    await expect(call('app.info', {}, { timeoutMs: 200 })).resolves.toBe('done');
+    await expect(call('app.info', {}, { timeoutMs: 10 })).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it('keeps other errors as they are', async () => {
+    stubFetch(1, { id: '1', ok: false, error: { code: 'validation', message: 'bad' } });
+    await expect(createHttpTransport('/api/command', {}, 200)('character.create')).rejects.toMatchObject({ code: 'validation' });
   });
 });
 

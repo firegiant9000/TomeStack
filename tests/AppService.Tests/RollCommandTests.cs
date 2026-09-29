@@ -145,4 +145,56 @@ public class RollCommandTests
         Assert.Equal(2, result.GetProperty("dice").GetArrayLength());
         Assert.Equal("initiative", result.GetProperty("provenance").GetProperty("rollId").GetString());
     }
+
+    private static readonly Guid HomebrewSource = Guid.Parse("7c000000-0000-4000-8000-000000000b01");
+
+    /// <summary>The Berserker 3 with Strength 8 and a pinned homebrew feat whose roll has the bonus formula <paramref name="bonus"/> (content v8).</summary>
+    private static (TempApp Temp, Guid Id, ContentReference Feat) WithBonusRoll(string bonus)
+    {
+        var (temp, id) = Berserker3();
+        temp.App.Store.UpsertSource(new SourceRecord
+        {
+            Id = HomebrewSource, Title = "Test Rolls", Publisher = "Me", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = false,
+        });
+        var feat = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = "Test Heavy Swing",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(HomebrewSource), Status = RevisionStatus.Published,
+            Effects = [new RollEffect { Id = "swing", RollId = "swing", Label = "Heavy swing", Dice = "1d6", Bonus = bonus }],
+        };
+        temp.App.Store.AddRevision(feat);
+        var character = temp.App.GetCharacter(id).Character;
+        temp.App.SaveCharacter(character with { Pins = [feat.Reference], BaseAbilities = new(8, 14, 14, 10, 10, 10) });
+        return (temp, id, feat.Reference);
+    }
+
+    [Theory]
+    [InlineData("-1", -1)]
+    [InlineData("STR.MOD", -1)] // Strength 8
+    public void A_negative_roll_bonus_is_subtracted_and_labelled_by_the_roll(string bonus, int amount)
+    {
+        var (temp, id, feat) = WithBonusRoll(bonus);
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, feat, "swing"));
+
+        var modifier = Assert.Single(record.Modifiers);
+        Assert.Equal(("Heavy swing bonus", amount), (modifier.Label, modifier.Amount)); // the label names the roll, not the formula
+        Assert.Equal(record.Dice.Sum(d => d.Value) + amount, record.Total);
+    }
+
+    [Fact]
+    public void A_roll_whose_bonus_cannot_be_calculated_is_refused()
+    {
+        // CLASS_LEVEL has no value in a feat, which belongs to no class.
+        var (temp, id, feat) = WithBonusRoll("CLASS_LEVEL");
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, feat, "swing")));
+
+        var problem = Assert.Single(refused.Problems);
+        Assert.Equal(("roll.bonus-invalid", feat, "swing"), (problem.Code, problem.Content, problem.EffectId));
+        Assert.Contains(temp.App.GetCharacter(id).Sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.Content == feat && d.EffectId == "swing");
+    }
 }

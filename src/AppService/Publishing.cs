@@ -79,9 +79,19 @@ public sealed partial class TomeStackApp
         if (!report.CanPublish)
             throw new AppValidationException([new("content.validation-failed", $"'{draft.Name}' has {report.Errors.Count} problem(s) and was not published.", draftReference), .. report.Errors]);
 
-        var published = draft with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Published };
+        // M2.2: write the lowest schema version the content needs (never above the draft's), so homebrew that uses no
+        // newer field stays readable by older builds. The published revision is a new insert with its own hash; the
+        // draft keeps its version, and no existing revision changes.
+        var published = draft with
+        {
+            RevisionId = Guid.NewGuid(),
+            Status = RevisionStatus.Published,
+            SchemaVersion = Math.Min(draft.SchemaVersion, report.RequiredSchemaVersion),
+        };
         _store.InTransaction(() => _store.AddRevision(published));
-        return new PublishResult(draftReference, published.Reference, report, AffectedCharacters(draft.ContentId));
+        // The report states the version actually written (it can be the draft's own, lower than the requirement when only a
+        // spell field target raises it; those were never refused).
+        return new PublishResult(draftReference, published.Reference, report with { RequiredSchemaVersion = published.SchemaVersion }, AffectedCharacters(draft.ContentId));
     }
 
     public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) => _store.ListRevisions(contentId);

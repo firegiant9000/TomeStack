@@ -76,6 +76,37 @@ public class UpgradeTests
     }
 
     [Fact]
+    public void A_stored_revision_under_a_bundled_id_is_kept_and_the_folder_still_opens()
+    {
+        // Full-stack review: a package imported into an older build can carry a revision under an id that a later build
+        // bundles. Seeding that build must not fail to open the data folder on every launch.
+        var directory = NewDirectory();
+        var padded = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-armor.json").Revisions.First();
+        using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [])) { }
+        var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
+        using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            // Another revision's data under the bundled id, as the older build would have stored it.
+            command.CommandText = "UPDATE content_revisions SET json = replace(json, $name, $planted), sha256 = 'planted' WHERE revision_id = $id;";
+            command.Parameters.AddWithValue("$name", $"\"name\":\"{padded.Name}\"");
+            command.Parameters.AddWithValue("$planted", "\"name\":\"Test Planted Name\"");
+            command.Parameters.AddWithValue("$id", padded.RevisionId.ToString("D"));
+            Assert.Equal(1, command.ExecuteNonQuery());
+        }
+
+        using var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []);
+
+        var warning = Assert.Single(app.GetInfo().Warnings, w => w.Code == "content.bundled-conflict");
+        Assert.Equal(padded.Reference, warning.Content);
+        Assert.DoesNotContain("Test Planted Name", warning.Message, StringComparison.Ordinal); // never the stored text
+        Assert.Equal("Test Planted Name", app.Store.FindRevision(padded.Reference)!.Name); // kept, not overwritten
+        // The rest of the bundled content is still there.
+        Assert.NotNull(app.Store.FindRevision(TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-armor.json").Revisions.Last().Reference));
+    }
+
+    [Fact]
     public void Data_folder_from_a_newer_build_is_refused_and_left_untouched()
     {
         var directory = NewDirectory();

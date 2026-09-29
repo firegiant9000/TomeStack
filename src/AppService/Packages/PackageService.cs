@@ -57,8 +57,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null, AttachmentId = null })); // machine-local; a path may name the user (ADR-005)
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
+        // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
         foreach (var character in plan.Characters)
-            files[$"characters/{character.Id:D}.json"] = ("character", Json(character));
+            files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null }));
         // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text).
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
             files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
@@ -258,9 +259,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             }
             foreach (var character in parsed.Characters)
             {
-                if (store.FindCharacter(character.Id) is null) added++;
+                var local = store.FindCharacter(character.Id);
+                if (local is null) added++;
                 else replaced++;
-                store.SaveCharacter(character);
+                // SPEC C-08: only a full library restore brings the archive mark back. A character package keeps the local
+                // mark (or none for a new character), so an import never archives or unarchives anything by itself.
+                store.SaveCharacter(library ? character : character with { ArchivedAt = local?.ArchivedAt });
             }
             foreach (var note in parsed.GapNotes)
             {

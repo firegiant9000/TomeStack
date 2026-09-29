@@ -958,3 +958,149 @@ it('the Backups screen says what a full backup holds, and needs the desktop app 
   await user.click(within(panel).getByRole('button', { name: 'Choose a full backup…' }));
   await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Restoring a full backup needs the TomeStack desktop app/));
 });
+
+const fighter = (n: number) => srd(408000 + n);
+
+it('adds a homebrew Fighter subclass through the studio and plays it: the Stardust Guardian path with original content (M2.2)', async () => {
+  const user = userEvent.setup();
+  // An SRD 5.2.1 Fighter 3 with the Defense style and no subclass yet (the builder flows cover building one).
+  await client.createCharacter({
+    name: 'E2E Warden',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 16, dex: 14, con: 14, int: 10, wis: 12, cha: 8 },
+    pins: [srd(1), srd(2)],
+    classes: [{ class: fighter(0), level: 3 }],
+    choices: [
+      { source: srd(2), choiceId: 'soldier-ability-scores', selected: [srd(4)] },
+      { source: fighter(0), choiceId: 'fighter-skills', selected: [fighter(800), fighter(802)] },
+      { source: fighter(1), choiceId: 'fighting-style', selected: [fighter(601)] },
+    ],
+  });
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Warden Homebrew');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Warden Homebrew' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
+  async function publish(name: string) {
+    await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(`Published ${name}.`));
+  }
+
+  // A limited-use feature: a resource, its recovery and a roll that spends it.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Star Shield');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(within(rule(/^Rule 1: Resource/)).getByRole('textbox', { name: 'Resource name' }), 'Star charges');
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll or action' }));
+  const action = rule(/^Rule 3: Roll or action/);
+  await user.type(within(action).getByRole('textbox', { name: 'Roll name' }), 'Star burst');
+  await user.clear(within(action).getByRole('textbox', { name: /^Dice/ }));
+  await user.type(within(action).getByRole('textbox', { name: /^Dice/ }), '2d6');
+  await user.selectOptions(within(action).getByRole('combobox', { name: /Uses a resource/ }), 'Star charges');
+  await publish('E2E Star Shield');
+
+  // The subclass joins the SRD Fighter's level-3 choice, with a modifier and the feature.
+  await user.click(screen.getByRole('button', { name: 'New subclass' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Starward Warden');
+  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  await waitFor(() => expect(within(offered).getByRole('option', { name: /^Fighter: Level 3: Fighter Subclass/ })).toBeTruthy());
+  await user.selectOptions(offered, within(offered).getByRole('option', { name: /^Fighter: Level 3: Fighter Subclass/ }));
+  await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
+  await user.click(within(editor()).getByRole('button', { name: 'Grant a feature' }));
+  await user.selectOptions(within(rule(/^Rule 2: Granted feature/)).getByRole('combobox', { name: 'Feature' }), 'E2E Star Shield (published)');
+  await publish('E2E Starward Warden');
+
+  // Choose it on the sheet, next to the SRD Champion, then play.
+  await user.click(screen.getByRole('button', { name: /^E2E Warden/ }));
+  let sheet = await screen.findByRole('article', { name: 'E2E Warden' });
+  await user.click(within(sheet).getByRole('button', { name: 'Make choices' }));
+  const subclass = await screen.findByRole('group', { name: /^Fighter: choose 1/ });
+  expect(await within(subclass).findByRole('checkbox', { name: /^Champion/ })).toBeTruthy();
+  await pick(user, /^Fighter: choose 1/, /^E2E Starward Warden/);
+  await user.click(await screen.findByRole('button', { name: 'Save choices' }));
+
+  sheet = await screen.findByRole('article', { name: 'E2E Warden' });
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+3/ })).toBeTruthy(); // Dex +2, homebrew +1
+  expect(within(sheet).getByRole('heading', { name: /^Attacks per Attack action: 1/ })).toBeTruthy(); // Extra Attack comes at 5
+  const resources = () => within(screen.getByRole('article', { name: 'E2E Warden' })).getByRole('region', { name: 'Resources' });
+  expect(within(resources()).getByRole('heading', { name: 'Star charges: 2 of 2' })).toBeTruthy();
+  expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy();
+  expect(within(resources()).getByRole('heading', { name: 'Action Surge: 1 of 1' })).toBeTruthy();
+
+  // Second Wind rolls 1d10 plus the Fighter level; spending it is a separate, confirmed press.
+  await user.click(within(sheet).getByRole('button', { name: 'Roll Second Wind healing (1d10 + 3)' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Second Wind healing bonus \+3/));
+  expect(lastRoll.textContent).not.toMatch(/CLASS_LEVEL/); // the label names the roll, not its formula
+  await user.click(await screen.findByRole('button', { name: 'Spend 1 Second Wind (2 left)' }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 1 of 2' })).toBeTruthy());
+  await user.click(within(screen.getByRole('article', { name: 'E2E Warden' })).getByRole('button', { name: 'Roll Star burst (2d6)' }));
+  await user.click(await screen.findByRole('button', { name: 'Spend 1 Star charges (2 left)' }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Star charges: 1 of 2' })).toBeTruthy());
+
+  // A short rest gives one Second Wind use back (2024); the homebrew charges wait for the long rest.
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Short rest' });
+  expect(await within(rest).findByRole('checkbox', { name: /^Second Wind: 1 → 2/ })).toBeTruthy();
+  expect(within(rest).queryByRole('checkbox', { name: /^Star charges/ })).toBeNull();
+  await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
+  await expectStatus(/Short rest finished/);
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy());
+});
+
+it('archives a character after a preview, lists it apart, and brings it back (SPEC C-08)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Archivist');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
+  const characters = screen.getByRole('navigation', { name: 'Characters' });
+
+  // Preview first: focus moves into it, and Escape (or "Keep it") changes nothing and returns focus.
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  let confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
+  expect(confirm.textContent).toMatch(/Nothing is deleted/);
+  await waitFor(() => expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Archive' })));
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' }));
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
+  await user.click(within(confirm).getByRole('button', { name: 'Keep it' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+
+  // Confirmed: the character moves to the collapsed "Archived" list, and its sheet says so.
+  await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
+  confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
+  await user.click(within(confirm).getByRole('button', { name: 'Archive' }));
+  await expectStatus(/Archived E2E Archivist/);
+  const archivedList = await within(characters).findByRole('list', { name: 'Archived characters' });
+  expect(within(archivedList).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+  expect(archivedList.closest('details')!.open).toBe(false);
+  await waitFor(() => expect(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('heading', { name: 'Archived' })).toBeTruthy());
+  // The pressed button is gone; focus lands on the control that replaced it, not on <body>.
+  await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Unarchive' })));
+
+  // Unarchive: back in the main list.
+  await user.click(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Unarchive' }));
+  await expectStatus(/back in the character list/);
+  await waitFor(() => expect(within(characters).queryByRole('list', { name: 'Archived characters' })).toBeNull());
+  expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
+  await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Archive…' })));
+});

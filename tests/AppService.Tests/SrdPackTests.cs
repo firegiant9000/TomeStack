@@ -18,8 +18,12 @@ public class SrdPackTests
     private static readonly ContentPack Equipment521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-equipment.json");
     private static readonly ContentPack Classes51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-classes.json");
     private static readonly ContentPack Classes521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-classes.json");
-    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51);
-    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521);
+    private static readonly ContentPack Armor51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-armor.json");
+    private static readonly ContentPack Armor521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-armor.json");
+    private static readonly ContentPack Fighter51 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.1-fighter.json");
+    private static readonly ContentPack Fighter521 = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-fighter.json");
+    private static readonly ContentPack Srd51 = Merge(Base51, Spells51, Equipment51, Classes51, Armor51, Fighter51);
+    private static readonly ContentPack Srd521 = Merge(Base521, Spells521, Equipment521, Classes521, Armor521, Fighter521);
 
     private static ContentPack Merge(params ContentPack[] packs) => new()
     {
@@ -40,10 +44,28 @@ public class SrdPackTests
     [Fact]
     public void A_familys_packs_carry_the_identical_source_record()
     {
-        foreach (var pack in new[] { Spells51, Equipment51, Classes51 })
+        foreach (var pack in new[] { Spells51, Equipment51, Classes51, Armor51, Fighter51 })
             Assert.Equal(TempApp.Json(Base51.Sources), TempApp.Json(pack.Sources));
-        foreach (var pack in new[] { Spells521, Equipment521, Classes521 })
+        foreach (var pack in new[] { Spells521, Equipment521, Classes521, Armor521, Fighter521 })
             Assert.Equal(TempApp.Json(Base521.Sources), TempApp.Json(pack.Sources));
+    }
+
+    [Fact]
+    public void The_armor_tables_are_twelve_armors_and_a_shield_with_strength_and_stealth()
+    {
+        // SRD 5.1 pp. 63-64 and SRD 5.2.1 p. 92 print the same numbers; the names differ ("Splint" / "Splint Armor").
+        foreach (var pack in new[] { Armor51, Armor521 })
+        {
+            Assert.Equal(13, pack.Revisions.Count);
+            Assert.All(pack.Revisions, r => Assert.Equal((ContentKind.Item, ContentRevision.CombatDetailsSchemaVersion), (r.Kind, r.SchemaVersion)));
+            var armor = pack.Revisions.Select(r => r.Effects.OfType<ArmorEffect>().Single()).ToList();
+            Assert.Equal([3, 5, 4, 1], new[] { ArmorCategory.Light, ArmorCategory.Medium, ArmorCategory.Heavy, ArmorCategory.Shield }.Select(c => armor.Count(a => a.Category == c)));
+            Assert.Equal([11, 11, 12, 12, 13, 14, 14, 15, 14, 16, 17, 18, 2], armor.Select(a => a.ArmorClass));
+            Assert.Equal([13, 15, 15], armor.Where(a => a.Strength is not null).Select(a => a.Strength!.Value));
+            Assert.Equal(7, armor.Count(a => a.StealthDisadvantage == true)); // padded, scale, half plate, and every heavy armor
+            Assert.All(armor.Where(a => a.Category == ArmorCategory.Medium), a => Assert.Equal(2, a.DexterityCap));
+        }
+        Assert.Equal(("Splint", "Splint Armor"), (Armor51.Revisions[10].Name, Armor521.Revisions[10].Name));
     }
 
     [Fact]

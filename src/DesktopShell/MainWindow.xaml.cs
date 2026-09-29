@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     private readonly List<string> _smokeCommands = [];
     private readonly List<string> _blockedRequests = [];
     private readonly int _charactersAtStart;
+    private const string AdditionalBrowserArguments = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
+    private bool _browserArgumentsSet;
 
     public MainWindow(TomeStackApp tomeStack, ShellOptions options)
     {
@@ -60,6 +62,11 @@ public partial class MainWindow : Window
             // missing-runtime check forces the same handler the loader's exception reaches.
             if (_options.SimulateMissingRuntime)
                 throw new WebView2RuntimeNotFoundException("Simulated by --simulate-missing-webview2.");
+            // Audit 2026-09-28: the loader reads extra browser arguments from the environment, which could open a
+            // DevTools protocol port (ADR-006: no listening socket). Outside a development session they are dropped.
+            _browserArgumentsSet = Environment.GetEnvironmentVariable(AdditionalBrowserArguments) is { Length: > 0 };
+            if (!_options.AllowBrowserArguments)
+                Environment.SetEnvironmentVariable(AdditionalBrowserArguments, null);
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
                 userDataFolder: Path.Combine(_tomeStack.DataDirectory, "WebView2"));
@@ -342,10 +349,18 @@ public partial class MainWindow : Window
             blockedRequests = _blockedRequests,
             webView2Runtime = TryGetRuntimeVersion(),
             simulatedMissingRuntime = _options.SimulateMissingRuntime,
+            // Development switches, honoured only in a Debug build or with --smoke (LIVING_SPECS D11).
+            devTools = _options.DevTools,
+            devFixtures = _options.DevFixtures,
             // Evidence only (no paths): which WebView2 loader overrides this process could see.
             webView2LoaderOverrides = new
             {
                 environmentVariable = Environment.GetEnvironmentVariable("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER") is { Length: > 0 },
+                // Whether extra browser arguments were set, and whether they were applied (a development session only).
+                additionalArguments = _browserArgumentsSet,
+                additionalArgumentsApplied = _browserArgumentsSet && _options.AllowBrowserArguments,
+                additionalArgumentsPolicy = HasWebView2Policy(Microsoft.Win32.Registry.LocalMachine, "AdditionalBrowserArguments")
+                    || HasWebView2Policy(Microsoft.Win32.Registry.CurrentUser, "AdditionalBrowserArguments"),
                 policy = HasBrowserFolderPolicy(Microsoft.Win32.Registry.LocalMachine) || HasBrowserFolderPolicy(Microsoft.Win32.Registry.CurrentUser),
             },
             dataDirectory = _tomeStack.DataDirectory,
@@ -354,9 +369,15 @@ public partial class MainWindow : Window
         Application.Current.Shutdown(success ? 0 : 2);
     }
 
-    private static bool HasBrowserFolderPolicy(Microsoft.Win32.RegistryKey root)
+    private static bool HasBrowserFolderPolicy(Microsoft.Win32.RegistryKey root) => HasWebView2Policy(root, "BrowserExecutableFolder");
+
+    /// <summary>
+    /// A WebView2 policy key with any value (keyed by exe name or AUMID). Evidence only: the shell cannot clear a policy,
+    /// and whoever can write the per-user key can also replace the per-user install, so it is reported, not blocked.
+    /// </summary>
+    private static bool HasWebView2Policy(Microsoft.Win32.RegistryKey root, string policy)
     {
-        using var key = root.OpenSubKey(@"Software\Policies\Microsoft\Edge\WebView2\BrowserExecutableFolder");
+        using var key = root.OpenSubKey($@"Software\Policies\Microsoft\Edge\WebView2\{policy}");
         return key is not null && key.ValueCount > 0;
     }
 

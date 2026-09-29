@@ -4,7 +4,7 @@ A local-first Windows desktop app for building fifth-edition characters and home
 
 > **Status: v0.3.0, a limited-content build.** The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet. M2.1 (data safety) is implemented and not released yet. The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
 >
-> - **Classes you can build:** the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. **Not yet:** Fighter (next, ROADMAP M2.2), Monk, Rogue, Barbarian 4–20, and the SRD armor table.
+> - **Classes you can build:** the Fighter with the Champion (M2.2, implemented, not released yet) and the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. The SRD armor table is bundled with the Fighter. **Not yet:** Monk, Rogue, Barbarian 4–20.
 > - **Species and backgrounds:** one each per family (Half-Orc and Acolyte for SRD 5.1; Dwarf and Soldier for SRD 5.2.1). Anything else you add in the homebrew studio.
 > - **Works today:** build under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, multiclassing, spells, every choice), and see every calculated field with a source-aware trace. Play: hit points, resources, spell slots, conditions, equipment, rolls, short and long rests, death saves. Author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, keep campaign profiles, and print a sheet. Back up and restore your whole library, PDFs included, or export one character to back it up or share it.
 > - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
@@ -60,7 +60,7 @@ CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/w
 dotnet run --project src/DesktopShell
 ```
 
-Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). Pass `--devtools` to enable WebView2 DevTools. The app seeds the bundled SRD packs. Set `TOMESTACK_DEV_FIXTURES=1` to also seed the original test fixtures (DevHost always does).
+Data goes to `%LOCALAPPDATA%\TomeStack` (override with `TOMESTACK_DATA_DIR` or `--data-dir <path>`; a folder inside OneDrive or another sync root gets a warning). The app seeds the bundled SRD packs. In a Debug build, `--devtools` enables WebView2 DevTools and `TOMESTACK_DEV_FIXTURES=1` also seeds the original test fixtures (DevHost always does); a Release build ignores both (LIVING_SPECS D11).
 
 **Self-test.** This launches the shell, loads the UI, round-trips commands over the bridge, creates a fixture character, exports it and previews the package. It then exits 0/2 and writes a JSON report:
 
