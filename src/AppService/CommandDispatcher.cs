@@ -132,7 +132,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.archive" => app.Archive(Payload<ArchiveRequest>(payload)),
         "character.unarchive" => app.Unarchive(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.snapshot" => app.Snapshot(Payload<SnapshotRequest>(payload)),
-        "character.snapshots" => app.Snapshots(Payload<CharacterIdPayload>(payload).CharacterId),
+        "character.snapshots" => ListSnapshots(Payload<SnapshotsPayload>(payload)),
         "character.restorePreview" => app.PreviewRestore(Payload<RestorePreviewRequest>(payload)),
         "character.restoreSnapshot" => app.RestoreSnapshot(Payload<RestoreSnapshotRequest>(payload)),
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
@@ -197,6 +197,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         app.DeleteGapNote(payload);
         return new { deleted = true };
     }
+
+    private SnapshotPage ListSnapshots(SnapshotsPayload payload) => app.Snapshots(payload.CharacterId, payload.Before);
 
     private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
 
@@ -374,6 +376,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record IdPayload(Guid Id);
 
     private sealed record CharacterIdPayload(Guid CharacterId);
+
+    private sealed record SnapshotsPayload(Guid CharacterId, Guid? Before = null);
 
     private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 

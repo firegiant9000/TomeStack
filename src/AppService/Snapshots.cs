@@ -19,6 +19,10 @@ public sealed record CharacterSnapshot(Guid Id, Guid CharacterId, DateTimeOffset
 /// <summary>What the snapshot list shows: never the whole character.</summary>
 public sealed record SnapshotSummary(Guid Id, Guid CharacterId, DateTimeOffset CreatedAt, SnapshotReason Reason, string? Label, string Name, int Level);
 
+/// <param name="Items">One page, newest first.</param>
+/// <param name="HasMore">Whether older snapshots exist: ask again with <c>before</c> = the last item's id.</param>
+public sealed record SnapshotPage(IReadOnlyList<SnapshotSummary> Items, bool HasMore);
+
 public sealed record SnapshotRequest(Guid CharacterId, string? Label = null);
 
 public sealed record RestorePreviewRequest(Guid CharacterId, Guid SnapshotId);
@@ -75,11 +79,18 @@ public sealed partial class TomeStackApp
         return Summarize(snapshot);
     }
 
-    /// <summary><c>character.snapshots</c>: the character's snapshots, newest first.</summary>
-    public IReadOnlyList<SnapshotSummary> Snapshots(Guid characterId)
+    /// <summary>
+    /// <c>character.snapshots</c>: a page of the character's snapshots, newest first (at most
+    /// <see cref="Persistence.SqliteStore.MaxListedSnapshots"/>). <paramref name="before"/> is the id of the oldest snapshot
+    /// already shown: the page then holds the ones stored before it. Snapshots are never removed, so this pages back to the first.
+    /// </summary>
+    public SnapshotPage Snapshots(Guid characterId, Guid? before = null)
     {
         FindCharacterOrThrow(characterId);
-        return [.. _store.ListSnapshots(characterId).Select(Summarize)];
+        if (before is { } cursor && _store.FindSnapshot(cursor)?.CharacterId != characterId)
+            throw new AppValidationException([new("snapshot.not-found", $"Snapshot {before} is not a snapshot of this character.")]);
+        var rows = _store.ListSnapshots(characterId, before, Persistence.SqliteStore.MaxListedSnapshots + 1);
+        return new SnapshotPage([.. rows.Take(Persistence.SqliteStore.MaxListedSnapshots).Select(Summarize)], rows.Count > Persistence.SqliteStore.MaxListedSnapshots);
     }
 
     /// <summary>

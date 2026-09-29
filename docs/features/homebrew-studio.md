@@ -227,11 +227,13 @@ The hint set is the owner's (LIVING_SPECS D14), and nothing else:
 | `design.level-without-feature` | Levels where the class gains no content grant or choice, although **every** bundled SRD class of the family gains one there (a grant or choice with no level counts at level 1). Many SRD levels bring only slots, a column or a subclass feature, which are not class grants, so the SRD itself is the measure. No bundled class trips it |
 
 **What is compared:**
-- The baseline is the content of the SRD packs this build ships (their source ids), never an imported source, whatever edition it declares.
+- The baseline is the published revisions this build seeded from its SRD packs, chosen **by revision id** (kept from startup, after any seed conflict is set aside). Nothing added later joins it: not an imported source, not a revision added under an SRD source id, and not a newer revision of an SRD content id.
 - The slot hints look at the spellcasting the calculator uses: the first that is not reference-only, and only with ordinary spell slots and a well-formed table. Pact Magic and malformed tables get none.
 - Hints about slots, resources and levels are per rules family: a revision written for both families can get one of each.
 
-`DesignFeedbackCommandTests` show that no bundled SRD caster gets either slot hint, and no bundled class the level hint. They also show that an over-slotted class does get the slot hint, and that an imported source's caster never enters the baseline.
+`DesignFeedbackCommandTests` show that no bundled SRD caster gets either slot hint, and no bundled class the level hint. They also show that an over-slotted class does get the slot hint, and that an imported source's caster never enters the baseline. A published revision under an SRD source id, and an inflated newer revision of an SRD caster feature, leave the hints unchanged.
+
+**Review fixes (2026-09-29):** the baseline is chosen by revision id, not by source id, because publishing and package import do not stop a revision from carrying an SRD source id, and a revision kept after a seed conflict is the user's own. The "higher spell level" test in `design.multiclass-share-above-table` compares the shared row's highest spell level with the highest spell level that has slots in the class's own row, so a row with a gap (none of level 1, six of level 2) is no longer flagged by mistake. The resource hint still compares with the fastest SRD pool (+95): that is the open owner question, unchanged.
 
 Acceptance:
 - `RulesCore.Tests/DesignFeedbackTests`;

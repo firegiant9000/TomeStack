@@ -73,6 +73,9 @@
 
 ### Fixed
 
+- **Design feedback compares only with the bundled SRD (review of #36, 2026-09-29):** a revision you or a package added under an SRD source, or as a newer version of an SRD feature, no longer becomes the baseline of the hints.
+- **No false "multiclass share above table" hint (review of #36):** a class whose own slots skip a spell level (for example none of level 1, six of level 2) is compared by its highest spell level, not by how many levels have slots.
+- **Older snapshots stay reachable (review of #36):** the snapshot list shows 100 at a time, and "Show older snapshots" loads the rest, so a snapshot pushed down by many restores can still be restored.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 

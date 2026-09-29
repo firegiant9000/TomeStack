@@ -19,6 +19,7 @@ const when = (iso: string) => new Date(iso).toLocaleString();
  */
 export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Props) {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [label, setLabel] = useState('');
   const [preview, setPreview] = useState<RestorePreview>();
   const [busy, setBusy] = useState(false);
@@ -30,8 +31,10 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
     let current = true;
     client
       .snapshots(character.id)
-      .then((list) => {
-        if (current) setSnapshots(list);
+      .then((page) => {
+        if (!current) return;
+        setSnapshots(page.items);
+        setHasMore(page.hasMore);
       })
       .catch(onError);
     return () => {
@@ -77,6 +80,15 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
       }
     });
 
+  // Snapshots are never removed, so older ones come a page at a time, after the oldest one shown.
+  const showOlder = () =>
+    run(async () => {
+      const page = await client.snapshots(character.id, snapshots[snapshots.length - 1]?.id);
+      setSnapshots((shown) => [...shown, ...page.items]);
+      setHasMore(page.hasMore);
+      onStatus(`Showing ${page.items.length} older snapshot${page.items.length === 1 ? '' : 's'}.`);
+    });
+
   const name = (s: SnapshotSummary) => s.label ?? (s.reason === 'beforeRestore' ? 'Before a restore' : 'Snapshot');
 
   return (
@@ -113,6 +125,11 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
             </li>
           ))}
         </ul>
+      )}
+      {hasMore && (
+        <button type="button" onClick={() => void showOlder()} disabled={busy}>
+          Show older snapshots
+        </button>
       )}
       {preview && (
         <div role="region" aria-labelledby="restore-heading" className="play-panel">

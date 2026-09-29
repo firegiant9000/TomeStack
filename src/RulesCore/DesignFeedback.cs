@@ -110,7 +110,7 @@ public static class DesignFeedback
                 continue;
             var shared = policy.MulticlassSpellSlots[Math.Min(casterLevel, Character.MaxLevel) - 1];
             var own = caster.Slots[level - 1];
-            if (shared.Sum() > own.Sum() || shared.Count > own.Count(n => n > 0))
+            if (shared.Sum() > own.Sum() || shared.Count > HighestLevel(own))
             {
                 hints.Add(new("design.multiclass-share-above-table",
                     $"At class level {level} its multiclass share counts {casterLevel} caster level(s), which the Multiclass Spellcaster table turns into {Describe(shared)}; its own table gives {Describe(own)}. A multiclass character could get more slots than a single-class one.",
@@ -118,6 +118,17 @@ public static class DesignFeedback
                 return;
             }
         }
+    }
+
+    /// <summary>The highest spell level with slots (0 for none), so a gapped row such as [0, 6] counts 2, not 1.</summary>
+    private static int HighestLevel(IReadOnlyList<int> row)
+    {
+        for (var i = row.Count - 1; i >= 0; i--)
+        {
+            if (row[i] > 0)
+                return i + 1;
+        }
+        return 0;
     }
 
     private static string Describe(IReadOnlyList<int> row) =>

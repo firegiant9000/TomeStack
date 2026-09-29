@@ -999,6 +999,12 @@ export interface SnapshotSummary {
   level: number;
 }
 
+/** One page of a character's snapshots, newest first. Older ones: ask again with `before` = the last item's id. */
+export interface SnapshotPage {
+  items: SnapshotSummary[];
+  hasMore: boolean;
+}
+
 /** `character.restorePreview`: what restoring would change. The token is good for one restore of this exact state. */
 export interface RestorePreview {
   token: string;

@@ -135,10 +135,11 @@ public sealed partial class TomeStackApp
             throw new AppValidationException(empty);
         if (revision.Effects.Count > MaxCompareEffects)
             throw new AppValidationException([new("feedback.too-large", $"Design feedback covers revisions of up to {MaxCompareEffects} rules.", revision.Reference)]);
-        // Only the SRD packs this build ships, never an imported source whatever its edition says (review fix). Every kind:
-        // the SRD packs keep a class's spellcasting on its granted "Spellcasting" feature.
+        // Only the revisions this build seeded from the SRD packs, by revision id (review fix): a revision a user or package
+        // adds under an SRD source id, or as a newer revision of an SRD content id, is not the baseline. Every kind: the SRD
+        // packs keep a class's spellcasting on its granted "Spellcasting" feature.
         var baseline = _store.ListRevisionsInOrder()
-            .Where(r => r.Status == RevisionStatus.Published && _bundledSources.Contains(r.Provenance.SourceId))
+            .Where(r => r.Status == RevisionStatus.Published && _bundledRevisions.Contains(r.RevisionId))
             .GroupBy(r => r.ContentId).Select(g => g.Last());
         return DesignFeedback.Analyze(revision, baseline);
     }

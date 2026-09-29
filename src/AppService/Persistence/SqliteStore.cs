@@ -267,14 +267,21 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public CharacterSnapshot? FindSnapshot(Guid id) =>
         QuerySingle<CharacterSnapshot>("SELECT json FROM character_snapshots WHERE id = $id;", ("$id", Key(id)));
 
-    /// <summary>The most snapshots a list returns: the newest ones (snapshots are never removed, so the history only grows).</summary>
+    /// <summary>The most snapshots one page of a list returns (snapshots are never removed, so the history only grows; older ones come by paging).</summary>
     public const int MaxListedSnapshots = 100;
 
-    /// <summary>A character's newest snapshots, newest first (insertion order breaks ties), at most <see cref="MaxListedSnapshots"/>.</summary>
-    public IReadOnlyList<CharacterSnapshot> ListSnapshots(Guid characterId) =>
-        Query<CharacterSnapshot>(
-            $"SELECT json FROM character_snapshots WHERE character_id = $character ORDER BY rowid DESC LIMIT {MaxListedSnapshots};",
-            ("$character", Key(characterId)));
+    /// <summary>
+    /// A page of a character's snapshots, newest first (insertion order breaks ties), at most <paramref name="limit"/>. With
+    /// <paramref name="before"/>, only snapshots stored before that one (the oldest of the page before).
+    /// </summary>
+    public IReadOnlyList<CharacterSnapshot> ListSnapshots(Guid characterId, Guid? before = null, int limit = MaxListedSnapshots) =>
+        before is { } cursor
+            ? Query<CharacterSnapshot>(
+                "SELECT json FROM character_snapshots WHERE character_id = $character AND rowid < (SELECT rowid FROM character_snapshots WHERE id = $before AND character_id = $character) ORDER BY rowid DESC LIMIT $limit;",
+                ("$character", Key(characterId)), ("$before", Key(cursor)), ("$limit", limit))
+            : Query<CharacterSnapshot>(
+                "SELECT json FROM character_snapshots WHERE character_id = $character ORDER BY rowid DESC LIMIT $limit;",
+                ("$character", Key(characterId)), ("$limit", limit));
 
     // ---- imports (M4 D2, ADR-009 (d)): local only, never exported ----
 
