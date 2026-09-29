@@ -125,6 +125,13 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
             ))}
           </ul>
           <p className="hint">{preview.manifest.attachmentPolicy}</p>
+          {preview.manifest.scope === 'source' && (
+            <p>
+              This is a source pack. Its sender stated that each source is their own work; TomeStack cannot check that. The
+              sources are recorded as received from someone else, so you cannot mark them as your own. A copy of your
+              library is saved in the backups folder before anything changes.
+            </p>
+          )}
         </>
       )}
 

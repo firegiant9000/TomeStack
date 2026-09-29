@@ -15,6 +15,7 @@ import type {
   OpenPageOutcome,
   ContentRevision,
   PublishResult,
+  SourcePackPreview,
   SourceRecord,
   StudioEntry,
   UpdateOffer,
@@ -97,6 +98,12 @@ export function createClient(transport: Transport) {
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
+    /**
+     * M6 slice 1, "Mark as shareable": `shareable` needs `confirmOwnWork` (the author's statement that the source is their
+     * own work). The service refuses bundled, import-derived and received sources. Stopping sharing needs no confirmation.
+     */
+    setShareable: (sourceId: string, shareable: boolean, confirmOwnWork = false) =>
+      call<SourceRecord>('source.setShareable', { sourceId, shareable, confirmOwnWork }),
     /** The source's PDF (no path), or `{ attached: false }`. */
     attachment: async (sourceId: string) => {
       const result = await call<AttachmentInfo | { attached: false }>('source.attachment', { sourceId });
@@ -193,6 +200,12 @@ export function createClient(transport: Transport) {
      */
     saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
       call<SaveOutcome>('package.saveAs', { characterIds, purpose }, { timeoutMs: null }),
+    // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
+    sourcePackPreview: (sourceIds: string[]) => call<SourcePackPreview>('package.sourcePackPreview', { sourceIds }),
+    exportSourcePack: (sourceIds: string[]) => call<ExportedPackage>('package.sourcePackExport', { sourceIds }),
+    /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
+    saveSourcePackAs: (sourceIds: string[]) =>
+      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds }, { timeoutMs: null }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices }),
