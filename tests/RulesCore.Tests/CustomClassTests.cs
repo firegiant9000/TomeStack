@@ -192,6 +192,13 @@ public class CustomClassTests
             var ink = sheet.Resources!.Single(r => r.ResourceId == "ink");
             Assert.Null(ink.Maximum);
             Assert.Contains(ink.Warnings, w => w.Message.Contains("formula.unknown-identifier", StringComparison.Ordinal));
+            // Every other formula site is gated the same way (review fix): recovery amount, roll bonus, modifier value and
+            // spellsFormula read no SCALE either.
+            Assert.Null(ink.Recoveries.Single(r => r.On == RestPeriod.ShortRest).Value);
+            var inkblot = sheet.Features!.Single(f => f.Content == Fixtures.Chronicler).Effects.Single(e => e.Id == "chronicler-inkblot");
+            Assert.Null(inkblot.Bonus);
+            Assert.Equal(3, sheet.Field("skill.history").Value); // Int +3 only: the Lore column is not read
+            Assert.Null(sheet.Spellcasting!.Single().SpellsAllowed);
             // The class's own columns are not read from a revision relabelled v8; its v9 subclass keeps its own.
             Assert.Equal(["echo"], sheet.Scales!.Select(s => s.ScaleId));
         }
@@ -466,6 +473,25 @@ public class CustomClassTests
         Assert.Contains("validate.spellcasting-multiclass-table", Errors(With(e => e is SpellcastingEffect ? Table([0, 1, 1, 0, .. Enumerable.Repeat(1, 16)]) : e))); // decreases
         Assert.Contains("validate.spellcasting-multiclass-both", Errors(With(e => e is SpellcastingEffect s ? s with { MulticlassCaster = MulticlassCaster.Full } : e)));
         Assert.Contains("validate.spellcasting-multiclass-pact", Errors(With(e => e is SpellcastingEffect s ? s with { SlotKind = SpellSlotKind.PactMagic, Slots = [.. Enumerable.Repeat<IReadOnlyList<int>>([1], 20)] } : e)));
+    }
+
+    [Theory]
+    [InlineData("label")] // required: without it the scale stays unknown
+    [InlineData("values")]
+    public void A_v9_scale_that_does_not_match_the_shape_is_an_error_not_a_silently_missing_column(string broken)
+    {
+        var node = JsonNode.Parse(JsonSerializer.Serialize(ChroniclerRevision(), RulesJson.Options))!;
+        var scale = node["effects"]!.AsArray().First(e => (string?)e!["type"] == "scale")!.AsObject();
+        if (broken == "label")
+            scale.Remove("label");
+        else
+            scale["values"] = new JsonArray([.. Enumerable.Range(0, 20).Select(_ => (JsonNode?)JsonValue.Create(1.5))]);
+        var revision = JsonSerializer.Deserialize<ContentRevision>(node.ToJsonString(RulesJson.Options), RulesJson.Options)!;
+        Assert.Contains(revision.Effects, e => e is UnknownEffect { DeclaredType: "scale" });
+
+        var report = ContentValidator.Validate(revision, Fixtures.ChroniclerCatalog());
+        Assert.Contains(report.Errors, e => e.Code == "validate.scale-incomplete");
+        Assert.False(report.CanPublish);
     }
 
     [Fact]
