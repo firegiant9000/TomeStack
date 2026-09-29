@@ -128,6 +128,40 @@ Acceptance:
 - `AppService.Tests/SandboxTests`;
 - the e2e flow "tries a draft class at a chosen level on a blank character without saving anything".
 
+## Compare revisions: diff and before/after (M5 slice 4, B07 and B04)
+
+The editor has a **Compare revisions** section once the entry has a stored revision. It compares any stored revision ("From") with another stored one or with the revision on screen, unsaved ("To"). It calls `content.compare { from, to | toRevision, characterIds?, blank? }`, which writes and applies nothing.
+- **Rules:** `ContentDiff` by effect id and property, the same table as the update review (`MechanicsDiffTable.tsx`).
+- **Texts:** the name, the description and each rule's text, line by line (`RulesCore.ContentTextDiff`, a longest-common-subsequence alignment). Each line says in words whether it was added, removed or unchanged, and colour is only a second cue. It is bounded (SPEC Q-02): a text over 2,000 lines, one over 1,000,000 alignment cells, or a comparison over 4,000,000 cells in total is shown whole (old text, then new) instead of aligned.
+- **Before and after:** both revisions run on unsaved copies of chosen characters (at most 20), and for a class or subclass also on a blank character at a chosen level. This is the update review's computation (`SheetChanges`, shared with `character.reviewUpdate`): the values that change, new and resolved problems, and choices left open.
+  - A copy that already uses the content, of any kind (a declared-option subclass too), is moved from one revision to the other as `character.applyUpdate` would move it. The update review's family rule applies: the revision supports the character's family, or the character records a cross-family exception for it. `CompareTests` show that the copy's values equal `character.reviewUpdate`'s.
+  - A class or subclass the copy lacks, and the blank character, are placed as in the sandbox.
+  - Other content the copy lacks cannot be compared. A character that gets it only through a grant is told so (`compare.granted`: the grant names one exact revision). The others get `compare.unused`.
+  - A character that cannot take a revision (its family, its levels, a choice) gets a "Not run" note; the rest still run.
+  - A draft calculates through the sandbox overlay, one draft per calculation, so a stored draft can be compared with an unsaved one (tested).
+  - **Bounds (SPEC Q-02):**
+    - each revision has at most 5,000 rules (`compare.too-large`);
+    - at most 20 characters;
+    - diagnostics are matched by key, linear in their number;
+    - text lines are aligned as numbered ids;
+    - a bad blank-character level or family is refused before anything is calculated.
+  - The ROADMAP's "bundled original sample fixtures" are not in the shipped app. The blank character stands in for them.
+
+Refusals:
+- `compare.to-required`;
+- `compare.different-content`;
+- `compare.same-revision`;
+- `compare.too-many`;
+- `compare.too-large`;
+- `compare.blank-kind`: a blank character needs a class or subclass;
+- per character, as a "Not run" note: `compare.unused`, `compare.granted`, `sandbox.rules-family` and the sandbox's placement codes;
+- `content.not-found`, `character.not-found`, `rules-family.unknown`, `sandbox.level`.
+
+Acceptance:
+- `RulesCore.Tests/ContentTextDiffTests`;
+- `AppService.Tests/CompareTests`, which also shows that the copy's values equal `character.reviewUpdate`'s and that nothing is written;
+- the e2e flow "compares the published revision with the unsaved one by rules, text and on a character copy".
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
 A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, ContentReference, UpdateReview } from '../api/types';
+import { MechanicsDiffTable } from './MechanicsDiffTable';
 
 interface Props {
   characterId: string;
@@ -51,39 +52,7 @@ export function UpdateReviewPanel({ characterId, characterName, contentName, fro
         <p className="hint">Comparing the revisions…</p>
       ) : (
         <>
-          <table>
-            <caption>Rule changes</caption>
-            <thead>
-              <tr>
-                <th scope="col">Effect or property</th>
-                <th scope="col">Change</th>
-                <th scope="col">Before</th>
-                <th scope="col">After</th>
-              </tr>
-            </thead>
-            <tbody>
-              {review.mechanics.properties.map((p) => (
-                <tr key={`p-${p.property}`}>
-                  <td>{p.property}</td>
-                  <td>changed</td>
-                  <td>{p.before ?? ''}</td>
-                  <td>{p.after ?? ''}</td>
-                </tr>
-              ))}
-              {review.mechanics.effects.map((e) => (
-                <tr key={`e-${e.effectId}`}>
-                  <td>{e.effectId}</td>
-                  <td>{e.change}</td>
-                  <td>
-                    <code>{e.before ?? ''}</code>
-                  </td>
-                  <td>
-                    <code>{e.after ?? ''}</code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <MechanicsDiffTable mechanics={review.mechanics} />
           {review.fields.length === 0 ? (
             <p>No calculated value changes.</p>
           ) : (

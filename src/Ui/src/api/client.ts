@@ -22,6 +22,8 @@ import type {
   Character,
   CharacterSummary,
   CharacterView,
+  CompareRequest,
+  ContentComparison,
   ContentOption,
   ContentReference,
   CreateCharacterRequest,
@@ -80,6 +82,8 @@ export function createClient(transport: Transport) {
     diagnoseRevision: (revision: ContentRevision) => call<DebugReport>('content.diagnose', { revision }),
     /** "Try it" (M5 slice 3): a draft on an unsaved copy or a blank character, calculated as if published. Saves nothing. */
     sandbox: (request: SandboxRequest) => call<SandboxView>('content.sandbox', request),
+    /** Diff two revisions of one content and run both on unsaved copies (M5 slice 4). Writes and applies nothing. */
+    compare: (request: CompareRequest) => call<ContentComparison>('content.compare', request),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),

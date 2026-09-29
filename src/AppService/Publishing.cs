@@ -172,25 +172,51 @@ public sealed partial class TomeStackApp
     public UpdateReview ReviewUpdate(Guid characterId, ContentReference from, ContentReference to)
     {
         var (character, before, after) = PrepareUpdate(characterId, from, to);
-        var oldSheet = CharacterCalculator.Calculate(character, _store);
-        var newSheet = CharacterCalculator.Calculate(character.ReplaceReference(from, to), _store);
+        var changes = SheetChanges(character, _store, character.ReplaceReference(from, to), _store, from, to);
+        return new UpdateReview(
+            characterId, from, to,
+            ContentDiff.Compare(before, after),
+            changes.Fields, changes.NewDiagnostics, changes.ResolvedDiagnostics, changes.UnresolvedChoices, changes.AffectedOverrides);
+    }
 
-        bool Same(Diagnostic a, Diagnostic b) =>
-            a.Code == b.Code && a.EffectId == b.EffectId && (a.Content == b.Content || (a.Content == from && b.Content == to));
+    /// <summary>What moving from one revision to another changes on a character's sheet (the update review's computation; M5 slice 4 reuses it).</summary>
+    internal sealed record SheetDelta(
+        IReadOnlyList<FieldDelta> Fields,
+        IReadOnlyList<Diagnostic> NewDiagnostics,
+        IReadOnlyList<Diagnostic> ResolvedDiagnostics,
+        IReadOnlyList<ChoiceStatus> UnresolvedChoices,
+        IReadOnlyList<FieldOverride> AffectedOverrides);
+
+    /// <summary>
+    /// Calculates <paramref name="before"/> and <paramref name="after"/>, each with its own catalog (the store, or a
+    /// sandbox overlay for a draft), and compares them. A diagnostic of <paramref name="from"/> and the same one of
+    /// <paramref name="to"/> count as unchanged. Pure: nothing is stored.
+    /// </summary>
+    internal static SheetDelta SheetChanges(
+        Character before, IContentCatalog beforeCatalog, Character after, IContentCatalog afterCatalog, ContentReference from, ContentReference to)
+    {
+        var oldSheet = CharacterCalculator.Calculate(before, beforeCatalog);
+        var newSheet = CharacterCalculator.Calculate(after, afterCatalog);
+        // An old diagnostic a and a new one b are the same when their code and effect match and they name the same content,
+        // or a names `from` where b names `to`. Keyed sets keep this linear in the number of diagnostics (review fix: a
+        // nested scan was quadratic, and content.compare runs it for up to 21 characters).
+        static (string, string?, ContentReference?) Key(Diagnostic d, ContentReference? content) => (d.Code, d.EffectId, content);
+        var oldKeys = oldSheet.Diagnostics.Select(d => Key(d, d.Content)).ToHashSet();
+        var newKeys = newSheet.Diagnostics.Select(d => Key(d, d.Content)).ToHashSet();
+        bool InOld(Diagnostic b) => oldKeys.Contains(Key(b, b.Content)) || (b.Content == to && oldKeys.Contains(Key(b, from)));
+        bool InNew(Diagnostic a) => newKeys.Contains(Key(a, a.Content)) || (a.Content == from && newKeys.Contains(Key(a, to)));
         var fields = newSheet.Fields
             .Select(f => (New: f, Old: oldSheet.Field(f.Field)))
             .Where(p => p.New.Value != p.Old.Value)
             .Select(p => new FieldDelta(p.New.Field, p.New.Label, p.Old.Value, p.New.Value))
             .ToList();
-        var overrides = character.Overrides
+        var overrides = after.Overrides
             .Where(o => CharacterCalculator.IsField(o.Field) && oldSheet.Field(o.Field).ComputedValue != newSheet.Field(o.Field).ComputedValue)
             .ToList();
-        return new UpdateReview(
-            characterId, from, to,
-            ContentDiff.Compare(before, after),
+        return new(
             fields,
-            [.. newSheet.Diagnostics.Where(n => !oldSheet.Diagnostics.Any(o => Same(o, n)))],
-            [.. oldSheet.Diagnostics.Where(o => !newSheet.Diagnostics.Any(n => Same(o, n)))],
+            [.. newSheet.Diagnostics.Where(n => !InOld(n))],
+            [.. oldSheet.Diagnostics.Where(o => !InNew(o))],
             [.. (newSheet.Choices ?? []).Where(c => !c.Resolved)],
             overrides);
     }

@@ -20,6 +20,7 @@ import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
+import { ComparePanel } from './ComparePanel';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -638,6 +639,13 @@ function EntryEditor(props: {
           )}
         </div>
       )}
+
+      <ComparePanel
+        entry={props.entries.find((e) => e.contentId === revision.contentId)}
+        unsaved={revision}
+        prepare={(r) => ({ ...forServer(r), revisionId: crypto.randomUUID() })}
+        onError={onError}
+      />
 
       {classLike && <SandboxPanel revision={revision} prepare={(r) => ({ ...forServer(r), revisionId: crypto.randomUUID() })} onError={onError} />}
 

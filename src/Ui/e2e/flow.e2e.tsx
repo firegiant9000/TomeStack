@@ -724,6 +724,66 @@ it('tries a draft class at a chosen level on a blank character without saving an
   expect(await client.contentBySource((await client.listSources()).find((s) => s.title === 'E2E Sandbox')!.id)).toEqual([]);
 });
 
+it('compares the published revision with the unsaved one by rules, text and on a character copy (M5 slice 4)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Diffs', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Diff Feat',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    summary: 'Old line',
+    effects: [{ type: 'modifier', id: 'quick', operation: 'bonus', target: 'initiative', value: '1' }],
+  });
+  const published = (await client.publish(draft)).published;
+  const hero = await client.createCharacter({ name: 'E2E Diff Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [published] });
+
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit E2E Diff Feat' }));
+
+  const editor = () => screen.getByRole('region', { name: /^Edit / });
+  const description = within(editor()).getByRole('textbox', { name: /^Description/ });
+  await user.clear(description);
+  await user.type(description, 'New line');
+  const value = within(within(editor()).getByRole('group', { name: /^Rule 1: Modifier/ })).getByRole('textbox', { name: /^Value/ });
+  await user.clear(value);
+  await user.type(value, '3');
+
+  const panel = within(editor()).getByRole('region', { name: 'Compare revisions' });
+  await user.click(within(panel).getByRole('checkbox', { name: 'E2E Diff Hero' }));
+  await user.click(within(panel).getByRole('button', { name: 'Compare' }));
+  const results = await within(panel).findByRole('region', { name: 'Comparison results' });
+  expect(within(results).getByRole('table', { name: 'Rule changes' }).textContent).toMatch(/quick.*changed/);
+  expect(results.textContent).toMatch(/removed: Old line/);
+  expect(results.textContent).toMatch(/added: New line/);
+  const run = within(results).getByRole('table', { name: 'Calculated values that change for E2E Diff Hero' });
+  expect(run.textContent).toMatch(/Initiative\s*1\s*3/);
+
+  // Nothing was applied: the character still uses the published revision.
+  expect((await client.getCharacter(hero.character.id)).sheet.fields.find((f) => f.field === 'initiative')?.value).toBe(1);
+
+  // A new entry has nothing stored to compare with until its first save; then the saved draft is "From" (review fix).
+  await user.click(within(editor()).getByRole('button', { name: 'Close editor' }));
+  await user.click(screen.getByRole('button', { name: 'New feat' }));
+  const fresh = () => screen.getByRole('region', { name: /^New / });
+  expect(within(fresh()).queryByRole('region', { name: 'Compare revisions' })).toBeNull();
+  await user.type(within(fresh()).getByRole('textbox', { name: 'Name' }), 'E2E Fresh Feat');
+  await user.click(within(fresh()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Fresh Feat/);
+  const freshPanel = await within(fresh()).findByRole('region', { name: 'Compare revisions' });
+  await user.click(within(freshPanel).getByRole('button', { name: 'Compare' }));
+  expect((await within(freshPanel).findByRole('region', { name: 'Comparison results' })).textContent).toMatch(/The rules are the same/);
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);

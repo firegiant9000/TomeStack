@@ -52,7 +52,7 @@ public sealed partial class TomeStackApp
             var family = request.RulesFamily ?? draft.RulesFamilies.FirstOrDefault() ?? "";
             if (!RulesFamilies.IsKnown(family))
                 problems.Add(new("rules-family.unknown", $"Rules family '{family}' is not supported.", draft.Reference));
-            copy = new Character { Id = Guid.NewGuid(), Name = "Sandbox character", RulesFamily = family, BaseAbilities = request.Abilities ?? new(10, 10, 10, 10, 10, 10) };
+            copy = BlankCharacter(family, request.Abilities);
         }
         if (!draft.RulesFamilies.Contains(copy.RulesFamily))
             problems.Add(new("sandbox.rules-family", $"'{draft.Name}' supports {string.Join(", ", draft.RulesFamilies)}, not {copy.RulesFamily}.", draft.Reference));
@@ -73,6 +73,10 @@ public sealed partial class TomeStackApp
         }
         return new SandboxView(new CharacterView(copy, sheet, CampaignOf(copy, sheet, overlay)), draft.Reference, changes, ContentValidator.Validate(draft, _store));
     }
+
+    /// <summary>An unsaved character with no content, for trying a class or subclass on its own (ability scores 10 by default).</summary>
+    private static Character BlankCharacter(string family, AbilityScores? abilities = null) =>
+        new() { Id = Guid.NewGuid(), Name = "Sandbox character", RulesFamily = family, BaseAbilities = abilities ?? new(10, 10, 10, 10, 10, 10) };
 
     /// <summary>The draft to try: an unsaved one (given a revision id if it has none), or a stored draft. Published content needs no sandbox.</summary>
     private ContentRevision SandboxDraft(SandboxRequest request)

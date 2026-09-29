@@ -986,6 +986,39 @@ export interface DebugReport {
   truncated: boolean;
 }
 
+/** M5 slice 4 (B07): one text of a revision pair, line by line. `whole`: too long to align (all old lines, then all new). */
+export interface TextChange {
+  where: string;
+  lines: { kind: 'same' | 'added' | 'removed'; text: string }[];
+  whole: boolean;
+}
+
+/** One character with each revision (M5 slice 4, B04): what changes, or why it could not run. */
+export interface CompareRun {
+  name: string;
+  characterId?: string;
+  fields: FieldDelta[];
+  newDiagnostics: Diagnostic[];
+  resolvedDiagnostics: Diagnostic[];
+  unresolvedChoices: ChoiceStatus[];
+  problems: Diagnostic[];
+}
+
+/** `content.compare`: two revisions by mechanics and text, run on unsaved copies. Nothing is written. */
+export interface ContentComparison {
+  mechanics: UpdateReview['mechanics'];
+  text: TextChange[];
+  runs: CompareRun[];
+}
+
+export interface CompareRequest {
+  from: ContentReference;
+  to?: ContentReference;
+  toRevision?: ContentRevision;
+  characterIds?: string[];
+  blank?: { rulesFamily?: RulesFamilyId; level?: number };
+}
+
 /** A displayed value that would change. */
 export interface FieldDelta {
   field: string;
