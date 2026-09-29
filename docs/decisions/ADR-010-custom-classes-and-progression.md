@@ -173,6 +173,13 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **Schema:** `SchemaTests` validates the fixture against the new `docs/schemas/content-revision.v9.schema.json`.
 - **Unchanged:** `SrdPackTests` (the bundled packs' hashes), `SrdCasterTests` and `SrdFighterTests`, and `git diff origin/main --stat -- src/AppService/Content` is empty.
 
+**Slice 1a review fixes (dual-review, 2026-09-29).** None of the findings was refuted; each is fixed and has a test.
+
+- **The table key below v9:** any spelling of the key (the serializer matches names case-insensitively), and any value (`null`, a string, a list of decimals), is taken out before typing. It goes back into extension data in document order. So the spellcasting still types, and the revision writes back byte for byte (`Below_v9_any_spelling_and_value_of_the_table_key_stays_extension_data_byte_for_byte`).
+- **`validate.requires-v9` for content read from JSON:** it now also fires for a `scale` that stays unknown below v9 and for a table key held as extension data (`A_scale_in_a_v8_draft_read_from_json_is_named_as_needing_v9`). Before this, such a draft would have been published as v8 with the feature silently ignored.
+- **A subclass's scale ids** are checked against its class's newest published revision, plus unsaved revisions validated with it. A clash with an older published revision is a warning (`validate.scale-duplicate-older`). A draft never blocks, and a subclass that extends a feature's choice gets no class checks (`A_subclass_is_checked_against_its_classs_newest_published_revision_only`, `A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks`).
+- **Calculation isolates out-of-bound scale values** that bypassed validation, with `scale.invalid` (`A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation`).
+
 **Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
 
 Supersedes: none. Extends ADR-003 (effect union, grammar) and the M2.2 minimum-version rule (`docs/schemas/README.md`).

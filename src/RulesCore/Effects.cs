@@ -500,16 +500,30 @@ public sealed record SpellcastingEffect : Effect
     /// </summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
-        var typed = VersionedEffects.Typed<SpellcastingEffect>(unknown);
-        if (revisionSchemaVersion >= MulticlassTableSchemaVersion || typed is not SpellcastingEffect { MulticlassCasterTable: not null } caster)
-            return typed;
+        bool IsTableKey(string name) => string.Equals(name, MulticlassCasterTableProperty, StringComparison.OrdinalIgnoreCase);
+        if (revisionSchemaVersion >= MulticlassTableSchemaVersion || !unknown.Raw.EnumerateObject().Any(p => IsTableKey(p.Name)))
+            return VersionedEffects.Typed<SpellcastingEffect>(unknown);
+
+        // The serializer matches names case-insensitively, so every spelling of the key, with any value (null, or not a
+        // list), is taken out before typing, exactly as a v8 build never binds it (review fix).
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in unknown.Raw.EnumerateObject().Where(p => !IsTableKey(p.Name)))
+                property.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+        using var stripped = JsonDocument.Parse(buffer.WrittenMemory);
+        if (VersionedEffects.Typed<SpellcastingEffect>(UnknownEffect.From(stripped.RootElement)) is not SpellcastingEffect caster)
+            return unknown; // the rest does not type either: reference-only and unchanged, as in a v8 build
         var extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var property in unknown.Raw.EnumerateObject())
         {
-            if (property.Name == MulticlassCasterTableProperty || caster.Extensions?.ContainsKey(property.Name) == true)
+            if (IsTableKey(property.Name) || caster.Extensions?.ContainsKey(property.Name) == true)
                 extensions[property.Name] = property.Value.Clone(); // document order, as the v8 build keeps it
         }
-        return caster with { MulticlassCasterTable = null, Extensions = extensions };
+        return caster with { Extensions = extensions };
     }
 }
 

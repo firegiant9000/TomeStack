@@ -1066,10 +1066,10 @@ public static class CharacterCalculator
         {
             foreach (var scale in owner.Revision.Effects.OfType<ScaleEffect>().Where(s => s.Automation == AutomationStatus.Automatic))
             {
-                if (scale.Values.Count != Character.MaxLevel || !ScaleEffect.IsValidScaleId(scale.ScaleId))
+                if (scale.Values.Count != Character.MaxLevel || !ScaleEffect.IsValidScaleId(scale.ScaleId) || scale.Values.Any(v => v is < 0 or > FormulaLimits.MaxLiteral))
                 {
                     // Validation refuses this on publish and import; stored content from elsewhere is isolated here (SPEC C-03).
-                    diagnostics.Add(new("scale.invalid", $"'{owner.Revision.Name}' scale '{scale.Id}' needs a valid scale id and {Character.MaxLevel} values; it is ignored.", owner.Revision.Reference, scale.Id));
+                    diagnostics.Add(new("scale.invalid", $"'{owner.Revision.Name}' scale '{scale.Id}' needs a valid scale id and {Character.MaxLevel} values of 0 to {FormulaLimits.MaxLiteral}; it is ignored.", owner.Revision.Reference, scale.Id));
                     continue;
                 }
                 if (!classLevels.Scales.TryAdd((owner.ClassRoot!, scale.ScaleId), (owner, scale)))

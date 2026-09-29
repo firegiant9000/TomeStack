@@ -251,6 +251,119 @@ public class CustomClassTests
         Assert.Contains(sheet.Field(FieldIds.SpellSlots(1)).Warnings, w => w.Code == "spellcasting.multiclass-slots");
     }
 
+    /// <summary>The v8-stored Chronicler with the table key replaced by <paramref name="name"/> and <paramref name="value"/>.</summary>
+    private static string V8WithTableKey(string name, JsonNode? value)
+    {
+        var node = JsonNode.Parse(AsStoredByAV8Build())!;
+        var spellcasting = node["effects"]!.AsArray().Single(e => (string?)e!["type"] == "spellcasting")!.AsObject();
+        spellcasting.Remove("multiclassCasterTable");
+        spellcasting.Add(name, value);
+        return node.ToJsonString(RulesJson.Options);
+    }
+
+    [Theory]
+    [InlineData("MulticlassCasterTable", "[0,1,2,2,3,4,4,5,6,6,7,8,8,9,10,10,11,12,12,13]")] // another spelling: the serializer is case-insensitive
+    [InlineData("multiclassCasterTable", "null")]
+    [InlineData("multiclassCasterTable", "\"2/3\"")] // not a list at all
+    [InlineData("multiclassCasterTable", "[1.5]")]
+    public void Below_v9_any_spelling_and_value_of_the_table_key_stays_extension_data_byte_for_byte(string name, string value)
+    {
+        // Review fix (M5 1a): a v8 build never binds this key, whatever its value, so its spellcasting still types and
+        // calculates, and the revision writes back exactly as stored.
+        var json = V8WithTableKey(name, JsonNode.Parse(value));
+        var revision = JsonSerializer.Deserialize<ContentRevision>(json, RulesJson.Options)!;
+
+        var spellcasting = Assert.IsType<SpellcastingEffect>(revision.Effects.Single(e => e.Type == SpellcastingEffect.TypeName));
+        Assert.Null(spellcasting.MulticlassCasterTable);
+        Assert.True(spellcasting.Extensions!.ContainsKey(name));
+        Assert.Equal(json, JsonSerializer.Serialize(revision, RulesJson.Options));
+        // The validator names it as needing v9 rather than letting it publish as v8 and be ignored.
+        Assert.Contains(ContentValidator.Validate(revision, Fixtures.ChroniclerCatalog()).Errors, e => e.Code == "validate.requires-v9");
+    }
+
+    [Fact]
+    public void A_scale_in_a_v8_draft_read_from_json_is_named_as_needing_v9()
+    {
+        var revision = JsonSerializer.Deserialize<ContentRevision>(AsStoredByAV8Build(), RulesJson.Options)!;
+        Assert.IsType<UnknownEffect>(revision.Effects[1]);
+
+        var report = ContentValidator.Validate(revision, Fixtures.ChroniclerCatalog());
+        Assert.Contains(report.Errors, e => e.Code == "validate.requires-v9");
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.effect-unsupported" && w.EffectId == "chronicler-ink-column");
+    }
+
+    [Fact]
+    public void A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation()
+    {
+        var chronicler = ChroniclerRevision();
+        var hostile = chronicler with
+        {
+            Effects = [.. chronicler.Effects.Select(e => e is ScaleEffect { ScaleId: "ink" } s ? s with { Values = [.. Enumerable.Repeat(int.MaxValue, 20)] } : e)],
+        };
+        var pack = Fixtures.ChroniclerPack();
+        var catalog = new InMemoryContentCatalog(pack.Sources, [hostile, .. pack.Revisions.Skip(1)]);
+
+        var sheet = CharacterCalculator.Calculate(Chronicler(RulesFamilies.Srd521, classes: new ClassLevel(Fixtures.Chronicler, 5)), catalog);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "scale.invalid" && d.EffectId == "chronicler-ink-column");
+        Assert.DoesNotContain(sheet.Scales!, s => s.ScaleId == "ink");
+        Assert.Null(sheet.Resources!.Single(r => r.ResourceId == "ink").Maximum);
+    }
+
+    [Fact]
+    public void A_subclass_is_checked_against_its_classs_newest_published_revision_only()
+    {
+        var pack = Fixtures.ChroniclerPack();
+        var chronicler = ChroniclerRevision();
+        var subclass = pack.Revisions.Single(r => r.Reference == Fixtures.ArchiveOfEchoes) with
+        {
+            RevisionId = Guid.NewGuid(),
+            Status = RevisionStatus.Draft,
+            ExtendsChoice = new(chronicler.ContentId, "chronicler-archive"),
+            Effects = [new ScaleEffect { Id = "s", ScaleId = "quill", Label = "Quill", Values = [.. Enumerable.Repeat(1, 20)] }],
+        };
+        Assert.DoesNotContain(ContentValidator.Validate(subclass, Fixtures.ChroniclerCatalog()).Errors, e => e.Code == "validate.scale-duplicate");
+
+        // A class draft that defines "quill" never blocks it; an older published revision that defines it only warns.
+        ContentRevision WithQuill(RevisionStatus status) => chronicler with
+        {
+            RevisionId = Guid.NewGuid(), Status = status,
+            Effects = [.. chronicler.Effects, new ScaleEffect { Id = "q", ScaleId = "quill", Label = "Quill", Values = [.. Enumerable.Repeat(2, 20)] }],
+        };
+        var withDraft = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, WithQuill(RevisionStatus.Draft)]);
+        Assert.DoesNotContain(ContentValidator.Validate(subclass, withDraft).Errors, e => e.Code == "validate.scale-duplicate");
+
+        var older = WithQuill(RevisionStatus.Published);
+        var olderThenNewer = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions.Skip(1), older, chronicler with { RevisionId = Guid.NewGuid() }]);
+        var report = ContentValidator.Validate(subclass, olderThenNewer);
+        Assert.DoesNotContain(report.Errors, e => e.Code == "validate.scale-duplicate");
+        Assert.Contains(report.Warnings, w => w.Code == "validate.scale-duplicate-older");
+
+        var newest = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, older]);
+        Assert.Contains(ContentValidator.Validate(subclass, newest).Errors, e => e.Code == "validate.scale-duplicate");
+    }
+
+    [Fact]
+    public void A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks()
+    {
+        var pack = Fixtures.ChroniclerPack();
+        var marginalia = pack.Revisions.Single(r => r.Reference == Fixtures.ChroniclerMarginalia);
+        var feature = marginalia with
+        {
+            RevisionId = Guid.NewGuid(),
+            Effects = [new ChoiceEffect { Id = "c", ChoiceId = "margin", Count = 1, Options = [Fixtures.ArchiveOfEchoes] }],
+        };
+        var subclass = pack.Revisions.Single(r => r.Reference == Fixtures.ArchiveOfEchoes) with
+        {
+            RevisionId = Guid.NewGuid(),
+            Status = RevisionStatus.Draft,
+            ExtendsChoice = new(feature.ContentId, "margin"),
+        };
+        var catalog = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, feature]);
+
+        // It reads SCALE.lore from the class, which validation cannot see through a feature: no false warning.
+        Assert.DoesNotContain(ContentValidator.Validate(subclass, catalog).Warnings, w => w.Code == "validate.scale-unknown");
+    }
+
     [Fact]
     public void A_spellcasting_revision_without_the_table_serializes_unchanged()
     {

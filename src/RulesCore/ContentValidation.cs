@@ -97,6 +97,11 @@ public static class ContentValidator
         {
             switch (effect)
             {
+                // A scale in a revision below v9 is never typed (it stays unknown), so it is named as needing v9 rather
+                // than as an effect this version cannot automate (review fix).
+                case UnknownEffect { DeclaredType: ScaleEffect.TypeName }:
+                    needsV9 = true;
+                    break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
                     break;
@@ -263,6 +268,9 @@ public static class ContentValidator
                         CheckFormula(spellsFormula, spellcasting.Id, "spellsFormula");
                     if ((spellcasting.MulticlassCaster is not null || spellcasting.MulticlassCasterTable is not null) && spellcasting.SlotKind == SpellSlotKind.PactMagic)
                         Error("validate.spellcasting-multiclass-pact", $"Spellcasting '{spellcasting.Id}': Pact Magic slots are never combined with other casters' slots, so it takes no multiclassCaster or multiclassCasterTable.", spellcasting.Id);
+                    // Below v9 the table stays extension data (never typed), so it is found there (review fix).
+                    if (spellcasting.Extensions?.Keys.Any(k => string.Equals(k, SpellcastingEffect.MulticlassCasterTableProperty, StringComparison.OrdinalIgnoreCase)) == true)
+                        needsV9 = true;
                     if (spellcasting.MulticlassCasterTable is { } casterTable)
                     {
                         needsV9 = true;
@@ -372,15 +380,27 @@ public static class ContentValidator
         }
 
         // Scale ids are unique within a class and its subclasses. The catalog check is best-effort (a class revision
-        // published later can still collide); the calculation reports scale.duplicate as the backstop.
+        // published later can still collide); the calculation reports scale.duplicate as the backstop. A subclass's
+        // class is known only when it extends a choice of a class (not of a feature, and not as a declared option).
         void CheckScales()
         {
             var own = revision.Effects.OfType<ScaleEffect>().ToList();
             foreach (var group in own.GroupBy(s => s.ScaleId).Where(g => g.Count() > 1))
                 Error("validate.scale-duplicate", $"Scale id '{group.Key}' is used more than once.", group.First().Id);
             var related = new List<ContentRevision>();
-            if (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent)
-                related.AddRange(catalog.RevisionsOf(parent.ContentId).Concat(local.Values.Where(r => r.ContentId == parent.ContentId)));
+            // A subclass is checked against the class whose choice it extends: its newest published revision, which new
+            // characters get, plus unsaved revisions validated with it. A draft or superseded class revision never blocks
+            // it, and a choice on a feature rather than a class says nothing about the class (review fix).
+            var publishedParents = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent
+                ? catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).ToList()
+                : [];
+            var parentClass = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } extended
+                ? [.. local.Values.Where(r => r.ContentId == extended.ContentId && r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
+                : new List<ContentRevision>();
+            related.AddRange(parentClass);
+            // Older published class revisions still calculate for the characters that pin them, so a clash with one is a
+            // warning (they get scale.duplicate, and the class's column wins); it never blocks the subclass for good.
+            var olderScales = publishedParents.SkipLast(1).SelectMany(r => r.Effects.OfType<ScaleEffect>().Select(s => (s.ScaleId, r.Name))).ToList();
             if (revision.Kind == ContentKind.Class)
             {
                 foreach (var choice in revision.Effects.OfType<ChoiceEffect>())
@@ -394,11 +414,13 @@ public static class ContentValidator
             {
                 if (relatedScales.FirstOrDefault(r => r.ScaleId == scale.ScaleId) is { Name: { } other })
                     Error("validate.scale-duplicate", $"Scale id '{scale.ScaleId}' is also defined by '{other}'; a class and its subclasses share one set of scale ids.", scale.Id);
+                else if (olderScales.FirstOrDefault(r => r.ScaleId == scale.ScaleId) is { Name: { } older })
+                    Warn("validate.scale-duplicate-older", $"Scale id '{scale.ScaleId}' is also defined by an older revision of '{older}'; characters still on that revision use the class's column.", scale.Id);
             }
             // SCALE ids the revision reads that neither it nor its class defines. Only a class, or a subclass that names its
             // class (extendsChoice), knows its class here; a feature's class, or that of a subclass a class lists as an
             // option, is known only when a character has it.
-            if (revision.Kind == ContentKind.Class || (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is not null))
+            if (revision.Kind == ContentKind.Class || parentClass.Count > 0)
             {
                 // A subclass reads its own and its class's scales; a class reads only its own (a subclass may be absent).
                 var defined = own.Select(s => s.ScaleId).Concat(revision.Kind == ContentKind.Subclass ? relatedScales.Select(r => r.ScaleId) : []).ToHashSet(StringComparer.Ordinal);
