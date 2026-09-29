@@ -198,6 +198,31 @@ public class SandboxTests
     }
 
     [Fact]
+    public void A_selection_keyed_to_another_revision_of_the_class_is_left_alone_and_the_draft_is_selected_on_the_class_the_copy_has()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Test Sandbox Source", [RulesFamilies.Srd521]));
+        var classId = Guid.NewGuid();
+        var first = Publish(app, Draft(source, classId, ContentKind.Class, "Test Sandbox Class", D8, PathChoice()));
+        var second = Publish(app, Draft(source, classId, ContentKind.Class, "Test Sandbox Class", D8, PathChoice()));
+        var subclassId = Guid.NewGuid();
+        var older = Publish(app, Draft(source, subclassId, ContentKind.Subclass, "Test Sandbox Path", Initiative("1")) with { ExtendsChoice = new(classId, "path") });
+        // The character is on the first class revision, but its stored selection is keyed to the second: the calculator never reads it.
+        var saved = app.CreateCharacter(new("Test Stray", RulesFamilies.Srd521, new(10, 10, 10, 10, 10, 10), null, [new(first, 4)], [new(second, "path", [older])])).Character;
+        var draft = Draft(source, subclassId, ContentKind.Subclass, "Test Sandbox Path", Initiative("3")) with { ExtendsChoice = new(classId, "path") };
+        var before = Snapshot(app);
+
+        var result = app.Sandbox(new(Revision: draft, CharacterId: saved.Id));
+
+        Assert.Equal(3, result.View.Sheet.Field(FieldIds.Initiative).Value); // the draft applies
+        Assert.Contains(result.View.Character.Choices, c => c.Source == first && c.ChoiceId == "path" && c.Selected.SequenceEqual([result.Draft]));
+        // The stray selection stays where it was (only its older subclass revision became the draft, like every reference to that content).
+        Assert.Contains(result.View.Character.Choices, c => c.Source == second && c.Selected.SequenceEqual([result.Draft]));
+        Assert.Equal(before, Snapshot(app));
+    }
+
+    [Fact]
     public void A_draft_subclass_joins_its_class_at_the_choice_level_on_a_blank_character()
     {
         using var temp = new TempApp();

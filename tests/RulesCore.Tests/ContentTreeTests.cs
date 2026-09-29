@@ -112,6 +112,24 @@ public class ContentTreeTests
     }
 
     [Fact]
+    public void A_draft_grant_or_extension_is_shown_with_a_note_and_each_choice_lists_only_its_own_extensions()
+    {
+        var draftFeature = Revision(2, ContentKind.Feature, "Tree Draft Gift") with { Status = RevisionStatus.Draft };
+        var cls = Revision(1, ContentKind.Class, "Tree Class", Grants("gift", 2, level: 1),
+            new ChoiceEffect { Id = "path", ChoiceId = "path", Level = 3 }, new ChoiceEffect { Id = "other", ChoiceId = "other", Level = 3 });
+        var draftPath = Revision(3, ContentKind.Subclass, "Tree Draft Path") with { Status = RevisionStatus.Draft, ExtendsChoice = new(cls.ContentId, "path") };
+        var livePath = Revision(4, ContentKind.Subclass, "Tree Live Path") with { ExtendsChoice = new(cls.ContentId, "path") };
+
+        var tree = ContentTree.Build(ContentGraph.Build([cls, livePath], scope: [draftFeature, draftPath]), cls.ContentId);
+
+        Assert.Equal(ContentTree.DraftPinNote, All(tree.Root).Single(n => n.EffectId == "gift").Note);
+        var path = All(tree.Root).Single(n => n.EffectId == "path");
+        Assert.Equal(ContentTree.DraftExtensionNote, path.Children.Single(c => c.Content == draftPath.Reference).Note);
+        Assert.Null(path.Children.Single(c => c.Content == livePath.Reference).Note);
+        Assert.Empty(All(tree.Root).Single(n => n.EffectId == "other").Children);
+    }
+
+    [Fact]
     public void A_deep_chain_of_choices_is_cut_at_the_depth_bound()
     {
         var chain = Enumerable.Range(1, ContentTree.MaxDepth + 5)

@@ -56,7 +56,8 @@ public class ContentTextDiffTests
         var longText = string.Join('\n', Enumerable.Range(0, ContentTextDiff.MaxAlignedLines + 1).Select(i => $"line {i}"));
         var whole = ContentTextDiff.Lines("summary", longText, longText + "\nmore");
         Assert.True(whole.Whole);
-        Assert.Equal(((2 * ContentTextDiff.MaxAlignedLines) + 3), whole.Lines.Count);
+        Assert.Equal(ContentTextDiff.MaxWholeLinesPerText, whole.Lines.Count);
+        Assert.Equal((2 * ContentTextDiff.MaxAlignedLines) + 3 - ContentTextDiff.MaxWholeLinesPerText, whole.NotShown);
 
         // Many medium texts together: once the shared budget is spent, the rest are shown whole.
         var medium = string.Join('\n', Enumerable.Range(0, 900).Select(i => $"row {i}"));
@@ -64,5 +65,24 @@ public class ContentTextDiffTests
         var changes = ContentTextDiff.Compare(Revision("Test", null, Rules("")), Revision("Test", null, Rules("\nchanged")));
         Assert.Contains(changes, c => !c.Whole);
         Assert.Contains(changes, c => c.Whole);
+    }
+
+    [Fact]
+    public void A_huge_text_shown_whole_stays_under_the_caps_and_reports_what_was_left_out()
+    {
+        var huge = new string('\n', 200_000); // 200,001 empty lines
+        var single = ContentTextDiff.Lines("summary", huge, "x");
+        Assert.True(single.Whole);
+        Assert.True(single.Lines.Count <= ContentTextDiff.MaxWholeLinesPerText);
+        Assert.Equal(200_002 - single.Lines.Count, single.NotShown);
+
+        // Long lines are cut to the character cap, and the comparison as a whole is capped too.
+        var wide = string.Join('\n', Enumerable.Range(0, 5_000).Select(_ => new string('w', 500)));
+        var changes = ContentTextDiff.Compare(
+            Revision("Test", huge, Rule("a", wide), Rule("b", wide), Rule("c", wide), Rule("d", wide), Rule("e", wide)),
+            Revision("Test", "y", Rule("a", "z"), Rule("b", "z"), Rule("c", "z"), Rule("d", "z"), Rule("e", "z")));
+        Assert.True(changes.Sum(c => c.Lines.Count) <= ContentTextDiff.MaxWholeLinesPerComparison);
+        Assert.True(changes.Sum(c => c.Lines.Sum(l => (long)l.Text.Length)) <= ContentTextDiff.MaxWholeCharsPerComparison);
+        Assert.All(changes.Where(c => c.Whole), c => Assert.True(c.NotShown > 0));
     }
 }

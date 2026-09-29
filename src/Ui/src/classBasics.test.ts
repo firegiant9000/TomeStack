@@ -25,11 +25,33 @@ const existing: Effect[] = [
   { type: 'choice', id: 'style', choiceId: 'fighting-style', count: 1, options: [] },
   { type: 'resource', id: 'r', resourceId: 'r', label: 'Ink', maximum: 'SCALE.ink' },
 ];
-const others = (effects: Effect[]) => effects.filter((e) => !isClassBasic(e) || e.id === 'other-group');
+const others = (effects: Effect[]) => effects.filter((e) => !isClassBasic(e, effects));
 
 describe('isClassBasic', () => {
   it('owns only what the class editor shows', () => {
-    expect(existing.filter(isClassBasic).map((e) => e.id)).toEqual(['hit-die', 'other-group']);
+    expect(existing.filter((e) => isClassBasic(e, existing)).map((e) => e.id)).toEqual(['hit-die']);
+  });
+
+  it('shows only saves granted as the starting class, at no level', () => {
+    const effects: Effect[] = [
+      { type: 'grant', id: 'save-a', grant: 'proficiency', target: 'save.int', onlyAs: 'startingClass' },
+      { type: 'grant', id: 'save-b', grant: 'proficiency', target: 'save.wis', onlyAs: 'startingClass', level: 14 },
+      { type: 'grant', id: 'save-c', grant: 'proficiency', target: 'save.cha' },
+    ];
+    expect(effects.filter((e) => isClassBasic(e, effects)).map((e) => e.id)).toEqual(['save-a']);
+    // Unticking the starting-class save never deletes the level-14 grant of the same ability.
+    const both: Effect[] = [...effects, { type: 'grant', id: 'save-d', grant: 'proficiency', target: 'save.wis', onlyAs: 'startingClass' }];
+    expect(toggleSave(both, 'wis').map((e) => e.id)).toEqual(['save-a', 'save-b', 'save-c']);
+  });
+
+  it('shows only the first multiclass restriction for an ability, in no group or the any-one group', () => {
+    const effects: Effect[] = [
+      { type: 'restriction', id: 'first', field: 'ability.int.score', minimum: 13, multiclass: true },
+      { type: 'restriction', id: 'second', field: 'ability.int.score', minimum: 15, multiclass: true },
+      { type: 'restriction', id: 'grouped', field: 'ability.wis.score', minimum: 13, multiclass: true, group: 'multiclass' },
+      { type: 'restriction', id: 'foreign', field: 'ability.dex.score', minimum: 13, multiclass: true, group: 'agile' },
+    ];
+    expect(effects.filter((e) => isClassBasic(e, effects)).map((e) => e.id)).toEqual(['first', 'grouped']);
   });
 });
 
@@ -41,6 +63,7 @@ describe('class editor edits', () => {
     effects = setAnyOne(effects, false);
     effects = setChoice(effects, 'subclass', { type: 'choice', id: 'subclass', choiceId: 'subclass', count: 1, options: [], level: 3 });
     expect(others(effects).map((e) => e.id)).toEqual(['armor', 'pb', 'str-plain', 'other-group', 'style', 'r']);
+    expect(effects.filter((e) => isClassBasic(e, effects)).map((e) => e.id)).toEqual(['hit-die', 'save-int', 'multiclass-int', 'subclass']);
     expect(effects[0]).toEqual({ type: 'hitDie', id: 'hit-die', die: 8 });
     expect(effects.find((e) => e.id === 'other-group')).toEqual(existing[4]); // its own group name is kept
     expect(setAnyOne(effects, true).find((e) => e.id === 'other-group')).toEqual(existing[4]);
