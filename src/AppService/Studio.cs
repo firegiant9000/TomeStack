@@ -94,6 +94,30 @@ public sealed partial class TomeStackApp
         return ContentDebugger.Diagnose(scope, _store.ListRevisionsInOrder(), _store, context);
     }
 
+    /// <summary>
+    /// <c>content.tree</c> (M5 slice 5, B19): the relationships of one content as a tree (<see cref="ContentTree"/>): a
+    /// stored revision by reference, or the unsaved revision on screen, among the latest revisions of its source, as the
+    /// debugger studies it. Writes nothing.
+    /// </summary>
+    public ContentTreeView Tree(DiagnoseRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.SourceId is not null || (request.Reference is null) == (request.Revision is null))
+            throw new AppValidationException([new("tree.scope", "Name one stored revision or one unsaved revision.")]);
+        var revision = request.Revision
+            ?? _store.FindRevision(request.Reference!)
+            ?? throw new AppValidationException([new("content.not-found", $"Revision {request.Reference!.RevisionId} is not installed.", request.Reference)]);
+        if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
+            throw new AppValidationException(empty);
+        if (revision.Effects.Count > MaxCompareEffects)
+            throw new AppValidationException([new("tree.too-large", $"Relationships are shown for revisions of up to {MaxCompareEffects} rules.", revision.Reference)]);
+        // One read of the store (review fix): the source's latest revisions are the context, as for the debugger.
+        var all = _store.ListRevisionsInOrder();
+        var context = all.Where(r => r.Provenance.SourceId == revision.Provenance.SourceId && r.ContentId != revision.ContentId)
+            .GroupBy(r => r.ContentId).Select(g => g.Last());
+        return ContentTree.Build(ContentGraph.Build(all, [.. context, revision], reach: false), revision.ContentId);
+    }
+
     /// <summary><c>content.bySource</c>: every content entity of one source with all its revisions (drafts too).</summary>
     public IReadOnlyList<StudioEntry> ContentBySource(Guid sourceId) =>
     [

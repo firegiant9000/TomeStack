@@ -986,6 +986,24 @@ export interface DebugReport {
   truncated: boolean;
 }
 
+/** M5 slice 5 (B19): one node of a content's relationship tree. */
+export interface TreeNode {
+  id: string;
+  kind: 'content' | 'level' | 'choice' | 'resource' | 'roll' | 'recovery' | 'toggle' | 'scale' | 'missing';
+  label: string;
+  content?: ContentReference;
+  /** The effect the node stands for; it belongs to `owner` (for a granted content, the content that grants it). */
+  effectId?: string;
+  owner?: ContentReference;
+  children: TreeNode[];
+  note?: string;
+}
+
+export interface ContentTreeView {
+  root: TreeNode;
+  truncated: boolean;
+}
+
 /** M5 slice 4 (B07): one text of a revision pair, line by line. `whole`: too long to align (all old lines, then all new). */
 export interface TextChange {
   where: string;

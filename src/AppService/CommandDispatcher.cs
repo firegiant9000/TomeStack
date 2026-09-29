@@ -20,7 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "source.list", "source.createHomebrew",
+        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "source.list", "source.createHomebrew",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
@@ -101,6 +101,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.diagnose" => Diagnose(Payload<DiagnoseRequest>(payload)),
         "content.sandbox" => Sandbox(Payload<SandboxRequest>(payload)),
         "content.compare" => app.Compare(Payload<CompareRequest>(payload)),
+        "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },

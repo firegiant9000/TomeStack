@@ -24,6 +24,7 @@ import type {
   CharacterView,
   CompareRequest,
   ContentComparison,
+  ContentTreeView,
   ContentOption,
   ContentReference,
   CreateCharacterRequest,
@@ -84,6 +85,8 @@ export function createClient(transport: Transport) {
     sandbox: (request: SandboxRequest) => call<SandboxView>('content.sandbox', request),
     /** Diff two revisions of one content and run both on unsaved copies (M5 slice 4). Writes and applies nothing. */
     compare: (request: CompareRequest) => call<ContentComparison>('content.compare', request),
+    /** The relationship tree of the unsaved revision on screen, among its source's drafts (M5 slice 5). Writes nothing. */
+    tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
