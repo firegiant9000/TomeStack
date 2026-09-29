@@ -237,6 +237,27 @@ public class CombatDetailsTests
     }
 
     [Fact]
+    public void An_assisted_armor_grant_on_a_feat_turns_the_training_check_off()
+    {
+        // Full-stack review: the Scholar records "no training" (armor.none), so the check would run, but a feat grants
+        // shield training the calculator cannot apply. Under 5.2.1 the shield must keep its +2, with no warning.
+        var feat = Revision(50, ContentKind.Feat, "Test Shield Drill", Training("shield") with { Automation = AutomationStatus.Assisted });
+        var character = Fighter(RulesFamilies.Srd521, [Worn(Buckler)], new ClassLevel(Scholar.Reference, 1)) with { Pins = [feat.Reference] };
+        var ac = CharacterCalculator.Calculate(character, Catalog(feat)).Field(FieldIds.ArmorClass);
+
+        Assert.Equal(10 + 2 + 2, ac.Value);
+        Assert.DoesNotContain(ac.Warnings, w => w.Code == "equipment.shield-untrained");
+
+        // A conditional grant counts the same way.
+        var drill = feat with { Effects = [Training("shield") with { Timing = EffectTiming.WhileActive }] };
+        var conditional = CharacterCalculator.Calculate(character, Catalog(drill)).Field(FieldIds.ArmorClass);
+        Assert.Equal(10 + 2 + 2, conditional.Value);
+
+        // Without the feat, the Scholar's own "no training" still takes the 2024 shield away (the check is on).
+        Assert.Equal(10 + 2, Sheet(character with { Pins = [] }).Field(FieldIds.ArmorClass).Value);
+    }
+
+    [Fact]
     public void A_class_whose_armor_grants_are_not_automatic_has_unknown_training()
     {
         // Dual review: an assisted grant gives no training the calculator can see, so it must not count as a record.

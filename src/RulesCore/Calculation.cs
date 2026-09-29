@@ -461,11 +461,13 @@ public static class CharacterCalculator
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
-        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining);
+        var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
+        var proficiencies = CollectProficiencies(active, character, diagnostics, manual, content => GateLevel(content, character, resolved.ClassLevels), weaponProficiencies, armorTraining, unseenArmor);
         // Every class the character records, not only those that resolved: a missing, unsupported or wrong-family class
-        // has unknown training, so it turns the check off too.
+        // has unknown training, so it turns the check off too. So does an assisted or conditional armor grant on any
+        // content (a feat, species or item): the calculator cannot tell what it gives.
         var classes = character.Classes.Where(e => e.Level > 0).ToList();
-        var checkTraining = classes.Count > 0 && classes.All(e =>
+        var checkTraining = unseenArmor.Count == 0 && classes.Count > 0 && classes.All(e =>
             resolved.Classes.FirstOrDefault(c => c.Content.Revision.Reference == e.Class) is { } info && RecordsArmorTraining(info.Content.Revision));
         var worn = AddArmor(active, modifiers, diagnostics, armorTraining, checkTraining, policy, warnings);
         RemoveCycles(modifiers, diagnostics, warnings, manual);
@@ -1528,9 +1530,13 @@ public static class CharacterCalculator
     private static Diagnostic V8FieldIgnored(ContentRevision revision, Effect effect, string field) =>
         new("effect.schema-field-ignored", $"'{revision.Name}' effect '{effect.Id}' uses {field}, a content schema v8 field, but the revision declares v{revision.SchemaVersion}; it is ignored.", revision.Reference, effect.Id);
 
+    /// <param name="unseenArmor">
+    /// Armor training grants that apply to the character but that the calculator cannot apply (assisted, reference or
+    /// conditional), on any content. Their training is unknown, so they turn the armor training check off.
+    /// </param>
     private static Dictionary<string, Proficiency> CollectProficiencies(
         List<ActiveContent> active, Character character, List<Diagnostic> diagnostics, HashSet<string> manual, Func<ActiveContent, int> gateLevel,
-        Dictionary<string, Proficiency> weapons, Dictionary<string, Proficiency> armor)
+        Dictionary<string, Proficiency> weapons, Dictionary<string, Proficiency> armor, Dictionary<string, Proficiency> unseenArmor)
     {
         var best = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         foreach (var item in active)
@@ -1560,6 +1566,8 @@ public static class CharacterCalculator
                         diagnostics.Add(new("effect.unknown-target", $"'{item.Revision.Name}' effect '{grant.Id}' grants training in '{armorTarget}', which is not armor.light, armor.medium, armor.heavy, armor.shield or armor.none; it is ignored.", item.Revision.Reference, grant.Id));
                     else if (grant.Automation == AutomationStatus.Automatic && grant.Timing == EffectTiming.Always)
                         armor.TryAdd(key, new(GrantKind.Proficiency, item, grant));
+                    else
+                        unseenArmor.TryAdd(key, new(GrantKind.Proficiency, item, grant)); // training the calculator cannot apply
                     continue;
                 }
                 if (grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
