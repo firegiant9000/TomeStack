@@ -147,6 +147,12 @@ The editor has a **Compare revisions** section once the entry has a stored revis
     - a bad blank-character level or family is refused before anything is calculated.
   - The ROADMAP's "bundled original sample fixtures" are not in the shipped app. The blank character stands in for them.
 
+Review fixes (2026-09-29):
+- A text shown whole is capped (SPEC Q-02): 1,000 lines and 100,000 characters per text, 4,000 lines and 400,000 characters per comparison. `TextChange.notShown` counts the lines left out, and the panel says "N more lines not shown". A very long text is counted, not split into lines.
+- The panel also shows each character's resolved problems and choices left open, as the update review does.
+- Characters are offered by the union of the two revisions' families (the on-screen draft's when it is the To) plus those that record a cross-family exception for this content (`character.list` carries `exceptionContentIds`, ids only). A pick that is no longer offered is not sent.
+- `CompareTests` cover new and resolved problems, and that a problem which persists is in neither list, against the update review.
+
 Refusals:
 - `compare.to-required`;
 - `compare.different-content`;
