@@ -150,7 +150,7 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 
 **Slice 1a (fixture-verified, 2026-09-29).** The fixture is `tests/RulesFixtures/fixture-pack-m5-chronicler.json`: the original Test Chronicler class, a granted feature that reads the class's column, and a subclass with a column of its own.
 
-- **`tests/RulesCore.Tests/CustomClassTests.cs`** (35 cases), each side by side in `srd-5.1` and `srd-5.2.1` where it calculates:
+- **`tests/RulesCore.Tests/CustomClassTests.cs`** (45 cases), each side by side in `srd-5.1` and `srd-5.2.1` where it calculates:
   - `The_Test_Chronicler_levels_1_to_20_from_its_columns_side_by_side` at levels 1, 3, 5, 11, 17 and 20. It checks hit points, both columns, the subclass column (absent before level 3), the Ink resource and both recoveries, the Inkblot roll's bonus and cost, a skill modifier, the granted feature's initiative, the prepared-spell formula and the class's own slot table.
   - Multiclass tests with the fixture full caster (caster level 3 + 3, identical in both families), a half caster (the enum caster's family rounding is the only difference), a third caster, and a non-caster (the Chronicler keeps its own table). Also the multiclass Intelligence prerequisite and the starting-class saves.
   - Version gates:
@@ -158,7 +158,7 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
     - `A_scale_effect_in_a_revision_older_than_v9_stays_unknown_and_byte_for_byte`;
     - `A_v8_spellcasting_revision_with_the_table_as_extension_data_is_unchanged_and_not_combined` (a later extension key keeps its place too);
     - `A_spellcasting_revision_without_the_table_serializes_unchanged`;
-    - `A_v9_revision_is_refused_by_validation_and_calculation_that_support_only_v8`.
+    - `A_v9_revision_is_refused_by_validation_and_calculation_that_support_only_v8`. It shows the refusal one version up (this build and v10), because a test cannot run an older build; the version gate is the same code.
   - Minimum versions:
     - `RequiredSchemaVersion_is_9_when_any_formula_field_reads_a_scale`, with one case for each of the six fields;
     - `RequiredSchemaVersion_stays_below_9_for_a_class_that_uses_nothing_from_v9`.
@@ -179,6 +179,14 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **`validate.requires-v9` for content read from JSON:** it now also fires for a `scale` that stays unknown below v9 and for a table key held as extension data (`A_scale_in_a_v8_draft_read_from_json_is_named_as_needing_v9`). Before this, such a draft would have been published as v8 with the feature silently ignored.
 - **A subclass's scale ids** are checked against its class's newest published revision, plus unsaved revisions validated with it. A clash with an older published revision is a warning (`validate.scale-duplicate-older`). A draft never blocks, and a subclass that extends a feature's choice gets no class checks (`A_subclass_is_checked_against_its_classs_newest_published_revision_only`, `A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks`).
 - **Calculation isolates out-of-bound scale values** that bypassed validation, with `scale.invalid` (`A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation`).
+
+**Second review (dual-review of the M5 stack, 2026-09-29).** Confirmed by both reviewers, fixed:
+
+- **A malformed scale in a v9 revision** (no label, values that are not whole numbers) stayed an unknown effect and published with no error, so its column silently did not exist. It is now `validate.scale-incomplete` (`A_v9_scale_that_does_not_match_the_shape_is_an_error_not_a_silently_missing_column`).
+- **Package import and restore no longer refuse what publishing allowed.** When a package's published revision is re-checked, `validate.requires-v9` (an inert `scale` or table key that an earlier build published at v3 to v8) and `validate.scale-duplicate` (a clash the order of publishing allowed; the calculation reports `scale.duplicate` and the class's column wins) are warnings. Both still block `content.publish` (`A_published_v8_revision_with_an_inert_scale_effect_still_imports_with_a_warning`).
+- **"Newest" during an import** now means what it means afterwards: the import catalog lists this machine's revisions first, then the package's, the order they have once added.
+- **Release constraint:** v9 includes slice 1b's choice with no declared options, so slices 1a and 1b ship in the same release (ROADMAP).
+- **Not changed (single-source, low):** a revision with no `schemaVersion` is read at the current version, as before v9. The calculation-side v8 gate is asserted for the resource maximum only; the other five formula sites use the same `AllowsScales` call.
 
 **Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
 

@@ -99,8 +99,12 @@ public static class ContentValidator
             {
                 // A scale in a revision below v9 is never typed (it stays unknown), so it is named as needing v9 rather
                 // than as an effect this version cannot automate (review fix).
-                case UnknownEffect { DeclaredType: ScaleEffect.TypeName }:
+                case UnknownEffect { DeclaredType: ScaleEffect.TypeName } unknownScale:
                     needsV9 = true;
+                    // From v9 on a scale is typed; one that stays unknown did not match the shape (no label, values that are
+                    // not whole numbers), so its column would silently not exist (review fix).
+                    if (revision.SchemaVersion >= ScaleEffect.SchemaVersion)
+                        Error("validate.scale-incomplete", $"Scale '{unknownScale.Id}' does not match the scale shape: it needs a scaleId, a label and {Character.MaxLevel} whole-number values.", unknownScale.Id);
                     break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
