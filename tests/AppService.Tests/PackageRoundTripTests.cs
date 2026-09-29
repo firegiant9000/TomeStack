@@ -207,6 +207,37 @@ public class PackageRoundTripTests
     }
 
     [Fact]
+    public void A_published_v8_revision_with_an_inert_scale_effect_still_imports_with_a_warning()
+    {
+        // An earlier build published this: in v8 a "scale" effect is unknown and reference-only on every build. The v9
+        // validator names it as needing v9, which blocks content.publish but must not refuse a package (review fix).
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(HomebrewFeat with { SchemaVersion = 8 }, RulesJson.Options))!;
+        node["effects"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject
+        {
+            ["type"] = "scale",
+            ["id"] = "old-scale",
+            ["scaleId"] = "ink",
+            ["label"] = "Ink",
+            ["values"] = new System.Text.Json.Nodes.JsonArray([.. Enumerable.Range(0, 20).Select(_ => (System.Text.Json.Nodes.JsonNode?)1)]),
+        });
+        var v8 = node.Deserialize<ContentRevision>(RulesJson.Options)!;
+        Assert.Contains(v8.Effects, e => e is UnknownEffect);
+
+        using var origin = new TempApp();
+        AddHomebrew(origin);
+        origin.App.Store.AddRevision(v8 with { RevisionId = Guid.Parse("7a00e000-0000-4000-8000-0000000000a8") });
+        var saved = origin.App.SaveCharacter(ExportableCharacter() with { Pins = [.. ExportableCharacter().Pins.Where(p => p != HomebrewFeat.Reference), new(HomebrewFeat.ContentId, Guid.Parse("7a00e000-0000-4000-8000-0000000000a8"))] });
+        var export = origin.App.ExportCharacters([saved.Character.Id]).Content;
+
+        using var destination = new TempApp();
+        var preview = destination.App.PreviewImport(export);
+
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Code)));
+        Assert.Contains(preview.Warnings, w => w.Code == "validate.requires-v9");
+        destination.App.ApplyImport(export);
+    }
+
+    [Fact]
     public void Draft_revisions_stay_inactive_after_import()
     {
         using var origin = new TempApp();

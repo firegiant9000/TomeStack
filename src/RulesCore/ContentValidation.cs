@@ -13,6 +13,17 @@ public sealed record ValidationReport(ContentReference Revision, IReadOnlyList<D
     public int RequiredSchemaVersion { get; init; } = ContentValidator.MinimumPublishedSchemaVersion;
 }
 
+/// <summary>Revisions validated together, keyed by reference and (once, on first use) by content id.</summary>
+internal sealed class ValidationBatch(IReadOnlyDictionary<ContentReference, ContentRevision> byReference)
+{
+    private ILookup<Guid, ContentRevision>? _byContent;
+
+    public ContentRevision? GetValueOrDefault(ContentReference reference) => byReference.GetValueOrDefault(reference);
+
+    /// <summary>The batch's revisions of one content, in batch order.</summary>
+    public IEnumerable<ContentRevision> OfContent(Guid contentId) => (_byContent ??= byReference.Values.ToLookup(r => r.ContentId))[contentId];
+}
+
 /// <summary>
 /// M1 item 3: validates one content revision before it is published. It reports schema problems (shape and allowed
 /// values), reference problems (source, granted content and choice options), formula problems (modifiers, resource
@@ -26,6 +37,12 @@ public static class ContentValidator
     /// import blocks on validation errors only from v3 (older revisions predate validation).
     /// </summary>
     public const int MinimumPublishedSchemaVersion = 3;
+
+    /// <summary>
+    /// The most a choice can ask for when it declares no options of its own (the v9 JSON schema's choice.count maximum);
+    /// with options, the count is bounded by how many there are.
+    /// </summary>
+    public const int MaxChoiceCountWithoutOptions = 20;
 
     /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
@@ -51,13 +68,13 @@ public static class ContentValidator
 
     /// <param name="batch">Other unsaved revisions validated together, which may reference each other.</param>
     public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null) =>
-        Validate(revision, catalog, (batch ?? []).ToDictionary(r => r.Reference));
+        Validate(revision, catalog, new ValidationBatch((batch ?? []).ToDictionary(r => r.Reference)));
 
     /// <summary>
-    /// The same, with the batch already keyed by reference (the debugger validates a whole source against itself once).
-    /// The batch may hold the revision itself: every batch lookup is of other content.
+    /// The same, with the batch already keyed by reference and by content id (the debugger validates a whole source
+    /// against itself, keying it once). The batch may hold the revision itself: every batch lookup is of other content.
     /// </summary>
-    internal static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IReadOnlyDictionary<ContentReference, ContentRevision> local)
+    internal static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, ValidationBatch local)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -106,8 +123,12 @@ public static class ContentValidator
             {
                 // A scale in a revision below v9 is never typed (it stays unknown), so it is named as needing v9 rather
                 // than as an effect this version cannot automate (review fix).
-                case UnknownEffect { DeclaredType: ScaleEffect.TypeName }:
+                case UnknownEffect { DeclaredType: ScaleEffect.TypeName } unknownScale:
                     needsV9 = true;
+                    // From v9 on a scale is typed; one that stays unknown did not match the shape (no label, values that are
+                    // not whole numbers), so its column would silently not exist (review fix).
+                    if (revision.SchemaVersion >= ScaleEffect.SchemaVersion)
+                        Error("validate.scale-incomplete", $"Scale '{unknownScale.Id}' does not match the scale shape: it needs a scaleId, a label and {Character.MaxLevel} whole-number values.", unknownScale.Id);
                     break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
@@ -191,7 +212,9 @@ public static class ContentValidator
                     }
                     if (choice.Options.Distinct().Count() != choice.Options.Count)
                         Error("validate.choice-option-duplicate", $"Choice '{choice.ChoiceId}' lists an option more than once.", choice.Id);
-                    if (choice.Count < 1 || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count()))
+                    if (choice.Count < 1
+                        || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count())
+                        || (choice.Options.Count == 0 && choice.Count > MaxChoiceCountWithoutOptions))
                         Error("validate.choice-count", $"Choice '{choice.ChoiceId}' asks for {choice.Count} of {choice.Options.Distinct().Count()} option(s).", choice.Id);
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");
@@ -236,7 +259,7 @@ public static class ContentValidator
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
                     {
-                        var definer = local.Values.Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
+                        var definer = local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
                         if (definer is null)
                             Warn("validate.roll-resource-content-missing", $"Roll '{roll.Id}' spends '{shared}' of content {holder}, which is not installed.", roll.Id);
                         else if (!definer.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared))
@@ -354,7 +377,7 @@ public static class ContentValidator
             Error("validate.source-missing", $"Source {revision.Provenance.SourceId} is not installed.");
         if (revision.ExtendsChoice is { } extends)
         {
-            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.Values.Where(r => r.ContentId == extends.ContentId)).ToList();
+            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.OfContent(extends.ContentId)).ToList();
             if (extends.ContentId == revision.ContentId)
                 Error("validate.self-reference", "A revision cannot add itself to one of its own choices.");
             else if (targets.Count == 0)
@@ -408,7 +431,7 @@ public static class ContentValidator
                 ? catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).ToList()
                 : [];
             var parentClass = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } extended
-                ? [.. local.Values.Where(r => r.ContentId == extended.ContentId && r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
+                ? [.. local.OfContent(extended.ContentId).Where(r => r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
                 : new List<ContentRevision>();
             related.AddRange(parentClass);
             // Older published class revisions still calculate for the characters that pin them, so a clash with one is a
