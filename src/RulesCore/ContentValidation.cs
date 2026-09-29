@@ -50,16 +50,23 @@ public static class ContentValidator
         field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
 
     /// <param name="batch">Other unsaved revisions validated together, which may reference each other.</param>
-    public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null)
+    public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null) =>
+        Validate(revision, catalog, (batch ?? []).ToDictionary(r => r.Reference));
+
+    /// <summary>
+    /// The same, with the batch already keyed by reference (the debugger validates a whole source against itself once).
+    /// The batch may hold the revision itself: every batch lookup is of other content.
+    /// </summary>
+    internal static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IReadOnlyDictionary<ContentReference, ContentRevision> local)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(local);
         var errors = new List<Diagnostic>();
         var warnings = new List<Diagnostic>();
         var reference = revision.Reference;
         if (EmptyEntries(revision) is { Count: > 0 } empty)
             return new ValidationReport(reference, empty, []); // nothing else can be checked safely
-        var local = (batch ?? []).ToDictionary(r => r.Reference);
         void Error(string code, string message, string? effectId = null) => errors.Add(new(code, message, reference, effectId));
         void Warn(string code, string message, string? effectId = null) => warnings.Add(new(code, message, reference, effectId));
 

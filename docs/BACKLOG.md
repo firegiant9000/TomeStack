@@ -5,7 +5,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | ID | Feature | Earliest target | Acceptance seed |
 | --- | --- | --- | --- |
 | B01 | Calculation inspector | M1/M2 | A number shows every applied rule and override |
-| B02 | Homebrew debugger | M5 | Missing references, invalid formulas and dead resources have diagnostics |
+| B02 | Homebrew debugger | M5 | Missing references, invalid formulas and dead resources have diagnostics. **Done 2026-09-29 (M5 slice 2, fixture-verified):** `content.diagnose`, [features/homebrew-studio.md](features/homebrew-studio.md#the-homebrew-debugger-m5-slice-2-b02) |
 | B03 | Character sandbox | M5 | Preview a draft subclass at chosen levels without changing a saved character |
 | B04 | Before/after tests | M5 | Compare two revisions on fixture characters |
 | B05 | PDF source-page links | M2 | Open cited page offline. **Implemented (M2 item 6, `features/pdf-attachments.md`)**; the owner check of the landed page passed on 0.2.2 (reported by the owner, 2026-09-28) |

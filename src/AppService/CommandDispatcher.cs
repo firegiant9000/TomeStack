@@ -20,7 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "content.bySource", "source.list", "source.createHomebrew",
+        "content.bySource", "content.diagnose", "source.list", "source.createHomebrew",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
@@ -98,6 +98,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
         "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
         "content.bySource" => app.ContentBySource(Payload<SourceIdPayload>(payload).SourceId),
+        "content.diagnose" => Diagnose(Payload<DiagnoseRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
@@ -159,6 +160,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
+    }
+
+    private object Diagnose(DiagnoseRequest payload)
+    {
+        var report = app.Diagnose(payload);
+        return new { report.Scope, report.Findings, report.Errors, report.Warnings, report.Truncated };
     }
 
     private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);

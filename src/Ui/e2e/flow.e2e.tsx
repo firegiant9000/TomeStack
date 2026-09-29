@@ -645,6 +645,51 @@ it('keeps a resource linked to its recovery when the resource is renamed in the 
   expect(results.textContent).not.toMatch(/does not define/);
 });
 
+it('finds a problem in a source with the debugger, shows its rule, and clears it in the editor (M5 slice 2)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Debugger', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Debugger' });
+
+  // A draft feature whose resource nothing spends or recovers.
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Dead Well');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(within(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })).getByRole('textbox', { name: 'Resource name' }), 'Echoes');
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Dead Well/);
+  await user.click(within(editor()).getByRole('button', { name: 'Close editor' }));
+
+  await user.click(await screen.findByRole('button', { name: 'Find problems in E2E Debugger' }));
+  const findings = await screen.findByRole('region', { name: 'Debugger findings for E2E Debugger' });
+  expect(findings.textContent).toMatch(/Warning in E2E Dead Well: Resource 'resource-1' is never spent/);
+
+  // "Show" opens the entry and moves focus to the rule the finding is about.
+  await user.click(within(findings).getByRole('button', { name: 'Show rule resource-1 of E2E Dead Well' }));
+  await screen.findByRole('heading', { name: 'Edit E2E Dead Well' });
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })));
+
+  // With the entry already open, Show keeps its unsaved edits and moves focus again (review fix).
+  const description = within(editor()).getByRole('textbox', { name: /^Description/ });
+  await user.type(description, 'Unsaved words');
+  await user.click(within(screen.getByRole('region', { name: 'Debugger findings for E2E Debugger' })).getByRole('button', { name: 'Show rule resource-1 of E2E Dead Well' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })));
+  expect((within(editor()).getByRole('textbox', { name: /^Description/ }) as HTMLTextAreaElement).value).toBe('Unsaved words');
+
+  // A recovery fixes it; the editor's own debugger checks the unsaved revision.
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Find problems' }));
+  const own = await within(editor()).findByRole('region', { name: 'Debugger findings' });
+  await waitFor(() => expect(own.textContent).toMatch(/The debugger found no problems/));
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);

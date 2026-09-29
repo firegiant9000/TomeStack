@@ -8,6 +8,15 @@ export { isClassBasic } from '../classBasics';
 const hitDice = [6, 8, 10, 12];
 const emptyId = '00000000-0000-0000-0000-000000000000';
 
+/**
+ * The element of this editor that holds a class-basic effect, so a debugger finding can move focus to it (M5 slice 2).
+ * Each group is a fieldset with `tabIndex={-1}`, named by its legend.
+ */
+export function classBasicElementId(effect: Effect): string {
+  if (effect.type === 'choice') return effect.choiceId === 'skills' ? 'class-basics-skills' : 'class-basics-subclass';
+  return effect.type === 'restriction' ? 'class-basics-prerequisites' : 'class-basics-die';
+}
+
 /** A change to the latest effect list; never a snapshot, so awaited work cannot undo other edits (review fix). */
 export type EffectsUpdate = (effects: Effect[]) => Effect[];
 
@@ -39,7 +48,7 @@ export function ClassBasicsEditor(props: {
   return (
     <section aria-labelledby="class-basics-heading" className="effect-editor">
       <h4 id="class-basics-heading">Class basics</h4>
-      <fieldset disabled={props.disabled}>
+      <fieldset disabled={props.disabled} id="class-basics-die" tabIndex={-1}>
         <legend>Hit die and saving throws</legend>
         <label className="field">
           Hit die
@@ -73,7 +82,7 @@ export function ClassBasicsEditor(props: {
         </fieldset>
       </fieldset>
 
-      <fieldset disabled={props.disabled}>
+      <fieldset disabled={props.disabled} id="class-basics-prerequisites" tabIndex={-1}>
         <legend>Multiclass prerequisites (leave blank for none)</legend>
         {abilities.map(([key, label]) => (
           <label key={key} className="field">
@@ -108,7 +117,7 @@ export function ClassBasicsEditor(props: {
         onError={props.onError}
       />
 
-      <fieldset disabled={props.disabled}>
+      <fieldset disabled={props.disabled} id="class-basics-subclass" tabIndex={-1}>
         <legend>Subclass</legend>
         <label className="choice">
           <input
@@ -237,7 +246,7 @@ function SkillChoice(props: {
   const uncovered = families.filter((f) => optionFamilies.some((of) => of !== undefined && !of.includes(f)));
 
   return (
-    <fieldset disabled={props.disabled}>
+    <fieldset disabled={props.disabled} id="class-basics-skills" tabIndex={-1}>
       <legend ref={legend} tabIndex={-1}>
         Skill choice (starting class only)
       </legend>

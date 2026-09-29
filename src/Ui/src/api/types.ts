@@ -964,6 +964,28 @@ export interface ValidationReport {
   canPublish: boolean;
 }
 
+/** M5 slice 2 (B02): how much a debugger finding matters; errors block publishing. */
+export type FindingSeverity = 'error' | 'warning' | 'note';
+
+export interface DebugFinding {
+  code: string;
+  severity: FindingSeverity;
+  message: string;
+  content: ContentReference;
+  contentName: string;
+  effectId?: string;
+}
+
+/** `content.diagnose`: what the homebrew debugger found. It writes nothing. */
+export interface DebugReport {
+  scope: ContentReference[];
+  findings: DebugFinding[];
+  errors: number;
+  warnings: number;
+  /** The graph walk hit its bound, so some reach findings may be missing. */
+  truncated: boolean;
+}
+
 export interface ImportResult {
   added: number;
   replaced: number;
