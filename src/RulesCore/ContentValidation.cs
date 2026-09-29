@@ -39,6 +39,12 @@ public static class ContentValidator
     public const int MinimumPublishedSchemaVersion = 3;
 
     /// <summary>
+    /// The most a choice can ask for when it declares no options of its own (the v9 JSON schema's choice.count maximum);
+    /// with options, the count is bounded by how many there are.
+    /// </summary>
+    public const int MaxChoiceCountWithoutOptions = 20;
+
+    /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
     /// and never lower than the entry before it (a class never loses caster levels as it gains class levels).
     /// </summary>
@@ -117,8 +123,12 @@ public static class ContentValidator
             {
                 // A scale in a revision below v9 is never typed (it stays unknown), so it is named as needing v9 rather
                 // than as an effect this version cannot automate (review fix).
-                case UnknownEffect { DeclaredType: ScaleEffect.TypeName }:
+                case UnknownEffect { DeclaredType: ScaleEffect.TypeName } unknownScale:
                     needsV9 = true;
+                    // From v9 on a scale is typed; one that stays unknown did not match the shape (no label, values that are
+                    // not whole numbers), so its column would silently not exist (review fix).
+                    if (revision.SchemaVersion >= ScaleEffect.SchemaVersion)
+                        Error("validate.scale-incomplete", $"Scale '{unknownScale.Id}' does not match the scale shape: it needs a scaleId, a label and {Character.MaxLevel} whole-number values.", unknownScale.Id);
                     break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
@@ -202,7 +212,9 @@ public static class ContentValidator
                     }
                     if (choice.Options.Distinct().Count() != choice.Options.Count)
                         Error("validate.choice-option-duplicate", $"Choice '{choice.ChoiceId}' lists an option more than once.", choice.Id);
-                    if (choice.Count < 1 || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count()))
+                    if (choice.Count < 1
+                        || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count())
+                        || (choice.Options.Count == 0 && choice.Count > MaxChoiceCountWithoutOptions))
                         Error("validate.choice-count", $"Choice '{choice.ChoiceId}' asks for {choice.Count} of {choice.Options.Distinct().Count()} option(s).", choice.Id);
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");

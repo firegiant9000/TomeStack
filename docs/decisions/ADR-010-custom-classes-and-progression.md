@@ -150,7 +150,7 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 
 **Slice 1a (fixture-verified, 2026-09-29).** The fixture is `tests/RulesFixtures/fixture-pack-m5-chronicler.json`: the original Test Chronicler class, a granted feature that reads the class's column, and a subclass with a column of its own.
 
-- **`tests/RulesCore.Tests/CustomClassTests.cs`** (35 cases), each side by side in `srd-5.1` and `srd-5.2.1` where it calculates:
+- **`tests/RulesCore.Tests/CustomClassTests.cs`** (45 cases), each side by side in `srd-5.1` and `srd-5.2.1` where it calculates:
   - `The_Test_Chronicler_levels_1_to_20_from_its_columns_side_by_side` at levels 1, 3, 5, 11, 17 and 20. It checks hit points, both columns, the subclass column (absent before level 3), the Ink resource and both recoveries, the Inkblot roll's bonus and cost, a skill modifier, the granted feature's initiative, the prepared-spell formula and the class's own slot table.
   - Multiclass tests with the fixture full caster (caster level 3 + 3, identical in both families), a half caster (the enum caster's family rounding is the only difference), a third caster, and a non-caster (the Chronicler keeps its own table). Also the multiclass Intelligence prerequisite and the starting-class saves.
   - Version gates:
@@ -158,7 +158,7 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
     - `A_scale_effect_in_a_revision_older_than_v9_stays_unknown_and_byte_for_byte`;
     - `A_v8_spellcasting_revision_with_the_table_as_extension_data_is_unchanged_and_not_combined` (a later extension key keeps its place too);
     - `A_spellcasting_revision_without_the_table_serializes_unchanged`;
-    - `A_v9_revision_is_refused_by_validation_and_calculation_that_support_only_v8`.
+    - `A_v9_revision_is_refused_by_validation_and_calculation_that_support_only_v8`. It shows the refusal one version up (this build and v10), because a test cannot run an older build; the version gate is the same code.
   - Minimum versions:
     - `RequiredSchemaVersion_is_9_when_any_formula_field_reads_a_scale`, with one case for each of the six fields;
     - `RequiredSchemaVersion_stays_below_9_for_a_class_that_uses_nothing_from_v9`.
@@ -180,13 +180,31 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **A subclass's scale ids** are checked against its class's newest published revision, plus unsaved revisions validated with it. A clash with an older published revision is a warning (`validate.scale-duplicate-older`). A draft never blocks, and a subclass that extends a feature's choice gets no class checks (`A_subclass_is_checked_against_its_classs_newest_published_revision_only`, `A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks`).
 - **Calculation isolates out-of-bound scale values** that bypassed validation, with `scale.invalid` (`A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation`).
 
+**Second review (dual-review of the M5 stack, 2026-09-29).** Confirmed by both reviewers, fixed:
+
+- **A malformed scale in a v9 revision** (no label, values that are not whole numbers) stayed an unknown effect and published with no error, so its column silently did not exist. It is now `validate.scale-incomplete` (`A_v9_scale_that_does_not_match_the_shape_is_an_error_not_a_silently_missing_column`).
+- **Package import and restore no longer refuse what publishing allowed.** When a package's published revision is re-checked, `validate.requires-v9` (an inert `scale` or table key that an earlier build published at v3 to v8) and `validate.scale-duplicate` (a clash the order of publishing allowed; the calculation reports `scale.duplicate` and the class's column wins) are warnings. Both still block `content.publish` (`A_published_v8_revision_with_an_inert_scale_effect_still_imports_with_a_warning`).
+- **"Newest" during an import** now means what it means afterwards: the import catalog lists this machine's revisions first, then the package's, the order they have once added.
+- **Release constraint:** v9 includes slice 1b's choice with no declared options, so slices 1a and 1b ship in the same release (ROADMAP).
+- **The calculation-side v8 gate** is now asserted at every formula site in the relabelled-v8 test (resource maximum, recovery, roll bonus, modifier value, spellsFormula).
+- **Not changed (confirmed, low):** a content revision with no `schemaVersion` is read at the current version, as before v9. Reading it as v1 instead would change how v1 packages import, so it is left for an owner decision.
+
+
 **Slice 1b (fixture-verified, 2026-09-29): the M5 exit gate.**
 
 - **The studio authors a class** ([homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010)).
-- **`AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`:** a class shaped as the studio writes it is published as v9. A homebrew subclass joins its empty subclass choice and reads the class's column. It multiclasses with the SRD Fighter, and a package round trip to a clean data folder gives the same sheet.
-- **The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class":** every class control is used in the real UI, then the builder, level 20 (hit points 143, Ink 9, level 7 slots) and Chronicler 5 / SRD Wizard 3 (caster level 6: 4, 3 and 3 slots).
+- **`AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`:** a class shaped as the studio writes it is published as v9. A homebrew subclass joins its empty subclass choice and reads the class's column. It multiclasses with the SRD Fighter, and a package round trip to a clean data folder gives the same sheet. The round trip is service-level only: the effects are built by hand in the test, not authored in the UI.
+- **The e2e flow "authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class":** in the real UI it uses the hit die, the saving throw boxes, a multiclass prerequisite, the skill choice (created, removed and created again), the subclass choice, a class column, a resource that reads it, spellcasting with its own multiclass table, and a modifier. It then builds the class in the builder at level 1, and creates the level 20 character (hit points 143, Ink 9, level 7 slots) and the Chronicler 5 / SRD Wizard 3 character (caster level 6: 4, 3 and 3 slots) with `client.createCharacter`, not through the level-up UI. It does not use "Grant a feature", "Any one of these is enough", the prepared/known picker or the spell-count formula.
 
 **Slice 1b review fixes (dual-review, 2026-09-29):** none of the 13 findings was refuted; all are fixed. They are listed in [homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010) under "Review fixes". The editor's effect logic is now pure and unit-tested (`src/Ui/src/classBasics.test.ts`). The e2e flow also turns on the subclass choice, adds a homebrew subclass to it, checks the chosen skill's proficiency on the sheet, and asserts focus after the skill helper.
+
+**Slice 1b second review (2026-09-29):** the findings were confirmed by two reviewers; each is fixed.
+
+- **The skill helper remembers what it published.** It keeps a record of the option features made in the editor session and consults it before the (stale) entries list, so a retry, or "Remove the skill choice" then "Create skill choice", reuses them ("0 new option features published, 3 reused" in the e2e flow). The "options not written for a family" warning reads both. The studio reloads its content after the helper publishes.
+- **The whole class editor is disabled while the helper runs,** Close included.
+- **Only true class basics are hidden from the rule list:** the first multiclass restriction of an ability, in no group or the "any one" group, and saves granted only as the starting class at no level. Others stay visible (`classBasics.test.ts`).
+- **A choice with no options** keeps an upper bound on its count: 20, as in the v9 JSON schema (`validate.choice-count`).
+- **This evidence is narrowed** to what the e2e flow and the service test exercise (above).
 
 **One addition to v9 made in slice 1b, before v9 merges:** a `choice` with **no declared options** is allowed (`validate.choice-options-none`, a warning). It offers only content that extends it, which is what a new class's subclass choice is before any subclass exists. v8 validation refused it, so it requires v9: an older build refuses by version instead of with a validation error.
 

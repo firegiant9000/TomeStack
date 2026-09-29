@@ -52,7 +52,7 @@ Resources, recoveries, rolls and modifiers work as for other content, and their 
 
 Acceptance:
 - `AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`;
-- the e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class". It authors "E2E Chronicler" with every control above, builds it at level 1 in the builder, and checks it at level 20 and as Chronicler 5 / SRD Wizard 3 (caster level 6).
+- the e2e flow "authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class". It authors "E2E Chronicler" with most of the controls above (not "Grant a feature", "Any one of these is enough", the prepared/known picker or the spell-count formula), builds it at level 1 in the builder, and creates and checks it at level 20 and as Chronicler 5 / SRD Wizard 3 (caster level 6) through the service client.
 
 ## The homebrew debugger (M5 slice 2, B02)
 

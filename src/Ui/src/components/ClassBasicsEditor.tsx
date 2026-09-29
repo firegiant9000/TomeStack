@@ -4,6 +4,7 @@ import type { AppInfo, ContentReference, ContentRevision, Effect, SourceRecord, 
 import { abilities, anyOne, isPrerequisite, isSave, setAnyOne, setChoice, setHitDie, setPrerequisite, toggleSave } from '../classBasics';
 
 export { isClassBasic } from '../classBasics';
+// Note: `isClassBasic(effect, effects)` needs the whole list to tell the first multiclass restriction of an ability.
 
 const hitDice = [6, 8, 10, 12];
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -35,12 +36,14 @@ export function ClassBasicsEditor(props: {
   disabled: boolean;
   onEffects: (update: EffectsUpdate) => void;
   onBusy: (busy: boolean) => void;
+  /** The skill-choice helper published option features: the caller reloads its entries. */
+  onOptionsPublished: () => void;
   onError: (error: unknown) => void;
 }) {
   const { revision, onEffects } = props;
   const effects = revision.effects;
   const hitDie = effects.find((e): e is Extract<Effect, { type: 'hitDie' }> => e.type === 'hitDie');
-  const prerequisites = effects.filter(isPrerequisite);
+  const prerequisites = effects.filter((e) => isPrerequisite(e, effects));
   const skills = effects.find((e): e is Extract<Effect, { type: 'choice' }> => e.type === 'choice' && e.choiceId === 'skills');
   const subclass = effects.find((e): e is Extract<Effect, { type: 'choice' }> => e.type === 'choice' && e.choiceId === 'subclass');
   const any = anyOne(effects);
@@ -112,6 +115,7 @@ export function ClassBasicsEditor(props: {
         info={props.info}
         current={skills}
         disabled={props.disabled}
+        onOptionsPublished={props.onOptionsPublished}
         onChoice={(choice) => onEffects((current) => setChoice(current, 'skills', choice))}
         onBusy={props.onBusy}
         onError={props.onError}
@@ -161,6 +165,13 @@ export function ClassBasicsEditor(props: {
  * so a retry, or removing and recreating the choice, never publishes duplicates. The choice is written once every
  * option exists, and a failure part-way leaves nothing half-written; the next try reuses what was published (review fix).
  */
+interface MadeOption {
+  className: string;
+  skill: string;
+  rulesFamilies: string[];
+  reference: ContentReference;
+}
+
 function SkillChoice(props: {
   revision: ContentRevision;
   source: SourceRecord;
@@ -168,6 +179,7 @@ function SkillChoice(props: {
   info: AppInfo;
   current?: Extract<Effect, { type: 'choice' }>;
   disabled: boolean;
+  onOptionsPublished: () => void;
   onChoice: (choice: Extract<Effect, { type: 'choice' }> | null) => void;
   onBusy: (busy: boolean) => void;
   onError: (error: unknown) => void;
@@ -176,6 +188,8 @@ function SkillChoice(props: {
   const [selected, setSelected] = useState<string[]>([]);
   const [count, setCount] = useState(2);
   const [busy, setBusy] = useState(false);
+  // Option features this editor session published; the entries prop is reloaded later and can miss them (review fix).
+  const [madeOptions, setMadeOptions] = useState<MadeOption[]>([]);
   const [announcement, setAnnouncement] = useState('');
   const legend = useRef<HTMLLegendElement>(null);
   const className = props.revision.name.trim();
@@ -186,8 +200,11 @@ function SkillChoice(props: {
       ? `Tick at least ${count} skill${count === 1 ? '' : 's'}.`
       : '';
 
-  // The existing published feature for this class and skill, if it covers the class's rules families.
-  function existing(field: { id: string; label: string }): ContentReference | undefined {
+  // The existing published feature for this class and skill, if it covers the class's rules families. What this
+  // editor session published counts first: the entries list is only reloaded after a delay, so it can be stale.
+  function existing(field: { id: string; label: string }, made: MadeOption[]): ContentReference | undefined {
+    const mine = made.find((m) => m.className === className && m.skill === field.id && families.every((f) => m.rulesFamilies.includes(f)));
+    if (mine) return mine.reference;
     const found = props.entries.find(
       (e) =>
         e.kind === 'feature' &&
@@ -209,24 +226,35 @@ function SkillChoice(props: {
     try {
       const options: ContentReference[] = [];
       let created = 0;
-      for (const field of skillFields.filter((f) => selected.includes(f.id))) {
-        const reuse = existing(field);
-        if (reuse) {
-          options.push(reuse);
-          continue;
+      const made = [...madeOptions];
+      try {
+        for (const field of skillFields.filter((f) => selected.includes(f.id))) {
+          const reuse = existing(field, made);
+          if (reuse) {
+            options.push(reuse);
+            continue;
+          }
+          const draft = await client.saveDraft({
+            contentId: crypto.randomUUID(),
+            revisionId: emptyId,
+            kind: 'feature',
+            name: `${className}: ${field.label}`,
+            rulesFamilies: [...families],
+            provenance: { sourceId: props.source.id },
+            status: 'draft',
+            effects: [{ type: 'grant', id: 'skill', grant: 'proficiency', target: field.id }],
+          });
+          const published = (await client.publish(draft)).published;
+          options.push(published);
+          made.push({ className, skill: field.id, rulesFamilies: [...families], reference: published });
+          created++;
         }
-        const draft = await client.saveDraft({
-          contentId: crypto.randomUUID(),
-          revisionId: emptyId,
-          kind: 'feature',
-          name: `${className}: ${field.label}`,
-          rulesFamilies: [...families],
-          provenance: { sourceId: props.source.id },
-          status: 'draft',
-          effects: [{ type: 'grant', id: 'skill', grant: 'proficiency', target: field.id }],
-        });
-        options.push((await client.publish(draft)).published);
-        created++;
+      } finally {
+        // Even after a failure part-way, what was published is remembered (published revisions are insert-only).
+        if (created > 0) {
+          setMadeOptions(made);
+          props.onOptionsPublished();
+        }
       }
       props.onChoice({ type: 'choice', id: 'skills', choiceId: 'skills', count, options, onlyAs: 'startingClass', text: `Choose ${count} skill${count === 1 ? '' : 's'}` });
       setSelected([]);
@@ -241,7 +269,9 @@ function SkillChoice(props: {
 
   // Options made for other rules families cannot be picked by a character of a family they do not support.
   const optionFamilies = (props.current?.options ?? []).map(
-    (o) => props.entries.find((e) => e.contentId === o.contentId)?.revisions.find((r) => r.revisionId === o.revisionId)?.rulesFamilies,
+    (o) =>
+      madeOptions.find((m) => m.reference.revisionId === o.revisionId)?.rulesFamilies ??
+      props.entries.find((e) => e.contentId === o.contentId)?.revisions.find((r) => r.revisionId === o.revisionId)?.rulesFamilies,
   );
   const uncovered = families.filter((f) => optionFamilies.some((of) => of !== undefined && !of.includes(f)));
 
