@@ -39,6 +39,11 @@ public static class ContentTree
 
     public const int MaxLabel = 120;
 
+    /// <summary>The calculator refuses a draft (<c>content.unpublished</c>), and publishing makes a new revision, so a pin on a draft stays a draft.</summary>
+    public const string DraftPinNote = "Draft: characters get nothing from it until it is published; publishing creates a new revision, so re-point this grant";
+
+    public const string DraftExtensionNote = "Draft: not offered to characters until published";
+
     public static ContentTreeView Build(ContentGraph graph, Guid contentId)
     {
         ArgumentNullException.ThrowIfNull(graph);
@@ -69,9 +74,26 @@ public static class ContentTree
         {
             var current = graph.Current.GetValueOrDefault(reference.ContentId);
             if (current?.RevisionId == reference.RevisionId)
-                return (current, null);
+                return (current, current.Status == RevisionStatus.Published ? null : DraftPinNote);
             var pinned = graph.PublishedRevisions(reference.ContentId).FirstOrDefault(r => r.RevisionId == reference.RevisionId);
             return pinned is null ? (null, null) : (pinned, current is null ? null : "A newer revision exists; characters get this one");
+        }
+
+        // Content that extends a choice is its current revision, which is not offered while it is a draft.
+        (ContentRevision? Revision, string? Note) Extending(Guid contentId)
+        {
+            var current = graph.Current.GetValueOrDefault(contentId);
+            return (current, current is not null && current.Status != RevisionStatus.Published ? DraftExtensionNote : null);
+        }
+
+        // Each owner's extension edges by choice, built once, so a choice reads its own and does not scan every edge.
+        var extensionLookups = new Dictionary<Guid, ILookup<string, GraphEdge>>();
+        ILookup<string, GraphEdge> ExtensionsOf(Guid ownerId)
+        {
+            if (!extensionLookups.TryGetValue(ownerId, out var lookup))
+                extensionLookups[ownerId] = lookup = graph.From(ownerId).Where(e => e.Kind == GraphEdgeKind.Extension && e.ChoiceId is not null)
+                    .ToLookup(e => e.ChoiceId!, StringComparer.Ordinal);
+            return lookup;
         }
 
         TreeNode ContentNode(string id, ContentRevision revision, int depth, bool asRoot, HashSet<Guid> path, string? note = null)
@@ -193,13 +215,13 @@ public static class ContentTree
             var choice = (ChoiceEffect)link;
             var options = new List<TreeNode>();
             var declared = choice.Options.Distinct().Select(o => (Reference: (ContentReference?)o, ContentId: o.ContentId));
-            var extensions = graph.From(owner.ContentId).Where(e => e.Kind == GraphEdgeKind.Extension && e.ChoiceId == choice.ChoiceId).Select(e => (Reference: (ContentReference?)null, ContentId: e.To));
+            var extensions = ExtensionsOf(owner.ContentId)[choice.ChoiceId].Select(e => (Reference: (ContentReference?)null, ContentId: e.To));
             foreach (var (reference, optionId) in declared.Concat(extensions))
             {
                 if (!Room(depth + 1))
                     break;
                 var optionNodeId = $"{id}.{options.Count}";
-                var (option, pinNote) = reference is { } pinned ? Pinned(pinned) : (graph.Current.GetValueOrDefault(optionId), null);
+                var (option, pinNote) = reference is { } pinned ? Pinned(pinned) : Extending(optionId);
                 options.Add(option is null
                     ? Node(optionNodeId, TreeNodeKind.Missing, $"An option ({optionId}) is not installed or not published", reference, null, [])
                     : ContentNode(optionNodeId, option, depth + 1, asRoot: true, path, pinNote));

@@ -166,7 +166,7 @@ Acceptance:
 
 **Show relationships** in the editor draws the revision on screen as a tree. It runs from the class, to the level each grant or choice applies from, to the feature or choice option it brings in, to that content's resources, and on to the rolls and toggles that spend them and the recoveries that restore them. Other rolls and the class columns are shown too. The revision on screen is placed among its source's latest revisions (drafts included), as the debugger studies it. `content.tree { reference | revision }` builds it (`RulesCore.ContentTree`, over `ContentGraph`) and writes nothing.
 - **As the calculator reads it:**
-  - a grant or declared option shows the exact revision it pins, which is what characters get, with a note when a newer revision exists. Content that extends a choice shows its current revision;
+  - a grant or declared option shows the exact revision it pins, which is what characters get when it is published, with a note when a newer revision exists. A pin on a draft is still shown, with the note "Draft: characters get nothing from it until it is published; publishing creates a new revision, so re-point this grant", because the calculator refuses a draft (`content.unpublished`). Content that extends a choice shows its current revision, with "Draft: not offered to characters until published" while that is a draft;
   - a granted content's own grants are shown as "Not followed" (grants are one level deep);
   - a grant that is not automatic, or not always applied, is shown as never applied, and one that names no content says so;
   - a resource id defined twice keeps the first definition, and the repeat is marked ignored;
@@ -181,6 +181,7 @@ Acceptance:
   - Labels are cut at 120 characters, and node ids are positions (`0.2.1`), never user text.
   - The revision on screen may have at most 5,000 rules (`tree.too-large`).
   - The store is read once, and the graph is built without the class reach walk, which the tree does not use.
+- **Review fixes (2026-09-29):** draft grants and extensions are noted as above, and each owner's extension edges are grouped by choice once, so a choice reads its own instead of scanning every edge.
 - **Activation:** Enter on a node focuses its rule when the rule belongs to the entry being edited. Each node carries the owner of its rule, so a "Grants X" node shows the entry's own grant.
 - **Keyboard and screen readers (the WAI-ARIA APG tree view pattern; accessibility checklist item 22):**
   - It is a `tree` of `treeitem`s in nested `group`s, each with `aria-level`, `aria-posinset`, `aria-setsize` and `aria-expanded`.

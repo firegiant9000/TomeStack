@@ -70,6 +70,7 @@
 
 ### Fixed
 
+- **The relationship tree no longer treats a draft as granted (review 2026-09-29):** a grant or choice option that names a draft is shown with a note that characters get nothing from it until it is published, and content that extends a choice while a draft is marked as not offered yet.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 
