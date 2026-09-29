@@ -326,12 +326,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             foreach (var campaign in parsed.Campaigns)
             {
                 var local = store.FindCampaign(campaign.Id);
+                var same = local is not null && CampaignChanges(local, campaign, new Dictionary<Guid, SourceRecord>()).Count == 0;
                 if (campaignPack)
                 {
                     // M6 slice 2: the sender's profile, with what is still not installed here recorded as pending.
-                    if (keepCampaigns?.Contains(campaign.Id) == true || (local is not null && CampaignChanges(local, campaign, new Dictionary<Guid, SourceRecord>()).Count == 0))
+                    if (keepCampaigns?.Contains(campaign.Id) == true || same)
                     {
                         unchanged++;
+                        if (WithPackPending(local!, parsed.Manifest) is { } merged)
+                            store.SaveCampaign(merged);
                         continue;
                     }
                     if (local is null) added++;
@@ -339,10 +342,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     store.SaveCampaign(ForReceiver(campaign, parsed.Manifest));
                     continue;
                 }
+                if (same) { unchanged++; continue; }
                 if (local is null) added++;
-                else if (Json(local).AsSpan().SequenceEqual(Json(campaign))) { unchanged++; continue; }
                 else replaced++;
-                store.SaveCampaign(campaign);
+                // Pending entries are this machine's record (review fix): a character package's own are dropped and the
+                // local ones kept while the source is still allowed and not installed. A full restore brings back the
+                // backup's (the user's own file), checked the same way.
+                var pending = (library ? campaign.PendingSources : local?.PendingSources) ?? [];
+                List<PendingSource> keep = [.. pending.Where(p => campaign.AllowedSources.Contains(p.SourceId) && store.FindSource(p.SourceId) is null)];
+                store.SaveCampaign(campaign with { PendingSources = keep.Count == 0 ? null : keep });
             }
             foreach (var character in parsed.Characters)
             {
@@ -547,8 +555,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 items.Add(new("campaign", campaign.Id, campaign.Name, packAction, $"{campaign.RulesFamily} · {campaign.AllowedSources.Count} allowed source(s)", packAction == PackageItemAction.Replace ? changes : null));
                 continue;
             }
+            // By what the profile means (review fix): a save time or pending entries alone are no difference, so they neither
+            // replace the local campaign nor cost a database copy.
             var action = local is null ? PackageItemAction.Add
-                : Json(local).AsSpan().SequenceEqual(Json(campaign)) ? PackageItemAction.Unchanged
+                : CampaignChanges(local, campaign, packageSources).Count == 0 ? PackageItemAction.Unchanged
                 : PackageItemAction.Replace;
             if (action == PackageItemAction.Replace)
                 warnings.Add(new("package.campaign-replace", $"Campaign '{campaign.Name}' differs from your local copy (allowed sources, rules family or house rules); the imported copy replaces it. Your whole database is copied to the {BackupFolderName} folder first ({(parsed.Manifest.Scope == PackageScope.Library ? "pre-restore" : "pre-import")}-….db)."));
@@ -821,8 +831,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     ExpectSchema(path, "campaign", campaign.SchemaVersion, Campaign.CurrentSchemaVersion, errors);
                     if (campaign.AllowedSources is null)
                         errors.Add(new("package.invalid-json", $"Entry '{path}' has no allowed-sources list."));
+                    // M6 slice 2 (review fix): pending entries are informational. A campaign pack's own are ignored (the
+                    // receiver works them out from omitted[]); any other file keeps only valid ones, clamped, so neither a
+                    // planted list nor an old damaged one can refuse a package or the user's own backup.
                     else
-                        campaigns.Add(campaign);
+                        campaigns.Add(campaignPack ? campaign with { PendingSources = null } : campaign.WithValidPending());
                     break;
                 case "gaps" when Deserialize<GapNote>(path, bytes, errors) is { } note:
                     ExpectId(path, id, note.Id, errors);

@@ -111,6 +111,7 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
   - **keepLocal / useImported** per campaign (`campaignChoices`); the preview lists the characters whose content the imported profile would newly make "not allowed" (`campaignImpact`).
   - **Rule 10 widened:** a source or campaign pack copies the database before it changes anything, and now so does a character package that replaces a campaign (before, a campaign replaced without a replaced character had no backup).
   - Needs the owner's approval: the `campaign` scope with format v8 (provisional), and `pendingSources` on the campaign record. No database migration.
+  - Dual review (cross-checked, none refuted): pending text is clamped and validated before it is stored, and cleaned on read in every file, so no package can leave a campaign that breaks a later restore; pending entries stay this machine's record through character packages; campaigns compare by meaning everywhere. Left open: nothing prunes old `backups/pre-import-*` copies (as for every earlier backup copy; a retention rule would be a new decision).
   - Evidence: fixture-verified (AppService `CampaignPackTests`, the e2e flow). Not Windows-install verified; the second-machine import is an owner check, as is a Narrator pass (accessibility item 25).
 - **2026-09-28 · owner direction: M5 before the M3 gate (D13):**
   - The ROADMAP said "M5 starts after the M3 gate". The owner reversed that: M5 engineering starts now. The M3 gate is unchanged and still not met; M4 stays experimental until a third-party PDF run.

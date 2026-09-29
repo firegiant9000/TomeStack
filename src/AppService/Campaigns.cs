@@ -69,13 +69,46 @@ public sealed record Campaign
         }
         return problems;
     }
+
+    /// <summary>
+    /// M6 slice 2 (review fix): the campaign with only valid pending entries, each clamped to the stored limits. Pending
+    /// entries are informational, so a file whose list is damaged or planted (an id that is not allowed, a repeat, text
+    /// that is too long) loses those entries instead of being refused; a user's own backup must always restore.
+    /// </summary>
+    internal Campaign WithValidPending()
+    {
+        if (PendingSources is null)
+            return this;
+        var allowed = (AllowedSources ?? []).ToHashSet();
+        List<PendingSource> kept =
+        [
+            .. PendingSources.OfType<PendingSource>().Where(p => allowed.Contains(p.SourceId)).DistinctBy(p => p.SourceId)
+                .Select(p => PendingSource.Clamped(p.SourceId, p.Title, p.Publisher, p.License)),
+        ];
+        return this with { PendingSources = kept.Count == 0 ? null : kept };
+    }
 }
 
 /// <summary>
 /// M6 slice 2: an allowed source a campaign pack left out, and that is not installed here: what the sender's pack said it
 /// is, so you know what to get. It stops being pending once a source with that id is installed.
 /// </summary>
-public sealed record PendingSource(Guid SourceId, string Title, string Publisher, string License);
+public sealed record PendingSource(Guid SourceId, string Title, string Publisher, string License)
+{
+    /// <summary>
+    /// Built from untrusted or unbounded text (a pack's <c>omitted[]</c>, a source title): trimmed, cut to
+    /// <see cref="Campaign.MaxNameLength"/>, and never empty, so the campaign it goes into always validates (review fix).
+    /// </summary>
+    public static PendingSource Clamped(Guid sourceId, string? title, string? publisher, string? license)
+    {
+        static string Clip(string text) => text.Length <= Campaign.MaxNameLength ? text : text[..Campaign.MaxNameLength];
+        return new(
+            sourceId,
+            Clip(string.IsNullOrWhiteSpace(title) ? $"Source {sourceId}" : title.Trim()),
+            Clip(publisher?.Trim() ?? "unknown"),
+            Clip(license?.Trim() ?? "unknown"));
+    }
+}
 
 /// <summary>How a character stands with its campaign: shown with the sheet, never part of the calculation.</summary>
 public sealed record CampaignStatus(Guid CampaignId, string Name, string RulesFamily, IReadOnlyList<Diagnostic> Warnings);

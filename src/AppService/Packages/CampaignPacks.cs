@@ -72,9 +72,22 @@ public sealed partial class PackageService
         var campaign = store.FindCampaign(campaignId)
             ?? throw new PackageException([new("pack.campaign-missing", $"Campaign {campaignId} does not exist.")]);
         var pending = (campaign.PendingSources ?? []).ToDictionary(p => p.SourceId);
-        var withContent = store.ListRevisionsInOrder().Where(r => r.Status == RevisionStatus.Published).Select(r => r.Provenance.SourceId).ToHashSet();
+        var all = store.ListRevisionsInOrder();
+        var withContent = all.Where(r => r.Status == RevisionStatus.Published).Select(r => r.Provenance.SourceId).ToHashSet();
+        // A content whose revisions sit in two sources cannot leave with one of them (as for a source pack). Here that
+        // source is left out, not the whole pack refused (review fix): the profile is what is being shared.
+        var spanning = all.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1)
+            .SelectMany(g => g.Select(r => (Source: r.Provenance.SourceId, Content: g.Last())))
+            .DistinctBy(s => s.Source).ToDictionary(s => s.Source, s => s.Content);
         List<SourceRecord> included = [], referenced = [];
         List<LeftOutSource> leftOut = [];
+        // Titles and publishers have no length limit here, but a pending entry does: the pack names each one as the receiver
+        // will store it (review fix).
+        LeftOutSource Left(Guid id, string? title, string? publisher, string? license, Diagnostic reason)
+        {
+            var named = PendingSource.Clamped(id, title, publisher, license);
+            return new(id, named.Title, named.Publisher, named.License, reason);
+        }
         foreach (var id in campaign.AllowedSources.Distinct())
         {
             var source = store.FindSource(id);
@@ -84,13 +97,15 @@ public sealed partial class PackageService
             {
                 // Not installed here: pending from an earlier campaign pack, so its name is known, or unknown.
                 var known = pending.GetValueOrDefault(id);
-                leftOut.Add(new(id, known?.Title ?? $"Source {id}", known?.Publisher ?? "unknown", known?.License ?? "unknown",
+                leftOut.Add(Left(id, known?.Title, known?.Publisher, known?.License,
                     new("pack.source-missing", $"'{known?.Title ?? id.ToString()}' is not installed here, so the pack only names it.")));
             }
             else if (ShareProblem(id, source) is { } problem)
-                leftOut.Add(new(id, source.Title, source.Publisher, source.License, problem));
+                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, problem));
             else if (!withContent.Contains(id))
-                leftOut.Add(new(id, source.Title, source.Publisher, source.License, new("pack.source-empty", $"'{source.Title}' has no published content to share yet.")));
+                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.source-empty", $"'{source.Title}' has no published content to share yet.")));
+            else if (spanning.TryGetValue(id, out var split))
+                leftOut.Add(Left(id, source.Title, source.Publisher, source.License, new("pack.content-spans-sources", $"'{split.Name}' has revisions in '{source.Title}' and in another source, so '{source.Title}' cannot be shared from here.", split.Reference)));
             else
                 included.Add(source);
         }
@@ -132,7 +147,7 @@ public sealed partial class PackageService
             if (carried.Contains(id) || store.FindSource(id) is not null)
                 continue;
             if (named.TryGetValue(id, out var omitted))
-                warnings.Add(new("campaign.source-pending", $"'{campaign.Name}' allows '{omitted.Title}' ({omitted.Publisher}, {omitted.License}), which the sender left out because it was not theirs to share. It is recorded as waiting until you install it yourself."));
+                warnings.Add(new("campaign.source-pending", $"'{campaign.Name}' allows '{omitted.Title}' ({omitted.Publisher}, {omitted.License}), which the sender left out because it was not theirs to share. The campaign records it as waiting until you install it yourself (unless you keep a version of the campaign that does not allow it)."));
             else
                 errors.Add(new("pack.campaign-source-unlisted", $"'{campaign.Name}' allows source {id}, which the pack neither carries nor names."));
         }
@@ -145,15 +160,39 @@ public sealed partial class PackageService
     /// </summary>
     private Campaign ForReceiver(Campaign imported, PackageManifest manifest)
     {
-        List<PendingSource> pending =
-        [
-            .. imported.AllowedSources
-                .Where(id => store.FindSource(id) is null)
-                .Select(id => manifest.Omitted.FirstOrDefault(o => o.SourceId == id))
-                .OfType<OmittedSource>()
-                .Select(o => new PendingSource(o.SourceId, o.Title, o.Publisher, o.License)),
-        ];
-        return imported with { PendingSources = pending.Count == 0 ? null : pending, Extensions = null };
+        var stored = imported with { PendingSources = NamedPending(imported.AllowedSources, manifest, []), Extensions = null };
+        // The manifest's text is clamped (PendingSource.Clamped), so this holds; checked anyway, because a campaign that
+        // fails its own validation would make every later backup of the library refuse to restore (review fix).
+        if (stored.Validate() is { Count: > 0 } problems)
+            throw new PackageException([.. problems.Select(p => p with { Message = $"Campaign '{imported.Name}': {p.Message}" })]);
+        return stored;
+    }
+
+    /// <summary>
+    /// Pending entries for <paramref name="allowed"/> sources that are not installed here, named by the pack's
+    /// <c>omitted[]</c> (clamped), after the ones in <paramref name="already"/>. Null when there is none.
+    /// </summary>
+    private List<PendingSource>? NamedPending(IEnumerable<Guid> allowed, PackageManifest manifest, IReadOnlyList<PendingSource> already)
+    {
+        List<PendingSource> pending = [.. already];
+        foreach (var id in allowed.Where(id => store.FindSource(id) is null && !pending.Any(p => p.SourceId == id)))
+        {
+            if (manifest.Omitted.FirstOrDefault(o => o.SourceId == id) is { } named)
+                pending.Add(PendingSource.Clamped(id, named.Title, named.Publisher, named.License));
+        }
+        return pending.Count == 0 ? null : pending;
+    }
+
+    /// <summary>
+    /// "Keep mine", or a pack whose profile is the same as the local one: the local profile stays, but a source the pack
+    /// names and this machine does not have is recorded as pending if the local profile allows it and has no entry for it
+    /// yet, as the preview says (review fix). Returns null when nothing is added.
+    /// </summary>
+    private Campaign? WithPackPending(Campaign local, PackageManifest manifest)
+    {
+        var current = local.PendingSources ?? [];
+        var merged = NamedPending(local.AllowedSources, manifest, current);
+        return merged is null || merged.Count == current.Count ? null : local with { PendingSources = merged };
     }
 
     /// <summary>

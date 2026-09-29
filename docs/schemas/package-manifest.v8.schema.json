@@ -118,7 +118,16 @@
         "properties": {
           "purpose": { "const": "share" },
           "characters": { "maxItems": 0 },
-          "omitted": { "items": { "properties": { "revisions": { "maxItems": 0 } } } },
+          "omitted": {
+            "items": {
+              "properties": {
+                "title": { "minLength": 1, "maxLength": 200 },
+                "publisher": { "maxLength": 200 },
+                "license": { "maxLength": 200 },
+                "revisions": { "maxItems": 0 }
+              }
+            }
+          },
           "entries": {
             "items": { "properties": { "path": { "pattern": "^(sources|content|campaigns)/" } } },
             "contains": { "properties": { "path": { "pattern": "^campaigns/" } } },

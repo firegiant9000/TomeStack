@@ -146,7 +146,8 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
             <p>
               This is a campaign pack: a campaign profile and the homebrew its sender marked as their own work. It carries no
               characters. Sources that were not the sender&apos;s to share are only named: the campaign waits for them until
-              you install them yourself. A copy of your library is saved in the backups folder before anything changes.
+              you install them yourself. If the import changes anything, a copy of your library is saved in the backups folder
+              first.
             </p>
           )}
         </>

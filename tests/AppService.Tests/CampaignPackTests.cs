@@ -276,6 +276,110 @@ public class CampaignPackTests
     }
 
     [Fact]
+    public void Names_the_pack_cannot_store_are_clamped_so_the_campaign_and_later_backups_stay_valid()
+    {
+        using var origin = new TempApp();
+        var shared = Homebrew(origin, "Test Harbor Notes");
+        var longPublisher = origin.App.CreateHomebrewSource(new("Test Verbose Notes", [RulesFamilies.Srd521], Publisher: new string('p', 250)));
+        var campaign = Campaign(origin, "Test Verbose Table", Srd521Source, shared.Id, longPublisher.Id);
+
+        // The exporter names the source as the receiver will store it.
+        var pack = origin.App.ExportCampaignPack(campaign.Id).Content;
+        Assert.Equal(AppService.Campaign.MaxNameLength, Assert.Single(origin.App.ExportCampaignPack(campaign.Id).Manifest.Omitted).Publisher.Length);
+        // A hand-edited pack with an empty title and an oversized license still stores a valid campaign.
+        var edited = PackageEditor.Edit(pack, _ => false, _ => { }, m =>
+        {
+            var named = m["omitted"]![0]!;
+            named["title"] = " ";
+            named["license"] = new string('l', 500);
+        });
+
+        using var destination = new TempApp();
+        Assert.True(destination.App.PreviewImport(edited).CanApply);
+        destination.App.ApplyImport(edited);
+        var stored = Assert.Single(destination.App.ListCampaigns());
+        Assert.Empty(stored.Validate());
+        var pending = Assert.Single(stored.PendingSources!);
+        Assert.Equal(($"Source {longPublisher.Id}", AppService.Campaign.MaxNameLength), (pending.Title, pending.License.Length));
+        destination.App.SaveCampaign(stored with { HouseRules = "Test house rule: edited here." });
+
+        // And the library backup holding it restores into a clean data folder.
+        var backup = Path.Combine(destination.Directory, "test-backup.tomestack.zip");
+        using (var file = File.Create(backup))
+            destination.App.WriteLibraryBackup(file);
+        using var clean = new TempApp();
+        var restore = clean.App.PreviewLibraryRestore(backup);
+        Assert.True(restore.CanApply, string.Join("; ", restore.Errors.Select(e => e.Code)));
+    }
+
+    [Fact]
+    public void A_damaged_or_planted_pending_list_is_dropped_on_read_never_refused()
+    {
+        using var origin = new TempApp();
+        var shared = Homebrew(origin, "Test Harbor Notes");
+        var campaign = Campaign(origin, "Test Harbor Table", Srd521Source, shared.Id);
+        var campaignPath = $"campaigns/{campaign.Id:D}.json";
+        var outsider = Guid.NewGuid().ToString("D");
+        var planted = new JsonArray(
+            new JsonObject { ["sourceId"] = outsider, ["title"] = "Not allowed", ["publisher"] = "x", ["license"] = "x" },
+            new JsonObject { ["sourceId"] = outsider, ["title"] = "Repeated", ["publisher"] = "x", ["license"] = "x" });
+
+        using var destination = new TempApp();
+        // In a campaign pack it is ignored; in a character package it is cleaned.
+        Assert.Empty(destination.App.PreviewImport(PackageEditor.Edit(origin.App.ExportCampaignPack(campaign.Id).Content, p => p == campaignPath, c => c["pendingSources"] = planted.DeepClone())).Errors);
+        var character = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier.json") with { CampaignId = campaign.Id });
+        var package = PackageEditor.Edit(origin.App.ExportCharacters([character.Character.Id]).Content, p => p == campaignPath, c => c["pendingSources"] = planted.DeepClone());
+        Assert.Empty(destination.App.PreviewImport(package).Errors);
+        destination.App.ApplyImport(package);
+        Assert.Null(Assert.Single(destination.App.ListCampaigns()).PendingSources);
+    }
+
+    [Fact]
+    public void A_source_whose_content_spans_another_is_left_out_not_the_whole_pack()
+    {
+        using var temp = new TempApp();
+        var shared = Homebrew(temp, "Test Harbor Notes");
+        var other = Homebrew(temp, "Test Other Notes");
+        var split = temp.App.Store.ListRevisionsInOrder().First(r => r.Provenance.SourceId == shared.Id && r.Status == RevisionStatus.Published);
+        temp.App.Store.AddRevision(split with { RevisionId = Guid.NewGuid(), Provenance = new(other.Id) });
+        var clean = Homebrew(temp, "Test Clean Notes");
+        var campaign = Campaign(temp, "Test Split Table", Srd521Source, shared.Id, clean.Id);
+
+        var preview = temp.App.PreviewCampaignPack(campaign.Id);
+        Assert.Equal(clean.Id, Assert.Single(preview.Included).SourceId);
+        Assert.Equal("pack.content-spans-sources", Assert.Single(preview.LeftOut).Reason.Code);
+    }
+
+    [Fact]
+    public void Pending_entries_are_this_machines_record_and_survive_a_character_package_or_an_unchanged_pack()
+    {
+        using var origin = new TempApp();
+        var shared = Homebrew(origin, "Test Harbor Notes");
+        var later = Homebrew(origin, "Test Tide Notes", shareable: false);
+        var campaign = Campaign(origin, "Test Tide Table", Srd521Source, shared.Id, later.Id, Fixture2024, FixtureShared, EquipmentFixtures);
+        var pack = origin.App.ExportCampaignPack(campaign.Id).Content;
+        var character = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier.json") with { CampaignId = campaign.Id });
+        // The origin has every source, so its campaign has no pending entry.
+        var characterPackage = origin.App.ExportCharacters([character.Character.Id], ExportPurpose.Share).Content;
+
+        // A campaign pack, then a character package with the same profile: the pending entry stays, and the campaign saves.
+        using var player = new TempApp();
+        player.App.ApplyImport(pack);
+        player.App.ApplyImport(characterPackage);
+        var afterShare = Assert.Single(player.App.ListCampaigns());
+        Assert.Equal(later.Id, Assert.Single(afterShare.PendingSources!).SourceId);
+        player.App.SaveCampaign(afterShare);
+
+        // A character package first (no pending entry), then the same profile as a pack: the pack's name is recorded.
+        using var other = new TempApp();
+        other.App.ApplyImport(characterPackage);
+        Assert.Null(Assert.Single(other.App.ListCampaigns()).PendingSources);
+        var result = other.App.ApplyImport(pack);
+        Assert.Equal(0, result.Replaced);
+        Assert.Equal("Test Tide Notes", Assert.Single(Assert.Single(other.App.ListCampaigns()).PendingSources!).Title);
+    }
+
+    [Fact]
     public void The_dispatcher_offers_campaign_pack_commands()
     {
         using var temp = new TempApp();
