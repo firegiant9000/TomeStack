@@ -61,4 +61,4 @@ Represent SRD 5.1 and SRD 5.2.1 as different rule-pack IDs, with tested policy d
 
 ## Early engineering decisions to record
 
-ADR-001 local-only Windows release; ADR-002 edition-aware content IDs and revision pins; ADR-003 declarative effect AST; ADR-004 review-before-publish import; ADR-005 managed PDF attachment versus external links; ADR-006 desktop host/IPC choice after spike; ADR-007 export package and license policy. Record reversals in the decision log, not as silent edits.
+ADR-001 local-only Windows release; ADR-002 edition-aware content IDs and revision pins; ADR-003 declarative effect AST; ADR-004 review-before-publish import; ADR-005 managed PDF attachment versus external links; ADR-006 desktop host/IPC choice after spike; ADR-007 export package and license policy. Later: ADR-008 installer, ADR-009 PDF extraction and OCR; for M5 and M6 (2026-09-28): ADR-010 custom classes and progression (accepted), ADR-011 extension API and ADR-012 export adapters (both proposed). Record reversals in the decision log, not as silent edits.

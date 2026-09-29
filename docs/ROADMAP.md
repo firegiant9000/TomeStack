@@ -11,8 +11,8 @@
 | M2.2 Fighter baseline | SRD Fighter 1–20 in both families with one SRD subclass each, the SRD armor and shield table, and the minimum mechanics a Fighter needs (Extra Attack count, a wider critical range, level-scaled uses; 2024 Weapon Mastery as tracked choices). Pack review extended first (SPEC Q-03). Plan: "M2.2 Fighter baseline" below | A fixture Fighter per family levels 1–20 and passes side-by-side tests; a homebrew Fighter subclass (a synthetic stand-in for the Stardust Guardian) is offered, chosen and played through the studio flow. **Done 2026-09-28 (fixture-verified):** `SrdFighterTests`, `CombatDetailsTests`, the e2e "adds a homebrew Fighter subclass…" flow. Not yet Windows-install verified on a released build | M2.1. **Moved before M3 (owner direction, 2026-09-28):** the Stardust Guardian run needs a Fighter to build on, so Fighter cannot come after it |
 | M3 Personal replacement | Stardust Guardian migration; complex resource/action mechanics, multiclass/spellcasting polish, source updates and session feedback | Arlo plays that character end to end without D&D Beyond. **Not met (2026-09-28):** the engineering items are done, but the owner's material and the played session are still needed ([features/m3-acceptance.md](features/m3-acceptance.md)). Synthetic fixtures never meet this gate. **Done:** B1, the acceptance ([features/m3-stardust-guardian.md](features/m3-stardust-guardian.md)), waiting for the owner's material; B2, toggles, shared resources and variable costs ([features/m3-effects.md](features/m3-effects.md)); B3, session gap notes ([features/gap-notes.md](features/gap-notes.md)); C3, combined multiclass spell slots ([features/spellcasting.md](features/spellcasting.md)); C4, printable backup ([features/printable-backup.md](features/printable-backup.md)); C5, "Report a gap" and the notes of all characters; C7, source updates offered on the sheet ([features/publishing-and-updates.md](features/publishing-and-updates.md)) | M2.2 (owner direction 2026-09-28: the character is built on a Fighter) |
 | M4 Import intelligence | Page and whole-book extraction, OCR fallback, candidate/entity recognition, review UI, confidence and dependency validation | A third-party test PDF produces reviewable candidates; no unapproved active rules. **Experimental until this gate passes** (MVP.md boundary): the UI and docs call the PDF import experimental until a real third-party PDF run and the SRD detection measurements (precision and recall floors) both pass. **The SRD floors passed on 2026-09-28** (both SRDs, now including the Fighter and armor; `m4-acceptance.md`). The third-party run is still owed. Synthetic fixtures never meet this gate. **Engineering done, gate not met (2026-09-28):** extraction with an OCR fallback in an isolated worker (ADR-009), resumable jobs, rule-based candidates, validated review and the review UI. The original fixture book runs with "active without approval: 0"; the third-party test PDF run is still owed ([features/m4-acceptance.md](features/m4-acceptance.md)) | M2; may run alongside M3 |
-| M5 Creation power | Full custom base classes, arbitrary progression, sandbox/diff/debugger, templates, design feedback toggle | A nonstandard class levels and multiclasses without code edits | M1–M4 |
-| M6 Sharing and extension | Versioned pack format, campaign packs, plugin SDK sandbox, export adapters, documentation | External sample extension and safe cross-machine round trip | M5 |
+| M5 Creation power | Full custom base classes, arbitrary progression, sandbox/diff/debugger, templates, design feedback toggle. Plan: "M5 plan" below | A nonstandard class levels and multiclasses without code edits. **Not started (2026-09-28); plan approved and ADR-010 accepted by the owner** | M1–M4 engineering. **Started before the M3 gate (owner direction, 2026-09-28, LIVING_SPECS D13);** priorities that were to come from the M3 gap notes are provisional |
+| M6 Sharing and extension | Versioned pack format, campaign packs, plugin SDK sandbox, export adapters, documentation. Plan: "M6 plan" below | External sample extension and safe cross-machine round trip. **Not started (2026-09-28); plan approved by the owner; ADR-011 and ADR-012 proposed** | M5 (slice 1 for the pack format; the export adapters need only the sheet, see the plan) |
 | M7 Expanded tabletop | Monsters/DM content, full PDF search, printable cards/PDF layouts, deeper accessibility/themes, optional local AI | Separate acceptance plans for each module | M4–M6 |
 
 ## Delivery slices within M0–M2
@@ -49,7 +49,11 @@ Done since v0.1: SRD fixtures for both families with a cross-edition conflict (M
 
 ## Order from here (2026-09-28)
 
-M2.1 (done) → M2.2 Fighter baseline (done) → **M3 Stardust Guardian run and played session** (waiting for the owner's material) → M4's third-party PDF run (can happen any time; it needs only a PDF). M5 starts after the M3 gate, and its template and effect priorities come from the M3 gap notes. Evidence levels (implemented, fixture-verified, Windows-install verified, accepted in real play) are defined in [features/m2-acceptance.md](features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
+M2.1 (done) → M2.2 Fighter baseline (done) → **M3 Stardust Guardian run and played session** (waiting for the owner's material) → M4's third-party PDF run (can happen any time; it needs only a PDF).
+
+**Changed by owner direction, 2026-09-28 (LIVING_SPECS D13):** M5 engineering starts now, in parallel with the wait for the M3 material, instead of after the M3 gate. The M3 gate is unchanged: it stays "not met" until the Stardust Guardian run and a played session, and M4 stays experimental until a third-party PDF run. What was to come from the M3 gap notes is **provisional**: the B15 template set and new effect types from [features/m3-effects.md](features/m3-effects.md) "Not yet". M5 builds the mechanisms with a small, revisable concrete set, and the gap notes re-rank them when they arrive. Then M6, whose export adapters and pack format can start before the M5 exit gate (see "M6 plan").
+
+Earlier text (kept for the record): "M5 starts after the M3 gate, and its template and effect priorities come from the M3 gap notes." Evidence levels (implemented, fixture-verified, Windows-install verified, accepted in real play) are defined in [features/m2-acceptance.md](features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
 
 ## M2.2 Fighter baseline (plan)
 
@@ -71,6 +75,154 @@ M2.1 (done) → M2.2 Fighter baseline (done) → **M3 Stardust Guardian run and 
 7. **Stardust Guardian smoke flow (synthetic):** an e2e flow authors an *original* Fighter subclass, "Test Starward Warden", in the studio. It has a modifier, a limited-use resource, an assisted roll and a reference feature. It extends `fighter-subclass`, is chosen at level 3, played through a short and a long rest, and backed up with "Back up everything". The real material runs only through `StardustGuardianAcceptanceTests` from the gitignored `tests/RulesFixtures/local/`.
 
 **Before Arlo can enter the real character**, these must be done: the Fighter class and its level-3 subclass choice (1, 3, 4), because a homebrew subclass needs a base class to extend; the armor table with its warnings (1, 2, 5), because Fighters are the main armor users; and the attack count (2). The critical range and Weapon Mastery can be tracked by hand at first; that is the manual step, and the gap notes record it.
+
+## M5 Creation power (plan, approved by the owner 2026-09-28)
+
+*Scope: a user builds a class that is not in any SRD, in the studio, with no code edits, and gets tools to check it. Started before the M3 gate (D13). The template set (slice 6) and any new effect types are provisional until the M3 gap notes arrive. Every fixture is original; no SRD text is added (SPEC Q-03). No bundled revision changes bytes.*
+
+**What exists (checked against the code 2026-09-28):**
+
+- **A class is already data.** `ContentKind.Class` carries `hitDie` (d6–d12), level-gated `grant` and `choice` (v3), `restriction` with `multiclass` and `group` plus `onlyAs` subsets (v5), `resource` and `recovery` with `CLASS_LEVEL` formulas, and `spellcasting` with 20-row slot tables (v5). Nothing in `RulesCore` names an SRD class. The builder offers every published class of the family (`CharacterBuilder.tsx`), so a published homebrew class would already be pickable.
+- **Gaps for a nonstandard class:**
+  - The multiclass caster share is a closed enum, `full`, `half` or `third` (`Effects.cs` `MulticlassCaster`, `Calculation.cs` slot combining). A 2/3 or 1/4 caster cannot be expressed.
+  - A per-level column (for example "2, 2, 3, 3, 4 …") has no name. It has to be written as floor arithmetic in each formula that uses it, and the sheet cannot show it as a class-table column.
+  - The studio authors only subclasses, features, feats and items (`HomebrewStudio.tsx` `authorable`), with editors for modifier, resource, recovery, roll, grant and armor. There is no class kind and no editor for `hitDie`, `choice`, `restriction`, `onlyAs` or `spellcasting`.
+  - Skill choices in the SRD packs are option features, each granting one proficiency. The studio cannot generate them.
+- **Rules constants that stay:** the proficiency bonus is by total level (`Calculation.cs`); total level ≤ 20; hit points are the die maximum and then the fixed value.
+- **Reusable:**
+  - `ContentValidator` and `ValidationReport` diagnostics, for the debugger;
+  - `character.preview` and `previewChoice`, for the sandbox;
+  - `ContentDiff`, `character.reviewUpdate` and `UpdateReviewPanel`, for the diff and before/after;
+  - `ValidationReport.RequiredSchemaVersion` (M2.2), for minimum-version publishing.
+- **Absent:** templates, character snapshots (characters are mutable rows, and the archive is only a mark, `Archive.cs`), and any graph view.
+
+**Slices, in dependency order:**
+
+1. **Custom base classes and arbitrary progression ([ADR-010](decisions/ADR-010-custom-classes-and-progression.md)).** Two PRs, because the schema bump should be reviewed on its own:
+   - **1a. Rules core, content schema v9.**
+     - Adds the `scale` effect (a named 20-row integer column on a class or subclass), the formula identifier `SCALE.<id>`, and `spellcasting.multiclassCasterTable` (20 caster levels, one per class level).
+     - Adds `validate.requires-v9` and `content-revision.v9.schema.json`, and extends `RequiredSchemaVersion`.
+     - Proven by RulesCore side-by-side tests on an original fixture class, "Test Chronicler" (d8, a scaling Ink resource, and a 2/3 caster by table), in both families at levels 1, 3, 5, 11, 17 and 20.
+     - Multiclass tests pair it with a fixture full caster, a half caster and a non-caster, in both families.
+     - **Stop point: the owner approves before v9 merges.**
+   - **1b. The studio authors a class.**
+     - "New class", with the hit die and a level table: features and choices per level, and the subclass level.
+     - A skill-choice helper that generates the option features, saving throws, and starting-class and multiclass proficiency subsets (`onlyAs`).
+     - Multiclass prerequisites (`restriction`, `multiclass`, `group`), and resources driven by a scale.
+     - A spellcasting editor: ability, list key, preparation, the 20-row slot table, and the multiclass share (none, full, half, third or a table).
+     - Proven by `HomebrewStudioTests` and an e2e flow: author the Chronicler in the studio, level it 1–20, and multiclass it with an SRD Wizard and an SRD Fighter.
+2. **B02 homebrew debugger.**
+   - A read-only `content.diagnose { sourceId | reference }` over a new RulesCore `ContentGraph` (grants, choices, resources, recoveries, rolls, scales, levels).
+   - It reports missing references and invalid formulas, and flags dead resources (never recovered and never spent) and unreachable features (a level above 20, a choice that nothing reaches, a non-standalone feature that nothing grants).
+   - It covers undefined or unused scales, per draft and per source. Each item links to its effect in the studio. It writes nothing.
+3. **B03 character sandbox.**
+   - "Try it" in the studio: a draft class or subclass at chosen levels, on an in-memory copy of a character or on a blank one.
+   - It reuses `character.preview` and saves nothing.
+   - **Owner decision:** previewing a *draft* needs an in-memory overlay that treats that one draft as published for one calculation. That touches the invariant "only published revisions calculate" (see "What I must decide").
+4. **B04 before/after tests and B07 diff viewer.**
+   - Compare any two revisions of a content by mechanics (`ContentDiff`, by effect id) and by text.
+   - Run both revisions on chosen characters: your own, unchanged copies, or the bundled original sample fixtures. The field changes come from the `reviewUpdate` computation, without applying anything.
+   - Drafts use slice 3's overlay.
+5. **B19 relationship graph.** Class → level → feature → resource → roll or recovery, from slice 2's `ContentGraph`.
+   - It is a keyboard-navigable tree (the WAI-ARIA tree pattern, or nested lists of links), not a canvas.
+   - WCAG 2.2 AA items from [features/accessibility-checklist.md](features/accessibility-checklist.md). A Narrator pass is an owner check.
+6. **B15 templates (provisional).** Four templates that create **drafts only**:
+   - a resource with a recovery;
+   - a toggled stance (toggle, `whileActive` modifier, resource);
+   - a subclass skeleton (`extendsChoice` and features at the class's subclass levels);
+   - a class skeleton (hit die, level-1 proficiencies, a subclass choice, and reference-only Ability Score Improvement features).
+   
+   The templates are original data with no SRD text, and the M3 gap notes revise the set.
+7. **Design feedback toggle.**
+   - An app setting, **off by default**. Hints come from a read-only analyzer and compare a class with the bundled SRD classes of its family, for example:
+     - more slots than a full caster at a level;
+     - a multiclass share above what its own slot table implies;
+     - a resource that grows faster than PB;
+     - a level with no feature.
+   - Hints never block, never change a calculation, and are never exported. The hint set is the owner's call.
+8. **B08 character snapshots.**
+   - Snapshots are insert-only, in a new table (a forward-only database migration, with the usual pre-upgrade backup). The commands are `character.snapshot`, `character.snapshots` and `character.restorePreview`: choices, pins, play state and the sheet diff, shown like an update review.
+   - `character.restoreSnapshot { token, confirm }` first snapshots the current state, so a restore can be undone and nothing is lost. The undo snapshot and the restore run in **one SQLite transaction**, as candidate acceptance does. The command takes the preview's one-use token, so a repeated confirmation does nothing (review fix).
+   - Interactions to settle:
+     - A full library backup should include snapshots, which is a new library-backup format version (owner decision; see "Package format numbers" in the M6 plan). Character packages and shares never include them.
+     - A snapshot never carries the archive mark, and restoring one never archives or unarchives (SPEC C-08).
+     - A snapshot pinning revisions missing on this machine restores as `content.missing`.
+   - Independent of slices 2–7, so it can move earlier.
+
+**Exit gate (restated):** a nonstandard class levels 1–20 and multiclasses with an SRD class, authored in the studio with no code edits.
+
+- **Evidence level:** fixture-verified. It rests on the RulesCore side-by-side tests (both families), the AppService tests and the e2e flow of slice 1.
+- **Windows-install verified:** needs the owner to author the class on an installed build (owner check).
+- **Only slice 1 is needed for the gate.** M5 is delivered when the gate passes and slices 2–8 are done.
+- M3 stays "not met" and M4 stays experimental whatever M5 reaches.
+
+**What I must decide (owner):**
+
+1. ~~Accept ADR-010: content v9 with `scale`, `SCALE.<id>` and `multiclassCasterTable`. Dice that scale by level (a d4 → d10 die) stay reference text for now.~~ **Accepted (owner, 2026-09-28)**, together with this plan. Items 2–5 are asked again when their slices start.
+2. Approve v9 before slice 1a merges (the stop point).
+3. The sandbox overlay for drafts (slice 3), and the reworded invariant: "only published revisions affect **saved** characters; a sandbox previews a draft on an unsaved copy and writes nothing".
+4. Snapshots (slice 8):
+   - whether they go into the full library backup (a new library-backup format version);
+   - whether they are taken automatically before a level-up, an applied update and a restore, or only by hand.
+5. The design-feedback hint set (slice 7), and the four-template set (slice 6).
+
+## M6 Sharing and extension (plan, approved by the owner 2026-09-28; ADR-011 and ADR-012 still proposed)
+
+*Scope: share homebrew and campaigns safely between machines, add a versioned extension API without running third-party code by default (SPEC P-05, Q-02), and export to a VTT. The shipped app still opens no listening socket and makes no network call (ADR-001, ADR-006).*
+
+**What exists (checked against the code 2026-09-28):**
+
+- **Packages:** character packages are v5 and full library backups v6. They already have size and entry limits, a path allowlist, hash checks, refusal of newer versions, preview-then-apply, validation of published revisions on import (ADR-004), and the ADR-007 share rules with `notices[]` and `omitted[]`.
+- **Campaigns** travel only inside character packages. There is no standalone campaign export (`CommandDispatcher` has `campaign.list`, `save` and `delete`). A campaign holds no paths.
+- **Homebrew sources** can be created `redistributable` (`source.createHomebrew`), but that cannot be changed later, and there is no source-only export (ADR-007 item 10).
+- **No extension, plugin, hook or adapter code exists.** The command protocol has no version field; only the payload schemas do.
+- **The PDF worker** (ADR-009) is the one isolation pattern: a child process over stdin and stdout, with heap, time and size caps and a watchdog. It has no job object, no AppContainer and no network block.
+- **The computed `CharacterSheet`** in `RulesCore` is what an export adapter maps from. No VTT export exists.
+
+**Slices (which can start early is noted):**
+
+1. **Content-pack format.** It can start after M5 slice 1a and is independent of M5 slices 2–8.
+   - A new package format version, `scope: "source"`: one or more homebrew sources with their published revisions. No characters, drafts, gap notes, PDFs or extracted text.
+   - Only sources marked shareable are included. "Mark as shareable" asks the author to confirm the source is their own work. It is refused for an import-derived source, which is the guard against a user source that wraps a bought book (ADR-009 (d)); owner decision. **The guard needs durable state and runs at every export (review fix):**
+     - A permanent **import-derived** flag on the source. It is set when a PDF is attached and when a candidate is accepted into the source, and by ADR-011 extension imports. `source.detach` never clears it, and it travels in library backups. Today the only record of an import is the candidate rows, which backups leave out.
+     - The check runs at every content-pack and campaign-pack export, not only when a source is marked.
+     - `source.createHomebrew` no longer accepts `redistributable: true` unchecked. It goes through the same guard, or loses the parameter.
+   - A documented schema and a compatibility matrix: pack format × content schema × app version.
+   - Unknown future versions are refused (existing path). The package limits and quarantine are reused (SPEC Q-02, ADR-004).
+2. **B13 campaign packs.**
+   - `scope: "campaign"`: the campaign profile, its house rules, and the shareable content of its allowed sources.
+   - SRD sources are referenced by id, never copied. Non-shareable allowed sources are listed in `omitted[]`.
+   - No characters, gap notes, paths or machine-local ids. No asset kinds exist yet, so no assets.
+   - Preview then apply, with a `keepLocal` or `useImported` choice when a campaign id already exists.
+   - **Settled with the existing campaign rules (review fix):**
+     - Today every allowed source must be installed (`campaign.source-missing`, [features/campaigns.md](features/campaigns.md)). An allowed source that the pack omits is therefore imported as a **pending reference**, with a warning, until the source is installed.
+     - `useImported` replaces `allowedSources`. The preview lists the local characters whose content would become "not allowed".
+     - The pre-import backup (package-format rule 10) also covers a campaign that is replaced.
+3. **The extension API ([ADR-011](decisions/ADR-011-extension-api.md)), after the owner picks the sandbox model.** It has versioned, permissioned data, import and export hooks. One external sample extension is kept in `examples/extensions/` and passes the M6 gate. Nothing that runs third-party code is built without that decision.
+4. **B20 export adapters ([ADR-012](decisions/ADR-012-export-adapters.md)), after the owner picks the targets.** They need only the computed sheet, through the sheet export model v1 defined in ADR-011. So they are independent of M5, and can start once the targets are chosen **and** that model is accepted (its purpose filter and `notices[]`), even if ADR-011's execution model is still open. Each adapter has a validator.
+5. **Author documentation** (`docs/authoring/`): how to write a class, a content pack and an extension. It is tested by following it in the e2e fixtures.
+6. **M6 exit gate:** the sample extension installs, is permissioned, and runs its hook in an e2e flow. A content pack, a campaign pack and a library backup round-trip into a clean data folder and compare equal (fixture-verified). The **cross-machine** part uses the owner's second-machine restore evidence if it is recorded by then. Otherwise it stays an owner check.
+
+**Package format numbers (review fix, 2026-09-28).** Four M5 and M6 slices change the package format:
+
+- snapshots in library backups (M5 slice 8);
+- the source scope (M6 slice 1);
+- the campaign scope (M6 slice 2);
+- extensions in library backups (ADR-011).
+
+They land in no fixed order, and today there is one `CurrentFormatVersion` (6). So no plan text fixes a number. Each slice takes the **next** number when it merges, records it in the version table of [features/package-format.md](features/package-format.md), and adds its manifest schema. Every new shape gets its own number, and a number is never reused.
+
+**Optional after the M6 gate:** B09 command palette, B11 tags, folders and collections.
+
+**Exit gate (restated):** an external sample extension and a safe cross-machine round trip. The evidence level is fixture-verified for the clean-folder round trip and the sample extension. It is Windows-install verified only once the owner's second-machine restore is recorded.
+
+**What I must decide (owner):**
+
+1. The extension sandbox model (ADR-011 options A to D).
+2. The adapter targets and versions (ADR-012).
+3. The "Mark as shareable" rule for your own homebrew: the durable import-derived flag, and what happens to `source.createHomebrew`'s `redistributable` parameter.
+4. How far ADR-012's `personal` purpose may go. Proposed: only your own homebrew that is not import-derived; bought books are always filtered.
+5. Whether the extension API or the adapters come first. Both wait on 1 or 2 above, and the adapters also wait on the sheet export model. The pack format waits on neither.
 
 ## M2 status (2026-09-28: checks passed as 0.3.0, limited content)
 
