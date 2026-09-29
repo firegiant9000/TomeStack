@@ -49,19 +49,26 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
   const from = stored.find((r) => r.revisionId === fromId) ?? stored.find((r) => r.revisionId === entry?.latestPublished?.revisionId) ?? stored[0]!;
   const label = (r: ContentRevision, i: number) => `Revision ${i + 1} (${r.status}${r.revisionId === entry?.latestPublished?.revisionId ? ', newest published' : ''})`;
   const levelProblem = level !== '' && !(/^\d+$/.test(level) && Number(level) >= 1 && Number(level) <= 20) ? 'The level must be a whole number from 1 to 20.' : undefined;
+  const toStored = stored.find((r) => r.revisionId === toId);
+  // Characters that can take the comparison: one whose family either revision supports (the unsaved draft's families
+  // when it is the To), or one that records a cross-family exception for this content.
+  const families = new Set([...from.rulesFamilies, ...(toStored ?? unsaved).rulesFamilies]);
+  const fitting = characters.filter((c) => families.has(c.rulesFamily) || (c.exceptionContentIds ?? []).includes(from.contentId));
+  // A pick that fell out of the list (a family edit, another revision) is not sent.
+  const sendIds = picked.filter((id) => fitting.some((c) => c.id === id));
   // What the result was computed for; any change of it, or of the revision on screen, hides the result.
-  const key = JSON.stringify([from.revisionId, toId, picked, blank, level, toId === unsavedKey ? unsaved : null]);
+  const key = JSON.stringify([from.revisionId, toId, sendIds, blank, level, toId === unsavedKey ? unsaved : null]);
 
   async function compare() {
     const computedFor = key;
     setBusy(true);
     try {
-      const to = stored.find((r) => r.revisionId === toId);
+      const to = toStored;
       const comparison = await client.compare({
         from: { contentId: from.contentId, revisionId: from.revisionId },
         to: to && { contentId: to.contentId, revisionId: to.revisionId },
         toRevision: to ? undefined : props.prepare(unsaved),
-        characterIds: picked,
+        characterIds: sendIds,
         blank: classLike && blank ? { level: level === '' ? undefined : Number(level) } : undefined,
       });
       setResult({ key: computedFor, comparison });
@@ -73,7 +80,6 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
   }
 
   const shown = result?.key === key ? result.comparison : undefined;
-  const fitting = characters.filter((c) => unsaved.rulesFamilies.includes(c.rulesFamily));
   return (
     <section aria-labelledby="compare-heading" className="effect-editor">
       <h4 id="compare-heading">Compare revisions</h4>
@@ -183,6 +189,16 @@ export function ComparePanel(props: { entry?: StudioEntry; unsaved: ContentRevis
                   ))}
                 </ul>
               )}
+              {run.resolvedDiagnostics.length > 0 && (
+                <ul aria-label={`Problems resolved for ${run.name}`}>
+                  {run.resolvedDiagnostics.map((d, j) => (
+                    <li key={`${d.code}-${j}`}>{d.message}</li>
+                  ))}
+                </ul>
+              )}
+              {run.unresolvedChoices.length > 0 && (
+                <p className="warn">Choices left open for {run.name}: {run.unresolvedChoices.map((c) => `${c.sourceName} (${c.choiceId})`).join(', ')}.</p>
+              )}
             </section>
           ))}
         </div>
@@ -208,6 +224,7 @@ function TextDiff({ change }: { change: TextChange }) {
           </span>
         ))}
       </pre>
+      {change.notShown > 0 && <p className="hint">{change.notShown} more lines not shown</p>}
     </figure>
   );
 }

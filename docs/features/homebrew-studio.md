@@ -52,7 +52,7 @@ Resources, recoveries, rolls and modifiers work as for other content, and their 
 
 Acceptance:
 - `AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`;
-- the e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class". It authors "E2E Chronicler" with every control above, builds it at level 1 in the builder, and checks it at level 20 and as Chronicler 5 / SRD Wizard 3 (caster level 6).
+- the e2e flow "authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class". It authors "E2E Chronicler" with most of the controls above (not "Grant a feature", "Any one of these is enough", the prepared/known picker or the spell-count formula), builds it at level 1 in the builder, and creates and checks it at level 20 and as Chronicler 5 / SRD Wizard 3 (caster level 6) through the service client.
 
 ## The homebrew debugger (M5 slice 2, B02)
 
@@ -67,7 +67,7 @@ The findings are validation (`content.validate`: missing references, invalid for
 | `debug.resource-dead` | warning | No roll or toggle spends the resource and no recovery restores it, so its uses change only by hand |
 | `debug.recovery-orphan` | warning | The recovery names a resource its own revision does not define. The calculator looks only there, so it never applies. It replaces validation's softer `validate.recovery-resource` |
 | `debug.roll-resource-unknown` | warning | The roll spends a resource its revision does not define (and names no other content with `resourceContent`) |
-| `debug.grant-nested` | warning | The content is only ever granted, and granted content's own grants are not followed (grants are one level deep; `grant.nested-ignored` at calculation) |
+| `debug.grant-nested` | warning | The content is only ever granted, and granted content's own grants are not followed (grants are one level deep; `grant.nested-ignored` at calculation), so its grants never apply where it is granted (only when a character picks it directly) |
 | `debug.subclass-unreachable` | warning | Nothing lists, extends to or grants the subclass |
 | `debug.feature-unreachable` | warning | The content reads `CLASS_LEVEL` or a class column, but no class reaches it. (A level gate alone is fine: outside a class it counts character levels) |
 | `debug.choice-empty` | warning | A choice with no options that nothing extends yet |
@@ -80,9 +80,15 @@ The findings are validation (`content.validate`: missing references, invalid for
 
 Only validation errors are errors (they block publishing); every graph finding is a warning or a note.
 
-**Reach follows the calculator.** From each class, only automatic grants that always apply are followed, only from a root (the class, or content chosen in a choice), and one level deep. Choices are followed from anything reached, and an extension only while the extended content's current revision has that choice. Level gates are not applied: the graph asks what a class can ever reach. A subclass sets the context in which its own columns are defined, and only automatic columns count, as in the calculation. **Not modeled:** rules families. A class for both families that grants a 5.1-only feature counts as reaching it for both, while the calculator refuses it for 5.2.1 characters (validation flags only fully disjoint families).
+**Reach follows the calculator.** From each class, only automatic grants that always apply are followed, only from a root (the class, or content chosen in a choice), and one level deep. Choices are followed from anything reached, and an extension only while the extended revision has that choice. Level gates are not applied: the graph asks what a class can ever reach. A subclass sets the context in which its own columns are defined, and only automatic columns count, as in the calculation. **Not modeled:** rules families. A class for both families that grants a 5.1-only feature counts as reaching it for both, while the calculator refuses it for 5.2.1 characters (validation flags only fully disjoint families).
 
-**Bounded (SPEC Q-02).** The walk stops at 200,000 states or 2,000,000 edges examined (`ContentGraph.MaxReachStates`, `MaxEdgeSteps`), and walks the classes under study first. If it stops early, the report says `truncated` and leaves out the findings that need the whole walk (unreachable content and the scale checks) rather than report them falsely. Every other lookup is built once per report.
+**Bounded (SPEC Q-02).** The walk stops at 200,000 states or 2,000,000 edges examined (`ContentGraph.MaxReachStates`, `MaxEdgeSteps`), and walks the classes under study first. If it stops early, the report says `truncated` and leaves out the findings that need the whole walk (unreachable content and the scale checks) rather than report them falsely. The graph's lookups, the scope keyed by reference and by content, and the set of choices something extends are built once per report. What the budgets do not bound is the merge of scale reads per reach (reaches times the scale ids one content reads), which is limited by the reach bound and the size of one revision. Nothing is claimed beyond that.
+
+**Review fixes (2026-09-29).**
+- A grant or option is followed to the exact revision it names, as the calculator admits it, not to the content's current revision; an extension names none and is offered from every published revision that extends the choice (and from the revision under study).
+- When the walk is truncated, validation's `validate.scale-unknown` and `validate.scale-duplicate-older` are kept, since their replacements (`debug.scale-undefined`, `debug.scale-collision-older`) are skipped then.
+- `debug.grant-nested` now says the grant does not apply where the content is granted; a character who picks the content directly still gets it.
+- The formula identifiers of a pre-v9 revision are read without `SCALE.<id>`; revisiting a known state at the bound no longer marks the walk truncated.
 
 **Scope.** For a source, the scope is each content's latest revision. "Find problems" on one revision studies it among the latest revisions of its own source (drafts too), so both buttons agree about it. Everything else uses its newest published revision. The scope is validated together, so its drafts may name each other.
 
@@ -93,7 +99,7 @@ Acceptance:
 
 ## Try it: the draft sandbox (M5 slice 3, B03)
 
-The class and subclass editors have a **Try it** section. It calculates the revision on screen, saved or not, as if it were published. It can run on a blank character (ability scores 10, the draft's first rules family) or on **a copy of** a saved character of a family the draft supports. The level is optional. It is the level in the class, or for a subclass, in the class it joins. `content.sandbox { revision | reference, characterId? | rulesFamily?, level? }` returns the unsaved sheet, the draft's validation report, and, for a copy, every displayed value that changes.
+The class and subclass editors have a **Try it** section. It calculates the revision on screen, saved or not, as if it were published. It can run on a blank character (ability scores 10, the draft's first rules family) or on **a copy of** a saved character of a family the draft supports. The level is optional. It is the level in the class, or for a subclass, in the class it joins. `content.sandbox { revision | reference, characterId? | rulesFamily?, level? }` returns the unsaved sheet, the draft's validation report, and, for a copy, every calculated sheet field that changes (fields only: resource maximums and class columns are not compared, but show in the sheet).
 
 **How the draft is placed on the copy:**
 - Every reference to another revision of the same content becomes the draft.
@@ -146,6 +152,12 @@ The editor has a **Compare revisions** section once the entry has a stored revis
     - text lines are aligned as numbered ids;
     - a bad blank-character level or family is refused before anything is calculated.
   - The ROADMAP's "bundled original sample fixtures" are not in the shipped app. The blank character stands in for them.
+
+Review fixes (2026-09-29):
+- A text shown whole is capped (SPEC Q-02): 1,000 lines and 100,000 characters per text, 4,000 lines and 400,000 characters per comparison. `TextChange.notShown` counts the lines left out, and the panel says "N more lines not shown". A very long text is counted, not split into lines.
+- The panel also shows each character's resolved problems and choices left open, as the update review does.
+- Characters are offered by the union of the two revisions' families (the on-screen draft's when it is the To) plus those that record a cross-family exception for this content (`character.list` carries `exceptionContentIds`, ids only). A pick that is no longer offered is not sent.
+- `CompareTests` cover new and resolved problems, and that a problem which persists is in neither list, against the update review.
 
 Refusals:
 - `compare.to-required`;

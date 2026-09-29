@@ -285,6 +285,70 @@ public class ContentDebuggerTests
         Assert.True(report.Truncated);
         Assert.DoesNotContain(report.Findings, f => f.Code == "debug.feature-unreachable");
         Assert.Contains(ContentDebugger.Diagnose([lone], stored, catalog).Findings, f => f.Code == "debug.feature-unreachable");
+
+        // The scale checks that would replace validation's are skipped too, so validation's own warning must survive.
+        var reader = Revision(Ref(6), ContentKind.Class, "Debug Reader", D8, Reads("reads-nope", "SCALE.nope"));
+        var readerCatalog = new InMemoryContentCatalog(Fixtures.ChroniclerPack().Sources, [.. stored, reader]);
+        var truncated = ContentDebugger.Diagnose([reader], ContentGraph.Build(stored, [reader], maxStates: 1), readerCatalog);
+        Assert.True(truncated.Truncated);
+        Assert.Contains(truncated.Findings, f => f.Code == "validate.scale-unknown");
+        Assert.DoesNotContain(truncated.Findings, f => f.Code == "debug.scale-undefined");
+        var whole = ContentDebugger.Diagnose([reader], stored, readerCatalog);
+        Assert.DoesNotContain(whole.Findings, f => f.Code == "validate.scale-unknown");
+        Assert.Contains(whole.Findings, f => f.Code == "debug.scale-undefined");
+    }
+
+    [Fact]
+    public void Revisiting_a_known_state_at_the_state_bound_does_not_truncate()
+    {
+        // The class grants the same feature twice: the second visit is of a state already known, so nothing new passes the bound.
+        var feature = Published(Revision(Ref(2), ContentKind.Feature, "Debug Twice"));
+        var cls = Published(Revision(Ref(1), ContentKind.Class, "Debug Class", D8, Grants("first", Ref(2)), Grants("second", Ref(2))));
+
+        Assert.False(ContentGraph.Build([feature, cls], maxStates: 2).Truncated);
+        Assert.True(ContentGraph.Build([feature, cls], maxStates: 1).Truncated);
+    }
+
+    [Fact]
+    public void A_pinned_option_is_walked_at_the_revision_it_names_not_the_current_one()
+    {
+        // The class pins S@r1. S's current revision r2 grants G; r1 grants nothing: G is not reached.
+        var g = Published(Revision(Ref(22), ContentKind.Feature, "Debug Granted"));
+        var s1 = Published(Revision(Ref(21, 1), ContentKind.Feature, "Debug Pinned"));
+        var s2 = Published(Revision(Ref(21, 2), ContentKind.Feature, "Debug Pinned", Grants("late", g.Reference)));
+        var pinsOld = Published(Revision(Ref(20), ContentKind.Class, "Debug Class", D8, new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [s1.Reference] }));
+
+        var graph = ContentGraph.Build([g, s1, s2, pinsOld]);
+
+        Assert.Single(graph.Reaches(s1.ContentId));
+        Assert.Empty(graph.Reaches(g.ContentId));
+
+        // And the other way round: r1 grants G, the current r2 does not; the pin still reaches G.
+        var t1 = Published(Revision(Ref(23, 1), ContentKind.Feature, "Debug Pinned Too", Grants("early", g.Reference)));
+        var t2 = Published(Revision(Ref(23, 2), ContentKind.Feature, "Debug Pinned Too"));
+        var pinsGrant = Published(Revision(Ref(24), ContentKind.Class, "Debug Class Two", D8, new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [t1.Reference] }));
+
+        var reversed = ContentGraph.Build([g, t1, t2, pinsGrant]);
+
+        Assert.Equal(new GraphReach(g.ContentId, pinsGrant.ContentId, null, AsRoot: false), Assert.Single(reversed.Reaches(g.ContentId)));
+
+        // A pin of a revision that is not stored leads nowhere (the calculator reports it missing).
+        var missing = Published(Revision(Ref(25), ContentKind.Class, "Debug Class Three", D8, new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [Ref(26, 5)] }));
+        var lost = Published(Revision(Ref(26, 1), ContentKind.Feature, "Debug Other"));
+        Assert.Empty(ContentGraph.Build([lost, missing]).Reaches(lost.ContentId));
+    }
+
+    [Fact]
+    public void Every_published_revision_that_extends_a_choice_is_reached_not_only_the_current_one()
+    {
+        var cls = Published(Revision(Ref(30), ContentKind.Class, "Debug Class", D8, new ChoiceEffect { Id = "path", ChoiceId = "path", Options = [] }));
+        var old = Published(Revision(Ref(31, 1), ContentKind.Subclass, "Debug Path") with { ExtendsChoice = new(cls.ContentId, "path") });
+        var newer = Published(Revision(Ref(31, 2), ContentKind.Subclass, "Debug Path"));   // no longer extends: characters on r1 still can pick it
+
+        var graph = ContentGraph.Build([cls, old, newer]);
+
+        Assert.Single(graph.Reaches(old.ContentId));
+        Assert.Contains(graph.From(cls.ContentId), e => e.Kind == GraphEdgeKind.Extension && e.To == old.ContentId && e.ChoiceId == "path");
     }
 
     [Fact]

@@ -22,19 +22,25 @@ public sealed record DebugReport(IReadOnlyList<ContentReference> Scope, IReadOnl
 /// is not in their revision, grants that are never followed, content no class or choice reaches, choices with nothing to
 /// pick, extensions of a choice the class no longer offers, scales that are read but undefined, defined but unread, or
 /// defined by a class and its subclass, and grants of an older revision. Only validation errors are errors; the rest are
-/// warnings and notes. Read-only: it writes nothing and changes no calculation. Every lookup is built once per report,
-/// so the cost grows with the content's size, not its square (SPEC Q-02).
+/// warnings and notes. Read-only: it writes nothing and changes no calculation. The graph walk is bounded
+/// (<see cref="ContentGraph.MaxReachStates"/>, <see cref="ContentGraph.MaxEdgeSteps"/>), and the lookups (formula
+/// identifiers, defined scales, choices something extends, the scope keyed by reference and by content) are built once
+/// per report. What is not bounded by those budgets is the merge of scale reads per reach (reaches times the scale ids a
+/// content reads), which is limited by the reach bound and by the size of one revision (SPEC Q-02).
 /// </summary>
 public static class ContentDebugger
 {
     /// <summary>
     /// Validation codes the graph findings state more exactly, so each problem is listed once: a recovery counts only for
-    /// a resource of its own revision (the calculator never looks elsewhere), and the scale checks cover drafts too.
+    /// a resource of its own revision (the calculator never looks elsewhere).
     /// </summary>
-    private static readonly HashSet<string> Superseded = new(StringComparer.Ordinal)
-    {
-        "validate.recovery-resource", "validate.scale-unknown", "validate.scale-duplicate-older",
-    };
+    private static readonly HashSet<string> Superseded = new(StringComparer.Ordinal) { "validate.recovery-resource" };
+
+    /// <summary>
+    /// Validation codes the scale findings state more exactly (they cover drafts too), so they are left out while those run.
+    /// A truncated walk skips the scale findings, and then validation's own codes are kept.
+    /// </summary>
+    private static readonly HashSet<string> ReachSuperseded = new(StringComparer.Ordinal) { "validate.scale-unknown", "validate.scale-duplicate-older" };
 
     /// <param name="scope">The revisions to report on (each the current revision of its content).</param>
     /// <param name="revisionsInOrder">Every stored revision, in insertion order.</param>
@@ -61,9 +67,10 @@ public static class ContentDebugger
         ArgumentNullException.ThrowIfNull(catalog);
         var index = new Index(graph);
         // The scope is validated together (so its drafts may name each other), keyed once; the first of a repeated reference counts.
-        var batch = new Dictionary<ContentReference, ContentRevision>();
+        var byReference = new Dictionary<ContentReference, ContentRevision>();
         foreach (var revision in scope)
-            batch.TryAdd(revision.Reference, revision);
+            byReference.TryAdd(revision.Reference, revision);
+        var batch = new ValidationBatch(byReference);
         var findings = new List<DebugFinding>();
         foreach (var revision in scope)
         {
@@ -74,7 +81,8 @@ public static class ContentDebugger
             var report = ContentValidator.Validate(revision, catalog, batch);
             foreach (var error in report.Errors)
                 Add(error.Code, FindingSeverity.Error, error.Message, error.EffectId);
-            foreach (var warning in report.Warnings.Where(w => !Superseded.Contains(w.Code)))
+            // The scale codes are replaced by the reach findings, which a truncated walk leaves out; then validation's stand.
+            foreach (var warning in report.Warnings.Where(w => !Superseded.Contains(w.Code) && !(!graph.Truncated && ReachSuperseded.Contains(w.Code))))
                 Add(warning.Code, FindingSeverity.Warning, warning.Message, warning.EffectId);
 
             Resources(revision, index, Add);
@@ -199,12 +207,15 @@ public static class ContentDebugger
         {
             var by = graph.Current.GetValueOrDefault(incoming.First(e => e.Kind == GraphEdgeKind.Grant).From)?.Name ?? "another content";
             foreach (var grant in revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
-                add("debug.grant-nested", FindingSeverity.Warning, $"Grant '{grant.Id}' never applies: this content is granted by '{by}', and grants are followed one level deep. Grant it from '{by}' instead, or offer this content in a choice.", grant.Id);
+                add("debug.grant-nested", FindingSeverity.Warning, $"Grant '{grant.Id}' never applies where this content is granted by '{by}' (grants are followed one level deep); it applies only when a character picks this content directly. Grant it from '{by}' instead, or offer this content in a choice.", grant.Id);
         }
 
-        foreach (var choice in revision.Effects.OfType<ChoiceEffect>().Where(c => c.Options.Count == 0))
+        var emptyChoices = revision.Effects.OfType<ChoiceEffect>().Where(c => c.Options.Count == 0).ToList();
+        // The choices something extends, read once per revision rather than once per empty choice.
+        var extended = emptyChoices.Count == 0 ? [] : graph.From(revision.ContentId).Where(e => e.Kind == GraphEdgeKind.Extension).Select(e => e.ChoiceId).ToHashSet(StringComparer.Ordinal);
+        foreach (var choice in emptyChoices)
         {
-            if (!graph.From(revision.ContentId).Any(e => e.Kind == GraphEdgeKind.Extension && e.ChoiceId == choice.ChoiceId))
+            if (!extended.Contains(choice.ChoiceId))
                 add("debug.choice-empty", FindingSeverity.Warning, $"Choice '{choice.ChoiceId}' has no options and nothing extends it yet, so it offers nothing to pick. Author a subclass (or other content) offered in this choice.", choice.Id);
         }
 
@@ -281,6 +292,7 @@ public static class ContentDebugger
         // A subclass and the class it is offered in define the same id: the class's column wins (scale.duplicate).
         if (revision.Kind != ContentKind.Subclass)
             return;
+        var validated = own.Where(f => f.Code == "validate.scale-duplicate" && f.EffectId is not null).Select(f => f.EffectId!).ToHashSet(StringComparer.Ordinal);
         foreach (var classId in reached.Where(r => r.SubclassId == revision.ContentId).Select(r => r.ClassId).Distinct())
         {
             var classCurrent = graph.Current.GetValueOrDefault(classId);
@@ -291,7 +303,7 @@ public static class ContentDebugger
                 if (classScales.Contains(scale.ScaleId))
                 {
                     // Validation says so (as an error) when the subclass extends the class's choice; listed once.
-                    if (!own.Any(f => f.Code == "validate.scale-duplicate" && f.EffectId == scale.Id))
+                    if (!validated.Contains(scale.Id))
                         add("debug.scale-collision", FindingSeverity.Warning, $"Scale id '{scale.ScaleId}' is also defined by '{classCurrent!.Name}', a class this subclass is offered in. A class and its subclasses share one set of scale ids, and the class's column wins.", scale.Id);
                 }
                 else if (older.FirstOrDefault(r => ActiveScales(r).Any(s => s.ScaleId == scale.ScaleId)) is { } clash)

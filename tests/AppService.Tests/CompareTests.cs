@@ -53,9 +53,41 @@ public class CompareTests
         Assert.Equal((1, 5), blank.Fields.Single(x => x.Field == FieldIds.Initiative) is var b ? (b.Before, b.After) : default);
 
         // The same numbers the update review shows, and nothing changed.
-        Assert.Equal(TempApp.Json(app.ReviewUpdate(hero.Id, first, second).Fields), TempApp.Json(copy.Fields));
+        var review = app.ReviewUpdate(hero.Id, first, second);
+        Assert.Equal(TempApp.Json(review.Fields), TempApp.Json(copy.Fields));
+        Assert.Equal(TempApp.Json(review.NewDiagnostics), TempApp.Json(copy.NewDiagnostics));
+        Assert.Equal(TempApp.Json(review.ResolvedDiagnostics), TempApp.Json(copy.ResolvedDiagnostics));
         Assert.Equal(before, Snapshot(app));
         Assert.Equal([new ClassLevel(first, 3)], app.GetCharacter(hero.Id).Character.Classes);
+    }
+
+    [Fact]
+    public void A_problem_that_persists_is_in_neither_list_and_one_that_goes_away_or_arrives_is_reported_the_same_as_the_update_review()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Test Compare Source", [RulesFamilies.Srd521]));
+        var featId = Guid.NewGuid();
+        // CLASS_LEVEL has no value in a feat, so a roll bonus of it is an effect.invalid-formula diagnostic.
+        static RollEffect Roll(string id, string bonus) => new() { Id = id, RollId = id, Label = id, Dice = "1d6", Bonus = bonus };
+        ContentReference Add(params Effect[] effects)
+        {
+            var revision = Draft(source, featId, ContentKind.Feat, "Test Problem Feat", null, effects) with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Published };
+            app.Store.AddRevision(revision);
+            return revision.Reference;
+        }
+        var first = Add(Roll("stays", "CLASS_LEVEL"), Roll("goes", "CLASS_LEVEL"));
+        var second = Add(Roll("stays", "CLASS_LEVEL"), Roll("goes", "1"), Roll("arrives", "CLASS_LEVEL"));
+        var user = app.CreateCharacter(new("Test Problem User", RulesFamilies.Srd521, new(10, 10, 10, 10, 10, 10), [first])).Character;
+
+        var run = app.Compare(new(first, To: second, CharacterIds: [user.Id])).Runs.Single();
+
+        Assert.Empty(run.Problems);
+        Assert.Equal(["arrives"], run.NewDiagnostics.Select(d => d.EffectId));
+        Assert.Equal(["goes"], run.ResolvedDiagnostics.Select(d => d.EffectId));
+        var review = app.ReviewUpdate(user.Id, first, second);
+        Assert.Equal(TempApp.Json(review.NewDiagnostics), TempApp.Json(run.NewDiagnostics));
+        Assert.Equal(TempApp.Json(review.ResolvedDiagnostics), TempApp.Json(run.ResolvedDiagnostics));
     }
 
     [Fact]
