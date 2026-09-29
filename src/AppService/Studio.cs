@@ -118,6 +118,31 @@ public sealed partial class TomeStackApp
         return ContentTree.Build(ContentGraph.Build(all, [.. context, revision], reach: false), revision.ContentId);
     }
 
+    /// <summary>
+    /// <c>content.feedback</c> (M5 slice 7, LIVING_SPECS D14): design hints for one revision (stored, or the unsaved one on
+    /// screen), against the newest published revision of each bundled (SRD) content. The studio asks only while its "design
+    /// feedback" setting is on (off by default). Hints never block, never change a calculation, and are never stored.
+    /// </summary>
+    public IReadOnlyList<DesignHint> Feedback(DiagnoseRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.SourceId is not null || (request.Reference is null) == (request.Revision is null))
+            throw new AppValidationException([new("feedback.scope", "Name one stored revision or one unsaved revision.")]);
+        var revision = request.Revision
+            ?? _store.FindRevision(request.Reference!)
+            ?? throw new AppValidationException([new("content.not-found", $"Revision {request.Reference!.RevisionId} is not installed.", request.Reference)]);
+        if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
+            throw new AppValidationException(empty);
+        if (revision.Effects.Count > MaxCompareEffects)
+            throw new AppValidationException([new("feedback.too-large", $"Design feedback covers revisions of up to {MaxCompareEffects} rules.", revision.Reference)]);
+        // Only the SRD packs this build ships, never an imported source whatever its edition says (review fix). Every kind:
+        // the SRD packs keep a class's spellcasting on its granted "Spellcasting" feature.
+        var baseline = _store.ListRevisionsInOrder()
+            .Where(r => r.Status == RevisionStatus.Published && _bundledSources.Contains(r.Provenance.SourceId))
+            .GroupBy(r => r.ContentId).Select(g => g.Last());
+        return DesignFeedback.Analyze(revision, baseline);
+    }
+
     /// <summary><c>content.bySource</c>: every content entity of one source with all its revisions (drafts too).</summary>
     public IReadOnlyList<StudioEntry> ContentBySource(Guid sourceId) =>
     [

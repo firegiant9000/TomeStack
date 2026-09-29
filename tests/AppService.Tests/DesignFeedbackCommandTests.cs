@@ -1,0 +1,92 @@
+using TomeStack.RulesCore;
+
+namespace TomeStack.AppService.Tests;
+
+/// <summary>M5 slice 7 (LIVING_SPECS D14): <c>content.feedback</c>, design hints against the bundled SRD classes. Read-only.</summary>
+public class DesignFeedbackCommandTests
+{
+    [Fact]
+    public void The_bundled_SRD_casters_raise_no_slot_hints_against_themselves()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var srd = app.ListSources().Where(s => s.Title.StartsWith("System Reference Document", StringComparison.Ordinal)).Select(s => s.Id).ToHashSet();
+        var casters = app.Store.ListRevisionsInOrder()
+            .Where(r => r.Status == RevisionStatus.Published && srd.Contains(r.Provenance.SourceId) && r.Effects.OfType<SpellcastingEffect>().Any())
+            .GroupBy(r => r.ContentId).Select(g => g.Last()).ToList();
+        Assert.True(casters.Count >= 8, $"{casters.Count} SRD casters");
+
+        foreach (var caster in casters)
+        {
+            var hints = app.Feedback(new(Reference: caster.Reference));
+            Assert.True(!hints.Any(h => h.Code is "design.slots-above-full-caster" or "design.multiclass-share-above-table"),
+                $"{caster.Name} ({string.Join(", ", caster.RulesFamilies)}): {string.Join("; ", hints.Select(h => h.Message))}");
+        }
+
+        // No bundled SRD class has a level "without a feature" against the SRD classes (review fix).
+        var classes = app.Store.ListRevisionsInOrder()
+            .Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class && srd.Contains(r.Provenance.SourceId))
+            .GroupBy(r => r.ContentId).Select(g => g.Last()).ToList();
+        Assert.True(classes.Count >= 10, $"{classes.Count} SRD classes");
+        foreach (var cls in classes)
+            Assert.DoesNotContain(app.Feedback(new(Reference: cls.Reference)), h => h.Code == "design.level-without-feature");
+    }
+
+    [Fact]
+    public void An_imported_source_is_never_part_of_the_SRD_baseline()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        // A package source that calls itself anything but homebrew, with a full caster of 9 slots at every level.
+        var imported = new SourceRecord
+        {
+            Id = Guid.NewGuid(), Title = "Test Imported Book", Publisher = "Test", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "1.0", License = "Test", Redistributable = false,
+        };
+        IReadOnlyList<IReadOnlyList<int>> nine = [.. Enumerable.Range(1, 20).Select(_ => (IReadOnlyList<int>)[9])];
+        var generousFeature = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feature, Name = "Test Imported Spellcasting",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(imported.Id), Status = RevisionStatus.Published,
+            Effects = [new SpellcastingEffect { Id = "casting", Ability = Ability.Int, SpellList = "test", MulticlassCaster = MulticlassCaster.Full, Slots = nine }],
+        };
+        app.Store.InTransaction(() =>
+        {
+            app.Store.UpsertSource(imported);
+            app.Store.AddRevision(generousFeature);
+        });
+        var homebrew = app.CreateHomebrewSource(new("Test Feedback Source", [RulesFamilies.Srd521]));
+
+        var hints = app.Feedback(new(Revision: generousFeature with { RevisionId = Guid.NewGuid(), Provenance = new(homebrew.Id), Status = RevisionStatus.Draft }));
+
+        Assert.Contains(hints, h => h.Code == "design.slots-above-full-caster");
+    }
+
+    [Fact]
+    public void An_unsaved_class_gets_hints_and_nothing_is_written()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var source = app.CreateHomebrewSource(new("Test Feedback Source", [RulesFamilies.Srd521]));
+        var draft = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Class, Name = "Test Feedback Class",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(source.Id), Status = RevisionStatus.Draft,
+            Effects = [new ResourceEffect { Id = "surge", ResourceId = "surge", Label = "Surge", Maximum = "CLASS_LEVEL" }],
+        };
+        var before = TempApp.Json(app.Store.ListRevisionsInOrder());
+
+        var hints = app.Feedback(new(Revision: draft));
+
+        Assert.Contains(hints, h => h.Code == "design.resource-faster-than-pb" && h.EffectId == "surge");
+        Assert.Equal(before, TempApp.Json(app.Store.ListRevisionsInOrder()));
+        Assert.Equal("feedback.scope", Assert.Throws<AppValidationException>(() => app.Feedback(new())).Problems.Single().Code);
+
+        // The real SRD full casters are the baseline (review fix: they hold spellcasting on a granted feature).
+        var generous = draft with
+        {
+            Effects = [new SpellcastingEffect { Id = "casting", Ability = Ability.Int, SpellList = "test", MulticlassCaster = MulticlassCaster.Full, Slots = [.. Enumerable.Range(1, 20).Select(_ => (IReadOnlyList<int>)[9])] }],
+        };
+        Assert.Contains(app.Feedback(new(Revision: generous)), h => h.Code == "design.slots-above-full-caster" && h.Level == 1 && h.Family == RulesFamilies.Srd521);
+    }
+}

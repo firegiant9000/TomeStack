@@ -914,6 +914,50 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });
 
+it('shows design feedback only once it is switched on, as hints that do not block (M5 slice 7)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Feedback', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Feedback' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+
+  // Off by default: the editor has no feedback section.
+  const toggle = screen.getByRole('checkbox', { name: 'Show design feedback' });
+  expect((toggle as HTMLInputElement).checked).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  expect(within(editor()).queryByRole('region', { name: 'Design feedback' })).toBeNull();
+
+  try {
+    await user.click(toggle);
+    expect(localStorage.getItem('tomestack.designFeedback')).toBe('on');
+    const section = within(editor()).getByRole('region', { name: 'Design feedback' });
+    await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Hinted Class');
+    await user.click(within(section).getByRole('button', { name: 'Get design hints' }));
+    const hints = await within(section).findByRole('region', { name: 'Design hints' });
+    expect(hints.textContent).toMatch(/Class level\(s\) .* give no feature or choice, although every bundled SRD class gives one there/);
+
+    // The choice is remembered for next time (this machine only): a fresh studio starts with it on.
+    cleanup();
+    render(<App />);
+    const again = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+    await waitFor(() => expect(again.disabled).toBe(false));
+    await user.click(again);
+    expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Show design feedback' })).checked).toBe(true);
+
+    // Off again: the choice is forgotten.
+    await user.click(screen.getByRole('checkbox', { name: 'Show design feedback' }));
+    expect(localStorage.getItem('tomestack.designFeedback')).toBeNull();
+  } finally {
+    localStorage.removeItem('tomestack.designFeedback'); // later flows start from the default, off
+  }
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);

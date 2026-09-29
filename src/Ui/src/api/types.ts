@@ -988,6 +988,15 @@ export interface DebugReport {
   truncated: boolean;
 }
 
+/** M5 slice 7: one design hint. An opinion only: it never blocks, never changes a calculation and is never stored. */
+export interface DesignHint {
+  code: string;
+  message: string;
+  effectId?: string;
+  family?: RulesFamilyId;
+  level?: number;
+}
+
 /** M5 slice 5 (B19): one node of a content's relationship tree. */
 export interface TreeNode {
   id: string;

@@ -10,6 +10,7 @@ import type {
   ContentTreeView,
   DebugFinding,
   DebugReport,
+  DesignHint,
   Effect,
   PublishResult,
   RulesFamilyId,
@@ -24,6 +25,7 @@ import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
 import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
+import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -65,6 +67,8 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
   const [focus, setFocus] = useState<RuleFocus>();
   const [diagnosing, setDiagnosing] = useState(false);
   const [templateId, setTemplateId] = useState<TemplateId>(templates[0]!.id);
+  // M5 slice 7: design feedback, off by default (a preference on this machine only).
+  const [feedbackOn, setFeedbackOn] = useState(designFeedbackOn);
 
   const loadSources = useCallback(
     () =>
@@ -139,6 +143,22 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
       <p className="hint">
         Write your own classes, subclasses, features, feats and items. Everything starts as a draft; publishing checks it and creates a
         new revision. Characters keep their current revision until you review and apply an update.
+      </p>
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={feedbackOn}
+          onChange={() => {
+            setDesignFeedback(!feedbackOn);
+            setFeedbackOn((on) => !on);
+          }}
+          aria-describedby="feedback-hint"
+        />
+        Show design feedback
+      </label>
+      <p id="feedback-hint" className="hint">
+        Hints that compare your classes and features with the SRD ones. Off by default; they never block publishing, never change a calculation and
+        are never exported.
       </p>
 
       <SourcePicker
@@ -224,6 +244,7 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
           entries={entries}
           info={info}
           focus={focus}
+          designFeedback={feedbackOn}
           onError={onError}
           onClose={() => setEditing(undefined)}
           onPublished={async (result, name) => {
@@ -376,6 +397,7 @@ function EntryEditor(props: {
   entries: StudioEntry[];
   info: AppInfo;
   focus?: RuleFocus;
+  designFeedback: boolean;
   onError: (error: unknown) => void;
   onClose: () => void;
   onDraftSaved: (name: string) => void;
@@ -389,6 +411,10 @@ function EntryEditor(props: {
   const [treed, setTreed] = useState<{ revision: ContentRevision; view: ContentTreeView }>();
   const [treeBusy, setTreeBusy] = useState(false);
   const treeRequest = useRef(0);
+  // M5 slice 7: the design hints, for the revision they were computed for.
+  const [hinted, setHinted] = useState<{ revision: ContentRevision; hints: DesignHint[] }>();
+  const [hintsBusy, setHintsBusy] = useState(false);
+  const hintsRequest = useRef(0);
   const [diagnosing, setDiagnosing] = useState(false);
   const [classChoices, setClassChoices] = useState<ClassChoice[]>([]);
   const [busy, setBusy] = useState(false);
@@ -699,6 +725,49 @@ function EntryEditor(props: {
             </ul>
           )}
         </div>
+      )}
+
+      {props.designFeedback && (
+        <section aria-labelledby="feedback-heading" className="effect-editor">
+          <h4 id="feedback-heading">Design feedback</h4>
+          <p className="hint">Opinions, not errors: nothing here blocks publishing or changes a character.</p>
+          <button
+            type="button"
+            disabled={hintsBusy}
+            onClick={async () => {
+              const studied = revision;
+              const request = ++hintsRequest.current;
+              setHintsBusy(true);
+              try {
+                const hints = await client.feedback({ ...forServer(studied), revisionId: crypto.randomUUID() });
+                // An older reply never replaces a newer one (review fix).
+                if (request === hintsRequest.current) setHinted({ revision: studied, hints });
+              } catch (error) {
+                onError(error);
+              } finally {
+                if (request === hintsRequest.current) setHintsBusy(false);
+              }
+            }}
+          >
+            Get design hints
+          </button>
+          {hinted?.revision === revision && (
+            <div role="region" aria-label="Design hints">
+              {hinted.hints.length === 0 ? (
+                <p>No hints: nothing stands out against the SRD classes.</p>
+              ) : (
+                <ul>
+                  {hinted.hints.map((h, i) => (
+                    <li key={`${h.code}-${h.effectId ?? ''}-${h.family ?? ''}-${i}`}>
+                      {h.message}
+                      {h.family && <span className="hint"> ({h.family})</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
       )}
 
       <section aria-labelledby="relations-heading" className="effect-editor">

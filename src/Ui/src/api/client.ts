@@ -29,6 +29,7 @@ import type {
   ContentReference,
   CreateCharacterRequest,
   DebugReport,
+  DesignHint,
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
@@ -87,6 +88,8 @@ export function createClient(transport: Transport) {
     compare: (request: CompareRequest) => call<ContentComparison>('content.compare', request),
     /** The relationship tree of the unsaved revision on screen, among its source's drafts (M5 slice 5). Writes nothing. */
     tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
+    /** Design hints for the unsaved revision on screen (M5 slice 7), asked only while the setting is on. Writes nothing. */
+    feedback: (revision: ContentRevision) => call<DesignHint[]>('content.feedback', { revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
