@@ -1,6 +1,6 @@
 # Portable package format (v7; v1 to v6 still importable)
 
-SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below) and for homebrew sources (M6 slice 1, "Source packs" below; **v7 is provisional and waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below) and for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -99,7 +99,7 @@ A character backup protects characters and what they use. It does not protect ho
 
 ## Source packs and "Mark as shareable" (M6 slice 1)
 
-**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 1. It waits for the owner's approval of the new source fields, the `source` scope, database v8 and the format number (LIVING_SPECS D14 item 6).** Format v7 is the number it would take if it merged next; the number is fixed only when it merges (ROADMAP "Package format numbers").
+**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 1. The owner approved the new source fields, the `source` scope and database v8 on 2026-09-29 (LIVING_SPECS D14 item 6); merging still waits for the owner.** Format v7 is the number it would take if it merged next; the number is fixed only when it merges (ROADMAP "Package format numbers").
 
 A **source pack** shares your own homebrew: one or more sources and their published content, and nothing else.
 

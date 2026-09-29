@@ -191,7 +191,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
      - `source.createHomebrew` no longer accepts `redistributable: true` unchecked. It goes through the same guard, or loses the parameter.
    - A documented schema and a compatibility matrix: pack format × content schema × app version.
    - Unknown future versions are refused (existing path). The package limits and quarantine are reused (SPEC Q-02, ADR-004).
-   - **As built (2026-09-29; fixture-verified; not merged, waits for the owner's approval of the schema change):** see [features/package-format.md](features/package-format.md#source-packs-and-mark-as-shareable-m6-slice-1). The plan review (dual review, cross-checked) found the flag alone could be bypassed, so the slice also has:
+   - **As built (2026-09-29; fixture-verified; not merged; the schema changes were approved by the owner on 2026-09-29, with format v7 still provisional, LIVING_SPECS D14):** see [features/package-format.md](features/package-format.md#source-packs-and-mark-as-shareable-m6-slice-1). The plan review (dual review, cross-checked) found the flag alone could be bypassed, so the slice also has:
      - one guard for every outbound path, the character share included;
      - a flag that only goes up, on every write and every import;
      - a machine-set `origin` (`local` or `received`), so a source received from someone else can never be marked as your own work;
@@ -231,7 +231,7 @@ They land in no fixed order, and today there is one `CurrentFormatVersion` (6). 
 
 1. The extension sandbox model (ADR-011 options A to D). **Decided (owner, 2026-09-29; D14): A, declarative only.**
 2. The adapter targets and versions (ADR-012). **Decided (D14): Foundry `dnd5e` (pair pinned at slice start) and the neutral JSON; Roll20 deferred.**
-3. The "Mark as shareable" rule for your own homebrew: the durable import-derived flag, and what happens to `source.createHomebrew`'s `redistributable` parameter. **Design approved (D14): the flag as proposed, and `redistributable` goes through the same guard. The flag itself is approved again before it ships.**
+3. The "Mark as shareable" rule for your own homebrew: the durable import-derived flag, and what happens to `source.createHomebrew`'s `redistributable` parameter. **Design approved (D14): the flag as proposed, and `redistributable` goes through the same guard. The flag itself is approved again before it ships.** **Re-approved (owner, 2026-09-29)** with `origin`, `shareConfirmedAt` and database v8; the character-share rule, page citations and unknown-origin sources stay open.
 4. How far ADR-012's `personal` purpose may go. Proposed: only your own homebrew that is not import-derived; bought books are always filtered. **Approved as proposed (D14).**
 5. Whether the extension API or the adapters come first. Both wait on 1 or 2 above, and the adapters also wait on the sheet export model. The pack format waits on neither.
 
