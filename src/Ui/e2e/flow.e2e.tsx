@@ -454,8 +454,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
-  // The button appears once the sheet has fetched the source's attachment: allow more than the 1 s default under load.
-  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' }, { timeout: 5000 });
+  // The button appears once the sheet has fetched the source's attachment (e2e/timeouts.setup.ts allows for that).
+  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' });
   await user.click(open);
   expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
 
