@@ -1007,7 +1007,7 @@ export interface SandboxView {
   /** The unsaved copy and its sheet, with the draft counted as published. Never stored. */
   view: CharacterView;
   draft: ContentReference;
-  /** For a copy of a saved character: every displayed value the draft changes. */
+  /** For a copy of a saved character: every calculated sheet field the draft changes (not resource maximums or class columns). */
   changes: FieldDelta[];
   validation: ValidationReport;
 }

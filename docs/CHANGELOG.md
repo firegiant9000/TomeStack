@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Try a class or subclass before you publish it (M5 slice 3):** "Try it" in the class and subclass editors shows how the revision on screen plays, at a level you pick. It runs on a blank character or on a copy of one of yours, with the values it would change. Nothing is saved, and your characters keep using published content only.
+- **Try a class or subclass before you publish it (M5 slice 3):** "Try it" in the class and subclass editors shows how the revision on screen plays, at a level you pick. It runs on a blank character or on a copy of one of yours, with the calculated sheet fields it would change. Nothing is saved, and your characters keep using published content only.
 - **Find problems in your homebrew (M5 slice 2):** "Find problems in <source>" in the homebrew studio checks all of a source's content, drafts included, and "Find problems" checks the entry you are editing. It finds what the Check button cannot see on one entry alone. Examples: a resource nothing spends or recovers, a recovery or action for a resource that isn't there, a grant that never applies because the content is itself granted, a subclass no class offers, a class feature nothing grants, a choice with nothing to pick, class columns that are read but missing or defined twice, and grants of an older version. **Show** opens the entry and moves focus to the rule. Nothing is changed.
 - **Write your own class in the homebrew studio (M5 slice 1b; ADR-010):** "New class" sets the hit die, the saving throws and multiclass prerequisites. It can also set:
   - a skill choice (TomeStack creates the skill options for you);

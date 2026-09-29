@@ -93,7 +93,7 @@ Acceptance:
 
 ## Try it: the draft sandbox (M5 slice 3, B03)
 
-The class and subclass editors have a **Try it** section. It calculates the revision on screen, saved or not, as if it were published. It can run on a blank character (ability scores 10, the draft's first rules family) or on **a copy of** a saved character of a family the draft supports. The level is optional. It is the level in the class, or for a subclass, in the class it joins. `content.sandbox { revision | reference, characterId? | rulesFamily?, level? }` returns the unsaved sheet, the draft's validation report, and, for a copy, every displayed value that changes.
+The class and subclass editors have a **Try it** section. It calculates the revision on screen, saved or not, as if it were published. It can run on a blank character (ability scores 10, the draft's first rules family) or on **a copy of** a saved character of a family the draft supports. The level is optional. It is the level in the class, or for a subclass, in the class it joins. `content.sandbox { revision | reference, characterId? | rulesFamily?, level? }` returns the unsaved sheet, the draft's validation report, and, for a copy, every calculated sheet field that changes (fields only: resource maximums and class columns are not compared, but show in the sheet).
 
 **How the draft is placed on the copy:**
 - Every reference to another revision of the same content becomes the draft.

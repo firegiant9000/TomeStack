@@ -50,7 +50,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
         level: level === '' ? undefined : Number(level),
       });
       setTried({ ...inputs, view });
-      setAnnouncement(`Tried at total level ${view.view.character.level}; ${view.changes.length} value(s) change. Nothing was saved.`);
+      setAnnouncement(`Tried at total level ${view.view.character.level}; ${view.changes.length} calculated field(s) change. Nothing was saved.`);
     } catch (error) {
       onError(error);
     } finally {
@@ -119,7 +119,7 @@ export function SandboxPanel(props: { revision: ContentRevision; prepare: (r: Co
           </p>
           {result.changes.length > 0 && (
             <>
-              <h5>What changes on the copy</h5>
+              <h5>Calculated fields that change on the copy</h5>
               <ul>
                 {result.changes.map((c) => (
                   <li key={c.field}>
