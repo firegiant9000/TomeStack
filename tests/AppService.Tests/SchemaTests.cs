@@ -20,10 +20,15 @@ public class SchemaTests
     /// </summary>
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<JsonSchema>> Loaded = new(StringComparer.Ordinal);
 
-    /// <summary>Picks <c>{kind}.v{schemaVersion}.schema.json</c>; documents without a version are v1.</summary>
+    /// <summary>
+    /// Picks <c>{kind}.v{schemaVersion}.schema.json</c>; documents without a version are v1. A source has no version
+    /// field: one with an M6 slice 1 field (only in v7 library backups and the database) is <c>source.v2</c>.
+    /// </summary>
     internal static string Validate(string kind, JsonElement document)
     {
-        var version = document.TryGetProperty(kind == "package-manifest" ? "formatVersion" : "schemaVersion", out var v) ? v.GetInt32() : 1;
+        var version = kind == "source"
+            ? (document.TryGetProperty("importDerived", out _) || document.TryGetProperty("origin", out _) || document.TryGetProperty("shareConfirmedAt", out _) ? 2 : 1)
+            : document.TryGetProperty(kind == "package-manifest" ? "formatVersion" : "schemaVersion", out var v) ? v.GetInt32() : 1;
         var schema = Loaded.GetOrAdd(
             $"{kind}.v{version}.schema.json",
             name => new Lazy<JsonSchema>(() => JsonSchema.FromText(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", name))), LazyThreadSafetyMode.ExecutionAndPublication)).Value;

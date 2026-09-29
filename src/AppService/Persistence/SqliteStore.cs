@@ -124,6 +124,12 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         CREATE TRIGGER character_snapshots_insert_only_delete BEFORE DELETE ON character_snapshots
         BEGIN SELECT RAISE(ABORT, 'character snapshots are insert-only'); END;
         """),
+        // v8 (M6 slice 1, LIVING_SPECS D14 item 6): the durable import-derived flag on sources. The column mirrors
+        // SourceRecord.ImportDerived and can only go up (UpsertSource). The data step marks every source that shows an
+        // import already: a PDF attached now or before migration v3 (legacy_pdf_ref), or an import job (jobs and their
+        // pages survive removing the PDF). Older builds refuse a v8 database, so none can rewrite a source without the
+        // flag. Forward-only, with the usual copy of the v7 database first.
+        new("ALTER TABLE sources ADD COLUMN import_derived INTEGER NOT NULL DEFAULT 0;", store => store.BackfillImportDerived()),
     ];
 
     private readonly SqliteConnection _connection;
@@ -201,14 +207,35 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds or replaces a source. M6 slice 1: whatever the caller passes, the import-derived flag never goes down, an
+    /// import-derived source is never redistributable or confirmed as shareable, and an origin once recorded stays (so no
+    /// package, restore or later write can launder a source).
+    /// </summary>
     public void UpsertSource(SourceRecord source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        Execute(
-            "INSERT INTO sources (id, json, attachment_id) VALUES ($id, $json, $attachment) ON CONFLICT(id) DO UPDATE SET json = excluded.json, attachment_id = excluded.attachment_id;",
-            ("$id", Key(source.Id)),
-            ("$json", Serialize(source)),
-            ("$attachment", source.AttachmentId is { } a ? Key(a) : DBNull.Value));
+        lock (_gate)
+        {
+            var existing = FindSource(source.Id);
+            var merged = source with
+            {
+                ImportDerived = source.ImportDerived == true || existing?.ImportDerived == true ? true : null,
+                Origin = existing?.Origin ?? source.Origin,
+            };
+            if (merged.ImportDerived == true)
+                merged = merged with { Redistributable = false, ShareConfirmedAt = null };
+            Execute(
+                """
+                INSERT INTO sources (id, json, attachment_id, import_derived) VALUES ($id, $json, $attachment, $derived)
+                ON CONFLICT(id) DO UPDATE SET json = excluded.json, attachment_id = excluded.attachment_id,
+                    import_derived = MAX(sources.import_derived, excluded.import_derived);
+                """,
+                ("$id", Key(merged.Id)),
+                ("$json", Serialize(merged)),
+                ("$attachment", merged.AttachmentId is { } a ? Key(a) : DBNull.Value),
+                ("$derived", merged.ImportDerived == true ? 1 : 0));
+        }
     }
 
     // ---- campaigns (SPEC P-01) ----
@@ -495,10 +522,28 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
-    public SourceRecord? FindSource(Guid sourceId) =>
-        QuerySingle<SourceRecord>("SELECT json FROM sources WHERE id = $id;", ("$id", Key(sourceId)));
+    public SourceRecord? FindSource(Guid sourceId) => Sources("WHERE id = $id", ("$id", Key(sourceId))).SingleOrDefault();
 
-    public IReadOnlyList<SourceRecord> ListSources() => Query<SourceRecord>("SELECT json FROM sources ORDER BY id;");
+    public IReadOnlyList<SourceRecord> ListSources() => Sources("ORDER BY id");
+
+    /// <summary>Sources with the <c>import_derived</c> column applied (database v8), which only ever raises the flag.</summary>
+    private List<SourceRecord> Sources(string clause, params (string Name, object Value)[] parameters)
+    {
+        lock (_gate)
+        {
+            using var command = Command($"SELECT json, import_derived FROM sources {clause};", parameters);
+            using var reader = command.ExecuteReader();
+            var sources = new List<SourceRecord>();
+            while (reader.Read())
+            {
+                var source = JsonSerializer.Deserialize<SourceRecord>(reader.GetString(0), RulesJson.Compact)!;
+                sources.Add(reader.GetInt64(1) != 0 && source.ImportDerived != true
+                    ? source with { ImportDerived = true, Redistributable = false, ShareConfirmedAt = null }
+                    : source);
+            }
+            return sources;
+        }
+    }
 
     /// <summary>Adds a revision. Returns false if an identical revision already exists.</summary>
     /// <exception cref="ImmutableRevisionException">A different revision with the same ID exists.</exception>
@@ -720,6 +765,47 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
                 ("$json", Serialize(source with { PdfRef = null, AttachmentId = attachment.AttachmentId })),
                 ("$attachment", Key(attachment.AttachmentId)),
                 ("$legacy", source.PdfRef),
+                ("$id", id));
+        }
+    }
+
+    /// <summary>
+    /// Migration v8 data step (M6 slice 1). Runs inside the migration's transaction. A source counts as import-derived when
+    /// it has a PDF now, had one before migration v3, or has an import job. The bundled SRD sources are never marked:
+    /// their content is this build's own.
+    /// </summary>
+    private void BackfillImportDerived()
+    {
+        var rows = new List<(string Id, string Json)>();
+        var evidence = new HashSet<string>(StringComparer.Ordinal);
+        lock (_gate)
+        {
+            using (var command = Command("SELECT id, json, attachment_id IS NOT NULL OR legacy_pdf_ref IS NOT NULL FROM sources;", []))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    rows.Add((reader.GetString(0), reader.GetString(1)));
+                    if (reader.GetInt64(2) != 0)
+                        evidence.Add(reader.GetString(0));
+                }
+            }
+            using (var command = Command("SELECT DISTINCT source_id FROM import_jobs;", []))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                    evidence.Add(reader.GetString(0));
+            }
+        }
+        var bundled = TomeStackApp.BundledSourceIds;
+        foreach (var (id, json) in rows.Where(r => evidence.Contains(r.Id)))
+        {
+            var source = JsonSerializer.Deserialize<SourceRecord>(json, RulesJson.Compact)!;
+            if (bundled.Contains(source.Id))
+                continue;
+            Execute(
+                "UPDATE sources SET json = $json, import_derived = 1 WHERE id = $id;",
+                ("$json", Serialize(source with { ImportDerived = true, Redistributable = false, ShareConfirmedAt = null })),
                 ("$id", id));
         }
     }

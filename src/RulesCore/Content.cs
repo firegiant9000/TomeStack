@@ -42,6 +42,46 @@ public sealed record SourceRecord
 
     /// <summary>ADR-005 (M2 item 6): the source's PDF attachment on this machine. Machine-local; never exported.</summary>
     public Guid? AttachmentId { get; init; }
+
+    /// <summary>
+    /// M6 slice 1 (LIVING_SPECS D14 item 6): true once material from outside the author entered this source: a PDF
+    /// attached, a PDF candidate accepted, pages imported (and, later, an ADR-011 extension import). It is never cleared,
+    /// not even by removing the PDF, and such a source is never shared. Absent (null) means false. Set only by this
+    /// machine; a package can raise it but never lower it.
+    /// </summary>
+    public bool? ImportDerived { get; init; }
+
+    /// <summary>
+    /// M6 slice 1: where this source came from, set only by this machine. <see cref="SourceOrigin.Received"/> sources
+    /// arrived in a package from someone else and can never be marked as your own work. Null for the bundled SRD packs and
+    /// for sources stored before database v8, whose origin is not known.
+    /// </summary>
+    public SourceOrigin? Origin { get; init; }
+
+    /// <summary>
+    /// M6 slice 1, "Mark as shareable": when the author confirmed on this machine that the source is their own work. A
+    /// source pack carries only sources with this set. Cleared when sharing is turned off or the source becomes
+    /// import-derived.
+    /// </summary>
+    public DateTimeOffset? ShareConfirmedAt { get; init; }
+
+    /// <summary>
+    /// M6 slice 1: whether this source's content may leave the machine in a share (a character share, a source pack):
+    /// redistributable and not import-derived. The bundled SRD packs pass (CC-BY-4.0); the caller decides whether a
+    /// kind of export takes them at all.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool MayBeShared => Redistributable && ImportDerived != true;
+}
+
+/// <summary>M6 slice 1: <see cref="SourceRecord.Origin"/>.</summary>
+public enum SourceOrigin
+{
+    /// <summary>Made on this machine with <c>source.createHomebrew</c>.</summary>
+    Local,
+
+    /// <summary>Arrived in a character package or a source pack.</summary>
+    Received,
 }
 
 public sealed record PageRef(int Start, int? End = null)

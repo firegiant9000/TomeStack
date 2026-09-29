@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/source.v2.schema.json",
+  "title": "TomeStack source record (v2)",
+  "description": "SPEC S-01, M6 slice 1. v1 plus three fields that only the machine holding the source sets: importDerived (never goes down; such a source is never shared), origin (local or received) and shareConfirmedAt (when the author marked it as shareable). They are stored in the database from v8 and written only in format v7 library backups. Character packages (v5) and source packs never carry them, so a source there is v1. There is no version field: a record with any of these fields is v2.",
+  "type": "object",
+  "required": ["id", "title", "publisher", "rulesFamilies", "editionVersion", "license", "redistributable"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "title": { "type": "string", "minLength": 1 },
+    "publisher": { "type": "string", "minLength": 1 },
+    "rulesFamilies": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rulesFamily" } },
+    "editionVersion": { "type": "string", "minLength": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "redistributable": { "type": "boolean" },
+    "attribution": { "type": "string" },
+    "modificationNotice": { "type": "string" },
+    "importedAt": { "type": "string", "format": "date-time" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "pdfRef": { "type": "string" },
+    "attachmentId": { "$ref": "#/$defs/uuid" },
+    "importDerived": { "const": true, "description": "Present only when true. An import-derived source is never redistributable." },
+    "origin": { "enum": ["local", "received"] },
+    "shareConfirmedAt": { "type": "string", "format": "date-time" }
+  },
+  "if": { "required": ["importDerived"] },
+  "then": { "properties": { "redistributable": { "const": false } }, "not": { "required": ["shareConfirmedAt"] } },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] }
+  }
+}

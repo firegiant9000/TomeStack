@@ -131,7 +131,8 @@ public sealed partial class PackageService
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
         {
-            FormatVersion = 6,
+            // v7 (M6 slice 1): sources carry importDerived, origin and shareConfirmedAt, which a v6 reader would drop.
+            FormatVersion = PackageManifest.LibraryFormatVersion,
             Scope = PackageScope.Library,
             Purpose = ExportPurpose.Backup,
             CreatedAt = createdAt,
@@ -359,7 +360,7 @@ public sealed partial class PackageService
         {
             var localOnly = store.RevisionsOf(group.Key).Any(r => r.Status == RevisionStatus.Published && !inBackup.Contains(r.RevisionId));
             if (localOnly)
-                warnings.Add(new("restore.newest-changes", $"'{group.Last().Name}' has a newer published revision here that is not in the backup. After the restore, the backup's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", group.Last().Reference));
+                warnings.Add(new("restore.newest-changes", $"'{group.Last().Name}' has a newer published revision here that is not in this file. Afterwards, the file's revision counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", group.Last().Reference));
         }
         return warnings;
     }
@@ -410,13 +411,14 @@ public sealed partial class PackageService
         return [.. order.Select(id => byId[id])];
     }
 
-    private string WriteSafetyCopy()
+    /// <param name="prefix"><c>pre-restore</c> (a library restore) or <c>pre-import</c> (a source pack, M6 slice 1).</param>
+    private string WriteSafetyCopy(string prefix = "pre-restore")
     {
         Directory.CreateDirectory(backupDirectory);
         var stamp = time.GetUtcNow().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
         for (var attempt = 0; ; attempt++)
         {
-            var name = attempt == 0 ? $"pre-restore-{stamp}.db" : $"pre-restore-{stamp}-{attempt}.db";
+            var name = attempt == 0 ? $"{prefix}-{stamp}.db" : $"{prefix}-{stamp}-{attempt}.db";
             var target = Path.Combine(backupDirectory, name);
             if (File.Exists(target) && attempt < 100)
                 continue;
