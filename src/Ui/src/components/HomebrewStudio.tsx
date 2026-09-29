@@ -15,7 +15,8 @@ import type {
   ValidationReport,
 } from '../api/types';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
-import { abilities, ClassBasicsEditor, isClassBasic } from './ClassBasicsEditor';
+import { ClassBasicsEditor, isClassBasic } from './ClassBasicsEditor';
+import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
 const authorable: { kind: ContentKind; label: string }[] = [
@@ -310,6 +311,11 @@ function EntryEditor(props: {
   const [report, setReport] = useState<ValidationReport>();
   const [classChoices, setClassChoices] = useState<ClassChoice[]>([]);
   const [busy, setBusy] = useState(false);
+  // The skill-choice helper publishes its option features; nothing else is saved meanwhile (review fix).
+  const [classBusy, setClassBusy] = useState(false);
+  // Fields that do not parse (a slot line with a typo, a column without 20 values), by effect id: they block saving.
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const problemList = Object.values(problems);
   const heading = useRef<HTMLHeadingElement>(null);
   const { onError } = props;
   const family = props.source.rulesFamilies[0];
@@ -373,7 +379,7 @@ function EntryEditor(props: {
                 ? { type, id, category: 'light', armorClass: 11 }
                 : type === 'scale'
                   ? // Content v9 (ADR-010): a class-table column. Its key is what formulas read as SCALE.<key>.
-                    { type, id, scaleId: `column${revision.effects.filter((e) => e.type === 'scale').length + 1}`, label: '', values: Array<number>(20).fill(1) }
+                    { type, id, scaleId: nextScaleKey(revision.effects), label: '', values: Array<number>(20).fill(1) }
                   : type === 'spellcasting'
                     ? { type, id, ability: 'int', preparation: 'prepared', spellList: '', slotKind: 'spellSlots', slots: Array.from({ length: 20 }, () => [] as number[]) }
                     : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
@@ -467,7 +473,16 @@ function EntryEditor(props: {
       )}
 
       {isClass && (
-        <ClassBasicsEditor revision={revision} source={props.source} info={props.info} onEffects={(effects) => update({ effects })} onError={onError} />
+        <ClassBasicsEditor
+          revision={revision}
+          source={props.source}
+          entries={props.entries}
+          info={props.info}
+          disabled={classBusy}
+          onEffects={(change) => setRevision((r) => ({ ...r, effects: change(r.effects) }))}
+          onBusy={setClassBusy}
+          onError={onError}
+        />
       )}
 
       {listed.map(({ effect, index }, position) => (
@@ -479,7 +494,17 @@ function EntryEditor(props: {
           resources={resources}
           grantable={grantable}
           onChange={(e) => setEffect(index, e)}
-          onRemove={() => update({ effects: revision.effects.filter((_, i) => i !== index) })}
+          onProblem={(field, problem) =>
+            setProblems((p) => {
+              const rest = Object.fromEntries(Object.entries(p).filter(([key]) => key !== field));
+              return problem ? { ...rest, [field]: problem } : rest;
+            })
+          }
+          onRemove={() => {
+            update({ effects: revision.effects.filter((_, i) => i !== index) });
+            // Field keys start with the effect id: a removed rule's problems no longer block saving.
+            setProblems((p) => Object.fromEntries(Object.entries(p).filter(([key]) => !key.startsWith(`${effect.id}-`))));
+          }}
         />
       ))}
 
@@ -543,57 +568,68 @@ function EntryEditor(props: {
         <button type="button" onClick={check}>
           Check
         </button>
-        <button type="button" onClick={() => save(false)} disabled={busy}>
+        <button type="button" onClick={() => save(false)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
           Save draft
         </button>
-        <button type="button" onClick={() => save(true)} disabled={busy}>
+        <button type="button" onClick={() => save(true)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
           Publish
         </button>
         <button type="button" onClick={props.onClose}>
           Close editor
         </button>
       </div>
+      <p id="editor-blocked" className="hint">
+        {classBusy
+          ? 'Publishing the skill options…'
+          : problemList.length > 0
+            ? `Fix ${problemList.length === 1 ? 'the marked field' : `the ${problemList.length} marked fields`} before saving: ${problemList.join(' ')}`
+            : ''}
+      </p>
     </section>
   );
 }
 
 const reference = (r: ContentRevision): ContentReference => ({ contentId: r.contentId, revisionId: r.revisionId });
 
-/**
- * "2, 2, 3" → [2, 2, 3]. Anything that is not a whole number is dropped (JSON has no NaN), so the count shown next to
- * the field falls short and validation says how many values are needed.
- */
-const parseList = (text: string): number[] =>
-  text
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map(Number)
-    .filter(Number.isInteger);
+/** Reports a field that does not parse, by name within its effect; `undefined` clears it. */
+type ReportProblem = (field: string, problem: string | undefined) => void;
 
 /**
- * A comma-separated list of numbers, such as a class column's 20 values. It keeps its own text while typing (so "2,"
- * is not rewritten to "2") and hands the parsed numbers up on every change.
+ * Exactly 20 whole numbers, such as a class column's values. It keeps its own text while typing (so "2," is not
+ * rewritten to "2"). Nothing is dropped: a typo or a wrong count is shown next to the field, linked to it, and blocks
+ * saving until fixed (review fix). Only a valid list is handed up.
  */
-function NumberListField(props: { label: string; values: number[]; onChange: (values: number[]) => void }) {
+function TwentyNumbersField(props: { id: string; label: string; max: number; values: number[]; onChange: (values: number[]) => void; onProblem: ReportProblem }) {
   const [text, setText] = useState(props.values.join(', '));
-  const count = parseList(text).length;
+  const parsed = parseTwenty(text, props.max);
+  const errorId = `${props.id}-error`;
   return (
-    <label className="field">
-      {props.label} ({count} of 20 given)
-      <input
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          props.onChange(parseList(e.target.value));
-        }}
-      />
-    </label>
+    <div className="field">
+      <label>
+        {props.label}
+        <input
+          value={text}
+          aria-invalid={parsed.problem ? true : undefined}
+          aria-describedby={parsed.problem ? errorId : undefined}
+          onChange={(e) => {
+            setText(e.target.value);
+            const next = parseTwenty(e.target.value, props.max);
+            props.onProblem(props.id, next.problem && `${props.label}: ${next.problem}.`);
+            if (!next.problem) props.onChange(next.values);
+          }}
+        />
+      </label>
+      {parsed.problem && (
+        <p id={errorId} className="error">
+          {parsed.problem}
+        </p>
+      )}
+    </div>
   );
 }
 
 /** Content v9 (ADR-010): a class-table column. Formulas of the class read it as SCALE.<key> at the class level. */
-function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChange: (effect: Effect) => void }) {
+function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
   const { effect, onChange } = props;
   return (
     <>
@@ -605,7 +641,14 @@ function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChan
         Key (formulas read it as SCALE.key; a lowercase letter, then letters or digits)
         <input value={effect.scaleId} onChange={(e) => onChange({ ...effect, scaleId: e.target.value.trim() })} />
       </label>
-      <NumberListField label="Values at class levels 1 to 20, separated by commas" values={effect.values} onChange={(values) => onChange({ ...effect, values })} />
+      <TwentyNumbersField
+        id={`${effect.id}-values`}
+        label="Values at class levels 1 to 20, separated by commas"
+        max={10000}
+        values={effect.values}
+        onChange={(values) => onChange({ ...effect, values })}
+        onProblem={props.onProblem}
+      />
     </>
   );
 }
@@ -614,10 +657,12 @@ function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChan
  * Content v5 spellcasting, with the v9 multiclass table (ADR-010). The slot table is one line per class level, each the
  * slots of spell levels 1, 2, … separated by commas (an empty line: no slots at that level).
  */
-function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasting' }>; onChange: (effect: Effect) => void }) {
+function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasting' }>; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
   const { effect, onChange } = props;
   // A new caster's 20 empty rows start as an empty box, not 19 blank lines that typed rows would follow.
   const [slotsText, setSlotsText] = useState(effect.slots.every((row) => row.length === 0) ? '' : effect.slots.map((row) => row.join(', ')).join('\n'));
+  const slotsProblem = parseSlotRows(slotsText).problem;
+  const slotsErrorId = `${effect.id}-slots-error`;
   const share = effect.multiclassCasterTable ? 'table' : (effect.multiclassCaster ?? 'none');
   return (
     <>
@@ -646,24 +691,36 @@ function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasti
         Prepared or known spells (optional formula, such as max(1, INT.MOD + CLASS_LEVEL))
         <input value={effect.spellsFormula ?? ''} onChange={(e) => onChange({ ...effect, spellsFormula: e.target.value || undefined })} />
       </label>
-      <label className="field">
-        Spell slots: one line per class level 1 to 20, the slots of spell levels 1, 2, … separated by commas
-        <textarea
-          rows={6}
-          value={slotsText}
-          onChange={(e) => {
-            setSlotsText(e.target.value);
-            const lines = e.target.value.split('\n');
-            onChange({ ...effect, slots: Array.from({ length: Math.max(20, lines.length) }, (_, i) => parseList(lines[i] ?? '')) });
-          }}
-        />
-      </label>
+      <div className="field">
+        <label>
+          Spell slots: one line per class level 1 to 20, the slots of spell levels 1, 2, … separated by commas
+          <textarea
+            rows={6}
+            value={slotsText}
+            aria-invalid={slotsProblem ? true : undefined}
+            aria-describedby={slotsProblem ? slotsErrorId : undefined}
+            onChange={(e) => {
+              setSlotsText(e.target.value);
+              // Positions matter: a typo is shown and blocks saving; it never moves a slot to another spell level.
+              const parsed = parseSlotRows(e.target.value);
+              props.onProblem(`${effect.id}-slots`, parsed.problem && `Spell slots: ${parsed.problem}.`);
+              if (!parsed.problem) onChange({ ...effect, slots: parsed.rows });
+            }}
+          />
+        </label>
+        {slotsProblem && (
+          <p id={slotsErrorId} className="error">
+            {slotsProblem}
+          </p>
+        )}
+      </div>
       <label className="field">
         With other casters (the Multiclass Spellcaster table)
         <select
           value={share}
           onChange={(e) => {
             const value = e.target.value;
+            if (value !== 'table') props.onProblem(`${effect.id}-table`, undefined); // the table field goes away
             onChange({
               ...effect,
               multiclassCaster: value === 'full' || value === 'half' || value === 'third' ? value : undefined,
@@ -679,10 +736,13 @@ function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasti
         </select>
       </label>
       {effect.multiclassCasterTable && (
-        <NumberListField
+        <TwentyNumbersField
+          id={`${effect.id}-table`}
           label="Caster levels it adds at class levels 1 to 20, separated by commas"
+          max={20}
           values={effect.multiclassCasterTable}
           onChange={(values) => onChange({ ...effect, multiclassCasterTable: values })}
+          onProblem={props.onProblem}
         />
       )}
     </>
@@ -696,9 +756,10 @@ function EffectEditor(props: {
   resources: Extract<Effect, { type: 'resource' }>[];
   grantable: StudioEntry[];
   onChange: (effect: Effect) => void;
+  onProblem: ReportProblem;
   onRemove: () => void;
 }) {
-  const { effect, onChange } = props;
+  const { effect, onChange, onProblem } = props;
   const n = props.index + 1;
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
@@ -857,8 +918,8 @@ function EffectEditor(props: {
           </label>
         </>
       )}
-      {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} />}
-      {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} onChange={onChange} />}
+      {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type !== 'grant' && (
         <label className="field">
           Automation

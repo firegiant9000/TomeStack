@@ -41,6 +41,13 @@ Every effect has an automation setting (automatic, assisted, reference only) and
 
 Resources, recoveries, rolls and modifiers work as for other content, and their formulas can read the class's columns. A published class appears in the builder like any class.
 
+**Review fixes (dual-review, 2026-09-29):**
+- **Every effect stays visible.** The class editor owns only what it shows: the hit die, starting-class saves, multiclass prerequisites on ability scores, and the `skills` and `subclass` choices. Every other effect of the class (other proficiencies, other restrictions and choices) stays in the rule list, where it can be seen and removed.
+- **Edits never reorder or lose effects.** Each edit applies to the latest effect list (`classBasics.ts`) and keeps other effects in place. "Any one of these is enough" survives clearing a value and typing it again, and a prerequisite group of another name is kept.
+- **The skill helper publishes no duplicates.** It reuses a feature this source already has for that class and skill, when that feature covers the class's families. It writes the choice only once every option exists, and a retry reuses what was published. The rest of the editor is disabled meanwhile. It warns when options do not cover a family the class was later given.
+- **List fields are strict.** Slot rows, columns and the caster table accept only whole numbers, and nothing is dropped. "4, 3, , 2" and "4, 3, x, 2" are errors, never a table with shifted spell levels. Save and Publish stay disabled until they are fixed.
+- **Column keys never repeat.** A new column's default key is never one already in use.
+
 **A choice with no options of its own** is content v9 (`validate.choice-options-none` is a warning, and `validate.requires-v9` applies below v9). A v8 build would refuse it with a validation error, so v9 makes it refuse by version instead. The calculator already offered published extensions after declared options.
 
 Acceptance:

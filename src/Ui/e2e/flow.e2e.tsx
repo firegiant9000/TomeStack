@@ -1090,6 +1090,9 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
   await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
   await waitFor(() => expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy());
+  expect(within(skills).getByText(/3 new option features published, 0 reused/)).toBeTruthy(); // announced, and focus stays in the group
+  expect(document.activeElement).toBe(within(skills).getByText('Skill choice (starting class only)'));
+  await user.click(within(within(basics).getByRole('group', { name: 'Subclass' })).getByRole('checkbox', { name: /^This class has subclasses/ }));
 
   await user.click(within(editor()).getByRole('button', { name: 'Add class column' }));
   const column = rule(/^Rule 1: Class column/);
@@ -1120,6 +1123,16 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Chronicler.'));
 
+  // A homebrew subclass joins the new class's subclass choice, which declares no options of its own.
+  await user.click(screen.getByRole('button', { name: 'New subclass' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Order of Quills');
+  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  await waitFor(() => expect(within(offered).getByRole('option', { name: 'E2E Chronicler: Choose a subclass' })).toBeTruthy());
+  await user.selectOptions(offered, 'E2E Chronicler: Choose a subclass');
+  await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Order of Quills.'));
+
   // Level 1 in the builder: the class is offered like any other, with its skill choice.
   await user.click(screen.getByRole('button', { name: 'New character' }));
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Scribe');
@@ -1133,6 +1146,7 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: Arcana/);
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   let sheet = await screen.findByRole('article', { name: 'E2E Scribe' });
+  expect(within(sheet).getByRole('heading', { name: /^History: \+5/ })).toBeTruthy(); // the chosen option grants it: Int +3, PB +2
   expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 2 of 2' })).toBeTruthy();
   expect(within(within(sheet).getByRole('region', { name: 'Class columns' })).getByText('Ink: 2')).toBeTruthy();
   expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 1 slots: 1 of 1' })).toBeTruthy();
@@ -1141,8 +1155,16 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   const options = await client.listContent('srd-5.2.1');
   const chronicler = options.find((o) => o.kind === 'class' && o.name === 'E2E Chronicler' && !o.superseded)!.reference;
   const wizard = options.find((o) => o.kind === 'class' && o.name === 'Wizard' && o.compatible && !o.superseded)!.reference;
+  const order = options.find((o) => o.kind === 'subclass' && o.name === 'E2E Order of Quills' && !o.superseded)!.reference;
   const scores = { str: 10, dex: 12, con: 14, int: 16, wis: 14, cha: 10 };
-  await client.createCharacter({ name: 'E2E Scribe 20', rulesFamily: 'srd-5.2.1', baseAbilities: scores, pins: [], classes: [{ class: chronicler, level: 20 }], choices: [] });
+  await client.createCharacter({
+    name: 'E2E Scribe 20',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: scores,
+    pins: [],
+    classes: [{ class: chronicler, level: 20 }],
+    choices: [{ source: chronicler, choiceId: 'subclass', selected: [order] }],
+  });
   await client.createCharacter({
     name: 'E2E Scribe Wizard',
     rulesFamily: 'srd-5.2.1',
@@ -1157,6 +1179,7 @@ it('authors a class in the studio, levels it 1–20 and multiclasses it with an 
   await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20/ }));
   sheet = await screen.findByRole('article', { name: 'E2E Scribe 20' });
   expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 143/ })).toBeTruthy(); // 8 + 19 × 5 + 20 × Con 2
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, the homebrew subclass +1
   expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 9 of 9' })).toBeTruthy();
   expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 7 slots: 1 of 1' })).toBeTruthy();
 

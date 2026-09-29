@@ -186,6 +186,8 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **`AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`:** a class shaped as the studio writes it is published as v9. A homebrew subclass joins its empty subclass choice and reads the class's column. It multiclasses with the SRD Fighter, and a package round trip to a clean data folder gives the same sheet.
 - **The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class":** every class control is used in the real UI, then the builder, level 20 (hit points 143, Ink 9, level 7 slots) and Chronicler 5 / SRD Wizard 3 (caster level 6: 4, 3 and 3 slots).
 
+**Slice 1b review fixes (dual-review, 2026-09-29):** none of the 13 findings was refuted; all are fixed. They are listed in [homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010) under "Review fixes". The editor's effect logic is now pure and unit-tested (`src/Ui/src/classBasics.test.ts`). The e2e flow also turns on the subclass choice, adds a homebrew subclass to it, checks the chosen skill's proficiency on the sheet, and asserts focus after the skill helper.
+
 **One addition to v9 made in slice 1b, before v9 merges:** a `choice` with **no declared options** is allowed (`validate.choice-options-none`, a warning). It offers only content that extends it, which is what a new class's subclass choice is before any subclass exists. v8 validation refused it, so it requires v9: an older build refuses by version instead of with a validation error.
 
 Supersedes: none. Extends ADR-003 (effect union, grammar) and the M2.2 minimum-version rule (`docs/schemas/README.md`).
