@@ -96,6 +96,7 @@ public sealed partial class TomeStackApp : IDisposable
             {
                 var seeded = app.Seed(pack);
                 bundled.UnionWith(seeded.Revisions.Select(r => r.RevisionId));
+                app._bundledSources.UnionWith(seeded.Sources.Select(s => s.Id)); // M6 slice 1: the SRD sources this build ships
             }
             // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
             bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
@@ -130,6 +131,12 @@ public sealed partial class TomeStackApp : IDisposable
     /// design-feedback baseline. Selected by revision id, so nothing a user or a package adds, even under an SRD source id, joins it.
     /// </summary>
     private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
+
+    /// <summary>
+    /// M6 slice 1: the source ids of the bundled SRD packs, as seeded. They are never import-derived, never marked as
+    /// shareable, never in a source pack, and no package replaces their records.
+    /// </summary>
+    private readonly HashSet<Guid> _bundledSources = [];
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
