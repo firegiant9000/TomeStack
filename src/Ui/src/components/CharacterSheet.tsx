@@ -15,6 +15,7 @@ import type {
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
+import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
@@ -325,6 +326,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
+
+      <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
 
       <HitPointsPanel view={view} act={act} />
       <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />

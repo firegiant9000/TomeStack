@@ -958,6 +958,50 @@ it('shows design feedback only once it is switched on, as hints that do not bloc
   }
 });
 
+it('takes a snapshot of a character, previews the restore, restores it and keeps an undo snapshot (M5 slice 8)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Snapshots', ['srd-5.2.1']);
+  const feat = (
+    await client.publish(
+      await client.saveDraft({
+        contentId: crypto.randomUUID(),
+        revisionId: '00000000-0000-0000-0000-000000000000',
+        kind: 'feat',
+        name: 'E2E Snapshot Feat',
+        rulesFamilies: ['srd-5.2.1'],
+        provenance: { sourceId: source.id },
+        status: 'draft',
+        effects: [{ type: 'modifier', id: 'quick', operation: 'bonus', target: 'initiative', value: '3' }],
+      }),
+    )
+  ).published;
+  const hero = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+  const panel = () => screen.getByRole('region', { name: 'Snapshots' });
+  await user.type(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('textbox', { name: /^Snapshot name/ }), 'E2E with the feat');
+  await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
+  await expectStatus(/Took a snapshot of E2E Snapshot Hero: E2E with the feat/);
+
+  // The character changes: the feat goes.
+  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [] });
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+
+  await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
+  const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
+  expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
+
+  await user.click(within(preview).getByRole('button', { name: 'Restore' }));
+  await expectStatus(/Restored the snapshot/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
+  expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);
