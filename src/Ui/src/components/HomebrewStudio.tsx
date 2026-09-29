@@ -159,6 +159,7 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
           info={info}
           onError={onError}
           onClose={() => setEditing(undefined)}
+          onEntriesChanged={() => void loadEntries(source.id)}
           onPublished={async (result, name) => {
             setEditing(undefined);
             setPublished({ result, name });
@@ -304,6 +305,8 @@ function EntryEditor(props: {
   info: AppInfo;
   onError: (error: unknown) => void;
   onClose: () => void;
+  /** The class helper published option features: reload the source's content. */
+  onEntriesChanged: () => void;
   onDraftSaved: (name: string) => void;
   onPublished: (result: PublishResult, name: string) => void;
 }) {
@@ -361,7 +364,7 @@ function EntryEditor(props: {
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
   // A class's basics (hit die, saves, prerequisites, choices) have their own editor; the rule list shows the rest.
-  const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !(isClass && isClassBasic(effect)));
+  const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !(isClass && isClassBasic(effect, revision.effects)));
 
   function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting') {
     const id = nextId(type);
@@ -419,6 +422,8 @@ function EntryEditor(props: {
       <h3 id="editor-heading" tabIndex={-1} ref={heading}>
         {title}
       </h3>
+      {/* While the skill-choice helper publishes, the whole editor is disabled, Close included (review fix). */}
+      <fieldset disabled={classBusy} className="bare-fieldset">
       <label className="field">
         Name
         <input value={revision.name} onChange={(e) => update({ name: e.target.value })} />
@@ -481,6 +486,7 @@ function EntryEditor(props: {
           disabled={classBusy}
           onEffects={(change) => setRevision((r) => ({ ...r, effects: change(r.effects) }))}
           onBusy={setClassBusy}
+          onOptionsPublished={props.onEntriesChanged}
           onError={onError}
         />
       )}
@@ -578,7 +584,8 @@ function EntryEditor(props: {
           Close editor
         </button>
       </div>
-      <p id="editor-blocked" className="hint">
+      </fieldset>
+      <p id="editor-blocked" className="hint" aria-live="polite">
         {classBusy
           ? 'Publishing the skill options…'
           : problemList.length > 0

@@ -28,6 +28,12 @@ public static class ContentValidator
     public const int MinimumPublishedSchemaVersion = 3;
 
     /// <summary>
+    /// The most a choice can ask for when it declares no options of its own (the v9 JSON schema's choice.count maximum);
+    /// with options, the count is bounded by how many there are.
+    /// </summary>
+    public const int MaxChoiceCountWithoutOptions = 20;
+
+    /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
     /// and never lower than the entry before it (a class never loses caster levels as it gains class levels).
     /// </summary>
@@ -184,7 +190,9 @@ public static class ContentValidator
                     }
                     if (choice.Options.Distinct().Count() != choice.Options.Count)
                         Error("validate.choice-option-duplicate", $"Choice '{choice.ChoiceId}' lists an option more than once.", choice.Id);
-                    if (choice.Count < 1 || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count()))
+                    if (choice.Count < 1
+                        || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count())
+                        || (choice.Options.Count == 0 && choice.Count > MaxChoiceCountWithoutOptions))
                         Error("validate.choice-count", $"Choice '{choice.ChoiceId}' asks for {choice.Count} of {choice.Options.Distinct().Count()} option(s).", choice.Id);
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");

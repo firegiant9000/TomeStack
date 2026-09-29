@@ -110,7 +110,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
      - A skill-choice helper that generates the option features, saving throws, and starting-class and multiclass proficiency subsets (`onlyAs`).
      - Multiclass prerequisites (`restriction`, `multiclass`, `group`), and resources driven by a scale.
      - A spellcasting editor: ability, list key, preparation, the 20-row slot table, and the multiclass share (none, full, half, third or a table).
-     - Proven by `HomebrewStudioTests` and an e2e flow: author the Chronicler in the studio, level it 1–20, and multiclass it with an SRD Wizard and an SRD Fighter.
+     - Proven by `HomebrewStudioTests` and an e2e flow: author the Chronicler in the studio and build it at levels 1, 20 and 5/3 with an SRD Wizard (levels 20 and 5/3 are created through the service client; the SRD Fighter multiclass and the package round trip are service-level tests).
 2. **B02 homebrew debugger.**
    - A read-only `content.diagnose { sourceId | reference }` over a new RulesCore `ContentGraph` (grants, choices, resources, recoveries, rolls, scales, levels).
    - It reports missing references and invalid formulas, and flags dead resources (never recovered and never spent) and unreachable features (a level above 20, a choice that nothing reaches, a non-standalone feature that nothing grants).

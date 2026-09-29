@@ -66,6 +66,7 @@
 
 ### Fixed
 
+- **Class editor (M5 slice 1b review):** creating the skill choice again no longer publishes duplicate option features, the whole editor is disabled while it publishes, the rule list shows every multiclass restriction and saving throw grant the editor does not show, and a choice with no listed options can no longer ask for more than 20.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 
