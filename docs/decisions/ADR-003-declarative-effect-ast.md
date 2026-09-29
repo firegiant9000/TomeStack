@@ -126,6 +126,7 @@ The design, the migration and the evidence are in [ADR-010](ADR-010-custom-class
 - **The `scale` effect** is typed only in a v9 revision (`VersionedEffects`). In a v2–v8 revision it stays unknown and byte for byte.
 - **The formula identifier `SCALE.<id>`** parses only in a v9 revision: `Formula.TryParse(…, allowScales)`, which every calculation site sets from the revision's version. Below v9 it is `formula.unknown-identifier`, exactly as in older builds. A scale is a table of literals, so it reads no field and adds no dependency edge; the formula bounds are unchanged.
 - **`spellcasting.multiclassCasterTable`** is nullable and absent by default, and typed only in a v9 revision. Below v9 the key stays extension data, in document order, so it is neither combined nor re-serialized.
+- **A `choice` with no declared options** (M5 slice 1b) offers only content that extends it, such as a new homebrew class's subclass choice. It is a warning (`validate.choice-options-none`) and needs v9, because v8 validation refused it.
 - **Versions:** `validate.requires-v9`. `RequiredSchemaVersion` now also reads formula identifiers, so `SCALE` in any of the six formula fields (value, maximum, amount, cost, bonus, spellsFormula) makes a revision v9. No stored revision changes, no database migration is needed, and the character schema stays v7.
 
 ## Consequences

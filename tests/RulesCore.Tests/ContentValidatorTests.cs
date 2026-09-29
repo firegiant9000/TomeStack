@@ -61,7 +61,13 @@ public class ContentValidatorTests
         Assert.Contains("validate.stack-group-missing", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Stacking = StackingRule.HighestInGroup })));
         Assert.Contains("validate.level", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Content, Content = Fixtures.Watchful, Level = 21 })));
         Assert.Contains("validate.choice-count", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c", Count = 2, Options = [Fixtures.Watchful] })));
-        Assert.Contains("validate.choice-options-empty", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c" })));
+        // Content v9 (M5 slice 1b): a choice with no options of its own offers only content that extends it (a new
+        // homebrew class's subclass choice). A warning, and v9: older builds refuse it by version.
+        var noOptions = ContentValidator.Validate(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c" }), Catalog);
+        Assert.Empty(noOptions.Errors);
+        Assert.Contains(noOptions.Warnings, w => w.Code == "validate.choice-options-none");
+        Assert.Equal(9, noOptions.RequiredSchemaVersion);
+        Assert.Contains("validate.requires-v9", Errors(Draft(new ChoiceEffect { Id = "c", ChoiceId = "c" }) with { SchemaVersion = 8 }));
         Assert.Contains("validate.hit-die", Errors(Draft(new HitDieEffect { Id = "d", Die = 20 })));
         Assert.Contains("validate.dice-invalid", Errors(Draft(new RollEffect { Id = "r", RollId = "r", Label = "Roll", Dice = "1d20+d" })));
         Assert.Contains("validate.requires-v3", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Content, Content = Fixtures.Watchful, Level = 3 }) with { SchemaVersion = 2 }));

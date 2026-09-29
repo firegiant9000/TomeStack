@@ -31,7 +31,7 @@ ROADMAP M5's exit gate: "a nonstandard class levels and multiclasses without cod
 
 ## Decision
 
-### Content schema v9 adds exactly three things
+### Content schema v9 adds exactly three things (and, from slice 1b, a choice with no declared options; see "Evidence")
 
 **1. The `scale` effect (a new type, typed only in a v9 revision).**
 
@@ -180,6 +180,12 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **A subclass's scale ids** are checked against its class's newest published revision, plus unsaved revisions validated with it. A clash with an older published revision is a warning (`validate.scale-duplicate-older`). A draft never blocks, and a subclass that extends a feature's choice gets no class checks (`A_subclass_is_checked_against_its_classs_newest_published_revision_only`, `A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks`).
 - **Calculation isolates out-of-bound scale values** that bypassed validation, with `scale.invalid` (`A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation`).
 
-**Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
+**Slice 1b (fixture-verified, 2026-09-29): the M5 exit gate.**
+
+- **The studio authors a class** ([homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010)).
+- **`AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`:** a class shaped as the studio writes it is published as v9. A homebrew subclass joins its empty subclass choice and reads the class's column. It multiclasses with the SRD Fighter, and a package round trip to a clean data folder gives the same sheet.
+- **The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class":** every class control is used in the real UI, then the builder, level 20 (hit points 143, Ink 9, level 7 slots) and Chronicler 5 / SRD Wizard 3 (caster level 6: 4, 3 and 3 slots).
+
+**One addition to v9 made in slice 1b, before v9 merges:** a `choice` with **no declared options** is allowed (`validate.choice-options-none`, a warning). It offers only content that extends it, which is what a new class's subclass choice is before any subclass exists. v8 validation refused it, so it requires v9: an older build refuses by version instead of with a validation error.
 
 Supersedes: none. Extends ADR-003 (effect union, grammar) and the M2.2 minimum-version rule (`docs/schemas/README.md`).

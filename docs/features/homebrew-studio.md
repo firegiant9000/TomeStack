@@ -10,7 +10,7 @@ UI: `src/Ui/src/components/HomebrewStudio.tsx`, `UpdateReviewPanel.tsx`. Service
 
 ## Guided authoring
 
-The studio authors subclasses, features, feats and items. Every control writes a declarative effect (ADR-003); nothing runs code (SPEC Q-02):
+The studio authors classes (since M5, below), subclasses, features, feats and items. Every control writes a declarative effect (ADR-003); nothing runs code (SPEC Q-02):
 
 | Control | Effect |
 | --- | --- |
@@ -23,6 +23,29 @@ The studio authors subclasses, features, feats and items. Every control writes a
 | Description only | A revision with no effects is a **reference-only** feature: its text is kept and shown, and the sheet says "reference only" |
 
 Every effect has an automation setting (automatic, assisted, reference only) and its own text. **Check** validates the unsaved revision (`content.validate`), **Save draft** stores it (`content.saveDraft`; drafts are insert-only, so each save is a new revision id), and **Publish** saves and publishes it (`content.publish` validates again and refuses on any error). Editing published content starts a new draft of the same content id.
+
+## A class of your own (M5 slice 1b, ADR-010)
+
+"New class" opens the class editor (`ClassBasicsEditor.tsx`, inside `HomebrewStudio.tsx`). Each control writes a declarative effect of an existing type, so authoring a nonstandard class needs no code edit:
+
+| Control | Effect |
+| --- | --- |
+| Hit die | `hitDie` (d6, d8, d10 or d12) |
+| Saving throw proficiencies | `grant proficiency save.<ability>`, `onlyAs: startingClass` |
+| Multiclass prerequisites | `restriction` on `ability.<ability>.score` with `multiclass`. "Any one of these is enough" puts them in one `group` |
+| Skill choice | "Create skill choice" publishes one feature per ticked skill in this source ("<class>: <skill>", each granting that proficiency), as the SRD packs do, and adds a `choice` of them, `onlyAs: startingClass` |
+| This class has subclasses | A `choice` (`subclass`) at the chosen class level with **no options of its own**. Homebrew subclasses join it through "Offered in the choice" (`extendsChoice`) |
+| Add class column | `scale` (content v9): a name, a key that formulas read as `SCALE.<key>`, and 20 values |
+| Add spellcasting | `spellcasting`: ability, spell list key, prepared or known, an optional prepared-spell formula, the slot table (one line per class level) and the multiclass share. The share is none, full, half, a third, or its own table of 20 caster levels (content v9) |
+| Grant a feature | `grant content` from a class level, as for subclasses; the level table of the class |
+
+Resources, recoveries, rolls and modifiers work as for other content, and their formulas can read the class's columns. A published class appears in the builder like any class.
+
+**A choice with no options of its own** is content v9 (`validate.choice-options-none` is a warning, and `validate.requires-v9` applies below v9). A v8 build would refuse it with a validation error, so v9 makes it refuse by version instead. The calculator already offered published extensions after declared options.
+
+Acceptance:
+- `AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`;
+- the e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class". It authors "E2E Chronicler" with every control above, builds it at level 1 in the builder, and checks it at level 20 and as Chronicler 5 / SRD Wizard 3 (caster level 6).
 
 ## A homebrew subclass in an SRD class (content schema v4)
 

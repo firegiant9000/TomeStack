@@ -15,9 +15,11 @@ import type {
   ValidationReport,
 } from '../api/types';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
+import { abilities, ClassBasicsEditor, isClassBasic } from './ClassBasicsEditor';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
 const authorable: { kind: ContentKind; label: string }[] = [
+  { kind: 'class', label: 'class' },
   { kind: 'subclass', label: 'subclass' },
   { kind: 'feature', label: 'feature' },
   { kind: 'feat', label: 'feat' },
@@ -37,9 +39,10 @@ interface Props {
 }
 
 /**
- * M2 item 5, SPEC I-04, I-06: guided authoring of subclasses, features, feats and items for the user's own homebrew
- * sources, over content.saveDraft / validate / publish. Nothing here runs code: every control writes a declarative
- * effect (ADR-003), and publishing validates again. No character changes until its own reviewed update.
+ * M2 item 5, SPEC I-04, I-06: guided authoring of classes (M5 slice 1b, ADR-010), subclasses, features, feats and items
+ * for the user's own homebrew sources, over content.saveDraft / validate / publish. Nothing here runs code: every
+ * control writes a declarative effect (ADR-003), and publishing validates again. No character changes until its own
+ * reviewed update.
  */
 export function HomebrewStudio({ info, onError, onStatus }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -98,7 +101,7 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
     <section className="panel" aria-labelledby="studio-heading">
       <h2 id="studio-heading">Homebrew studio</h2>
       <p className="hint">
-        Write your own subclasses, features, feats and items. Everything starts as a draft; publishing checks it and creates a
+        Write your own classes, subclasses, features, feats and items. Everything starts as a draft; publishing checks it and creates a
         new revision. Characters keep their current revision until you review and apply an update.
       </p>
 
@@ -348,8 +351,13 @@ function EntryEditor(props: {
   };
   const resources = revision.effects.filter((e): e is Extract<Effect, { type: 'resource' }> => e.type === 'resource');
   const grantable = props.entries.filter((e) => e.contentId !== revision.contentId && e.latestPublished && (e.kind === 'feature' || e.kind === 'feat'));
+  const isClass = revision.kind === 'class';
+  const classLike = isClass || revision.kind === 'subclass';
+  const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
+  // A class's basics (hit die, saves, prerequisites, choices) have their own editor; the rule list shows the rest.
+  const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !(isClass && isClassBasic(effect)));
 
-  function add(type: Effect['type']) {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting') {
     const id = nextId(type);
     const effect: Effect =
       type === 'modifier'
@@ -363,7 +371,12 @@ function EntryEditor(props: {
               ? { type, id, rollId: id, label: '', dice: '1d6', timing: 'onRoll', automation: 'assisted' }
               : type === 'armor'
                 ? { type, id, category: 'light', armorClass: 11 }
-                : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: 3 };
+                : type === 'scale'
+                  ? // Content v9 (ADR-010): a class-table column. Its key is what formulas read as SCALE.<key>.
+                    { type, id, scaleId: `column${revision.effects.filter((e) => e.type === 'scale').length + 1}`, label: '', values: Array<number>(20).fill(1) }
+                  : type === 'spellcasting'
+                    ? { type, id, ability: 'int', preparation: 'prepared', spellList: '', slotKind: 'spellSlots', slots: Array.from({ length: 20 }, () => [] as number[]) }
+                    : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
     update({ effects: [...revision.effects, effect] });
   }
 
@@ -453,10 +466,14 @@ function EntryEditor(props: {
         </label>
       )}
 
-      {revision.effects.map((effect, index) => (
+      {isClass && (
+        <ClassBasicsEditor revision={revision} source={props.source} info={props.info} onEffects={(effects) => update({ effects })} onError={onError} />
+      )}
+
+      {listed.map(({ effect, index }, position) => (
         <EffectEditor
           key={effect.id}
-          index={index}
+          index={position}
           effect={effect}
           fields={props.info.fields}
           resources={resources}
@@ -479,9 +496,19 @@ function EntryEditor(props: {
         <button type="button" onClick={() => add('roll')}>
           Add roll or action
         </button>
-        {(revision.kind === 'subclass' || revision.kind === 'feat') && (
+        {(classLike || revision.kind === 'feat') && (
           <button type="button" onClick={() => add('grant')} disabled={grantable.length === 0}>
             Grant a feature
+          </button>
+        )}
+        {classLike && (
+          <button type="button" onClick={() => add('scale')}>
+            Add class column
+          </button>
+        )}
+        {classLike && (
+          <button type="button" onClick={() => add('spellcasting')} disabled={hasSpellcasting}>
+            Add spellcasting
           </button>
         )}
         {revision.kind === 'item' && (
@@ -532,6 +559,136 @@ function EntryEditor(props: {
 
 const reference = (r: ContentRevision): ContentReference => ({ contentId: r.contentId, revisionId: r.revisionId });
 
+/**
+ * "2, 2, 3" → [2, 2, 3]. Anything that is not a whole number is dropped (JSON has no NaN), so the count shown next to
+ * the field falls short and validation says how many values are needed.
+ */
+const parseList = (text: string): number[] =>
+  text
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map(Number)
+    .filter(Number.isInteger);
+
+/**
+ * A comma-separated list of numbers, such as a class column's 20 values. It keeps its own text while typing (so "2,"
+ * is not rewritten to "2") and hands the parsed numbers up on every change.
+ */
+function NumberListField(props: { label: string; values: number[]; onChange: (values: number[]) => void }) {
+  const [text, setText] = useState(props.values.join(', '));
+  const count = parseList(text).length;
+  return (
+    <label className="field">
+      {props.label} ({count} of 20 given)
+      <input
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          props.onChange(parseList(e.target.value));
+        }}
+      />
+    </label>
+  );
+}
+
+/** Content v9 (ADR-010): a class-table column. Formulas of the class read it as SCALE.<key> at the class level. */
+function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChange: (effect: Effect) => void }) {
+  const { effect, onChange } = props;
+  return (
+    <>
+      <label className="field">
+        Column name
+        <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
+      </label>
+      <label className="field">
+        Key (formulas read it as SCALE.key; a lowercase letter, then letters or digits)
+        <input value={effect.scaleId} onChange={(e) => onChange({ ...effect, scaleId: e.target.value.trim() })} />
+      </label>
+      <NumberListField label="Values at class levels 1 to 20, separated by commas" values={effect.values} onChange={(values) => onChange({ ...effect, values })} />
+    </>
+  );
+}
+
+/**
+ * Content v5 spellcasting, with the v9 multiclass table (ADR-010). The slot table is one line per class level, each the
+ * slots of spell levels 1, 2, … separated by commas (an empty line: no slots at that level).
+ */
+function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasting' }>; onChange: (effect: Effect) => void }) {
+  const { effect, onChange } = props;
+  // A new caster's 20 empty rows start as an empty box, not 19 blank lines that typed rows would follow.
+  const [slotsText, setSlotsText] = useState(effect.slots.every((row) => row.length === 0) ? '' : effect.slots.map((row) => row.join(', ')).join('\n'));
+  const share = effect.multiclassCasterTable ? 'table' : (effect.multiclassCaster ?? 'none');
+  return (
+    <>
+      <label className="field">
+        Spellcasting ability
+        <select value={effect.ability} onChange={(e) => onChange({ ...effect, ability: e.target.value as typeof effect.ability })}>
+          {abilities.map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        Spell list key (spells name the lists they are on)
+        <input value={effect.spellList} onChange={(e) => onChange({ ...effect, spellList: e.target.value.trim() })} />
+      </label>
+      <label className="field">
+        Spells
+        <select value={effect.preparation ?? 'prepared'} onChange={(e) => onChange({ ...effect, preparation: e.target.value as 'prepared' | 'known' })}>
+          <option value="prepared">Prepared (the list can change)</option>
+          <option value="known">Known</option>
+        </select>
+      </label>
+      <label className="field">
+        Prepared or known spells (optional formula, such as max(1, INT.MOD + CLASS_LEVEL))
+        <input value={effect.spellsFormula ?? ''} onChange={(e) => onChange({ ...effect, spellsFormula: e.target.value || undefined })} />
+      </label>
+      <label className="field">
+        Spell slots: one line per class level 1 to 20, the slots of spell levels 1, 2, … separated by commas
+        <textarea
+          rows={6}
+          value={slotsText}
+          onChange={(e) => {
+            setSlotsText(e.target.value);
+            const lines = e.target.value.split('\n');
+            onChange({ ...effect, slots: Array.from({ length: Math.max(20, lines.length) }, (_, i) => parseList(lines[i] ?? '')) });
+          }}
+        />
+      </label>
+      <label className="field">
+        With other casters (the Multiclass Spellcaster table)
+        <select
+          value={share}
+          onChange={(e) => {
+            const value = e.target.value;
+            onChange({
+              ...effect,
+              multiclassCaster: value === 'full' || value === 'half' || value === 'third' ? value : undefined,
+              multiclassCasterTable: value === 'table' ? (effect.multiclassCasterTable ?? Array<number>(20).fill(0)) : undefined,
+            });
+          }}
+        >
+          <option value="none">Not combined (a manual step)</option>
+          <option value="full">All its levels count</option>
+          <option value="half">Half its levels count</option>
+          <option value="third">A third of its levels count</option>
+          <option value="table">Its own table of caster levels</option>
+        </select>
+      </label>
+      {effect.multiclassCasterTable && (
+        <NumberListField
+          label="Caster levels it adds at class levels 1 to 20, separated by commas"
+          values={effect.multiclassCasterTable}
+          onChange={(values) => onChange({ ...effect, multiclassCasterTable: values })}
+        />
+      )}
+    </>
+  );
+}
+
 function EffectEditor(props: {
   index: number;
   effect: Effect;
@@ -551,6 +708,10 @@ function EffectEditor(props: {
     roll: 'Roll or action',
     armor: 'Armor',
     choice: 'Choice',
+    hitDie: 'Hit die',
+    restriction: 'Prerequisite',
+    scale: 'Class column',
+    spellcasting: 'Spellcasting',
   };
   const legend = `Rule ${n}: ${names[effect.type]}`;
 
@@ -590,7 +751,7 @@ function EffectEditor(props: {
             <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
           <label className="field">
-            Uses (a number or a formula such as PB or CLASS_LEVEL)
+            Uses (a number or a formula such as PB, CLASS_LEVEL or SCALE.column1)
             <input value={effect.maximum} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
           </label>
         </>
@@ -696,6 +857,8 @@ function EffectEditor(props: {
           </label>
         </>
       )}
+      {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} />}
+      {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} onChange={onChange} />}
       {effect.type !== 'grant' && (
         <label className="field">
           Automation

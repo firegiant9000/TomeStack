@@ -249,6 +249,29 @@ function ResourceCard({ resource, act }: { resource: ResourceValue; act: Act }) 
   );
 }
 
+/** Content v9 (ADR-010): each class-table column at the character's level in that class, such as "Ink: 4". */
+export function ClassColumnsPanel({ view }: { view: CharacterView }) {
+  const scales = view.sheet.scales ?? [];
+  if (scales.length === 0) return null;
+  return (
+    <section aria-labelledby="class-columns-heading" className="play-panel">
+      <h3 id="class-columns-heading">Class columns</h3>
+      <ul className="resources">
+        {scales.map((s) => (
+          <li key={`${s.class.revisionId}-${s.scaleId}`} className="resource">
+            <span className="option-name">
+              {s.label}: {s.value}
+            </span>{' '}
+            <span className="hint">
+              {s.className} level {s.classLevel}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act }) {
   const resources = view.sheet.resources ?? [];
   if (resources.length === 0) return null;

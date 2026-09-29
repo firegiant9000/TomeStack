@@ -264,6 +264,18 @@ export interface CharacterSheet {
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
   toggles?: ToggleValue[];
+  /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
+  scales?: ScaleValue[];
+}
+
+export interface ScaleValue {
+  class: ContentReference;
+  className: string;
+  content: ContentReference;
+  scaleId: string;
+  label: string;
+  classLevel: number;
+  value: number;
 }
 
 export interface ResourceUse {
@@ -799,14 +811,36 @@ interface EffectBase {
   text?: string;
 }
 
+/** Content v5 (D04): only for the starting class, or only for a class taken later. */
+export type ClassEntry = 'startingClass' | 'multiclass';
+
+export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+
 export type Effect =
   | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string })
-  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number })
+  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number; onlyAs?: ClassEntry })
   | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
-  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number });
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
+  // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
+  | (EffectBase & { type: 'hitDie'; die: number })
+  | (EffectBase & { type: 'restriction'; field: string; minimum: number; multiclass?: boolean; group?: string })
+  | (EffectBase & { type: 'scale'; scaleId: string; label: string; values: number[] })
+  | (EffectBase & {
+      type: 'spellcasting';
+      ability: SpellcastingAbility;
+      preparation?: 'prepared' | 'known';
+      spellList: string;
+      slotKind?: 'spellSlots' | 'pactMagic';
+      slots: number[][];
+      cantrips?: number[];
+      spellsTable?: number[];
+      spellsFormula?: string;
+      multiclassCaster?: 'full' | 'half' | 'third';
+      multiclassCasterTable?: number[];
+    });
 
 export interface ChoiceExtension {
   contentId: string;
