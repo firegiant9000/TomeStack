@@ -171,12 +171,17 @@ public sealed partial class PackageService
     private SourceRecord Merged(SourceRecord imported, SourceRecord? local, PackageScope scope, Guid? attachmentId)
     {
         var library = scope == PackageScope.Library;
-        var derived = imported.ImportDerived == true || local?.ImportDerived == true || attachmentId is not null;
+        // A backup whose source had a PDF is evidence even when the PDF does not come back (an unsafe linked path).
+        var derived = imported.ImportDerived == true || local?.ImportDerived == true || attachmentId is not null
+            || (library && imported.AttachmentId is not null);
         var merged = imported with
         {
             AttachmentId = attachmentId,
             ImportDerived = derived ? true : null,
-            Origin = local?.Origin ?? (library ? imported.Origin : SourceOrigin.Received),
+            // A source already here keeps what this machine knows about it, an unknown (pre-v8) origin included: only a
+            // source that is new here is recorded as received (review fix: a re-import of your own backup must not relabel
+            // your homebrew).
+            Origin = local is not null ? local.Origin : library ? imported.Origin : SourceOrigin.Received,
             Redistributable = library || local is null ? imported.Redistributable : imported.Redistributable && local.Redistributable,
             ShareConfirmedAt = library ? imported.ShareConfirmedAt : local?.ShareConfirmedAt,
         };
@@ -190,8 +195,15 @@ public sealed partial class PackageService
     /// share: published revisions of its own sources, each marked shareable, none bundled, none import-derived. It may not
     /// add content to a source you made here, or new revisions to a content that belongs to another source here.
     /// </summary>
-    private void CheckSourcePack(ParsedPackage parsed, List<Diagnostic> errors)
+    private void CheckSourcePack(ParsedPackage parsed, List<Diagnostic> errors, List<Diagnostic> warnings)
     {
+        // Newest means last stored. A revision this machine already has keeps its place, so when the sender's newest is
+        // already here and the pack adds older ones, one of those becomes the newest here. Say so (review fix).
+        foreach (var content in parsed.Revisions.GroupBy(r => r.ContentId))
+        {
+            if (store.RevisionHash(content.Last().RevisionId) is not null && content.Any(r => store.RevisionHash(r.RevisionId) is null))
+                warnings.Add(new("pack.newest-changes", $"'{content.Last().Name}': the pack's newest revision is already here, and the pack adds older ones. Afterwards an older one counts as the newest: new picks and update offers use it. Characters keep the revision they pin.", content.Last().Reference));
+        }
         var packSources = parsed.Sources.ToDictionary(s => s.Id);
         var attested = (parsed.Manifest.Attestations ?? []).Where(a => a is not null).Select(a => a.SourceId).ToHashSet();
         foreach (var source in parsed.Sources)
@@ -204,12 +216,11 @@ public sealed partial class PackageService
                 errors.Add(new("pack.attestation-missing", $"The pack carries '{source.Title}' without its author's statement that it is their own work."));
             if (!parsed.Revisions.Any(r => r.Provenance.SourceId == source.Id))
                 errors.Add(new("pack.source-empty", $"The pack carries '{source.Title}' with no content."));
-            if (store.FindSource(source.Id) is { Origin: SourceOrigin.Local } own
-                && parsed.Revisions.Any(r => r.Provenance.SourceId == own.Id && store.RevisionHash(r.RevisionId) is null))
-            {
-                errors.Add(new("pack.own-source", $"The pack adds content to '{own.Title}', a source you made on this machine. Only you add content to your own sources."));
-            }
+            // Adding to a source you made here is refused for every package (package.own-source, BuildPreview).
         }
+        // A content's revisions belong to one source, inside the pack as against this machine (the export refuses it too).
+        foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
+            errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the pack's sources.", split.Last().Reference));
         foreach (var revision in parsed.Revisions)
         {
             if (revision.Status != RevisionStatus.Published)

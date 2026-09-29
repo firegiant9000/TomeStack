@@ -5,9 +5,12 @@ import type { AttachmentInfo, DetachPreview, SourcePackPreview, SourceRecord } f
 import { downloadBase64, readFileAsBase64 } from '../files';
 import { ImportPanel } from './ImportPanel';
 
-/** What the author confirms to mark a source as shareable (M6 slice 1); the service holds the same statement. */
+/**
+ * What the author confirms to mark a source as shareable (M6 slice 1). The same words as the service's
+ * `TomeStackApp.OwnWorkStatement`, which a source pack records as the attestation.
+ */
 const ownWorkStatement =
-  'This source is my own work. It holds no text, tables or rules copied from a book, PDF or other material I did not write.';
+  'The source is my own work, and it holds no text, tables or rules copied from a book, PDF or other material I did not write.';
 
 /** M6 slice 1: may this source go into a source pack? The service checks again at every export. */
 const inPack = (s: SourceRecord) => s.redistributable && !s.importDerived && s.origin !== 'received' && !!s.shareConfirmedAt;
@@ -17,6 +20,7 @@ function sharing(source: SourceRecord): string {
   if (source.importDerived) return 'Holds material imported from a PDF: never shared, even after the PDF is removed.';
   if (source.origin === 'received') return source.redistributable ? 'Received from someone else; may travel on in character shares.' : 'Received from someone else; not shared.';
   if (inPack(source)) return 'Marked as shareable: your own work, can go in a source pack.';
+  if (source.redistributable) return 'Shared in character shares, but not confirmed as your own work, so not in a source pack.';
   return 'Not shared.';
 }
 
@@ -313,7 +317,7 @@ export function SourcesPanel({ onError, onStatus }: Props) {
                     Mark as shareable…
                   </button>
                 )}
-                {source.editionVersion === 'homebrew' && source.redistributable && source.origin !== 'received' && (
+                {source.editionVersion === 'homebrew' && source.redistributable && (
                   <button type="button" onClick={() => setShareable(source, false)}>
                     Stop sharing
                   </button>

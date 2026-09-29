@@ -294,16 +294,17 @@ public class SourcePackTests
         var hero = sender.App.SaveCharacter(HeroPinning(feat.Reference));
         var backup = sender.App.ExportCharacters([hero.Character.Id]).Content;
 
-        // A local import-derived source with the same id: "use imported" replaces its title, never its flag.
+        // A local import-derived source with the same id (stored before v8, origin unknown; a source made here would refuse the
+        // new revision, package.own-source): "use imported" replaces its title, never its flag or origin.
         using var flagged = new TempApp();
-        flagged.App.Store.UpsertSource(Record("Test Notes (mine)", redistributable: false) with { ImportDerived = true, Origin = SourceOrigin.Local });
+        flagged.App.Store.UpsertSource(Record("Test Notes (mine)", redistributable: false) with { ImportDerived = true });
         flagged.App.ApplyImport(backup, new Dictionary<Guid, SourceChoice> { [sourceId] = SourceChoice.UseImported });
         var kept = flagged.App.Store.FindSource(sourceId)!;
-        Assert.Equal(("Test Notes (sender)", true, false, SourceOrigin.Local), (kept.Title, kept.ImportDerived, kept.Redistributable, kept.Origin));
+        Assert.Equal(("Test Notes (sender)", true, false, (SourceOrigin?)null), (kept.Title, kept.ImportDerived, kept.Redistributable, kept.Origin));
 
         // A local source that is not shared: an import never raises its redistributable flag.
         using var unshared = new TempApp();
-        unshared.App.Store.UpsertSource(Record("Test Notes (mine)", redistributable: false) with { Origin = SourceOrigin.Local });
+        unshared.App.Store.UpsertSource(Record("Test Notes (mine)", redistributable: false));
         unshared.App.ApplyImport(backup, new Dictionary<Guid, SourceChoice> { [sourceId] = SourceChoice.UseImported });
         Assert.False(unshared.App.Store.FindSource(sourceId)!.Redistributable);
 
@@ -351,6 +352,16 @@ public class SourcePackTests
         { "no-order", "package.invalid-json" },
         { "bundled", "pack.source-bundled" },
         { "not-a-share", "package.invalid-json" },
+        { "split-content", "pack.content-conflict" },
+    };
+
+    private static readonly Guid SecondSource = Guid.Parse("6e5b0000-0000-4000-8000-000000000002");
+    private static readonly Guid SplitRevision = Guid.Parse("6e5be000-0000-4000-8000-000000000002");
+
+    private static readonly SourceRecord SecondSourceRecord = new()
+    {
+        Id = SecondSource, Title = "Test Second Notes", Publisher = "Test author", RulesFamilies = [RulesFamilies.Srd51],
+        EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = true,
     };
 
     [Theory]
@@ -369,7 +380,8 @@ public class SourcePackTests
             "character" => AddEntry(pack, $"characters/{Guid.NewGuid():D}.json", "character", TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json")),
             "draft" => PackageEditor.Edit(pack, p => p == firstPath, r => r["status"] = "draft"),
             "not-shareable" => PackageEditor.Edit(pack, p => p == sourcePath, s => s["redistributable"] = false),
-            "import-derived" => PackageEditor.Edit(pack, p => p == sourcePath, s => { s["importDerived"] = true; s["redistributable"] = false; }),
+            "import-derived" => PackageEditor.Edit(pack, p => p == sourcePath, s => s["importDerived"] = true), // still "redistributable"
+            "split-content" => SplitContent(pack),
             "foreign-revision" => PackageEditor.Edit(pack, p => p == firstPath, r => r["provenance"]!["sourceId"] = srd.Id.ToString("D")),
             "no-attestation" => PackageEditor.Edit(pack, _ => false, _ => { }, m => m["attestations"] = new JsonArray()),
             "no-order" => PackageEditor.Edit(pack, _ => false, _ => { }, m => m.AsObject().Remove("revisionOrder")),
@@ -400,13 +412,116 @@ public class SourcePackTests
         // A pack that adds a revision to a source you made here is refused.
         var extra = Feat(source.Id, "Test Slipped In", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published };
         var added = AddEntry(pack, $"content/{extra.RevisionId:D}.json", "contentRevision", extra, order: extra.RevisionId);
-        Assert.Contains(origin.App.PreviewImport(added).Errors, e => e.Code == "pack.own-source");
+        Assert.Contains(origin.App.PreviewImport(added).Errors, e => e.Code == "package.own-source");
 
         // A pack whose content id already belongs to another source here is refused.
         using var destination = new TempApp();
         var other = destination.App.CreateHomebrewSource(new("Test Other Notes", [RulesFamilies.Srd51]));
         Publish(destination, Feat(other.Id, "Test Storm Step", FeatContent, Guid.NewGuid()));
         Assert.Contains(destination.App.PreviewImport(pack).Errors, e => e.Code == "pack.content-conflict");
+    }
+
+    [Fact]
+    public void A_source_from_before_v8_keeps_its_unknown_origin_when_your_own_backup_is_imported_again()
+    {
+        var sourceId = Guid.Parse("6e5c0000-0000-4000-8000-000000000001");
+        var feat = Feat(sourceId, "Test Old Step", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        using var temp = new TempApp();
+        // As stored before database v8: no origin, redistributable, and marked as shareable since.
+        temp.App.Store.UpsertSource(new SourceRecord
+        {
+            Id = sourceId, Title = "Test Old Notes", Publisher = "Personal homebrew", RulesFamilies = [RulesFamilies.Srd51],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = true, ShareConfirmedAt = TempApp.Now,
+        });
+        temp.App.Store.AddRevision(feat);
+        var hero = temp.App.SaveCharacter(HeroPinning(feat.Reference));
+        var backup = temp.App.ExportCharacters([hero.Character.Id]).Content;
+
+        temp.App.ApplyImport(backup);
+        var kept = temp.App.Store.FindSource(sourceId)!;
+        Assert.Equal(((SourceOrigin?)null, (DateTimeOffset?)TempApp.Now), (kept.Origin, kept.ShareConfirmedAt)); // not relabelled "received"
+        temp.App.ExportSourcePack([sourceId]);
+
+        // New content arriving for it from a package withdraws the share confirmation (it may not be yours).
+        var extra = Feat(sourceId, "Test Slipped In", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        var withExtra = AddEntry(backup, $"content/{extra.RevisionId:D}.json", "contentRevision", extra);
+        var preview = temp.App.PreviewImport(withExtra);
+        Assert.Contains(preview.Warnings, w => w.Code == "package.source-unconfirmed");
+        temp.App.ApplyImport(withExtra);
+        Assert.Null(temp.App.Store.FindSource(sourceId)!.ShareConfirmedAt);
+        Assert.Contains("pack.source-not-shareable", PackCodes(() => temp.App.ExportSourcePack([sourceId])));
+    }
+
+    [Fact]
+    public void No_package_adds_content_to_a_source_you_made_here_or_to_a_bundled_SRD_source()
+    {
+        using var temp = new TempApp();
+        var mine = Shared(temp);
+        var feat = Publish(temp, Feat(mine.Id, "Test Storm Step", Guid.NewGuid(), Guid.NewGuid()));
+        var hero = temp.App.SaveCharacter(HeroPinning(feat));
+        var backup = temp.App.ExportCharacters([hero.Character.Id]).Content;
+
+        // A character package (not only a source pack) that adds a revision to your own source is refused.
+        var intruder = Feat(mine.Id, "Test Intruder", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        var adding = AddEntry(backup, $"content/{intruder.RevisionId:D}.json", "contentRevision", intruder);
+        Assert.Contains(temp.App.PreviewImport(adding).Errors, e => e.Code == "package.own-source");
+
+        // New content under a bundled SRD source id is refused on import and when saving a draft.
+        var srd = temp.App.ListSources().First(s => s.EditionVersion != "homebrew");
+        var posing = Feat(srd.Id, "Test Posing As SRD", Guid.NewGuid(), Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        var smuggled = AddEntry(backup, $"content/{posing.RevisionId:D}.json", "contentRevision", posing);
+        using var clean = new TempApp();
+        Assert.Contains(clean.App.PreviewImport(smuggled).Errors, e => e.Code == "package.bundled-source-content");
+        Assert.Equal("content.source-not-editable", Code(() => temp.App.SaveDraft(posing with { Status = RevisionStatus.Draft })));
+    }
+
+    [Fact]
+    public void A_pack_whose_newest_revision_is_already_here_warns_that_an_older_one_becomes_the_newest()
+    {
+        using var origin = new TempApp();
+        var (source, _, second) = SharedWithTwoRevisions(origin);
+        var pack = origin.App.ExportSourcePack([source.Id]).Content;
+
+        using var destination = new TempApp();
+        // The receiver already has the newest revision (for example from a character share) and its received source.
+        destination.App.Store.UpsertSource(origin.App.Store.FindSource(source.Id)! with { Origin = SourceOrigin.Received, ShareConfirmedAt = null });
+        destination.App.Store.AddRevision(origin.App.Store.FindRevision(second)!);
+        Assert.Contains(destination.App.PreviewImport(pack).Warnings, w => w.Code == "pack.newest-changes");
+    }
+
+    [Fact]
+    public void A_full_restore_gives_a_bundled_SRD_source_its_PDF_back()
+    {
+        using var origin = new TempApp();
+        var srd = origin.App.ListSources().First(s => s.EditionVersion != "homebrew");
+        origin.App.AttachPdf(srd.Id, "srd.pdf", Pdf);
+        var file = Path.Combine(origin.Directory, "full.tomestack.zip");
+        using (var stream = File.Create(file))
+            origin.App.WriteLibraryBackup(stream);
+
+        using var destination = new TempApp();
+        destination.App.ApplyLibraryRestore(file);
+        Assert.Equal("available", destination.App.GetAttachment(srd.Id)?.Status);
+        Assert.Null(destination.App.Store.FindSource(srd.Id)!.ImportDerived);
+    }
+
+    [Fact]
+    public void Library_backup_sources_match_the_source_v2_schema()
+    {
+        using var temp = new TempApp();
+        var mine = Shared(temp, "Test Own Notes");
+        var book = temp.App.CreateHomebrewSource(new("Test Book Notes", [RulesFamilies.Srd51]));
+        temp.App.AttachPdf(book.Id, "book.pdf", Pdf);
+        using var buffer = new MemoryStream();
+        temp.App.WriteLibraryBackup(buffer);
+
+        using var zip = new ZipArchive(new MemoryStream(buffer.ToArray()), ZipArchiveMode.Read);
+        foreach (var id in new[] { mine.Id, book.Id })
+        {
+            using var record = JsonDocument.Parse(zip.GetEntry($"sources/{id:D}.json")!.Open());
+            Assert.True(record.RootElement.TryGetProperty("origin", out _));
+            Assert.Equal("", SchemaTests.Validate("source", record.RootElement));
+        }
     }
 
     [Fact]
@@ -501,6 +616,16 @@ public class SourcePackTests
         Assert.True(exported.RootElement.GetProperty("ok").GetBoolean());
         Assert.NotEmpty(exported.RootElement.GetProperty("result").GetProperty("base64").GetString()!);
         Assert.Contains("\"pack.sources-required\"", Send("package.sourcePackExport", new { }), StringComparison.Ordinal);
+    }
+
+    /// <summary>A second, attested source in the pack that holds a revision of the first source's content.</summary>
+    private static byte[] SplitContent(byte[] pack)
+    {
+        var withSource = AddEntry(pack, $"sources/{SecondSource:D}.json", "source", SecondSourceRecord);
+        var revision = Feat(SecondSource, "Test Storm Step", FeatContent, SplitRevision) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        var split = AddEntry(withSource, $"content/{SplitRevision:D}.json", "contentRevision", revision, order: SplitRevision);
+        return PackageEditor.Edit(split, _ => false, _ => { }, m => m["attestations"]!.AsArray().Add(
+            new JsonObject { ["sourceId"] = SecondSource.ToString("D"), ["statement"] = "x", ["confirmedAt"] = "2026-09-24T12:00:00+00:00" }));
     }
 
     private static Character HeroPinning(ContentReference feat)

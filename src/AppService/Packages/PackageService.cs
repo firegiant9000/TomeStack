@@ -239,11 +239,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             {
                 var local = store.FindSource(source.Id);
                 if (local is not null && _bundledSources.Contains(source.Id))
-                    continue; // M6 slice 1: bundled source records are this build's own
+                {
+                    // M6 slice 1: bundled source records are this build's own. A full restore still gives an SRD source the
+                    // backup's PDF when it has none here (its page links), as for any source (review fix).
+                    if (library && local.AttachmentId is null && source.AttachmentId is { } srdPdf && linked.Contains(srdPdf) && store.FindAttachment(srdPdf) is not null)
+                        store.UpsertSource(local with { AttachmentId = srdPdf });
+                    continue;
+                }
                 if (keepLocal.Contains(source.Id))
                 {
-                    // The local metadata stays, but the import-derived flag still only goes up (M6 slice 1).
-                    if (local is not null && source.ImportDerived == true && local.ImportDerived != true)
+                    // The local metadata stays, but the import-derived flag still only goes up (M6 slice 1): the file's flag,
+                    // or, in a backup, a PDF the source had there.
+                    if (local is not null && local.ImportDerived != true && (source.ImportDerived == true || (library && source.AttachmentId is not null)))
                         store.UpsertSource(local with { ImportDerived = true });
                     continue;
                 }
@@ -258,10 +265,23 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 }
                 store.UpsertSource(Merged(source, local, parsed.Manifest.Scope, attachmentId) with { PdfRef = local?.PdfRef });
             }
+            var unconfirm = new HashSet<Guid>();
             foreach (var revision in parsed.Revisions)
             {
-                if (store.AddRevision(revision)) added++;
+                if (store.AddRevision(revision))
+                {
+                    added++;
+                    if (!library)
+                        unconfirm.Add(revision.Provenance.SourceId);
+                }
                 else unchanged++;
+            }
+            // M6 slice 1: a source of unknown origin that received content from a package must be confirmed again before
+            // it is shared as the author's own work (package.source-unconfirmed).
+            foreach (var sourceId in unconfirm)
+            {
+                if (store.FindSource(sourceId) is { Origin: null, ShareConfirmedAt: not null } unknown && !_bundledSources.Contains(sourceId))
+                    store.UpsertSource(unknown with { ShareConfirmedAt = null });
             }
             foreach (var campaign in parsed.Campaigns)
             {
@@ -403,6 +423,19 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 : PackageItemAction.Conflict;
             if (action == PackageItemAction.Conflict)
                 errors.Add(new("package.revision-conflict", $"Revision {revision.RevisionId} of '{revision.Name}' differs from the installed revision with the same ID. Published revisions are immutable.", revision.Reference));
+            // M6 slice 1 (review fixes), every scope but a full restore (the user's own file):
+            if (action == PackageItemAction.Add && parsed.Manifest.Scope != PackageScope.Library)
+            {
+                // New content under a bundled SRD source would travel in every share with the SRD's CC-BY notice.
+                if (_bundledSources.Contains(revision.Provenance.SourceId))
+                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' claims to belong to a bundled SRD source, but is not part of it. It was not written by this TomeStack's SRD packs.", revision.Reference));
+                // Only you add content to a source you made here. A source of unknown origin (stored before v8) may be yours
+                // from another machine, so it is not refused, but it must be marked as shareable again (Commit).
+                else if (store.FindSource(revision.Provenance.SourceId) is { Origin: SourceOrigin.Local } own)
+                    errors.Add(new("package.own-source", $"'{revision.Name}' would be added to '{own.Title}', a source you made on this machine. Only you add content to your own sources.", revision.Reference));
+                else if (store.FindSource(revision.Provenance.SourceId) is { Origin: null, ShareConfirmedAt: not null } unknown)
+                    warnings.Add(new("package.source-unconfirmed", $"'{revision.Name}' is added to '{unknown.Title}'. Its share confirmation is withdrawn: mark it as shareable again once you have checked its content.", revision.Reference));
+            }
             if (revision.Status != RevisionStatus.Published)
                 warnings.Add(new("package.revision-draft", $"'{revision.Name}' is a draft and stays inactive after import.", revision.Reference));
             var families = string.Join(", ", revision.RulesFamilies);
@@ -507,7 +540,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
 
         if (parsed.Manifest.Scope == PackageScope.Source)
-            CheckSourcePack(parsed, errors);
+            CheckSourcePack(parsed, errors, warnings);
         if (parsed.Manifest.Scope is PackageScope.Library or PackageScope.Source)
             warnings.AddRange(LibraryWarnings(parsed));
         foreach (var attachment in parsed.Attachments)

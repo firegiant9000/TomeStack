@@ -507,7 +507,7 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   const confirm = await screen.findByRole('alertdialog', { name: 'Mark E2E Own Notes as shareable?' });
   const mark = within(confirm).getByRole<HTMLButtonElement>('button', { name: 'Mark as shareable' });
   expect(mark.disabled).toBe(true);
-  await user.click(within(confirm).getByRole('checkbox', { name: /This source is my own work/ }));
+  await user.click(within(confirm).getByRole('checkbox', { name: /The source is my own work/ }));
   await user.click(mark);
   await expectStatus(/E2E Own Notes is marked as shareable/);
   await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Own Notes' })).getByText(/Marked as shareable/)).toBeTruthy());
