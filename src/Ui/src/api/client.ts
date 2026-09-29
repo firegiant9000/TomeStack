@@ -49,8 +49,11 @@ import type {
   RestPreview,
   RollRecord,
   RollTarget,
+  RestorePreview,
+  RestoreResult,
   RulesFamilyId,
   SandboxRequest,
+  SnapshotSummary,
   SandboxView,
   SaveOutcome,
   SourceChoice,
@@ -144,6 +147,11 @@ export function createClient(transport: Transport) {
     archiveCharacter: (characterId: string) => call<CharacterSummary>('character.archive', { characterId, confirm: true }),
     unarchiveCharacter: (characterId: string) => call<CharacterSummary>('character.unarchive', { characterId }),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
+    /** M5 slice 8: snapshots, taken by hand; a restore needs the preview's one-use token and a confirmation. */
+    takeSnapshot: (characterId: string, label?: string) => call<SnapshotSummary>('character.snapshot', { characterId, label }),
+    snapshots: (characterId: string) => call<SnapshotSummary[]>('character.snapshots', { characterId }),
+    restorePreview: (characterId: string, snapshotId: string) => call<RestorePreview>('character.restorePreview', { characterId, snapshotId }),
+    restoreSnapshot: (token: string) => call<RestoreResult>('character.restoreSnapshot', { token, confirm: true }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */

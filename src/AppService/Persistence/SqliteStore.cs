@@ -108,6 +108,22 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         );
         CREATE INDEX ix_import_audit_job_id ON import_audit (job_id);
         """),
+        // v7 (M5 slice 8, BACKLOG B08): character snapshots, insert-only. The triggers refuse any change or removal, so a
+        // snapshot is a fixed record. Local only: no package, share or library backup includes them (owner decision
+        // LIVING_SPECS D14). Forward-only, with the usual copy of the v6 database first.
+        new("""
+        CREATE TABLE character_snapshots (
+            id TEXT PRIMARY KEY,
+            character_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        CREATE INDEX ix_character_snapshots_character_id ON character_snapshots (character_id);
+        CREATE TRIGGER character_snapshots_insert_only_update BEFORE UPDATE ON character_snapshots
+        BEGIN SELECT RAISE(ABORT, 'character snapshots are insert-only'); END;
+        CREATE TRIGGER character_snapshots_insert_only_delete BEFORE DELETE ON character_snapshots
+        BEGIN SELECT RAISE(ABORT, 'character snapshots are insert-only'); END;
+        """),
     ];
 
     private readonly SqliteConnection _connection;
@@ -233,6 +249,32 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<GapNote> ListAllGapNotes() => Query<GapNote>("SELECT json FROM gap_notes ORDER BY rowid;");
 
     public void DeleteGapNote(Guid id) => Execute("DELETE FROM gap_notes WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- character snapshots (M5 slice 8): insert-only, local only ----
+
+    /// <summary>Adds a snapshot. There is no update or delete: the table refuses both (migration v7).</summary>
+    public void AddSnapshot(CharacterSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        Execute(
+            "INSERT INTO character_snapshots (id, character_id, created_at, json) VALUES ($id, $character, $created, $json);",
+            ("$id", Key(snapshot.Id)),
+            ("$character", Key(snapshot.CharacterId)),
+            ("$created", snapshot.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)),
+            ("$json", Serialize(snapshot)));
+    }
+
+    public CharacterSnapshot? FindSnapshot(Guid id) =>
+        QuerySingle<CharacterSnapshot>("SELECT json FROM character_snapshots WHERE id = $id;", ("$id", Key(id)));
+
+    /// <summary>The most snapshots a list returns: the newest ones (snapshots are never removed, so the history only grows).</summary>
+    public const int MaxListedSnapshots = 100;
+
+    /// <summary>A character's newest snapshots, newest first (insertion order breaks ties), at most <see cref="MaxListedSnapshots"/>.</summary>
+    public IReadOnlyList<CharacterSnapshot> ListSnapshots(Guid characterId) =>
+        Query<CharacterSnapshot>(
+            $"SELECT json FROM character_snapshots WHERE character_id = $character ORDER BY rowid DESC LIMIT {MaxListedSnapshots};",
+            ("$character", Key(characterId)));
 
     // ---- imports (M4 D2, ADR-009 (d)): local only, never exported ----
 

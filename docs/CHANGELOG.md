@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Snapshots of a character (M5 slice 8):** "Take snapshot" on the sheet keeps a copy of the character to come back to. "Restore" first shows what would change. It then keeps a snapshot of the current state as well, so every restore can be undone. Snapshots stay on this computer: exports, shares and full backups leave them out. The data folder moves to database version 7; the previous version is backed up first (`tomestack.db.v6.bak`).
 - **Design feedback, if you want it (M5 slice 7):** a "Show design feedback" setting in the studio, off by default. When it is on, "Get design hints" compares a class or feature with the SRD classes. It points out more spell slots than any SRD full caster has, a multiclass share that gives more slots than the class's own table, a resource that grows faster than the proficiency bonus, and levels that give nothing. Hints never block publishing, never change a character and are never exported.
 - **Start homebrew from a template (M5 slice 6):** four starting points in the studio: a feature with limited uses, a stance you switch on and off, a subclass skeleton and a class skeleton. A template opens as an unsaved draft; nothing is saved or published until you do it. The skeletons leave empty feature slots at the usual levels, which you fill with your own published features. The studio can now also edit toggles, and bonuses that apply only while a toggle is on.
 - **See how your homebrew fits together (M5 slice 5):** "Show relationships" in the studio editor draws a tree. For a class it runs by level, through the features and choices it brings in, to the resources and to the rolls and rests that use them. It also shows what never applies, such as a grant inside granted content. It works fully by keyboard and with screen readers, and Enter on a rule jumps to it in the editor.
@@ -100,6 +101,7 @@
 
 ### Migration
 
+- **Database schema 7** (M5 slice 8) adds `character_snapshots`, insert-only (triggers refuse updates and deletes). The data folder is backed up first (`tomestack.db.v6.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages and library backups are unchanged: snapshots are never in them.
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).
