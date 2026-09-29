@@ -405,7 +405,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/), { timeout: 5000 });
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/));
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
@@ -439,8 +439,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(within(book).getByRole('button', { name: 'Attach PDF…' }));
   const pdf = new File([new TextEncoder().encode('%PDF-1.4\n% e2e\n%%EOF\n')], 'e2e-book.pdf', { type: 'application/pdf' });
   await user.upload(screen.getByLabelText('PDF file'), pdf);
-  // The upload hashes and copies the file, then reloads every source: allow more than the 1 s default under load.
-  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy(), { timeout: 5000 });
+  // The upload hashes and copies the file, then reloads every source (e2e/timeouts.setup.ts allows for that).
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy());
 
   // SPEC I-03: pages 3-4 become a draft reference entry (nothing is extracted; it stays inactive until published).
   const pages = within(screen.getByRole('listitem', { name: 'E2E Book' })).getByRole('group', { name: 'Import pages of E2E Book as reference' });
@@ -454,8 +454,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
-  // The button appears once the sheet has fetched the source's attachment: allow more than the 1 s default under load.
-  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' }, { timeout: 5000 });
+  // The button appears once the sheet has fetched the source's attachment (e2e/timeouts.setup.ts allows for that).
+  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' });
   await user.click(open);
   expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
 
