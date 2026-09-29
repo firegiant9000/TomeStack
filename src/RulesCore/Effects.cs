@@ -305,6 +305,37 @@ public sealed record ToggleEffect : Effect
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ToggleEffect>(unknown);
 }
 
+/// <summary>
+/// Content schema v9 (M5, ADR-010): a named per-level column of a class or subclass, such as "Ink: 2, 2, 3, 3, 4 …".
+/// Formulas read it as <c>SCALE.&lt;scaleId&gt;</c> at the level of the class the content belongs to, and the sheet shows
+/// it as a column of the class table. The values are literals, so a scale reads no field and cannot form a cycle.
+/// Typed only in a v9 (or newer) revision, like <see cref="ArmorEffect"/>.
+/// </summary>
+public sealed record ScaleEffect : Effect
+{
+    public const string TypeName = "scale";
+
+    public const int SchemaVersion = 9;
+
+    /// <summary>The longest scale id: <c>SCALE.</c> plus it must still fit comfortably in a 200-character formula.</summary>
+    public const int MaxScaleIdLength = 32;
+
+    public override string Type => TypeName;
+
+    /// <summary>A key, never a display name, set once like a resource id: <c>[a-z][A-Za-z0-9]{0,31}</c>.</summary>
+    public required string ScaleId { get; init; }
+
+    public required string Label { get; init; }
+
+    /// <summary>20 values (class levels 1–20), each 0 to <see cref="FormulaLimits.MaxLiteral"/>.</summary>
+    public required IReadOnlyList<int> Values { get; init; }
+
+    public static bool IsValidScaleId(string? id) =>
+        id is { Length: > 0 and <= MaxScaleIdLength } && char.IsAsciiLetterLower(id[0]) && id.All(char.IsAsciiLetterOrDigit);
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ScaleEffect>(unknown);
+}
+
 public enum WeaponCategory { Simple, Martial }
 
 public enum WeaponAttack { Melee, Ranged }
@@ -451,7 +482,35 @@ public sealed record SpellcastingEffect : Effect
     /// <summary>The content schema version that adds <see cref="MulticlassCaster"/>.</summary>
     public const int MulticlassSchemaVersion = 7;
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<SpellcastingEffect>(unknown);
+    /// <summary>
+    /// Content schema v9 (M5, ADR-010): the caster levels this class adds to the Multiclass Spellcaster table at each of
+    /// its levels (20 entries), for a share that <see cref="MulticlassCaster"/> cannot state, such as two thirds. Exact
+    /// numbers, with no rules-family rounding. Never together with <see cref="MulticlassCaster"/>; never on Pact Magic.
+    /// </summary>
+    public IReadOnlyList<int>? MulticlassCasterTable { get; init; }
+
+    /// <summary>The content schema version that adds <see cref="MulticlassCasterTable"/>.</summary>
+    public const int MulticlassTableSchemaVersion = 9;
+
+    internal const string MulticlassCasterTableProperty = "multiclassCasterTable";
+
+    /// <summary>
+    /// Typed from a v5 (or newer) revision. Below v9, a <c>multiclassCasterTable</c> key stays extension data, exactly as a
+    /// v8 build reads it: never typed (so it is not combined) and written back in the same place (so the hash is unchanged).
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        var typed = VersionedEffects.Typed<SpellcastingEffect>(unknown);
+        if (revisionSchemaVersion >= MulticlassTableSchemaVersion || typed is not SpellcastingEffect { MulticlassCasterTable: not null } caster)
+            return typed;
+        var extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in unknown.Raw.EnumerateObject())
+        {
+            if (property.Name == MulticlassCasterTableProperty || caster.Extensions?.ContainsKey(property.Name) == true)
+                extensions[property.Name] = property.Value.Clone(); // document order, as the v8 build keeps it
+        }
+        return caster with { MulticlassCasterTable = null, Extensions = extensions };
+    }
 }
 
 /// <summary>Whether a spell needs an attack roll.</summary>
@@ -500,14 +559,16 @@ public sealed record SpellEffect : Effect
 /// </summary>
 internal static class VersionedEffects
 {
-    public static readonly IReadOnlyDictionary<string, (int Version, Func<UnknownEffect, Effect> Type)> ByName =
-        new Dictionary<string, (int, Func<UnknownEffect, Effect>)>(StringComparer.Ordinal)
+    /// <summary>Each type's first version, and how to type it given the revision's own schema version.</summary>
+    public static readonly IReadOnlyDictionary<string, (int Version, Func<UnknownEffect, int, Effect> Type)> ByName =
+        new Dictionary<string, (int, Func<UnknownEffect, int, Effect>)>(StringComparer.Ordinal)
         {
-            [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, ArmorEffect.FromUnknown),
+            [ArmorEffect.TypeName] = (ArmorEffect.SchemaVersion, (u, _) => ArmorEffect.FromUnknown(u)),
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
-            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellEffect.FromUnknown),
-            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, WeaponEffect.FromUnknown),
-            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
+            [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => SpellEffect.FromUnknown(u)),
+            [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => WeaponEffect.FromUnknown(u)),
+            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, (u, _) => ToggleEffect.FromUnknown(u)),
+            [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
         };
 
     /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
@@ -576,7 +637,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

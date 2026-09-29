@@ -75,8 +75,10 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v8 (M2.2, the Fighter) adds the <c>attacks</c> and <c>criticalRange</c> fields as targets, armor proficiency grants
     /// (<c>armor.light</c> and so on), <c>armor.strength</c> and <c>armor.stealthDisadvantage</c>, <c>modifier.whileArmored</c>
     /// and <c>roll.bonus</c>. All are optional, so older revisions serialize unchanged.
+    /// v9 (M5, ADR-010) adds the <c>scale</c> effect, the formula identifier <c>SCALE.&lt;id&gt;</c> and
+    /// <c>spellcasting.multiclassCasterTable</c>, each read only in a v9 revision.
     /// </summary>
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     /// <summary>The content schema version that adds the M2.2 combat details listed above.</summary>
     public const int CombatDetailsSchemaVersion = 8;
@@ -133,6 +135,6 @@ public sealed record ContentRevision : IJsonOnDeserialized
         bool Typeable(Effect e) =>
             e is UnknownEffect unknown && VersionedEffects.ByName.TryGetValue(unknown.DeclaredType, out var typed) && _schemaVersion >= typed.Version;
         if (_effects.Any(Typeable))
-            _effects = [.. _effects.Select(e => Typeable(e) ? VersionedEffects.ByName[((UnknownEffect)e).DeclaredType].Type((UnknownEffect)e) : e)];
+            _effects = [.. _effects.Select(e => Typeable(e) ? VersionedEffects.ByName[((UnknownEffect)e).DeclaredType].Type((UnknownEffect)e, _schemaVersion) : e)];
     }
 }

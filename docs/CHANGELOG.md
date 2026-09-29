@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Classes with their own columns and caster shares (M5 slice 1a; ADR-010; rules engine only):** class content can now carry named per-level columns, such as "Ink: 2, 2, 3 …". Its formulas can read them, so a resource, a roll bonus, a skill or a prepared-spell count grows with the class. A caster can also say exactly how many caster levels it adds at each class level, for example two thirds, and it combines with the SRD casters on the Multiclass Spellcaster table. The homebrew studio cannot author these yet; that is the next slice. Tested on an original fixture class, not bundled content.
+
 - **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Exporting a character never passes on that it is archived, and importing a package never archives or unarchives one. Older versions of TomeStack show an archived character as active.
 
 - **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
@@ -89,6 +91,7 @@
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).
 - **SRD packs (M2.2):** new v8 revisions of the Paladin and Ranger (Extra Attack, then a further revision adding armor training) and of the Wizard and Sorcerer (`armor.none`), in both families (insert-only: a data folder opened by an earlier build of this branch still opens).
 - **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
+- **Content schema v9** (`docs/schemas/content-revision.v9.schema.json`, M5 slice 1a, ADR-010) adds the `scale` effect, `SCALE.<id>` in formulas and `spellcasting.multiclassCasterTable`. Each is read only in a v9 revision. No stored revision, hash or bundled pack changes, and there is no database migration. Content published without these features keeps its lower version, and older builds refuse v9 content (`content.schema-unsupported`, `package.schema-unsupported`).
 
 ## 0.3.0 (M2 delivered)
 

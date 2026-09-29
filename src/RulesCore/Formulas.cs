@@ -22,11 +22,24 @@ public static class FormulaIdentifiers
     public const string Level = "LEVEL";
     public const string ClassLevel = "CLASS_LEVEL";
 
+    /// <summary>
+    /// Content schema v9 (ADR-010): <c>SCALE.&lt;scaleId&gt;</c> reads a class's per-level column (<see cref="ScaleEffect"/>)
+    /// at the level of the class the content belongs to. It reads no field, so it adds no dependency edge.
+    /// </summary>
+    public const string ScalePrefix = "SCALE.";
+
     private static readonly Dictionary<string, string?> Fields = Build();
 
     public static IEnumerable<string> All => Fields.Keys;
 
     public static bool IsKnown(string identifier) => Fields.ContainsKey(identifier);
+
+    /// <summary>Whether <paramref name="identifier"/> is <c>SCALE.</c> followed by a valid scale id.</summary>
+    public static bool IsScale(string identifier) =>
+        identifier.StartsWith(ScalePrefix, StringComparison.Ordinal) && ScaleEffect.IsValidScaleId(identifier[ScalePrefix.Length..]);
+
+    /// <summary>The scale id of a <c>SCALE.</c> identifier.</summary>
+    public static string ScaleId(string identifier) => identifier[ScalePrefix.Length..];
 
     /// <summary>The field an identifier reads, or null for inputs that are not derived fields (LEVEL, CLASS_LEVEL).</summary>
     public static string? FieldFor(string identifier) => Fields.GetValueOrDefault(identifier);
@@ -88,7 +101,15 @@ public sealed class Formula
     /// <summary>Every identifier the formula reads. These become dependency edges (item 11).</summary>
     public IReadOnlySet<string> Identifiers { get; }
 
-    public static bool TryParse(string? source, out Formula? formula, out FormulaError? error)
+    public static bool TryParse(string? source, out Formula? formula, out FormulaError? error) =>
+        TryParse(source, allowScales: false, out formula, out error);
+
+    /// <param name="allowScales">
+    /// Whether <c>SCALE.&lt;id&gt;</c> is a known identifier: only in a content schema v9 (or newer) revision
+    /// (<see cref="ScaleEffect.SchemaVersion"/>). Below v9 it is <c>formula.unknown-identifier</c>, exactly as in builds
+    /// before v9, so one stored revision never means two things (ADR-010).
+    /// </param>
+    public static bool TryParse(string? source, bool allowScales, out Formula? formula, out FormulaError? error)
     {
         formula = null;
         if (string.IsNullOrWhiteSpace(source))
@@ -104,7 +125,7 @@ public sealed class Formula
         try
         {
             var tokens = Tokenize(source);
-            var parser = new Parser(tokens);
+            var parser = new Parser(tokens, allowScales);
             var root = parser.ParseFormula();
             formula = new Formula(source, root, parser.Identifiers);
             error = null;
@@ -235,7 +256,7 @@ public sealed class Formula
     private static string Printable(char c) => char.IsControl(c) || char.IsSurrogate(c) ? $"U+{(int)c:X4}" : c.ToString();
 
     /// <summary>Recursive descent. Recursion consumes a token per level, so it is bounded by the token limit and MaxDepth.</summary>
-    private sealed class Parser(List<Token> tokens)
+    private sealed class Parser(List<Token> tokens, bool allowScales)
     {
         private int _position;
         private int _depth;
@@ -299,7 +320,7 @@ public sealed class Formula
                 case TokenKind.Identifier when Peek(TokenKind.LeftParen, "("):
                     return ParseCall(token);
                 case TokenKind.Identifier:
-                    if (!FormulaIdentifiers.IsKnown(token.Text))
+                    if (!FormulaIdentifiers.IsKnown(token.Text) && !(allowScales && FormulaIdentifiers.IsScale(token.Text)))
                         throw new FormulaException("formula.unknown-identifier", $"'{Truncate(token.Text)}' is not a known value. Use one of: {string.Join(", ", FormulaIdentifiers.All)}.");
                     Identifiers.Add(token.Text);
                     return new IdentifierNode(token.Text);

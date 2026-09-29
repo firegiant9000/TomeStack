@@ -27,6 +27,24 @@ public static class ContentValidator
     /// </summary>
     public const int MinimumPublishedSchemaVersion = 3;
 
+    /// <summary>
+    /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
+    /// and never lower than the entry before it (a class never loses caster levels as it gains class levels).
+    /// </summary>
+    internal static string? MulticlassTableProblem(IReadOnlyList<int> table)
+    {
+        if (table.Count != Character.MaxLevel)
+            return $"it needs {Character.MaxLevel} entries (class levels 1 to {Character.MaxLevel}), not {table.Count}";
+        for (var i = 0; i < table.Count; i++)
+        {
+            if (table[i] < 0 || table[i] > i + 1)
+                return $"at class level {i + 1} it counts {table[i]} caster level(s); it must be 0 to {i + 1}";
+            if (i > 0 && table[i] < table[i - 1])
+                return $"at class level {i + 1} it counts {table[i]}, fewer than the {table[i - 1]} at level {i}";
+        }
+        return null;
+    }
+
     /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
     private static bool IsSpellField(string field) =>
         field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
@@ -72,6 +90,8 @@ public static class ContentValidator
         var needsV5 = false;
         var needsV6 = false;
         var needsV8 = false;
+        var needsV9 = false;
+        var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
         {
@@ -241,10 +261,27 @@ public static class ContentValidator
                         Error("validate.spellcasting", $"Spellcasting '{spellcasting.Id}': {problem}.", spellcasting.Id);
                     if (spellcasting.SpellsFormula is { } spellsFormula)
                         CheckFormula(spellsFormula, spellcasting.Id, "spellsFormula");
-                    if (spellcasting.MulticlassCaster is not null && spellcasting.SlotKind == SpellSlotKind.PactMagic)
-                        Error("validate.spellcasting-multiclass-pact", $"Spellcasting '{spellcasting.Id}': Pact Magic slots are never combined with other casters' slots, so it takes no multiclassCaster.", spellcasting.Id);
+                    if ((spellcasting.MulticlassCaster is not null || spellcasting.MulticlassCasterTable is not null) && spellcasting.SlotKind == SpellSlotKind.PactMagic)
+                        Error("validate.spellcasting-multiclass-pact", $"Spellcasting '{spellcasting.Id}': Pact Magic slots are never combined with other casters' slots, so it takes no multiclassCaster or multiclassCasterTable.", spellcasting.Id);
+                    if (spellcasting.MulticlassCasterTable is { } casterTable)
+                    {
+                        needsV9 = true;
+                        if (spellcasting.MulticlassCaster is not null)
+                            Error("validate.spellcasting-multiclass-both", $"Spellcasting '{spellcasting.Id}' has both multiclassCaster and multiclassCasterTable; use one.", spellcasting.Id);
+                        if (MulticlassTableProblem(casterTable) is { } tableProblem)
+                            Error("validate.spellcasting-multiclass-table", $"Spellcasting '{spellcasting.Id}' multiclassCasterTable: {tableProblem}.", spellcasting.Id);
+                    }
                     if (revision.Kind is not (ContentKind.Class or ContentKind.Subclass or ContentKind.Feature))
                         Warn("validate.spellcasting-kind", $"Spellcasting is calculated only inside a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", spellcasting.Id);
+                    break;
+                case ScaleEffect scale:
+                    needsV9 = true;
+                    if (!ScaleEffect.IsValidScaleId(scale.ScaleId) || string.IsNullOrWhiteSpace(scale.Label))
+                        Error("validate.scale-incomplete", $"Scale '{scale.Id}' needs a label and a scaleId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits.", scale.Id);
+                    if (scale.Values.Count != Character.MaxLevel || scale.Values.Any(v => v is < 0 or > FormulaLimits.MaxLiteral))
+                        Error("validate.scale-values", $"Scale '{scale.Id}' needs {Character.MaxLevel} values (class levels 1 to {Character.MaxLevel}), each 0 to {FormulaLimits.MaxLiteral}.", scale.Id);
+                    if (revision.Kind is not (ContentKind.Class or ContentKind.Subclass))
+                        Error("validate.scale-kind", $"A scale is a column of a class table, so it belongs on a class or subclass; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", scale.Id);
                     break;
                 case SpellEffect spell:
                     if (spell.Level is < 0 or > SpellcastingEffect.MaxSpellLevel)
@@ -272,6 +309,10 @@ public static class ContentValidator
             Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
         if (needsV8 && revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
             Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
+        needsV9 |= usedScales.Count > 0;
+        if (needsV9 && revision.SchemaVersion < ScaleEffect.SchemaVersion)
+            Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
+        CheckScales();
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
@@ -310,7 +351,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV8 ? ContentRevision.CombatDetailsSchemaVersion
+            needsV9 ? ScaleEffect.SchemaVersion
+            : needsV8 ? ContentRevision.CombatDetailsSchemaVersion
             : revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) ? SpellcastingEffect.MulticlassSchemaVersion
             : needsV6 ? ToggleEffect.SchemaVersion
             : needsV5 || spellTargets || revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) ? SpellcastingEffect.SchemaVersion
@@ -318,10 +360,51 @@ public static class ContentValidator
             : MinimumPublishedSchemaVersion;
         return new ValidationReport(reference, errors, warnings) { RequiredSchemaVersion = Math.Max(required, MinimumPublishedSchemaVersion) };
 
+        // Parsed with scales allowed, so a SCALE in a revision that declares an older version is named as needing v9
+        // (validate.requires-v9) rather than as an unknown value. Every formula field goes through here: modifier value,
+        // resource maximum, recovery amount, roll cost and bonus, and spellsFormula (ADR-010).
         void CheckFormula(string source, string effectId, string what)
         {
-            if (!Formula.TryParse(source, out _, out var error))
+            if (!Formula.TryParse(source, allowScales: true, out var formula, out var error))
                 Error("validate.formula-invalid", $"Effect '{effectId}' {what} '{source}': {error!.Message} ({error.Code})", effectId);
+            else
+                usedScales.UnionWith(formula!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+        }
+
+        // Scale ids are unique within a class and its subclasses. The catalog check is best-effort (a class revision
+        // published later can still collide); the calculation reports scale.duplicate as the backstop.
+        void CheckScales()
+        {
+            var own = revision.Effects.OfType<ScaleEffect>().ToList();
+            foreach (var group in own.GroupBy(s => s.ScaleId).Where(g => g.Count() > 1))
+                Error("validate.scale-duplicate", $"Scale id '{group.Key}' is used more than once.", group.First().Id);
+            var related = new List<ContentRevision>();
+            if (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent)
+                related.AddRange(catalog.RevisionsOf(parent.ContentId).Concat(local.Values.Where(r => r.ContentId == parent.ContentId)));
+            if (revision.Kind == ContentKind.Class)
+            {
+                foreach (var choice in revision.Effects.OfType<ChoiceEffect>())
+                {
+                    related.AddRange(catalog.ChoiceExtensions(revision.ContentId, choice.ChoiceId).Where(r => r.Kind == ContentKind.Subclass));
+                    related.AddRange(choice.Options.Select(o => local.GetValueOrDefault(o) ?? catalog.FindRevision(o)).OfType<ContentRevision>().Where(r => r.Kind == ContentKind.Subclass));
+                }
+            }
+            var relatedScales = related.Where(r => r.ContentId != revision.ContentId).SelectMany(r => r.Effects.OfType<ScaleEffect>().Select(s => (s.ScaleId, r.Name))).ToList();
+            foreach (var scale in own)
+            {
+                if (relatedScales.FirstOrDefault(r => r.ScaleId == scale.ScaleId) is { Name: { } other })
+                    Error("validate.scale-duplicate", $"Scale id '{scale.ScaleId}' is also defined by '{other}'; a class and its subclasses share one set of scale ids.", scale.Id);
+            }
+            // SCALE ids the revision reads that neither it nor its class defines. Only a class, or a subclass that names its
+            // class (extendsChoice), knows its class here; a feature's class, or that of a subclass a class lists as an
+            // option, is known only when a character has it.
+            if (revision.Kind == ContentKind.Class || (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is not null))
+            {
+                // A subclass reads its own and its class's scales; a class reads only its own (a subclass may be absent).
+                var defined = own.Select(s => s.ScaleId).Concat(revision.Kind == ContentKind.Subclass ? relatedScales.Select(r => r.ScaleId) : []).ToHashSet(StringComparer.Ordinal);
+                foreach (var missing in usedScales.Where(u => !defined.Contains(u)).Order(StringComparer.Ordinal))
+                    Warn("validate.scale-unknown", $"A formula reads SCALE.{missing}, which neither this revision nor its class defines; it is unavailable until one does.");
+            }
         }
 
         void CheckLevel(int? level, string effectId)
