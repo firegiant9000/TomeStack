@@ -103,6 +103,7 @@ public sealed partial class TomeStackApp : IDisposable
             app._bundledRevisions = bundled; // the design-feedback baseline (M5 slice 7; review fix: by revision id, not source)
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             app._packages.SetBundledSources(app._bundledSources); // M6 slice 1: never replaced by a package, never in a source pack
+            app._packages.SetCampaignImpact(app.CampaignImpactOf); // M6 slice 2: what "use the imported campaign" would disallow
             if (devFixtures)
             {
                 app.Seed("TomeStack.FixturePack.json");
@@ -327,10 +328,17 @@ public sealed partial class TomeStackApp : IDisposable
     /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
     public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
 
+    /// <summary>M6 slice 2: what a campaign pack of this campaign would hold (<c>package.campaignPackPreview</c>). Writes nothing.</summary>
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId) => _packages.PreviewCampaignPack(campaignId);
+
+    /// <summary>M6 slice 2: a campaign pack: the profile and the shareable content of its allowed sources (<c>package.campaignPackExport</c>).</summary>
+    public ExportResult ExportCampaignPack(Guid campaignId) => _packages.ExportCampaignPack(campaignId);
+
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
-    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
-        _packages.Apply(package, sourceChoices);
+    /// <param name="campaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null) =>
+        _packages.Apply(package, sourceChoices, campaignChoices);
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
     public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();

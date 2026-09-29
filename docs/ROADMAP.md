@@ -209,6 +209,11 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
      - Today every allowed source must be installed (`campaign.source-missing`, [features/campaigns.md](features/campaigns.md)). An allowed source that the pack omits is therefore imported as a **pending reference**, with a warning, until the source is installed.
      - `useImported` replaces `allowedSources`. The preview lists the local characters whose content would become "not allowed".
      - The pre-import backup (package-format rule 10) also covers a campaign that is replaced.
+   - **As built (2026-09-29; fixture-verified; not merged; format v8 provisional, and the scope and the campaign's `pendingSources` wait for the owner's approval):** see [features/package-format.md](features/package-format.md#campaign-packs-m6-slice-2-b13) and [features/campaigns.md](features/campaigns.md).
+     - The slice 1 guard decides what a campaign pack carries: only sources that would pass a source-pack export. Received, import-derived, unmarked or empty sources are named in `omitted[]` with the reason, not refused, because the profile is what is being shared.
+     - A pending reference is the source id kept in `allowedSources` (so older builds allow it once installed) plus an informational `pendingSources` entry on the campaign (title, publisher, license). The field changes how no existing field is read, so campaign stays v1 (schemas/README "Versioning rules").
+     - "Use the imported one" is a per-campaign `campaignChoices` choice, like `sourceChoices`; the preview's `campaignImpact` lists the characters that would newly get "not allowed" content.
+     - Rule 10 now also covers a character package that replaces a campaign (a database copy), which it did not before.
 3. **The extension API ([ADR-011](decisions/ADR-011-extension-api.md)), after the owner picks the sandbox model.** It has versioned, permissioned data, import and export hooks. One external sample extension is kept in `examples/extensions/` and passes the M6 gate. Nothing that runs third-party code is built without that decision.
 4. **B20 export adapters ([ADR-012](decisions/ADR-012-export-adapters.md)), after the owner picks the targets.** They need only the computed sheet, through the sheet export model v1 defined in ADR-011. So they are independent of M5, and can start once the targets are chosen **and** that model is accepted (its purpose filter and `notices[]`), even if ADR-011's execution model is still open. Each adapter has a validator.
 5. **Author documentation** (`docs/authoring/`): how to write a class, a content pack and an extension. It is tested by following it in the e2e fixtures.
@@ -218,10 +223,10 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
 
 - ~~snapshots in library backups (M5 slice 8)~~ (not taken: the owner kept snapshots out of backups, D14);
 - the source scope, and the source fields in library backups (M6 slice 1; one number for both, since they ship together; it would be v7 if it merged next, LIVING_SPECS 2026-09-29);
-- the campaign scope (M6 slice 2);
+- the campaign scope (M6 slice 2; it would be v8 if it merged after slice 1, LIVING_SPECS 2026-09-29);
 - extensions in library backups (ADR-011).
 
-They land in no fixed order, and today there is one `CurrentFormatVersion` (6). So no plan text fixes a number. Each slice takes the **next** number when it merges, records it in the version table of [features/package-format.md](features/package-format.md), and adds its manifest schema. Every new shape gets its own number, and a number is never reused.
+They land in no fixed order, and on `main` there is one `CurrentFormatVersion` (6; the unmerged M6 branches use 7 and 8 provisionally). So no plan text fixes a number. Each slice takes the **next** number when it merges, records it in the version table of [features/package-format.md](features/package-format.md), and adds its manifest schema. Every new shape gets its own number, and a number is never reused.
 
 **Optional after the M6 gate:** B09 command palette, B11 tags, folders and collections.
 

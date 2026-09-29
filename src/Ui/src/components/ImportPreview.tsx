@@ -2,12 +2,17 @@ import { useState } from 'react';
 import { client } from '../api/client';
 import type { ImportResult, PackageItem, PackagePreview, SourceChoice } from '../api/types';
 
-/** A source whose metadata differs from the local record: show the diff and require an explicit choice. */
+/**
+ * A source whose metadata differs from the local record, or (M6 slice 2) a campaign pack's campaign that differs from
+ * yours: show the diff and require an explicit choice.
+ */
 export function SourceDecision({ item, choice, onChoose }: { item: PackageItem; choice?: SourceChoice; onChoose: (choice: SourceChoice) => void }) {
-  const name = `source-choice-${item.id}`;
+  const name = `${item.kind}-choice-${item.id}`;
   return (
     <fieldset className="source-decision">
-      <legend>“{item.name}” differs from your local record</legend>
+      <legend>
+        {item.kind === 'campaign' ? `Campaign “${item.name}” differs from yours` : `“${item.name}” differs from your local record`}
+      </legend>
       <table>
         <caption className="visually-hidden">Differences in {item.name}</caption>
         <thead>
@@ -52,13 +57,18 @@ interface Props {
 export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, onError }: Props) {
   const [applying, setApplying] = useState(false);
   const [choices, setChoices] = useState<Record<string, SourceChoice>>({});
+  const [campaignChoices, setCampaignChoices] = useState<Record<string, SourceChoice>>({});
   const decisions = preview.items.filter((item) => item.kind === 'source' && item.changes && item.changes.length > 0);
-  const undecided = decisions.filter((item) => !choices[item.id]).length;
+  // M6 slice 2: a campaign pack's campaign that differs from yours needs the same explicit choice.
+  const campaignDecisions = preview.items.filter((item) => item.kind === 'campaign' && item.changes && item.changes.length > 0);
+  const undecided =
+    decisions.filter((item) => !choices[item.id]).length + campaignDecisions.filter((item) => !campaignChoices[item.id]).length;
+  const impact = preview.campaignImpact ?? [];
 
   async function apply() {
     setApplying(true);
     try {
-      onApplied(await client.applyImport(base64, choices));
+      onApplied(await client.applyImport(base64, choices, campaignChoices));
     } catch (error) {
       onError(error);
     } finally {
@@ -132,6 +142,13 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
               library is saved in the backups folder before anything changes.
             </p>
           )}
+          {preview.manifest.scope === 'campaign' && (
+            <p>
+              This is a campaign pack: a campaign profile and the homebrew its sender marked as their own work. It carries no
+              characters. Sources that were not the sender&apos;s to share are only named: the campaign waits for them until
+              you install them yourself. A copy of your library is saved in the backups folder before anything changes.
+            </p>
+          )}
         </>
       )}
 
@@ -144,9 +161,34 @@ export function ImportPreview({ fileName, base64, preview, onApplied, onCancel, 
         />
       ))}
 
+      {campaignDecisions.map((item) => (
+        <SourceDecision
+          key={item.id}
+          item={item}
+          choice={campaignChoices[item.id]}
+          onChoose={(choice) => setCampaignChoices((current) => ({ ...current, [item.id]: choice }))}
+        />
+      ))}
+
+      {impact.length > 0 && (
+        <section aria-labelledby="campaign-impact-heading">
+          <h3 id="campaign-impact-heading">Characters affected if you use the imported campaign</h3>
+          <ul>
+            {impact.map((i) => (
+              <li key={`${i.campaignId}-${i.characterId}`}>
+                {i.characterName}:{' '}
+                {i.notAllowed.length > 0 && <>no longer allowed: {i.notAllowed.join(', ')}.</>}
+                {i.rulesFamily && <> The campaign would play {i.rulesFamily}.</>}
+              </li>
+            ))}
+          </ul>
+          <p className="hint">Nothing changes on these characters; their sheets show the content as not allowed until you decide.</p>
+        </section>
+      )}
+
       {undecided > 0 && (
         <p className="hint" id="import-undecided">
-          Choose a version for {undecided === 1 ? 'the source above' : `each of the ${undecided} sources above`} before importing.
+          Choose a version for {undecided === 1 ? 'the item above' : `each of the ${undecided} items above`} before importing.
         </p>
       )}
 

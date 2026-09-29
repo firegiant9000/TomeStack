@@ -42,12 +42,7 @@ public sealed partial class PackageService
             files[$"sources/{source.Id:D}.json"] = ("source", Json(ForSourcePack(source)));
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
-
-        // The reader's limits, checked before anything is written: a pack nobody can import is worse than none.
-        if (files.Count + 1 > MaxEntries || files.Values.Any(f => f.Bytes.LongLength > MaxEntryBytes) || files.Values.Sum(f => f.Bytes.LongLength) > MaxTotalBytes - (1024 * 1024))
-        {
-            throw new PackageException([new("pack.too-large", $"These sources are larger than a package can hold ({MaxEntries:N0} entries, {MaxEntryBytes / (1024 * 1024)} MB per revision, {MaxTotalBytes / (1024 * 1024)} MB in all). Nothing was written. Share fewer sources at a time.")]);
-        }
+        CheckPackLimits(files, "Share fewer sources at a time.");
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -63,15 +58,29 @@ public sealed partial class PackageService
             Attestations = [.. plan.Sources.Select(s => new SourceAttestation(s.Id, TomeStackApp.OwnWorkStatement, s.ShareConfirmedAt!.Value))],
             AttachmentPolicy = SourceAttachmentPolicy,
         };
+        return new ExportResult(plan.FileName, Zip(manifest, files), manifest);
+    }
 
+    /// <summary>The reader's limits, checked before anything is written: a pack nobody can import is worse than none.</summary>
+    private static void CheckPackLimits(SortedDictionary<string, (string Kind, byte[] Bytes)> files, string advice)
+    {
+        if (files.Count + 1 > MaxEntries || files.Values.Any(f => f.Bytes.LongLength > MaxEntryBytes) || files.Values.Sum(f => f.Bytes.LongLength) > MaxTotalBytes - (1024 * 1024))
+        {
+            throw new PackageException([new("pack.too-large", $"These sources are larger than a package can hold ({MaxEntries:N0} entries, {MaxEntryBytes / (1024 * 1024)} MB per revision, {MaxTotalBytes / (1024 * 1024)} MB in all). Nothing was written. {advice}")]);
+        }
+    }
+
+    /// <summary>The package's bytes: the manifest first, then the entries in path order, all stamped with its creation time.</summary>
+    private static byte[] Zip(PackageManifest manifest, SortedDictionary<string, (string Kind, byte[] Bytes)> files)
+    {
         using var buffer = new MemoryStream();
         using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
         {
-            WriteEntry(zip, ManifestPath, Json(manifest), createdAt);
+            WriteEntry(zip, ManifestPath, Json(manifest), manifest.CreatedAt);
             foreach (var (path, file) in files)
-                WriteEntry(zip, path, file.Bytes, createdAt);
+                WriteEntry(zip, path, file.Bytes, manifest.CreatedAt);
         }
-        return new ExportResult(plan.FileName, buffer.ToArray(), manifest);
+        return buffer.ToArray();
     }
 
     /// <summary>
@@ -90,16 +99,7 @@ public sealed partial class PackageService
         foreach (var id in ids)
         {
             var source = store.FindSource(id);
-            var problem = source switch
-            {
-                null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
-                _ when _bundledSources.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
-                { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds material imported from a PDF, so it is never shared."),
-                { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
-                { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
-                _ => null,
-            };
-            if (problem is not null)
+            if (ShareProblem(id, source) is { } problem)
                 errors.Add(problem);
             else
                 sources.Add(source!);
@@ -107,19 +107,32 @@ public sealed partial class PackageService
         if (errors.Count > 0)
             throw new PackageException(errors);
 
+        var (revisions, drafts, warnings) = PackContent(sources, errors);
+        foreach (var empty in sources.Where(s => !revisions.Any(r => r.Provenance.SourceId == s.Id)))
+            errors.Add(new("pack.source-empty", $"'{empty.Title}' has no published content to share yet."));
+        if (errors.Count > 0)
+            throw new PackageException(errors);
+
+        var name = sources.Count == 1 ? SafeFileName(sources[0].Title) : "homebrew-sources";
+        return new SourcePackPlan(sources, revisions, drafts, warnings, $"{name}-source-pack.tomestack.zip");
+    }
+
+    /// <summary>
+    /// What a pack of <paramref name="sources"/> carries (source and campaign packs): every published revision of each, in
+    /// stored order. A content that another source also holds is added to <paramref name="errors"/>; content they refer to
+    /// in a source the pack does not carry (and that is not bundled) is a warning.
+    /// </summary>
+    private (List<ContentRevision> Revisions, int Drafts, List<Diagnostic> Warnings) PackContent(IReadOnlyCollection<SourceRecord> sources, List<Diagnostic> errors)
+    {
         var inPack = sources.Select(s => s.Id).ToHashSet();
         var all = store.ListRevisionsInOrder();
         var revisions = all.Where(r => inPack.Contains(r.Provenance.SourceId) && r.Status == RevisionStatus.Published).ToList();
         var drafts = all.Count(r => inPack.Contains(r.Provenance.SourceId) && r.Status != RevisionStatus.Published);
-        foreach (var empty in sources.Where(s => !revisions.Any(r => r.Provenance.SourceId == s.Id)))
-            errors.Add(new("pack.source-empty", $"'{empty.Title}' has no published content to share yet."));
         // A content's revisions belong to one source. One that another source also holds cannot leave with this one, or
         // the receiver would get part of its history under the wrong license.
         var contentIds = revisions.Select(r => r.ContentId).ToHashSet();
         foreach (var spanning in all.Where(r => contentIds.Contains(r.ContentId) && !inPack.Contains(r.Provenance.SourceId)).DistinctBy(r => r.ContentId))
             errors.Add(new("pack.content-spans-sources", $"'{spanning.Name}' has revisions in another source too, so it cannot be shared from this one.", spanning.Reference));
-        if (errors.Count > 0)
-            throw new PackageException(errors);
 
         var warnings = new List<Diagnostic>();
         var bySource = all.GroupBy(r => r.ContentId).ToDictionary(g => g.Key, g => g.Last().Provenance.SourceId);
@@ -133,10 +146,22 @@ public sealed partial class PackageService
             var title = store.FindSource(sourceId)?.Title ?? sourceId.ToString();
             warnings.Add(new("pack.reference-outside", $"Content in this pack refers to content from '{title}', which the pack does not carry. Whoever imports it needs that source too."));
         }
-
-        var name = sources.Count == 1 ? SafeFileName(sources[0].Title) : "homebrew-sources";
-        return new SourcePackPlan(sources, revisions, drafts, warnings, $"{name}-source-pack.tomestack.zip");
+        return (revisions, drafts, warnings);
     }
+
+    /// <summary>
+    /// The guard (D14 item 6), shared by source packs and campaign packs (M6 slice 2): why a source may not leave in a pack,
+    /// or null when it is homebrew made on this machine, not import-derived, and marked as shareable by its author.
+    /// </summary>
+    private Diagnostic? ShareProblem(Guid id, SourceRecord? source) => source switch
+    {
+        null => new Diagnostic("pack.source-missing", $"Source {id} is not installed."),
+        _ when _bundledSources.Contains(id) => new Diagnostic("pack.source-bundled", $"'{source.Title}' is bundled with TomeStack; everyone has it already, so a pack never carries it."),
+        { ImportDerived: true } => new Diagnostic("pack.source-import-derived", $"'{source.Title}' holds material imported from a PDF, so it is never shared."),
+        { Origin: SourceOrigin.Received } => new Diagnostic("pack.source-received", $"'{source.Title}' came from someone else's package, so you cannot share it as your own work."),
+        { Redistributable: false } or { ShareConfirmedAt: null } => new Diagnostic("pack.source-not-shareable", $"'{source.Title}' is not marked as shareable. Mark it as shareable (you confirm it is your own work) first."),
+        _ => null,
+    };
 
     /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's resource.</summary>
     private static IEnumerable<Guid> References(ContentRevision revision) =>

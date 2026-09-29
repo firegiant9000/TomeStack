@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService;
@@ -26,6 +27,15 @@ public sealed record Campaign
     /// <summary>Free text: house rules and notes. Not interpreted.</summary>
     public string? HouseRules { get; init; }
 
+    /// <summary>
+    /// M6 slice 2: allowed sources that are not installed here yet, because a campaign pack left them out (they were not
+    /// the sender's to share). Each is still in <see cref="AllowedSources"/>, so the campaign allows it as soon as it is
+    /// installed, in this build and in older ones (which keep this field as an unknown property). This only says what to
+    /// get: the title, publisher and license the sender's pack named. Absent when there is none, so a campaign without
+    /// one is written exactly as before.
+    /// </summary>
+    public IReadOnlyList<PendingSource>? PendingSources { get; init; }
+
     public DateTimeOffset UpdatedAt { get; init; }
 
     [JsonExtensionData]
@@ -44,9 +54,28 @@ public sealed record Campaign
             problems.Add(new("campaign.sources-invalid", "Each allowed source is listed once."));
         if (HouseRules is { Length: > MaxHouseRulesLength })
             problems.Add(new("campaign.house-rules-too-long", $"House rules are at most {MaxHouseRulesLength} characters."));
+        if (PendingSources is { } pending)
+        {
+            if (pending.Any(p => p is null || p.Title is null || p.Publisher is null || p.License is null)
+                || pending.Select(p => p.SourceId).Distinct().Count() != pending.Count
+                || (AllowedSources is not null && pending.Any(p => !AllowedSources.Contains(p.SourceId))))
+            {
+                problems.Add(new("campaign.pending-invalid", "Each source waiting to be installed is listed once, is one of the allowed sources, and has a title, publisher and license."));
+            }
+            else if (pending.Any(p => p.Title.Length is 0 or > MaxNameLength || p.Publisher.Length > MaxNameLength || p.License.Length > MaxNameLength))
+            {
+                problems.Add(new("campaign.pending-invalid", $"A source waiting to be installed has a title of 1 to {MaxNameLength} characters, and a publisher and license of at most {MaxNameLength}."));
+            }
+        }
         return problems;
     }
 }
+
+/// <summary>
+/// M6 slice 2: an allowed source a campaign pack left out, and that is not installed here: what the sender's pack said it
+/// is, so you know what to get. It stops being pending once a source with that id is installed.
+/// </summary>
+public sealed record PendingSource(Guid SourceId, string Title, string Publisher, string License);
 
 /// <summary>How a character stands with its campaign: shown with the sheet, never part of the calculation.</summary>
 public sealed record CampaignStatus(Guid CampaignId, string Name, string RulesFamily, IReadOnlyList<Diagnostic> Warnings);
@@ -57,22 +86,33 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// <c>campaign.save</c>: creates (id empty) or updates a campaign. Every allowed source must be installed
-    /// (<c>campaign.source-missing</c>). Characters in it are not changed; their warnings follow the new profile.
+    /// (<c>campaign.source-missing</c>), except one the stored campaign already has as pending (M6 slice 2: a campaign
+    /// pack left it out). Pending entries come only from the stored campaign, never from the request, and one whose source
+    /// is now installed, or that is no longer allowed, is dropped. Characters in it are not changed; their warnings follow
+    /// the new profile.
     /// </summary>
     public Campaign SaveCampaign(Campaign campaign)
     {
         ArgumentNullException.ThrowIfNull(campaign);
+        var id = campaign.Id == Guid.Empty ? Guid.NewGuid() : campaign.Id;
+        var allowed = campaign.AllowedSources ?? [];
+        List<PendingSource> pending =
+        [
+            .. (_store.FindCampaign(id)?.PendingSources ?? [])
+                .Where(p => allowed.Contains(p.SourceId) && _store.FindSource(p.SourceId) is null),
+        ];
         var saved = campaign with
         {
-            Id = campaign.Id == Guid.Empty ? Guid.NewGuid() : campaign.Id,
+            Id = id,
             Name = campaign.Name?.Trim() ?? "",
             HouseRules = string.IsNullOrWhiteSpace(campaign.HouseRules) ? null : campaign.HouseRules.Trim(),
+            PendingSources = pending.Count == 0 ? null : pending,
             UpdatedAt = _time.GetUtcNow(),
         };
         var problems = saved.Validate().ToList();
         if (problems.Count == 0)
         {
-            foreach (var missing in saved.AllowedSources.Where(s => _store.FindSource(s) is null))
+            foreach (var missing in allowed.Where(s => _store.FindSource(s) is null && !pending.Any(p => p.SourceId == s)))
                 problems.Add(new("campaign.source-missing", $"Source {missing} is not installed."));
         }
         if (problems.Count > 0)
@@ -106,17 +146,53 @@ public sealed partial class TomeStackApp
         var warnings = new List<Diagnostic>();
         if (campaign.RulesFamily != character.RulesFamily)
             warnings.Add(new("campaign.rules-family-mismatch", $"'{campaign.Name}' plays {campaign.RulesFamily}; this character uses {character.RulesFamily}."));
-        var allowed = campaign.AllowedSources.ToHashSet();
-        var active = (sheet.Active ?? []).ToHashSet();
-        foreach (var reference in character.AllReferences().Where(active.Contains))
+        foreach (var (reference, revision) in OutsideCampaign(character, sheet, campaign, catalog))
         {
-            if (catalog.FindRevision(reference) is not { } revision || allowed.Contains(revision.Provenance.SourceId))
-                continue;
             var source = catalog.FindSource(revision.Provenance.SourceId)?.Title ?? "an unknown source";
             warnings.Add(character.CampaignExceptions.LastOrDefault(e => e.Content == reference) is { } exception
                 ? new("campaign.exception", $"'{revision.Name}' is from {source}, which '{campaign.Name}' does not allow; used by exception: {exception.Reason}", reference)
                 : new("campaign.source-not-allowed", $"'{revision.Name}' is from {source}, which '{campaign.Name}' does not allow. Remove it or record an exception with a reason.", reference));
         }
         return new(campaign.Id, campaign.Name, campaign.RulesFamily, warnings);
+    }
+
+    /// <summary>The character's own active references (pins, classes, chosen options, equipment) from sources <paramref name="campaign"/> does not allow.</summary>
+    private static IEnumerable<(ContentReference Reference, ContentRevision Revision)> OutsideCampaign(
+        Character character, CharacterSheet sheet, Campaign campaign, IContentCatalog catalog)
+    {
+        var allowed = campaign.AllowedSources.ToHashSet();
+        var active = (sheet.Active ?? []).ToHashSet();
+        foreach (var reference in character.AllReferences().Where(active.Contains))
+        {
+            if (catalog.FindRevision(reference) is { } revision && !allowed.Contains(revision.Provenance.SourceId))
+                yield return (reference, revision);
+        }
+    }
+
+    /// <summary>
+    /// M6 slice 2: before a campaign pack replaces <paramref name="local"/> with <paramref name="imported"/> ("use the
+    /// imported one"), the characters in it whose content the imported profile would no longer allow. Content they already
+    /// use by a recorded exception, or that the local profile does not allow either, is not counted: only what would newly
+    /// become "not allowed". Nothing is written.
+    /// </summary>
+    private IReadOnlyList<CampaignImpact> CampaignImpactOf(Campaign local, Campaign imported)
+    {
+        var impact = new List<CampaignImpact>();
+        foreach (var character in _store.ListCharacters().Where(c => c.CampaignId == local.Id).OrderBy(c => c.Name, StringComparer.Ordinal))
+        {
+            var sheet = CharacterCalculator.Calculate(character, _store);
+            var before = OutsideCampaign(character, sheet, local, _store).Select(o => o.Reference).ToHashSet();
+            var excepted = character.CampaignExceptions.Select(e => e.Content).ToHashSet();
+            List<string> newly =
+            [
+                .. OutsideCampaign(character, sheet, imported, _store)
+                    .Where(o => !before.Contains(o.Reference) && !excepted.Contains(o.Reference))
+                    .Select(o => o.Revision.Name).Distinct().Order(StringComparer.Ordinal),
+            ];
+            var familyChanges = imported.RulesFamily != local.RulesFamily && character.RulesFamily == local.RulesFamily;
+            if (newly.Count > 0 || familyChanges)
+                impact.Add(new(local.Id, character.Id, character.Name, newly, familyChanges ? imported.RulesFamily : null));
+        }
+        return impact;
     }
 }

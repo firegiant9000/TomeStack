@@ -29,9 +29,10 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `package-manifest.v5.schema.json` | Adds `gaps/` entries, backups only (M3 B3). Current for character packages | `formatVersion` |
 | `package-manifest.v6.schema.json` | Adds `scope` and `revisionOrder`; `attachments/` and `files/` entries in full library backups only (M2.1). Still restored | `formatVersion` |
 | `package-manifest.v7.schema.json` | Adds `scope: "source"` (a source pack: `sources/` and published `content/` only, with `revisionOrder` and `attestations`) and library backups whose sources are v2 (M6 slice 1; the number is provisional until it merges). Current for library backups and source packs | `formatVersion` |
+| `package-manifest.v8.schema.json` | Adds `scope: "campaign"` (a campaign pack: one `campaigns/` entry, `sources/` and published `content/`, with `revisionOrder`, `attestations` and `omitted[]` without revisions; M6 slice 2, provisional until it merges). Current for campaign packs | `formatVersion` |
 | `attachment.v1.schema.json` | `attachments/<attachmentId>.json` in a full library backup: a managed or linked PDF record (ADR-005, M2.1) | none (v1) |
 | `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Current | `schemaVersion` |
-| `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules. Current | `schemaVersion` |
+| `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules, and (M6 slice 2) the optional `pendingSources`, which changes how no existing field is read, so it stays v1. Current | `schemaVersion` |
 
 The files are named `<kind>.v<version>.schema.json`. The test picks the schema from the document's own version field.
 

@@ -1,6 +1,6 @@
-# Portable package format (v7; v1 to v6 still importable)
+# Portable package format (v8; v1 to v7 still importable)
 
-SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below) and for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**) and for campaigns (M6 slice 2, "Campaign packs" below; **v8, provisional, waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -9,7 +9,7 @@ manifest.json
 sources/<sourceId>.json        SourceRecord, including license and redistribution flag
 content/<revisionId>.json      ContentRevision (immutable, pinned by characters)
 characters/<characterId>.json  Character choices, pins, overrides and play state (no derived values)
-campaigns/<campaignId>.json    Campaign profile of an exported character (v4; SPEC P-01)
+campaigns/<campaignId>.json    Campaign profile of an exported character (v4; SPEC P-01), or the one campaign of a campaign pack (v8)
 gaps/<noteId>.json             Session gap note of an exported character (v5; backups only, gap-notes.md)
 ```
 
@@ -17,7 +17,7 @@ gaps/<noteId>.json             Session gap note of an exported character (v5; ba
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs (v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs, `8` for campaign packs (v8, M6 slice 2, provisional: `scope: "campaign"`; v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |
@@ -52,7 +52,7 @@ Every limit and check below has its own test in `tests/AppService.Tests/PackageL
 
 **Sharing with an older build (M2.2 decision, 2026-09-28).** A package is readable by an older build when every entry's `schemaVersion` is one it supports. Content revisions are published in the lowest content schema that holds them (never below v3; [schemas/README.md](../schemas/README.md#versioning-rules)), so homebrew that uses no content v8 field (attack count, critical range, armor training, armor Strength or Stealth, `whileArmored`, roll bonus) imports into 0.3.x. A revision that uses one is v8, and an older build refuses the package with `package.schema-unsupported` instead of misreading it. Characters are always written in the current character schema, so a package with characters still needs a build that reads it. Revisions published earlier keep the version they were written in (the then-current one, v7 in 0.3.x), because published revisions are immutable.
 9. **Source metadata is never overwritten silently.** If a package's source differs from the local record with the same ID, the preview lists each differing field (local vs. imported). Apply then needs an explicit `sourceChoices[sourceId]` of `keepLocal` or `useImported`, and refuses with `package.source-choice-required` otherwise. `pdfRef` and `attachmentId` (ADR-005) are machine-local. They are never exported, and an import never changes them; nor does it bring a PDF.
-10. **Backup before replace (SPEC C-07, Q-01):** if the package replaces characters that already exist locally, apply first exports their current local copies to `<data dir>/backups/pre-import-<UTC timestamp>.tomestack.zip`. That file is an ordinary package, so you restore it by importing it. If the local copy cannot be exported (for example, a pinned revision is missing), the import is refused with `package.backup-failed`, and nothing changes. A source pack that adds or replaces anything first copies the whole database to `<data dir>/backups/pre-import-<UTC timestamp>.db` (an SQLite online backup, as for a library restore); to go back, close TomeStack and put that file in place of `tomestack.db`.
+10. **Backup before replace (SPEC C-07, Q-01):** if the package replaces characters that already exist locally, apply first exports their current local copies to `<data dir>/backups/pre-import-<UTC timestamp>.tomestack.zip`. That file is an ordinary package, so you restore it by importing it. If the local copy cannot be exported (for example, a pinned revision is missing), the import is refused with `package.backup-failed`, and nothing changes. A source pack or a campaign pack that adds or replaces anything first copies the whole database to `<data dir>/backups/pre-import-<UTC timestamp>.db` (an SQLite online backup, as for a library restore); to go back, close TomeStack and put that file in place of `tomestack.db`. **M6 slice 2:** a character package that replaces a campaign copies the database too, because the character backup holds only the campaigns of the characters it replaces (the result's `databaseCopy` when there is also a character backup).
 11. **Sources keep their provenance (M6 slice 1).** On every import (and, where noted, every restore):
     - the import-derived flag only goes up (`package.source-import-derived` warns when a package raises it), and in a restore a source that had a PDF in the backup is marked even if the PDF does not come back;
     - a source that is new here is recorded as `received`, and a received source can never be marked as the receiver's own work; a source already here keeps the origin this machine recorded (a source stored before database v8 keeps its unknown origin);
@@ -124,13 +124,16 @@ A **source pack** shares your own homebrew: one or more sources and their publis
 
 **Where each shape is read (compatibility matrix).** "Refused" means refused with a clear message, never misread.
 
-| File | Written by | Format | Content schema inside | Read by 0.3.x (format ≤ 5) | Read by M2.1 to M5 builds (format ≤ 6) | Read by this build (format ≤ 7) |
-| --- | --- | --- | --- | --- | --- | --- |
-| Character package (backup or share) | all builds | 5 | lowest version each revision needs (3 to 9) | yes, if no entry is newer than it supports | yes, same condition | yes |
-| Full library backup | M2.1 to M5 builds | 6 | 3 to 9 | refused (v6) | yes | yes; every source that comes back with a PDF is marked import-derived |
-| Full library backup | this build | 7 | 3 to 9 | refused | refused (v7) | yes, with the flag, origin and share confirmation |
-| Source pack | this build | 7 | 3 to 9 | refused | refused (v7) | yes |
-| A later format (8 and on) | later builds | 8+ | any | refused | refused | refused (`package.unsupported-format`) |
+| File | Written by | Format | Content schema inside | Read by 0.3.x (format ≤ 5) | Read by M2.1 to M5 builds (format ≤ 6) | Read by M6 slice 1 builds (format ≤ 7) | Read by this build (format ≤ 8) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Character package (backup or share) | all builds | 5 | lowest version each revision needs (3 to 9) | yes, if no entry is newer than it supports | yes, same condition | yes | yes |
+| Full library backup | M2.1 to M5 builds | 6 | 3 to 9 | refused (v6) | yes | yes; every source that comes back with a PDF is marked import-derived | yes, same |
+| Full library backup | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes, with the flag, origin and share confirmation | yes, same |
+| Source pack | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes | yes |
+| Campaign pack | this build | 8 | 3 to 9 | refused | refused | refused (v8) | yes |
+| A later format (9 and on) | later builds | 9+ | any | refused | refused | refused | refused (`package.unsupported-format`) |
+
+A campaign carried in a character package or a library backup may have `pendingSources` (M6 slice 2). Older builds keep it as an unknown property; the source it names is still in `allowedSources`, so they allow it once it is installed.
 
 The database is versioned the same way: this build migrates a v7 database to v8 (forward-only, `tomestack.db.v7.bak` first), and an older build refuses a v8 data folder (`NewerDatabaseException`), so no older build can rewrite a source without its flag.
 
@@ -139,6 +142,31 @@ The database is versioned the same way: this build migrates a v7 database to v8 
 **Dual review (2026-09-29, both reviewers and the cross-check; none refuted).** Fixed: a pre-v8 source was relabelled "received" by any import; additions to your own source were refused only in source packs; content could be stored under an SRD source id (package or draft); a restore dropped an SRD source's PDF; an older revision could silently become the newest; a pack could split one content across two of its sources; a backup source with a PDF that did not come back was not marked; tests and UI wording. The limits listed under rule 11 are documented, not fixed. The e2e flow "marks a source as shareable after confirming it is your own work, saves a source pack and imports it".
 
 **Not verified:** a pack moved to a second machine and imported there (the clean-folder test stands in), and screen-reader use of the confirmation (owner checks).
+
+## Campaign packs (M6 slice 2, B13)
+
+**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. Format v8 is provisional (the number is fixed only when it merges, ROADMAP "Package format numbers"); the scope and the campaign's `pendingSources` wait for the owner's approval.**
+
+A **campaign pack** shares one campaign profile with the people who play in it.
+
+- **Contents:** `campaigns/<id>.json` (exactly one: name, rules family, allowed sources, house rules), plus `sources/` and `content/` for the allowed sources the pack may carry, and nothing else: no characters, gap notes, drafts, attachment records, PDFs or text read from PDFs. The campaign is written without `pendingSources` and without unknown properties (which could hold anything). Sources carry no machine-local field, as in a source pack.
+- **What it carries, per allowed source** (the source-pack guard of D14 item 6 runs at every campaign-pack export):
+  - a **bundled SRD source** is referenced by id and never copied (every install has it);
+  - a source that **passes the guard** (homebrew made on this machine, not import-derived, marked as shareable) and has published content is carried with every published revision, in stored order, with its attestation;
+  - **every other allowed source** is left out and listed in `omitted[]` with its title, publisher and license and no revisions (a campaign pack carries no characters). `package.campaignPackPreview` says why each is left out (`pack.source-not-shareable`, `pack.source-import-derived`, `pack.source-received`, `pack.source-empty`, `pack.source-missing`).
+- **Manifest:** `scope: "campaign"`, `purpose: "share"`, `formatVersion: 8`, `revisionOrder`, `attestations[]`, `omitted[]`. Schema: [package-manifest.v8](../schemas/package-manifest.v8.schema.json).
+- **Commands:** `package.campaignPackPreview { campaignId }`, `package.campaignPackSaveAs { campaignId }` (the native Save dialog) and `package.campaignPackExport { campaignId }` (base64; browser development and tests). Importing uses `package.preview` and `package.apply`.
+
+**Importing a campaign pack**, beyond rules 1 to 12:
+
+- The pack must be a v8 share with only `sources/`, `content/` and `campaigns/` entries (`package.entry-not-allowed`) and exactly one campaign (`pack.campaign-count`). Its sources and revisions follow every source-pack rule (published only, attested, shareable, not bundled, not added to your own source, no content split across sources), and it may carry no source its campaign does not allow (`pack.source-not-allowed`).
+- Every allowed source must be carried, installed here, or named in `omitted[]` (`pack.campaign-source-unlisted` otherwise). One that is named but not installed is imported as a **pending reference**, with a warning (`campaign.source-pending`): it stays in `allowedSources`, and the campaign records the pack's title, publisher and license in `pendingSources` so you know what to get. Once a source with that id is installed, its content is allowed; saving the campaign drops the pending entry. `campaign.save` keeps a pending entry only if the stored campaign already has it, so a request cannot add one. A `pendingSources` list inside the pack is ignored and worked out again from `omitted[]`.
+- **A campaign that already exists and differs** (by name, rules family, allowed sources or house rules; not by its save time) is listed with its differences, and apply needs `campaignChoices[campaignId]` of `keepLocal` or `useImported` (`package.campaign-choice-required`). **Use the imported one** replaces the profile, `allowedSources` included. The preview lists the local characters in that campaign whose content it would newly make "not allowed" (`campaignImpact`: content from a source the imported profile does not allow and the local one does, not counting content used by a recorded exception), and whether the rules family would change. Nothing on those characters changes; their sheets show the warnings. **Keep mine** leaves the profile; the pack's sources and content are still imported.
+- The imported sources are recorded as `received`, as for a source pack. Apply copies the database first (rule 10), which also covers the replaced campaign.
+
+**Tests:** `tests/AppService.Tests/CampaignPackTests.cs`: the round trip into a clean data folder compared as JSON (the campaign, every carried revision, the received origin, the pre-import copy, and a second import that changes nothing); what the guard leaves out and why, the v8 manifest and campaign schemas, and no character or machine-local field in the pack; an omitted source imported as pending, kept on save, not addable by a request, and allowed once installed; keep or use a differing campaign, with the affected characters; a character package that replaces a campaign copies the database; hostile packs (two campaigns, a character entry, an unlisted or disallowed source, an import-derived source, a draft, no attestation, the wrong format or purpose, a planted pending list); the dispatcher commands. e2e: "shares a campaign as a campaign pack that names what it leaves out, and imports it over a changed copy by choice".
+
+**Not verified:** a pack moved to a second machine and imported there (the clean-folder test stands in), and a Narrator pass (accessibility item 25). Owner checks.
 
 ## Decided
 
