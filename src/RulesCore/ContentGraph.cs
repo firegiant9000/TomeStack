@@ -28,7 +28,8 @@ public sealed record GraphReach(Guid ContentId, Guid ClassId, Guid? SubclassId, 
 /// each content (the author's revision under study, else the newest published one), the grant, option and extension
 /// edges between them, and every way each class reaches each content. The reach follows the calculator's rules
 /// (<c>CharacterCalculator</c> content resolution): grants only from a root and one level deep, and choices from anything
-/// reached. Level gates are not applied: the graph asks what a class can ever reach, not what one character has.
+/// reached. A grant or option is followed to the exact revision it names (not the content's current one); an extension
+/// names none, and is followed from every published revision that extends the choice. Level gates are not applied: the graph asks what a class can ever reach, not what one character has.
 /// It is pure and never writes; the debugger (<see cref="ContentDebugger"/>) and the relationship view read it.
 /// </summary>
 public sealed class ContentGraph
@@ -104,35 +105,68 @@ public sealed class ContentGraph
             scoped.Add(revision.ContentId);
         }
 
-        var edges = new List<GraphEdge>();
-        foreach (var revision in current.Values)
+        // Grants and options name an exact revision, and the calculator admits exactly that one: the scope's revision when
+        // it has that reference, else a stored published one. Extensions name no revision (see below).
+        var scopeByReference = new Dictionary<ContentReference, ContentRevision>();
+        foreach (var revision in scope ?? [])
+            scopeByReference.TryAdd(revision.Reference, revision);
+        var publishedByReference = new Dictionary<ContentReference, ContentRevision>();
+        foreach (var revision in published.Values.SelectMany(l => l))
+            publishedByReference.TryAdd(revision.Reference, revision);
+        ContentRevision? Resolve(ContentReference reference) =>
+            scopeByReference.GetValueOrDefault(reference) ?? publishedByReference.GetValueOrDefault(reference);
+
+        // The calculator offers every published revision that extends a choice (SqliteStore.ChoiceExtensions), each as
+        // itself; the revision under study counts too, whatever its status.
+        var extensionsByContent = new Dictionary<Guid, List<ContentRevision>>();
+        var extensionSeen = new HashSet<Guid>();
+        foreach (var revision in published.Values.SelectMany(l => l).Concat(current.Values.Where(r => scoped.Contains(r.ContentId))))
         {
+            if (revision.ExtendsChoice is not { } extends || extends.ContentId == revision.ContentId || !extensionSeen.Add(revision.RevisionId))
+                continue;
+            if (!extensionsByContent.TryGetValue(extends.ContentId, out var list))
+                extensionsByContent[extends.ContentId] = list = [];
+            list.Add(revision);
+        }
+
+        // One revision's outgoing edges, each with the revision it leads to (null when that revision is not available).
+        var edgeCache = new Dictionary<Guid, List<(GraphEdge Edge, ContentRevision? Target)>>();
+        List<(GraphEdge Edge, ContentRevision? Target)> EdgesOf(ContentRevision revision)
+        {
+            if (edgeCache.TryGetValue(revision.RevisionId, out var cached))
+                return cached;
+            var result = new List<(GraphEdge, ContentRevision?)>();
             foreach (var effect in revision.Effects)
             {
                 switch (effect)
                 {
                     // Only what the calculator follows: an automatic grant that always applies (its level gate aside).
                     case GrantEffect { Grant: GrantKind.Content, Content: { } granted, Automation: AutomationStatus.Automatic, Timing: EffectTiming.Always } grant:
-                        edges.Add(new(GraphEdgeKind.Grant, revision.ContentId, granted.ContentId, grant.Id, null, grant.Level, granted));
+                        result.Add((new(GraphEdgeKind.Grant, revision.ContentId, granted.ContentId, grant.Id, null, grant.Level, granted), Resolve(granted)));
                         break;
                     case ChoiceEffect choice:
                         foreach (var option in choice.Options.Distinct())
-                            edges.Add(new(GraphEdgeKind.Option, revision.ContentId, option.ContentId, choice.Id, choice.ChoiceId, choice.Level, option));
+                            result.Add((new(GraphEdgeKind.Option, revision.ContentId, option.ContentId, choice.Id, choice.ChoiceId, choice.Level, option), Resolve(option)));
                         break;
                 }
             }
-            // The calculator offers an extension only while it offers that choice, so the current revision of the extended
-            // content must still have it.
-            if (revision.ExtendsChoice is { } extends && extends.ContentId != revision.ContentId
-                && current.GetValueOrDefault(extends.ContentId)?.Effects.OfType<ChoiceEffect>().FirstOrDefault(c => c.ChoiceId == extends.ChoiceId) is { } offered)
+            // An extension is offered only while this revision offers that choice.
+            foreach (var extension in extensionsByContent.GetValueOrDefault(revision.ContentId) ?? [])
             {
-                edges.Add(new(GraphEdgeKind.Extension, extends.ContentId, revision.ContentId, offered.Id, extends.ChoiceId, offered.Level, null));
+                var extends = extension.ExtendsChoice!;
+                if (revision.Effects.OfType<ChoiceEffect>().FirstOrDefault(c => c.ChoiceId == extends.ChoiceId) is { } offered)
+                    result.Add((new(GraphEdgeKind.Extension, revision.ContentId, extension.ContentId, offered.Id, extends.ChoiceId, offered.Level, null), extension));
             }
+            return edgeCache[revision.RevisionId] = result;
         }
 
-        var from = edges.GroupBy(e => e.From).ToDictionary(g => g.Key, g => g.ToList());
+        // The edges the debugger reads: those of each content's current revision.
+        var edges = new List<GraphEdge>();
+        foreach (var revision in current.Values)
+            edges.AddRange(EdgesOf(revision).Select(e => e.Edge));
         var reaches = new Dictionary<Guid, List<GraphReach>>();
-        var visited = new HashSet<GraphReach>();
+        // A state is a way of reaching one revision: the same content pinned at two revisions is two states.
+        var visited = new HashSet<(GraphReach Reach, Guid RevisionId)>();
         var steps = 0;
         var truncated = false;
         var classes = reach ? current.Values.Where(r => r.Kind == ContentKind.Class).OrderBy(r => scoped.Contains(r.ContentId) ? 0 : 1) : Enumerable.Empty<ContentRevision>();
@@ -140,26 +174,29 @@ public sealed class ContentGraph
         {
             if (truncated)
                 break;
-            var pending = new Queue<GraphReach>();
-            void Visit(GraphReach reach)
+            var pending = new Queue<(GraphReach Reach, ContentRevision Revision)>();
+            void Visit(GraphReach reach, ContentRevision revision)
             {
+                if (visited.Contains((reach, revision.RevisionId)))
+                    return;
+                // Only a new state can pass the bound.
                 if (visited.Count >= maxStates)
                 {
                     truncated = true;
                     return;
                 }
-                if (!visited.Add(reach))
-                    return;
+                visited.Add((reach, revision.RevisionId));
                 if (!reaches.TryGetValue(reach.ContentId, out var list))
                     reaches[reach.ContentId] = list = [];
-                list.Add(reach);
-                pending.Enqueue(reach);
+                if (!list.Contains(reach))
+                    list.Add(reach);
+                pending.Enqueue((reach, revision));
             }
-            Visit(new(classRevision.ContentId, classRevision.ContentId, null, AsRoot: true));
+            Visit(new(classRevision.ContentId, classRevision.ContentId, null, AsRoot: true), classRevision);
             while (pending.Count > 0 && !truncated)
             {
-                var at = pending.Dequeue();
-                foreach (var edge in from.GetValueOrDefault(at.ContentId) ?? [])
+                var (at, atRevision) = pending.Dequeue();
+                foreach (var (edge, target) in EdgesOf(atRevision))
                 {
                     if (++steps > maxEdgeSteps)
                     {
@@ -169,11 +206,12 @@ public sealed class ContentGraph
                     // A granted content's own grants are not followed (grants are one level deep).
                     if (edge.Kind == GraphEdgeKind.Grant && !at.AsRoot)
                         continue;
-                    // Another class brought in as content is a class of its own, not part of this one.
-                    if (current.GetValueOrDefault(edge.To) is not { Kind: not ContentKind.Class } target)
+                    // Another class brought in as content is a class of its own, not part of this one; a revision the
+                    // calculator would not admit (missing, unpublished) leads nowhere.
+                    if (target is not { Kind: not ContentKind.Class })
                         continue;
                     var subclass = target.Kind == ContentKind.Subclass ? target.ContentId : at.SubclassId;
-                    Visit(new(edge.To, at.ClassId, subclass, AsRoot: edge.Kind != GraphEdgeKind.Grant));
+                    Visit(new(edge.To, at.ClassId, subclass, AsRoot: edge.Kind != GraphEdgeKind.Grant), target);
                     if (truncated)
                         break;
                 }
@@ -215,5 +253,5 @@ public sealed class ContentGraph
     /// <summary>The identifiers each formula of a revision reads, by effect id. Formulas that do not parse read nothing (validation reports them).</summary>
     public static IEnumerable<(string EffectId, string Identifier)> Identifiers(ContentRevision revision) =>
         Formulas(revision).SelectMany(f =>
-            Formula.TryParse(f.Source, allowScales: true, out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : []);
+            Formula.TryParse(f.Source, allowScales: revision.SchemaVersion >= ScaleEffect.SchemaVersion, out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : []);
 }

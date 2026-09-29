@@ -14,7 +14,7 @@ public sealed record SandboxRequest(
 
 /// <param name="View">The unsaved copy and its sheet, calculated with the draft as if published. Never stored.</param>
 /// <param name="Draft">The draft's reference as used on the copy.</param>
-/// <param name="Changes">For a copy of a saved character: every displayed value the draft changes. Empty for a blank one.</param>
+/// <param name="Changes">For a copy of a saved character: every calculated sheet field the draft changes (not resource maximums or class columns). Empty for a blank one.</param>
 /// <param name="Validation">The draft's validation report: a draft may be incomplete, and the sandbox still calculates it.</param>
 public sealed record SandboxView(CharacterView View, ContentReference Draft, IReadOnlyList<FieldDelta> Changes, ValidationReport Validation);
 
@@ -133,8 +133,11 @@ public sealed partial class TomeStackApp
 
         var classEntry = copy.Classes.FirstOrDefault(c => c.Class.ContentId == extends.ContentId);
         // The selection the calculator reads is the one on the class revision the copy has (review fix).
-        var existing = copy.Choices.FirstOrDefault(c => c.Source == classEntry?.Class && c.ChoiceId == extends.ChoiceId)
-            ?? copy.Choices.FirstOrDefault(OnExtendedChoice);
+        // With a class entry only that exact revision counts: a selection keyed to another revision of the class is never
+        // read, so rewriting it would leave the draft unapplied. Without one (a feature's choice) any revision of the source will do.
+        var existing = classEntry is not null
+            ? copy.Choices.FirstOrDefault(c => c.Source == classEntry.Class && c.ChoiceId == extends.ChoiceId)
+            : copy.Choices.FirstOrDefault(OnExtendedChoice);
         if (existing is not null)
         {
             copy = copy with { Choices = [.. copy.Choices.Select(c => c == existing ? c with { Selected = [draft.Reference] } : c)] };
