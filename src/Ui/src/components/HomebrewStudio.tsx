@@ -378,7 +378,7 @@ function EntryEditor(props: {
   // whole entry or a rule that is no longer there. Runs after the heading focus above, on the first render too.
   function focusRule(effectId: string | undefined) {
     const effect = effectId === undefined ? undefined : revision.effects.find((e) => e.id === effectId);
-    const target = effect && document.getElementById(revision.kind === 'class' && isClassBasic(effect) ? classBasicElementId(effect) : ruleElementId(effect.id));
+    const target = effect && document.getElementById(revision.kind === 'class' && isClassBasic(effect, revision.effects) ? classBasicElementId(effect) : ruleElementId(effect.id));
     (target ?? heading.current)?.focus();
   }
   const onFocusRequest = useEffectEvent((effectId: string | undefined) => focusRule(effectId));
