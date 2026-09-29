@@ -454,7 +454,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
-  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' });
+  // The button appears once the sheet has fetched the source's attachment: allow more than the 1 s default under load.
+  const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' }, { timeout: 5000 });
   await user.click(open);
   expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
 
@@ -688,6 +689,39 @@ it('finds a problem in a source with the debugger, shows its rule, and clears it
   await user.click(within(editor()).getByRole('button', { name: 'Find problems' }));
   const own = await within(editor()).findByRole('region', { name: 'Debugger findings' });
   await waitFor(() => expect(own.textContent).toMatch(/The debugger found no problems/));
+});
+
+it('tries a draft class at a chosen level on a blank character without saving anything (M5 slice 3)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Sandbox', ['srd-5.2.1']);
+  const charactersBefore = (await client.listCharacters()).length;
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Sandbox' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Trial Class');
+  await user.selectOptions(within(editor()).getByRole('combobox', { name: 'Hit die' }), 'd10');
+
+  const sandbox = within(editor()).getByRole('region', { name: 'Try it' });
+  await user.type(within(sandbox).getByRole('textbox', { name: /^Level in this class/ }), '3');
+  await user.click(within(sandbox).getByRole('button', { name: 'Try it' }));
+  const results = await within(sandbox).findByRole('region', { name: 'Try it results' });
+  expect(results.textContent).toMatch(/Unsaved blank character at total level 3/);
+  expect(results.textContent).toMatch(/Hit point maximum: 22/); // d10: 10, then 6 per level, Con +0
+  expect(results.textContent).not.toMatch(/Spell save DC/); // not a caster
+
+  // An edit hides the result until it is tried again, and nothing was saved.
+  await user.selectOptions(within(editor()).getByRole('combobox', { name: 'Hit die' }), 'd6');
+  expect(within(sandbox).queryByRole('region', { name: 'Try it results' })).toBeNull();
+  expect((await client.listCharacters()).length).toBe(charactersBefore);
+  expect(await client.contentBySource((await client.listSources()).find((s) => s.title === 'E2E Sandbox')!.id)).toEqual([]);
 });
 
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {

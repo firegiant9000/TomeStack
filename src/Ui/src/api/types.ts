@@ -986,6 +986,32 @@ export interface DebugReport {
   truncated: boolean;
 }
 
+/** A displayed value that would change. */
+export interface FieldDelta {
+  field: string;
+  label: string;
+  before: number;
+  after: number;
+}
+
+/** `content.sandbox` (M5 slice 3): one draft tried on an unsaved copy or a blank character. Nothing is saved. */
+export interface SandboxRequest {
+  revision?: ContentRevision;
+  reference?: ContentReference;
+  characterId?: string;
+  rulesFamily?: RulesFamilyId;
+  level?: number;
+}
+
+export interface SandboxView {
+  /** The unsaved copy and its sheet, with the draft counted as published. Never stored. */
+  view: CharacterView;
+  draft: ContentReference;
+  /** For a copy of a saved character: every displayed value the draft changes. */
+  changes: FieldDelta[];
+  validation: ValidationReport;
+}
+
 export interface ImportResult {
   added: number;
   replaced: number;

@@ -91,9 +91,46 @@ Acceptance:
 - `AppService.Tests/ContentDiagnoseTests`: the scope rules, the command's JSON, "writes nothing", and both bundled SRD sources (each over 500 revisions) with no findings;
 - the e2e flow "finds a problem in a source with the debugger, shows its rule, and clears it in the editor", including Show on an entry already open, which keeps its unsaved edits.
 
+## Try it: the draft sandbox (M5 slice 3, B03)
+
+The class and subclass editors have a **Try it** section. It calculates the revision on screen, saved or not, as if it were published. It can run on a blank character (ability scores 10, the draft's first rules family) or on **a copy of** a saved character of a family the draft supports. The level is optional. It is the level in the class, or for a subclass, in the class it joins. `content.sandbox { revision | reference, characterId? | rulesFamily?, level? }` returns the unsaved sheet, the draft's validation report, and, for a copy, every displayed value that changes.
+
+**How the draft is placed on the copy:**
+- Every reference to another revision of the same content becomes the draft.
+- A class the copy already has keeps its level, unless one is chosen; otherwise the class is added. A character with no class levels recorded (its class only pinned) keeps its level, and the class is no longer pinned separately.
+- A subclass is selected in the choice it extends, on the class revision the copy has. A selection of an older revision in another choice (the draft now extends a different one) is dropped. If the copy lacks that class, the class's newest published revision is added, at the chosen level or else at the choice's level (never below the character's level when it has no class levels recorded).
+- A subclass that extends a feature's choice can be tried only on a copy that already makes that choice, and then with no level (it has no class level to set).
+- A subclass offered only as a **declared option** of a choice cannot be tried as a draft: that choice names one exact revision, and the calculator accepts nothing else there.
+
+**The invariant (owner decision, LIVING_SPECS D14): only published revisions affect *saved* characters.**
+- The sandbox is the one place a draft calculates. `RulesCore.DraftOverlayCatalog` shows that one draft as published, in memory, for one calculation. There, it replaces the other revisions of its content in the choice it extends.
+- The copy gets a new id, and the studio never stores it.
+- `content.sandbox` writes no revision, character, play state, campaign or gap note. `SandboxTests` compare revisions, characters, sources, campaigns and gap notes before and after. A saved character still calculates its published revision.
+- **What stays true even if a client saves the copy:** `character.save` does not refuse draft references (characters that pin drafts are a supported case, shown inactive with `content.unpublished`). A copy saved through the API would therefore be stored. It would still never calculate the draft.
+- The campaign check reads through the overlay too, so an unsaved draft from a source the campaign does not allow is flagged on the copy.
+- Changing the revision, the character, the level or the blank character's rules family hides the result until **Try it** runs again. A draft for both families can be tried on a blank character of either.
+
+Refusals:
+- `sandbox.draft-required`: published content, or no draft sent;
+- `sandbox.kind`: only a class or subclass can be tried;
+- `sandbox.level`;
+- `sandbox.level-class`: a level for a subclass of a feature's choice;
+- `sandbox.rules-family`;
+- `sandbox.scope`: both a character and a blank character's family;
+- `sandbox.subclass-unplaced`: the subclass is offered in no choice;
+- `sandbox.subclass-declared-option`;
+- `sandbox.subclass-class`: it joins a choice of a feature, and there is no copy that makes it;
+- `rules-family.unknown`, `character.not-found`, `content.not-found`, `validate.empty-entry`;
+- the character's own checks, such as more than 20 levels in total.
+
+Acceptance:
+- `RulesCore.Tests/DraftOverlayCatalogTests`: both families, and the catalog underneath is untouched;
+- `AppService.Tests/SandboxTests`;
+- the e2e flow "tries a draft class at a chosen level on a blank character without saving anything".
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
-A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered. `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.
+A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.
 
 Validation: the target content must offer that choice (`validate.extends-choice-unknown`) and share a rules family (`validate.reference-family`). A target that is not installed is a warning (`validate.extends-choice-missing`). A revision cannot extend its own choice. `extendsChoice` needs `schemaVersion` 4 (`validate.requires-v4`).
 
