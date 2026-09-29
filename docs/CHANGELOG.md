@@ -66,6 +66,7 @@
 ### Changed
 
 - **Plans only, nothing built (ROADMAP "M5 plan" and "M6 plan"; LIVING_SPECS D13):** by owner direction, M5 (creation power) starts before the M3 gate, which is unchanged and still not met. The template set and new effect types are provisional until the M3 gap notes arrive. The owner approved the plans and accepted ADR-010 (custom base classes, content schema v9). ADR-011 (the extension API) and ADR-012 (VTT export adapters) are proposed and wait for the owner's choices.
+- **Content schema v9 approved (owner, 2026-09-29; ADR-010, LIVING_SPECS change history):** the `scale` effect, `SCALE.<id>`, `spellcasting.multiclassCasterTable` and a choice with no declared options. Merging still waits for the owner.
 - **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build, a smoke run included. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
 - **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
 
@@ -91,6 +92,8 @@
   - Content that claims an older content version but carries the new Fighter fields (including the attack count and critical range) has those fields ignored, as an older TomeStack would, with a note on the sheet.
 
 - **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. A sixth race: the Barbarian flow read the long-rest proposal as soon as the panel had focus, before the proposal had arrived (reproduced by delaying it 400 ms), and that flow took 23 of its 30 seconds. It now waits for the proposal, and e2e tests have 60 seconds. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder. It passed three hosted runs in a row, so it is blocking too.
+
+- **CI (M5 stack, 2026-09-29):** the UI flow failed at random steps on the hosted runner (#30, #31 and #35 each had a red run on a commit whose rerun passed), always where a step waited the default 1 second for the DevHost. Every wait in the e2e flow now allows 10 seconds (`e2e/timeouts.setup.ts`); a 200 ms limit reproduced the same failures locally.
 
 - **A second spellcasting class gets its bonuses, with a trace (M2.1; `docs/features/spellcasting.md`):** a bonus to spell attacks or spell save DCs (from an item or a feature) used to reach only the first spellcasting class. A multiclass character's other casters showed a bare proficiency bonus + ability modifier, without saying how it was calculated. Every caster now gets those bonuses, and the Spells panel explains each caster's attack bonus and save DC step by step.
 
