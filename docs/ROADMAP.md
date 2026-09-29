@@ -104,7 +104,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
      - Adds `validate.requires-v9` and `content-revision.v9.schema.json`, and extends `RequiredSchemaVersion`.
      - Proven by RulesCore side-by-side tests on an original fixture class, "Test Chronicler" (d8, a scaling Ink resource, and a 2/3 caster by table), in both families at levels 1, 3, 5, 11, 17 and 20.
      - Multiclass tests pair it with a fixture full caster, a half caster and a non-caster, in both families.
-     - **Stop point: the owner approves before v9 merges.**
+     - **Stop point: the owner approves before v9 merges.** Approved (owner, 2026-09-29), with 1b's choice with no declared options; merging still waits for the owner.
    - **1b. The studio authors a class.**
      - "New class", with the hit die and a level table: features and choices per level, and the subclass level.
      - A skill-choice helper that generates the option features, saving throws, and starting-class and multiclass proficiency subsets (`onlyAs`).
@@ -159,7 +159,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
 **What I must decide (owner):**
 
 1. ~~Accept ADR-010: content v9 with `scale`, `SCALE.<id>` and `multiclassCasterTable`. Dice that scale by level (a d4 → d10 die) stay reference text for now.~~ **Accepted (owner, 2026-09-28)**, together with this plan. Items 2–5 are asked again when their slices start.
-2. Approve v9 before slice 1a merges (the stop point).
+2. ~~Approve v9 before slice 1a merges (the stop point).~~ **Approved (owner, 2026-09-29).**
 3. The sandbox overlay for drafts (slice 3), and the reworded invariant: "only published revisions affect **saved** characters; a sandbox previews a draft on an unsaved copy and writes nothing". **Approved (owner, 2026-09-29; LIVING_SPECS D14).**
 4. Snapshots (slice 8):
    - whether they go into the full library backup (a new library-backup format version);
