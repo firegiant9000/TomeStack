@@ -48,12 +48,15 @@
 
 ### Changed
 
-- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` now works only in a Debug build, and `--devtools` only in a Debug build or in a smoke run on its own throwaway folder. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
+- **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build, a smoke run included. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
 - **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
 
 - **Honest status (M2.1; README, MVP, ROADMAP, acceptance docs):** claims now say how far they are proven: implemented, fixture-verified, Windows-install verified, or accepted in real play. The README states the current class, species and background coverage. M2 is "checks passed, limited content", because the MVP goal of any SRD character 1–20 is not met yet. The ROADMAP adds M2.1 (data safety, done) and M2.2 (Fighter baseline and SRD armor), and puts M2.2 before the M3 Stardust Guardian run that depends on it. PDF candidate import is labeled **Experimental** in the app until a real third-party book and the SRD measurements pass.
 
 ### Fixed
+
+- **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
+- **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 
 - **Fighter review fixes (M2.2, PR #12 review; `docs/features/equipment.md`, `docs/features/multiclass-and-attacks.md`):**
   - Armor training is checked only when every class the character has levels in records it (and is installed). A Paladin who took a level of Fighter is no longer told they lack training for their plate, and under 2024 rules a Cleric who takes a feat granting light armor keeps the shield's Armor Class. A Wizard who takes a level of Fighter is still warned about heavy armor.

@@ -246,7 +246,9 @@ export function App() {
             onArchiveChanged={async () => {
               const id = screen.view.character.id;
               await refresh();
-              setScreen({ kind: 'sheet', view: await client.getCharacter(id) });
+              const view = await client.getCharacter(id);
+              // The user may have moved on while this ran; only a sheet still showing this character is refreshed.
+              setScreen((current) => (current.kind === 'sheet' && current.view.character.id === id ? { kind: 'sheet', view } : current));
             }}
           />
         )}

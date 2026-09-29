@@ -34,7 +34,7 @@ public partial class App : Application
         try
         {
             // The shipped app seeds only the SRD packs; the original fixtures are for development (TOMESTACK_DEV_FIXTURES=1,
-            // honoured only in a Debug build or with --smoke; LIVING_SPECS D11).
+            // honoured only in a Debug build; LIVING_SPECS D11).
             _tomeStack = TomeStackApp.Open(dataDirectory, devFixtures: options.DevFixtures);
         }
         catch (DataFolderInUseException ex)
@@ -72,9 +72,9 @@ public partial class App : Application
 }
 
 /// <param name="DevTools">
-/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build, or with
-/// <c>--smoke</c> on the smoke's own throwaway data folder (no <c>--data-dir</c>) (audit 2026-09-28). The shell also clears
-/// <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c> outside those cases, so no variable can open a debugging port either.
+/// <c>--devtools</c>: the WebView2 developer tools and context menus. Honoured only in a Debug build (audit 2026-09-28),
+/// <c>--smoke</c> included. A Release build also clears <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c>, so no variable can
+/// open a debugging port either.
 /// </param>
 /// <param name="SimulateMissingRuntime">
 /// Test-only: take the "WebView2 Runtime not found" path without asking the loader. Honoured only with
@@ -86,7 +86,7 @@ public partial class App : Application
 /// </param>
 /// <param name="AllowBrowserArguments">
 /// Whether WebView2 may apply <c>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</c> (for example a remote debugging port). Only in a
-/// development session, the same one <paramref name="DevTools"/> needs; otherwise the shell clears the variable first.
+/// Debug build; otherwise the shell clears the variable first.
 /// </param>
 public sealed record ShellOptions(
     bool Smoke, bool DevTools, string? DataDirectory, string? SmokeReport, bool SimulateMissingRuntime = false, bool DevFixtures = false,
@@ -109,12 +109,12 @@ public sealed record ShellOptions(
         string? Value(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         var smoke = args.Contains("--smoke");
         var dataDirectory = Value("--data-dir");
-        // A smoke run counts only on its own throwaway folder (no --data-dir), never on a chosen library.
-        var development = debugBuild || (smoke && dataDirectory is null);
+        // Only a Debug build is a development session: no Release launch, --smoke included, gets DevTools or extra
+        // browser arguments (a debugging port would be a listening socket, ADR-006). The smoke needs neither.
         return new ShellOptions(
             Smoke: smoke,
-            DevTools: development && args.Contains("--devtools"),
-            AllowBrowserArguments: development,
+            DevTools: debugBuild && args.Contains("--devtools"),
+            AllowBrowserArguments: debugBuild,
             DataDirectory: dataDirectory,
             SmokeReport: Value("--smoke-report"),
             SimulateMissingRuntime: smoke && args.Contains("--simulate-missing-webview2"),

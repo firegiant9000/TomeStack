@@ -17,9 +17,10 @@ public sealed partial class TomeStackApp : IDisposable
     private readonly PackageService _packages;
     private readonly TimeProvider _time;
 
-    private readonly IReadOnlyList<Diagnostic> _warnings;
+    /// <summary>Startup warnings (<see cref="AppInfo.Warnings"/>): a sync-root data folder, and bundled revisions that could not be seeded.</summary>
+    private readonly List<Diagnostic> _warnings;
 
-    private TomeStackApp(string dataDirectory, TimeProvider time, IReadOnlyList<Diagnostic> warnings)
+    private TomeStackApp(string dataDirectory, TimeProvider time, List<Diagnostic> warnings)
     {
         DataDirectory = dataDirectory;
         _time = time;
@@ -73,6 +74,8 @@ public sealed partial class TomeStackApp : IDisposable
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
                 bundled.UnionWith(app.Seed(pack).Revisions.Select(r => r.RevisionId));
+            // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
+            bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             if (devFixtures)
             {
@@ -319,6 +322,14 @@ public sealed partial class TomeStackApp : IDisposable
             ?? throw new InvalidOperationException($"Embedded content pack {resourceName} is empty.");
     }
 
+    /// <summary>Bundled revisions whose id was already stored with other data (see <see cref="Seed"/>).</summary>
+    private readonly List<ContentReference> _seedConflicts = [];
+
+    /// <summary>
+    /// Seeds a bundled pack (insert-only). A stored revision with the same id but different data (for example one a package
+    /// brought in under an id that a later build bundles) is kept, and the bundled revision is skipped with a startup
+    /// warning, instead of the data folder failing to open on every launch. Published revisions are never overwritten.
+    /// </summary>
     private ContentPack Seed(string resourceName)
     {
         var pack = LoadBundledPack(resourceName);
@@ -327,7 +338,21 @@ public sealed partial class TomeStackApp : IDisposable
             foreach (var source in pack.Sources.Where(s => _store.FindSource(s.Id) is null))
                 _store.UpsertSource(source);
             foreach (var revision in pack.Revisions)
-                _store.AddRevision(revision);
+            {
+                try
+                {
+                    _store.AddRevision(revision);
+                }
+                catch (ImmutableRevisionException conflict) // thrown before anything is written
+                {
+                    _seedConflicts.Add(conflict.Reference);
+                    // Ids and the bundled name only: never text from the stored revision, which may be the user's (gotcha: error logs).
+                    _warnings.Add(new(
+                        "content.bundled-conflict",
+                        $"TomeStack could not add the bundled revision '{revision.Name}' ({revision.RevisionId}): your library already has different content under that id, which is kept. Characters that use this revision may calculate differently from the bundled rules.",
+                        conflict.Reference));
+                }
+            }
         });
         return pack;
     }
