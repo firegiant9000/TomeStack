@@ -67,6 +67,7 @@
 
 ### Fixed
 
+- **Homebrew debugger review fixes (2026-09-29; `docs/features/homebrew-studio.md`):** reach now follows the exact revision a grant or option names, as the calculator does, and every published revision that extends a choice; the scale problems still show when the walk is cut short; the "granted content's own grants never apply" note no longer hides that a character can pick the content directly.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 
