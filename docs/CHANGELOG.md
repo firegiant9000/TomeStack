@@ -48,6 +48,7 @@
 
 ### Changed
 
+- **Correction to the 0.3.0 notes (2026-09-28):** the 0.3.0 entry says the keyboard and Narrator passes passed on 0.2.2. Only the keyboard walkthrough was done. The Narrator pass, 200% zoom, High Contrast and the field-card state are still open WCAG AA checks (`docs/features/accessibility-checklist.md`, LIVING_SPECS D05).
 - **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build, a smoke run included. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
 - **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
 
