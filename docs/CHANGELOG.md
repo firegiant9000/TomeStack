@@ -112,7 +112,7 @@
 
 ### Migration
 
-- **Database schema 7** (M5 slice 8) adds `character_snapshots`, insert-only (triggers refuse updates and deletes). The data folder is backed up first (`tomestack.db.v6.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages and library backups are unchanged: snapshots are never in them.
+- **Database schema 7** (M5 slice 8; approved by the owner 2026-09-29, LIVING_SPECS change history) adds `character_snapshots`, insert-only (triggers refuse updates and deletes). The data folder is backed up first (`tomestack.db.v6.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages and library backups are unchanged: snapshots are never in them.
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).

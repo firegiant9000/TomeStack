@@ -140,7 +140,7 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
      - a resource that grows faster than PB (**changed by the owner, 2026-09-29: faster than every SRD pool of the family**, because SRD pools also outgrow PB);
      - a level with no feature.
    - Hints never block, never change a calculation, and are never exported. The hint set is the owner's call.
-8. **B08 character snapshots.** **Done 2026-09-29 (fixture-verified; [features/snapshots.md](features/snapshots.md)): database migration v7, by hand only, not in backups (D14).**
+8. **B08 character snapshots.** **Done 2026-09-29 (fixture-verified; [features/snapshots.md](features/snapshots.md)): database migration v7 (approved by the owner, 2026-09-29), by hand only, not in backups (D14).**
    - Snapshots are insert-only, in a new table (a forward-only database migration, with the usual pre-upgrade backup). The commands are `character.snapshot`, `character.snapshots` and `character.restorePreview`: choices, pins, play state and the sheet diff, shown like an update review.
    - `character.restoreSnapshot { token, confirm }` first snapshots the current state, so a restore can be undone and nothing is lost. The undo snapshot and the restore run in **one SQLite transaction**, as candidate acceptance does. The command takes the preview's one-use token, so a repeated confirmation does nothing (review fix).
    - Interactions to settle:
