@@ -186,7 +186,8 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **Package import and restore no longer refuse what publishing allowed.** When a package's published revision is re-checked, `validate.requires-v9` (an inert `scale` or table key that an earlier build published at v3 to v8) and `validate.scale-duplicate` (a clash the order of publishing allowed; the calculation reports `scale.duplicate` and the class's column wins) are warnings. Both still block `content.publish` (`A_published_v8_revision_with_an_inert_scale_effect_still_imports_with_a_warning`).
 - **"Newest" during an import** now means what it means afterwards: the import catalog lists this machine's revisions first, then the package's, the order they have once added.
 - **Release constraint:** v9 includes slice 1b's choice with no declared options, so slices 1a and 1b ship in the same release (ROADMAP).
-- **Not changed (single-source, low):** a revision with no `schemaVersion` is read at the current version, as before v9. The calculation-side v8 gate is asserted for the resource maximum only; the other five formula sites use the same `AllowsScales` call.
+- **The calculation-side v8 gate** is now asserted at every formula site in the relabelled-v8 test (resource maximum, recovery, roll bonus, modifier value, spellsFormula).
+- **Not changed (confirmed, low):** a content revision with no `schemaVersion` is read at the current version, as before v9. Reading it as v1 instead would change how v1 packages import, so it is left for an owner decision.
 
 **Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
 
