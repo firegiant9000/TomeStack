@@ -23,6 +23,7 @@ import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
 import { TreeView } from './TreeView';
+import { fromTemplate, templates, type TemplateId } from '../templates';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -63,6 +64,7 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
   const [sourceReport, setSourceReport] = useState<{ sourceId: string; report: DebugReport }>();
   const [focus, setFocus] = useState<RuleFocus>();
   const [diagnosing, setDiagnosing] = useState(false);
+  const [templateId, setTemplateId] = useState<TemplateId>(templates[0]!.id);
 
   const loadSources = useCallback(
     () =>
@@ -179,6 +181,29 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
                 New {a.label}
               </button>
             ))}
+            <label className="field">
+              Start from a template
+              <select value={templateId} onChange={(e) => setTemplateId(e.target.value as TemplateId)} aria-describedby="template-hint">
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setPublished(undefined);
+                setFocus(undefined);
+                setEditing(fromTemplate(templateId, source.id, source.rulesFamilies, crypto.randomUUID()));
+              }}
+            >
+              Use template
+            </button>
+            <p id="template-hint" className="hint">
+              {templates.find((t) => t.id === templateId)?.description} It opens as an unsaved draft; nothing is saved until you save it.
+            </p>
             {entries.length > 0 && (
               <button type="button" onClick={() => void diagnoseSource(source.id)} disabled={diagnosing}>
                 Find problems in {source.title}
@@ -589,6 +614,7 @@ function EntryEditor(props: {
           effect={effect}
           fields={props.info.fields}
           resources={resources}
+          toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
           grantable={grantable}
           onChange={(e) => setEffect(index, e)}
           onProblem={(field, problem) =>
@@ -598,7 +624,21 @@ function EntryEditor(props: {
             })
           }
           onRemove={() => {
-            update({ effects: revision.effects.filter((_, i) => i !== index) });
+            // Rules that named the removed one no longer do (review fix): a modifier switched by a removed toggle is always
+            // on again, and a toggle that spent a removed resource spends nothing.
+            const removedToggle = effect.type === 'toggle' ? effect.toggleId : undefined;
+            const removedResource = effect.type === 'resource' ? effect.resourceId : undefined;
+            const remaining = revision.effects.filter((_, i) => i !== index);
+            const resourceStillDefined = remaining.some((e) => e.type === 'resource' && e.resourceId === removedResource);
+            update({
+              effects: remaining.map((e) =>
+                e.type === 'modifier' && removedToggle !== undefined && e.toggle === removedToggle
+                  ? { ...e, toggle: undefined, timing: undefined }
+                  : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
+                    ? { ...e, resourceId: undefined }
+                    : e,
+              ),
+            });
             // Field keys start with the effect id: a removed rule's problems no longer block saving.
             setProblems((p) => Object.fromEntries(Object.entries(p).filter(([key]) => !key.startsWith(`${effect.id}-`))));
           }}
@@ -894,6 +934,7 @@ function EffectEditor(props: {
   effect: Effect;
   fields: { id: string; label: string }[];
   resources: Extract<Effect, { type: 'resource' }>[];
+  toggles: Extract<Effect, { type: 'toggle' }>[];
   grantable: StudioEntry[];
   onChange: (effect: Effect) => void;
   onProblem: ReportProblem;
@@ -913,7 +954,9 @@ function EffectEditor(props: {
     restriction: 'Prerequisite',
     scale: 'Class column',
     spellcasting: 'Spellcasting',
+    toggle: 'Toggle',
   };
+  const toggles = props.toggles;
   const legend = `Rule ${n}: ${names[effect.type]}`;
 
   return (
@@ -942,6 +985,47 @@ function EffectEditor(props: {
           <label className="field">
             Value (a number or a formula such as PB + CON.MOD)
             <input value={effect.value} onChange={(e) => onChange({ ...effect, value: e.target.value })} />
+          </label>
+          {/* Only for a modifier that is always on or switched by a toggle: another timing (such as onRoll, from imported
+              content) is left as it is, never turned into "always" (review fix). */}
+          {(effect.toggle || ((effect.timing ?? 'always') === 'always' && toggles.length > 0)) && (
+            <label className="field">
+              Applies
+              <select
+                value={effect.toggle ?? ''}
+                onChange={(e) =>
+                  // Content v6: a toggled modifier applies only while its toggle is on, so its timing is whileActive; without
+                  // the toggle it is always on again (its timing was whileActive only because of the toggle).
+                  onChange(e.target.value ? { ...effect, toggle: e.target.value, timing: 'whileActive' } : { ...effect, toggle: undefined, timing: undefined })
+                }
+              >
+                <option value="">Always</option>
+                {toggles.map((t) => (
+                  <option key={t.id} value={t.toggleId}>
+                    While {t.label || t.toggleId} is on
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </>
+      )}
+      {effect.type === 'toggle' && (
+        <>
+          <label className="field">
+            Toggle name
+            <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
+          </label>
+          <label className="field">
+            Turning it on spends
+            <select value={effect.resourceId ?? ''} onChange={(e) => onChange({ ...effect, resourceId: e.target.value || undefined })}>
+              <option value="">Nothing</option>
+              {props.resources.map((r) => (
+                <option key={r.id} value={r.resourceId}>
+                  One use of {r.label || r.resourceId}
+                </option>
+              ))}
+            </select>
           </label>
         </>
       )}
@@ -1022,6 +1106,9 @@ function EffectEditor(props: {
                 onChange({ ...effect, content: entry?.latestPublished && reference(entry.latestPublished) });
               }}
             >
+              {/* An empty slot (a template's, or before any feature is published) shows as empty, so picking the first
+                  feature is a change too. */}
+              {!effect.content && <option value="">Choose a published feature</option>}
               {props.grantable.map((g) => (
                 <option key={g.contentId} value={g.latestPublished!.revisionId}>
                   {g.name} (published)

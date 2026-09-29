@@ -194,6 +194,25 @@ Acceptance:
 - `AppService.Tests/ContentTreeCommandTests`;
 - the e2e flow "shows an entry's relationships as a keyboard tree and jumps from a node to its rule".
 
+## Templates (M5 slice 6, B15; provisional)
+
+**Start from a template** in the studio opens an unsaved draft in the editor. It never saves or publishes anything by itself (drafts only): the author saves it, and publishing runs the usual checks. The set is the one the owner approved (LIVING_SPECS D14). It is provisional: the M3 gap notes will revise it (D13). All template text is original to TomeStack, with no SRD or third-party text (SPEC Q-03). The templates are `src/Ui/src/templates.ts`, pure functions tested in `templates.test.ts`.
+
+| Template | Kind | What it fills in |
+| --- | --- | --- |
+| A feature with limited uses | feature | A resource (uses = `PB`), an assisted action that spends one use, and a long-rest recovery of all uses |
+| A stance you switch on and off | feature | A resource of 2 uses with a long-rest recovery, a toggle that spends one use when switched on, and a +1 Armor Class bonus only while the toggle is on (content v6 `toggle` and `modifier.toggle`) |
+| A subclass skeleton | subclass | Empty feature slots (content grants that name nothing yet) at class levels 3, 6, 10 and 14. The author chooses "Offered in the choice" and a published feature for each slot |
+| A class skeleton | class | A d8 hit die, Constitution and Wisdom saves (starting class), a subclass choice at level 3 with no options of its own, and empty reference-only Ability Score Improvement slots at levels 4, 8, 12, 16 and 19 |
+
+**The skeleton levels are fixed, provisional defaults** (3, 6, 10 and 14 for a subclass; 4, 8, 12, 16 and 19 for improvements). They are not taken from the class or the rules family: classes differ, and so do the families' high-level features. The author moves or removes the slots, and the M3 gap notes may change the defaults (D13). A template leaves the description (shown on the sheet) empty; its explanation is only the hint beside the picker.
+
+An empty slot is a validation error (`validate.grant-content-missing`), so a skeleton can be saved as a draft but not published until each slot names a published feature. The debugger and the relationship tree show the slots too. For the stance template, the editor now shows `toggle` rules (name, and the resource it spends) and a modifier's "Applies: while … is on". That choice is offered only for a modifier that is always on or switched by a toggle, so a situational timing from imported content is never turned into "always". Removing a toggle turns the modifiers it switched back to always on, and removing a resource leaves the toggles that spent it spending nothing. "Use template", like "New …", replaces an open editor's unsaved edits.
+
+Acceptance:
+- `templates.test.ts`;
+- the e2e flow "starts homebrew from a template as an unsaved draft, publishes a stance, and a skeleton waits for its slots". It also runs all four templates through the server's checks (only the skeletons' empty slots are errors) and removes a stance's toggle.
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
 A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.

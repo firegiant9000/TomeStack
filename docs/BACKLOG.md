@@ -18,7 +18,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B12 | Local campaign profiles | M2 | Filter sources and rule choices per campaign. **Implemented (M2 item 7, `features/campaigns.md`)** |
 | B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely |
 | B14 | Spell/item/feature cards | M7 | Produce readable quick-reference cards |
-| B15 | Homebrew templates | M5 | Start a resource, transformation or class pattern |
+| B15 | Homebrew templates | M5 | Start a resource, transformation or class pattern. **Done 2026-09-29 (M5 slice 6, fixture-verified, provisional set):** four draft-only templates, [features/homebrew-studio.md](features/homebrew-studio.md#templates-m5-slice-6-b15-provisional) |
 | B16 | Optional local-language assistant | M7 | Turn text into reviewable suggestions without requiring AI |
 | B17 | Accessibility and customization | M2 baseline, M7 depth | Keyboard, scaling, high contrast and layout checks |
 | B18 | Themes | M7 | Offer modern, dark and tabletop themes |

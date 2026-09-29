@@ -817,7 +817,9 @@ export type ClassEntry = 'startingClass' | 'multiclass';
 export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
 export type Effect =
-  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string })
+  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
+  // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
+  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string })
   | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number; onlyAs?: ClassEntry })
   | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
