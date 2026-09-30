@@ -7,7 +7,10 @@ public enum Ability { Str, Dex, Con, Int, Wis, Cha }
 
 public enum ContentKind { Species, Background, Class, Subclass, Feature, Feat, Spell, Item }
 
-/// <summary>Only <see cref="Published"/> revisions can affect calculations (SPEC I-01, I-06).</summary>
+/// <summary>
+/// Only <see cref="Published"/> revisions affect saved characters (SPEC I-01, I-06). The studio sandbox alone calculates
+/// one draft, in memory, on an unsaved copy (<see cref="DraftOverlayCatalog"/>).
+/// </summary>
 public enum RevisionStatus { Draft, Published }
 
 /// <summary>SPEC I-05. Unhandled mechanics keep their text and are marked <see cref="Reference"/>.</summary>

@@ -5,7 +5,7 @@ Date: 2026-09-28
 
 ## Context
 
-ROADMAP M5's exit gate: "a nonstandard class levels and multiclasses without code edits". SPEC I-04 (guided authoring, no scripts) and Q-02 (bounded formulas, no code execution) still hold. The invariants: only published revisions calculate; published revisions are insert-only, and a bundled revision already on any pushed branch never changes bytes; `srd-5.1` and `srd-5.2.1` differ only through `RulesFamilyPolicy` fields; `RulesCore` stays free of persistence, UI and Windows.
+ROADMAP M5's exit gate: "a nonstandard class levels and multiclasses without code edits". SPEC I-04 (guided authoring, no scripts) and Q-02 (bounded formulas, no code execution) still hold. The invariants: only published revisions calculate (reworded 2026-09-29, LIVING_SPECS D14: only published revisions affect *saved* characters; the studio sandbox calculates one draft on an unsaved copy); published revisions are insert-only, and a bundled revision already on any pushed branch never changes bytes; `srd-5.1` and `srd-5.2.1` differ only through `RulesFamilyPolicy` fields; `RulesCore` stays free of persistence, UI and Windows.
 
 **What a class already is (checked against the code 2026-09-28).** A class is content (`ContentKind.Class`), and nothing in `RulesCore` names an SRD class. Most of a nonstandard class can therefore be written today, in content schemas v3 to v8:
 

@@ -95,8 +95,10 @@ public sealed partial class TomeStackApp
     /// must come from allowed sources; granted content follows what grants it. A recorded exception turns the warning
     /// into a note with the reason. A rules family other than the campaign's is also flagged.
     /// </summary>
-    private CampaignStatus? CampaignOf(Character character, CharacterSheet sheet)
+    /// <param name="catalog">Where revisions are looked up: the store, or the sandbox overlay (M5 slice 3), so an unsaved draft is checked too.</param>
+    private CampaignStatus? CampaignOf(Character character, CharacterSheet sheet, IContentCatalog? catalog = null)
     {
+        catalog ??= _store;
         if (character.CampaignId is not { } id)
             return null;
         if (_store.FindCampaign(id) is not { } campaign)
@@ -108,9 +110,9 @@ public sealed partial class TomeStackApp
         var active = (sheet.Active ?? []).ToHashSet();
         foreach (var reference in character.AllReferences().Where(active.Contains))
         {
-            if (_store.FindRevision(reference) is not { } revision || allowed.Contains(revision.Provenance.SourceId))
+            if (catalog.FindRevision(reference) is not { } revision || allowed.Contains(revision.Provenance.SourceId))
                 continue;
-            var source = _store.FindSource(revision.Provenance.SourceId)?.Title ?? "an unknown source";
+            var source = catalog.FindSource(revision.Provenance.SourceId)?.Title ?? "an unknown source";
             warnings.Add(character.CampaignExceptions.LastOrDefault(e => e.Content == reference) is { } exception
                 ? new("campaign.exception", $"'{revision.Name}' is from {source}, which '{campaign.Name}' does not allow; used by exception: {exception.Reason}", reference)
                 : new("campaign.source-not-allowed", $"'{revision.Name}' is from {source}, which '{campaign.Name}' does not allow. Remove it or record an exception with a reason.", reference));

@@ -19,6 +19,7 @@ import type {
 import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
 import { DebugFindings } from './DebugFindings';
+import { SandboxPanel } from './SandboxPanel';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -643,6 +644,8 @@ function EntryEditor(props: {
           )}
         </div>
       )}
+
+      {classLike && <SandboxPanel revision={revision} prepare={(r) => ({ ...forServer(r), revisionId: crypto.randomUUID() })} onError={onError} />}
 
       {debugged?.revision === revision && (
         <DebugFindings report={debugged.report} label="Debugger findings" showNames={false} onShow={(f) => focusRule(f.effectId)} />

@@ -46,6 +46,8 @@ import type {
   RollRecord,
   RollTarget,
   RulesFamilyId,
+  SandboxRequest,
+  SandboxView,
   SaveOutcome,
   SourceChoice,
   ValidationReport,
@@ -76,6 +78,8 @@ export function createClient(transport: Transport) {
     /** The homebrew debugger (M5 slice 2): a whole source, drafts included, or one unsaved revision. Writes nothing. */
     diagnoseSource: (sourceId: string) => call<DebugReport>('content.diagnose', { sourceId }),
     diagnoseRevision: (revision: ContentRevision) => call<DebugReport>('content.diagnose', { revision }),
+    /** "Try it" (M5 slice 3): a draft on an unsaved copy or a blank character, calculated as if published. Saves nothing. */
+    sandbox: (request: SandboxRequest) => call<SandboxView>('content.sandbox', request),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
