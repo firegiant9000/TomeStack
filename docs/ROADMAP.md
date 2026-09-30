@@ -31,7 +31,7 @@ The rule from LIVING_SPECS D13 stands: everything M5 chose provisionally (templa
 | M7 Expanded tabletop | DEFERRED | Monsters, DM tools, local AI | Nothing in the evidence asks for it. | Unknown | None |
 | Content breadth (Monk, Rogue, Barbarian 4 to 20, species, backgrounds) | DEFERRED until T2 | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
 | Cloud sync, accounts, executable plugin sandbox | CANCELLED | (never planned; recorded to close the question) | Contradicts SPEC and ADR-011 option A. | n/a | n/a |
-| Accessibility owner checks (items 6, 16 and 18 to 27; 15 and 17 passed on 0.2.2) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
+| Accessibility owner checks (items 6, 15 to 17 and 18 to 27; the 0.2.2 pass was keyboard only, #24) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
 | ADR-008 pre-release checklist (trademark, REDIST, Velopack notices, signing) | SUPERSEDED by T5 | Before the first installer | Becomes the acceptance list of T5. | High | Release evidence |
 
 ### R3. Milestones
@@ -381,7 +381,7 @@ Character packages stay format 5.
 
 ## M2 status (2026-09-28: checks passed as 0.3.0, limited content)
 
-The owner checks on the installed 0.2.2 passed on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal. By owner decision, the synthetic stand-in meets DoD 3 for M2, and the real Stardust Guardian is the M3 gate.
+The owner checks on the installed 0.2.2 passed on 2026-09-28: the upgrade from 0.2.0, the keyboard walkthrough, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal. **Correction (2026-09-28):** a Narrator pass was also recorded as passed, but it was not done; it and the other open WCAG AA items (200% zoom, High Contrast, field-card state) are owner checks still open (`features/accessibility-checklist.md`). By owner decision, the synthetic stand-in meets DoD 3 for M2, and the real Stardust Guardian is the M3 gate.
 
 ### Earlier status (2026-09-27, v0.2.2: exit candidate)
 
