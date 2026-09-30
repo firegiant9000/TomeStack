@@ -218,17 +218,14 @@ public sealed partial class PackageService
                 errors.Add(new("pack.source-empty", $"The pack carries '{source.Title}' with no content."));
             // Adding to a source you made here is refused for every package (package.own-source, BuildPreview).
         }
-        // A content's revisions belong to one source, inside the pack as against this machine (the export refuses it too).
-        foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
-            errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the pack's sources.", split.Last().Reference));
+        // A content's revisions belong to one source, inside the pack and against this machine: BuildPreview checks that
+        // for every package but a full restore (M6 review; the export refuses it too).
         foreach (var revision in parsed.Revisions)
         {
             if (revision.Status != RevisionStatus.Published)
                 errors.Add(new("pack.draft-not-allowed", $"'{revision.Name}' is a draft; a source pack carries only published content.", revision.Reference));
             if (!packSources.ContainsKey(revision.Provenance.SourceId))
                 errors.Add(new("pack.revision-source", $"'{revision.Name}' belongs to a source the pack does not carry.", revision.Reference));
-            else if (store.RevisionsOf(revision.ContentId).FirstOrDefault(r => r.Provenance.SourceId != revision.Provenance.SourceId) is { } other)
-                errors.Add(new("pack.content-conflict", $"'{revision.Name}' would add a revision to '{other.Name}', which belongs to another source here.", revision.Reference));
         }
     }
 

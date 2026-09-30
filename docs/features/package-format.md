@@ -58,16 +58,19 @@ Every limit and check below has its own test in `tests/AppService.Tests/PackageL
     - a source that is new here is recorded as `received`, and a received source can never be marked as the receiver's own work; a source already here keeps the origin this machine recorded (a source stored before database v8 keeps its unknown origin);
     - no package adds content to a source you made here (`package.own-source`); a source of unknown origin that gets content from a package loses its share confirmation (`package.source-unconfirmed`), so it must be marked as shareable again;
     - no package adds content under a bundled SRD source (`package.bundled-source-content`), and `content.saveDraft` refuses it too (`content.source-not-editable`), so nothing else travels with the SRD's CC-BY notice;
+    - no package but a full restore adds a revision to a content that belongs to another source here, or splits one content across two of its own sources (`pack.content-conflict`; a character package too since the M6 stack review, 2026-09-30). Otherwise the added revision became that content's newest, SRD content included, and the content sat in two sources for good;
     - a character or source pack import never raises an existing source's `redistributable`;
     - a bundled SRD source record is never replaced (`package.bundled-source-kept`); a full restore still gives it the backup's PDF when it has none here;
     - `importDerived`, `origin` and `shareConfirmedAt` are never a `keepLocal` / `useImported` choice.
 
     **What this does not stop (review, 2026-09-29).** These rules guard against mistakes and against packages from other people, not against a user who sets out to get round them on their own machine:
     - a **full library restore** is the user's own file and is taken at its word: a hand-edited backup (its hashes are plain SHA-256) can bring a source back without the flag, with `origin: "local"`, or with `redistributable` raised;
+    - that includes **someone else's full backup** restored here: a source new here comes back with the backup's `origin` and `shareConfirmedAt`, so their homebrew counts as made and confirmed here (and your own packages from your other machine are then refused for it with `package.own-source`). Found by the M6 stack review (2026-09-30); changing what a restore records is an owner decision, so the behaviour is kept until then;
     - a **v6 backup** of a source whose PDF was already removed, or that only had import jobs, restores unflagged (jobs are not in backups);
+    - a source **stored before database v8** whose PDF was removed after pages were imported from it (a page import records no import job) is not marked by the v8 migration;
     - a source **stored before database v8** has an unknown origin, so a friend's source received back then can still be marked as your own work (you confirm it is yours);
     - text **copied by hand** from a PDF into a new source is not tracked: the flag is per source, not per text.
-12. **Newer packages are refused as newer.** `format` and `formatVersion` are read from the raw manifest first, so a package from a later TomeStack, even with a scope this build does not know, is refused with `package.unsupported-format` ("update TomeStack"), not as a damaged file.
+12. **Newer packages are refused as newer.** `format` and `formatVersion` are read from the raw manifest first, before any other entry's name is checked (M6 stack review, 2026-09-30), so a package from a later TomeStack, even with a scope or an entry folder this build does not know, is refused with `package.unsupported-format` ("update TomeStack"), not as a damaged file.
 
 ## Full library backup (M2.1)
 
@@ -93,7 +96,7 @@ A character backup protects characters and what they use. It does not protect ho
   - The writer refuses a library over the reader's limits (`backup.too-large`) before writing, so every saved backup can be restored.
   - A backup file that changes between "Choose" and "Restore" is refused (`restore.file-changed`).
   - The preview says a replaced character is kept in the `pre-restore-*.db` copy (`restore.character-replace`). It also warns when a revision from the backup would become the newest over a newer one that only this library has (`restore.newest-changes`).
-- The two kinds do not mix. `package.preview` refuses a library backup (`package.library-backup`), and a restore refuses a character package (`restore.not-a-library-backup`). Only a v6 or later library backup may contain `attachments/` or `files/` entries, and only a v7 source pack has `scope: "source"`.
+- The two kinds do not mix. `package.preview` refuses a library backup (`package.library-backup`), and a restore refuses a character package (`restore.not-a-library-backup`). Only a v6 or later library backup may contain `attachments/` or `files/` entries, and only a v7 or later source pack has `scope: "source"`.
 - Tests: `tests/AppService.Tests/LibraryBackupTests.cs` covers the clean-folder restore compared as a whole, including a restart, plus the exclusions, the refusals, an altered PDF, the pre-restore copy and a damaged PDF copy. `LibraryBackupTests.The_commands_use_the_native_dialogs…` covers the commands. The desktop smoke (`scripts/smoke.ps1`) backs up its data folder, PDF included, and restores it into a second, clean folder with the shipped exe.
 - **Not verified:** a restore on a second machine, and a backup of a real library with large PDFs. Both are owner checks.
 
@@ -117,7 +120,7 @@ A **source pack** shares your own homebrew: one or more sources and their publis
 
 - The pack must be a v7 share with only `sources/` and `content/` entries (`package.entry-not-allowed`), a `revisionOrder` that lists every revision once, and an attestation for each source (`pack.attestation-missing`).
 - Each source must be redistributable and not import-derived (`pack.source-not-shareable`), not a bundled SRD source (`pack.source-bundled`), and have content (`pack.source-empty`). Every revision must be published (`pack.draft-not-allowed`) and belong to a source in the pack (`pack.revision-source`).
-- A pack may not add content to a source you made on this machine (`package.own-source`, rule 11), or a revision to a content that belongs to another source here or to two of its own sources (`pack.content-conflict`). Your own pack imported back where it was made adds nothing and is allowed.
+- A pack may not add content to a source you made on this machine (`package.own-source`, rule 11), or a revision to a content that belongs to another source here or to two of its own sources (`pack.content-conflict`, checked for every package but a full restore, rule 11). Your own pack imported back where it was made adds nothing and is allowed.
 - When the pack's newest revision of a content is already here and it adds older ones, one of those becomes the newest here (newest is last stored); the preview warns (`pack.newest-changes`).
 - The imported sources are recorded as `received`: they can travel on in character shares under the sender's `redistributable`, but never in your source packs, and you cannot mark them as your own.
 - The preview says the attestation is the sender's claim, which TomeStack cannot verify. Apply copies the database first (rule 10).
@@ -132,7 +135,7 @@ A **source pack** shares your own homebrew: one or more sources and their publis
 | Source pack | this build | 7 | 3 to 9 | refused | refused (v7) | yes |
 | A later format (8 and on) | later builds | 8+ | any | refused | refused | refused (`package.unsupported-format`) |
 
-The database is versioned the same way: this build migrates a v7 database to v8 (forward-only, `tomestack.db.v7.bak` first), and an older build refuses a v8 data folder (`NewerDatabaseException`), so no older build can rewrite a source without its flag.
+The database is versioned the same way: this build migrates a v7 database to v8 (forward-only; one copy first, at the version the database is opened with: `tomestack.db.v7.bak`, or `tomestack.db.v6.bak` from 0.3.x, which runs v7 and v8 in turn), and an older build refuses a v8 data folder (`NewerDatabaseException`), so no older build can rewrite a source without its flag.
 
 **Tests:** `tests/AppService.Tests/SourcePackTests.cs`: the round trip into a clean data folder (stored order, equal revisions, received origin, the pre-import copy); every export refusal; "Mark as shareable" and its refusals; the flag on attach, detach, page import and candidate accept, and a character share leaving it out; the flag, origin and confirmation through a v7 library backup, and a v6 backup restored with a PDF; imports that cannot lower the flag, raise `redistributable` or replace a bundled source; ten hostile packs; a pack adding to your own source or to another source's content; a character package adding to your own source or under an SRD source, and a draft saved under one; a pre-v8 source keeping its unknown origin through your own backup, and losing its share confirmation when a package adds to it; the newest-changes warning; a full restore giving an SRD source its PDF back; a newer format with an unknown scope; the v8 migration backfill; the dispatcher commands. The source-pack manifest is validated against package-manifest v7 and its sources against source v1, and library-backup sources against source v2 (`Library_backup_sources_match_the_source_v2_schema`).
 
