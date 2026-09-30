@@ -1,6 +1,6 @@
 # Extensions (ADR-011, option A)
 
-SPEC P-05 · ROADMAP M6 slice 3 · [ADR-011](../decisions/ADR-011-extension-api.md) (accepted, option A: declarative only) · status: **implemented and fixture-verified on the unmerged M6 slice 3 PR (2026-09-29)**; database v9 and library-backup format v9 (provisional) wait for the owner's approval.
+SPEC P-05 · ROADMAP M6 slice 3 · [ADR-011](../decisions/ADR-011-extension-api.md) (accepted, option A: declarative only) · status: **implemented and fixture-verified on the unmerged M6 slice 3 PR (2026-09-29)**; database v9, library-backup format v9 (the number stays provisional until it merges) and the new schemas approved by the owner 2026-09-30; merging still waits for the owner.
 
 An extension adds an **import** (a JSON or CSV file becomes draft content) or an **export** (a character's sheet, or published content, becomes a text or JSON file). **No extension code ever runs.** An extension is data: a manifest and one transform document per hook, which TomeStack's own bounded interpreter reads (`AppService/Extensions/DeclarativeTransform.cs`). The shipped app still opens no socket and makes no network call (ADR-001, ADR-006).
 
@@ -15,7 +15,7 @@ transforms/<hook id>.json    one transform per hook (docs/schemas/extension-tran
 
 It is read as untrusted input: at most 5 MB and 64 entries, 1 MB per entry and 16 MB unpacked, every path on that allowlist (anything else, `..` included, is refused before anything is unpacked), nothing extracted to disk, every transform parsed before install, and no entry left unused. The sample is [examples/extensions/spell-list-and-sheet-summary](../../examples/extensions/spell-list-and-sheet-summary/).
 
-A source pack, campaign pack or character package can never carry an extension, and importing one never installs one (`package.extension-not-allowed`).
+A source pack, campaign pack or character package can never carry an extension, and importing one never installs one (`package.extension-not-allowed`). That holds for a package that claims a newer format too: an extension's own entries (`extension.json`, `transforms/`, a `.tomestack-ext.zip`) are refused as an extension before the version is read, not with "update TomeStack" (M6 stack re-review, 2026-09-30). Only the library backup's `extensions/` folder is left to the version check, because a later backup may keep extensions in another shape.
 
 ## Manifest
 

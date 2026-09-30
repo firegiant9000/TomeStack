@@ -52,6 +52,10 @@ public sealed partial class TomeStackApp
         // published with the SRD's CC-BY record, shared everywhere and exempt from the import-derived flag.
         if (_bundledSources.Contains(revision.Provenance.SourceId))
             throw new AppValidationException([new("content.source-not-editable", "Bundled SRD sources cannot take your own content. Save it in a homebrew source of your own.", revision.Reference)]);
+        // A content's revisions belong to one source (M6 stack review, 2026-09-30): a draft under another source would split
+        // it, and a character package that pins both revisions could then not be imported again (pack.content-conflict).
+        if (_store.RevisionsOf(revision.ContentId).FirstOrDefault(r => r.Provenance.SourceId != revision.Provenance.SourceId) is { } other)
+            throw new AppValidationException([new("content.source-mismatch", $"'{other.Name}' belongs to another source. Save a new revision in that source, or make new content here.", revision.Reference)]);
         // A draft may be incomplete, but not malformed: validation and publishing must be able to read it.
         if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
             throw new AppValidationException(empty);
