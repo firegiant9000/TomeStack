@@ -94,10 +94,17 @@ public sealed record CharacterSheet(
     IReadOnlyList<SlotValue>? SpellSlots = null,
     SlotValue? PactSlots = null,
     IReadOnlyList<AttackEntry>? Attacks = null,
-    IReadOnlyList<ToggleValue>? Toggles = null)
+    IReadOnlyList<ToggleValue>? Toggles = null,
+    IReadOnlyList<ScaleValue>? Scales = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>
+/// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
+/// level-5 Test Chronicler. <paramref name="Content"/> is the revision that defines it (the class or its subclass).
+/// </summary>
+public sealed record ScaleValue(ContentReference Class, string ClassName, ContentReference Content, string ScaleId, string Label, int ClassLevel, int Value);
 
 /// <summary>
 /// A limited-use resource (ADR-003 <c>resource</c>). <paramref name="Maximum"/> is its formula evaluated in the content's
@@ -312,7 +319,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && Formula.TryParse(effect.Value, out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -527,7 +534,7 @@ public static class CharacterCalculator
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         // A roll's cost is a number of uses, so never negative.
         int? Cost(ActiveContent item, string source) =>
-            Formula.TryParse(source, out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
+            Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
                 ? Math.Max(value, 0)
                 : null;
         var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
@@ -567,9 +574,18 @@ public static class CharacterCalculator
 
         var attacks = CollectAttacks(active, values, family, weaponProficiencies);
 
+        var scales = resolved.ClassLevels.Scales
+            .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
+            .Select(s =>
+            {
+                var classLevel = resolved.ClassLevels[s.Key.Class];
+                var className = active.FirstOrDefault(a => a.Revision.Reference == s.Key.Class)?.Revision.Name ?? "";
+                return new ScaleValue(s.Key.Class, className, s.Value.Content.Revision.Reference, s.Key.ScaleId, s.Value.Effect.Label, classLevel, s.Value.Effect.Values[Math.Clamp(classLevel, 1, s.Value.Effect.Values.Count) - 1]);
+            })
+            .ToList();
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
-            spellcasting, spellSlots, pactSlots, attacks, toggles), active);
+            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null), active);
     }
 
     /// <summary>
@@ -669,7 +685,7 @@ public static class CharacterCalculator
     /// the order the classes were taken. Spellcasting outside a class, or with tables that are not 20 rows of at most 9
     /// levels, is disabled with a diagnostic (SPEC C-03); validation refuses both on publish.
     /// </summary>
-    private static List<CasterInfo> CollectCasters(List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, List<Diagnostic> diagnostics)
+    private static List<CasterInfo> CollectCasters(List<ActiveContent> active, Character character, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
     {
         var casters = new List<CasterInfo>();
         foreach (var item in active)
@@ -730,7 +746,7 @@ public static class CharacterCalculator
     /// then every modifier of the sheet field, in ADR-003 order. The trace starts with its inputs' steps, like a field's.
     /// </summary>
     private static (int Value, IReadOnlyList<TraceEntry> Trace) SecondaryCasterNumber(
-        CasterInfo caster, string field, int constant, string description, Character character, Dictionary<ContentReference, int> classLevels,
+        CasterInfo caster, string field, int constant, string description, Character character, ClassLevelMap classLevels,
         Dictionary<string, int> values, string family, CasterNumbers numbers, List<Diagnostic> warnings)
     {
         var (content, effect, _) = caster;
@@ -755,7 +771,7 @@ public static class CharacterCalculator
     }
 
     private static List<SpellcastingEntry> SpellcastingEntries(
-        List<CasterInfo> casters, Character character, IContentCatalog catalog, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics,
+        List<CasterInfo> casters, Character character, IContentCatalog catalog, ClassLevelMap classLevels, Dictionary<string, int> values, string family, List<Diagnostic> diagnostics,
         CasterNumbers numbers)
     {
         var entries = new List<SpellcastingEntry>();
@@ -768,7 +784,7 @@ public static class CharacterCalculator
             int? allowed = effect.SpellsTable?[level - 1];
             if (effect.SpellsFormula is { } source)
             {
-                if (Formula.TryParse(source, out var formula, out var failure)
+                if (Formula.TryParse(source, AllowsScales(content.Revision), out var formula, out var failure)
                     && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
                 {
                     allowed = Math.Max(value, 0);
@@ -858,7 +874,7 @@ public static class CharacterCalculator
     /// and a failing formula disables only that resource, with a warning (SPEC C-03).
     /// </summary>
     private static List<ResourceValue> CollectResources(
-        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, string family)
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, string family)
     {
         var resources = new List<ResourceValue>();
         foreach (var item in active)
@@ -882,7 +898,7 @@ public static class CharacterCalculator
                 {
                     trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
                 }
-                else if (!Formula.TryParse(effect.Maximum, out var formula, out var parseError))
+                else if (!Formula.TryParse(effect.Maximum, AllowsScales(revision), out var formula, out var parseError))
                 {
                     warnings.Add(InvalidFormula(revision, effect, parseError!));
                 }
@@ -912,14 +928,14 @@ public static class CharacterCalculator
 
     /// <summary>A recovery amount: <c>all</c>, or its formula evaluated in the content's context (a failure is a warning).</summary>
     private static RecoveryInfo Recovery(
-        RecoveryEffect recovery, ActiveContent item, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> warnings)
+        RecoveryEffect recovery, ActiveContent item, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> warnings)
     {
         if (string.Equals(recovery.Amount.Trim(), "all", StringComparison.OrdinalIgnoreCase))
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, All: true);
         if (recovery.Automation != AutomationStatus.Automatic)
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
         FormulaError? failure;
-        if (Formula.TryParse(recovery.Amount, out var formula, out failure)
+        if (Formula.TryParse(recovery.Amount, AllowsScales(item.Revision), out var formula, out failure)
             && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
         {
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
@@ -934,7 +950,7 @@ public static class CharacterCalculator
     /// rolled without it. A revision below v8 has no roll bonus (<see cref="IgnoresV8"/>).
     /// </summary>
     private static Dictionary<(ContentReference, string), int> RollBonuses(
-        List<ActiveContent> active, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
     {
         var bonuses = new Dictionary<(ContentReference, string), int>();
         foreach (var item in active.Where(a => !IgnoresV8(a.Revision)))
@@ -944,7 +960,7 @@ public static class CharacterCalculator
                 if (roll.Bonus is not { } source)
                     continue;
                 FormulaError? failure;
-                if (Formula.TryParse(source, out var formula, out failure)
+                if (Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure)
                     && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                     bonuses[(item.Revision.Reference, roll.Id)] = value;
                 else
@@ -983,12 +999,18 @@ public static class CharacterCalculator
     /// class the content belongs to; unavailable outside a class) or a field value calculated so far. Records what it read.
     /// </summary>
     private static int? Resolve(
-        string identifier, ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels, Dictionary<string, int> values, List<TraceInput> inputs)
+        string identifier, ActiveContent content, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<TraceInput> inputs)
     {
         int? resolved = identifier switch
         {
             FormulaIdentifiers.Level => character.TotalLevel,
             FormulaIdentifiers.ClassLevel => content.ClassRoot is { } root && classLevels.TryGetValue(root, out var level) ? level : null,
+            // Content v9: the column's value at the level of the class the content belongs to (ADR-010). Unavailable
+            // outside a class, or when neither the class nor its subclass defines the scale.
+            _ when FormulaIdentifiers.IsScale(identifier) => content.ClassRoot is { } scaleRoot && classLevels.TryGetValue(scaleRoot, out var scaleLevel)
+                && classLevels.Scales.TryGetValue((scaleRoot, FormulaIdentifiers.ScaleId(identifier)), out var scale)
+                ? scale.Effect.Values[Math.Clamp(scaleLevel, 1, scale.Effect.Values.Count) - 1]
+                : null,
             _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
             _ => null,
         };
@@ -1021,8 +1043,46 @@ public static class CharacterCalculator
     /// <summary>A class the character has levels in, with its hit die when the class declares one.</summary>
     private sealed record ClassInfo(ActiveContent Content, int Level, HitDieEffect? Die);
 
+    /// <summary>
+    /// The level in each class (keyed by the class revision), and since content v9 each class's scales: the columns its
+    /// class revision and its active subclass define (ADR-010), keyed by the class and the scale id.
+    /// </summary>
+    private sealed class ClassLevelMap : Dictionary<ContentReference, int>
+    {
+        public Dictionary<(ContentReference Class, string ScaleId), (ActiveContent Content, ScaleEffect Effect)> Scales { get; } = [];
+    }
+
+    /// <summary>
+    /// Content v9 (ADR-010): the scales of every class and its active subclasses. The class's own columns come first, so
+    /// when a subclass repeats a class's scale id, the class's column wins and <c>scale.duplicate</c> says so. Only
+    /// automatic scales of a v9 revision with 20 values apply; a subclass pinned outside a class has none.
+    /// </summary>
+    private static void CollectScales(List<ActiveContent> active, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
+    {
+        var owners = active
+            .Where(a => a.ClassRoot is not null && a.Revision.Kind is (ContentKind.Class or ContentKind.Subclass) && a.Revision.SchemaVersion >= ScaleEffect.SchemaVersion)
+            .OrderBy(a => a.Revision.Kind == ContentKind.Class ? 0 : 1);
+        foreach (var owner in owners)
+        {
+            foreach (var scale in owner.Revision.Effects.OfType<ScaleEffect>().Where(s => s.Automation == AutomationStatus.Automatic))
+            {
+                if (scale.Values.Count != Character.MaxLevel || !ScaleEffect.IsValidScaleId(scale.ScaleId) || scale.Values.Any(v => v is < 0 or > FormulaLimits.MaxLiteral))
+                {
+                    // Validation refuses this on publish and import; stored content from elsewhere is isolated here (SPEC C-03).
+                    diagnostics.Add(new("scale.invalid", $"'{owner.Revision.Name}' scale '{scale.Id}' needs a valid scale id and {Character.MaxLevel} values of 0 to {FormulaLimits.MaxLiteral}; it is ignored.", owner.Revision.Reference, scale.Id));
+                    continue;
+                }
+                if (!classLevels.Scales.TryAdd((owner.ClassRoot!, scale.ScaleId), (owner, scale)))
+                {
+                    var kept = classLevels.Scales[(owner.ClassRoot!, scale.ScaleId)].Content.Revision.Name;
+                    diagnostics.Add(new("scale.duplicate", $"'{owner.Revision.Name}' defines scale '{scale.ScaleId}', which '{kept}' already defines for this class; the first one is used.", owner.Revision.Reference, scale.Id));
+                }
+            }
+        }
+    }
+
     private sealed record ResolvedContent(
-        List<ActiveContent> Active, List<ClassInfo> Classes, Dictionary<ContentReference, int> ClassLevels, List<ChoiceStatus> Choices);
+        List<ActiveContent> Active, List<ClassInfo> Classes, ClassLevelMap ClassLevels, List<ChoiceStatus> Choices);
 
     /// <summary>
     /// Pins and classes first. Then, in a worklist: content granted by a root (one level deep only: granted content's own
@@ -1036,7 +1096,7 @@ public static class CharacterCalculator
     {
         var active = new List<ActiveContent>();
         var seen = new HashSet<ContentReference>();
-        var classLevels = new Dictionary<ContentReference, int>();
+        var classLevels = new ClassLevelMap();
         foreach (var entry in character.Classes)
             classLevels.TryAdd(entry.Class, entry.Level);
         var choices = new List<ChoiceStatus>();
@@ -1256,6 +1316,7 @@ public static class CharacterCalculator
 
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
+        CollectScales(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices);
     }
 
@@ -1272,7 +1333,7 @@ public static class CharacterCalculator
     }
 
     /// <summary>The level that gates <paramref name="content"/>'s grants: its class's level, or the character level.</summary>
-    private static int GateLevel(ActiveContent content, Character character, Dictionary<ContentReference, int> classLevels) =>
+    private static int GateLevel(ActiveContent content, Character character, ClassLevelMap classLevels) =>
         content.ClassRoot is { } root ? classLevels.GetValueOrDefault(root) : character.TotalLevel;
 
     // ---- effects --------------------------------------------------------------------------------------------
@@ -1456,7 +1517,7 @@ public static class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);
@@ -1523,6 +1584,12 @@ public static class CharacterCalculator
     /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
     /// </summary>
     private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
+
+    /// <summary>
+    /// Content v9 (ADR-010): <c>SCALE.&lt;id&gt;</c> is a known identifier only in a v9 revision. Below v9 it is an unknown
+    /// identifier, as in builds before v9, so a stored revision never calculates differently on this build.
+    /// </summary>
+    private static bool AllowsScales(ContentRevision revision) => revision.SchemaVersion >= ScaleEffect.SchemaVersion;
 
     /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;
@@ -1751,7 +1818,7 @@ public static class CharacterCalculator
 
     /// <summary>ADR-003 order: highest replace, then bonuses (stack / highest in group), then highest set.</summary>
     private static int ApplyModifiers(
-        string field, int value, List<Modifier> modifiers, Character character, Dictionary<ContentReference, int> classLevels,
+        string field, int value, List<Modifier> modifiers, Character character, ClassLevelMap classLevels,
         Dictionary<string, int> values, string family, List<Step> steps, List<Diagnostic> warnings, HashSet<string> manual)
     {
         var evaluated = new List<(Modifier Modifier, int Amount, List<TraceInput> Inputs)>();
@@ -2025,7 +2092,8 @@ public static class CharacterCalculator
             steps.Add(new(field, "base", "No spell slots", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 0;
         }
-        if (slotCasters.Count > 1 && slotCasters.All(x => x.Effect.MulticlassCaster is not null))
+        // A caster combines when it says how: the v7 enum, or the v9 table (ADR-010; never both, validation refuses it).
+        if (slotCasters.Count > 1 && slotCasters.All(x => x.Effect.MulticlassCaster is not null || CasterTable(x) is not null))
             return CombinedSlots(c, steps, level, slotCasters);
         var (content, effect, classLevel) = slotCasters[0];
         var value = Row(effect.Slots, classLevel)[level - 1];
@@ -2053,14 +2121,18 @@ public static class CharacterCalculator
         var field = FieldIds.SpellSlots(level);
         var policy = RulesFamilies.Get(c.Family);
         var total = 0;
-        foreach (var (content, effect, classLevel) in casters)
+        foreach (var caster in casters)
         {
-            var (part, how) = effect.MulticlassCaster switch
-            {
-                MulticlassCaster.Half => (Fraction(classLevel, 2, policy.HalfCasterLevels), $"half, rounded {Rounding(policy.HalfCasterLevels)}"),
-                MulticlassCaster.Third => (Fraction(classLevel, 3, policy.ThirdCasterLevels), $"a third, rounded {Rounding(policy.ThirdCasterLevels)}"),
-                _ => (classLevel, "all levels"),
-            };
+            var (content, effect, classLevel) = caster;
+            // A table caster counts its table's entry exactly, with no family rounding: the content states the numbers.
+            var (part, how) = CasterTable(caster) is { } table
+                ? (table[Math.Clamp(classLevel, 1, table.Count) - 1], "its multiclass table")
+                : effect.MulticlassCaster switch
+                {
+                    MulticlassCaster.Half => (Fraction(classLevel, 2, policy.HalfCasterLevels), $"half, rounded {Rounding(policy.HalfCasterLevels)}"),
+                    MulticlassCaster.Third => (Fraction(classLevel, 3, policy.ThirdCasterLevels), $"a third, rounded {Rounding(policy.ThirdCasterLevels)}"),
+                    _ => (classLevel, "all levels"),
+                };
             total += part;
             steps.Add(new(field, "base", $"{Describe(content)} at class level {classLevel} counts {part} caster level(s) ({how})", part, total, ContentOrigin(c.Family, content, effect), [new(FormulaIdentifiers.ClassLevel, classLevel)]));
         }
@@ -2069,6 +2141,17 @@ public static class CharacterCalculator
         steps.Add(new(field, "base", $"Multiclass Spellcaster table at caster level {casterLevel}: {value} level {level} slot(s)", casterLevel, value, new(TraceOriginKind.RulesPolicy, c.Family)));
         return value;
     }
+
+    /// <summary>
+    /// Content v9: a caster's multiclass table, when its revision is v9 (deserialization keeps an older revision's key as
+    /// extension data anyway) and the table is valid; an invalid one is refused on publish and import, and ignored here.
+    /// </summary>
+    private static IReadOnlyList<int>? CasterTable(CasterInfo caster) =>
+        caster.Effect.MulticlassCasterTable is { } table && caster.Content.Revision.SchemaVersion >= SpellcastingEffect.MulticlassTableSchemaVersion
+            && caster.Effect.MulticlassCaster is null && caster.Effect.SlotKind == SpellSlotKind.SpellSlots
+            && ContentValidator.MulticlassTableProblem(table) is null
+            ? table
+            : null;
 
     private static int Fraction(int classLevel, int divisor, CasterLevelRounding rounding) =>
         rounding == CasterLevelRounding.Up ? (classLevel + divisor - 1) / divisor : classLevel / divisor;

@@ -1,0 +1,247 @@
+{
+  "packId": "tomestack-m5-chronicler-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures (M5 slice 1, ADR-010: a nonstandard class). Names, columns and tables are invented for testing and contain no SRD or third-party rules text.",
+  "sources": [
+    {
+      "id": "5fc05000-0000-4000-8000-000000000001",
+      "title": "TomeStack Fixtures: Test Chronicler",
+      "publisher": "TomeStack project",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "5fc0c000-0000-4000-8000-000000000001",
+      "revisionId": "5fc0e000-0000-4000-8000-000000000001",
+      "schemaVersion": 9,
+      "kind": "class",
+      "name": "Test Chronicler",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "5fc05000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 1
+        }
+      },
+      "status": "published",
+      "summary": "A test class with its own columns and a two-thirds caster share.",
+      "effects": [
+        {
+          "type": "hitDie",
+          "id": "chronicler-hit-die",
+          "die": 8
+        },
+        {
+          "type": "scale",
+          "id": "chronicler-ink-column",
+          "scaleId": "ink",
+          "label": "Ink",
+          "values": [2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9]
+        },
+        {
+          "type": "scale",
+          "id": "chronicler-lore-column",
+          "scaleId": "lore",
+          "label": "Lore",
+          "values": [1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4]
+        },
+        {
+          "type": "restriction",
+          "id": "chronicler-multiclass-int",
+          "field": "ability.int.score",
+          "minimum": 13,
+          "multiclass": true,
+          "text": "To multiclass into or out of this class: Intelligence 13."
+        },
+        {
+          "type": "grant",
+          "id": "chronicler-save-int",
+          "grant": "proficiency",
+          "target": "save.int",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "grant",
+          "id": "chronicler-save-wis",
+          "grant": "proficiency",
+          "target": "save.wis",
+          "onlyAs": "startingClass"
+        },
+        {
+          "type": "resource",
+          "id": "chronicler-ink",
+          "resourceId": "ink",
+          "label": "Ink",
+          "maximum": "SCALE.ink"
+        },
+        {
+          "type": "recovery",
+          "id": "chronicler-ink-long",
+          "timing": "onLongRest",
+          "resourceId": "ink",
+          "on": "longRest",
+          "amount": "all"
+        },
+        {
+          "type": "recovery",
+          "id": "chronicler-ink-short",
+          "timing": "onShortRest",
+          "resourceId": "ink",
+          "on": "shortRest",
+          "amount": "floor(SCALE.ink / 2)"
+        },
+        {
+          "type": "roll",
+          "id": "chronicler-inkblot",
+          "timing": "onRoll",
+          "rollId": "inkblot",
+          "label": "Inkblot",
+          "dice": "1d6",
+          "resourceId": "ink",
+          "cost": "1",
+          "bonus": "SCALE.lore",
+          "activation": "action",
+          "text": "Spend 1 ink: 1d6 plus your Lore column."
+        },
+        {
+          "type": "modifier",
+          "id": "chronicler-history",
+          "operation": "bonus",
+          "target": "skill.history",
+          "value": "SCALE.lore"
+        },
+        {
+          "type": "spellcasting",
+          "id": "chronicler-spellcasting",
+          "ability": "int",
+          "preparation": "prepared",
+          "spellList": "fixture-chronicle",
+          "slotKind": "spellSlots",
+          "slots": [
+            [1],
+            [2],
+            [3],
+            [3, 1],
+            [3, 2],
+            [4, 2],
+            [4, 2, 1],
+            [4, 3, 1],
+            [4, 3, 2],
+            [4, 3, 2, 1],
+            [4, 3, 3, 1],
+            [4, 3, 3, 2],
+            [4, 3, 3, 2, 1],
+            [4, 3, 3, 3, 1],
+            [4, 3, 3, 3, 2],
+            [4, 3, 3, 3, 2, 1],
+            [4, 3, 3, 3, 2, 1],
+            [4, 3, 3, 3, 3, 1],
+            [4, 3, 3, 3, 3, 2],
+            [4, 3, 3, 3, 3, 2, 1]
+          ],
+          "spellsFormula": "max(1, INT.MOD + SCALE.lore)",
+          "multiclassCasterTable": [0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13],
+          "text": "Test Chronicler casts from the fixture-chronicle list (invented test progression; two thirds of its levels count as a multiclass caster)."
+        },
+        {
+          "type": "grant",
+          "id": "chronicler-marginalia",
+          "grant": "content",
+          "level": 2,
+          "content": {
+            "contentId": "5fc0c000-0000-4000-8000-000000000002",
+            "revisionId": "5fc0e000-0000-4000-8000-000000000002"
+          }
+        },
+        {
+          "type": "choice",
+          "id": "chronicler-archive",
+          "choiceId": "chronicler-archive",
+          "count": 1,
+          "level": 3,
+          "text": "Choose an archive.",
+          "options": [
+            {
+              "contentId": "5fc0c000-0000-4000-8000-000000000003",
+              "revisionId": "5fc0e000-0000-4000-8000-000000000003"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "5fc0c000-0000-4000-8000-000000000002",
+      "revisionId": "5fc0e000-0000-4000-8000-000000000002",
+      "schemaVersion": 9,
+      "kind": "feature",
+      "name": "Test Chronicler: Marginalia",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "5fc05000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 2
+        }
+      },
+      "status": "published",
+      "summary": "A test feature that reads its class's Ink column.",
+      "effects": [
+        {
+          "type": "modifier",
+          "id": "marginalia-initiative",
+          "operation": "bonus",
+          "target": "initiative",
+          "value": "floor(SCALE.ink / 4)"
+        }
+      ]
+    },
+    {
+      "contentId": "5fc0c000-0000-4000-8000-000000000003",
+      "revisionId": "5fc0e000-0000-4000-8000-000000000003",
+      "schemaVersion": 9,
+      "kind": "subclass",
+      "name": "Test Archive of Echoes",
+      "rulesFamilies": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ],
+      "provenance": {
+        "sourceId": "5fc05000-0000-4000-8000-000000000001",
+        "page": {
+          "start": 3
+        }
+      },
+      "status": "published",
+      "summary": "A test subclass with a column of its own.",
+      "effects": [
+        {
+          "type": "scale",
+          "id": "echoes-echo-column",
+          "scaleId": "echo",
+          "label": "Echoes",
+          "values": [0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4]
+        },
+        {
+          "type": "modifier",
+          "id": "echoes-arcana",
+          "operation": "bonus",
+          "target": "skill.arcana",
+          "value": "SCALE.echo + SCALE.lore"
+        }
+      ]
+    }
+  ]
+}

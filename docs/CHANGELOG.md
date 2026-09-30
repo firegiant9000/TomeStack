@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Classes with their own columns and caster shares (M5 slice 1a; ADR-010; rules engine only):** class content can now carry named per-level columns, such as "Ink: 2, 2, 3 …". Its formulas can read them, so a resource, a roll bonus, a skill or a prepared-spell count grows with the class. A caster can also say exactly how many caster levels it adds at each class level, for example two thirds, and it combines with the SRD casters on the Multiclass Spellcaster table. The homebrew studio cannot author these yet; that is the next slice. Tested on an original fixture class, not bundled content.
+
 - **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Exporting a character never passes on that it is archived, and importing a package never archives or unarchives one. Older versions of TomeStack show an archived character as active.
 
 - **The Fighter and the armor table (M2.2; `docs/licensing/srd-pack-review.md` "M2.2 extension"):** the SRD Fighter, levels 1–20, in both rules families, with the Champion, and the SRD armor and shield table.
@@ -49,6 +51,7 @@
 ### Changed
 
 - **Plans only, nothing built (ROADMAP "M5 plan" and "M6 plan"; LIVING_SPECS D13):** by owner direction, M5 (creation power) starts before the M3 gate, which is unchanged and still not met. The template set and new effect types are provisional until the M3 gap notes arrive. The owner approved the plans and accepted ADR-010 (custom base classes, content schema v9). ADR-011 (the extension API) and ADR-012 (VTT export adapters) are proposed and wait for the owner's choices.
+- **Content schema v9 approved (owner, 2026-09-29; ADR-010, LIVING_SPECS change history):** the `scale` effect, `SCALE.<id>`, `spellcasting.multiclassCasterTable` and a choice with no declared options. Merging still waits for the owner.
 - **Development switches are off in the shipped app (audit 2026-09-28; LIVING_SPECS D11):** `TOMESTACK_DEV_FIXTURES=1` and `--devtools` now work only in a Debug build, a smoke run included. The installed app also drops WebView2's extra browser arguments from the environment, so a variable or a shortcut can no longer seed test content into your library, open the browser developer tools or open a debugging port.
 - **The development transport times out like the app's (audit 2026-09-28):** in the browser dev setup, a command to the DevHost that gets no answer now fails after 30 seconds with "timeout", as in the desktop app, instead of waiting forever. Commands that wait for you (a native dialog) still wait.
 
@@ -56,6 +59,7 @@
 
 ### Fixed
 
+- **Content schema v9 (M5 stack review, 2026-09-29):** a class column (`scale`) written in the wrong shape is refused when you check or publish it, instead of publishing with the column silently missing. Importing a package or restoring a backup no longer refuses revisions that publishing allowed: an inert `scale` in content an earlier build published, and a column id that clashes because of the order things were published, are warnings there.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.
 
@@ -66,6 +70,8 @@
   - Content that claims an older content version but carries the new Fighter fields (including the attack count and critical range) has those fields ignored, as an older TomeStack would, with a note on the sheet.
 
 - **CI (M2.1):** the UI flow no longer fails at random. Five checks read the status line before it changed and saw the previous message (three failed runs on 2026-09-28). They now wait for the expected text, and lint refuses the old pattern in the e2e tests. A sixth race: the Barbarian flow read the long-rest proposal as soon as the panel had focus, before the proposal had arrived (reproduced by delaying it 400 ms), and that flow took 23 of its 30 seconds. It now waits for the proposal, and e2e tests have 60 seconds. The desktop smoke is now blocking: it passed on every hosted run that reached it. A new check starts two real TomeStack processes on one data folder. It passed three hosted runs in a row, so it is blocking too.
+
+- **CI (M5 stack, 2026-09-29):** the UI flow failed at random steps on the hosted runner (#30, #31 and #35 each had a red run on a commit whose rerun passed), always where a step waited the default 1 second for the DevHost. Every wait in the e2e flow now allows 10 seconds (`e2e/timeouts.setup.ts`); a 200 ms limit reproduced the same failures locally.
 
 - **A second spellcasting class gets its bonuses, with a trace (M2.1; `docs/features/spellcasting.md`):** a bonus to spell attacks or spell save DCs (from an item or a feature) used to reach only the first spellcasting class. A multiclass character's other casters showed a bare proficiency bonus + ability modifier, without saying how it was calculated. Every caster now gets those bonuses, and the Spells panel explains each caster's attack bonus and save DC step by step.
 
@@ -89,6 +95,7 @@
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).
 - **SRD packs (M2.2):** new v8 revisions of the Paladin and Ranger (Extra Attack, then a further revision adding armor training) and of the Wizard and Sorcerer (`armor.none`), in both families (insert-only: a data folder opened by an earlier build of this branch still opens).
 - **SRD packs:** new revisions of the seven SRD slot casters and their Spellcasting features, in both families (insert-only; the earlier revisions stay for the characters that pin them).
+- **Content schema v9** (`docs/schemas/content-revision.v9.schema.json`, M5 slice 1a, ADR-010) adds the `scale` effect, `SCALE.<id>` in formulas and `spellcasting.multiclassCasterTable`. Each is read only in a v9 revision. No stored revision, hash or bundled pack changes, and there is no database migration. Content published without these features keeps its lower version, and older builds refuse v9 content (`content.schema-unsupported`, `package.schema-unsupported`).
 
 ## 0.3.0 (M2 delivered)
 

@@ -1,6 +1,6 @@
 # ADR-010: Custom base classes and arbitrary progression (content schema v9)
 
-Status: **accepted** (owner, 2026-09-28, as proposed: dice that scale by level stay out of v9). Nothing is built yet. The owner still approves the v9 bump itself before it merges (ROADMAP "M5 plan", slice 1a).
+Status: **accepted** (owner, 2026-09-28, as proposed: dice that scale by level stay out of v9). **Slice 1a (the rules core) is implemented and fixture-verified (2026-09-29)**, see "Evidence". **The v9 bump is approved by the owner (2026-09-29)**, including slice 1b's addition (a choice with no declared options). Merging still waits for the owner.
 Date: 2026-09-28
 
 ## Context
@@ -50,14 +50,14 @@ IDENT := PB | LEVEL | CLASS_LEVEL | (STR|DEX|CON|INT|WIS|CHA) "." (MOD|SCORE) | 
 NAME  := [a-z][A-Za-z0-9]{0,31}
 ```
 
-- The value is the column's entry at the level of the class that the content belongs to. It is read from that class or its chosen subclass, following the same rule as `CLASS_LEVEL` (`features/levels-and-classes.md`). Outside a class the effect is disabled with `formula.value-unavailable`. An id that the class does not define gives `formula.scale-unknown`, and the rest of the sheet still calculates.
+- The value is the column's entry at the level of the class that the content belongs to. It is read from that class or its chosen subclass, following the same rule as `CLASS_LEVEL` (`features/levels-and-classes.md`). Outside a class, or for an id that neither the class nor its subclass defines, the effect is disabled with `formula.value-unavailable` (as built: the evaluator's one code for an identifier without a value), and the rest of the sheet still calculates.
 - A scale is a table of literals, not a formula, so it reads no field. It adds no edge to the field graph and cannot create a cycle or recursion (Q-02). The formula bounds of ADR-003 are unchanged.
-- The trace step reads "Ink at Test Chronicler level 5 = 4, from <class revision, source, page>" (`values[4]` in the example above).
+- The trace records the read as an input of the step that uses it: `SCALE.ink = 4` for a level-5 Test Chronicler (`values[4]` in the example above), next to the effect's own origin (revision, source, page). The sheet lists each column with its class, the revision that defines it and the value (`sheet.scales`).
 - Any formula that uses `SCALE` is v9 content. Six fields hold formulas: a modifier `value`, a resource `maximum`, a recovery `amount`, a roll `cost`, a roll `bonus` (v8), and `spellsFormula`. Dice expressions do not accept `SCALE` (see "Not in v9").
 - **`SCALE` works only in v9 revisions (review fix).** `Formula.TryParse` does not look at the schema version, so the gate belongs in the resolver, like the calculator's `IgnoresV8`. In a revision below v9, `SCALE.<id>` resolves as `formula.unknown-identifier`, which is exactly what builds before v9 do. Package import does not block on validation errors for v1 and v2 revisions. Without this gate, a stored v2 feature whose formula names `SCALE.ink` would calculate on a v9 build and fail on every older build: one stored revision with two meanings.
 - **The id rules are best-effort at publish; calculation is the backstop (review fix).**
   - `validate.scale-duplicate` checks the revision against the catalog: its class, and the subclasses that extend the class's choices. A class revision published later can still collide with an existing homebrew subclass, so calculation reports `scale.duplicate` and the class's column wins.
-  - A `SCALE.<id>` that neither the revision nor its class root defines is a publish warning, `validate.scale-unknown`, and the debugger (M5 slice 2) lists collisions across revisions.
+  - A `SCALE.<id>` that neither the revision nor its class defines is a publish warning, `validate.scale-unknown`. As built, it is checked for a class and for a subclass that names its class (`extendsChoice`). A feature's class, or that of a subclass a class lists as a declared option, is known only when a character has it, so those are left to calculation and to the debugger (M5 slice 2), which also lists collisions across revisions.
   - A subclass's column is indexed by the **class** level. Rows below the level where the subclass is chosen are never read, because the subclass does not apply there.
 
 **3. `spellcasting.multiclassCasterTable` (a new field on an existing type: nullable, absent by default).**
@@ -72,7 +72,7 @@ NAME  := [a-z][A-Za-z0-9]{0,31}
   3. An enum caster counts through the family policy, as today. A table caster counts its table's entry, exactly, with no family rounding: the content states the numbers.
   4. The slots then come from `RulesFamilyPolicy.MulticlassSpellSlots`, as today.
   5. A single caster still uses its own slot table. Pact Magic is still never combined.
-- **The table is read only in v9 revisions (review fix).** `spellcasting` has been typed since v5, and an unknown property on it goes to extension data. A v5–v8 revision that carries `multiclassCasterTable` (edited by hand, or written by a newer build and relabelled) keeps it as **extension data**. It is never typed, so it serializes byte for byte. The calculator ignores it (`effect.schema-field-ignored`), the same way `IgnoresV8` treats v8 fields today, and does what a v8 build does.
+- **The table is read only in v9 revisions (review fix).** `spellcasting` has been typed since v5, and an unknown property on it goes to extension data. A v5–v8 revision that carries `multiclassCasterTable` (edited by hand, or written by a newer build and relabelled) keeps it as **extension data**, in document order (`SpellcastingEffect.FromUnknown`). It is never typed, so it serializes byte for byte. The calculator therefore never sees it, and does what a v8 build does: no diagnostic, no combining. As a second guard, the calculator also ignores a table on any revision below v9 that was built in code.
 - The trace step reads "Test Chronicler at class level 5 counts 3 caster level(s) (its multiclass table)".
 - A homebrew author who wants 2014 and 2024 rounding to differ publishes one revision per family. That is content, which keeps the rule "differences are content or policy fields, never names". The **Test Chronicler** fixture is a 2/3 caster by table: `[0,1,2,2,3,4,4,5,6,6,7,8,8,9,10,10,11,12,12,13]`.
 
@@ -146,22 +146,49 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 | Scripting (Roslyn, Jint, Lua) | Rejected by SPEC Q-02 |
 | Editing the SRD classes to use the new table | It would change bundled revisions or add new ones for no behavior change. The SRD classes keep the enum |
 
-## Evidence (planned; none yet)
+## Evidence
 
-- **RulesCore:** `CustomClassTests`, side by side in `srd-5.1` and `srd-5.2.1`:
-  - the Test Chronicler at levels 1, 3, 5, 11, 17 and 20: hit points, scales, the scale-driven resource and its recovery, and slots;
-  - Chronicler 5 / fixture full caster 3 combining to caster level 3 + 3, the Chronicler with a half caster, and the Chronicler with a non-caster.
-- **Also in RulesCore:**
-  - `A_scale_effect_in_a_revision_older_than_v9_stays_unknown_and_byte_for_byte`;
-  - `A_spellcasting_revision_without_the_table_serializes_unchanged`;
-  - `SCALE_outside_a_class_is_unavailable`;
-  - `A_scale_reads_no_field_and_adds_no_edge`;
-  - `RequiredSchemaVersion_is_9_only_when_a_v9_feature_is_used`, one case for each of the six formula fields, including a roll `bonus` that would otherwise be v8;
-  - `SCALE_in_a_v8_revision_is_an_unknown_identifier`;
-  - `A_v8_spellcasting_revision_with_the_table_as_extension_data_is_unchanged_and_not_combined`;
-  - `A_table_caster_combines_with_an_enum_caster` (the combining check);
-  - `A_v9_revision_is_refused_by_a_v8_validator`.
-- **AppService:** `HomebrewStudioTests` authors and publishes the class and multiclasses it with SRD classes; `SrdPackTests` unchanged; a package round trip.
-- **e2e:** "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
+**Slice 1a (fixture-verified, 2026-09-29).** The fixture is `tests/RulesFixtures/fixture-pack-m5-chronicler.json`: the original Test Chronicler class, a granted feature that reads the class's column, and a subclass with a column of its own.
+
+- **`tests/RulesCore.Tests/CustomClassTests.cs`** (45 cases), each side by side in `srd-5.1` and `srd-5.2.1` where it calculates:
+  - `The_Test_Chronicler_levels_1_to_20_from_its_columns_side_by_side` at levels 1, 3, 5, 11, 17 and 20. It checks hit points, both columns, the subclass column (absent before level 3), the Ink resource and both recoveries, the Inkblot roll's bonus and cost, a skill modifier, the granted feature's initiative, the prepared-spell formula and the class's own slot table.
+  - Multiclass tests with the fixture full caster (caster level 3 + 3, identical in both families), a half caster (the enum caster's family rounding is the only difference), a third caster, and a non-caster (the Chronicler keeps its own table). Also the multiclass Intelligence prerequisite and the starting-class saves.
+  - Version gates:
+    - `SCALE_in_a_v8_revision_is_an_unknown_identifier_as_in_builds_before_v9`;
+    - `A_scale_effect_in_a_revision_older_than_v9_stays_unknown_and_byte_for_byte`;
+    - `A_v8_spellcasting_revision_with_the_table_as_extension_data_is_unchanged_and_not_combined` (a later extension key keeps its place too);
+    - `A_spellcasting_revision_without_the_table_serializes_unchanged`;
+    - `A_v9_revision_is_refused_by_validation_and_calculation_that_support_only_v8`. It shows the refusal one version up (this build and v10), because a test cannot run an older build; the version gate is the same code.
+  - Minimum versions:
+    - `RequiredSchemaVersion_is_9_when_any_formula_field_reads_a_scale`, with one case for each of the six fields;
+    - `RequiredSchemaVersion_stays_below_9_for_a_class_that_uses_nothing_from_v9`.
+  - Bounds and validation:
+    - `A_scale_reads_no_field_and_adds_no_dependency_edge`;
+    - `Scale_identifiers_follow_the_id_pattern`;
+    - `Validation_refuses_bad_scales_and_bad_caster_tables`;
+    - `A_formula_reading_a_scale_its_class_does_not_define_is_a_warning`;
+    - `A_subclass_that_repeats_its_class_scale_id_loses_to_the_class_at_calculation`;
+    - `SCALE_outside_a_class_is_unavailable_and_the_rest_calculates`.
+- **`tests/AppService.Tests/CustomClassTests.cs`:** the Chronicler with the bundled SRD Wizard (caster level 6 in both families), an SRD Paladin (2014 rounds down, 2024 rounds up) and the SRD Fighter (its own table). `content.publish` writes a Chronicler draft as v9, and a class without v9 features at v5.
+- **Schema:** `SchemaTests` validates the fixture against the new `docs/schemas/content-revision.v9.schema.json`.
+- **Unchanged:** `SrdPackTests` (the bundled packs' hashes), `SrdCasterTests` and `SrdFighterTests`, and `git diff origin/main --stat -- src/AppService/Content` is empty.
+
+**Slice 1a review fixes (dual-review, 2026-09-29).** None of the findings was refuted; each is fixed and has a test.
+
+- **The table key below v9:** any spelling of the key (the serializer matches names case-insensitively), and any value (`null`, a string, a list of decimals), is taken out before typing. It goes back into extension data in document order. So the spellcasting still types, and the revision writes back byte for byte (`Below_v9_any_spelling_and_value_of_the_table_key_stays_extension_data_byte_for_byte`).
+- **`validate.requires-v9` for content read from JSON:** it now also fires for a `scale` that stays unknown below v9 and for a table key held as extension data (`A_scale_in_a_v8_draft_read_from_json_is_named_as_needing_v9`). Before this, such a draft would have been published as v8 with the feature silently ignored.
+- **A subclass's scale ids** are checked against its class's newest published revision, plus unsaved revisions validated with it. A clash with an older published revision is a warning (`validate.scale-duplicate-older`). A draft never blocks, and a subclass that extends a feature's choice gets no class checks (`A_subclass_is_checked_against_its_classs_newest_published_revision_only`, `A_subclass_that_extends_a_features_choice_gets_no_class_scale_checks`).
+- **Calculation isolates out-of-bound scale values** that bypassed validation, with `scale.invalid` (`A_stored_scale_with_values_out_of_bounds_is_isolated_at_calculation`).
+
+**Second review (dual-review of the M5 stack, 2026-09-29).** Confirmed by both reviewers, fixed:
+
+- **A malformed scale in a v9 revision** (no label, values that are not whole numbers) stayed an unknown effect and published with no error, so its column silently did not exist. It is now `validate.scale-incomplete` (`A_v9_scale_that_does_not_match_the_shape_is_an_error_not_a_silently_missing_column`).
+- **Package import and restore no longer refuse what publishing allowed.** When a package's published revision is re-checked, `validate.requires-v9` (an inert `scale` or table key that an earlier build published at v3 to v8) and `validate.scale-duplicate` (a clash the order of publishing allowed; the calculation reports `scale.duplicate` and the class's column wins) are warnings. Both still block `content.publish` (`A_published_v8_revision_with_an_inert_scale_effect_still_imports_with_a_warning`).
+- **"Newest" during an import** now means what it means afterwards: the import catalog lists this machine's revisions first, then the package's, the order they have once added.
+- **Release constraint:** v9 includes slice 1b's choice with no declared options, so slices 1a and 1b ship in the same release (ROADMAP).
+- **The calculation-side v8 gate** is now asserted at every formula site in the relabelled-v8 test (resource maximum, recovery, roll bonus, modifier value, spellsFormula).
+- **Not changed (confirmed, low):** a content revision with no `schemaVersion` is read at the current version, as before v9. Reading it as v1 instead would change how v1 packages import, so it is left for an owner decision.
+
+**Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
 
 Supersedes: none. Extends ADR-003 (effect union, grammar) and the M2.2 minimum-version rule (`docs/schemas/README.md`).

@@ -76,6 +76,23 @@ internal static class Fixtures
     private static ContentReference MulticlassRef(int n) =>
         new(Guid.Parse($"5f9dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f9de000-0000-4000-8000-{n:D12}"));
 
+    // M5 slice 1 fixtures (fixture-pack-m5-chronicler.json, content v9, ADR-010): a nonstandard class.
+    public static readonly ContentReference Chronicler = ChroniclerRef(1);
+    public static readonly ContentReference ChroniclerMarginalia = ChroniclerRef(2);
+    public static readonly ContentReference ArchiveOfEchoes = ChroniclerRef(3);
+
+    public static ContentPack ChroniclerPack() => Load<ContentPack>("fixture-pack-m5-chronicler.json");
+
+    /// <summary>Every fixture pack plus the Test Chronicler.</summary>
+    public static InMemoryContentCatalog ChroniclerCatalog()
+    {
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), ChroniclerPack()];
+        return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
+    }
+
+    private static ContentReference ChroniclerRef(int n) =>
+        new(Guid.Parse($"5fc0c000-0000-4000-8000-{n:D12}"), Guid.Parse($"5fc0e000-0000-4000-8000-{n:D12}"));
+
     /// <summary>Every fixture pack: M0, M1, spellcasting and combat.</summary>
     public static InMemoryContentCatalog AllCatalog()
     {
