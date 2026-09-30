@@ -380,6 +380,37 @@ public class CampaignPackTests
     }
 
     [Fact]
+    public void A_character_share_writes_its_campaign_as_a_campaign_pack_does_and_a_backup_keeps_it_whole()
+    {
+        // M6 stack review: a share wrote the stored campaign, pending list and unknown properties included, which a
+        // campaign pack leaves out on purpose.
+        using var origin = new TempApp();
+        var shared = Homebrew(origin, "Test Harbor Notes");
+        var later = Homebrew(origin, "Test Tide Notes", shareable: false);
+        var campaign = Campaign(origin, "Test Tide Table", Srd521Source, shared.Id, later.Id, Fixture2024, FixtureShared, EquipmentFixtures);
+        using var player = new TempApp();
+        player.App.ApplyImport(origin.App.ExportCampaignPack(campaign.Id).Content);
+        var received = Assert.Single(player.App.ListCampaigns());
+        Assert.NotNull(received.PendingSources);
+        using (var planted = JsonDocument.Parse("\"Test planted value\""))
+            player.App.Store.SaveCampaign(received with { Extensions = new() { ["testPlanted"] = planted.RootElement.Clone() } });
+        var character = player.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier.json") with { CampaignId = campaign.Id });
+
+        JsonElement CampaignIn(byte[] package)
+        {
+            using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+            using var document = JsonDocument.Parse(zip.GetEntry($"campaigns/{campaign.Id:D}.json")!.Open());
+            return document.RootElement.Clone();
+        }
+        var share = CampaignIn(player.App.ExportCharacters([character.Character.Id], ExportPurpose.Share).Content);
+        Assert.False(share.TryGetProperty("pendingSources", out _));
+        Assert.False(share.TryGetProperty("testPlanted", out _));
+        var backup = CampaignIn(player.App.ExportCharacters([character.Character.Id]).Content);
+        Assert.True(backup.TryGetProperty("pendingSources", out _));
+        Assert.True(backup.TryGetProperty("testPlanted", out _));
+    }
+
+    [Fact]
     public void The_dispatcher_offers_campaign_pack_commands()
     {
         using var temp = new TempApp();

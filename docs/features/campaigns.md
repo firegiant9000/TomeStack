@@ -19,7 +19,7 @@ Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` pack
 
 ## Packages (DoD 5)
 
-A package includes the campaign of every exported character (`campaigns/<id>.json`, kind `campaign`, package format v4). The import preview lists it (add, unchanged or replace, with a warning when it differs), and apply stores it in the same transaction. A campaign holds no rules text, so a share includes it too. Since M6 slice 2, a character package that replaces a campaign copies the database first ([package-format.md](package-format.md) rule 10).
+A package includes the campaign of every exported character (`campaigns/<id>.json`, kind `campaign`, package format v4). The import preview lists it (add, unchanged or replace, with a warning when it differs), and apply stores it in the same transaction. A campaign holds no rules text, so a share includes it too, written as a campaign pack writes it: without `pendingSources` or unknown properties (M6 stack review, 2026-09-30); a backup keeps both. Since M6 slice 2, a character package that replaces a campaign copies the database first ([package-format.md](package-format.md) rule 10).
 
 ## Campaign packs (M6 slice 2, B13)
 
