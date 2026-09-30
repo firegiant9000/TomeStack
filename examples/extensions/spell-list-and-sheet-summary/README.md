@@ -13,10 +13,12 @@ All text here is original to TomeStack; there is no SRD or third-party rules tex
 ## Build the extension file
 
 An extension is a ZIP file named `*.tomestack-ext.zip` holding `extension.json` and `transforms/` at its root, nothing
-else (not this README, not the CSV). In PowerShell, from this folder:
+else (not this README, not the CSV). In a terminal, from this folder (`tar` comes with Windows 10 and 11):
 
 ```powershell
-Compress-Archive -Path extension.json, transforms -DestinationPath spell-list-and-sheet-summary.tomestack-ext.zip
+tar -a -c -f spell-list-and-sheet-summary.tomestack-ext.zip extension.json transforms
 ```
 
-Then install it from the Extensions screen. See `docs/authoring/extensions.md` for writing your own.
+`Compress-Archive -Path extension.json, transforms -DestinationPath spell-list-and-sheet-summary.tomestack-ext.zip` works too.
+
+Then install it from the Extensions screen. See `docs/authoring/extension.md` for writing your own.

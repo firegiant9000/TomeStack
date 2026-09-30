@@ -330,6 +330,11 @@ namespace TomeStack.AppService
                 throw new AppValidationException([new("extension.output-too-large", "The output is larger than 5 MB, so nothing was written.")]);
             if (OutputScan.Leaks(text, SensitivePaths(), [ScanIdentity().UserName]))
                 throw new AppValidationException([new("extension.output-refused", $"The output of '{installed.Manifest.Name}' contains a local path or your Windows user name, so nothing was written.")]);
+            // ADR-011: "Every consumer must carry them." Each notice's title and license must be in the file (review fix:
+            // the notices were only shown in the preview). JSON output is read as its string values, escapes decoded.
+            var written = hook.Produces == "text" ? text : string.Join("\n", StringsOf(result));
+            if (notices.FirstOrDefault(n => !written.Contains(n.Title, StringComparison.Ordinal) || !written.Contains(n.License, StringComparison.Ordinal)) is { } missing)
+                throw new AppValidationException([new("extension.notices-missing", $"The output of '{installed.Manifest.Name}' leaves out the license notice of '{missing.Title}' ({missing.License}), so nothing was written. An export must carry every notice.")]);
 
             var bytes = Encoding.UTF8.GetBytes(text);
             var extension = hook.FileExtension ?? (hook.Produces == "json" ? ".json" : ".txt");
@@ -340,6 +345,14 @@ namespace TomeStack.AppService
                 warnings.Add(new("export.personal", "Personal copy: includes your own homebrew. Do not share it."));
             return new(token, HookKind.Export, request.Purpose, fileName, bytes.LongLength, text.Length > 2_000 ? text[..2_000] : text, null, [], dropped, notices, warnings);
         }
+
+        private static IEnumerable<string> StringsOf(JsonNode? node) => node switch
+        {
+            JsonObject obj => obj.SelectMany(p => StringsOf(p.Value).Prepend(p.Key)),
+            JsonArray array => array.SelectMany(StringsOf),
+            JsonValue value when value.TryGetValue<string>(out var s) => [s],
+            _ => [],
+        };
 
         private ExtensionRunPreview PreviewImport(InstalledExtension installed, ExtensionHook hook, DeclarativeTransform transform, ExtensionRunRequest request, Action<string> need, IReadOnlyList<string> used)
         {
