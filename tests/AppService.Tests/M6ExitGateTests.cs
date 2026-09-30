@@ -31,10 +31,24 @@ public class M6ExitGateTests
         var preview = app.PreviewExtensionInstall(AuthoringGuideTests.GuideExtension());
         Assert.True(preview.CanInstall, string.Join("; ", preview.Errors.Select(e => e.Code)));
         var extension = app.InstallExtension(preview.Token!.Value, ["read.sheet", "export.file"], confirm: true).Id;
+        // What else a library holds (review fix): a draft, a gap note, and a source made import-derived by a managed PDF.
+        app.SaveDraft(new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = "Test Unfinished Lantern Trick",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(source.Id), Status = RevisionStatus.Draft, Summary = "Test draft text.",
+        });
+        app.AddGapNote(new(character, new(GapTargetKind.Field, FieldId: FieldIds.Initiative), "Test note: the table allows lantern light."));
+        var scanned = app.CreateHomebrewSource(new("Test Scanned Notes", [RulesFamilies.Srd521]));
+        app.AttachPdf(scanned.Id, "scanned-notes.pdf", Encoding.ASCII.GetBytes("%PDF-1.4\n% TomeStack M6 exit gate test PDF\n%%EOF\n"));
+        Assert.True(app.Store.FindSource(scanned.Id)!.ImportDerived);
         return new(source, feature, klass, campaign, character, extension);
     }
 
-    /// <summary>Everything the library holds, serialized, so two data folders compare as a whole. Grants are machine-local and left out.</summary>
+    /// <summary>
+    /// What the library holds, serialized, so two data folders compare as a whole: revisions (drafts included), sources,
+    /// characters and their sheets, campaigns, gap notes, attachments and extensions. Left out: an extension's grants and
+    /// on/off state, which never travel (asserted separately), and snapshots, which backups leave out (D14).
+    /// </summary>
     private static string Snapshot(TomeStackApp app)
     {
         var store = app.Store;
@@ -45,6 +59,8 @@ public class M6ExitGateTests
             characters = store.ListCharacters(),
             sheets = store.ListCharacters().Select(c => app.GetCharacter(c.Id).Sheet),
             campaigns = store.ListCampaigns(),
+            gapNotes = store.ListAllGapNotes(),
+            attachments = store.ListAttachments(),
             extensions = app.ListExtensions().Select(e => new { e.Id, e.Sha256, e.Manifest }),
         }, RulesJson.Options);
     }
@@ -73,7 +89,7 @@ public class M6ExitGateTests
         var received = clean.App.Store.FindSource(library.Source.Id)!;
         // Equal but for what the receiving machine records: that it was received, and no share confirmation of its own.
         Assert.Equal(TempApp.Json(library.Source with { Origin = null, ShareConfirmedAt = null }), TempApp.Json(received with { Origin = null, ShareConfirmedAt = null }));
-        Assert.Equal(SourceOrigin.Received, received.Origin);
+        Assert.Equal((SourceOrigin.Received, (DateTimeOffset?)null), (received.Origin, received.ShareConfirmedAt));
     }
 
     [Fact]
@@ -90,7 +106,8 @@ public class M6ExitGateTests
         Assert.Equal(TempApp.Json(author.App.Store.FindCampaign(library.Campaign.Id)), TempApp.Json(Assert.Single(clean.App.ListCampaigns())));
         foreach (var reference in new[] { library.Feature, library.Class })
             Assert.Equal(TempApp.Json(author.App.Store.FindRevision(reference)), TempApp.Json(clean.App.Store.FindRevision(reference)));
-    }
+        var received = clean.App.Store.FindSource(library.Source.Id)!;
+        Assert.Equal((SourceOrigin.Received, (DateTimeOffset?)null), (received.Origin, received.ShareConfirmedAt));    }
 
     [Fact]
     public void A_library_backup_round_trips_into_a_clean_data_folder_and_compares_equal_and_the_extension_runs_again()
@@ -105,7 +122,8 @@ public class M6ExitGateTests
         using (var manifest = JsonDocument.Parse(zip.GetEntry("manifest.json")!.Open()))
             Assert.Equal(PackageManifest.LibraryExtensionsFormatVersion, manifest.RootElement.GetProperty("formatVersion").GetInt32());
 
-        using var clean = new TempApp();
+        // A later clock: a restore must keep the original times, not stamp its own (review fix).
+        using var clean = new TempApp(now: TempApp.Now.AddDays(1));
         Assert.True(clean.App.PreviewLibraryRestore(backup).CanApply);
         clean.App.ApplyLibraryRestore(backup);
         Assert.Equal(Snapshot(author.App), Snapshot(clean.App));
