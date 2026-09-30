@@ -1262,7 +1262,16 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
 
-  await user.click(within(preview).getByRole('button', { name: 'Restore' }));
+  // "Keep the current state" closes the preview and returns focus to the button that opened it (accessibility item 23).
+  await user.click(within(preview).getByRole('button', { name: 'Keep the current state' }));
+  const reopen = within(panel()).getByRole('button', { name: 'Restore E2E with the feat…' });
+  await waitFor(() => expect(document.activeElement).toBe(reopen));
+  expect(within(panel()).queryByRole('region', { name: 'Restore E2E with the feat?' })).toBeNull();
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([]);
+
+  await user.click(reopen);
+  const again = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
+  await user.click(within(again).getByRole('button', { name: 'Restore' }));
   await expectStatus(/Restored the snapshot/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
   expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
