@@ -128,3 +128,8 @@ dd { margin: 0; }
   .print-sheet { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
 }
+
+/* M5 slice 4: text diff (the words added/removed are also in the text for screen readers; colour is not the only cue) */
+.text-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.text-diff .diff-added { color: var(--accent); }
+.text-diff .diff-removed { color: var(--error); text-decoration: line-through; }
