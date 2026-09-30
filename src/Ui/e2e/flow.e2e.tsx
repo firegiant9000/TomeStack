@@ -700,6 +700,43 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   expect(character.character.id).toBeTruthy();
 });
 
+it('follows the authoring guides: the extension guide, packed as written, installs, is granted and exports its CSV (M6 slice 5)', async () => {
+  const user = userEvent.setup();
+  // docs/authoring/extension.md, its tagged blocks exactly as the guide shows them.
+  const guide = readFileSync(resolve(process.cwd(), '../../docs/authoring/extension.md'), 'utf8');
+  const files: Record<string, Uint8Array> = {};
+  for (const match of guide.matchAll(/```json tomestack-example:([^\r\n]+)\r?\n([\s\S]*?)\r?\n```/g)) {
+    const name = match[1]!.trim();
+    if (name === 'extension.json' || name.startsWith('transforms/')) files[name] = new TextEncoder().encode(match[2]!);
+  }
+  expect(Object.keys(files).sort()).toEqual(['extension.json', 'transforms/features-csv.json']);
+  await client.createCharacter({ name: 'E2E Guide Reader', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
+  await user.upload(screen.getByLabelText('Extension file'), new File([zip(files)], 'example-feature-list.tomestack-ext.zip', { type: 'application/zip' }));
+  // "Tick the permissions and choose Install with these permissions."
+  const review = await screen.findByRole('region', { name: 'Install Example feature list?' });
+  for (const permission of within(within(review).getByRole('group', { name: 'Permissions to grant' })).getAllByRole('checkbox')) await user.click(permission);
+  await user.click(within(review).getByRole('button', { name: 'Install with these permissions' }));
+  await expectStatus(/Installed Example feature list with 2 permissions/);
+  // "Then choose the hook (Export features as CSV), pick a character …, choose Preview output, and Save output…"
+  await user.click(within(await screen.findByRole('listitem', { name: 'Example feature list' })).getByRole('button', { name: 'Export features as CSV' }));
+  const run = await screen.findByRole('region', { name: 'Run Export features as CSV' });
+  await user.selectOptions(within(run).getByRole('combobox', { name: 'Character' }), 'E2E Guide Reader');
+  await user.click(within(run).getByRole('button', { name: 'Preview output' }));
+  const output = await within(run).findByRole('region', { name: 'Preview of Export features as CSV' });
+  expect(output.textContent).toMatch(/name,kind,source/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(output).getByRole('button', { name: 'Save output…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Guide-Reader-features-csv.csv');
+  expect(new TextDecoder().decode(bytesOf(base64)).split('\n')[0]).toBe('name,kind,source');
+  await client.removeExtension((await client.listExtensions()).find((x) => x.manifest.name === 'Example feature list')!.id);
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();
