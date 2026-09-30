@@ -357,6 +357,16 @@ Earlier text (kept for the record): "M5 starts after the M3 gate, and its templa
 
 They land in no fixed order, and on `main` there is one `CurrentFormatVersion` (6; the unmerged M6 branches use 7, 8 and 9 provisionally). So no plan text fixes a number. Each slice takes the **next** number when it merges, records it in the version table of [features/package-format.md](features/package-format.md), and adds its manifest schema. Every new shape gets its own number, and a number is never reused.
 
+**Settled on `m5-m6-integration` (2026-09-30), as if it merged next; final only when it merges to `main`.** On `main` the package format is 6 and the database is 6. If the stacked PRs merge instead, in the order #27 → #29 … #36 → #38 → #39 … #45, the same numbers result.
+
+| Number | Package format | Database |
+| --- | --- | --- |
+| 7 | source packs (`scope: "source"`) and full library backups whose sources are v2 (M6 slice 1) | `character_snapshots` (M5 slice 8; approved) |
+| 8 | campaign packs (`scope: "campaign"`; M6 slice 2; waits for approval) | `sources.import_derived` with its backfill (M6 slice 1; approved) |
+| 9 | full library backups that keep installed extensions (M6 slice 3; waits for approval); a backup without one stays 7 | `extensions` (M6 slice 3; waits for approval) |
+
+Character packages stay format 5.
+
 **Optional after the M6 gate:** B09 command palette, B11 tags, folders and collections.
 
 **Exit gate (restated):** an external sample extension and a safe cross-machine round trip. The evidence level is fixture-verified for the clean-folder round trip and the sample extension. It is Windows-install verified only once the owner's second-machine restore is recorded.

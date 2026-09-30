@@ -1,6 +1,6 @@
 # Portable package format (v9; v1 to v8 still importable)
 
-SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**) and for campaigns (M6 slice 2, "Campaign packs" below; **v8, provisional, waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **v7, settled on the M5+M6 integration branch; final only when it merges to `main`**) and for campaigns (M6 slice 2, "Campaign packs" below; **v8, settled on the integration branch (final only when it merges to `main`), waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -17,7 +17,7 @@ gaps/<noteId>.json             Session gap note of an exported character (v5; ba
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs, `8` for campaign packs, `9` for full library backups that keep installed extensions (v9, M6 slice 3, provisional: `extensions/<sha256>.zip` entries, library backups only; v8, M6 slice 2, provisional: `scope: "campaign"`; v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs, `8` for campaign packs, `9` for full library backups that keep installed extensions (v9, M6 slice 3: `extensions/<sha256>.zip` entries, library backups only; v8, M6 slice 2: `scope: "campaign"`; v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |
@@ -81,7 +81,7 @@ A character backup protects characters and what they use. It does not protect ho
   - Each managed PDF copy is included once, as `files/<sha256>.pdf`.
   - It leaves out the bundled SRD revisions (every install seeds them), the files of linked PDFs (their records are kept), and the local-only extracted text, import jobs and candidates (ADR-009). Those can be read again from the PDF.
   - It also leaves out **character snapshots** (M5 slice 8; owner decision LIVING_SPECS D14), as every character package does. Snapshots stay on this machine ([snapshots.md](snapshots.md)), so the format is unchanged.
-  - **Installed extensions (M6 slice 3, ADR-011):** each extension's file as `extensions/<sha256>.zip` (kind `extension`), counted in the backup's limits, and **not** its grants. A backup that keeps one is written as format **v9** (provisional until the slice merges); a backup with none stays v7. A restore checks each file as an install does and brings it back **turned off, with no permission granted**, only when no extension with its id is installed ([extensions.md](extensions.md#library-backups)). Only a v9 library backup may hold `extensions/` entries; any other package that carries an extension is refused (`package.extension-not-allowed`).
+  - **Installed extensions (M6 slice 3, ADR-011):** each extension's file as `extensions/<sha256>.zip` (kind `extension`), counted in the backup's limits, and **not** its grants. A backup that keeps one is written as format **v9** (settled on the integration branch; final only when it merges to `main`); a backup with none stays v7. A restore checks each file as an install does and brings it back **turned off, with no permission granted**, only when no extension with its id is installed ([extensions.md](extensions.md#library-backups)). Only a v9 library backup may hold `extensions/` entries; any other package that carries an extension is refused (`package.extension-not-allowed`).
   - A managed copy that is missing, or no longer matches its hash, is left out with `backup.pdf-unreadable`, so one damaged file never blocks the backup. Its source then has no PDF after a restore.
 - **Restore full backup** (`library.restoreChoose`, then `library.restoreApply { token, sourceChoices, confirm: true }`) reads a file picked in the native Open dialog. The path stays in the service; the page gets a one-use token and the file name.
   - The preview checks the file completely before anything is written. That includes rules 2 to 9 above, the attachment records, and every PDF's size, signature and SHA-256, streamed and never held in memory.
@@ -150,7 +150,7 @@ The database is versioned the same way: this build migrates a v7 database to v8 
 
 ## Campaign packs (M6 slice 2, B13)
 
-**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. Format v8 is provisional (the number is fixed only when it merges, ROADMAP "Package format numbers"); the scope and the campaign's `pendingSources` wait for the owner's approval.**
+**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. Format v8 is settled on the M5+M6 integration branch and final only when it merges to `main` (ROADMAP "Package format numbers"); the scope and the campaign's `pendingSources` wait for the owner's approval.**
 
 A **campaign pack** shares one campaign profile with the people who play in it.
 
