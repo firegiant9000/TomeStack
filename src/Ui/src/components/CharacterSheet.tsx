@@ -24,6 +24,7 @@ import { RestPanel } from './RestPanel';
 import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
+import { VttExportPanel } from './VttExportPanel';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
@@ -324,6 +325,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
 
       <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+
+      <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
 
       <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
 

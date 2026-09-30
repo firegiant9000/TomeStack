@@ -29,8 +29,14 @@ public class SchemaTests
         var version = kind == "source"
             ? (document.TryGetProperty("importDerived", out _) || document.TryGetProperty("origin", out _) || document.TryGetProperty("shareConfirmedAt", out _) ? 2 : 1)
             : document.TryGetProperty(kind == "package-manifest" ? "formatVersion" : "schemaVersion", out var v) ? v.GetInt32() : 1;
+        return ValidateFile($"{kind}.v{version}.schema.json", document);
+    }
+
+    /// <summary>Validates against one schema file by name (M6 slice 4: the Foundry schema is named by the pinned system version).</summary>
+    internal static string ValidateFile(string fileName, JsonElement document)
+    {
         var schema = Loaded.GetOrAdd(
-            $"{kind}.v{version}.schema.json",
+            fileName,
             name => new Lazy<JsonSchema>(() => JsonSchema.FromText(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", name))), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
         var result = schema.Evaluate(document, new EvaluationOptions { OutputFormat = OutputFormat.List, RequireFormatValidation = true });
         if (result.IsValid)

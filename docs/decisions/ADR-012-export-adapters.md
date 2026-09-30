@@ -1,6 +1,6 @@
 # ADR-012: Export adapters for virtual tabletops (B20)
 
-Status: **accepted (owner, 2026-09-29): the recommended targets** (LIVING_SPECS D14). Foundry VTT `dnd5e` (the core and system pair is pinned at slice start and verified against that release's data models), the neutral sheet-export JSON, and Roll20 deferred. `purpose: "personal"` goes only as far as your own homebrew that is not import-derived. Nothing is built yet (M6 slice 4). ADR-007 is amended for the "totals only" share rule before that slice. Proposed 2026-09-28.
+Status: **accepted (owner, 2026-09-29): the recommended targets** (LIVING_SPECS D14). Foundry VTT `dnd5e` (the core and system pair is pinned at slice start and verified against that release's data models), the neutral sheet-export JSON, and Roll20 deferred. `purpose: "personal"` goes only as far as your own homebrew that is not import-derived. ADR-007 was amended for the "totals only" share rule (item 11, in M6 slice 3, before this slice). **Implemented in M6 slice 4 (2026-09-29; fixture-verified; unmerged; the Foundry adapter labelled Experimental): pinned to Foundry core 14.367 with dnd5e 6.0.5, [features/export-adapters.md](../features/export-adapters.md).** Proposed 2026-09-28.
 Date: 2026-09-28
 
 ## Context
@@ -95,8 +95,16 @@ A VTT file is meant to leave the machine, to a Foundry server that other people 
 - **Writing into a Foundry world's database directly, or through its API:** it needs file paths into another app's data, or a network call. Rejected by ADR-001.
 - **Roll20 via a userscript:** a browser-extension runtime that TomeStack does not control. Rejected.
 
-## Evidence (planned; none yet)
+## Evidence (M6 slice 4, 2026-09-29; fixture-verified)
 
-`FoundryExportTests` (the schema, golden files, the privacy scan, share and personal), `SheetExportModelTests` (the schema, no paths), and an e2e step that exports a character and checks the preview. An owner check for each target version, recorded in `docs/features/export-adapters.md`.
+`ExportAdapterTests` (the planned `FoundryExportTests`: golden files for both targets checked against `export-foundry-dnd5e.6.0.5.schema.json` and `sheet-export.v1.schema.json`, the mapping, the validators, the sentinel privacy test, share and personal) and `ExtensionTests` (the sheet export model's schema and filters, the planned `SheetExportModelTests`), plus an e2e flow that previews and saves both files. The owner check for Foundry 14.367 with dnd5e 6.0.5 is not recorded yet ([export-adapters.md](../features/export-adapters.md#validation-and-privacy)).
+
+**Settled at slice start:**
+
+- **The pinned pair:** dnd5e 6.0.5 (2026-09-22) with Foundry core 14.367, its declared compatibility minimum (verified 14). Field names were verified against that release's data models (listed in export-adapters.md).
+- **Does Foundry migrate a document from an older system version on import?** Yes, as far as the data models show: each has a `_migrateData` step that runs when Foundry builds a document from its source, and `system.json` names `needsMigrationVersion` 6.0.0. One pin therefore stays importable for as long as the system keeps those migrations; a new pin is still a new schema file, new golden files and a new owner check.
+- **Roll20** was not searched again; it stays deferred by the owner's decision (D14).
+- **As built, where this ADR left a choice:** a flat Armor Class is `ac.flat` with `ac.override` (6.x has no `calc: "flat"`); skill half proficiency (0.5) is never written because TomeStack does not model it; equipped weapons get `damage.base` only when their damage starts with dice; the validators are code (no new dependency in AppService), and the JSON Schemas are checked in the tests.
+- **Review fixes (checked against the dnd5e 6.0.5 source):** every spell carries `method` (`spell`, or `pact` for Pact Magic above cantrips; 6.x defaults it to "", which cannot be prepared or slotted) and its caster's `ability`, so the sheet export model's casters gained `slotKind`; a recovery is `recoverAll` only for "all", a whole number is a `formula`, and anything else is left out and named; class identifiers are unique in the actor; a class with no accepted hit die spends none of the real dice; the preview compares with Foundry's own proficiency bonus (from the class levels in the file) and modifiers, and names what the file cannot carry (the Pact Magic slot level, dropped recoveries, missing hit dice); `@` and `[[` get a word joiner so Foundry enrichers stay text; and the privacy scan also reads the unencoded sheet, because HTML encoding turns é and ' into entities.
 
 Supersedes: none. Applies ADR-007 to a new kind of output.

@@ -34,6 +34,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
         "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.review", "extension.setEnabled", "extension.remove",
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
+        "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
 
@@ -181,6 +182,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.runImport" => RunExtensionImport(Payload<ExtensionTokenPayload>(payload)),
         "extension.runExport" => RunExtensionExport(Payload<ExtensionTokenPayload>(payload)),
         "extension.runSaveAs" => RunExtensionSaveAs(Payload<ExtensionTokenPayload>(payload)),
+        "export.preview" => PreviewVttExport(Payload<VttExportPayload>(payload)),
+        "export.saveAs" => SaveVttExportAs(Payload<ExtensionTokenPayload>(payload)),
+        "export.download" => DownloadVttExport(Payload<ExtensionTokenPayload>(payload)),
         "library.backupPreview" => app.PreviewLibraryBackup(),
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
@@ -397,6 +401,30 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         return outcome;
     }
 
+    // ---- export adapters (M6 slice 4, ADR-012) ----
+
+    private Exports.VttExportPreview PreviewVttExport(VttExportPayload payload) =>
+        app.PreviewVttExport(payload.CharacterId, payload.Target, payload.Purpose);
+
+    /// <summary>Writes the previewed file where the user chooses; the page never sees the path.</summary>
+    private SaveOutcome SaveVttExportAs(ExtensionTokenPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        var (fileName, bytes) = app.PeekVttExport(payload.Token);
+        var outcome = SaveBytes(fileName, bytes, "Export file", ".json");
+        if (outcome.Saved)
+            app.CompleteVttExport(payload.Token);
+        return outcome;
+    }
+
+    /// <summary>Browser development and tests: the previewed file as base64.</summary>
+    private object DownloadVttExport(ExtensionTokenPayload payload)
+    {
+        var (fileName, bytes) = app.VttExportOutput(payload.Token);
+        return new { fileName, base64 = Convert.ToBase64String(bytes) };
+    }
+
     private SaveOutcome SaveAs(ExportResult export) => SaveBytes(export.FileName, export.Content, "TomeStack package", ".tomestack.zip");
 
     private SaveOutcome SaveBytes(string fileName, byte[] content, string filterDescription, string extension)
@@ -581,6 +609,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         string? RulesFamily = null, string? SourceTitle = null, Guid? InputToken = null, string? InputBase64 = null);
 
     private sealed record ExtensionTokenPayload(Guid Token, bool Confirm = false);
+
+    /// <param name="Target"><c>foundry-dnd5e</c> or <c>sheet-json</c>.</param>
+    private sealed record VttExportPayload(Guid CharacterId, string Target, Exports.SheetPurpose Purpose = Exports.SheetPurpose.Share);
 
     /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
     /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>

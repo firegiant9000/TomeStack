@@ -1,0 +1,230 @@
+{
+  "_stats": {
+    "coreVersion": "14.367",
+    "systemId": "dnd5e",
+    "systemVersion": "6.0.5"
+  },
+  "flags": {
+    "tomestack": {
+      "adapterVersion": "1.0.0",
+      "exportedAt": "2026-09-24T12:00:00.0000000+00:00",
+      "purpose": "share",
+      "sources": [
+        "TomeStack Fixtures: Combat",
+        "TomeStack Fixtures: Equipment"
+      ]
+    }
+  },
+  "items": [
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f6dc000-0000-4000-8000-000000000011",
+          "revisionId": "5f6de000-0000-4000-8000-000000000011"
+        }
+      },
+      "name": "Fixture Duelist",
+      "system": {
+        "hd": {
+          "denomination": "d10",
+          "spent": 0
+        },
+        "identifier": "fixture-duelist",
+        "levels": 3
+      },
+      "type": "class"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f6dc000-0000-4000-8000-000000000012",
+          "revisionId": "5f6de000-0000-4000-8000-000000000012"
+        }
+      },
+      "name": "Fixture Riposte",
+      "system": {
+        "description": {
+          "value": "<p>A test reaction roll.</p>"
+        },
+        "identifier": "fixture-riposte"
+      },
+      "type": "feat"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f6dc000-0000-4000-8000-000000000013",
+          "revisionId": "5f6de000-0000-4000-8000-000000000013"
+        }
+      },
+      "name": "Fixture Second Breath",
+      "system": {
+        "description": {
+          "value": "<p>A test bonus action with a use per short rest.</p>"
+        },
+        "identifier": "fixture-second-breath",
+        "uses": {
+          "max": "1",
+          "recovery": [
+            {
+              "period": "sr",
+              "type": "recoverAll"
+            }
+          ],
+          "spent": 0
+        }
+      },
+      "type": "feat"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f6dc000-0000-4000-8000-000000000001",
+          "revisionId": "5f6de000-0000-4000-8000-000000000001"
+        }
+      },
+      "name": "Fixture Longblade",
+      "system": {
+        "damage": {
+          "base": {
+            "denomination": 8,
+            "number": 1,
+            "types": [
+              "slashing"
+            ]
+          }
+        },
+        "description": {
+          "value": "<p>+5 to hit, 1d8+3 slashing damage (TomeStack).</p>"
+        },
+        "equipped": true,
+        "identifier": "fixture-longblade",
+        "proficient": 1
+      },
+      "type": "weapon"
+    }
+  ],
+  "name": "Test Armored Duelist",
+  "system": {
+    "abilities": {
+      "cha": {
+        "proficient": 0,
+        "value": 8
+      },
+      "con": {
+        "proficient": 0,
+        "value": 14
+      },
+      "dex": {
+        "proficient": 1,
+        "value": 12
+      },
+      "int": {
+        "proficient": 0,
+        "value": 10
+      },
+      "str": {
+        "proficient": 1,
+        "value": 16
+      },
+      "wis": {
+        "proficient": 0,
+        "value": 10
+      }
+    },
+    "attributes": {
+      "ac": {
+        "calcs": [],
+        "flat": 19,
+        "override": 19
+      },
+      "exhaustion": 0,
+      "hp": {
+        "max": 28,
+        "temp": 0,
+        "value": 28
+      }
+    },
+    "details": {
+      "biography": {
+        "value": "<h2>Sources and licenses</h2><p><strong>TomeStack Fixtures: Combat</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p><strong>TomeStack Fixtures: Equipment</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p>Exported by TomeStack for Foundry VTT (dnd5e system). TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>"
+      }
+    },
+    "skills": {
+      "acr": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ani": {
+        "ability": "wis",
+        "value": 0
+      },
+      "arc": {
+        "ability": "int",
+        "value": 0
+      },
+      "ath": {
+        "ability": "str",
+        "value": 0
+      },
+      "dec": {
+        "ability": "cha",
+        "value": 0
+      },
+      "his": {
+        "ability": "int",
+        "value": 0
+      },
+      "ins": {
+        "ability": "wis",
+        "value": 0
+      },
+      "inv": {
+        "ability": "int",
+        "value": 0
+      },
+      "itm": {
+        "ability": "cha",
+        "value": 0
+      },
+      "med": {
+        "ability": "wis",
+        "value": 0
+      },
+      "nat": {
+        "ability": "int",
+        "value": 0
+      },
+      "per": {
+        "ability": "cha",
+        "value": 0
+      },
+      "prc": {
+        "ability": "wis",
+        "value": 0
+      },
+      "prf": {
+        "ability": "cha",
+        "value": 0
+      },
+      "rel": {
+        "ability": "int",
+        "value": 0
+      },
+      "slt": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ste": {
+        "ability": "dex",
+        "value": 0
+      },
+      "sur": {
+        "ability": "wis",
+        "value": 0
+      }
+    },
+    "spells": {}
+  },
+  "type": "character"
+}
