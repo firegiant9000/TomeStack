@@ -228,7 +228,7 @@ They land in no fixed order, and today there is one `CurrentFormatVersion` (6). 
 
 ## M2 status (2026-09-28: checks passed as 0.3.0, limited content)
 
-The owner checks on the installed 0.2.2 passed on 2026-09-28: the upgrade from 0.2.0, the keyboard and Narrator passes, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal. By owner decision, the synthetic stand-in meets DoD 3 for M2, and the real Stardust Guardian is the M3 gate.
+The owner checks on the installed 0.2.2 passed on 2026-09-28: the upgrade from 0.2.0, the keyboard walkthrough, the viewer landing on the cited page, a clean-VM install and an SRD play rehearsal. **Correction (2026-09-28):** a Narrator pass was also recorded as passed, but it was not done; it and the other open WCAG AA items (200% zoom, High Contrast, field-card state) are owner checks still open (`features/accessibility-checklist.md`). By owner decision, the synthetic stand-in meets DoD 3 for M2, and the real Stardust Guardian is the M3 gate.
 
 ### Earlier status (2026-09-27, v0.2.2: exit candidate)
 
