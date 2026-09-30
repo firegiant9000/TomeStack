@@ -31,7 +31,7 @@ ROADMAP M5's exit gate: "a nonstandard class levels and multiclasses without cod
 
 ## Decision
 
-### Content schema v9 adds exactly three things
+### Content schema v9 adds exactly three things (and, from slice 1b, a choice with no declared options; see "Evidence")
 
 **1. The `scale` effect (a new type, typed only in a v9 revision).**
 
@@ -189,6 +189,23 @@ The Test Chronicler is an original fixture under `tests/RulesFixtures/` (never `
 - **The calculation-side v8 gate** is now asserted at every formula site in the relabelled-v8 test (resource maximum, recovery, roll bonus, modifier value, spellsFormula).
 - **Not changed (confirmed, low):** a content revision with no `schemaVersion` is read at the current version, as before v9. Reading it as v1 instead would change how v1 packages import, so it is left for an owner decision.
 
-**Slice 1b (planned):** `HomebrewStudioTests` authors and publishes the class in the studio and multiclasses it with SRD classes, with a package round trip. The e2e flow "authors a class in the studio, levels it 1–20 and multiclasses it with an SRD class".
+
+**Slice 1b (fixture-verified, 2026-09-29): the M5 exit gate.**
+
+- **The studio authors a class** ([homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010)).
+- **`AppService.Tests/CustomClassTests.A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips`:** a class shaped as the studio writes it is published as v9. A homebrew subclass joins its empty subclass choice and reads the class's column. It multiclasses with the SRD Fighter, and a package round trip to a clean data folder gives the same sheet. The round trip is service-level only: the effects are built by hand in the test, not authored in the UI.
+- **The e2e flow "authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class":** in the real UI it uses the hit die, the saving throw boxes, a multiclass prerequisite, the skill choice (created, removed and created again), the subclass choice, a class column, a resource that reads it, spellcasting with its own multiclass table, and a modifier. It then builds the class in the builder at level 1, and creates the level 20 character (hit points 143, Ink 9, level 7 slots) and the Chronicler 5 / SRD Wizard 3 character (caster level 6: 4, 3 and 3 slots) with `client.createCharacter`, not through the level-up UI. It does not use "Grant a feature", "Any one of these is enough", the prepared/known picker or the spell-count formula.
+
+**Slice 1b review fixes (dual-review, 2026-09-29):** none of the 13 findings was refuted; all are fixed. They are listed in [homebrew-studio.md](../features/homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010) under "Review fixes". The editor's effect logic is now pure and unit-tested (`src/Ui/src/classBasics.test.ts`). The e2e flow also turns on the subclass choice, adds a homebrew subclass to it, checks the chosen skill's proficiency on the sheet, and asserts focus after the skill helper.
+
+**Slice 1b second review (2026-09-29):** the findings were confirmed by two reviewers; each is fixed.
+
+- **The skill helper remembers what it published.** It keeps a record of the option features made in the editor session and consults it before the (stale) entries list, so a retry, or "Remove the skill choice" then "Create skill choice", reuses them ("0 new option features published, 3 reused" in the e2e flow). The "options not written for a family" warning reads both. The studio reloads its content after the helper publishes.
+- **The whole class editor is disabled while the helper runs,** Close included.
+- **Only true class basics are hidden from the rule list:** the first multiclass restriction of an ability, in no group or the "any one" group, and saves granted only as the starting class at no level. Others stay visible (`classBasics.test.ts`).
+- **A choice with no options** keeps an upper bound on its count: 20, as in the v9 JSON schema (`validate.choice-count`).
+- **This evidence is narrowed** to what the e2e flow and the service test exercise (above).
+
+**One addition to v9 made in slice 1b, before v9 merges:** a `choice` with **no declared options** is allowed (`validate.choice-options-none`, a warning). It offers only content that extends it, which is what a new class's subclass choice is before any subclass exists. v8 validation refused it, so it requires v9: an older build refuses by version instead of with a validation error.
 
 Supersedes: none. Extends ADR-003 (effect union, grammar) and the M2.2 minimum-version rule (`docs/schemas/README.md`).

@@ -28,6 +28,12 @@ public static class ContentValidator
     public const int MinimumPublishedSchemaVersion = 3;
 
     /// <summary>
+    /// The most a choice can ask for when it declares no options of its own (the v9 JSON schema's choice.count maximum);
+    /// with options, the count is bounded by how many there are.
+    /// </summary>
+    public const int MaxChoiceCountWithoutOptions = 20;
+
+    /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
     /// and never lower than the entry before it (a class never loses caster levels as it gains class levels).
     /// </summary>
@@ -178,11 +184,19 @@ public static class ContentValidator
                     CheckLevel(choice.Level, choice.Id);
                     if (string.IsNullOrWhiteSpace(choice.ChoiceId))
                         Error("validate.choice-id-required", $"Choice effect '{choice.Id}' needs a choiceId.", choice.Id);
+                    // Content v9 (M5 slice 1b): a choice may declare no options of its own when its options come from
+                    // content that extends it (extendsChoice), such as the subclass choice of a new homebrew class. Older
+                    // builds refused it, so it needs v9: they refuse it by version instead of with this error.
                     if (choice.Options.Count == 0)
-                        Error("validate.choice-options-empty", $"Choice '{choice.ChoiceId}' has no options.", choice.Id);
+                    {
+                        needsV9 = true;
+                        Warn("validate.choice-options-none", $"Choice '{choice.ChoiceId}' lists no options of its own; it offers only published content that extends it (for example a subclass that names this choice).", choice.Id);
+                    }
                     if (choice.Options.Distinct().Count() != choice.Options.Count)
                         Error("validate.choice-option-duplicate", $"Choice '{choice.ChoiceId}' lists an option more than once.", choice.Id);
-                    if (choice.Count < 1 || choice.Count > choice.Options.Distinct().Count())
+                    if (choice.Count < 1
+                        || (choice.Options.Count > 0 && choice.Count > choice.Options.Distinct().Count())
+                        || (choice.Options.Count == 0 && choice.Count > MaxChoiceCountWithoutOptions))
                         Error("validate.choice-count", $"Choice '{choice.ChoiceId}' asks for {choice.Count} of {choice.Options.Distinct().Count()} option(s).", choice.Id);
                     foreach (var option in choice.Options.Distinct())
                         CheckReference(option, choice.Id, $"option of choice '{choice.ChoiceId}'");
@@ -323,7 +337,7 @@ public static class ContentValidator
             Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
         needsV9 |= usedScales.Count > 0;
         if (needsV9 && revision.SchemaVersion < ScaleEffect.SchemaVersion)
-            Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
+            Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable, a choice with no options of its own) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         CheckScales();
         if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");

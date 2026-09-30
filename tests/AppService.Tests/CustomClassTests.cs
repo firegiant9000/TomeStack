@@ -81,6 +81,70 @@ public class CustomClassTests
         }
     }
 
+    /// <summary>
+    /// M5 slice 1b: a class written the way the studio writes it (HomebrewStudio.tsx, ClassBasicsEditor.tsx), with a
+    /// subclass choice that declares no options of its own. It is authored as drafts in a homebrew source, published,
+    /// joined by a homebrew subclass through extendsChoice, multiclassed with the SRD Fighter, and round-tripped
+    /// through a package to a clean data folder.
+    /// </summary>
+    [Fact]
+    public void A_class_authored_like_the_studio_publishes_takes_a_homebrew_subclass_multiclasses_and_round_trips()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Test Studio Classes", [RulesFamilies.Srd521]));
+        ContentRevision Draft(ContentKind kind, string name, params Effect[] effects) => new()
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.Empty, Kind = kind, Name = name, RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(source.Id), Status = RevisionStatus.Draft, Effects = effects,
+        };
+        ContentReference Publish(ContentRevision draft) => temp.App.Publish(temp.App.SaveDraft(draft)).Published;
+
+        // The skill choice's options, published first, as "Create skill choice" does.
+        var history = Publish(Draft(ContentKind.Feature, "Test Quillmaster: History", new GrantEffect { Id = "skill", Grant = GrantKind.Proficiency, Target = "skill.history" }));
+        var arcana = Publish(Draft(ContentKind.Feature, "Test Quillmaster: Arcana", new GrantEffect { Id = "skill", Grant = GrantKind.Proficiency, Target = "skill.arcana" }));
+        var classDraft = Draft(
+            ContentKind.Class,
+            "Test Quillmaster",
+            new HitDieEffect { Id = "hit-die", Die = 8 },
+            new GrantEffect { Id = "save-int", Grant = GrantKind.Proficiency, Target = "save.int", OnlyAs = ClassEntry.StartingClass },
+            new RestrictionEffect { Id = "multiclass-int", Field = "ability.int.score", Minimum = 13, Multiclass = true },
+            new ChoiceEffect { Id = "skills", ChoiceId = "skills", Count = 1, Options = [history, arcana], OnlyAs = ClassEntry.StartingClass },
+            new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [], Level = 3, Text = "Choose a subclass" },
+            new ScaleEffect { Id = "scale-1", ScaleId = "ink", Label = "Ink", Values = [2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9] },
+            new ResourceEffect { Id = "resource-2", ResourceId = "resource-2", Label = "Ink", Maximum = "SCALE.ink" });
+        var report = temp.App.Publish(temp.App.SaveDraft(classDraft));
+        Assert.Contains(report.Report.Warnings, w => w.Code == "validate.choice-options-none");
+        Assert.Equal(9, temp.App.Store.FindRevision(report.Published)!.SchemaVersion);
+        var quillmaster = report.Published;
+
+        var subclass = Publish(Draft(ContentKind.Subclass, "Test Order of the Margin", new ModifierEffect { Id = "m", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "SCALE.ink" }) with
+        {
+            ExtendsChoice = new(quillmaster.ContentId, "subclass"),
+        });
+
+        var fighter = Srd(Fighter521, "Fighter");
+        var character = temp.App.SaveCharacter(new Character
+        {
+            Id = Guid.NewGuid(), Name = "Test Quill Fighter", RulesFamily = RulesFamilies.Srd521, Level = 8,
+            Classes = [new(quillmaster, 5), new(fighter, 3)],
+            BaseAbilities = new(13, 12, 14, 16, 14, 14),
+            Choices = [new(quillmaster, "skills", [arcana]), new(quillmaster, "subclass", [subclass])],
+        });
+        var sheet = character.Sheet;
+        Assert.Contains(sheet.Choices!, c => c.ChoiceId == "subclass" && c.Resolved && c.Options.Contains(subclass));
+        Assert.Equal(4, sheet.Resources!.Single(r => r.Label == "Ink").Maximum);
+        Assert.Equal(1 + 4, sheet.Field(FieldIds.Initiative).Value); // Dex +1, the subclass reads the class's Ink column (4)
+        Assert.Equal(3 + 3, sheet.Field("skill.arcana").Value); // Int +3, PB +3 (total level 8)
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code is "restriction.multiclass-unmet" or "effect.invalid-formula");
+        Assert.All(sheet.Choices!.Where(c => c.Source == quillmaster), c => Assert.True(c.Resolved)); // the Fighter's own stay open here
+
+        // A clean data folder calculates the same sheet from a package.
+        var export = temp.App.ExportCharacters([character.Character.Id]);
+        using var destination = new TempApp();
+        destination.App.ApplyImport(export.Content);
+        Assert.Equal(TempApp.Json(sheet), TempApp.Json(destination.App.GetCharacter(character.Character.Id).Sheet));
+    }
+
     [Fact]
     public void Publishing_a_Chronicler_draft_writes_v9_and_a_class_without_v9_features_stays_lower()
     {

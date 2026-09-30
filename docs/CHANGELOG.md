@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Write your own class in the homebrew studio (M5 slice 1b; ADR-010):** "New class" sets the hit die, the saving throws and multiclass prerequisites. It can also set:
+  - a skill choice (TomeStack creates the skill options for you);
+  - a subclass choice at any level, which your own subclasses join;
+  - class columns such as "Ink", which resources and other formulas can read;
+  - features by level;
+  - spellcasting with its own slot table and a caster share for multiclassing.
+  
+  The class appears in the builder like any other, and the sheet shows its columns under "Class columns". Content that uses these features can only be opened by this version of TomeStack or later.
 - **Classes with their own columns and caster shares (M5 slice 1a; ADR-010; rules engine only):** class content can now carry named per-level columns, such as "Ink: 2, 2, 3 …". Its formulas can read them, so a resource, a roll bonus, a skill or a prepared-spell count grows with the class. A caster can also say exactly how many caster levels it adds at each class level, for example two thirds, and it combines with the SRD casters on the Multiclass Spellcaster table. The homebrew studio cannot author these yet; that is the next slice. Tested on an original fixture class, not bundled content.
 
 - **Archive a character (SPEC C-08, audit 2026-09-28):** "Archive…" on the sheet first says what happens, then moves the character to a collapsed "Archived" list after you confirm. Nothing is deleted: its play state, gap notes, campaign and the content it uses all stay, and "Back up everything" includes it and restores it archived. "Unarchive" brings it back as it was. There is no hard delete. Exporting a character never passes on that it is archived, and importing a package never archives or unarchives one. Older versions of TomeStack show an archived character as active.
@@ -59,6 +67,7 @@
 
 ### Fixed
 
+- **Class editor (M5 slice 1b review):** creating the skill choice again no longer publishes duplicate option features, the whole editor is disabled while it publishes, the rule list shows every multiclass restriction and saving throw grant the editor does not show, and a choice with no listed options can no longer ask for more than 20.
 - **Content schema v9 (M5 stack review, 2026-09-29):** a class column (`scale`) written in the wrong shape is refused when you check or publish it, instead of publishing with the column silently missing. Importing a package or restoring a backup no longer refuses revisions that publishing allowed: an inert `scale` in content an earlier build published, and a column id that clashes because of the order things were published, are warnings there.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.
 - **Archiving no longer pulls you back:** if you open something else while an archive or unarchive finishes, you stay where you went.

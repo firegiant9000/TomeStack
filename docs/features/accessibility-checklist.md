@@ -43,6 +43,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 15 | Screen reader pass (Narrator) on the sheet and the import preview | 4.1.2 | ☐ |
 | 16 | Windows High Contrast / forced colours | 1.4.11 | ☐ the system colours `Canvas`/`CanvasText` should adapt; not checked |
 | 17 | Expandable field cards work by keyboard and name their state | 2.1.1, 4.1.2 | ☐ Native `<details>`/`<summary>` with a heading inside the summary. Check Narrator's expanded/collapsed announcement |
+| 18 | The studio's class editor (M5 slice 1b) | 1.3.1, 2.4.3, 3.3.1, 4.1.3 | 🔧 review fixes, partly e2e-verified. Every control has a label, and groups have a `fieldset`/`legend`. "Create skill choice" and "Remove the skill choice" move focus to the group's legend and announce the result in a polite live region; the e2e flow asserts both. A disabled "Create skill choice" says why (`aria-describedby`). A list field that does not parse is `aria-invalid`, with its error linked (`aria-describedby`), and Save and Publish stay disabled with the reason next to them. ☐ Narrator and keyboard-only passes on the editor |
 
 ## Manual keyboard walkthrough
 

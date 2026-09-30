@@ -1057,6 +1057,150 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy());
 });
 
+it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class (M5 exit gate, ADR-010)', async () => {
+  // An original nonstandard class, built in the studio with no code edits: a d8, Int and Wis saves, a multiclass
+  // prerequisite, a skill choice, a column ("Ink"), a resource that reads it, and a caster whose multiclass share is its
+  // own table (two thirds). Tables are invented for testing.
+  const user = userEvent.setup();
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Chronicle Homebrew');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Chronicle Homebrew' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Chronicler');
+
+  const basics = within(editor()).getByRole('region', { name: 'Class basics' });
+  await user.selectOptions(within(basics).getByRole('combobox', { name: 'Hit die' }), 'd8');
+  const saves = within(basics).getByRole('group', { name: /^Saving throw proficiencies/ });
+  await user.click(within(saves).getByRole('checkbox', { name: 'Intelligence' }));
+  await user.click(within(saves).getByRole('checkbox', { name: 'Wisdom' }));
+  const prerequisites = within(basics).getByRole('group', { name: /^Multiclass prerequisites/ });
+  await user.type(within(prerequisites).getByRole('spinbutton', { name: 'Intelligence at least' }), '13');
+  const skills = within(basics).getByRole('group', { name: /^Skill choice/ });
+  await user.click(within(skills).getByRole('checkbox', { name: 'History' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Arcana' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
+  await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy());
+  expect(within(skills).getByText(/3 new option features published, 0 reused/)).toBeTruthy(); // announced, and focus stays in the group
+  expect(document.activeElement).toBe(within(skills).getByText('Skill choice (starting class only)'));
+  // Removing the choice and creating it again reuses the three published features, never publishes duplicates (review fix).
+  await user.click(within(skills).getByRole('button', { name: 'Remove the skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/Skill choice removed/)).toBeTruthy());
+  await user.click(within(skills).getByRole('checkbox', { name: 'History' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Arcana' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
+  await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/0 new option features published, 3 reused/)).toBeTruthy());
+  expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy();
+  await user.click(within(within(basics).getByRole('group', { name: 'Subclass' })).getByRole('checkbox', { name: /^This class has subclasses/ }));
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add class column' }));
+  const column = rule(/^Rule 1: Class column/);
+  await user.type(within(column).getByRole('textbox', { name: 'Column name' }), 'Ink');
+  await user.clear(within(column).getByRole('textbox', { name: /^Key/ }));
+  await user.type(within(column).getByRole('textbox', { name: /^Key/ }), 'ink');
+  const values = within(column).getByRole('textbox', { name: /^Values at class levels/ });
+  await user.clear(values);
+  await user.type(values, '2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9');
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  const ink = rule(/^Rule 2: Resource/);
+  await user.type(within(ink).getByRole('textbox', { name: 'Resource name' }), 'Ink');
+  await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
+  await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'SCALE.ink');
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' })); // all, on a long rest
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add spellcasting' }));
+  const casting = rule(/^Rule 4: Spellcasting/);
+  await user.type(within(casting).getByRole('textbox', { name: /^Spell list key/ }), 'e2e-chronicle');
+  const slots = ['1', '2', '3', '3, 1', '3, 2', '4, 2', '4, 2, 1', '4, 3, 1', '4, 3, 2', '4, 3, 2, 1', '4, 3, 3, 1', '4, 3, 3, 2', '4, 3, 3, 2, 1', '4, 3, 3, 3, 1', '4, 3, 3, 3, 2', '4, 3, 3, 3, 2, 1', '4, 3, 3, 3, 2, 1', '4, 3, 3, 3, 3, 1', '4, 3, 3, 3, 3, 2', '4, 3, 3, 3, 3, 2, 1'];
+  await user.type(within(casting).getByRole('textbox', { name: /^Spell slots/ }), slots.join('{Enter}'));
+  await user.selectOptions(within(casting).getByRole('combobox', { name: /^With other casters/ }), 'Its own table of caster levels');
+  const share = within(casting).getByRole('textbox', { name: /^Caster levels it adds/ });
+  await user.clear(share);
+  await user.type(share, '0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13');
+
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Chronicler.'));
+
+  // A homebrew subclass joins the new class's subclass choice, which declares no options of its own.
+  await user.click(screen.getByRole('button', { name: 'New subclass' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Order of Quills');
+  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  await waitFor(() => expect(within(offered).getByRole('option', { name: 'E2E Chronicler: Choose a subclass' })).toBeTruthy());
+  await user.selectOptions(offered, 'E2E Chronicler: Choose a subclass');
+  await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Order of Quills.'));
+
+  // Level 1 in the builder: the class is offered like any other, with its skill choice.
+  await user.click(screen.getByRole('button', { name: 'New character' }));
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Scribe');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  const intelligence = within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Intelligence' });
+  await user.clear(intelligence);
+  await user.type(intelligence, '16');
+  await user.click(await screen.findByRole('radio', { name: /^E2E Chronicler/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: History/);
+  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: Arcana/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  let sheet = await screen.findByRole('article', { name: 'E2E Scribe' });
+  expect(within(sheet).getByRole('heading', { name: /^History: \+5/ })).toBeTruthy(); // the chosen option grants it: Int +3, PB +2
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 2 of 2' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Class columns' })).getByText('Ink: 2')).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 1 slots: 1 of 1' })).toBeTruthy();
+
+  // Level 20, and Chronicler 5 with the SRD Wizard 3: the same published class, no code edits.
+  const options = await client.listContent('srd-5.2.1');
+  const chronicler = options.find((o) => o.kind === 'class' && o.name === 'E2E Chronicler' && !o.superseded)!.reference;
+  const wizard = options.find((o) => o.kind === 'class' && o.name === 'Wizard' && o.compatible && !o.superseded)!.reference;
+  const order = options.find((o) => o.kind === 'subclass' && o.name === 'E2E Order of Quills' && !o.superseded)!.reference;
+  const scores = { str: 10, dex: 12, con: 14, int: 16, wis: 14, cha: 10 };
+  await client.createCharacter({
+    name: 'E2E Scribe 20',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: scores,
+    pins: [],
+    classes: [{ class: chronicler, level: 20 }],
+    choices: [{ source: chronicler, choiceId: 'subclass', selected: [order] }],
+  });
+  await client.createCharacter({
+    name: 'E2E Scribe Wizard',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: scores,
+    pins: [],
+    classes: [{ class: chronicler, level: 5 }, { class: wizard, level: 3 }],
+    choices: [],
+  });
+  cleanup();
+  render(<App />);
+
+  await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Scribe 20' });
+  expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 143/ })).toBeTruthy(); // 8 + 19 × 5 + 20 × Con 2
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, the homebrew subclass +1
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 9 of 9' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 7 slots: 1 of 1' })).toBeTruthy();
+
+  await user.click(screen.getByRole('button', { name: /^E2E Scribe Wizard/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Scribe Wizard' });
+  const spells = within(sheet).getByRole('region', { name: 'Spells and slots' });
+  // Chronicler 5 counts 3 (its table) + Wizard 3: caster level 6 on the Multiclass Spellcaster table.
+  expect(within(spells).getByRole('heading', { name: 'Level 1 slots: 4 of 4' })).toBeTruthy();
+  expect(within(spells).getByRole('heading', { name: 'Level 3 slots: 3 of 3' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 4 of 4' })).toBeTruthy();
+});
+
 it('archives a character after a preview, lists it apart, and brings it back (SPEC C-08)', async () => {
   const user = userEvent.setup();
   render(<App />);

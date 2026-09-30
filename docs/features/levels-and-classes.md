@@ -28,7 +28,7 @@ A class or subclass can name a per-level column with a `scale` effect: `{ scaleI
 - The sheet lists each column with its current value (`sheet.scales`).
 - `SCALE` is read only in a v9 revision. In an older one it is an unknown identifier, as in older builds.
 
-The first user is the original **Test Chronicler** fixture (`tests/RulesFixtures/fixture-pack-m5-chronicler.json`). Its Ink column sets a resource, a short-rest recovery and a feature's initiative bonus, and its Lore column sets a roll bonus, a skill and the prepared-spell count. The studio cannot author classes yet (M5 slice 1b).
+The first user is the original **Test Chronicler** fixture (`tests/RulesFixtures/fixture-pack-m5-chronicler.json`). Its Ink column sets a resource, a short-rest recovery and a feature's initiative bonus, and its Lore column sets a roll bonus, a skill and the prepared-spell count. Since M5 slice 1b the studio authors classes, columns included ([homebrew-studio.md](homebrew-studio.md#a-class-of-your-own-m5-slice-1b-adr-010)). The sheet shows the columns under "Class columns".
 
 ## Hit points (`hitPoints`)
 
