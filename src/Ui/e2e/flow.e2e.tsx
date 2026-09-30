@@ -9,6 +9,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
+import { fromTemplate, templates } from '../src/templates';
 
 vi.mock('../src/api/client', async (importOriginal) => {
   const { inject } = await import('vitest');
@@ -855,6 +856,62 @@ it('shows an entry\'s relationships as a keyboard tree and jumps from a node to 
   await user.click(within(tree).getByRole('treeitem', { name: 'Roll: Flare (1d6), spends it' }));
   await user.keyboard('{ArrowLeft}');
   expect(document.activeElement).toBe(resource);
+});
+
+it('starts homebrew from a template as an unsaved draft, publishes a stance, and a skeleton waits for its slots (M5 slice 6)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Templates', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Templates/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Templates/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Templates' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+
+  // The stance: a toggle that spends a use, and a bonus only while it is on. Nothing is stored until it is saved.
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A stance you switch on and off');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  expect(await client.contentBySource(source.id)).toEqual([]);
+  expect(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).toBeTruthy();
+  expect((within(within(editor()).getByRole('group', { name: /^Rule 4: Modifier/ })).getByRole('combobox', { name: 'Applies' }) as HTMLSelectElement).value).toBe('stance');
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Stance');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Stance/);
+
+  // The class skeleton: its hit die, saves and subclass choice are set; its improvement slots block publishing until filled.
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A class skeleton');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Skeleton Class');
+  expect((within(editor()).getByRole('combobox', { name: 'Hit die' }) as HTMLSelectElement).value).toBe('8');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  const results = await within(editor()).findByRole('region', { name: 'Check results' });
+  expect(results.textContent).toMatch(/improvement-4' grants content but names none/);
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Skeleton Class/);
+  expect((await client.contentBySource(source.id)).find((e) => e.name === 'E2E Skeleton Class')?.latest.status).toBe('draft');
+
+  // Every template passes the server's checks; only the skeletons' empty slots are errors (review fix).
+  for (const t of templates) {
+    const draft = { ...fromTemplate(t.id, source.id, ['srd-5.2.1'], crypto.randomUUID()), name: `E2E ${t.label}`, revisionId: crypto.randomUUID() };
+    expect(draft.summary).toBeUndefined(); // a template never writes the description shown on the sheet
+    const report = await client.validateRevision(draft);
+    expect(report.errors.filter((e) => e.code !== 'validate.grant-content-missing')).toEqual([]);
+    expect(report.errors.length > 0).toBe(t.id === 'subclass-skeleton' || t.id === 'class-skeleton');
+  }
+
+  // Removing the stance's toggle turns its bonus back to always on, so nothing names a missing toggle (review fix).
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A stance you switch on and off');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Loose Stance');
+  await user.click(within(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).getByRole('button', { name: 'Remove rule 3' }));
+  expect(within(editor()).queryByRole('combobox', { name: 'Applies' })).toBeNull();
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });
 
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
