@@ -137,7 +137,8 @@ public sealed partial class PackageService
         }
         var campaign = parsed.Campaigns[0];
         var carried = parsed.Sources.Select(s => s.Id).ToHashSet();
-        foreach (var stray in parsed.Sources.Where(s => !campaign.AllowedSources.Contains(s.Id)))
+        var allowed = campaign.AllowedSources.ToHashSet();
+        foreach (var stray in parsed.Sources.Where(s => !allowed.Contains(s.Id)))
             errors.Add(new("pack.source-not-allowed", $"The pack carries '{stray.Title}', which its campaign does not allow."));
         var named = new Dictionary<Guid, OmittedSource>();
         foreach (var omitted in parsed.Manifest.Omitted)
@@ -174,11 +175,16 @@ public sealed partial class PackageService
     /// </summary>
     private List<PendingSource>? NamedPending(IEnumerable<Guid> allowed, PackageManifest manifest, IReadOnlyList<PendingSource> already)
     {
+        // Sets and a dictionary, not list scans: both lists come from an untrusted pack (M6 stack review).
         List<PendingSource> pending = [.. already];
-        foreach (var id in allowed.Where(id => store.FindSource(id) is null && !pending.Any(p => p.SourceId == id)))
+        var listed = pending.Select(p => p.SourceId).ToHashSet();
+        var named = new Dictionary<Guid, OmittedSource>();
+        foreach (var omitted in manifest.Omitted)
+            named.TryAdd(omitted.SourceId, omitted);
+        foreach (var id in allowed.Where(id => !listed.Contains(id) && store.FindSource(id) is null))
         {
-            if (manifest.Omitted.FirstOrDefault(o => o.SourceId == id) is { } named)
-                pending.Add(PendingSource.Clamped(id, named.Title, named.Publisher, named.License));
+            if (named.TryGetValue(id, out var source) && listed.Add(id))
+                pending.Add(PendingSource.Clamped(id, source.Title, source.Publisher, source.License));
         }
         return pending.Count == 0 ? null : pending;
     }

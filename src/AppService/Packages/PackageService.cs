@@ -69,9 +69,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
         foreach (var character in plan.Characters)
             files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null }));
-        // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text).
+        // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text). A share writes it
+        // as a campaign pack does, without the pending list or unknown properties (M6 stack review); a backup keeps both.
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
-            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
+            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(purpose == ExportPurpose.Share ? ForCampaignPack(campaign) : campaign));
         // M3 B3: gap notes are the player's own session feedback. They go in a backup, and never in a share.
         if (purpose == ExportPurpose.Backup)
         {
@@ -358,7 +359,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 // local ones kept while the source is still allowed and not installed. A full restore brings back the
                 // backup's (the user's own file), checked the same way.
                 var pending = (library ? campaign.PendingSources : local?.PendingSources) ?? [];
-                List<PendingSource> keep = [.. pending.Where(p => campaign.AllowedSources.Contains(p.SourceId) && store.FindSource(p.SourceId) is null)];
+                var allowedHere = campaign.AllowedSources.ToHashSet();
+                List<PendingSource> keep = [.. pending.Where(p => allowedHere.Contains(p.SourceId) && store.FindSource(p.SourceId) is null)];
                 store.SaveCampaign(campaign with { PendingSources = keep.Count == 0 ? null : keep });
             }
             foreach (var character in parsed.Characters)
@@ -507,6 +509,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     errors.Add(new("package.own-source", $"'{revision.Name}' would be added to '{own.Title}', a source you made on this machine. Only you add content to your own sources.", revision.Reference));
                 else if (store.FindSource(revision.Provenance.SourceId) is { Origin: null, ShareConfirmedAt: not null } unknown)
                     warnings.Add(new("package.source-unconfirmed", $"'{revision.Name}' is added to '{unknown.Title}'. Its share confirmation is withdrawn: mark it as shareable again once you have checked its content.", revision.Reference));
+                // A content's revisions belong to one source (M6 review): a new revision of an SRD or homebrew content here,
+                // under another source, would become its newest and leave that content in two sources for good.
+                if (store.RevisionsOf(revision.ContentId).FirstOrDefault(r => r.Provenance.SourceId != revision.Provenance.SourceId) is { } other)
+                    errors.Add(new("pack.content-conflict", $"'{revision.Name}' would add a revision to '{other.Name}', which belongs to another source here.", revision.Reference));
             }
             if (revision.Status != RevisionStatus.Published)
                 warnings.Add(new("package.revision-draft", $"'{revision.Name}' is a draft and stays inactive after import.", revision.Reference));
@@ -630,6 +636,12 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("gapNote", note.Id, note.Target?.Label ?? "(gap note)", action, $"{owner.Name} · {note.Status}"));
         }
 
+        // Inside the package too, a content's revisions belong to one source (every scope but a full restore; M6 review).
+        if (parsed.Manifest.Scope != PackageScope.Library)
+        {
+            foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
+                errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the package's sources.", split.Last().Reference));
+        }
         if (parsed.Manifest.Scope is PackageScope.Source or PackageScope.Campaign)
             CheckSourcePack(parsed, errors, warnings); // a campaign pack's sources follow the source-pack rules (M6 slice 2)
         if (campaignPack)
@@ -690,7 +702,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            // Names are checked for every entry before any entry is decompressed.
+            // The format and version first (M6 slice 1), read bounded from the manifest alone: a newer package may add an
+            // entry path as well as a scope or field, and must be refused as "update TomeStack", not as a bad path.
+            if (zip.GetEntry(ManifestPath) is { } manifestEntry && !ManifestVersionReadable(ReadBounded(manifestEntry, limits.MaxJsonBytes), errors))
+                return null;
+            // Names are checked for every other entry before it is decompressed.
             foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
             {
                 errors.Add(LooksLikeExtension(entry.FullName)
@@ -737,10 +753,6 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             errors.Add(new("package.manifest-missing", "The package has no manifest.json."));
             return null;
         }
-        // The format and version first, from the raw JSON (M6 slice 1): a newer package may use a scope or field this build
-        // cannot read, and must be refused as "update TomeStack" rather than as a broken file.
-        if (!ManifestVersionReadable(manifestBytes, errors))
-            return null;
         var manifest = Deserialize<PackageManifest>(ManifestPath, manifestBytes, errors);
         if (manifest is null)
             return null;
