@@ -476,6 +476,42 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void No_package_adds_a_revision_to_content_that_belongs_to_another_source_or_splits_one_content()
+    {
+        // M6 review: the one-content-one-source rule ran only for source packs, so a character package could give an SRD
+        // or homebrew content a newer revision under its own source (the new pick and update offer), and leave that
+        // content in two sources for good (its source pack refused from then on).
+        using var sender = new TempApp();
+        var notes = Shared(sender, "Test Sender Notes");
+        var more = Shared(sender, "Test Sender More");
+        var feat = Publish(sender, Feat(notes.Id, "Test Sender Step", Guid.NewGuid(), Guid.NewGuid()));
+        var other = Publish(sender, Feat(more.Id, "Test Sender Leap", Guid.NewGuid(), Guid.NewGuid()));
+        var hero = sender.App.SaveCharacter(HeroPinning(feat) with { Pins = [.. HeroPinning(feat).Pins, other] });
+        var backup = sender.App.ExportCharacters([hero.Character.Id]).Content;
+
+        using var destination = new TempApp();
+        var mine = Shared(destination);
+        var own = Publish(destination, Feat(mine.Id, "Test Own Step", Guid.NewGuid(), Guid.NewGuid()));
+        var srdSource = destination.App.ListSources().First(s => s.EditionVersion != "homebrew");
+        var srd = destination.App.Store.ListRevisions().First(r => r.Provenance.SourceId == srdSource.Id);
+        Assert.True(destination.App.PreviewImport(backup).CanApply);
+
+        foreach (var contentId in new[] { srd.ContentId, own.ContentId })
+        {
+            var takeover = Feat(notes.Id, "Test Takeover", contentId, Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+            var hostile = AddEntry(backup, $"content/{takeover.RevisionId:D}.json", "contentRevision", takeover);
+            Assert.Contains(destination.App.PreviewImport(hostile).Errors, e => e.Code == "pack.content-conflict");
+            Assert.Throws<PackageException>(() => destination.App.ApplyImport(hostile));
+            Assert.Null(destination.App.Store.FindRevision(takeover.Reference));
+        }
+
+        var split = Feat(notes.Id, "Test Sender Leap", other.ContentId, Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        var splitting = AddEntry(backup, $"content/{split.RevisionId:D}.json", "contentRevision", split);
+        Assert.Contains(destination.App.PreviewImport(splitting).Errors, e => e.Code == "pack.content-conflict");
+        // A full restore is the user's own file and keeps what it holds.
+    }
+
+    [Fact]
     public void A_pack_whose_newest_revision_is_already_here_warns_that_an_older_one_becomes_the_newest()
     {
         using var origin = new TempApp();
@@ -530,6 +566,27 @@ public class SourcePackTests
         using var origin = new TempApp();
         var (source, _, _) = SharedWithTwoRevisions(origin);
         var newer = PackageEditor.Edit(origin.ExportPack(source.Id), _ => false, _ => { }, m => { m["formatVersion"] = PackageManifest.CurrentFormatVersion + 1; m["scope"] = "someday"; });
+
+        using var destination = new TempApp();
+        var preview = destination.App.PreviewImport(newer);
+        Assert.Equal("package.unsupported-format", Assert.Single(preview.Errors).Code);
+    }
+
+    [Fact]
+    public void A_package_from_a_newer_TomeStack_is_refused_as_newer_even_with_an_entry_path_this_build_does_not_know()
+    {
+        // M6 review: the path allowlist ran before the version, so a newer format that adds a folder read as a bad path.
+        using var origin = new TempApp();
+        var (source, _, _) = SharedWithTwoRevisions(origin);
+        var newer = PackageEditor.Edit(origin.ExportPack(source.Id), _ => false, _ => { }, m => m["formatVersion"] = PackageManifest.CurrentFormatVersion + 1);
+        using (var stream = new MemoryStream())
+        {
+            stream.Write(newer);
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
+            using (var entry = zip.CreateEntry("assets/test-map.json").Open())
+                entry.Write("{}"u8);
+            newer = stream.ToArray();
+        }
 
         using var destination = new TempApp();
         var preview = destination.App.PreviewImport(newer);

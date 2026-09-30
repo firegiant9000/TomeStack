@@ -75,7 +75,7 @@ A full library backup keeps each installed extension's file (`extensions/<sha256
 
 ## Storage
 
-Database migration **v9** adds the `extensions` table (id, the file's SHA-256, and the manifest, grants and on/off state as JSON). Forward-only, with the usual copy of the v8 database first.
+Database migration **v9** adds the `extensions` table (id, the file's SHA-256, and the manifest, grants and on/off state as JSON). Forward-only, with the usual single copy first, at the version the database is opened with (`tomestack.db.v8.bak` from a v8 folder, `tomestack.db.v7.bak` from an M5 build; no copy per step).
 
 ## Tests and evidence
 
