@@ -60,11 +60,13 @@
       },
       "name": "Fixture Spark",
       "system": {
+        "ability": "int",
         "description": {
           "value": "<p>A test spell of level 0.</p><p>A test cantrip: a spark of light.</p>"
         },
         "identifier": "fixture-spark",
         "level": 0,
+        "method": "spell",
         "prepared": 1,
         "school": "evo"
       },
@@ -79,11 +81,13 @@
       },
       "name": "Fixture Frost Ring",
       "system": {
+        "ability": "int",
         "description": {
           "value": "<p>A test spell of level 1.</p><p>A test spell: a ring of cold.</p>"
         },
         "identifier": "fixture-frost-ring",
         "level": 1,
+        "method": "spell",
         "prepared": 1,
         "school": "evo"
       },

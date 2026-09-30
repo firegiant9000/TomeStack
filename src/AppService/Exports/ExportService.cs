@@ -114,8 +114,11 @@ namespace TomeStack.AppService
                 fileName = baseName + SheetJson.FileSuffix;
                 (adapterVersion, targetVersion) = (SheetJson.AdapterVersion, $"sheet export model v{SheetExport.CurrentFormatVersion}");
             }
-            // The model is an allowlist with no path field; the scan is the second line (ADR-012 "Privacy").
-            if (OutputScan.Leaks(text, SensitivePaths(), [ScanIdentity().UserName]))
+            // The model is an allowlist with no path field; the scan is the second line (ADR-012 "Privacy"). The Foundry file
+            // holds HTML-encoded text (an accented or quoted name is written as an entity), so the sheet it came from, whose
+            // strings are the same but not encoded, is scanned too (review fix).
+            var scanned = target == FoundryDnd5e.Target ? [text, SheetJson.Map(sheet).ToJsonString(FileJson)] : new[] { text };
+            if (scanned.Any(t => OutputScan.Leaks(t, SensitivePaths(), [ScanIdentity().UserName])))
                 throw new AppValidationException([new("export.output-refused", "The file would contain a local path or your Windows user name, so nothing was written.")]);
             var bytes = Encoding.UTF8.GetBytes(text);
             KeepFew(_pendingExports);
@@ -150,14 +153,20 @@ namespace TomeStack.AppService
         private static IReadOnlyList<string> FoundryDifferences(SheetExport sheet)
         {
             var differences = new List<string>();
-            var pb = sheet.Fields.FirstOrDefault(f => f.Id == FieldIds.ProficiencyBonus)?.Value ?? 2;
-            var mods = sheet.Abilities.ToDictionary(a => a.Ability, a => a.Modifier);
+            // Foundry's own numbers (review fix): its proficiency bonus comes from the class levels in the file (dnd5e
+            // Proficiency.calculateMod, floor((level + 7) / 4)) and each modifier from the score, never from TomeStack's totals.
+            var pb = FoundryDnd5e.ProficiencyBonus(sheet.Character.Classes.Sum(c => c.Level));
+            var mods = sheet.Abilities.ToDictionary(a => a.Ability, a => (int)Math.Floor((a.Score - 10) / 2.0));
             int Expected(string ability, SheetProficiency proficiency) =>
                 mods.GetValueOrDefault(ability) + (proficiency switch { SheetProficiency.Expertise => 2 * pb, SheetProficiency.Proficient => pb, _ => 0 });
+            if (sheet.Fields.FirstOrDefault(f => f.Id == FieldIds.ProficiencyBonus) is { } bonus && bonus.Value != pb)
+                differences.Add($"Proficiency bonus: TomeStack {Signed(bonus.Value)}; Foundry works out {Signed(pb)} from the class levels in the file.");
             foreach (var skill in sheet.Skills.Where(s => s.Total != Expected(s.Ability, s.Proficiency)))
                 differences.Add($"{skill.Label}: TomeStack {Signed(skill.Total)}; Foundry works out {Signed(Expected(skill.Ability, skill.Proficiency))} before its own bonuses.");
-            foreach (var ability in sheet.Abilities.Where(a => a.Save != Expected(a.Ability, a.SaveProficiency)))
-                differences.Add($"{ability.Ability.ToUpperInvariant()} save: TomeStack {Signed(ability.Save)}; Foundry works out {Signed(Expected(ability.Ability, ability.SaveProficiency))}.");
+            // The file marks a save proficient or not: Foundry adds the proficiency bonus once, even for Expertise.
+            SheetProficiency Save(SheetProficiency p) => p == SheetProficiency.None ? p : SheetProficiency.Proficient;
+            foreach (var ability in sheet.Abilities.Where(a => a.Save != Expected(a.Ability, Save(a.SaveProficiency))))
+                differences.Add($"{ability.Ability.ToUpperInvariant()} save: TomeStack {Signed(ability.Save)}; Foundry works out {Signed(Expected(ability.Ability, Save(ability.SaveProficiency)))}.");
             if (sheet.Fields.FirstOrDefault(f => f.Id == FieldIds.Initiative) is { } initiative && initiative.Value != mods.GetValueOrDefault("dex"))
                 differences.Add($"Initiative: TomeStack {Signed(initiative.Value)}; Foundry starts from the Dexterity modifier ({Signed(mods.GetValueOrDefault("dex"))}).");
             foreach (var caster in sheet.Spellcasting)
@@ -165,6 +174,7 @@ namespace TomeStack.AppService
                 if (caster.AttackBonus != mods.GetValueOrDefault(caster.Ability) + pb || caster.SaveDc != 8 + mods.GetValueOrDefault(caster.Ability) + pb)
                     differences.Add($"{caster.Name} spellcasting: TomeStack {Signed(caster.AttackBonus)} to hit, DC {caster.SaveDc}; Foundry works these out from the ability and proficiency bonus.");
             }
+            differences.AddRange(FoundryDnd5e.Losses(sheet));
             if (sheet.Dropped.Count > 0)
                 differences.Add("Content left out for sharing is not in the file; the totals above still include it.");
             return differences;

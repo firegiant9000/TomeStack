@@ -110,6 +110,9 @@ public class ExportAdapterTests
         var items = actor["items"]!.AsArray();
         Assert.Equal([3, 2], items.Where(i => i!["type"]!.GetValue<string>() == "class").Select(i => i!["system"]!["levels"]!.GetValue<int>()));
         Assert.Equal(["Fixture Frost Ring", "Fixture Spark"], items.Where(i => i!["type"]!.GetValue<string>() == "spell").Select(i => i!["name"]!.GetValue<string>()).Order());
+        // Each spell carries its caster's ability and a casting method dnd5e can prepare and slot (review fix).
+        Assert.All(items.Where(i => i!["type"]!.GetValue<string>() == "spell"), s =>
+            Assert.Equal(("int", "spell"), (s!["system"]!["ability"]!.GetValue<string>(), s["system"]!["method"]!.GetValue<string>())));
         Assert.All(items, i => Assert.NotNull(i!["flags"]?["tomestack"]?["revisionId"])); // provenance ids only
         Assert.Contains("not affiliated with Foundry Gaming LLC", actor["system"]!["details"]!["biography"]!["value"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Empty(FoundryDnd5e.Validate(actor.AsObject()));
@@ -172,6 +175,94 @@ public class ExportAdapterTests
         }
         // The character's own name holds the sentinel, but not as a path segment, so the file is written.
         Assert.Contains(sentinel, Export(temp, character.Id, SheetJson.Target), StringComparison.Ordinal);
+    }
+
+    /// <summary>Your own homebrew feat with <paramref name="summary"/>, pinned to the 2024 fixture character.</summary>
+    private static Guid WithOwnFeat(TempApp temp, string summary)
+    {
+        var mine = temp.App.CreateHomebrewSource(new("Test Own Notes", [RulesFamilies.Srd521]));
+        var draft = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), Kind = ContentKind.Feat, Name = "Test Own Knack", RulesFamilies = [RulesFamilies.Srd521],
+            Provenance = new(mine.Id), Status = RevisionStatus.Draft, Summary = summary,
+        };
+        temp.App.SaveDraft(draft);
+        var knack = temp.App.Publish(draft.Reference).Published;
+        var courier = TempApp.LoadFixture<Character>("characters/srd521-courier.json");
+        return temp.App.SaveCharacter(courier with { Pins = [.. courier.Pins, knack] }).Character.Id;
+    }
+
+    [Theory]
+    [InlineData("Jos\u00e9 Tester")]
+    [InlineData("O'Brien Tester")]
+    public void A_path_or_user_name_that_HTML_encoding_would_change_is_still_refused(string userName)
+    {
+        // Review fix: the Foundry file writes é and ' as entities, so the scan also reads the unencoded sheet.
+        using var temp = new TempApp();
+        temp.App.ScanIdentity = () => ($"C:\\Users\\{userName}", userName);
+        var id = WithOwnFeat(temp, $"Notes kept in C:\\Users\\{userName}\\Documents.");
+        foreach (var target in TomeStackApp.ExportTargets)
+        {
+            var refused = Assert.Throws<AppValidationException>(() => temp.App.PreviewVttExport(id, target, SheetPurpose.Personal));
+            Assert.Contains(refused.Problems, e => e.Code == "export.output-refused");
+        }
+    }
+
+    [Fact]
+    public void Foundry_enrichers_in_exported_text_are_left_inert()
+    {
+        using var temp = new TempApp();
+        var id = WithOwnFeat(temp, "See @UUID[Actor.abc]{a friend} and roll [[/r 1d20]] or @Embed[Item.x].");
+        var actor = JsonNode.Parse(Export(temp, id, FoundryDnd5e.Target, SheetPurpose.Personal))!;
+        var html = string.Concat(actor["items"]!.AsArray().Select(i => i!["system"]!["description"]?["value"]?.GetValue<string>()));
+        foreach (var enricher in new[] { "@UUID[", "@Embed[", "[[/r" })
+            Assert.DoesNotContain(enricher, html, StringComparison.Ordinal);
+        Assert.Contains("@\u2060UUID[Actor.abc]", html, StringComparison.Ordinal); // still readable
+    }
+
+    [Fact]
+    public void Recoveries_classes_hit_dice_and_pact_slots_map_only_what_dnd5e_can_hold()
+    {
+        // Review fixes: recoverAll only for "all", whole numbers as a formula, the rest named as lost.
+        Assert.Equal("""{"period":"sr","type":"recoverAll"}""", FoundryDnd5e.Recovery("ShortRest: all")!.ToJsonString());
+        Assert.Equal("""{"formula":"1","period":"lr","type":"formula"}""", FoundryDnd5e.Recovery("LongRest: 1")!.ToJsonString());
+        Assert.Null(FoundryDnd5e.Recovery("ShortRest: floor(SCALE.ink / 2)"));
+        Assert.Equal((1, 2, 3, 6), (FoundryDnd5e.ProficiencyBonus(0), FoundryDnd5e.ProficiencyBonus(1), FoundryDnd5e.ProficiencyBonus(5), FoundryDnd5e.ProficiencyBonus(20)));
+
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(Golden(temp, "armored-duelist")).Character;
+        var sheet = temp.App.SheetExportFor(character.Id, SheetPurpose.Share);
+        var only = sheet.Character.Classes.Single();
+        // Two classes whose names give one identifier, one without an accepted hit die, and pact slots of level 3.
+        var twin = sheet with
+        {
+            Character = sheet.Character with { Classes = [only, only with { Name = only.Name + "!", Level = 1, HitDie = null, Subclass = "Test Branch" }] },
+            PactSlots = new(3, 2, 0),
+        };
+        var actor = FoundryDnd5e.Map(twin);
+        Assert.Empty(FoundryDnd5e.Validate(actor));
+        var items = actor["items"]!.AsArray();
+        var classes = items.Where(i => i!["type"]!.GetValue<string>() == "class").Select(i => i!["system"]!).ToList();
+        Assert.Equal(2, classes.Select(c => c["identifier"]!.GetValue<string>()).Distinct().Count());
+        Assert.Equal(classes[1]["identifier"]!.GetValue<string>(), items.Single(i => i!["type"]!.GetValue<string>() == "subclass")!["system"]!["classIdentifier"]!.GetValue<string>());
+        Assert.Equal(0, classes[1]["hd"]!["spent"]!.GetValue<int>());
+        var losses = FoundryDnd5e.Losses(twin).ToList();
+        Assert.Contains(losses, l => l.StartsWith("Pact Magic slots: level 3", StringComparison.Ordinal));
+        Assert.Contains(losses, l => l.Contains("no hit die", StringComparison.Ordinal));
+
+        // A duplicate identifier is refused by the validator.
+        classes[1]["identifier"] = classes[0]["identifier"]!.GetValue<string>();
+        Assert.Contains("every class has its own identifier", FoundryDnd5e.Validate(actor));
+    }
+
+    [Fact]
+    public void The_Foundry_preview_compares_with_the_proficiency_bonus_Foundry_works_out()
+    {
+        // Review fix: a character with no class levels in the file gets Foundry's +1, not TomeStack's +2.
+        using var temp = new TempApp();
+        var character = temp.App.SaveCharacter(Golden(temp, "fixture-2014")).Character;
+        var preview = temp.App.PreviewVttExport(character.Id, FoundryDnd5e.Target, SheetPurpose.Share);
+        Assert.Contains(preview.Differences, d => d.StartsWith("Proficiency bonus: TomeStack +2; Foundry works out +1", StringComparison.Ordinal));
     }
 
     [Fact]

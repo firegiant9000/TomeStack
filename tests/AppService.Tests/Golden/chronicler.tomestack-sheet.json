@@ -358,6 +358,7 @@
         "revisionId": "5fc0e000-0000-4000-8000-000000000001"
       },
       "saveDc": 14,
+      "slotKind": "spellSlots",
       "source": "TomeStack Fixtures: Test Chronicler",
       "spells": []
     }

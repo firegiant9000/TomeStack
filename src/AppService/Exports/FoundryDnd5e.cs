@@ -67,25 +67,34 @@ public static partial class FoundryDnd5e
             ["hp"] = new JsonObject { ["max"] = sheet.HitPoints.Maximum, ["temp"] = sheet.HitPoints.Temporary, ["value"] = sheet.HitPoints.Current },
             ["exhaustion"] = sheet.Conditions.Exhaustion,
         };
+        // The actor's default; each spell also carries its own caster's ability (review fix: multiclass casters).
         if (sheet.Spellcasting.FirstOrDefault() is { } primary)
             attributes["spellcasting"] = primary.Ability;
         var spells = new JsonObject();
         foreach (var slot in sheet.Slots)
             spells[$"spell{slot.Level}"] = new JsonObject { ["override"] = slot.Maximum, ["value"] = Math.Max(0, slot.Maximum - slot.Spent) };
+        // Foundry works out the pact slot level from class spellcasting data the file does not carry, so it shows level 1;
+        // Losses names that in the preview.
         if (sheet.PactSlots is { } pact)
             spells["pact"] = new JsonObject { ["override"] = pact.Maximum, ["value"] = Math.Max(0, pact.Maximum - pact.Spent) };
 
         var items = new JsonArray();
         var spentByDie = sheet.HitDice.ToDictionary(h => h.Die, h => h.Spent);
-        foreach (var klass in sheet.Character.Classes)
+        var identifiers = ClassIdentifiers(sheet);
+        for (var i = 0; i < sheet.Character.Classes.Count; i++)
         {
-            var identifier = Identifier(klass.Name);
-            var die = klass.HitDie ?? 8;
-            var spent = Math.Min(klass.Level, spentByDie.GetValueOrDefault(die));
-            spentByDie[die] = spentByDie.GetValueOrDefault(die) - spent;
+            var klass = sheet.Character.Classes[i];
+            var identifier = identifiers[i];
+            // A class without an accepted hit die gets Foundry's d8 but spends none of the character's real dice (review fix).
+            var spent = 0;
+            if (klass.HitDie is { } die)
+            {
+                spent = Math.Min(klass.Level, spentByDie.GetValueOrDefault(die));
+                spentByDie[die] = spentByDie.GetValueOrDefault(die) - spent;
+            }
             items.Add(Item(klass.Name, "class", new JsonObject
             {
-                ["hd"] = new JsonObject { ["denomination"] = $"d{die}", ["spent"] = spent },
+                ["hd"] = new JsonObject { ["denomination"] = $"d{klass.HitDie ?? 8}", ["spent"] = spent },
                 ["identifier"] = identifier,
                 ["levels"] = klass.Level,
             }, klass.Ref));
@@ -101,7 +110,7 @@ public static partial class FoundryDnd5e
                 system["uses"] = new JsonObject
                 {
                     ["max"] = max.ToString(CultureInfo.InvariantCulture),
-                    ["recovery"] = new JsonArray([.. resource.Recovery.Select(Recovery).OfType<string>().Distinct().Select(p => (JsonNode)new JsonObject { ["period"] = p, ["type"] = "recoverAll" })]),
+                    ["recovery"] = new JsonArray([.. resource.Recovery.Select(Recovery).OfType<JsonObject>().DistinctBy(r => r["period"]!.GetValue<string>())]),
                     ["spent"] = Math.Min(resource.Spent, max),
                 };
             }
@@ -113,9 +122,13 @@ public static partial class FoundryDnd5e
             {
                 var system = new JsonObject
                 {
+                    // Review fix: the caster's own ability, and a casting method (dnd5e 6.x defaults it to "", which cannot
+                    // be prepared or use slots). Pact Magic spells above cantrips use the pact slots.
+                    ["ability"] = caster.Ability,
                     ["description"] = Description(spell.Summary, spell.Text is null ? [] : [spell.Text]),
                     ["identifier"] = Identifier(spell.Name),
                     ["level"] = spell.Level,
+                    ["method"] = caster.SlotKind == "pactMagic" && spell.Level > 0 ? "pact" : "spell",
                     ["prepared"] = spell.Prepared || spell.Level == 0 ? 1 : 0,
                 };
                 if (spell.School is { } school && Schools.TryGetValue(school, out var schoolKey))
@@ -222,8 +235,24 @@ public static partial class FoundryDnd5e
             if (type == "class")
                 Need(item!["system"]?["levels"] is JsonValue levels && levels.GetValue<int>() is >= 1 and <= 20, "a class has 1 to 20 levels");
             if (type == "spell")
+            {
                 Need(item!["system"]?["level"] is JsonValue level && level.GetValue<int>() is >= 0 and <= 9, "a spell has a level 0 to 9");
+                Need(item["system"]?["method"]?.GetValue<string>() is "spell" or "pact", "a spell's method is spell or pact");
+            }
+            foreach (var recovery in item?["system"]?["uses"]?["recovery"] as JsonArray ?? [])
+            {
+                Need(recovery?["period"]?.GetValue<string>() is "lr" or "sr", "a recovery period is lr or sr");
+                Need(recovery?["type"]?.GetValue<string>() switch
+                {
+                    "recoverAll" => true,
+                    "formula" => int.TryParse(recovery!["formula"]?.GetValue<string>(), NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0,
+                    _ => false,
+                }, "a recovery is recoverAll or a whole-number formula");
+            }
         }
+        // dnd5e keys an actor's classes by identifier, and a subclass finds its class by it.
+        var classIds = (actor["items"] as JsonArray ?? []).Where(i => i?["type"]?.GetValue<string>() == "class").Select(i => i!["system"]?["identifier"]?.GetValue<string>()).ToList();
+        Need(classIds.Distinct(StringComparer.Ordinal).Count() == classIds.Count, "every class has its own identifier");
         return problems;
     }
 
@@ -236,9 +265,59 @@ public static partial class FoundryDnd5e
 
     private static int Value(IReadOnlyDictionary<string, SheetField> fields, string id) => fields.TryGetValue(id, out var f) ? Math.Max(0, f.Value) : 0;
 
-    /// <summary>"LongRest: all" → lr, "ShortRest: …" → sr; anything else is kept only in the text.</summary>
-    private static string? Recovery(string recovery) =>
-        recovery.StartsWith("LongRest", StringComparison.Ordinal) ? "lr" : recovery.StartsWith("ShortRest", StringComparison.Ordinal) ? "sr" : null;
+    /// <summary>dnd5e's proficiency bonus for a character level (Proficiency.calculateMod).</summary>
+    public static int ProficiencyBonus(int level) => (level + 7) / 4;
+
+    /// <summary>
+    /// A TomeStack recovery ("LongRest: all", "ShortRest: 1") as a dnd5e recovery: <c>recoverAll</c> for "all", a
+    /// <c>formula</c> for a whole number. Anything else (a formula over TomeStack values) has no dnd5e form and is left out;
+    /// <see cref="Losses"/> names it (review fix: a partial recovery was written as recoverAll).
+    /// </summary>
+    internal static JsonObject? Recovery(string recovery)
+    {
+        var at = recovery.IndexOf(": ", StringComparison.Ordinal);
+        var period = at < 0 ? null : recovery[..at] switch { "LongRest" => "lr", "ShortRest" => "sr", _ => null };
+        if (period is null)
+            return null;
+        var amount = recovery[(at + 2)..];
+        if (amount == "all")
+            return new JsonObject { ["period"] = period, ["type"] = "recoverAll" };
+        return int.TryParse(amount, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0
+            ? new JsonObject { ["formula"] = n.ToString(CultureInfo.InvariantCulture), ["period"] = period, ["type"] = "formula" }
+            : null;
+    }
+
+    /// <summary>What the file cannot carry for this sheet, for the preview's differences (review fix).</summary>
+    public static IEnumerable<string> Losses(SheetExport sheet)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        if (sheet.PactSlots is { Level: > 1 } pact)
+            yield return $"Pact Magic slots: level {pact.Level} in TomeStack; Foundry shows them as level 1 because the file carries no class spellcasting progression.";
+        foreach (var klass in sheet.Character.Classes.Where(c => c.HitDie is null))
+            yield return $"{klass.Name}: no hit die in TomeStack; Foundry gives the class d8 hit dice.";
+        var features = sheet.Features.Select(f => f.Ref.ContentId).ToHashSet();
+        foreach (var resource in sheet.Resources.Where(r => r.Maximum is not null && features.Contains(r.Ref.ContentId)))
+        {
+            foreach (var recovery in resource.Recovery.Where(r => Recovery(r) is null))
+                yield return $"{resource.Label}: the recovery \"{recovery}\" has no Foundry form, so Foundry does not restore it.";
+        }
+    }
+
+    /// <summary>One identifier per class, unique within the actor: a repeated slug gets -2, -3 (review fix).</summary>
+    private static List<string> ClassIdentifiers(SheetExport sheet)
+    {
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var identifiers = new List<string>();
+        foreach (var klass in sheet.Character.Classes)
+        {
+            var slug = Identifier(klass.Name);
+            var identifier = slug;
+            for (var n = 2; !used.Add(identifier); n++)
+                identifier = $"{slug[..Math.Min(slug.Length, 56)].TrimEnd('-')}-{n}"; // still at most 60 characters
+            identifiers.Add(identifier);
+        }
+        return identifiers;
+    }
 
     private static JsonObject Item(string name, string type, JsonObject system, ContentReference? reference)
     {
@@ -255,7 +334,7 @@ public static partial class FoundryDnd5e
     {
         var html = new StringBuilder();
         foreach (var paragraph in new[] { summary }.Concat(texts).OfType<string>().Where(t => t.Length > 0).Distinct())
-            html.Append("<p>").Append(WebUtility.HtmlEncode(paragraph)).Append("</p>");
+            html.Append("<p>").Append(Encode(paragraph)).Append("</p>");
         return new JsonObject { ["value"] = html.ToString() };
     }
 
@@ -268,10 +347,10 @@ public static partial class FoundryDnd5e
         var html = new StringBuilder("<h2>Sources and licenses</h2>");
         foreach (var notice in sheet.Notices)
         {
-            html.Append("<p><strong>").Append(WebUtility.HtmlEncode(notice.Title)).Append("</strong> (")
-                .Append(WebUtility.HtmlEncode(notice.Publisher)).Append("), ").Append(WebUtility.HtmlEncode(notice.License)).Append('.');
-            if (notice.Attribution is { Length: > 0 } attribution) html.Append(' ').Append(WebUtility.HtmlEncode(attribution));
-            if (notice.ModificationNotice is { Length: > 0 } modified) html.Append(' ').Append(WebUtility.HtmlEncode(modified));
+            html.Append("<p><strong>").Append(Encode(notice.Title)).Append("</strong> (")
+                .Append(Encode(notice.Publisher)).Append("), ").Append(Encode(notice.License)).Append('.');
+            if (notice.Attribution is { Length: > 0 } attribution) html.Append(' ').Append(Encode(attribution));
+            if (notice.ModificationNotice is { Length: > 0 } modified) html.Append(' ').Append(Encode(modified));
             if (notice.TotalsOnly) html.Append(" Only totals from this source are in this file.");
             html.Append("</p>");
         }
@@ -280,6 +359,14 @@ public static partial class FoundryDnd5e
         html.Append("<p>Exported by TomeStack for Foundry VTT (dnd5e system). TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>");
         return html.ToString();
     }
+
+    /// <summary>
+    /// Text for an HTML field. Foundry enriches these fields: <c>@UUID[…]</c>, <c>@Embed[…]</c> and <c>[[/r …]]</c> become
+    /// links, embeds and roll buttons. A word joiner (U+2060) after every "@" and between "[[" leaves the text readable but
+    /// stops it being enriched (review fix), so imported text cannot place actions in a world.
+    /// </summary>
+    internal static string Encode(string text) =>
+        WebUtility.HtmlEncode(text.Replace("@", "@\u2060", StringComparison.Ordinal).Replace("[[", "[\u2060[", StringComparison.Ordinal));
 
     /// <summary>A dnd5e identifier: lowercase letters, digits and hyphens.</summary>
     internal static string Identifier(string name)
