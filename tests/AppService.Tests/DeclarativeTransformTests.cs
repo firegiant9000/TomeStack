@@ -88,6 +88,50 @@ public class DeclarativeTransformTests
     }
 
     [Fact]
+    public void Copying_data_pays_for_its_whole_size_so_fuel_bounds_memory_and_deep_output_is_refused()
+    {
+        // Review fix: each getRoot "" used to copy the whole input for one step. 50,000 rows, copied per row.
+        var csv = "Name,Text\n" + string.Concat(Enumerable.Range(0, ExtensionInput.MaxCsvRows).Select(i => $"Row {i},Some original text for row {i}\n"));
+        var input = ExtensionInput.Parse(Encoding.UTF8.GetBytes(csv), "csv");
+        var copyAll = Parse("""{"output":{"map":{"over":{"getRoot":"/rows"},"emit":{"getRoot":""}}}}""");
+        // Either bound stops it (fuel alone, on a quiet machine; the clock first, under load), long before memory runs out.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        Assert.Contains(Assert.Throws<TransformException>(() => copyAll.Run(input)).Code, new[] { "transform.fuel", "transform.timeout" });
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"took {clock.Elapsed}");
+        // A large literal repeated in a loop pays each time.
+        var big = new string('x', 700_000);
+        var literal = Parse("{\"output\":{\"map\":{\"over\":{\"getRoot\":\"/rows\"},\"emit\":{\"lower\":\"" + big + "\"}}}}");
+        Assert.Contains(Assert.Throws<TransformException>(() => literal.Run(input)).Code, new[] { "transform.fuel", "transform.timeout" });
+        // The same list, read once per row without copying, is ordinary work and fits.
+        var names = Parse("""{"output":{"map":{"over":{"getRoot":"/rows"},"emit":{"get":"/Name"}}}}""");
+        Assert.Equal(ExtensionInput.MaxCsvRows, names.Run(input)!.AsArray().Count);
+        // Output deeper than the limit is refused as transform.too-deep, never an internal error (review fix): 62 nested
+        // lists around a 100-deep input (130 levels), and a copy of data deeper than the limit.
+        JsonNode? Deep(int levels) => JsonNode.Parse(new string('[', levels) + new string(']', levels), documentOptions: new System.Text.Json.JsonDocumentOptions { MaxDepth = 256 });
+        var wrapped = new StringBuilder("{\"getRoot\":\"\"}");
+        for (var i = 0; i < 30; i++) wrapped.Insert(0, "{\"array\":[").Append("]}");
+        Assert.Equal("transform.too-deep", Assert.Throws<TransformException>(() => Parse("{\"output\":" + wrapped + "}").Run(Deep(100))).Code);
+        Assert.Equal("transform.too-deep", Assert.Throws<TransformException>(() => Parse("""{"output":{"getRoot":""}}""").Run(Deep(DeclarativeTransform.MaxOutputDepth + 5))).Code);
+    }
+
+    [Fact]
+    public void The_output_scan_finds_paths_in_any_spelling_and_the_user_name_only_as_a_path_segment()
+    {
+        string[] paths = [@"D:\Books Test\Tome.pdf", @"C:\Users\Someone\AppData\Local\TomeStack"];
+        bool Leaks(string output, string user = "Max") => OutputScan.Leaks(output, paths, [user]);
+        Assert.True(Leaks(@"see D:\Books Test\Tome.pdf"));
+        Assert.True(Leaks(@"see d:\\books test\\tome.pdf")); // doubled backslashes in plain text
+        Assert.True(Leaks("see /BOOKS TEST/TOME.PDF")); // no drive, other case
+        Assert.True(Leaks("{\"p\":\"D:\\\\Books Test\\\\Tome.pdf\"}")); // escaped in JSON
+        Assert.True(Leaks("see D:\u2216Books Test\u2216To\u200Bme.pdf")); // a lookalike separator and a zero-width space
+        Assert.True(Leaks("c:/users/max/notes"));
+        Assert.True(Leaks("\"C:\\\\Users\\\\Max\"}"));
+        Assert.False(Leaks("maximum 12, max 3")); // review fix: "Max" is not refused in ordinary words
+        Assert.False(Leaks("the item's current owner", user: "Owner"));
+        Assert.False(Leaks("a tome of danger and iron", user: "Tom"));
+    }
+
+    [Fact]
     public void The_input_reader_parses_strict_CSV_and_bounded_JSON()
     {
         var csv = ExtensionInput.Parse(Encoding.UTF8.GetBytes("Name,Text\r\n\"A, b\",\"say \"\"hi\"\"\"\nC,\n"), "csv");
@@ -102,6 +146,9 @@ public class DeclarativeTransformTests
         Assert.Equal("input.too-large", Code(() => ExtensionInput.Parse(new byte[ExtensionInput.MaxBytes + 1], "json")));
         Assert.Equal("input.invalid-json", Code(() => ExtensionInput.Parse(Encoding.UTF8.GetBytes(new string('[', 40) + new string(']', 40)), "json")));
         Assert.Equal("input.encoding", Code(() => ExtensionInput.Parse([0xFF, 0xFE, 0x00], "json")));
+        // With one column, a blank line is a row whose value is empty (review fix); with more, it is skipped.
+        Assert.Equal(3, ExtensionInput.Parse(Encoding.UTF8.GetBytes("Name\na\n\nb\n"), "csv")["rows"]!.AsArray().Count);
+        Assert.Equal(2, ExtensionInput.Parse(Encoding.UTF8.GetBytes("A,B\n1,2\n\n3,4\n"), "csv")["rows"]!.AsArray().Count);
     }
 
     /// <summary>

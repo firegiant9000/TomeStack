@@ -249,8 +249,24 @@ public class ExtensionTests
         Assert.DoesNotContain(sentinel, text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Gap text", text, StringComparison.Ordinal);
 
-        // A transform that writes a path in any spelling is refused before anything is written.
-        foreach (var leak in new[] { temp.Directory, temp.Directory.Replace('\\', '/').ToUpperInvariant(), pdf.Replace("\\", "\\\\", StringComparison.Ordinal), sentinel.ToLowerInvariant() })
+        // A transform that writes a path in any spelling is refused before anything is written. Review fix: the paths are
+        // also tested where they do not contain the user name, so the path matching itself is what refuses them.
+        var plainFolder = Path.GetFullPath(Path.Combine(temp.Directory, "..", "plain-books"));
+        Directory.CreateDirectory(plainFolder);
+        var plainPdf = Path.Combine(plainFolder, "other.pdf");
+        File.WriteAllBytes(plainPdf, Encoding.ASCII.GetBytes("%PDF-1.4\n% test\n%%EOF\n"));
+        var other = app.CreateHomebrewSource(new("Test Other Notes", [RulesFamilies.Srd521]));
+        app.AttachPdfFile(other.Id, plainPdf, AttachmentMode.Linked);
+        Assert.DoesNotContain(sentinel, plainPdf, StringComparison.OrdinalIgnoreCase);
+        foreach (var leak in new[]
+        {
+            plainPdf,
+            plainPdf.Replace('\\', '/').ToUpperInvariant(),
+            plainPdf.Replace("\\", "\\\\", StringComparison.Ordinal),
+            plainPdf[2..].Replace('\\', '\u2216'),
+            temp.Directory,
+            $"C:/Users/{sentinel.ToLowerInvariant()}/notes",
+        })
         {
             var evil = Sample(m => m["version"] = $"1.0.{Math.Abs(leak.GetHashCode()) % 1000}", transform: t => t.Contains("sheet/character", StringComparison.Ordinal)
                 ? JsonSerializer.Serialize(new { output = new { template = "leak: " + leak.Replace("{", "{{", StringComparison.Ordinal) } })
@@ -258,6 +274,49 @@ public class ExtensionTests
             var reinstalled = Install(app, evil);
             Assert.Contains("extension.output-refused", Codes(() => app.PreviewExtensionRun(new(reinstalled.Id, "sheet-markdown", CharacterId: character.Character.Id))));
         }
+    }
+
+    [Fact]
+    public void A_previewed_run_is_refused_once_a_permission_it_used_is_withdrawn_and_a_cancelled_save_keeps_it()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var installed = Install(app);
+        var character = app.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier.json"));
+        var export = app.PreviewExtensionRun(new(installed.Id, "sheet-markdown", CharacterId: character.Character.Id));
+        // Peeking (the Save dialog cancelled) keeps the token.
+        app.PeekExtensionOutput(export.Token);
+        Assert.NotEmpty(app.PeekExtensionOutput(export.Token).Bytes);
+
+        // The same file installed again with only the import permissions: the export previewed before cannot be written.
+        var again = app.PreviewExtensionInstall(Sample());
+        app.InstallExtension(again.Token!.Value, ["import.file", "write.drafts"], confirm: true);
+        Assert.Contains("extension.run-expired", Codes(() => app.PeekExtensionOutput(export.Token)));
+        Assert.Contains("extension.permission-not-granted", Codes(() => app.PreviewExtensionRun(new(installed.Id, "sheet-markdown", CharacterId: character.Character.Id))));
+    }
+
+    [Fact]
+    public void Installing_the_same_file_again_repairs_a_damaged_copy()
+    {
+        using var temp = new TempApp();
+        var app = temp.App;
+        var installed = Install(app);
+        var path = Path.Combine(temp.Directory, "extensions", $"{installed.Sha256}.zip");
+        File.SetAttributes(path, FileAttributes.Normal);
+        File.WriteAllBytes(path, [1, 2, 3]);
+        Assert.Contains("extension.file-changed", Codes(() => app.PreviewExtensionRun(new(installed.Id, "spells-from-csv", Input: SampleCsv))));
+        Install(app);
+        Assert.Equal(3, app.PreviewExtensionRun(new(installed.Id, "spells-from-csv", Input: SampleCsv)).Drafts.Count);
+    }
+
+    [Fact]
+    public void A_hook_without_a_kind_or_with_a_field_this_build_does_not_know_is_refused()
+    {
+        using var temp = new TempApp();
+        var noKind = temp.App.PreviewExtensionInstall(Sample(m => m["hooks"]![0]!.AsObject().Remove("kind")));
+        Assert.Contains("extension.hook-invalid", noKind.Errors.Select(e => e.Code));
+        var extra = temp.App.PreviewExtensionInstall(Sample(m => m["hooks"]![0]!["autorun"] = true));
+        Assert.Contains("extension.field-unknown", extra.Errors.Select(e => e.Code));
     }
 
     [Fact]
@@ -323,6 +382,10 @@ public class ExtensionTests
         var restored = Assert.Single(clean.App.ListExtensions());
         Assert.Equal((installed.Id, installed.Sha256, false, 0), (restored.Id, restored.Sha256, restored.Enabled, restored.Grants.Count));
         Assert.Contains("extension.disabled", Codes(() => clean.App.PreviewExtensionRun(new(restored.Id, "sheet-markdown", CharacterId: Guid.NewGuid()))));
+        // Review fix: it can be reviewed and granted from its stored file, without the original.
+        var review = clean.App.PreviewInstalledExtension(restored.Id);
+        Assert.True(review.CanInstall);
+        Assert.True(clean.App.InstallExtension(review.Token!.Value, [.. review.Manifest!.Permissions], confirm: true).Enabled);
 
         // Without an extension, a backup stays v7 so v7 builds can restore it.
         using var plain = new TempApp();

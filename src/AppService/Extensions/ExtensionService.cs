@@ -76,8 +76,10 @@ namespace TomeStack.AppService
         internal Func<(string? Profile, string? UserName)> ScanIdentity { get; set; } =
             () => (Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.UserName);
 
+        /// <param name="Needed">The permissions the run used; each must still be granted when it is applied (review fix).</param>
         private sealed record PendingRun(
-            Guid ExtensionId, string Sha256, HookKind Kind, string? FileName, byte[]? Output, SourceRecord? Source, IReadOnlyList<ContentRevision> Drafts);
+            Guid ExtensionId, string Sha256, HookKind Kind, string? FileName, byte[]? Output, SourceRecord? Source, IReadOnlyList<ContentRevision> Drafts,
+            IReadOnlyList<string> Needed);
 
         private string ExtensionDirectory => Path.Combine(DataDirectory, ExtensionFolderName);
 
@@ -152,7 +154,27 @@ namespace TomeStack.AppService
             _store.InTransaction(() => _store.SaveExtension(installed));
             if (previous is not null && previous.Sha256 != installed.Sha256)
                 DeleteExtensionFile(previous.Sha256);
+            ForgetRuns(installed.Id); // grants changed: a run previewed before is previewed again (review fix)
             return installed;
+        }
+
+        /// <summary>
+        /// <c>extension.review</c> (review fix): the install preview of an extension that is already installed, read from its
+        /// stored file, so its permissions can be granted again, for example after a full restore brought it back ungranted.
+        /// </summary>
+        public ExtensionInstallPreview PreviewInstalledExtension(Guid extensionId)
+        {
+            var installed = _store.FindExtension(extensionId)
+                ?? throw new AppValidationException([new("extension.not-found", $"Extension {extensionId} is not installed.")]);
+            var bytes = ExtensionFiles.ReadIntact(ExtensionDirectory, installed.Sha256)
+                ?? throw new AppValidationException([new("extension.file-changed", $"The file of '{installed.Manifest.Name}' is missing or changed on disk. Install it again from its file.")]);
+            return PreviewExtensionInstall(bytes);
+        }
+
+        private void ForgetRuns(Guid extensionId)
+        {
+            foreach (var run in _pendingRuns.Where(r => r.Value.ExtensionId == extensionId).Select(r => r.Key).ToList())
+                _pendingRuns.TryRemove(run, out _);
         }
 
         public InstalledExtension SetExtensionEnabled(Guid extensionId, bool enabled)
@@ -163,6 +185,8 @@ namespace TomeStack.AppService
                 throw new AppValidationException([new("extension.no-grants", "Grant at least one permission first: install it again to review them.")]);
             var updated = installed with { Enabled = enabled, UpdatedAt = _time.GetUtcNow() };
             _store.InTransaction(() => _store.SaveExtension(updated));
+            if (!enabled)
+                ForgetRuns(extensionId);
             return updated;
         }
 
@@ -175,8 +199,7 @@ namespace TomeStack.AppService
                 ?? throw new AppValidationException([new("extension.not-found", $"Extension {extensionId} is not installed.")]);
             _store.InTransaction(() => _store.DeleteExtension(extensionId));
             DeleteExtensionFile(installed.Sha256);
-            foreach (var run in _pendingRuns.Where(r => r.Value.ExtensionId == extensionId).Select(r => r.Key).ToList())
-                _pendingRuns.TryRemove(run, out _);
+            ForgetRuns(extensionId);
         }
 
         private void DeleteExtensionFile(string sha256)
@@ -228,15 +251,22 @@ namespace TomeStack.AppService
                 ?? throw new AppValidationException([new("extension.hook-not-found", $"'{installed.Manifest.Name}' has no hook '{request.HookId}'.")]);
             var package = LoadExtension(installed);
             var transform = package.Transforms[hook.Id];
+            var used = new List<string>();
             void Need(string permission)
             {
                 if (!installed.Grants.Contains(permission))
                     throw new AppValidationException([new("extension.permission-not-granted", $"'{installed.Manifest.Name}' needs the {permission} permission for this, and you did not grant it.")]);
+                used.Add(permission);
             }
 
             try
             {
-                return hook.Kind == HookKind.Export ? PreviewExport(installed, hook, transform, request, Need) : PreviewImport(installed, hook, transform, request, Need);
+                return hook.Kind == HookKind.Export ? PreviewExport(installed, hook, transform, request, Need, used) : PreviewImport(installed, hook, transform, request, Need, used);
+            }
+            catch (InvalidOperationException)
+            {
+                // A value the writer cannot write (defence in depth: the transform's own output check refuses these first).
+                throw new AppValidationException([new("transform.too-deep", $"'{installed.Manifest.Name}', hook '{hook.Id}': the output could not be written; it nests too deep.")]);
             }
             catch (TransformException ex)
             {
@@ -245,7 +275,7 @@ namespace TomeStack.AppService
             }
         }
 
-        private ExtensionRunPreview PreviewExport(InstalledExtension installed, ExtensionHook hook, DeclarativeTransform transform, ExtensionRunRequest request, Action<string> need)
+        private ExtensionRunPreview PreviewExport(InstalledExtension installed, ExtensionHook hook, DeclarativeTransform transform, ExtensionRunRequest request, Action<string> need, IReadOnlyList<string> used)
         {
             need(ExtensionPermissions.ExportFile);
             if (request.CharacterId is null && (request.SourceIds is null || request.SourceIds.Count == 0))
@@ -295,23 +325,23 @@ namespace TomeStack.AppService
                     : throw new AppValidationException([new("extension.output-invalid", $"'{installed.Manifest.Name}', hook '{hook.Id}' must produce text, and produced something else.")]);
             }
             else
-                text = result?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "null";
+                text = result?.ToJsonString(new JsonSerializerOptions { WriteIndented = true, MaxDepth = 256 }) ?? "null";
             if (text.Length > DeclarativeTransform.MaxOutputChars)
                 throw new AppValidationException([new("extension.output-too-large", "The output is larger than 5 MB, so nothing was written.")]);
-            if (OutputScan.Leaks(text, SensitiveStrings()))
+            if (OutputScan.Leaks(text, SensitivePaths(), [ScanIdentity().UserName]))
                 throw new AppValidationException([new("extension.output-refused", $"The output of '{installed.Manifest.Name}' contains a local path or your Windows user name, so nothing was written.")]);
 
             var bytes = Encoding.UTF8.GetBytes(text);
             var extension = hook.FileExtension ?? (hook.Produces == "json" ? ".json" : ".txt");
             var fileName = $"{SafeName(baseName)}-{hook.Id}{extension}";
-            var token = Remember(new PendingRun(installed.Id, installed.Sha256, HookKind.Export, fileName, bytes, null, []));
+            var token = Remember(new PendingRun(installed.Id, installed.Sha256, HookKind.Export, fileName, bytes, null, [], [.. used]));
             var warnings = new List<Diagnostic>();
             if (request.Purpose == SheetPurpose.Personal)
                 warnings.Add(new("export.personal", "Personal copy: includes your own homebrew. Do not share it."));
             return new(token, HookKind.Export, request.Purpose, fileName, bytes.LongLength, text.Length > 2_000 ? text[..2_000] : text, null, [], dropped, notices, warnings);
         }
 
-        private ExtensionRunPreview PreviewImport(InstalledExtension installed, ExtensionHook hook, DeclarativeTransform transform, ExtensionRunRequest request, Action<string> need)
+        private ExtensionRunPreview PreviewImport(InstalledExtension installed, ExtensionHook hook, DeclarativeTransform transform, ExtensionRunRequest request, Action<string> need, IReadOnlyList<string> used)
         {
             need(ExtensionPermissions.ImportFile);
             need(ExtensionPermissions.WriteDrafts);
@@ -365,7 +395,7 @@ namespace TomeStack.AppService
             }
             if (drafts.Count == 0)
                 throw new AppValidationException([new("extension.output-invalid", $"'{installed.Manifest.Name}', hook '{hook.Id}' produced no draft this TomeStack can read."), .. warnings.Take(20)]);
-            var token = Remember(new PendingRun(installed.Id, installed.Sha256, HookKind.Import, null, null, source, drafts));
+            var token = Remember(new PendingRun(installed.Id, installed.Sha256, HookKind.Import, null, null, source, drafts, [.. used]));
             warnings.Add(new("extension.import-derived", $"The drafts go into a new source, '{title}', which is marked as holding imported material: it is never shared. Nothing is active until you publish it."));
             return new(token, HookKind.Import, SheetPurpose.Personal, null, null, null, title, previews, [], [], warnings);
         }
@@ -435,12 +465,26 @@ namespace TomeStack.AppService
             return new(source.Id, source.Title, run.Drafts.Count);
         }
 
-        /// <summary><c>extension.runExport</c> / <c>extension.runSaveAs</c>: the previewed output, once.</summary>
+        /// <summary><c>extension.runExport</c>: the previewed output, once.</summary>
         public (string FileName, byte[] Bytes) ExtensionExportOutput(Guid token)
         {
             var run = TakeRun(token, HookKind.Export, confirm: true);
             return (run.FileName!, run.Output!);
         }
+
+        /// <summary>
+        /// <c>extension.runSaveAs</c>, step 1: the previewed output, checked but kept, so cancelling the Save dialog loses
+        /// nothing (review fix). <see cref="CompleteExtensionOutput"/> uses the token up once the file is written.
+        /// </summary>
+        public (string FileName, byte[] Bytes) PeekExtensionOutput(Guid token)
+        {
+            if (!_pendingRuns.TryGetValue(token, out var run) || run.Kind != HookKind.Export)
+                throw new AppValidationException([new("extension.run-expired", "Run the preview again.")]);
+            CheckRun(run);
+            return (run.FileName!, run.Output!);
+        }
+
+        public void CompleteExtensionOutput(Guid token) => _pendingRuns.TryRemove(token, out _);
 
         private PendingRun TakeRun(Guid token, HookKind kind, bool confirm)
         {
@@ -448,10 +492,18 @@ namespace TomeStack.AppService
                 throw new AppValidationException([new("extension.confirm-required", "Show the run's preview and confirm it first.")]);
             if (!_pendingRuns.TryRemove(token, out var run) || run.Kind != kind)
                 throw new AppValidationException([new("extension.run-expired", "Run the preview again.")]);
-            // Revoked, turned off or replaced since the preview: nothing is written.
-            if (_store.FindExtension(run.ExtensionId) is not { Enabled: true } installed || installed.Sha256 != run.Sha256)
-                throw new AppValidationException([new("extension.run-expired", "The extension changed or was turned off after the preview. Run the preview again.")]);
+            CheckRun(run);
             return run;
+        }
+
+        /// <summary>Revoked, turned off, replaced, or a permission it used withdrawn since the preview: nothing is written.</summary>
+        private void CheckRun(PendingRun run)
+        {
+            if (_store.FindExtension(run.ExtensionId) is not { Enabled: true } installed || installed.Sha256 != run.Sha256
+                || run.Needed.Any(p => !installed.Grants.Contains(p)))
+            {
+                throw new AppValidationException([new("extension.run-expired", "The extension or its permissions changed, or it was turned off, after the preview. Run the preview again.")]);
+            }
         }
 
         private Guid Remember(PendingRun run)
@@ -478,13 +530,14 @@ namespace TomeStack.AppService
             return SheetExportBuilder.Build(character, sheet, _store, purpose, _bundledSources, _time.GetUtcNow());
         }
 
-        /// <summary>What the output scan looks for (ADR-011): the data folder, the profile, the user name, and linked PDFs.</summary>
-        internal IEnumerable<string?> SensitiveStrings()
+        /// <summary>
+        /// The paths the output scan looks for (ADR-011): the data folder, the profile and every linked PDF. The Windows user
+        /// name is searched for separately, as a path segment (<see cref="OutputScan.Leaks"/>).
+        /// </summary>
+        internal IEnumerable<string?> SensitivePaths()
         {
-            var (profile, user) = ScanIdentity();
             yield return Path.GetFullPath(DataDirectory);
-            yield return profile;
-            yield return user;
+            yield return ScanIdentity().Profile;
             foreach (var linked in _store.ListAttachments().Where(a => a.Mode == AttachmentMode.Linked))
                 yield return linked.LinkedPath;
         }
