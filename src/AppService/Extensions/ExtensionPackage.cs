@@ -37,7 +37,13 @@ public enum HookKind { Import, Export }
 /// <param name="Produces">Export hooks: <c>text</c> or <c>json</c>.</param>
 /// <param name="FileExtension">Export hooks: the output file's extension (<c>.txt</c>, <c>.md</c>, <c>.json</c> or <c>.csv</c>).</param>
 /// <param name="Transform">The transform document in the extension file: <c>transforms/&lt;id&gt;.json</c>.</param>
-public sealed record ExtensionHook(HookKind Kind, string Id, string Label, string Transform, string? Accepts = null, string? Produces = null, string? FileExtension = null);
+/// <remarks><paramref name="Kind"/> is nullable only so a missing one is refused rather than read as "import" (review fix).</remarks>
+public sealed record ExtensionHook(HookKind? Kind, string Id, string Label, string Transform, string? Accepts = null, string? Produces = null, string? FileExtension = null)
+{
+    /// <summary>Fields this build does not know: they refuse the install (review fix; the schema has no other fields).</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Unknown { get; init; }
+}
 
 /// <summary><c>extension.json</c> (docs/schemas/extension-manifest.v1.schema.json, ADR-011).</summary>
 public sealed record ExtensionManifest
@@ -225,6 +231,10 @@ public static partial class ExtensionReader
             }
             if (!Text(hook.Label, 100))
                 yield return new("extension.hook-invalid", $"Hook '{id}' needs a label of 1 to 100 characters.");
+            if (hook.Kind is null)
+                yield return new("extension.hook-invalid", $"Hook '{id}' needs a kind: import or export.");
+            if (hook.Unknown is { Count: > 0 })
+                yield return new("extension.field-unknown", $"Hook '{id}' has fields this TomeStack does not know ({hook.Unknown.Count}); a newer extension may need a newer TomeStack.");
             if (hook.Transform != $"transforms/{id}.json")
                 yield return new("extension.hook-invalid", $"Hook '{id}' reads its transform from transforms/{id}.json.");
             if (hook.Kind == HookKind.Import)

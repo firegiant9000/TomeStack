@@ -238,32 +238,54 @@ public sealed partial class PackageService
 
             var warnings = new List<Diagnostic>();
             var (added, replaced, unchanged) = Commit(parsed, keepLocal, warnings);
-            added += RestoreExtensions(parsed);
+            added += RestoreExtensions(parsed, warnings);
             return new LibraryRestoreResult(added, replaced, unchanged, copied, safetyCopy, warnings);
         });
 
     /// <summary>
-    /// M6 slice 3 (ADR-011 "A restore installs nothing by itself"): each extension in the backup goes through the full
-    /// install checks and comes back turned off, with no permission granted, only when no extension with its id is
-    /// installed here. A backup handed over by someone else therefore cannot run their extensions.
+    /// The backup's extension files that pass the install checks, in a fixed order (by hash) and one per id: the order the
+    /// preview shows and the restore follows.
     /// </summary>
-    private int RestoreExtensions(ParsedPackage parsed)
+    private static IEnumerable<(string Sha, byte[] Bytes, Extensions.ExtensionPackage? Package, Extensions.ExtensionException? Refused)> BackupExtensions(ParsedPackage parsed)
     {
-        var restored = 0;
-        foreach (var (sha, bytes) in parsed.Extensions)
+        foreach (var (sha, bytes) in parsed.Extensions.OrderBy(e => e.Key, StringComparer.Ordinal))
         {
-            Extensions.ExtensionPackage package;
+            Extensions.ExtensionPackage? package = null;
+            Extensions.ExtensionException? refused = null;
             try
             {
                 package = Extensions.ExtensionReader.Read(bytes);
             }
-            catch (Extensions.ExtensionException)
+            catch (Extensions.ExtensionException ex)
             {
-                continue; // the preview warned (restore.extension-skipped)
+                refused = ex;
             }
-            if (store.FindExtension(package.Manifest.Id) is not null)
+            yield return (sha, bytes, package, refused);
+        }
+    }
+
+    /// <summary>
+    /// M6 slice 3 (ADR-011 "A restore installs nothing by itself"): each extension in the backup goes through the full
+    /// install checks and comes back turned off, with no permission granted, only when no extension with its id is
+    /// installed here. A backup handed over by someone else therefore cannot run their extensions. The rest of the restore
+    /// is already committed, so a file that cannot be written is a warning, not a failure (review fix).
+    /// </summary>
+    private int RestoreExtensions(ParsedPackage parsed, List<Diagnostic> warnings)
+    {
+        var restored = 0;
+        foreach (var (sha, bytes, package, _) in BackupExtensions(parsed))
+        {
+            if (package is null || store.FindExtension(package.Manifest.Id) is not null)
+                continue; // refused (the preview warned), or already here: kept
+            try
+            {
+                Extensions.ExtensionFiles.Write(ExtensionDirectory, sha, bytes);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                warnings.Add(new("restore.extension-failed", $"The extension '{package.Manifest.Name}' could not be written to your data folder (the disk may be full, or the folder not writable). Everything else was restored; install it again from its file."));
                 continue;
-            Extensions.ExtensionFiles.Write(ExtensionDirectory, sha, bytes);
+            }
             var now = time.GetUtcNow();
             store.InTransaction(() => store.SaveExtension(new(package.Manifest.Id, sha, package.Manifest, [], false, now, now)));
             restored++;
@@ -274,26 +296,24 @@ public sealed partial class PackageService
     /// <summary>The restore preview's lines for extensions (M6 slice 3).</summary>
     private void PreviewExtensions(ParsedPackage parsed, List<PackageItem> items, List<Diagnostic> warnings)
     {
-        foreach (var (sha, bytes) in parsed.Extensions)
+        var seen = new HashSet<Guid>();
+        foreach (var (sha, _, package, refused) in BackupExtensions(parsed))
         {
-            Extensions.ExtensionPackage package;
-            try
+            if (package is null)
             {
-                package = Extensions.ExtensionReader.Read(bytes);
-            }
-            catch (Extensions.ExtensionException ex)
-            {
-                warnings.Add(new("restore.extension-skipped", $"An extension in the backup does not pass the install checks ({ex.Errors[0].Code}), so it is not restored."));
+                warnings.Add(new("restore.extension-skipped", $"An extension in the backup does not pass the install checks ({refused!.Errors[0].Code}), so it is not restored."));
                 continue;
             }
             var installed = store.FindExtension(package.Manifest.Id);
-            var detail = installed is null ? $"{package.Manifest.Version}; comes back turned off, with no permission granted"
+            var first = seen.Add(package.Manifest.Id);
+            var detail = !first ? "another file of the same extension comes first in the backup; this one is not restored"
+                : installed is null ? $"{package.Manifest.Version}; comes back turned off, with no permission granted"
                 : installed.Sha256 == sha ? "already installed"
                 : "a different version is installed here; it is kept";
-            items.Add(new("extension", package.Manifest.Id, package.Manifest.Name, installed is null ? PackageItemAction.Add : PackageItemAction.Unchanged, detail));
+            items.Add(new("extension", package.Manifest.Id, package.Manifest.Name, first && installed is null ? PackageItemAction.Add : PackageItemAction.Unchanged, detail));
         }
         if (items.Any(i => i.Kind == "extension" && i.Action == PackageItemAction.Add))
-            warnings.Add(new("restore.extension-review", "Extensions come back turned off, with no permission granted. Review each one on the Extensions screen before you turn it on."));
+            warnings.Add(new("restore.extension-review", "Extensions come back turned off, with no permission granted. On the Extensions screen, use \"Review and grant…\" on each one before you turn it on."));
     }
 
     private T WithLibrary<T>(string path, Func<PackagePreview, ParsedPackage?, List<Diagnostic>, T> use)

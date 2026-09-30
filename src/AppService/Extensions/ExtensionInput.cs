@@ -56,7 +56,10 @@ public static class ExtensionInput
         }
     }
 
-    /// <summary>RFC 4180: comma-separated, a header row, fields quoted with " and "" for a quote inside. Nothing else is accepted.</summary>
+    /// <summary>
+    /// RFC 4180 quoting: comma-separated, a header row, fields quoted with " and "" for a quote inside; a quote anywhere
+    /// else is refused. Lines may end in CRLF, LF or a bare CR, and blank lines are skipped (unless there is one column).
+    /// </summary>
     private static JsonNode ParseCsv(string text)
     {
         var records = new List<List<string>>();
@@ -122,8 +125,8 @@ public static class ExtensionInput
         for (var r = 1; r < records.Count; r++)
         {
             var values = records[r];
-            if (values.Count == 1 && values[0].Length == 0)
-                continue; // a blank line
+            if (values.Count == 1 && values[0].Length == 0 && header.Count > 1)
+                continue; // a blank line (with one column, it is a row whose value is empty)
             if (values.Count != header.Count)
                 throw new TransformException("input.invalid-csv", $"Row {r + 1} has {values.Count} fields; the header has {header.Count}.");
             var row = new JsonObject();

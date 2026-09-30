@@ -153,7 +153,8 @@ public static class SheetExportBuilder
         foreach (var entry in character.Classes)
         {
             var revision = catalog.FindRevision(entry.Class);
-            var hitDie = revision?.Effects.OfType<HitDieEffect>().FirstOrDefault()?.Die;
+            // Only a die the calculator accepts (review fix: the schema allows 6, 8, 10 and 12).
+            var hitDie = revision?.Effects.OfType<HitDieEffect>().Select(h => (int?)h.Die).FirstOrDefault(d => HitDieEffect.AllowedDice.Contains(d!.Value));
             var subclass = (sheet.Choices ?? []).Where(c => c.Source.ContentId == entry.Class.ContentId)
                 .SelectMany(c => c.Selected)
                 .FirstOrDefault(s => catalog.FindRevision(s)?.Kind == ContentKind.Subclass);
@@ -196,7 +197,12 @@ public static class SheetExportBuilder
         foreach (var caster in sheet.Spellcasting ?? [])
         {
             if (!Out(caster.Content, out var casterSource))
+            {
+                // Its spells are dropped with it; each is counted and its source noticed (review fix).
+                foreach (var spell in caster.Spells)
+                    Out(spell.Spell, out _);
                 continue;
+            }
             var spells = new List<SheetSpell>();
             foreach (var spell in caster.Spells)
             {

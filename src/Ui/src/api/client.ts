@@ -226,6 +226,8 @@ export function createClient(transport: Transport) {
       call<{ chosen: boolean; fileName?: string; preview?: ExtensionInstallPreview }>('extension.installChoose', undefined, { timeoutMs: null }),
     /** Only the install preview's button calls this, with the permissions the user ticked. */
     installExtension: (token: string, grants: string[]) => call<InstalledExtension>('extension.install', { token, grants, confirm: true }),
+    /** The install review of an installed extension, read from its stored file (to grant permissions again after a restore). */
+    reviewExtension: (extensionId: string) => call<ExtensionInstallPreview>('extension.review', { extensionId }),
     setExtensionEnabled: (extensionId: string, enabled: boolean) => call<InstalledExtension>('extension.setEnabled', { extensionId, enabled }),
     /** Only the remove confirmation calls this. Drafts the extension made stay. */
     removeExtension: (extensionId: string) => call<{ removed: boolean }>('extension.remove', { extensionId, confirm: true }),

@@ -26,7 +26,8 @@ public sealed class DeclarativeTransform
     public const long MaxDocumentBytes = 1024 * 1024;
     public const int MaxTableEntries = 10_000;
     public const int MaxDepth = 64;
-    public const long DefaultFuel = 2_000_000;
+    /// <summary>Steps per run. Copying data costs one step per node and one per 16 characters, so this also bounds memory.</summary>
+    public const long DefaultFuel = 4_000_000;
     public const long MaxIterationProduct = 100_000;
     public const int MaxOutputChars = 5 * 1024 * 1024;
     public static readonly TimeSpan DefaultTimeLimit = TimeSpan.FromSeconds(5);
@@ -88,10 +89,65 @@ public sealed class DeclarativeTransform
     {
         var run = new Evaluation(this, input, fuel, timeLimit ?? DefaultTimeLimit);
         var result = run.Evaluate(_output, input, 0);
-        if (Size(result) > MaxOutputChars)
-            throw new TransformException("transform.output-too-large", $"The output is larger than {MaxOutputChars / (1024 * 1024)} MB.");
+        CheckOutput(result);
         return result;
     }
+
+    /// <summary>Nesting of the output (and of anything copied); deeper is refused, never passed to a JSON writer.</summary>
+    public const int MaxOutputDepth = 128;
+
+    /// <summary>
+    /// The output as it would be written, through a writer that stops at <see cref="MaxOutputChars"/> bytes (review fix: it
+    /// used to build the whole text first) and at <see cref="MaxOutputDepth"/> levels.
+    /// </summary>
+    private static void CheckOutput(JsonNode? result)
+    {
+        try
+        {
+            using var counter = new BoundedCount(MaxOutputChars);
+            using var writer = new Utf8JsonWriter(counter, new JsonWriterOptions { MaxDepth = MaxOutputDepth, SkipValidation = false });
+            if (result is null) writer.WriteNullValue();
+            else result.WriteTo(writer);
+            writer.Flush();
+        }
+        catch (OutputTooLargeException)
+        {
+            throw new TransformException("transform.output-too-large", $"The output is larger than {MaxOutputChars / (1024 * 1024)} MB.");
+        }
+        catch (InvalidOperationException)
+        {
+            throw new TransformException("transform.too-deep", $"The output nests deeper than {MaxOutputDepth} levels.");
+        }
+    }
+
+    /// <summary>A write-only stream that only counts, and stops the writer once it passes its limit.</summary>
+    private sealed class BoundedCount(long limit) : Stream
+    {
+        private long _length;
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _length;
+        public override long Position { get => _length; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => Add(count);
+
+        public override void Write(ReadOnlySpan<byte> buffer) => Add(buffer.Length);
+
+        private void Add(long count)
+        {
+            _length += count;
+            if (_length > limit)
+                throw new OutputTooLargeException();
+        }
+    }
+
+    private sealed class OutputTooLargeException : Exception;
 
     private static readonly HashSet<string> Operators =
     [
@@ -174,14 +230,6 @@ public sealed class DeclarativeTransform
 
     private static string Clip(string text) => text.Length <= 40 ? text : text[..40] + "…";
 
-    /// <summary>The output's size in characters as it would be written, bounded (it stops counting past the limit).</summary>
-    private static long Size(JsonNode? node) => node switch
-    {
-        null => 4,
-        JsonValue value when value.GetValueKind() == JsonValueKind.String => ((string)value!).Length,
-        _ => node.ToJsonString().Length,
-    };
-
     /// <summary>One run: its fuel, clock and iteration product.</summary>
     private sealed class Evaluation(DeclarativeTransform transform, JsonNode? root, long fuel, TimeSpan timeLimit)
     {
@@ -194,29 +242,83 @@ public sealed class DeclarativeTransform
         {
             _fuel -= steps;
             if (_fuel < 0)
-                throw new TransformException("transform.fuel", "The transform took too many steps. It may loop over too much data, or build text that grows without end.");
-            if (++_ticks % 256 == 0 && _clock.Elapsed > timeLimit)
+                throw new TransformException("transform.fuel", "The transform took too many steps or built too much data. It may loop over too much data, copy it again and again, or build text that grows without end.");
+            // The clock is read every 256 steps, and at once after any large charge (review fix).
+            if ((++_ticks % 256 == 0 || steps >= 1024) && _clock.Elapsed > timeLimit)
                 throw new TransformException("transform.timeout", $"The transform ran longer than {timeLimit.TotalSeconds:0} seconds.");
         }
 
-        /// <summary>A copy of <paramref name="node"/>, paid for by its size, so copying large data is never free.</summary>
+        /// <summary>
+        /// What producing a copy of <paramref name="node"/> costs: one step per node and one per 16 characters of text
+        /// (review fix: every copy, literal and lookup result pays for its whole size, so fuel also bounds memory). The
+        /// walk stops as soon as it passes the fuel left, and anything deeper than <see cref="MaxOutputDepth"/> is refused.
+        /// </summary>
+        private long Weigh(JsonNode? node)
+        {
+            long weight = 0;
+            var pending = new Stack<(JsonNode? Node, int Depth)>();
+            pending.Push((node, 0));
+            while (pending.Count > 0)
+            {
+                var (current, depth) = pending.Pop();
+                if (depth > MaxOutputDepth)
+                    throw new TransformException("transform.too-deep", $"The data nests deeper than {MaxOutputDepth} levels.");
+                weight++;
+                switch (current)
+                {
+                    case JsonObject obj:
+                        foreach (var (key, value) in obj)
+                        {
+                            weight += key.Length / 16;
+                            pending.Push((value, depth + 1));
+                        }
+                        break;
+                    case JsonArray array:
+                        foreach (var value in array)
+                            pending.Push((value, depth + 1));
+                        break;
+                    case JsonValue value when value.GetValueKind() == JsonValueKind.String:
+                        weight += ((string)value!).Length / 16;
+                        break;
+                }
+                if (weight > _fuel)
+                    break; // Spend refuses it; no need to walk the rest
+            }
+            return weight;
+        }
+
+        /// <summary>A copy of <paramref name="node"/>, paid for by its whole size, so copying large data is never free.</summary>
         private JsonNode? Copy(JsonNode? node)
         {
-            Spend(node switch { JsonArray a => a.Count, JsonObject o => o.Count, _ => 0 });
+            Spend(Weigh(node));
             return node?.DeepClone();
+        }
+
+        /// <summary>The value a <c>get</c> or <c>getRoot</c> reads, without a copy (for iterating only).</summary>
+        private JsonNode? ReadOnly(JsonObject source, JsonNode? item)
+        {
+            Spend(1);
+            var (op, arg) = source.First();
+            return Resolve(op == "get" ? item : root, (string)arg!);
+        }
+
+        /// <summary>A new text value, paid for by its length.</summary>
+        private JsonValue Text(string text)
+        {
+            Spend(text.Length / 16);
+            return JsonValue.Create(text);
         }
 
         public JsonNode? Evaluate(JsonNode? expression, JsonNode? item, int depth)
         {
             Spend(1);
             if (expression is not JsonObject obj)
-                return expression?.DeepClone(); // a literal (CheckShape refused lists)
+                return Copy(expression); // a literal (CheckShape refused lists)
             var (op, arg) = obj.First();
             switch (op)
             {
                 case "const":
-                    Spend(Size(arg) / 64);
-                    return arg?.DeepClone();
+                    return Copy(arg);
                 case "get":
                     return Copy(Resolve(item, (string)arg!));
                 case "getRoot":
@@ -230,12 +332,15 @@ public sealed class DeclarativeTransform
                         throw new TransformException("transform.table-missing", $"There is no table \"{Clip(name)}\".");
                     var key = AsText(Evaluate(arg["key"], item, depth + 1));
                     if (key is not null && table.TryGetValue(key, out var found))
-                        return found?.DeepClone();
+                        return Copy(found);
                     return arg.AsObject().ContainsKey("default") ? Evaluate(arg["default"], item, depth + 1) : null;
                 }
                 case "map" or "filter":
                 {
-                    var over = Evaluate(arg!["over"], item, depth + 1) as JsonArray ?? [];
+                    // A list read straight from the input is walked where it is, not copied first: its elements are only read.
+                    var over = (arg!["over"] is JsonObject source && source.Count == 1 && source.First().Key is "get" or "getRoot"
+                        ? ReadOnly(source, item)
+                        : Evaluate(arg["over"], item, depth + 1)) as JsonArray ?? [];
                     Iterate(over.Count);
                     try
                     {
@@ -272,7 +377,10 @@ public sealed class DeclarativeTransform
                     Spend(text.Length / 16);
                     var result = new JsonArray();
                     foreach (var part in text.Split(separator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        Spend(1);
                         result.Add(JsonValue.Create(part));
+                    }
                     return result;
                 }
                 case "object":
@@ -318,11 +426,11 @@ public sealed class DeclarativeTransform
                     return null; // not a whole number: absent, so "exists" and "if" can handle it
                 }
                 case "text":
-                    return AsText(Evaluate(arg, item, depth + 1)) is { } asText ? JsonValue.Create(asText) : null;
+                    return AsText(Evaluate(arg, item, depth + 1)) is { } asText ? Text(asText) : null;
                 case "lower":
-                    return AsText(Evaluate(arg, item, depth + 1)) is { } lower ? JsonValue.Create(lower.ToLowerInvariant()) : null;
+                    return AsText(Evaluate(arg, item, depth + 1)) is { } lower ? Text(lower.ToLowerInvariant()) : null;
                 case "upper":
-                    return AsText(Evaluate(arg, item, depth + 1)) is { } upper ? JsonValue.Create(upper.ToUpperInvariant()) : null;
+                    return AsText(Evaluate(arg, item, depth + 1)) is { } upper ? Text(upper.ToUpperInvariant()) : null;
                 case "count":
                     return Evaluate(arg, item, depth + 1) switch
                     {

@@ -10,6 +10,7 @@ import type {
   RulesFamilyId,
   RulesFamilyPolicy,
   SheetPurpose,
+  SourceRecord,
 } from '../api/types';
 import { downloadBase64, readFileAsBase64 } from '../files';
 
@@ -109,7 +110,11 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
   hook: ExtensionHook;
   onDone: () => void;
 } & Props) {
-  const [characterId, setCharacterId] = useState(characters[0]?.id ?? '');
+  const readsSheet = extension.grants.includes('read.sheet');
+  const readsContent = extension.grants.includes('read.content');
+  const [characterId, setCharacterId] = useState(readsSheet ? (characters[0]?.id ?? '') : '');
+  const [sources, setSources] = useState<SourceRecord[]>([]);
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
   const [purpose, setPurpose] = useState<SheetPurpose>('share');
   const [family, setFamily] = useState<RulesFamilyId>(rulesFamilies[0]?.id ?? 'srd-5.2.1');
   const [title, setTitle] = useState(`${extension.manifest.name} import`);
@@ -117,9 +122,22 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
   const [inputName, setInputName] = useState<string>();
   const picker = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (hook.kind === 'export' && readsContent) client.listSources().then(setSources).catch(onError);
+  }, [hook.kind, readsContent, onError]);
+
   async function previewExport() {
     try {
-      setPreview(await client.previewExtensionRun({ extensionId: extension.id, hookId: hook.id, characterId, purpose }));
+      // Only what its permissions let it read, and only what was picked (review fix).
+      setPreview(
+        await client.previewExtensionRun({
+          extensionId: extension.id,
+          hookId: hook.id,
+          characterId: readsSheet && characterId ? characterId : undefined,
+          sourceIds: readsContent && sourceIds.length > 0 ? sourceIds : undefined,
+          purpose,
+        }),
+      );
     } catch (error) {
       onError(error);
     }
@@ -149,19 +167,23 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
     if (!preview) return;
     try {
       const outcome = await client.saveExtensionOutputAs(preview.token);
-      if (outcome.saved) onStatus(`Saved ${outcome.fileName}.`);
+      // Cancelling the dialog keeps the preview, so it can be saved again (review fix).
+      if (outcome.saved) {
+        onStatus(`Saved ${outcome.fileName}.`);
+        setPreview(undefined);
+      }
     } catch (error) {
       if (unsupported(error)) {
         try {
           const output = await client.runExtensionExport(preview.token);
           downloadBase64(output.fileName, output.base64, 'text/plain');
           onStatus(`Downloaded ${output.fileName}.`);
+          setPreview(undefined);
         } catch (inner) {
           onError(inner);
         }
       } else onError(error);
     }
-    setPreview(undefined);
   }
 
   async function createDrafts() {
@@ -180,16 +202,36 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
       <h4>{hook.label}</h4>
       {hook.kind === 'export' ? (
         <>
-          <label className="field">
-            Character
-            <select value={characterId} onChange={(e) => (setCharacterId(e.target.value), setPreview(undefined))}>
-              {characters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+          {readsSheet && (
+            <label className="field">
+              Character
+              <select value={characterId} onChange={(e) => (setCharacterId(e.target.value), setPreview(undefined))}>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {readsContent && (
+            <fieldset>
+              <legend>Sources it may read</legend>
+              {sources.map((s) => (
+                <label key={s.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={sourceIds.includes(s.id)}
+                    onChange={(e) => {
+                      setPreview(undefined);
+                      setSourceIds((current) => (e.target.checked ? [...current, s.id] : current.filter((x) => x !== s.id)));
+                    }}
+                  />
+                  {s.title}
+                </label>
               ))}
-            </select>
-          </label>
+            </fieldset>
+          )}
           <fieldset>
             <legend>What the file may hold</legend>
             <label className="choice">
@@ -201,7 +243,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
               Personal copy: also includes your own homebrew. Do not share it.
             </label>
           </fieldset>
-          <button type="button" disabled={!characterId} onClick={previewExport}>
+          <button type="button" disabled={!(readsSheet && characterId) && !(readsContent && sourceIds.length > 0)} onClick={previewExport}>
             Preview output
           </button>
         </>
@@ -209,7 +251,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
         <>
           <label className="field">
             Rules
-            <select value={family} onChange={(e) => setFamily(e.target.value as RulesFamilyId)}>
+            <select value={family} onChange={(e) => (setFamily(e.target.value as RulesFamilyId), setPreview(undefined))}>
               {rulesFamilies.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.displayName}
@@ -219,7 +261,7 @@ function HookRun({ extension, hook, characters, rulesFamilies, onError, onStatus
           </label>
           <label className="field">
             New source for the drafts
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input value={title} onChange={(e) => (setTitle(e.target.value), setPreview(undefined))} />
           </label>
           <button type="button" onClick={chooseInput}>
             Choose {hook.accepts?.toUpperCase()} file…
@@ -390,6 +432,17 @@ export function ExtensionsPanel(props: Props) {
                     {h.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    client
+                      .reviewExtension(x.id)
+                      .then((preview) => setReview({ fileName: x.manifest.name, preview }))
+                      .catch(onError)
+                  }
+                >
+                  Review and grant {x.manifest.name}…
+                </button>
                 <button type="button" onClick={() => setRemoving(x)}>
                   Remove {x.manifest.name}…
                 </button>

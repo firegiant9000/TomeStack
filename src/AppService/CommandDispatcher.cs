@@ -32,7 +32,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
         "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
         "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
-        "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.setEnabled", "extension.remove",
+        "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.review", "extension.setEnabled", "extension.remove",
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
@@ -174,6 +174,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.installPreview" => app.PreviewExtensionInstall(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "extension.installChoose" => ChooseExtensionInstall(),
         "extension.install" => InstallExtension(Payload<ExtensionInstallPayload>(payload)),
+        "extension.review" => app.PreviewInstalledExtension(Payload<ExtensionRemovePayload>(payload).ExtensionId),
         "extension.setEnabled" => SetExtensionEnabled(Payload<ExtensionEnablePayload>(payload)),
         "extension.remove" => RemoveExtension(Payload<ExtensionRemovePayload>(payload)),
         "extension.chooseInput" => ChooseExtensionInput(),
@@ -392,8 +393,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        var (fileName, bytes) = app.ExtensionExportOutput(payload.Token);
-        return SaveBytes(fileName, bytes, "Extension output", Path.GetExtension(fileName));
+        // Kept until the file is written, so cancelling the dialog loses nothing (review fix).
+        var (fileName, bytes) = app.PeekExtensionOutput(payload.Token);
+        var outcome = SaveBytes(fileName, bytes, "Extension output", Path.GetExtension(fileName));
+        if (outcome.Saved)
+            app.CompleteExtensionOutput(payload.Token);
+        return outcome;
     }
 
     // ---- export adapters (M6 slice 4, ADR-012) ----

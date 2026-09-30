@@ -5,13 +5,18 @@ internal static class ExtensionFiles
 {
     public static string PathOf(string directory, string sha256) => Path.Combine(directory, $"{sha256}.zip");
 
-    /// <summary>Writes the file once (a file with that hash is already the same bytes), through a <c>.partial</c> copy.</summary>
+    /// <summary>
+    /// Writes the file through a <c>.partial</c> copy, unless an intact one is there already. A damaged or changed copy is
+    /// replaced (review fix: installing the same file again is how <c>extension.file-changed</c> is repaired).
+    /// </summary>
     public static void Write(string directory, string sha256, byte[] bytes)
     {
         Directory.CreateDirectory(directory);
         var path = PathOf(directory, sha256);
-        if (File.Exists(path))
+        if (ReadIntact(directory, sha256) is not null)
             return;
+        if (File.Exists(path))
+            File.SetAttributes(path, FileAttributes.Normal);
         File.WriteAllBytes(path + ".partial", bytes);
         File.Move(path + ".partial", path, overwrite: true);
         File.SetAttributes(path, FileAttributes.ReadOnly);
