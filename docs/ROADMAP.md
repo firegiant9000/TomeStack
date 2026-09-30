@@ -2,6 +2,128 @@
 
 **Planning rule:** milestone exit evidence, rather than speculative dates, determines progress. All 20 ideas are approved for the backlog, not promised in MVP.
 
+## Revision 2026-09-29: use it first, then prove it (reconciled 2026-09-30, LIVING_SPECS D15)
+
+_This revision sits above the milestone table and changes what happens next, not what was built. Evidence and the repository cleanup plan are in [roadmap-review-2026-09.md](roadmap-review-2026-09.md). The milestone table and the M2.2, M5 and M6 plans below are kept as the record; their rows carry the status tags from R2._
+
+_**Reconciled with the owner's direction of 2026-09-30 (LIVING_SPECS D15):** M6 slices 2 to 6 were built on purpose before T2 and are kept. T1, T2 as the gate for M7, content breadth and further studio work, T3 to T6 and the audit findings still apply. What the M6 stack made obsolete is struck through, with the reason. The revision branch held two drafts of this section (T1–T6 and a near copy, U1–U6); this is the one kept, with the few details only U had folded in._
+
+### R1. Decision
+
+The next thing TomeStack needs is not a feature. It is a **played session**. M5 (eight studio slices) and M6 slice 1 were built in three days and are all fixture-verified, unmerged and unreleased, while the M3 played session, the M4 third-party PDF run, the second-machine restore and the first installer are still owner checks. By owner direction, M6 slices 2 to 6 were then built in the same days (D15). Until the M3 gate produces a gap report, no further studio, DM, combat, extension, cloud or content-breadth work starts. After it, the repository specialises in what it already does best: .NET architecture, local-first desktop engineering, correctness (FsCheck), performance (BenchmarkDotNet), desktop release engineering (Velopack) and recovery evidence (a real restore drill). This repository owns those four kinds of evidence for the whole portfolio.
+
+The rule from LIVING_SPECS D13 stands: everything M5 chose provisionally (templates, hints, effect types) is re-ranked by the M3 gap notes. ~~Building M6 slices 2 to 5 before those notes exist would invert that rule, so they wait.~~ **Obsolete (D15):** the owner had M6 slices 2 to 6 built before T2 on purpose, and they are kept. The gap report still re-ranks what M6 left provisional (which export targets and extension hooks matter next), and it gates everything after M6.
+
+### R2. Status of existing milestones and plans
+
+| Item | Status | Previous goal | Decision and reason | Effect on use | Effect on evidence |
+|---|---|---|---|---|---|
+| M0, M1 | CURRENT (done) | Foundation, rules core | Done. | n/a | Baseline |
+| M2 Usable MVP | CURRENT (done, limited content) | All MVP checks on an installed build | Checks passed on 0.2.2; content breadth stays limited until T2 says otherwise. | n/a | Baseline |
+| M2.1 second-machine restore (owner check) | SUPERSEDED by T6 | Owner check | Promoted to a milestone with recorded counts and time; it is the portfolio's only recovery drill. | High (trust) | Recovery evidence |
+| M2.2 Fighter | CURRENT (done, fixture-verified) | Fighter 1 to 20 | Done; install verification comes with T5. | n/a | Baseline |
+| M3 Personal replacement | CURRENT, the gate | Arlo plays without D&D Beyond | Unchanged and now first (T2). | Highest | The usability gate |
+| M4 third-party PDF run | OPTIONAL | Import gate | Stays experimental; needs only a PDF; not on the critical path. | Medium | Small |
+| M5 slices 1 to 8 | CURRENT (built, unmerged) | Creation power | Merge through the T1 cleanup; no further studio work after. The row's "not delivered until slices 2 to 8 are done" means "delivered when merged to `main` and authored once on an installed build". | Medium | Baseline once merged |
+| M6 slice 1 source packs (PR #38) | CURRENT (built, unmerged, awaiting approvals) | Pack format | Merge through T1 after the owner approvals recorded in the PR. | Medium | Baseline once merged |
+| M6 slices 2 to 6 (campaign packs #39, extension API #40, export adapters #41, docs #42, exit gate #43) | ~~DEFERRED until after T2~~ CURRENT (built 2026-09-29 by owner direction, D15; fixture-verified, unmerged, awaiting approvals) | Sharing and extension | Kept. Merge through T1 with the rest of the stack once the owner approves their schema, format and database changes. The gap report may re-rank follow-up work on them (for example, which VTT the group uses); it does not undo them. The M6 exit gate's cross-machine part is T6. | Medium | Round-trip evidence (fixture-verified) |
+| M6 optional B09 palette, B11 tags | DEFERRED | Polish | After use. | Low | None |
+| M7 Expanded tabletop | DEFERRED | Monsters, DM tools, local AI | Nothing in the evidence asks for it. | Unknown | None |
+| Content breadth (Monk, Rogue, Barbarian 4 to 20, species, backgrounds) | DEFERRED until T2 | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
+| Cloud sync, accounts, executable plugin sandbox | CANCELLED | (never planned; recorded to close the question) | Contradicts SPEC and ADR-011 option A. | n/a | n/a |
+| Accessibility owner checks (items 6, 16 and 18 to 27; 15 and 17 passed on 0.2.2) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
+| ADR-008 pre-release checklist (trademark, REDIST, Velopack notices, signing) | SUPERSEDED by T5 | Before the first installer | Becomes the acceptance list of T5. | High | Release evidence |
+
+### R3. Milestones
+
+Order is fixed. Each has an acceptance criterion, an artifact, a resume bullet with placeholders that stay empty until the work is done, and interview questions.
+
+#### T1. Repository health
+
+The safe merge and cleanup plan is section 5 of the review document. Summary: coordinate with any other session first; ~~push the twelve unpushed local commits~~ (done: every stack branch matches `origin`, 2026-09-30); merge #24; ~~then rebase the stack bottom-up once onto the new `main` (the only force-push, on feature branches, after owner confirmation)~~ **superseded (2026-09-30):** the `m5-m6-integration` branch (from `origin/main`, the stack merged in bottom-up with merge commits) shows the combined result without rewriting any pushed branch, so no force-push is needed; the owner chooses whether to merge that one PR or the stack; merge with merge commits so child PRs retarget; delete the five `worktree-agent-*` branches and the stale local copies; remove the extra worktrees; move the clone out of OneDrive; tag the merged tip.
+
+Why the OneDrive move is not optional: on 2026-09-30 a git auto-repack in the OneDrive clone replaced a pack while a commit was reading it ("packfile … index unavailable"). The commit landed and `git fsck` found no damage, but it is the failure the review warned about.
+
+**Acceptance.** `origin/main` contains M5 and M6 (slices 1 to 6 and their follow-ups); one clean clone; zero open stacked PRs; no git repository under a sync root; a tag at the merged tip.
+
+**Evidence produced.** The merged PR list, the tag, a one-paragraph note in `docs/gotchas` about the OneDrive move.
+
+**Resume potential.** None directly; it unblocks everything else.
+
+**Interview questions.** Why merge commits rather than squash for a stacked chain? What breaks when a git repository lives under a file-sync client?
+
+#### T2. Real-use gate (the M3 gate, made procedural)
+
+Enter Arlo's real character (the Stardust Guardian, from the gitignored fixture folder). Use TomeStack during one real tabletop session, on an installed build if T5 is ready or a local build if not. Record every point of friction in `docs/features/gap-notes.md` during the session and **fix nothing mid-session**. Afterwards write `docs/features/m3-gap-report-YYYY-MM-DD.md`: what was used, what was worked around, what was missing, what was wrong, each item ranked. Then re-rank M5's provisional choices, ~~M6 slices 2 to 5~~ M6's follow-up work (D15: the slices themselves are built), content breadth and M7 from that report and update this file.
+
+T2 gates M7, content breadth and any studio or extension work beyond what M5 and M6 built. It does not gate merging the built M5 and M6 slices (T1).
+
+**Acceptance.** `m3-acceptance.md` has a dated run with the build number and counts; the gap report exists with ranked items; the roadmap's DEFERRED items are re-ordered by it.
+
+**Evidence produced.** The acceptance record and the gap report.
+
+**Resume potential.** "Replaced a commercial character tool with my own local-first application for weekly play; drove the roadmap from a session gap report rather than speculative features."
+
+**Interview questions.** What did real use surface that fixtures did not? What did you decide not to build because of it?
+
+#### T3. Property testing with FsCheck.Xunit
+
+Add `FsCheck.Xunit` to `RulesCore.Tests` and `AppService.Tests`. Candidate properties, each tied to an invariant an ADR already asserts:
+- a content revision's hash is stable under serialize → deserialize → serialize for every content schema version 1 to 9, and unchanged by an absent optional field (a golden-hash fixture per version, so a serializer change fails loudly, plus generated revisions);
+- character and content serialization round-trips are identity;
+- the formula parser round-trips: `parse(print(ast)) == ast` for generated ASTs, and evaluation is total within the bounded grammar;
+- calculation is deterministic under `SeededRandomSource` with the same seed, and a sheet computed twice from the same pins is equal;
+- package export → import into a clean folder → export yields an equal manifest and equal hashes (source packs, campaign packs and library backups too, extending `M6ExitGateTests`);
+- schema migration v1 → v9 on generated databases preserves entity counts and hashes (the M6 stack review ran v6 → v9 once on a folder written by `main`'s build; this makes it a property).
+
+**Acceptance.** Properties exist for at least four of the six; each runs at a stated case count in CI; any counterexample found is recorded as a fixed bug with its shrunk input in the test.
+
+**Evidence produced.** The property tests, the CI log with case counts, the bug list if any.
+
+**Resume potential.** "Property-tested TomeStack's rules engine with FsCheck ([N] generated cases across [K] invariants: revision-hash stability across nine schema versions, parser round-trip, deterministic calculation, package round-trip), finding [B] defects."
+
+**Interview questions.** Which invariant was hardest to express as a generator, and why? What did shrinking tell you about a failure? Why is hash stability a property and not a unit test?
+
+#### T4. Performance with BenchmarkDotNet
+
+Add a `benchmarks/` project. Cases: a level-20 three-class character calculation with a full spell list and equipment; import of a large fixture content pack; formula evaluation over the SRD packs; dependency recalculation after one changed revision; time to first paint measured once by hand and recorded. Record mean, error, allocations and, where distribution matters, the percentiles BenchmarkDotNet reports. Record the machine, and run at least twice with the spread noted. Optimise nothing without a measured problem; if a number is surprising, the follow-up is a separate item with a before/after table.
+
+**Acceptance.** A benchmark table in `docs/performance.md` with machine, runtime, commit and the raw BenchmarkDotNet output committed; the README links it.
+
+**Evidence produced.** The table and the raw results.
+
+**Resume potential.** "Benchmarked TomeStack's level-20 multiclass calculation at [X] ms mean with [Y] KB allocated and content-pack import at [Z] ms with BenchmarkDotNet; [optimised or confirmed] the hot path."
+
+**Interview questions.** Why is `Calculation.cs` 2,249 lines and where does the time go? What does allocation tell you that time does not? What would you change first if the number doubled?
+
+#### T5. A real release
+
+One downloadable GitHub release built by a tag-triggered release workflow (`release.yml`): Velopack package, `Setup.exe`, release notes. Resolve, in order: the trademark check (5E-compatible wording, no D&D mark), the Windows SDK OCR question (state which SDK binaries ship, if any; the app calls `Windows.Media.Ocr` through the OS, so the likely answer is none; if it stays unresolved, ship with OCR off by default and say so), the Velopack Setup.exe and Update.exe crate notices in `ATTRIBUTION.md`, and code signing (a certificate if practical; otherwise the release notes state "unsigned" and describe the SmartScreen prompt). Add `UpdateManager` or document that updates mean running the newer `Setup.exe`, then **test one upgrade** from the previous release on an installed build and record it.
+
+**Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
+
+**Evidence produced.** The release page, the upgrade record, the closed checklist.
+
+**Resume potential.** "Shipped TomeStack as a [signed / unsigned] Velopack release with a tested upgrade path and a resolved third-party licensing checklist."
+
+**Interview questions.** What did SmartScreen do to your unsigned installer and what are the options? How does Velopack apply a delta update, and what happens to the SQLite database during an upgrade?
+
+#### T6. Recovery drill
+
+On another physical machine or a clean VM: install the T5 release, restore a full library backup (v7, or v9 with extensions) taken from the real library, and record entity counts per table, attachment counts, restore time, and every failure or warning. Compare with the source. Then restore a package (character, source pack and campaign pack) the same way. Repeat once after fixing anything found.
+
+**Acceptance.** `docs/features/restore-drill-YYYY-MM-DD.md` with counts before and after, elapsed time, failures and what was done about them; the M2.1 owner check closed; the M6 exit gate's cross-machine part recorded; the ROADMAP risk-table row for the restore drill points at it.
+
+**Evidence produced.** The drill record.
+
+**Resume potential.** "Verified full backup and restore of a local-first SQLite application on a clean machine ([N] revisions, [M] attachments, [T] s) and closed [K] gaps found by the drill."
+
+**Interview questions.** Why the SQLite online-backup API rather than copying the file? What did the drill find that the fixture round-trip test could not?
+
+### R4. Do not do (2026-09 revision)
+
+No new studio tools, no DM or combat tools, no plugin execution model, no cloud sync or accounts, no content breadth, ~~and no M6 slices 2 to 5~~ and no new extension hooks, export targets or "Optional after the M6 gate" work (D15: the slices are built) before the T2 gap report; no security scanning beyond Dependabot; no cloud infrastructure of any kind.
+
 | Milestone | Deliverable | Exit gate | Dependencies |
 | --- | --- | --- | --- |
 | M0 Foundation | Repo, CI, license/attribution review, desktop packaging spike, source/data schemas, test fixtures, first diagram and ADRs | Windows offline shell opens; fixture content persists and exports | None |
@@ -13,7 +135,7 @@
 | M4 Import intelligence | Page and whole-book extraction, OCR fallback, candidate/entity recognition, review UI, confidence and dependency validation | A third-party test PDF produces reviewable candidates; no unapproved active rules. **Experimental until this gate passes** (MVP.md boundary): the UI and docs call the PDF import experimental until a real third-party PDF run and the SRD detection measurements (precision and recall floors) both pass. **The SRD floors passed on 2026-09-28** (both SRDs, now including the Fighter and armor; `m4-acceptance.md`). The third-party run is still owed. Synthetic fixtures never meet this gate. **Engineering done, gate not met (2026-09-28):** extraction with an OCR fallback in an isolated worker (ADR-009), resumable jobs, rule-based candidates, validated review and the review UI. The original fixture book runs with "active without approval: 0"; the third-party test PDF run is still owed ([features/m4-acceptance.md](features/m4-acceptance.md)) | M2; may run alongside M3 |
 | M5 Creation power | Full custom base classes, arbitrary progression, sandbox/diff/debugger, templates, design feedback toggle. Plan: "M5 plan" below | A nonstandard class levels and multiclasses without code edits. **In progress. Plan approved and ADR-010 accepted by the owner (2026-09-28). Exit gate fixture-verified (2026-09-29): slices 1a and 1b (the rules core with content v9, and the studio's class editor), shown by RulesCore and AppService `CustomClassTests` and the e2e flow that authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class (levels 20 and 5/3 are created through the service, not levelled up in the UI). Not Windows-install verified. v9 was approved by the owner (2026-09-29); merging the PRs still waits for the owner. M5 is not delivered until slices 2–8 are done. Slices 2 (the homebrew debugger), 3 (the draft sandbox), 4 (compare revisions), 5 (the relationship tree), 6 (templates), 7 (design feedback) and 8 (snapshots) done 2026-09-29, fixture-verified (`SnapshotTests`, the e2e snapshot flow; `DesignFeedbackTests`, `DesignFeedbackCommandTests`, the e2e feedback flow; `templates.test.ts`, the e2e templates flow; `ContentTreeTests`, `ContentTreeCommandTests`, the e2e keyboard-tree flow; `ContentTextDiffTests`, `CompareTests`, the e2e compare flow; `DraftOverlayCatalogTests`, `SandboxTests`, the e2e "Try it" flow; `ContentDebuggerTests`, `ContentDiagnoseTests`, the e2e debugger flow); the owner decisions for slices 3–8 are recorded (LIVING_SPECS D14)** | M1–M4 engineering. **Started before the M3 gate (owner direction, 2026-09-28, LIVING_SPECS D13);** priorities that were to come from the M3 gap notes are provisional |
 | M6 Sharing and extension | Versioned pack format, campaign packs, plugin SDK sandbox (built as a declarative extension API, ADR-011 option A: no third-party code runs, so there is no sandbox), export adapters, documentation. Plan: "M6 plan" below | External sample extension and safe cross-machine round trip. **Exit gate not met: the fixture part is verified (2026-09-29), the cross-machine restore is owed (owner check). Built on stacked PRs, not merged.** Plan approved by the owner (2026-09-28); ADR-011 (option A, declarative only) and ADR-012 (Foundry `dnd5e` and neutral JSON, Roll20 deferred) accepted 2026-09-29 (LIVING_SPECS D14). Slices 1–6 are built on stacked PRs, each fixture-verified. Slice 1's schema changes were approved by the owner (2026-09-29; its format number stays provisional until merge); slices 2–5 wait for the owner's approval of their changes (campaign scope and format v8, database v9 and library-backup format v9, all provisional). The exit gate: `M6ExitGateTests` (a source pack, a campaign pack and a library backup with an extension each round-trip into a clean data folder and compare equal) and the e2e flows that install, grant and run the sample extension and the authoring guide's extension. **Not Windows-install verified; the cross-machine round trip is not recorded (owner check).** | M5 (slice 1 for the pack format; the export adapters need only the sheet, see the plan) |
-| M7 Expanded tabletop | Monsters/DM content, full PDF search, printable cards/PDF layouts, deeper accessibility/themes, optional local AI | Separate acceptance plans for each module | M4–M6 |
+| M7 Expanded tabletop | Monsters/DM content, full PDF search, printable cards/PDF layouts, deeper accessibility/themes, optional local AI | Separate acceptance plans for each module. **DEFERRED 2026-09-29 until the T2 gap report (see the revision above; LIVING_SPECS D15)** | M4–M6 |
 
 ## Delivery slices within M0–M2
 
