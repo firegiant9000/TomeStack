@@ -88,7 +88,7 @@ public partial class AuthoringGuideTests
     {
         using var author = new TempApp();
         var (source, feature, klass) = FollowClassGuide(author);
-        // Step 1: "Mark as shareable…", confirming the source is your own work. Before it, the pack is refused.
+        // Step 1: "Mark as shareable…", confirming the source is your own work (the studio made it unshared).
         Assert.False(author.App.Store.FindSource(source.Id)!.MayBeShared);
         author.App.SetShareable(new(source.Id, Shareable: true, ConfirmOwnWork: true));
         // Step 3: preview, then save the pack.
