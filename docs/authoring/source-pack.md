@@ -17,7 +17,6 @@ The full rules are in [features/package-format.md](../features/package-format.md
 
 On the **Sources** screen, find your source and choose **Mark as shareable…**. TomeStack asks you to confirm that "the source is my own work, and it holds no text, tables or rules copied from a book, PDF or other material I did not write". Tick it and choose **Mark as shareable**. The source now says "Marked as shareable"; **Stop sharing** undoes it (files you already sent stay sent).
 
-You can also mark a source as shareable when you make it, with the same confirmation.
 
 ## 2. Publish what you want to share
 
@@ -34,6 +33,8 @@ The pack records your statement that the sources are your own work, and when you
 They choose **Import package…** and pick the file. The preview shows your sources and content, your statement (which TomeStack cannot verify), and the license. A copy of their library is saved before anything changes. After the import, the sources are recorded as **received**: they can use the content, share characters that use it, but never mark it as their own work or put it in their own source packs.
 
 ## When something is refused
+
+The Sources screen says what is wrong in words; these are the codes behind the messages.
 
 - `pack.source-not-shareable`: mark the source as shareable first.
 - `pack.source-import-derived`: the source holds imported material; move your own work to a new source (write it again yourself; copied text is still copied).

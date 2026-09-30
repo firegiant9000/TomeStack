@@ -95,6 +95,12 @@ public static partial class ExtensionReader
     [GeneratedRegex("^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})$", RegexOptions.CultureInvariant)]
     private static partial Regex SemVer();
 
+    /// <summary>
+    /// An entry's name with "\" read as "/": Windows PowerShell 5.1's Compress-Archive, which the author guide mentions,
+    /// writes "transforms\x.json" (review fix). The allowlist is checked after this, so nothing else is let in.
+    /// </summary>
+    private static string NameOf(ZipArchiveEntry entry) => entry.FullName.Replace('\\', '/');
+
     public static string Sha256(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
 
     /// <exception cref="ExtensionException">Every problem found, with its code; nothing was installed.</exception>
@@ -109,7 +115,7 @@ public static partial class ExtensionReader
             using var zip = new ZipArchive(new MemoryStream(bytes, writable: false), ZipArchiveMode.Read);
             if (zip.Entries.Count > MaxEntries)
                 throw new ExtensionException([new("extension.too-many-entries", $"An extension file has at most {MaxEntries} entries.")]);
-            var stray = zip.Entries.Where(e => !EntryPath().IsMatch(e.FullName)).Select(e => new Diagnostic("extension.entry-not-allowed", $"Entry '{Clip(e.FullName)}' is not allowed in an extension (only extension.json and transforms/<hook>.json).")).ToList();
+            var stray = zip.Entries.Where(e => !EntryPath().IsMatch(NameOf(e))).Select(e => new Diagnostic("extension.entry-not-allowed", $"Entry '{Clip(e.FullName)}' is not allowed in an extension (only extension.json and transforms/<hook>.json).")).ToList();
             if (stray.Count > 0)
                 throw new ExtensionException(stray);
             long remaining = MaxUnpackedBytes;
@@ -128,7 +134,7 @@ public static partial class ExtensionReader
                         throw new ExtensionException([new("extension.entry-too-large", $"Entry '{entry.FullName}' is too large.")]);
                 }
                 remaining -= buffer.Length;
-                if (!files.TryAdd(entry.FullName, buffer.ToArray()))
+                if (!files.TryAdd(NameOf(entry), buffer.ToArray()))
                     throw new ExtensionException([new("extension.entry-duplicate", $"Entry '{entry.FullName}' appears more than once.")]);
             }
         }

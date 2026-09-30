@@ -6,7 +6,7 @@ What you need: TomeStack, and a rules family to write for (SRD 5.1, the 2014 rul
 
 ## 1. Make a source for it
 
-Everything you write lives in a **homebrew source**. In the studio, give it a title, pick the rules families and choose **Create source**. Leave "Share" off for now; you can mark it as shareable later (see [source-pack.md](source-pack.md)).
+Everything you write lives in a **homebrew source**. In the studio, give it a title, pick the rules families and choose **Create source**. A new source is not shared; you mark it as shareable later, on the Sources screen (see [source-pack.md](source-pack.md)).
 
 A source is just a record: title, publisher, license and whether it may be shared. TomeStack fills in the rest.
 
@@ -28,7 +28,7 @@ In the studio choose **New feature**, name it, write its text, and add effects (
 }
 ```
 
-Then choose **Publish**. TomeStack checks it first and refuses it with a list of problems if something is wrong (an unknown field, a formula it cannot read). Publishing makes a new, fixed revision: to change a published feature later, edit it and publish again, and each character that uses it is offered the update.
+Then choose **Publish**. TomeStack checks it first and refuses it with a list of problems if something is wrong (an unknown field, a formula it cannot read). Publishing makes a new, fixed revision: to change a published feature later, edit it and publish again. A character that pins the feature itself is offered the update. A feature a class grants (like Example Steady Flame) reaches characters only through the class: publish a new revision of the class that grants the new feature revision, and review that update.
 
 ## 3. Write the class
 
@@ -79,7 +79,7 @@ Create a character, pick the class in the builder, and level it. The sheet trace
 
 ## When something is refused
 
-The refusal names the effect and the problem, for example `validate.formula-invalid` for a formula TomeStack cannot read, `validate.requires-v9` for a column in older content, or `validate.reference-missing` for a grant of content that is not published. Fix it in the editor and publish again.
+The refusal names the effect and the problem in words. Behind each message is a code the tests use, for example `validate.formula-invalid` for a formula TomeStack cannot read, `validate.requires-v9` for a column in older content, or `validate.reference-missing` for a grant of content that is not installed. A grant of content that is only a draft is not refused: it gets the warning `validate.reference-unpublished` and does nothing until that content is published. Fix it in the editor and publish again.
 
 ## Related
 
