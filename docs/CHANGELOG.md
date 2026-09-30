@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Find problems in your homebrew (M5 slice 2):** "Find problems in <source>" in the homebrew studio checks all of a source's content, drafts included, and "Find problems" checks the entry you are editing. It finds what the Check button cannot see on one entry alone. Examples: a resource nothing spends or recovers, a recovery or action for a resource that isn't there, a grant that never applies because the content is itself granted, a subclass no class offers, a class feature nothing grants, a choice with nothing to pick, class columns that are read but missing or defined twice, and grants of an older version. **Show** opens the entry and moves focus to the rule. Nothing is changed.
 - **Write your own class in the homebrew studio (M5 slice 1b; ADR-010):** "New class" sets the hit die, the saving throws and multiclass prerequisites. It can also set:
   - a skill choice (TomeStack creates the skill options for you);
   - a subclass choice at any level, which your own subclasses join;
@@ -67,6 +68,7 @@
 
 ### Fixed
 
+- **Homebrew debugger review fixes (2026-09-29; `docs/features/homebrew-studio.md`):** reach now follows the exact revision a grant or option names, as the calculator does, and every published revision that extends a choice; the scale problems still show when the walk is cut short; the "granted content's own grants never apply" note no longer hides that a character can pick the content directly.
 - **Class editor (M5 slice 1b review):** creating the skill choice again no longer publishes duplicate option features, the whole editor is disabled while it publishes, the rule list shows every multiclass restriction and saving throw grant the editor does not show, and a choice with no listed options can no longer ask for more than 20.
 - **Content schema v9 (M5 stack review, 2026-09-29):** a class column (`scale`) written in the wrong shape is refused when you check or publish it, instead of publishing with the column silently missing. Importing a package or restoring a backup no longer refuses revisions that publishing allowed: an inert `scale` in content an earlier build published, and a column id that clashes because of the order things were published, are warnings there.
 - **A data folder always opens after an update (full-stack review 2026-09-28):** if your library already holds different content under the id of a revision a new TomeStack version bundles (for example from a package imported earlier), TomeStack now keeps your copy, skips the bundled one and says so at startup. Before, it refused to open the data folder at all, on every launch.

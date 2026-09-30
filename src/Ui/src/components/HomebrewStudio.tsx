@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type {
   AffectedCharacter,
@@ -7,6 +7,8 @@ import type {
   ContentOption,
   ContentReference,
   ContentRevision,
+  DebugFinding,
+  DebugReport,
   Effect,
   PublishResult,
   RulesFamilyId,
@@ -15,7 +17,8 @@ import type {
   ValidationReport,
 } from '../api/types';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
-import { ClassBasicsEditor, isClassBasic } from './ClassBasicsEditor';
+import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
+import { DebugFindings } from './DebugFindings';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -52,6 +55,10 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
   const [editing, setEditing] = useState<ContentRevision>();
   const [published, setPublished] = useState<{ result: PublishResult; name: string }>();
   const [reviewing, setReviewing] = useState<{ affected: AffectedCharacter; to: ContentReference; name: string }>();
+  // M5 slice 2: the debugger's findings for one source, and the rule a "Show" button asked the editor to focus.
+  const [sourceReport, setSourceReport] = useState<{ sourceId: string; report: DebugReport }>();
+  const [focus, setFocus] = useState<RuleFocus>();
+  const [diagnosing, setDiagnosing] = useState(false);
 
   const loadSources = useCallback(
     () =>
@@ -94,8 +101,30 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
 
   function edit(entry: StudioEntry) {
     setPublished(undefined);
+    setFocus(undefined);
     // A published revision is never changed: editing starts a new draft of the same content.
     setEditing({ ...entry.latest, revisionId: emptyId, status: 'draft', schemaVersion: undefined });
+  }
+
+  async function diagnoseSource(id: string) {
+    setDiagnosing(true); // one request at a time: a large library takes a moment (review fix)
+    try {
+      const report = await client.diagnoseSource(id);
+      setSourceReport({ sourceId: id, report });
+      onStatus(report.findings.length === 0 ? 'The debugger found no problems.' : `The debugger found ${report.findings.length} thing(s) to look at.`);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setDiagnosing(false);
+    }
+  }
+
+  /** Opens the finding's entry (unless it is already open, which keeps unsaved edits) and focuses its rule. */
+  function show(finding: DebugFinding) {
+    const entry = entries.find((e) => e.contentId === finding.content.contentId);
+    if (!entry) return;
+    if (editing?.contentId !== entry.contentId) edit(entry);
+    setFocus((f) => ({ effectId: finding.effectId, n: (f?.n ?? 0) + 1 }));
   }
 
   return (
@@ -146,7 +175,15 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
                 New {a.label}
               </button>
             ))}
+            {entries.length > 0 && (
+              <button type="button" onClick={() => void diagnoseSource(source.id)} disabled={diagnosing}>
+                Find problems in {source.title}
+              </button>
+            )}
           </div>
+          {sourceReport?.sourceId === source.id && (
+            <DebugFindings report={sourceReport.report} label={`Debugger findings for ${source.title}`} showNames onShow={show} />
+          )}
         </section>
       )}
 
@@ -157,6 +194,7 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
           source={source}
           entries={entries}
           info={info}
+          focus={focus}
           onError={onError}
           onClose={() => setEditing(undefined)}
           onEntriesChanged={() => void loadEntries(source.id)}
@@ -291,6 +329,12 @@ function SourcePicker(props: {
   );
 }
 
+/** A request to move focus to one rule of the open editor (`n` changes on every request, so a repeat still moves it). */
+interface RuleFocus {
+  effectId?: string;
+  n: number;
+}
+
 interface ClassChoice {
   classContentId: string;
   className: string;
@@ -303,6 +347,7 @@ function EntryEditor(props: {
   source: SourceRecord;
   entries: StudioEntry[];
   info: AppInfo;
+  focus?: RuleFocus;
   onError: (error: unknown) => void;
   onClose: () => void;
   /** The class helper published option features: reload the source's content. */
@@ -312,6 +357,9 @@ function EntryEditor(props: {
 }) {
   const [revision, setRevision] = useState<ContentRevision>(props.initial);
   const [report, setReport] = useState<ValidationReport>();
+  // The findings belong to the revision they were computed for: any edit makes a new revision object, which hides them.
+  const [debugged, setDebugged] = useState<{ revision: ContentRevision; report: DebugReport }>();
+  const [diagnosing, setDiagnosing] = useState(false);
   const [classChoices, setClassChoices] = useState<ClassChoice[]>([]);
   const [busy, setBusy] = useState(false);
   // The skill-choice helper publishes its option features; nothing else is saved meanwhile (review fix).
@@ -324,6 +372,18 @@ function EntryEditor(props: {
   const family = props.source.rulesFamilies[0];
 
   useEffect(() => heading.current?.focus(), []);
+
+  // A debugger finding's "Show" button: focus the rule's fieldset, or the editor's heading when the finding concerns the
+  // whole entry or a rule that is no longer there. Runs after the heading focus above, on the first render too.
+  function focusRule(effectId: string | undefined) {
+    const effect = effectId === undefined ? undefined : revision.effects.find((e) => e.id === effectId);
+    const target = effect && document.getElementById(revision.kind === 'class' && isClassBasic(effect, revision.effects) ? classBasicElementId(effect) : ruleElementId(effect.id));
+    (target ?? heading.current)?.focus();
+  }
+  const onFocusRequest = useEffectEvent((effectId: string | undefined) => focusRule(effectId));
+  useEffect(() => {
+    if (props.focus) onFocusRequest(props.focus.effectId);
+  }, [props.focus]);
 
   // A subclass can add itself to a class's choice (content schema v4 extendsChoice): list every choice of every class.
   useEffect(() => {
@@ -396,6 +456,20 @@ function EntryEditor(props: {
       setReport(await client.validateRevision({ ...forServer(revision), revisionId: crypto.randomUUID() }));
     } catch (error) {
       onError(error);
+    }
+  }
+
+  /** M5 slice 2: the debugger on this unsaved revision, against everything installed. */
+  async function diagnose() {
+    const studied = revision;
+    setDiagnosing(true);
+    try {
+      const report = await client.diagnoseRevision({ ...forServer(studied), revisionId: crypto.randomUUID() });
+      setDebugged({ revision: studied, report });
+    } catch (error) {
+      onError(error);
+    } finally {
+      setDiagnosing(false);
     }
   }
 
@@ -570,9 +644,16 @@ function EntryEditor(props: {
         </div>
       )}
 
+      {debugged?.revision === revision && (
+        <DebugFindings report={debugged.report} label="Debugger findings" showNames={false} onShow={(f) => focusRule(f.effectId)} />
+      )}
+
       <div className="actions">
         <button type="button" onClick={check}>
           Check
+        </button>
+        <button type="button" onClick={diagnose} disabled={diagnosing}>
+          Find problems
         </button>
         <button type="button" onClick={() => save(false)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
           Save draft
@@ -597,6 +678,9 @@ function EntryEditor(props: {
 }
 
 const reference = (r: ContentRevision): ContentReference => ({ contentId: r.contentId, revisionId: r.revisionId });
+
+/** The id of a rule's fieldset in the editor, which a debugger finding focuses. */
+const ruleElementId = (effectId: string) => `rule-${effectId}`;
 
 /** Reports a field that does not parse, by name within its effect; `undefined` clears it. */
 type ReportProblem = (field: string, problem: string | undefined) => void;
@@ -784,7 +868,7 @@ function EffectEditor(props: {
   const legend = `Rule ${n}: ${names[effect.type]}`;
 
   return (
-    <fieldset className="effect-editor">
+    <fieldset className="effect-editor" id={ruleElementId(effect.id)} tabIndex={-1}>
       <legend>{legend}</legend>
       {effect.type === 'modifier' && (
         <>

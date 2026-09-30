@@ -5,6 +5,9 @@ namespace TomeStack.AppService;
 /// <param name="Redistributable">Default false: a share export leaves personal homebrew out unless the author says it may be shared (ADR-007).</param>
 public sealed record HomebrewSourceRequest(string Title, IReadOnlyList<string> RulesFamilies, string? Publisher = null, bool Redistributable = false);
 
+/// <summary><c>content.diagnose</c>: exactly one of a source, a stored revision or an unsaved revision.</summary>
+public sealed record DiagnoseRequest(Guid? SourceId = null, ContentReference? Reference = null, ContentRevision? Revision = null);
+
 /// <summary>One content entity from a source, as the studio lists it: every revision in the order it was added.</summary>
 public sealed record StudioEntry(Guid ContentId, string Name, ContentKind Kind, IReadOnlyList<ContentRevision> Revisions)
 {
@@ -54,6 +57,41 @@ public sealed partial class TomeStackApp
         };
         _store.InTransaction(() => _store.UpsertSource(source));
         return source;
+    }
+
+    /// <summary>
+    /// <c>content.diagnose</c> (M5 slice 2, B02): the homebrew debugger. Studies one source (the latest revision of each of
+    /// its contents, drafts included), one stored revision, or one unsaved revision, against everything installed. It
+    /// reports validation problems and what the content graph shows (<see cref="ContentDebugger"/>). Writes nothing.
+    /// </summary>
+    public DebugReport Diagnose(DiagnoseRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if ((request.SourceId is null ? 0 : 1) + (request.Reference is null ? 0 : 1) + (request.Revision is null ? 0 : 1) != 1)
+            throw new AppValidationException([new("diagnose.scope", "Name exactly one of a source, a stored revision or an unsaved revision to check.")]);
+        IReadOnlyList<ContentRevision> scope;
+        if (request.SourceId is { } sourceId)
+        {
+            if (_store.FindSource(sourceId) is null)
+                throw new AppValidationException([new("source.not-found", $"Source {sourceId} is not installed.")]);
+            scope = [.. ContentBySource(sourceId).Select(e => e.Latest)];
+        }
+        else if (request.Reference is { } reference)
+        {
+            scope = [_store.FindRevision(reference) ?? throw new AppValidationException([new("content.not-found", $"Revision {reference.RevisionId} is not installed.", reference)])];
+        }
+        else
+        {
+            // As for a draft: incomplete is fine, malformed is not (the graph must be able to read it).
+            if (ContentValidator.EmptyEntries(request.Revision!) is { Count: > 0 } empty)
+                throw new AppValidationException(empty);
+            scope = [request.Revision!];
+        }
+        // One revision is studied among the latest revisions of its own source (drafts too), as "Find problems in <source>"
+        // sees them, so both give the same answer about it (review fix). Those revisions shape the graph; only the scope is
+        // reported.
+        var context = request.SourceId is null ? ContentBySource(scope[0].Provenance.SourceId).Select(e => e.Latest).ToList() : [];
+        return ContentDebugger.Diagnose(scope, _store.ListRevisionsInOrder(), _store, context);
     }
 
     /// <summary><c>content.bySource</c>: every content entity of one source with all its revisions (drafts too).</summary>

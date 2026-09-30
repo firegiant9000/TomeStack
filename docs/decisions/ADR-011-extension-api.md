@@ -1,6 +1,6 @@
 # ADR-011: Extension API (M6, SPEC P-05)
 
-Status: **proposed** (2026-09-28). Nothing is built. **The owner chooses the execution model** (options A to D below). Nothing that runs third-party code is built without that decision.
+Status: **accepted (owner, 2026-09-29): option A, declarative transforms only** (LIVING_SPECS D14). Nothing is built yet (M6 slice 3). Proposed 2026-09-28. No third-party code runs: options B and C stay possible later only through a new revision of this ADR and a new owner decision, and D stays rejected. The sheet export model v1 below (its purpose filter and `notices[]`) is accepted with it, for ADR-012.
 Date: 2026-09-28
 
 ## Context

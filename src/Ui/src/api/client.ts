@@ -25,6 +25,7 @@ import type {
   ContentOption,
   ContentReference,
   CreateCharacterRequest,
+  DebugReport,
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
@@ -72,6 +73,9 @@ export function createClient(transport: Transport) {
     contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
     affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
     contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
+    /** The homebrew debugger (M5 slice 2): a whole source, drafts included, or one unsaved revision. Writes nothing. */
+    diagnoseSource: (sourceId: string) => call<DebugReport>('content.diagnose', { sourceId }),
+    diagnoseRevision: (revision: ContentRevision) => call<DebugReport>('content.diagnose', { revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),

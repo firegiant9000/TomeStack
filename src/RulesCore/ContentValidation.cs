@@ -13,6 +13,17 @@ public sealed record ValidationReport(ContentReference Revision, IReadOnlyList<D
     public int RequiredSchemaVersion { get; init; } = ContentValidator.MinimumPublishedSchemaVersion;
 }
 
+/// <summary>Revisions validated together, keyed by reference and (once, on first use) by content id.</summary>
+internal sealed class ValidationBatch(IReadOnlyDictionary<ContentReference, ContentRevision> byReference)
+{
+    private ILookup<Guid, ContentRevision>? _byContent;
+
+    public ContentRevision? GetValueOrDefault(ContentReference reference) => byReference.GetValueOrDefault(reference);
+
+    /// <summary>The batch's revisions of one content, in batch order.</summary>
+    public IEnumerable<ContentRevision> OfContent(Guid contentId) => (_byContent ??= byReference.Values.ToLookup(r => r.ContentId))[contentId];
+}
+
 /// <summary>
 /// M1 item 3: validates one content revision before it is published. It reports schema problems (shape and allowed
 /// values), reference problems (source, granted content and choice options), formula problems (modifiers, resource
@@ -56,16 +67,23 @@ public static class ContentValidator
         field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
 
     /// <param name="batch">Other unsaved revisions validated together, which may reference each other.</param>
-    public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null)
+    public static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, IEnumerable<ContentRevision>? batch = null) =>
+        Validate(revision, catalog, new ValidationBatch((batch ?? []).ToDictionary(r => r.Reference)));
+
+    /// <summary>
+    /// The same, with the batch already keyed by reference and by content id (the debugger validates a whole source
+    /// against itself, keying it once). The batch may hold the revision itself: every batch lookup is of other content.
+    /// </summary>
+    internal static ValidationReport Validate(ContentRevision revision, IContentCatalog catalog, ValidationBatch local)
     {
         ArgumentNullException.ThrowIfNull(revision);
         ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(local);
         var errors = new List<Diagnostic>();
         var warnings = new List<Diagnostic>();
         var reference = revision.Reference;
         if (EmptyEntries(revision) is { Count: > 0 } empty)
             return new ValidationReport(reference, empty, []); // nothing else can be checked safely
-        var local = (batch ?? []).ToDictionary(r => r.Reference);
         void Error(string code, string message, string? effectId = null) => errors.Add(new(code, message, reference, effectId));
         void Warn(string code, string message, string? effectId = null) => warnings.Add(new(code, message, reference, effectId));
 
@@ -241,7 +259,7 @@ public static class ContentValidator
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
                     {
-                        var definer = local.Values.Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
+                        var definer = local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
                         if (definer is null)
                             Warn("validate.roll-resource-content-missing", $"Roll '{roll.Id}' spends '{shared}' of content {holder}, which is not installed.", roll.Id);
                         else if (!definer.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared))
@@ -359,7 +377,7 @@ public static class ContentValidator
             Error("validate.source-missing", $"Source {revision.Provenance.SourceId} is not installed.");
         if (revision.ExtendsChoice is { } extends)
         {
-            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.Values.Where(r => r.ContentId == extends.ContentId)).ToList();
+            var targets = catalog.RevisionsOf(extends.ContentId).Concat(local.OfContent(extends.ContentId)).ToList();
             if (extends.ContentId == revision.ContentId)
                 Error("validate.self-reference", "A revision cannot add itself to one of its own choices.");
             else if (targets.Count == 0)
@@ -413,7 +431,7 @@ public static class ContentValidator
                 ? catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).ToList()
                 : [];
             var parentClass = revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } extended
-                ? [.. local.Values.Where(r => r.ContentId == extended.ContentId && r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
+                ? [.. local.OfContent(extended.ContentId).Where(r => r.Kind == ContentKind.Class), .. publishedParents.TakeLast(1)]
                 : new List<ContentRevision>();
             related.AddRange(parentClass);
             // Older published class revisions still calculate for the characters that pin them, so a clash with one is a
