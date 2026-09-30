@@ -425,7 +425,19 @@ export interface Campaign {
   rulesFamily: RulesFamilyId;
   allowedSources: string[];
   houseRules?: string;
+  /**
+   * M6 slice 2: allowed sources a campaign pack left out that are not installed here yet (each is also in
+   * allowedSources). Set only by an import; the service keeps or drops them on save.
+   */
+  pendingSources?: PendingSource[];
   updatedAt?: string;
+}
+
+export interface PendingSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
 }
 
 export interface CampaignStatus {
@@ -625,8 +637,8 @@ export interface PackageManifest {
   notices: LicenseNotice[];
   omitted?: OmittedSource[];
   attachmentPolicy: string;
-  /** Absent for character packages; `source` is a source pack (format v7, M6 slice 1). */
-  scope?: 'characters' | 'library' | 'source';
+  /** Absent for character packages; `source` is a source pack (format v7, M6 slice 1), `campaign` a campaign pack (v8, slice 2). */
+  scope?: 'characters' | 'library' | 'source' | 'campaign';
   /** Source packs: the sender's statement, per source, that it is their own work. TomeStack cannot verify it. */
   attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
 }
@@ -639,6 +651,30 @@ export interface SourcePackPreview {
   revisions: number;
   /** Drafts of these sources that stay on this machine. */
   drafts: number;
+  warnings: Diagnostic[];
+}
+
+/** A source a campaign pack leaves out, and why (M6 slice 2). */
+export interface LeftOutSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
+  reason: Diagnostic;
+}
+
+/** M6 slice 2 (`package.campaignPackPreview`): what a campaign pack would hold. Nothing is written. */
+export interface CampaignPackPreview {
+  fileName: string;
+  campaignId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  /** Allowed sources the pack carries, with their published revisions. */
+  included: LicenseNotice[];
+  /** Bundled SRD sources: referenced by id, never copied. */
+  referenced: LicenseNotice[];
+  leftOut: LeftOutSource[];
+  revisions: number;
   warnings: Diagnostic[];
 }
 
@@ -798,16 +834,29 @@ export interface FieldChange {
 }
 
 export interface PackageItem {
-  kind: 'source' | 'contentRevision' | 'character';
+  kind: 'source' | 'contentRevision' | 'character' | 'campaign' | 'gapNote' | 'attachment';
   id: string;
   name: string;
   action: PackageItemAction;
   detail?: string;
-  /** Set on a source that differs from the local record; apply needs a SourceChoice for it. */
+  /**
+   * Set on a source that differs from the local record, and (M6 slice 2) on a campaign pack's campaign that differs
+   * from yours; apply needs a SourceChoice for it.
+   */
   changes?: FieldChange[];
 }
 
 export type SourceChoice = 'keepLocal' | 'useImported';
+
+/** M6 slice 2: a character whose content "use the imported campaign" would make not allowed. */
+export interface CampaignImpact {
+  campaignId: string;
+  characterId: string;
+  characterName: string;
+  notAllowed: string[];
+  /** The imported campaign's rules family, when it differs from the character's. */
+  rulesFamily?: RulesFamilyId;
+}
 
 export interface PackagePreview {
   canApply: boolean;
@@ -815,6 +864,7 @@ export interface PackagePreview {
   items: PackageItem[];
   errors: Diagnostic[];
   warnings: Diagnostic[];
+  campaignImpact?: CampaignImpact[];
 }
 
 // ---- homebrew studio (M2 item 5) ----
@@ -1144,6 +1194,8 @@ export interface ImportResult {
   characters: string[];
   /** Relative to the data folder; set when a local character was replaced. Import it to restore. */
   backupFile?: string;
+  /** M6 slice 2: a database copy taken because a campaign was replaced, beside a character backup in backupFile. */
+  databaseCopy?: string;
 }
 
 // ---- full library backup (M2.1) ----

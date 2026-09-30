@@ -60,9 +60,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
         foreach (var character in plan.Characters)
             files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null }));
-        // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text).
+        // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text). A share writes it
+        // as a campaign pack does, without the pending list or unknown properties (M6 stack review); a backup keeps both.
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
-            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(campaign));
+            files[$"campaigns/{campaign.Id:D}.json"] = ("campaign", Json(purpose == ExportPurpose.Share ? ForCampaignPack(campaign) : campaign));
         // M3 B3: gap notes are the player's own session feedback. They go in a backup, and never in a share.
         if (purpose == ExportPurpose.Backup)
         {
@@ -181,23 +182,61 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     /// Required for every package source whose metadata differs from the local record (preview items with
     /// <see cref="PackageItem.Changes"/>). Local license metadata is never overwritten without an explicit choice.
     /// </param>
-    public ImportResult Apply(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
+    /// <param name="campaignChoices">
+    /// M6 slice 2, campaign packs: required for a campaign that differs from the local one (a preview item of kind
+    /// <c>campaign</c> with <see cref="PackageItem.Changes"/>): keep the local profile, or use the imported one.
+    /// </param>
+    public ImportResult Apply(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null)
     {
         var (preview, parsed) = Read(package);
         if (!preview.CanApply || parsed is null)
             throw new PackageException(preview.Errors);
         var keepLocal = SourcesKeptLocal(preview, sourceChoices);
+        var keepCampaigns = CampaignsKeptLocal(preview, campaignChoices);
 
         // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
         var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
         var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
-        // M6 slice 1: a source pack can replace source metadata and make its revisions the newest, so the whole database is
-        // copied first whenever it changes anything (package-format.md rule 10).
-        if (parsed.Manifest.Scope == PackageScope.Source && preview.Items.Any(i => (i.Action is PackageItemAction.Add or PackageItemAction.Replace) && !(i.Kind == "source" && keepLocal.Contains(i.Id))))
-            backupFile = WriteSafetyCopy("pre-import");
+        string? databaseCopy = null;
+        // M6 slices 1 and 2: a source or campaign pack can replace source metadata and a campaign, and make its revisions the
+        // newest, so the whole database is copied first whenever it changes anything (package-format.md rule 10).
+        bool Kept(PackageItem i) => (i.Kind == "source" && keepLocal.Contains(i.Id)) || (i.Kind == "campaign" && keepCampaigns.Contains(i.Id));
+        if (parsed.Manifest.Scope is PackageScope.Source or PackageScope.Campaign)
+        {
+            if (preview.Items.Any(i => (i.Action is PackageItemAction.Add or PackageItemAction.Replace) && !Kept(i)))
+                backupFile = WriteSafetyCopy("pre-import");
+        }
+        // M6 slice 2 (review fix to rule 10): a character package that replaces a campaign is covered too. The character
+        // backup above holds only the campaigns of replaced characters, so the database is copied as well.
+        else if (preview.Items.Any(i => i.Kind == "campaign" && i.Action == PackageItemAction.Replace))
+        {
+            if (backupFile is null)
+                backupFile = WriteSafetyCopy("pre-import");
+            else
+                databaseCopy = WriteSafetyCopy("pre-import");
+        }
 
-        var (added, replaced, unchanged) = Commit(parsed, keepLocal, []);
-        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
+        var (added, replaced, unchanged) = Commit(parsed, keepLocal, [], keepCampaigns);
+        return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile, databaseCopy);
+    }
+
+    /// <summary>M6 slice 2: the campaigns a campaign pack leaves as they are; every campaign that differs needs a choice.</summary>
+    private static HashSet<Guid> CampaignsKeptLocal(PackagePreview preview, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices)
+    {
+        if (preview.Manifest?.Scope != PackageScope.Campaign)
+            return [];
+        var differing = preview.Items.Where(i => i.Kind == "campaign" && i.Action == PackageItemAction.Replace).ToList();
+        var missing = differing.Where(i => campaignChoices is null || !campaignChoices.ContainsKey(i.Id)).ToList();
+        if (missing.Count > 0)
+        {
+            throw new PackageException(
+            [
+                .. missing.Select(i => new Diagnostic(
+                    "package.campaign-choice-required",
+                    $"Campaign '{i.Name}' in the package differs from yours ({string.Join(", ", i.Changes!.Select(c => c.Field))}). Choose whether to keep your version or use the imported one.")),
+            ]);
+        }
+        return differing.Where(i => campaignChoices![i.Id] == SourceChoice.KeepLocal).Select(i => i.Id).ToHashSet();
     }
 
     /// <summary>The sources to leave as they are; every source that differs from the local record needs a choice.</summary>
@@ -222,7 +261,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     /// (<see cref="ParsedPackage.Attachments"/> non-empty or library scope) also adds attachment records, and gives a
     /// source the backup's PDF when it has none here; a different local PDF is kept (<paramref name="warnings"/>).
     /// </summary>
-    private (int Added, int Replaced, int Unchanged) Commit(ParsedPackage parsed, HashSet<Guid> keepLocal, List<Diagnostic> warnings)
+    /// <param name="keepCampaigns">M6 slice 2, campaign packs: campaigns to leave as they are ("keep my version").</param>
+    private (int Added, int Replaced, int Unchanged) Commit(ParsedPackage parsed, HashSet<Guid> keepLocal, List<Diagnostic> warnings, HashSet<Guid>? keepCampaigns = null)
     {
         var library = parsed.Manifest.Scope == PackageScope.Library;
         var linked = library ? AttachmentsToRestore(parsed, keepLocal) : [];
@@ -283,13 +323,36 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 if (store.FindSource(sourceId) is { Origin: null, ShareConfirmedAt: not null } unknown && !_bundledSources.Contains(sourceId))
                     store.UpsertSource(unknown with { ShareConfirmedAt = null });
             }
+            var campaignPack = parsed.Manifest.Scope == PackageScope.Campaign;
             foreach (var campaign in parsed.Campaigns)
             {
                 var local = store.FindCampaign(campaign.Id);
+                var same = local is not null && CampaignChanges(local, campaign, new Dictionary<Guid, SourceRecord>()).Count == 0;
+                if (campaignPack)
+                {
+                    // M6 slice 2: the sender's profile, with what is still not installed here recorded as pending.
+                    if (keepCampaigns?.Contains(campaign.Id) == true || same)
+                    {
+                        unchanged++;
+                        if (WithPackPending(local!, parsed.Manifest) is { } merged)
+                            store.SaveCampaign(merged);
+                        continue;
+                    }
+                    if (local is null) added++;
+                    else replaced++;
+                    store.SaveCampaign(ForReceiver(campaign, parsed.Manifest));
+                    continue;
+                }
+                if (same) { unchanged++; continue; }
                 if (local is null) added++;
-                else if (Json(local).AsSpan().SequenceEqual(Json(campaign))) { unchanged++; continue; }
                 else replaced++;
-                store.SaveCampaign(campaign);
+                // Pending entries are this machine's record (review fix): a character package's own are dropped and the
+                // local ones kept while the source is still allowed and not installed. A full restore brings back the
+                // backup's (the user's own file), checked the same way.
+                var pending = (library ? campaign.PendingSources : local?.PendingSources) ?? [];
+                var allowedHere = campaign.AllowedSources.ToHashSet();
+                List<PendingSource> keep = [.. pending.Where(p => allowedHere.Contains(p.SourceId) && store.FindSource(p.SourceId) is null)];
+                store.SaveCampaign(campaign with { PendingSources = keep.Count == 0 ? null : keep });
             }
             foreach (var character in parsed.Characters)
             {
@@ -476,16 +539,35 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             }
         }
 
+        var campaignPack = parsed.Manifest.Scope == PackageScope.Campaign;
+        var impact = new List<CampaignImpact>();
         foreach (var campaign in parsed.Campaigns)
         {
             foreach (var problem in campaign.Validate())
                 errors.Add(problem with { Message = $"Campaign '{campaign.Name}': {problem.Message}" });
             var local = store.FindCampaign(campaign.Id);
+            if (campaignPack)
+            {
+                // M6 slice 2: a campaign pack's profile replaces the local one only if you choose "use the imported one"
+                // (Apply), and the preview lists the characters whose content that would make not allowed.
+                var changes = local is null ? [] : CampaignChanges(local, campaign, packageSources);
+                var packAction = local is null ? PackageItemAction.Add : changes.Count == 0 ? PackageItemAction.Unchanged : PackageItemAction.Replace;
+                if (packAction == PackageItemAction.Replace)
+                {
+                    warnings.Add(new("package.campaign-differs", $"Campaign '{campaign.Name}' differs from your local copy ({string.Join(", ", changes.Select(c => c.Field))}). Choose which version to keep before importing."));
+                    if (_campaignImpact is not null && campaign.Validate().Count == 0)
+                        impact.AddRange(_campaignImpact(local!, campaign));
+                }
+                items.Add(new("campaign", campaign.Id, campaign.Name, packAction, $"{campaign.RulesFamily} · {campaign.AllowedSources.Count} allowed source(s)", packAction == PackageItemAction.Replace ? changes : null));
+                continue;
+            }
+            // By what the profile means (review fix): a save time or pending entries alone are no difference, so they neither
+            // replace the local campaign nor cost a database copy.
             var action = local is null ? PackageItemAction.Add
-                : Json(local).AsSpan().SequenceEqual(Json(campaign)) ? PackageItemAction.Unchanged
+                : CampaignChanges(local, campaign, packageSources).Count == 0 ? PackageItemAction.Unchanged
                 : PackageItemAction.Replace;
             if (action == PackageItemAction.Replace)
-                warnings.Add(new("package.campaign-replace", $"Campaign '{campaign.Name}' differs from your local copy (allowed sources, rules family or house rules); the imported copy replaces it."));
+                warnings.Add(new("package.campaign-replace", $"Campaign '{campaign.Name}' differs from your local copy (allowed sources, rules family or house rules); the imported copy replaces it. Your whole database is copied to the {BackupFolderName} folder first ({(parsed.Manifest.Scope == PackageScope.Library ? "pre-restore" : "pre-import")}-….db)."));
             items.Add(new("campaign", campaign.Id, campaign.Name, action, $"{campaign.RulesFamily} · {campaign.AllowedSources.Count} allowed source(s)"));
         }
 
@@ -549,9 +631,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
                 errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the package's sources.", split.Last().Reference));
         }
-        if (parsed.Manifest.Scope == PackageScope.Source)
-            CheckSourcePack(parsed, errors, warnings);
-        if (parsed.Manifest.Scope is PackageScope.Library or PackageScope.Source)
+        if (parsed.Manifest.Scope is PackageScope.Source or PackageScope.Campaign)
+            CheckSourcePack(parsed, errors, warnings); // a campaign pack's sources follow the source-pack rules (M6 slice 2)
+        if (campaignPack)
+            CheckCampaignPack(parsed, errors, warnings);
+        if (parsed.Manifest.Scope is PackageScope.Library or PackageScope.Source or PackageScope.Campaign)
             warnings.AddRange(LibraryWarnings(parsed));
         foreach (var attachment in parsed.Attachments)
         {
@@ -562,7 +646,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("attachment", attachment.AttachmentId, attachment.OriginalFileName, action, detail));
         }
 
-        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings), errors.Count == 0 ? parsed : null);
+        return (new PackagePreview(errors.Count == 0, parsed.Manifest, items, errors, warnings, impact), errors.Count == 0 ? parsed : null);
     }
 
     /// <summary>Entry count and total unpacked JSON for one kind of archive.</summary>
@@ -693,6 +777,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             errors.Add(new("package.entry-not-allowed", $"Entry '{stray}' is not allowed in a source pack, which carries only sources and their published content."));
             return null;
         }
+        // M6 slice 2: a campaign pack is always a share and carries one campaign with shareable sources and published content.
+        var campaignPack = manifest.Scope == PackageScope.Campaign;
+        if (campaignPack && (manifest.FormatVersion < PackageManifest.CampaignFormatVersion || manifest.Purpose != ExportPurpose.Share))
+        {
+            errors.Add(new("package.invalid-json", $"A campaign pack must be a format v{PackageManifest.CampaignFormatVersion} share."));
+            return null;
+        }
+        if (campaignPack && files.Keys.FirstOrDefault(p => p != ManifestPath && !p.StartsWith("sources/", StringComparison.Ordinal) && !p.StartsWith("content/", StringComparison.Ordinal) && !p.StartsWith("campaigns/", StringComparison.Ordinal)) is { } strayInCampaign)
+        {
+            errors.Add(new("package.entry-not-allowed", $"Entry '{strayInCampaign}' is not allowed in a campaign pack, which carries only a campaign, sources and their published content."));
+            return null;
+        }
 
         var listed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in manifest.Entries.Where(e => !listed.Add(e.Path)))
@@ -747,8 +843,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     ExpectSchema(path, "campaign", campaign.SchemaVersion, Campaign.CurrentSchemaVersion, errors);
                     if (campaign.AllowedSources is null)
                         errors.Add(new("package.invalid-json", $"Entry '{path}' has no allowed-sources list."));
+                    // M6 slice 2 (review fix): pending entries are informational. A campaign pack's own are ignored (the
+                    // receiver works them out from omitted[]); any other file keeps only valid ones, clamped, so neither a
+                    // planted list nor an old damaged one can refuse a package or the user's own backup.
                     else
-                        campaigns.Add(campaign);
+                        campaigns.Add(campaignPack ? campaign with { PendingSources = null } : campaign.WithValidPending());
                     break;
                 case "gaps" when Deserialize<GapNote>(path, bytes, errors) is { } note:
                     ExpectId(path, id, note.Id, errors);
@@ -764,9 +863,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
         if (errors.Count > 0)
             return null;
-        // Newest means last stored (SPEC I-06), so a library backup and a source pack add revisions in the order the
-        // sender stored them, not in entry (id) order.
-        if (library || sourcePack)
+        // Newest means last stored (SPEC I-06), so a library backup, a source pack and a campaign pack add revisions in the
+        // order the sender stored them, not in entry (id) order.
+        if (library || sourcePack || campaignPack)
             revisions = OrderAsStored(revisions, manifest.RevisionOrder, errors);
         return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs);
     }

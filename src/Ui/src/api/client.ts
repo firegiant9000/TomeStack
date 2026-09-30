@@ -16,6 +16,7 @@ import type {
   ContentRevision,
   PublishResult,
   SourcePackPreview,
+  CampaignPackPreview,
   SourceRecord,
   StudioEntry,
   UpdateOffer,
@@ -206,9 +207,16 @@ export function createClient(transport: Transport) {
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
     saveSourcePackAs: (sourceIds: string[]) =>
       call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds }, { timeoutMs: null }),
+    // ---- campaign packs (M6 slice 2): the profile and the shareable content of its allowed sources ----
+    campaignPackPreview: (campaignId: string) => call<CampaignPackPreview>('package.campaignPackPreview', { campaignId }),
+    exportCampaignPack: (campaignId: string) => call<ExportedPackage>('package.campaignPackExport', { campaignId }),
+    /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
+    saveCampaignPackAs: (campaignId: string) =>
+      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId }, { timeoutMs: null }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
-    applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
-      call<ImportResult>('package.apply', { base64, sourceChoices }),
+    /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
+    applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>
+      call<ImportResult>('package.apply', { base64, sourceChoices, campaignChoices }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----
     libraryBackupPreview: () => call<LibraryBackupPreview>('library.backupPreview'),
     /** Native Save dialog, then writes everything (PDFs included). No timeout: it waits for the dialog and the copy. */

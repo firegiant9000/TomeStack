@@ -31,6 +31,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
         "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
+        "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
 
@@ -163,6 +164,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.sourcePackPreview" => app.PreviewSourcePack(Payload<SourcePackPayload>(payload).SourceIds ?? []),
         "package.sourcePackExport" => ExportSourcePack(Payload<SourcePackPayload>(payload)),
         "package.sourcePackSaveAs" => SaveSourcePackAs(Payload<SourcePackPayload>(payload)),
+        "package.campaignPackPreview" => app.PreviewCampaignPack(Payload<CampaignIdPayload>(payload).CampaignId),
+        "package.campaignPackExport" => ExportCampaignPack(Payload<CampaignIdPayload>(payload)),
+        "package.campaignPackSaveAs" => SaveCampaignPackAs(Payload<CampaignIdPayload>(payload)),
         "library.backupPreview" => app.PreviewLibraryBackup(),
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
@@ -263,6 +267,21 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
         return SaveAs(app.ExportSourcePack(payload.SourceIds ?? []));
+    }
+
+    /// <summary>M6 slice 2: a campaign pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
+    private object ExportCampaignPack(CampaignIdPayload payload)
+    {
+        var export = app.ExportCampaignPack(payload.CampaignId);
+        return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
+    }
+
+    /// <summary>M6 slice 2: writes a campaign pack where the user chooses; the page never supplies a path.</summary>
+    private SaveOutcome SaveCampaignPackAs(CampaignIdPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        return SaveAs(app.ExportCampaignPack(payload.CampaignId));
     }
 
     private SaveOutcome SaveAs(ExportResult export)
@@ -380,7 +399,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     }
 
     private object ApplyImport(PackagePayload payload) =>
-        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices);
+        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices, payload.CampaignChoices);
 
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element
@@ -427,9 +446,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <param name="Purpose">ADR-007: <c>backup</c> (default, everything) or <c>share</c> (leaves out non-redistributable sources).</param>
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
 
-    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
+    /// <param name="CampaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
+    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null, Dictionary<Guid, SourceChoice>? CampaignChoices = null);
 
     private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds);
+
+    private sealed record CampaignIdPayload(Guid CampaignId);
 
     /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
     /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>

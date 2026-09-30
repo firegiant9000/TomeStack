@@ -565,7 +565,7 @@ public class SourcePackTests
     {
         using var origin = new TempApp();
         var (source, _, _) = SharedWithTwoRevisions(origin);
-        var newer = PackageEditor.Edit(origin.ExportPack(source.Id), _ => false, _ => { }, m => { m["formatVersion"] = PackageManifest.CurrentFormatVersion + 1; m["scope"] = "campaign"; });
+        var newer = PackageEditor.Edit(origin.ExportPack(source.Id), _ => false, _ => { }, m => { m["formatVersion"] = PackageManifest.CurrentFormatVersion + 1; m["scope"] = "someday"; });
 
         using var destination = new TempApp();
         var preview = destination.App.PreviewImport(newer);
@@ -701,7 +701,7 @@ public class SourcePackTests
     }
 
     /// <summary>Adds one entry to a package and lists it in the manifest (and in the revision order when given).</summary>
-    private static byte[] AddEntry<T>(byte[] package, string path, string kind, T value, Guid? order = null)
+    internal static byte[] AddEntry<T>(byte[] package, string path, string kind, T value, Guid? order = null)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value, RulesJson.Options) + "\n");
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);

@@ -533,6 +533,69 @@ it('marks a source as shareable after confirming it is your own work, saves a so
   await expectStatus(/unchanged/);
 });
 
+it('shares a campaign as a campaign pack that names what it leaves out, and imports it over a changed copy by choice (M6 slice 2)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: your own shareable homebrew, homebrew you did not mark, and a campaign allowing both and the SRD.
+  async function homebrew(title: string, shareable: boolean) {
+    const source = await client.createHomebrewSource(title, ['srd-5.2.1']);
+    if (shareable) await client.setShareable(source.id, true, true);
+    const draft = await client.saveDraft({
+      contentId: crypto.randomUUID(),
+      revisionId: '00000000-0000-0000-0000-000000000000',
+      kind: 'feat',
+      name: `${title} Feat`,
+      rulesFamilies: ['srd-5.2.1'],
+      provenance: { sourceId: source.id },
+      status: 'draft',
+      summary: 'An original feat.',
+      effects: [],
+    });
+    await client.publish(draft);
+    return source;
+  }
+  const harbor = await homebrew('E2E Harbor Notes', true);
+  const secret = await homebrew('E2E Secret Notes', false);
+  const campaign = await client.saveCampaign({
+    id: '00000000-0000-0000-0000-000000000000',
+    name: 'E2E Harbor Table',
+    rulesFamily: 'srd-5.2.1',
+    allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id, secret.id],
+    houseRules: 'Original house rule: rests take a full day.',
+  });
+
+  render(<App />);
+  const campaignsButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Campaigns' });
+  await waitFor(() => expect(campaignsButton.disabled).toBe(false));
+  await user.click(campaignsButton);
+  await user.click(await screen.findByRole('button', { name: 'Share E2E Harbor Table…' }));
+  const share = await screen.findByRole('region', { name: 'Share E2E Harbor Table' });
+  await waitFor(() => expect(share.textContent).toMatch(/1 source carried with 1 published revision; System Reference Document 5\.2\.1 named, not copied/));
+  // The guard: homebrew you did not mark as your own shareable work is only named.
+  const leftOut = within(share).getByRole('region', { name: 'Left out of the campaign pack' });
+  expect(leftOut.textContent).toMatch(/E2E Secret Notes .*not marked as shareable/);
+
+  // DevHost has no Save dialog, so it downloads.
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(share).getByRole('button', { name: 'Save campaign pack…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Harbor-Table-campaign-pack.tomestack.zip');
+
+  // Here the campaign changes after the pack was made; importing it asks which version to keep.
+  await client.saveCampaign({ ...campaign, name: 'E2E Harbor Table (local)', allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id] });
+  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  expect(within(importing).getByText(/This is a campaign pack/)).toBeTruthy();
+  const apply = within(importing).getByRole<HTMLButtonElement>('button', { name: 'Apply import' });
+  expect(apply.disabled).toBe(true);
+  const decision = within(importing).getByRole('group', { name: 'Campaign “E2E Harbor Table” differs from yours' });
+  expect(within(decision).getByRole('rowheader', { name: 'allowedSources' })).toBeTruthy();
+  await user.click(within(decision).getByRole('radio', { name: 'Use the imported version' }));
+  await user.click(apply);
+  await expectStatus(/1 replaced.*copied to backups\/pre-import-.*\.db/);
+  expect((await client.listCampaigns()).find((c) => c.id === campaign.id)?.name).toBe('E2E Harbor Table');
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();
