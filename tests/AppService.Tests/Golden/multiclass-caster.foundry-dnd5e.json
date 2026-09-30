@@ -1,0 +1,226 @@
+{
+  "_stats": {
+    "coreVersion": "14.367",
+    "systemId": "dnd5e",
+    "systemVersion": "6.0.5"
+  },
+  "flags": {
+    "tomestack": {
+      "adapterVersion": "1.0.0",
+      "exportedAt": "2026-09-24T12:00:00.0000000+00:00",
+      "purpose": "share",
+      "sources": [
+        "TomeStack Fixtures: Spellcasting"
+      ]
+    }
+  },
+  "items": [
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f5dc000-0000-4000-8000-000000000001",
+          "revisionId": "5f5de000-0000-4000-8000-000000000001"
+        }
+      },
+      "name": "Fixture Arcanist",
+      "system": {
+        "hd": {
+          "denomination": "d8",
+          "spent": 0
+        },
+        "identifier": "fixture-arcanist",
+        "levels": 3
+      },
+      "type": "class"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f5dc000-0000-4000-8000-000000000002",
+          "revisionId": "5f5de000-0000-4000-8000-000000000002"
+        }
+      },
+      "name": "Fixture Chanter",
+      "system": {
+        "hd": {
+          "denomination": "d8",
+          "spent": 0
+        },
+        "identifier": "fixture-chanter",
+        "levels": 2
+      },
+      "type": "class"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f5dc000-0000-4000-8000-000000000011",
+          "revisionId": "5f5de000-0000-4000-8000-000000000011"
+        }
+      },
+      "name": "Fixture Spark",
+      "system": {
+        "description": {
+          "value": "<p>A test spell of level 0.</p><p>A test cantrip: a spark of light.</p>"
+        },
+        "identifier": "fixture-spark",
+        "level": 0,
+        "prepared": 1,
+        "school": "evo"
+      },
+      "type": "spell"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f5dc000-0000-4000-8000-000000000012",
+          "revisionId": "5f5de000-0000-4000-8000-000000000012"
+        }
+      },
+      "name": "Fixture Frost Ring",
+      "system": {
+        "description": {
+          "value": "<p>A test spell of level 1.</p><p>A test spell: a ring of cold.</p>"
+        },
+        "identifier": "fixture-frost-ring",
+        "level": 1,
+        "prepared": 1,
+        "school": "evo"
+      },
+      "type": "spell"
+    }
+  ],
+  "name": "Test Twin Caster",
+  "system": {
+    "abilities": {
+      "cha": {
+        "proficient": 0,
+        "value": 14
+      },
+      "con": {
+        "proficient": 0,
+        "value": 12
+      },
+      "dex": {
+        "proficient": 0,
+        "value": 14
+      },
+      "int": {
+        "proficient": 0,
+        "value": 16
+      },
+      "str": {
+        "proficient": 0,
+        "value": 8
+      },
+      "wis": {
+        "proficient": 0,
+        "value": 10
+      }
+    },
+    "attributes": {
+      "ac": {
+        "calcs": [],
+        "flat": 12,
+        "override": 12
+      },
+      "exhaustion": 0,
+      "hp": {
+        "max": 33,
+        "temp": 0,
+        "value": 33
+      },
+      "spellcasting": "int"
+    },
+    "details": {
+      "biography": {
+        "value": "<h2>Sources and licenses</h2><p><strong>TomeStack Fixtures: Spellcasting</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p>Exported by TomeStack for Foundry VTT (dnd5e system). TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>"
+      }
+    },
+    "skills": {
+      "acr": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ani": {
+        "ability": "wis",
+        "value": 0
+      },
+      "arc": {
+        "ability": "int",
+        "value": 0
+      },
+      "ath": {
+        "ability": "str",
+        "value": 0
+      },
+      "dec": {
+        "ability": "cha",
+        "value": 0
+      },
+      "his": {
+        "ability": "int",
+        "value": 0
+      },
+      "ins": {
+        "ability": "wis",
+        "value": 0
+      },
+      "inv": {
+        "ability": "int",
+        "value": 0
+      },
+      "itm": {
+        "ability": "cha",
+        "value": 0
+      },
+      "med": {
+        "ability": "wis",
+        "value": 0
+      },
+      "nat": {
+        "ability": "int",
+        "value": 0
+      },
+      "per": {
+        "ability": "cha",
+        "value": 0
+      },
+      "prc": {
+        "ability": "wis",
+        "value": 0
+      },
+      "prf": {
+        "ability": "cha",
+        "value": 0
+      },
+      "rel": {
+        "ability": "int",
+        "value": 0
+      },
+      "slt": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ste": {
+        "ability": "dex",
+        "value": 0
+      },
+      "sur": {
+        "ability": "wis",
+        "value": 0
+      }
+    },
+    "spells": {
+      "spell1": {
+        "override": 4,
+        "value": 4
+      },
+      "spell2": {
+        "override": 1,
+        "value": 1
+      }
+    }
+  },
+  "type": "character"
+}

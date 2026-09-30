@@ -287,8 +287,8 @@ public static partial class FoundryDnd5e
         var slug = new string([.. name.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-')]);
         while (slug.Contains("--", StringComparison.Ordinal))
             slug = slug.Replace("--", "-", StringComparison.Ordinal);
-        slug = slug.Trim('-');
-        return slug.Length == 0 ? "item" : slug[..Math.Min(slug.Length, 60)];
+        slug = slug[..Math.Min(slug.Length, 60)].Trim('-');
+        return slug.Length == 0 ? "item" : slug;
     }
 
     /// <summary>Object keys in ordinal order, recursively, so output is deterministic (ADR-012 "Golden files").</summary>

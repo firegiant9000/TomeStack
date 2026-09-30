@@ -1,0 +1,191 @@
+{
+  "_stats": {
+    "coreVersion": "14.367",
+    "systemId": "dnd5e",
+    "systemVersion": "6.0.5"
+  },
+  "flags": {
+    "tomestack": {
+      "adapterVersion": "1.0.0",
+      "exportedAt": "2026-09-24T12:00:00.0000000+00:00",
+      "purpose": "share",
+      "sources": [
+        "TomeStack Fixtures: 2014 Family",
+        "TomeStack Fixtures: Shared"
+      ]
+    }
+  },
+  "items": [
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f0dc000-0000-4000-8000-000000000001",
+          "revisionId": "5f0de000-0000-4000-8000-000000000001"
+        }
+      },
+      "name": "Fixture Quickfoot",
+      "system": {
+        "description": {
+          "value": "<p>A nimble test species.</p>"
+        },
+        "identifier": "fixture-quickfoot"
+      },
+      "type": "feat"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f0dc000-0000-4000-8000-000000000003",
+          "revisionId": "5f0de000-0000-4000-8000-000000000003"
+        }
+      },
+      "name": "Fixture Wanderer",
+      "system": {
+        "description": {
+          "value": "<p>A test species usable under both families; its ability increase only applies where species grant them.</p>"
+        },
+        "identifier": "fixture-wanderer"
+      },
+      "type": "feat"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5f0dc000-0000-4000-8000-000000000004",
+          "revisionId": "5f0de000-0000-4000-8000-000000000004"
+        }
+      },
+      "name": "Fixture Keen Reflexes",
+      "system": {
+        "description": {
+          "value": "<p>A test feat granting a small initiative bonus.</p>"
+        },
+        "identifier": "fixture-keen-reflexes"
+      },
+      "type": "feat"
+    }
+  ],
+  "name": "Pell (2014 fixture)",
+  "system": {
+    "abilities": {
+      "cha": {
+        "proficient": 0,
+        "value": 8
+      },
+      "con": {
+        "proficient": 0,
+        "value": 12
+      },
+      "dex": {
+        "proficient": 0,
+        "value": 17
+      },
+      "int": {
+        "proficient": 0,
+        "value": 10
+      },
+      "str": {
+        "proficient": 0,
+        "value": 10
+      },
+      "wis": {
+        "proficient": 0,
+        "value": 13
+      }
+    },
+    "attributes": {
+      "ac": {
+        "calcs": [],
+        "flat": 13,
+        "override": 13
+      },
+      "exhaustion": 0,
+      "hp": {
+        "max": 0,
+        "temp": 0,
+        "value": 0
+      }
+    },
+    "details": {
+      "biography": {
+        "value": "<h2>Sources and licenses</h2><p><strong>TomeStack Fixtures: 2014 Family</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p><strong>TomeStack Fixtures: Shared</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p>Exported by TomeStack for Foundry VTT (dnd5e system). TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>"
+      }
+    },
+    "skills": {
+      "acr": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ani": {
+        "ability": "wis",
+        "value": 0
+      },
+      "arc": {
+        "ability": "int",
+        "value": 0
+      },
+      "ath": {
+        "ability": "str",
+        "value": 0
+      },
+      "dec": {
+        "ability": "cha",
+        "value": 0
+      },
+      "his": {
+        "ability": "int",
+        "value": 0
+      },
+      "ins": {
+        "ability": "wis",
+        "value": 0
+      },
+      "inv": {
+        "ability": "int",
+        "value": 0
+      },
+      "itm": {
+        "ability": "cha",
+        "value": 0
+      },
+      "med": {
+        "ability": "wis",
+        "value": 0
+      },
+      "nat": {
+        "ability": "int",
+        "value": 0
+      },
+      "per": {
+        "ability": "cha",
+        "value": 0
+      },
+      "prc": {
+        "ability": "wis",
+        "value": 0
+      },
+      "prf": {
+        "ability": "cha",
+        "value": 0
+      },
+      "rel": {
+        "ability": "int",
+        "value": 0
+      },
+      "slt": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ste": {
+        "ability": "dex",
+        "value": 0
+      },
+      "sur": {
+        "ability": "wis",
+        "value": 0
+      }
+    },
+    "spells": {}
+  },
+  "type": "character"
+}

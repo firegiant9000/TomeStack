@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/export-foundry-dnd5e.6.0.5.schema.json",
+  "title": "TomeStack export: Foundry VTT Actor for the dnd5e system 6.0.5 (core 14.367)",
+  "description": "ADR-012: exactly the subset of a Foundry VTT dnd5e 'character' Actor document that TomeStack's Foundry adapter emits (adapter 1.0.0), pinned to dnd5e release-6.0.5 (compatibility minimum 14.367, verified 14). Field names verified against module/data/actor/character.mjs, templates/common.mjs, creature.mjs and attributes.mjs, the class, subclass, feat, spell and weapon item models, shared/damage-field.mjs and shared/uses-field.mjs at that tag. Foundry fills every field not listed here with its defaults on import. Keys are sorted; no timestamp but flags.tomestack.exportedAt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_stats", "flags", "items", "name", "system", "type"],
+  "properties": {
+    "_stats": {
+      "type": "object", "additionalProperties": false, "required": ["coreVersion", "systemId", "systemVersion"],
+      "properties": { "coreVersion": { "const": "14.367" }, "systemId": { "const": "dnd5e" }, "systemVersion": { "const": "6.0.5" } }
+    },
+    "flags": {
+      "type": "object", "additionalProperties": false, "required": ["tomestack"],
+      "properties": {
+        "tomestack": {
+          "type": "object", "additionalProperties": false, "required": ["adapterVersion", "exportedAt", "purpose", "sources"],
+          "properties": {
+            "adapterVersion": { "const": "1.0.0" },
+            "exportedAt": { "type": "string", "format": "date-time" },
+            "purpose": { "enum": ["share", "personal"] },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "type": { "const": "character" },
+    "system": {
+      "type": "object", "additionalProperties": false, "required": ["abilities", "attributes", "details", "skills", "spells"],
+      "properties": {
+        "abilities": {
+          "type": "object", "additionalProperties": false, "required": ["str", "dex", "con", "int", "wis", "cha"],
+          "patternProperties": { "^(str|dex|con|int|wis|cha)$": { "$ref": "#/$defs/ability" } }
+        },
+        "attributes": {
+          "type": "object", "additionalProperties": false, "required": ["ac", "hp", "exhaustion"],
+          "properties": {
+            "ac": {
+              "type": "object", "additionalProperties": false, "required": ["calcs", "flat", "override"],
+              "properties": { "calcs": { "type": "array", "maxItems": 0 }, "flat": { "type": "integer", "minimum": 0 }, "override": { "type": "integer", "minimum": 0 } }
+            },
+            "hp": {
+              "type": "object", "additionalProperties": false, "required": ["max", "temp", "value"],
+              "properties": { "max": { "type": "integer", "minimum": 0 }, "temp": { "type": "integer", "minimum": 0 }, "value": { "type": "integer", "minimum": 0 } }
+            },
+            "exhaustion": { "type": "integer", "minimum": 0, "maximum": 6 },
+            "spellcasting": { "enum": ["str", "dex", "con", "int", "wis", "cha"] }
+          }
+        },
+        "details": {
+          "type": "object", "additionalProperties": false, "required": ["biography"],
+          "properties": { "biography": { "type": "object", "additionalProperties": false, "required": ["value"], "properties": { "value": { "type": "string" } } } }
+        },
+        "skills": {
+          "type": "object", "additionalProperties": false,
+          "patternProperties": {
+            "^(acr|ani|arc|ath|dec|his|ins|itm|inv|med|nat|prc|prf|per|rel|slt|ste|sur)$": {
+              "type": "object", "additionalProperties": false, "required": ["ability", "value"],
+              "properties": { "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] }, "value": { "enum": [0, 0.5, 1, 2] } }
+            }
+          }
+        },
+        "spells": {
+          "type": "object", "additionalProperties": false,
+          "patternProperties": {
+            "^(spell[1-9]|pact)$": {
+              "type": "object", "additionalProperties": false, "required": ["override", "value"],
+              "properties": { "override": { "type": "integer", "minimum": 0 }, "value": { "type": "integer", "minimum": 0 } }
+            }
+          }
+        }
+      }
+    },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "identifier": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?$" },
+    "ability": {
+      "type": "object", "additionalProperties": false, "required": ["proficient", "value"],
+      "properties": { "proficient": { "enum": [0, 1] }, "value": { "type": "integer", "minimum": 0 } }
+    },
+    "description": {
+      "type": "object", "additionalProperties": false, "required": ["value"], "properties": { "value": { "type": "string" } }
+    },
+    "flags": {
+      "type": "object", "additionalProperties": false, "required": ["tomestack"],
+      "properties": {
+        "tomestack": {
+          "type": "object", "additionalProperties": false, "required": ["contentId", "revisionId"],
+          "properties": { "contentId": { "$ref": "#/$defs/uuid" }, "revisionId": { "$ref": "#/$defs/uuid" } }
+        }
+      }
+    },
+    "item": {
+      "type": "object", "additionalProperties": false, "required": ["name", "system", "type"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["class", "subclass", "feat", "spell", "weapon"] },
+        "flags": { "$ref": "#/$defs/flags" },
+        "system": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "class" } } },
+          "then": {
+            "properties": {
+              "system": {
+                "additionalProperties": false, "required": ["hd", "identifier", "levels"],
+                "properties": {
+                  "hd": { "type": "object", "additionalProperties": false, "required": ["denomination", "spent"], "properties": { "denomination": { "enum": ["d6", "d8", "d10", "d12"] }, "spent": { "type": "integer", "minimum": 0 } } },
+                  "identifier": { "$ref": "#/$defs/identifier" },
+                  "levels": { "type": "integer", "minimum": 1, "maximum": 20 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "subclass" } } },
+          "then": { "properties": { "system": { "additionalProperties": false, "required": ["classIdentifier", "identifier"], "properties": { "classIdentifier": { "$ref": "#/$defs/identifier" }, "identifier": { "$ref": "#/$defs/identifier" } } } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "feat" } } },
+          "then": {
+            "properties": {
+              "system": {
+                "additionalProperties": false, "required": ["description", "identifier"],
+                "properties": {
+                  "description": { "$ref": "#/$defs/description" },
+                  "identifier": { "$ref": "#/$defs/identifier" },
+                  "uses": {
+                    "type": "object", "additionalProperties": false, "required": ["max", "recovery", "spent"],
+                    "properties": {
+                      "max": { "type": "string", "pattern": "^[0-9]+$" },
+                      "spent": { "type": "integer", "minimum": 0 },
+                      "recovery": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["period", "type"], "properties": { "period": { "enum": ["lr", "sr"] }, "type": { "const": "recoverAll" } } } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "spell" } } },
+          "then": {
+            "properties": {
+              "system": {
+                "additionalProperties": false, "required": ["description", "identifier", "level", "prepared"],
+                "properties": {
+                  "description": { "$ref": "#/$defs/description" },
+                  "identifier": { "$ref": "#/$defs/identifier" },
+                  "level": { "type": "integer", "minimum": 0, "maximum": 9 },
+                  "prepared": { "enum": [0, 1] },
+                  "school": { "enum": ["abj", "con", "div", "enc", "evo", "ill", "nec", "trs"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "weapon" } } },
+          "then": {
+            "properties": {
+              "system": {
+                "additionalProperties": false, "required": ["description", "equipped", "identifier", "proficient"],
+                "properties": {
+                  "description": { "$ref": "#/$defs/description" },
+                  "equipped": { "const": true },
+                  "identifier": { "$ref": "#/$defs/identifier" },
+                  "proficient": { "enum": [0, 1] },
+                  "damage": {
+                    "type": "object", "additionalProperties": false, "required": ["base"],
+                    "properties": {
+                      "base": {
+                        "type": "object", "additionalProperties": false, "required": ["denomination", "number", "types"],
+                        "properties": { "denomination": { "enum": [4, 6, 8, 10, 12, 20] }, "number": { "type": "integer", "minimum": 1 }, "types": { "type": "array", "items": { "type": "string" } } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

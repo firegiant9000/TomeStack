@@ -411,8 +411,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        var (fileName, bytes) = app.VttExportOutput(payload.Token);
-        return SaveBytes(fileName, bytes, "Export file", ".json");
+        var (fileName, bytes) = app.PeekVttExport(payload.Token);
+        var outcome = SaveBytes(fileName, bytes, "Export file", ".json");
+        if (outcome.Saved)
+            app.CompleteVttExport(payload.Token);
+        return outcome;
     }
 
     /// <summary>Browser development and tests: the previewed file as base64.</summary>

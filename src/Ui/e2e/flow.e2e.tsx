@@ -663,6 +663,43 @@ it('installs the sample extension after granting its permissions, runs its impor
   expect(await client.contentBySource(imported.id)).toHaveLength(3);
 });
 
+it('exports a character for Foundry VTT and as sheet JSON after a preview, with no local path in either file (M6 slice 4)', async () => {
+  const user = userEvent.setup();
+  const character = await client.createCharacter({ name: 'E2E VTT Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E VTT Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E VTT Hero' });
+  const panel = within(sheet).getByRole('region', { name: 'Export for a virtual tabletop' });
+  const dataDir = inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/');
+
+  // Foundry VTT (dnd5e): the preview names the pinned release, then DevHost downloads the file.
+  await user.click(within(panel).getByRole('radio', { name: /Foundry VTT \(dnd5e system\)/ }));
+  await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
+  const preview = await within(panel).findByRole('region', { name: 'Export preview' });
+  expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.5/);
+  expect(preview.textContent).toMatch(/not affiliated with Foundry Gaming LLC/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(preview).getByRole('button', { name: 'Save export file…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [foundryName, foundry64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(foundryName).toBe('E2E-VTT-Hero.foundry-dnd5e.json');
+  const actorText = new TextDecoder().decode(bytesOf(foundry64));
+  const actor = JSON.parse(actorText) as { type: string; name: string; _stats: { systemVersion: string } };
+  expect([actor.type, actor.name, actor._stats.systemVersion]).toEqual(['character', 'E2E VTT Hero', '6.0.5']);
+  expect(actorText.toLowerCase().replaceAll('\\\\', '/').replaceAll('\\', '/')).not.toContain(dataDir);
+
+  // The neutral sheet JSON.
+  await user.click(within(panel).getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
+  await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
+  await user.click(within(await within(panel).findByRole('region', { name: 'Export preview' })).getByRole('button', { name: 'Save export file…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 2));
+  const [sheetName, sheet64] = vi.mocked(downloadBase64).mock.calls[downloads + 1]!;
+  expect(sheetName).toBe('E2E-VTT-Hero.tomestack-sheet.json');
+  const model = JSON.parse(new TextDecoder().decode(bytesOf(sheet64))) as { format: string; formatVersion: number; character: { name: string } };
+  expect([model.format, model.formatVersion, model.character.name]).toEqual(['tomestack.sheet', 1, 'E2E VTT Hero']);
+  expect(character.character.id).toBeTruthy();
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();

@@ -1,0 +1,186 @@
+{
+  "_stats": {
+    "coreVersion": "14.367",
+    "systemId": "dnd5e",
+    "systemVersion": "6.0.5"
+  },
+  "flags": {
+    "tomestack": {
+      "adapterVersion": "1.0.0",
+      "exportedAt": "2026-09-24T12:00:00.0000000+00:00",
+      "purpose": "share",
+      "sources": [
+        "TomeStack Fixtures: Test Chronicler"
+      ]
+    }
+  },
+  "items": [
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5fc0c000-0000-4000-8000-000000000001",
+          "revisionId": "5fc0e000-0000-4000-8000-000000000001"
+        }
+      },
+      "name": "Test Chronicler",
+      "system": {
+        "hd": {
+          "denomination": "d8",
+          "spent": 0
+        },
+        "identifier": "test-chronicler",
+        "levels": 5
+      },
+      "type": "class"
+    },
+    {
+      "flags": {
+        "tomestack": {
+          "contentId": "5fc0c000-0000-4000-8000-000000000002",
+          "revisionId": "5fc0e000-0000-4000-8000-000000000002"
+        }
+      },
+      "name": "Test Chronicler: Marginalia",
+      "system": {
+        "description": {
+          "value": "<p>A test feature that reads its class&#39;s Ink column.</p>"
+        },
+        "identifier": "test-chronicler-marginalia"
+      },
+      "type": "feat"
+    }
+  ],
+  "name": "Test Chronicler Five",
+  "system": {
+    "abilities": {
+      "cha": {
+        "proficient": 0,
+        "value": 10
+      },
+      "con": {
+        "proficient": 0,
+        "value": 14
+      },
+      "dex": {
+        "proficient": 0,
+        "value": 12
+      },
+      "int": {
+        "proficient": 1,
+        "value": 16
+      },
+      "str": {
+        "proficient": 0,
+        "value": 8
+      },
+      "wis": {
+        "proficient": 1,
+        "value": 12
+      }
+    },
+    "attributes": {
+      "ac": {
+        "calcs": [],
+        "flat": 11,
+        "override": 11
+      },
+      "exhaustion": 0,
+      "hp": {
+        "max": 38,
+        "temp": 0,
+        "value": 38
+      },
+      "spellcasting": "int"
+    },
+    "details": {
+      "biography": {
+        "value": "<h2>Sources and licenses</h2><p><strong>TomeStack Fixtures: Test Chronicler</strong> (TomeStack project), Original test fixture. Written for TomeStack tests.</p><p>Exported by TomeStack for Foundry VTT (dnd5e system). TomeStack is not affiliated with Foundry Gaming LLC, Roll20 or Wizards of the Coast.</p>"
+      }
+    },
+    "skills": {
+      "acr": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ani": {
+        "ability": "wis",
+        "value": 0
+      },
+      "arc": {
+        "ability": "int",
+        "value": 0
+      },
+      "ath": {
+        "ability": "str",
+        "value": 0
+      },
+      "dec": {
+        "ability": "cha",
+        "value": 0
+      },
+      "his": {
+        "ability": "int",
+        "value": 0
+      },
+      "ins": {
+        "ability": "wis",
+        "value": 0
+      },
+      "inv": {
+        "ability": "int",
+        "value": 0
+      },
+      "itm": {
+        "ability": "cha",
+        "value": 0
+      },
+      "med": {
+        "ability": "wis",
+        "value": 0
+      },
+      "nat": {
+        "ability": "int",
+        "value": 0
+      },
+      "per": {
+        "ability": "cha",
+        "value": 0
+      },
+      "prc": {
+        "ability": "wis",
+        "value": 0
+      },
+      "prf": {
+        "ability": "cha",
+        "value": 0
+      },
+      "rel": {
+        "ability": "int",
+        "value": 0
+      },
+      "slt": {
+        "ability": "dex",
+        "value": 0
+      },
+      "ste": {
+        "ability": "dex",
+        "value": 0
+      },
+      "sur": {
+        "ability": "wis",
+        "value": 0
+      }
+    },
+    "spells": {
+      "spell1": {
+        "override": 3,
+        "value": 3
+      },
+      "spell2": {
+        "override": 2,
+        "value": 2
+      }
+    }
+  },
+  "type": "character"
+}

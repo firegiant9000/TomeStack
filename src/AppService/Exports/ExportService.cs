@@ -70,6 +70,17 @@ namespace TomeStack.AppService
     {
         public static IReadOnlyList<string> ExportTargets { get; } = [FoundryDnd5e.Target, SheetJson.Target];
 
+        /// <summary>
+        /// Export files are indented, and readable: HTML in a description is written as it is, not as < escapes. The
+        /// file is data another tool imports; nothing renders it as a web page.
+        /// </summary>
+        private static readonly JsonSerializerOptions FileJson = new()
+        {
+            WriteIndented = true,
+            MaxDepth = 256,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
+
         private readonly ConcurrentDictionary<Guid, (string FileName, byte[] Bytes)> _pendingExports = new();
 
         /// <summary><c>export.preview { characterId, target, purpose }</c>: runs the adapter and shows the result; writes nothing.</summary>
@@ -89,7 +100,7 @@ namespace TomeStack.AppService
                 var actor = FoundryDnd5e.Map(sheet);
                 if (FoundryDnd5e.Validate(actor) is { Count: > 0 } problems)
                     throw new AppValidationException([new("export.invalid-output", $"The Foundry file would not match what dnd5e {FoundryDnd5e.SystemVersion} reads ({problems[0]}), so nothing was written.")]);
-                text = actor.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                text = actor.ToJsonString(FileJson);
                 fileName = baseName + FoundryDnd5e.FileSuffix;
                 (adapterVersion, targetVersion) = (FoundryDnd5e.AdapterVersion, $"Foundry VTT {FoundryDnd5e.CoreVersion} with dnd5e {FoundryDnd5e.SystemVersion}");
                 differences = FoundryDifferences(sheet);
@@ -99,12 +110,12 @@ namespace TomeStack.AppService
                 var node = SheetJson.Map(sheet);
                 if (SheetJson.Validate(node) is { Count: > 0 } problems)
                     throw new AppValidationException([new("export.invalid-output", $"The sheet file would not be a valid sheet export model ({problems[0]}), so nothing was written.")]);
-                text = node.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                text = node.ToJsonString(FileJson);
                 fileName = baseName + SheetJson.FileSuffix;
                 (adapterVersion, targetVersion) = (SheetJson.AdapterVersion, $"sheet export model v{SheetExport.CurrentFormatVersion}");
             }
             // The model is an allowlist with no path field; the scan is the second line (ADR-012 "Privacy").
-            if (OutputScan.Leaks(text, SensitiveStrings()))
+            if (OutputScan.Leaks(text, SensitivePaths(), [ScanIdentity().UserName]))
                 throw new AppValidationException([new("export.output-refused", "The file would contain a local path or your Windows user name, so nothing was written.")]);
             var bytes = Encoding.UTF8.GetBytes(text);
             KeepFew(_pendingExports);
@@ -118,11 +129,19 @@ namespace TomeStack.AppService
             return new(token, target, fileName, bytes.LongLength, adapterVersion, targetVersion, purpose, sheet.Dropped, sheet.Notices, differences, warnings);
         }
 
-        /// <summary><c>export.saveAs</c> / <c>export.download</c>: the previewed file, once.</summary>
+        /// <summary><c>export.download</c>: the previewed file, once.</summary>
         public (string FileName, byte[] Bytes) VttExportOutput(Guid token) =>
             _pendingExports.TryRemove(token, out var output)
                 ? output
                 : throw new AppValidationException([new("export.expired", "Show the export preview again.")]);
+
+        /// <summary><c>export.saveAs</c>: the previewed file, kept until it is written (a cancelled Save dialog loses nothing).</summary>
+        public (string FileName, byte[] Bytes) PeekVttExport(Guid token) =>
+            _pendingExports.TryGetValue(token, out var output)
+                ? output
+                : throw new AppValidationException([new("export.expired", "Show the export preview again.")]);
+
+        public void CompleteVttExport(Guid token) => _pendingExports.TryRemove(token, out _);
 
         /// <summary>
         /// Foundry recalculates skills, saves, initiative and spellcasting numbers from abilities, proficiency levels and its

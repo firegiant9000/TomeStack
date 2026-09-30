@@ -21,6 +21,9 @@ import type {
   ExtensionRunPreview,
   ExtensionRunRequest,
   InstalledExtension,
+  ExportTarget,
+  SheetPurpose,
+  VttExportPreview,
   SourceRecord,
   StudioEntry,
   UpdateOffer,
@@ -240,6 +243,13 @@ export function createClient(transport: Transport) {
     runExtensionExport: (token: string) => call<{ fileName: string; base64: string }>('extension.runExport', { token }),
     /** Native Save dialog; `unsupported` elsewhere. No timeout: it waits for the dialog. */
     saveExtensionOutputAs: (token: string) => call<SaveOutcome>('extension.runSaveAs', { token }, { timeoutMs: null }),
+    // ---- export adapters (M6 slice 4, ADR-012): a file to import by hand; nothing is uploaded ----
+    previewVttExport: (characterId: string, target: ExportTarget, purpose: SheetPurpose) =>
+      call<VttExportPreview>('export.preview', { characterId, target, purpose }),
+    /** Native Save dialog; `unsupported` elsewhere (DevHost). No timeout: it waits for the dialog. */
+    saveVttExportAs: (token: string) => call<SaveOutcome>('export.saveAs', { token }, { timeoutMs: null }),
+    /** Browser development: the previewed file as base64. */
+    downloadVttExport: (token: string) => call<{ fileName: string; base64: string }>('export.download', { token }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>

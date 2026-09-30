@@ -745,6 +745,25 @@ export interface ExtensionRunPreview {
   warnings: Diagnostic[];
 }
 
+/** M6 slice 4 (ADR-012): export targets. */
+export type ExportTarget = 'foundry-dnd5e' | 'sheet-json';
+
+export interface VttExportPreview {
+  token: string;
+  target: ExportTarget;
+  fileName: string;
+  bytes: number;
+  adapterVersion: string;
+  /** The target release the adapter was verified against. */
+  targetVersion?: string;
+  purpose: SheetPurpose;
+  dropped: SheetDropped[];
+  notices: SheetNotice[];
+  /** Values Foundry calculates itself that may not match TomeStack's. */
+  differences: string[];
+  warnings: Diagnostic[];
+}
+
 export interface ExtensionRunRequest {
   extensionId: string;
   hookId: string;
