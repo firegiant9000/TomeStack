@@ -28,8 +28,13 @@ public sealed record PackageManifest
     /// v8 (M6 slice 2; provisional like v7, fixed only when the slice merges): the <see cref="PackageScope.Campaign"/> scope
     /// (a campaign pack: one campaign profile, and the sources of it that pass the source-pack guard with their published
     /// revisions; allowed sources it leaves out are listed in <see cref="Omitted"/>).
+    /// v9 (M6 slice 3; provisional too): library backups that keep installed extensions (<c>extensions/&lt;sha256&gt;.zip</c>,
+    /// without their grants; ADR-011 "Storage and backup"). A backup with no extension is still written as v7.
     /// </summary>
-    public const int CurrentFormatVersion = 8;
+    public const int CurrentFormatVersion = 9;
+
+    /// <summary>M6 slice 3 (provisional): the first library-backup version that may carry installed extensions.</summary>
+    public const int LibraryExtensionsFormatVersion = 9;
 
     /// <summary>Character packages (backup and share) have not changed since v5, so they stay readable by 0.3.0.</summary>
     public const int CharacterFormatVersion = 5;
@@ -130,9 +135,10 @@ public sealed record CampaignImpact(Guid CampaignId, Guid CharacterId, string Ch
 /// <param name="ManagedPdfs">PDFs TomeStack keeps a copy of (included), and their total size.</param>
 /// <param name="LinkedPdfs">PDFs left where they are: their records are included, the files are not.</param>
 /// <param name="Unreadable">Managed PDFs that are missing or damaged on disk and would be left out, by source title.</param>
+/// <param name="Extensions">M6 slice 3: installed extensions kept (their files, not their grants).</param>
 public sealed record LibraryBackupPreview(
     string FileName, int Characters, int Campaigns, int GapNotes, int Sources, int PublishedRevisions, int DraftRevisions,
-    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable);
+    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable, int Extensions = 0);
 
 /// <param name="Warnings">Anything left out (a damaged PDF copy); the backup is still complete otherwise.</param>
 public sealed record LibraryBackupResult(string FileName, long Bytes, LibraryBackupPreview Contents, IReadOnlyList<Diagnostic> Warnings);

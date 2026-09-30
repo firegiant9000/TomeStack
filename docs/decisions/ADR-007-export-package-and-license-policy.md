@@ -1,6 +1,6 @@
 # ADR-007: Export package and license policy
 
-Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26; item 10, M2.1, 2026-09-28). Items 1–10 are implemented and tested. The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
+Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26; item 10, M2.1, 2026-09-28; item 11, the sheet-export share rule, amended 2026-09-29 for M6 as ADR-011 and ADR-012 require). Items 1–10 are implemented and tested; item 11 is implemented in M6 slice 3 (unmerged). The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
 Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context
@@ -33,7 +33,17 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
 
 **Accepted (M2.1, 2026-09-28; amends item 2):**
 
-10. A **full library backup** (package format v6, `scope: "library"`, always `purpose: "backup"`) is a third kind of file, separate from character exports. It is the only package that includes PDF files: the managed copies (`files/<sha256>.pdf`), because losing them is losing the user's data. Character backups and shares still never include PDFs, and a share never includes gap notes. The library backup is personal, like a character backup: the UI says not to share it, and nothing offers to send it anywhere. It carries each source's `attachmentId` and the linked PDF records (a linked path can name the Windows user, which is acceptable in a personal backup). The rules are in [package-format.md](../features/package-format.md#full-library-backup-m21). Evidence: `LibraryBackupTests`. "Share one source's homebrew" is not part of this: homebrew sources are `redistributable: false` by default, and there is no way yet to mark your own homebrew shareable.
+10. A **full library backup** (package format v6, `scope: "library"`, always `purpose: "backup"`) is a third kind of file, separate from character exports. It is the only package that includes PDF files: the managed copies (`files/<sha256>.pdf`), because losing them is losing the user's data. Character backups and shares still never include PDFs, and a share never includes gap notes. The library backup is personal, like a character backup: the UI says not to share it, and nothing offers to send it anywhere. It carries each source's `attachmentId` and the linked PDF records (a linked path can name the Windows user, which is acceptable in a personal backup). The rules are in [package-format.md](../features/package-format.md#full-library-backup-m21). Evidence: `LibraryBackupTests`. "Share one source's homebrew" is not part of this: homebrew sources are `redistributable: false` by default. (M6 slice 1 later added "Mark as shareable" and source packs, [package-format.md](../features/package-format.md#source-packs-and-mark-as-shareable-m6-slice-1).)
+
+**Accepted (amendment, 2026-09-29, M6 slice 3; as ADR-011 and ADR-012 require before the sheet export model is built; the model and its purpose filter were accepted by the owner in LIVING_SPECS D14 items 4 and 5):**
+
+11. **Sheet exports** (the ADR-011 sheet export model v1, which extension export hooks and ADR-012 adapters read) are a third kind of output, with their own share rule, because a VTT or extension file has no recalculation that could restore what a share leaves out.
+    - **`purpose: "share"` is the default.** A source that may be shared (`redistributable: true` and not import-derived: the SRD, homebrew marked as shareable, a received shareable source) is included in full.
+    - **Totals only for every other source.** Its content is dropped **whole** (features, resources and their uses and recovery, attacks, spells, toggles and `scales`), not kept without its name, because per-item values are the book's mechanics ("Alternatives" below). The aggregate totals stay: ability scores, Armor Class, hit point maximum, initiative, save and skill totals, proficiency bonus, spell attack bonus and save DC, and slot counts. They keep that content's effect, which is the difference from item 6: a character share omits whole revisions and the receiver recalculates without them. The export preview lists what was dropped, by source title and count.
+    - **`purpose: "personal"`** additionally includes the full content of **your own** homebrew: a source made on this machine (`origin: "local"`), not import-derived, or one of unknown origin (stored before database v8) only once its author marked it as shareable. Other publishers' `redistributable: false` content, and anything import-derived, is filtered even here, because the file's only use is a tool or server that other people may read. It is labelled as backups are: "Personal copy: includes your own homebrew. Do not share it."
+    - **Notices:** every source that contributes anything (full content, or only totals) is listed in the model's `notices[]` (title, publisher, license, attribution, modification notice), and every consumer carries them.
+    - **Never, under any purpose:** local paths, attachment ids, gap notes, override reasons, traces or extracted PDF text. The model's schema is an allowlist with no field a path could go in; an output scan (ADR-011) is the second line.
+    - Evidence: `ExtensionTests` (M6 slice 3; the sheet export model is `SheetExport.cs`).
 
 **Accepted (D07, owner, 2026-09-26):**
 

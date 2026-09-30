@@ -1,4 +1,4 @@
-# Portable package format (v8; v1 to v7 still importable)
+# Portable package format (v9; v1 to v8 still importable)
 
 SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**) and for campaigns (M6 slice 2, "Campaign packs" below; **v8, provisional, waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
@@ -17,7 +17,7 @@ gaps/<noteId>.json             Session gap note of an exported character (v5; ba
 
 | Field | Meaning |
 | --- | --- |
-| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs, `8` for campaign packs (v8, M6 slice 2, provisional: `scope: "campaign"`; v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
+| `format` / `formatVersion` | `tomestack.package` / `5` for character packages, `7` for full library backups and source packs, `8` for campaign packs, `9` for full library backups that keep installed extensions (v9, M6 slice 3, provisional: `extensions/<sha256>.zip` entries, library backups only; v8, M6 slice 2, provisional: `scope: "campaign"`; v7, M6 slice 1: `scope: "source"`, `attestations`, and library-backup sources that carry `importDerived`, `origin` and `shareConfirmedAt`; v6: `scope`, `revisionOrder`, `attachments/` and `files/` entries, library backups only; v5: `gaps/` entries, backups only; v4: `campaigns/` entries, and entries may be content schema v4 and character schema v4; v3: `purpose` and `omitted`, ADR-007; v2: content entries use content schema v2 with typed effects, ADR-003). v1 and v2 packages still import as backups, and v1 revisions are upcast. Newer versions are refused with a clear message. |
 | `createdAt`, `appVersion` | Provenance of the export. |
 | `purpose` | `backup` (everything; not for sharing) or `share` (non-redistributable sources left out). |
 | `characters` | Character IDs included. |
@@ -81,6 +81,7 @@ A character backup protects characters and what they use. It does not protect ho
   - Each managed PDF copy is included once, as `files/<sha256>.pdf`.
   - It leaves out the bundled SRD revisions (every install seeds them), the files of linked PDFs (their records are kept), and the local-only extracted text, import jobs and candidates (ADR-009). Those can be read again from the PDF.
   - It also leaves out **character snapshots** (M5 slice 8; owner decision LIVING_SPECS D14), as every character package does. Snapshots stay on this machine ([snapshots.md](snapshots.md)), so the format is unchanged.
+  - **Installed extensions (M6 slice 3, ADR-011):** each extension's file as `extensions/<sha256>.zip` (kind `extension`), counted in the backup's limits, and **not** its grants. A backup that keeps one is written as format **v9** (provisional until the slice merges); a backup with none stays v7. A restore checks each file as an install does and brings it back **turned off, with no permission granted**, only when no extension with its id is installed ([extensions.md](extensions.md#library-backups)). Only a v9 library backup may hold `extensions/` entries; any other package that carries an extension is refused (`package.extension-not-allowed`).
   - A managed copy that is missing, or no longer matches its hash, is left out with `backup.pdf-unreadable`, so one damaged file never blocks the backup. Its source then has no PDF after a restore.
 - **Restore full backup** (`library.restoreChoose`, then `library.restoreApply { token, sourceChoices, confirm: true }`) reads a file picked in the native Open dialog. The path stays in the service; the page gets a one-use token and the file name.
   - The preview checks the file completely before anything is written. That includes rules 2 to 9 above, the attachment records, and every PDF's size, signature and SHA-256, streamed and never held in memory.
@@ -127,18 +128,19 @@ A **source pack** shares your own homebrew: one or more sources and their publis
 
 **Where each shape is read (compatibility matrix).** "Refused" means refused with a clear message, never misread.
 
-| File | Written by | Format | Content schema inside | Read by 0.3.x (format ≤ 5) | Read by M2.1 to M5 builds (format ≤ 6) | Read by M6 slice 1 builds (format ≤ 7) | Read by this build (format ≤ 8) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Character package (backup or share) | all builds | 5 | lowest version each revision needs (3 to 9) | yes, if no entry is newer than it supports | yes, same condition | yes | yes |
-| Full library backup | M2.1 to M5 builds | 6 | 3 to 9 | refused (v6) | yes | yes; every source that comes back with a PDF is marked import-derived | yes, same |
-| Full library backup | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes, with the flag, origin and share confirmation | yes, same |
-| Source pack | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes | yes |
-| Campaign pack | this build | 8 | 3 to 9 | refused | refused | refused (v8) | yes |
-| A later format (9 and on) | later builds | 9+ | any | refused | refused | refused | refused (`package.unsupported-format`) |
+| File | Written by | Format | Content schema inside | Read by 0.3.x (format ≤ 5) | Read by M2.1 to M5 builds (format ≤ 6) | Read by M6 slice 1 builds (format ≤ 7) | Read by M6 slice 2 builds (format ≤ 8) | Read by this build (format ≤ 9) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Character package (backup or share) | all builds | 5 | lowest version each revision needs (3 to 9) | yes, if no entry is newer than it supports | yes, same condition | yes | yes | yes |
+| Full library backup | M2.1 to M5 builds | 6 | 3 to 9 | refused (v6) | yes | yes; every source that comes back with a PDF is marked import-derived | yes, same | yes, same |
+| Full library backup (no extension) | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes, with the flag, origin and share confirmation | yes, same | yes, same |
+| Source pack | M6 builds | 7 | 3 to 9 | refused | refused (v7) | yes | yes | yes |
+| Campaign pack | M6 slice 2 and later | 8 | 3 to 9 | refused | refused | refused (v8) | yes | yes |
+| Full library backup with extensions | this build | 9 | 3 to 9 | refused | refused | refused | refused (v9) | yes; extensions come back turned off, ungranted |
+| A later format (10 and on) | later builds | 10+ | any | refused | refused | refused | refused | refused (`package.unsupported-format`) |
 
 A campaign carried in a character backup or a library backup may have `pendingSources` (M6 slice 2); a character share writes its campaign without `pendingSources` or unknown properties, as a campaign pack does (M6 stack review, 2026-09-30). Older builds keep it as an unknown property; the source it names is still in `allowedSources`, so they allow it once it is installed.
 
-The database is versioned the same way: this build migrates a v7 database to v8 (forward-only; one copy first, at the version the database is opened with: `tomestack.db.v7.bak`, or `tomestack.db.v6.bak` from 0.3.x, which runs v7 and v8 in turn), and an older build refuses a v8 data folder (`NewerDatabaseException`), so no older build can rewrite a source without its flag.
+The database is versioned the same way: this build migrates a v7 database to v8 (forward-only; one copy first, at the version the database is opened with: `tomestack.db.v7.bak`, or `tomestack.db.v6.bak` from 0.3.x, which runs v7 and v8 in turn), and an older build refuses a v8 data folder (`NewerDatabaseException`), so no older build can rewrite a source without its flag. M6 slice 3 adds v9 (the `extensions` table) with the same single copy first: a v7 database opened here runs v8 and v9 in turn and leaves only `tomestack.db.v7.bak` (checked on a DB v6 data folder written by `main`'s build in the M6 stack review, 2026-09-30).
 
 **Tests:** `tests/AppService.Tests/SourcePackTests.cs`: the round trip into a clean data folder (stored order, equal revisions, received origin, the pre-import copy); every export refusal; "Mark as shareable" and its refusals; the flag on attach, detach, page import and candidate accept, and a character share leaving it out; the flag, origin and confirmation through a v7 library backup, and a v6 backup restored with a PDF; imports that cannot lower the flag, raise `redistributable` or replace a bundled source; ten hostile packs; a pack adding to your own source or to another source's content; a character package adding to your own source or under an SRD source, and a draft saved under one; a pre-v8 source keeping its unknown origin through your own backup, and losing its share confirmation when a package adds to it; the newest-changes warning; a full restore giving an SRD source its PDF back; a newer format with an unknown scope; the v8 migration backfill; the dispatcher commands. The source-pack manifest is validated against package-manifest v7 and its sources against source v1, and library-backup sources against source v2 (`Library_backup_sources_match_the_source_v2_schema`).
 

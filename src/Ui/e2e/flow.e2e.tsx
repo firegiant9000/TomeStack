@@ -1,11 +1,12 @@
 // End-to-end UI flow against the real DevHost (same CommandDispatcher as the shell): create -> sheet -> override
 // -> export -> import. Only the transport differs from the desktop app: HTTP to loopback instead of the WebView2
 // bridge, so export takes the download fallback instead of the native Save dialog.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, inject, it, vi } from 'vitest';
+import { zip } from './zip';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
@@ -594,6 +595,72 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   await user.click(apply);
   await expectStatus(/1 replaced.*copied to backups\/pre-import-.*\.db/);
   expect((await client.listCampaigns()).find((c) => c.id === campaign.id)?.name).toBe('E2E Harbor Table');
+});
+
+it('installs the sample extension after granting its permissions, runs its import and export hooks, and removes it (M6 slice 3)', async () => {
+  const user = userEvent.setup();
+  // The external sample, packed as a user would: extension.json and transforms/ from examples/extensions.
+  const folder = resolve(process.cwd(), '../../examples/extensions/spell-list-and-sheet-summary');
+  const files: Record<string, Uint8Array> = { 'extension.json': readFileSync(resolve(folder, 'extension.json')) };
+  for (const name of readdirSync(resolve(folder, 'transforms'))) files[`transforms/${name}`] = readFileSync(resolve(folder, 'transforms', name));
+  const extension = new File([zip(files)], 'spell-list-and-sheet-summary.tomestack-ext.zip', { type: 'application/zip' });
+  await client.createCharacter({ name: 'E2E Ext Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  // DevHost has no native Open dialog, so the browser picker is used.
+  await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
+  await user.upload(screen.getByLabelText('Extension file'), extension);
+  const review = await screen.findByRole('region', { name: 'Install Spell list and sheet summary (sample)?' });
+  const install = within(review).getByRole<HTMLButtonElement>('button', { name: 'Install with these permissions' });
+  expect(install.disabled).toBe(true); // nothing is granted until it is ticked
+  const permissions = within(within(review).getByRole('group', { name: 'Permissions to grant' })).getAllByRole('checkbox');
+  expect(permissions).toHaveLength(4);
+  for (const permission of permissions) await user.click(permission);
+  await user.click(install);
+  await expectStatus(/Installed Spell list and sheet summary \(sample\) with 4 permissions/);
+  const item = await screen.findByRole('listitem', { name: 'Spell list and sheet summary (sample)' });
+
+  // Import: a CSV spell list becomes drafts in a new source; nothing is written before "Create drafts".
+  await user.click(within(item).getByRole('button', { name: 'Import a CSV spell list as draft spells' }));
+  const importRun = await screen.findByRole('region', { name: 'Run Import a CSV spell list as draft spells' });
+  await user.clear(within(importRun).getByRole('textbox', { name: 'New source for the drafts' }));
+  await user.type(within(importRun).getByRole('textbox', { name: 'New source for the drafts' }), 'E2E Imported Spells');
+  await user.click(within(importRun).getByRole('button', { name: 'Choose CSV file…' }));
+  const csv = readFileSync(resolve(folder, 'sample-spells.csv'));
+  await user.upload(screen.getByLabelText('Import a CSV spell list as draft spells: file'), new File([csv], 'sample-spells.csv', { type: 'text/csv' }));
+  const drafts = await within(importRun).findByRole('region', { name: 'Preview of Import a CSV spell list as draft spells' });
+  expect(drafts.textContent).toMatch(/3 drafts in the new source E2E Imported Spells/);
+  expect(drafts.textContent).toMatch(/never shared/);
+  expect((await client.listSources()).some((s) => s.title === 'E2E Imported Spells')).toBe(false);
+  await user.click(within(drafts).getByRole('button', { name: 'Create drafts' }));
+  await expectStatus(/Created 3 drafts in the new source E2E Imported Spells/);
+  const imported = (await client.listSources()).find((s) => s.title === 'E2E Imported Spells')!;
+  expect(imported.importDerived).toBe(true);
+  expect((await client.contentBySource(imported.id)).every((e) => e.latest.status === 'draft')).toBe(true);
+
+  // Export: the sheet summary, previewed and then saved (DevHost downloads). No local path reaches it.
+  await user.click(within(screen.getByRole('listitem', { name: 'Spell list and sheet summary (sample)' })).getByRole('button', { name: 'Export a sheet summary as Markdown' }));
+  const exportRun = await screen.findByRole('region', { name: 'Run Export a sheet summary as Markdown' });
+  await user.selectOptions(within(exportRun).getByRole('combobox', { name: 'Character' }), 'E2E Ext Hero');
+  await user.click(within(exportRun).getByRole('button', { name: 'Preview output' }));
+  const output = await within(exportRun).findByRole('region', { name: 'Preview of Export a sheet summary as Markdown' });
+  expect(output.textContent).toMatch(/# E2E Ext Hero/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(output).getByRole('button', { name: 'Save output…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Ext-Hero-sheet-markdown.md');
+  const markdown = new TextDecoder().decode(bytesOf(base64));
+  expect(markdown).toMatch(/## Sources and licenses/);
+  expect(markdown.toLowerCase().replaceAll('\\', '/')).not.toContain(inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/'));
+
+  // Remove: its permissions and file go; its drafts stay.
+  await user.click(within(screen.getByRole('listitem', { name: 'Spell list and sheet summary (sample)' })).getByRole('button', { name: 'Remove Spell list and sheet summary (sample)…' }));
+  await user.click(within(await screen.findByRole('alertdialog', { name: 'Remove Spell list and sheet summary (sample)?' })).getByRole('button', { name: 'Remove' }));
+  await expectStatus(/Removed Spell list and sheet summary \(sample\)/);
+  expect(await client.listExtensions()).toEqual([]);
+  expect(await client.contentBySource(imported.id)).toHaveLength(3);
 });
 
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {

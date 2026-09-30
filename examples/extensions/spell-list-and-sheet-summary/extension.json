@@ -1,0 +1,30 @@
+{
+  "format": "tomestack.extension",
+  "formatVersion": 1,
+  "id": "6f3e0000-0000-4000-8000-00000000e001",
+  "name": "Spell list and sheet summary (sample)",
+  "version": "1.0.0",
+  "author": "TomeStack examples",
+  "license": "Apache-2.0",
+  "description": "The sample extension for M6 (ADR-011): imports a CSV spell list as draft spells, and exports a character sheet as Markdown. Declarative only: TomeStack reads the transforms; no code runs.",
+  "extensionApi": 1,
+  "runtime": "declarative",
+  "permissions": ["import.file", "write.drafts", "read.sheet", "export.file"],
+  "hooks": [
+    {
+      "kind": "import",
+      "id": "spells-from-csv",
+      "label": "Import a CSV spell list as draft spells",
+      "accepts": "csv",
+      "transform": "transforms/spells-from-csv.json"
+    },
+    {
+      "kind": "export",
+      "id": "sheet-markdown",
+      "label": "Export a sheet summary as Markdown",
+      "produces": "text",
+      "fileExtension": ".md",
+      "transform": "transforms/sheet-markdown.json"
+    }
+  ]
+}

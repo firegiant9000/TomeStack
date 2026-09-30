@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/package-manifest.v9.schema.json",
+  "title": "TomeStack package manifest (formatVersion 9)",
+  "description": "manifest.json of a *.tomestack.zip package (SPEC P-02; docs/features/package-format.md). v9 (M6 slice 3; provisional like v7 and v8: each number is fixed only when its slice merges) is a full library backup that keeps installed extensions: extensions/<sha256>.zip entries (kind 'extension'), without their grants (ADR-011 'Storage and backup'). Only such a backup is written as v9; a library backup with no extension stays v7. v8 added scope 'campaign'; v7 scope 'source'; v6 scope 'library'; v5 gaps/; v4 campaigns/; v3 purpose and omitted (ADR-007).",
+  "type": "object",
+  "required": ["format", "formatVersion", "createdAt", "appVersion", "purpose", "characters", "entries", "notices", "omitted", "attachmentPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "tomestack.package" },
+    "formatVersion": { "const": 9 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "appVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "purpose": { "enum": ["backup", "share"] },
+    "scope": { "enum": ["characters", "library", "source", "campaign"] },
+    "characters": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "revisionOrder": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
+    "attestations": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "statement", "confirmedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "statement": { "type": "string" },
+          "confirmedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "sha256", "size"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^((sources|content|characters|campaigns|gaps|attachments)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json|files/[0-9a-f]{64}\\.pdf|extensions/[0-9a-f]{64}\\.zip)$"
+          },
+          "kind": { "enum": ["source", "contentRevision", "character", "campaign", "gapNote", "attachment", "pdf", "extension"] },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 1073741824 }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "redistributable"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "redistributable": { "type": "boolean" },
+          "attribution": { "type": "string" },
+          "modificationNotice": { "type": "string" }
+        }
+      }
+    },
+    "omitted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license", "revisions"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string" },
+          "publisher": { "type": "string" },
+          "license": { "type": "string" },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reference", "name", "characters"],
+              "additionalProperties": false,
+              "properties": {
+                "reference": {
+                  "type": "object",
+                  "required": ["contentId", "revisionId"],
+                  "additionalProperties": false,
+                  "properties": { "contentId": { "$ref": "#/$defs/uuid" }, "revisionId": { "$ref": "#/$defs/uuid" } }
+                },
+                "name": { "type": "string" },
+                "characters": { "type": "array", "items": { "$ref": "#/$defs/uuid" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "attachmentPolicy": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "entries": { "contains": { "properties": { "path": { "pattern": "^extensions/" } } } } } },
+      "then": { "required": ["scope"], "properties": { "scope": { "const": "library" }, "purpose": { "const": "backup" } } }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "source" } }, "required": ["scope"] },
+      "then": {
+        "required": ["revisionOrder", "attestations"],
+        "properties": {
+          "purpose": { "const": "share" },
+          "characters": { "maxItems": 0 },
+          "omitted": { "maxItems": 0 },
+          "entries": { "items": { "properties": { "path": { "pattern": "^(sources|content)/" } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "scope": { "const": "campaign" } }, "required": ["scope"] },
+      "then": {
+        "required": ["revisionOrder", "attestations"],
+        "properties": {
+          "purpose": { "const": "share" },
+          "characters": { "maxItems": 0 },
+          "omitted": {
+            "items": {
+              "properties": {
+                "title": { "minLength": 1, "maxLength": 200 },
+                "publisher": { "maxLength": 200 },
+                "license": { "maxLength": 200 },
+                "revisions": { "maxItems": 0 }
+              }
+            }
+          },
+          "entries": {
+            "items": { "properties": { "path": { "pattern": "^(sources|content|campaigns)/" } } },
+            "contains": { "properties": { "path": { "pattern": "^campaigns/" } } },
+            "minContains": 1,
+            "maxContains": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

@@ -1,0 +1,4 @@
+Name,Level,School,Casting Time,Range,Components,Duration,Concentration,Lists,Description
+Example Lantern Mote,0,Evocation,Action,30 feet,"V, S",1 hour,no,wizard;sorcerer,"A mote of pale light follows you and lights a 10-foot radius. (Original sample text.)"
+Example Quiet Step,1,Illusion,Bonus Action,Self,V,1 minute,yes,wizard,"Your steps make no sound until the spell ends. (Original sample text.)"
+Example Ink Ward,2,Abjuration,Action,Touch,"V, S, M (a drop of ink)",8 hours,no,wizard;cleric,"A written page resists water and fire until the spell ends. (Original sample text.)"
