@@ -117,10 +117,10 @@ Extensions and export adapters (ADR-012) read the same documented shapes, never 
 **As built, where this ADR left a choice:**
 
 - The bounds: a step budget of 4,000,000 per run in which every value produced pays for its whole size (so it bounds memory too; dual-review fix), 5 seconds, 100,000 nested iterations in product, expressions 64 deep and data 128 deep, 10,000 table entries, 1 MB per transform, 5 MB of output measured while it is written; the extension file at most 5 MB and 64 entries.
-- The output scan looks for the Windows user name only as a path segment (dual-review fix: as a bare substring it refused ordinary words for short names); the profile path covers the name inside it.
+- The output scan looks for the Windows user name only as a path segment (dual-review fix: as a bare substring it refused ordinary words for short names; approved by the owner, 2026-09-30); the profile path covers the name inside it.
 - `extension.review` grants an installed extension again from its stored file, so a restored extension can be turned on without the original file.
 - Import hooks do not read content (`read.content` is an export permission here), so "drafts inherit the most restrictive redistribution among the sources the run read" has nothing to inherit: every import writes into a new, import-derived, non-redistributable source.
 - An install takes the file's bytes (the native Open dialog in the shell, or base64 in browser development); the preview holds them under a one-use token, so what is installed is exactly what was reviewed.
-- Library backups that keep an extension are written as format v9 (provisional); a backup without one stays v7.
+- Library backups that keep an extension are written as format v9 (settled on the M5+M6 integration branch; final only when it merges to `main`); a backup without one stays v7.
 
 Supersedes: none. Extends ADR-004 (import output is drafts), ADR-006 (no socket) and ADR-007 (share rules apply to hook output).

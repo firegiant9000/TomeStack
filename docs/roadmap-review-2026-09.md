@@ -8,8 +8,8 @@ This review is the evidence base for the 2026-09 revision at the top of [`ROADMA
 > - Sections 1, 6 and 7: "M6 slices 2 to 5 … DEFERRED until the T2 gap report". The owner had M6 slices 2 to 6 built before T2 on purpose (PRs #39 to #43), and they are kept. T2 still gates M7, content breadth and further studio or extension work.
 > - Section 5: "Unpushed local work" and cleanup step 2. Every stack branch now matches `origin`.
 > - Section 5, step 4 (rebase `m5-plan` and force-push the stack). The `m5-m6-integration` branch merges the stack into `origin/main` with merge commits instead, so no pushed branch is rewritten. The owner chooses whether to merge that one PR or the stack.
-> - Section 5, step 5's list of approvals is out of date. Database v7, database v8 with the source fields, and the `source` scope were approved on 2026-09-29. The approvals still owed are listed in LIVING_SPECS and the integration PR.
-> - Section 8, the "package-format version numbers lag the code" row. The M6 plan text now states `main` 6 and the branches 7, 8 and 9 (provisional).
+> - Section 5, step 5's list of approvals is out of date. Database v7, database v8 with the source fields, and the `source` scope were approved on 2026-09-29, and the changes of M6 slices 2 to 5 (PRs #39 to #42) on 2026-09-30. What is still open (#38 items 4 to 6 among them) is listed in LIVING_SPECS; merging still waits for the owner.
+> - Section 8, the "package-format version numbers lag the code" row. The M6 plan text now states `main` 6 and the branches 7, 8 and 9 (settled on `m5-m6-integration`, final only when it merges to `main`).
 >
 > The rest of section 5 still applies: merge #24 first, delete the stale branches and worktrees, move the clone out of OneDrive, and tag the merged tip. On 2026-09-30 a git auto-repack in the OneDrive clone raced a commit. The commit landed, and `git fsck` found no damage.
 

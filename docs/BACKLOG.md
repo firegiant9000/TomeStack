@@ -16,7 +16,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B10 | PDF full-text search | M7 | Search imported text and open matching page |
 | B11 | Tags/folders/collections | M6 (optional, after the M6 gate; ROADMAP "M6 plan") | Filter content and characters by custom labels |
 | B12 | Local campaign profiles | M2 | Filter sources and rule choices per campaign. **Implemented (M2 item 7, `features/campaigns.md`)** |
-| B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely. **Built 2026-09-29 (M6 slice 2, fixture-verified; not merged, waits for the owner's approval of the `campaign` scope and `pendingSources`):** [features/package-format.md](features/package-format.md#campaign-packs-m6-slice-2-b13) |
+| B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely. **Built 2026-09-29 (M6 slice 2, fixture-verified; not merged; the `campaign` scope and `pendingSources` approved by the owner 2026-09-30):** [features/package-format.md](features/package-format.md#campaign-packs-m6-slice-2-b13) |
 | B14 | Spell/item/feature cards | M7 | Produce readable quick-reference cards |
 | B15 | Homebrew templates | M5 | Start a resource, transformation or class pattern. **Done 2026-09-29 (M5 slice 6, fixture-verified, provisional set):** four draft-only templates, [features/homebrew-studio.md](features/homebrew-studio.md#templates-m5-slice-6-b15-provisional) |
 | B16 | Optional local-language assistant | M7 | Turn text into reviewable suggestions without requiring AI |
