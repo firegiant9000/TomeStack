@@ -12,6 +12,16 @@ A local-first Windows desktop app for building fifth-edition characters and home
 >
 > The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). No installer has been published; build from source (below). Milestone evidence is in [ROADMAP](docs/ROADMAP.md) and [`docs/features/*-acceptance.md`](docs/features/).
 
+![The Strength score expanded on a character sheet: a table traces the value from the chosen base score of 15, plus 2 from the Soldier background's ability score choice, to 17, citing System Reference Document 5.2.1, page 83](docs/media/calculation-trace.png)
+
+Every calculated value on the sheet expands into its trace: each step, the amount it adds, and the source page it comes from. Values can be overridden with a reason, and the calculated value stays visible next to the override.
+
+![The character builder's choices step for a Dwarf Soldier Barbarian under SRD 5.2.1: the Soldier's ability score increase is chosen, one of two Barbarian skills is still to pick, and the status line says the draft can be saved now with the open choice listed on the sheet](docs/media/builder-choices.png)
+
+Characters are built as a cancelable draft. Every option cites its source, and open choices are flagged rather than blocking the save.
+
+Screenshots are from the browser development host (`src/DevHost`) running the same UI and application service as the desktop shell, with a throwaway data folder.
+
 Specs live in [`docs/`](docs/). [SPEC](docs/SPEC.md) is the behavioral source of truth. [MVP](docs/MVP.md) sets the release boundary, [ROADMAP](docs/ROADMAP.md) the milestones, and [LIVING_SPECS](docs/LIVING_SPECS.md) covers the change process and open decisions. Decisions are in [`docs/decisions/`](docs/decisions/).
 
 ## Layout
