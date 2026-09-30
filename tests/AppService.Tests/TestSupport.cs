@@ -17,14 +17,18 @@ internal sealed class TempApp : IDisposable
 
     private readonly ImportWorker.IDocumentExtractor _extractor;
 
+    private readonly DateTimeOffset _now;
+
     // No sync roots: tests must not depend on this machine's OneDrive or registry (DataFolderTests covers discovery).
     // Imports extract in this process with PdfPig (the worker process itself is tested in ImportWorker.Tests).
     /// <param name="folder">A folder name inside the random test folder (M6 slice 3: a data folder named after a sentinel user).</param>
-    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null)
+    /// <param name="now">The app's clock (default <see cref="Now"/>); a later one shows a restore keeps the original times.</param>
+    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null)
     {
+        _now = now ?? Now;
         _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"), folder ?? "data");
         _extractor = extractor ?? new ImportWorker.Extraction.PdfPigExtractor();
-        App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: [], devFixtures: true, extractor: _extractor);
+        App = TomeStackApp.Open(_directory, new FixedTime(_now), syncRoots: [], devFixtures: true, extractor: _extractor);
     }
 
     public TomeStackApp App { get; private set; }
@@ -34,7 +38,7 @@ internal sealed class TempApp : IDisposable
     public void Reopen()
     {
         App.Dispose();
-        App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: [], devFixtures: true, extractor: _extractor);
+        App = TomeStackApp.Open(_directory, new FixedTime(_now), syncRoots: [], devFixtures: true, extractor: _extractor);
     }
 
     public void Dispose()
