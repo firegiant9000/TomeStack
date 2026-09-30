@@ -5,7 +5,7 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | File | Describes | Version field |
 | --- | --- | --- |
 | `source.v1.schema.json` | `SourceRecord` (SPEC S-01), as character packages and source packs write it | none (v1) |
-| `source.v2.schema.json` | Adds `importDerived`, `origin` and `shareConfirmedAt` (M6 slice 1; set only by the machine that holds the source). Stored from database v8 and written only in format v7 library backups; a record with any of them is v2 | none (by field) |
+| `source.v2.schema.json` | Adds `importDerived`, `origin` and `shareConfirmedAt` (M6 slice 1; set only by the machine that holds the source). Stored from database v8 and written only in library backups (format v7, or v9 with extensions); a record with any of them is v2 | none (by field) |
 | `content-revision.v1.schema.json` | `ContentRevision` with M0 string-typed effects (ADR-002). Read and upcast; no longer written | `schemaVersion` |
 | `content-revision.v2.schema.json` | `ContentRevision` with typed effects (ADR-003). Still read and kept as v2 (not upcast) | `schemaVersion` |
 | `content-revision.v3.schema.json` | Adds `grant.level`, `hitDie`, and the `armorClass` / `hitPoints` targets (ADR-003 "Content schema v3"). An `armor` effect in a v3 revision is unknown and reference-only. Still read and kept as v3 | `schemaVersion` |

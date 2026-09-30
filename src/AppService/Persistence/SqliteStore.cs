@@ -128,11 +128,12 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         // SourceRecord.ImportDerived and can only go up (UpsertSource). The data step marks every source that shows an
         // import already: a PDF attached now or before migration v3 (legacy_pdf_ref), or an import job (jobs and their
         // pages survive removing the PDF). Older builds refuse a v8 database, so none can rewrite a source without the
-        // flag. Forward-only, with the usual copy of the v7 database first.
+        // flag. Forward-only, with the usual copy first (BackupBeforeUpgrade: one copy, at the version the database was
+        // opened with, so a v6 database upgraded here leaves tomestack.db.v6.bak and no v7 copy).
         new("ALTER TABLE sources ADD COLUMN import_derived INTEGER NOT NULL DEFAULT 0;", store => store.BackfillImportDerived()),
         // v9 (M6 slice 3, ADR-011): installed extensions. The row holds the manifest, the SHA-256 of the file the grants are
         // bound to, the grants and whether it is enabled; the file itself is <data dir>/extensions/<sha256>.zip, read-only.
-        // Forward-only, with the usual copy of the v8 database first.
+        // Forward-only, with the usual single copy first (at the version the database was opened with).
         new("""
         CREATE TABLE extensions (
             id TEXT PRIMARY KEY,

@@ -50,7 +50,8 @@ public sealed record Campaign
             problems.Add(new("campaign.name-required", $"A campaign needs a name of 1 to {MaxNameLength} characters."));
         if (!RulesFamilies.IsKnown(RulesFamily))
             problems.Add(new("campaign.rules-family-unknown", $"Rules family '{RulesFamily}' is not supported."));
-        if (AllowedSources is null || AllowedSources.Distinct().Count() != AllowedSources.Count)
+        var allowed = AllowedSources?.ToHashSet();
+        if (AllowedSources is null || allowed!.Count != AllowedSources.Count)
             problems.Add(new("campaign.sources-invalid", "Each allowed source is listed once."));
         if (HouseRules is { Length: > MaxHouseRulesLength })
             problems.Add(new("campaign.house-rules-too-long", $"House rules are at most {MaxHouseRulesLength} characters."));
@@ -58,7 +59,7 @@ public sealed record Campaign
         {
             if (pending.Any(p => p is null || p.Title is null || p.Publisher is null || p.License is null)
                 || pending.Select(p => p.SourceId).Distinct().Count() != pending.Count
-                || (AllowedSources is not null && pending.Any(p => !AllowedSources.Contains(p.SourceId))))
+                || (allowed is not null && pending.Any(p => !allowed.Contains(p.SourceId))))
             {
                 problems.Add(new("campaign.pending-invalid", "Each source waiting to be installed is listed once, is one of the allowed sources, and has a title, publisher and license."));
             }
@@ -145,7 +146,8 @@ public sealed partial class TomeStackApp
         var problems = saved.Validate().ToList();
         if (problems.Count == 0)
         {
-            foreach (var missing in allowed.Where(s => _store.FindSource(s) is null && !pending.Any(p => p.SourceId == s)))
+            var waiting = pending.Select(p => p.SourceId).ToHashSet();
+            foreach (var missing in allowed.Where(s => !waiting.Contains(s) && _store.FindSource(s) is null))
                 problems.Add(new("campaign.source-missing", $"Source {missing} is not installed."));
         }
         if (problems.Count > 0)
