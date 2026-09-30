@@ -990,6 +990,53 @@ export interface DebugReport {
   truncated: boolean;
 }
 
+/** M5 slice 8 (B08): a snapshot of a character, as the list shows it. Snapshots are local: never in a package or backup. */
+export interface SnapshotSummary {
+  id: string;
+  characterId: string;
+  createdAt: string;
+  reason: 'manual' | 'beforeRestore';
+  label?: string;
+  name: string;
+  level: number;
+}
+
+/** One page of a character's snapshots, newest first. Older ones: ask again with `before` = the last item's id. */
+export interface SnapshotPage {
+  items: SnapshotSummary[];
+  hasMore: boolean;
+}
+
+/** `character.restorePreview`: what restoring would change. The token is good for one restore of this exact state. */
+export interface RestorePreview {
+  token: string;
+  snapshot: SnapshotSummary;
+  fields: FieldDelta[];
+  newDiagnostics: Diagnostic[];
+  added: ContentReference[];
+  removed: ContentReference[];
+  playChanges: boolean;
+  /** The name the restore brings back, when it differs. */
+  nameAfter?: string;
+  exceptionsChange?: boolean;
+  /** New campaign warnings: the campaign stays as it is, so the snapshot's content may not be allowed there. */
+  campaignWarnings?: Diagnostic[];
+}
+
+export interface RestoreResult {
+  view: CharacterView;
+  undo: SnapshotSummary;
+}
+
+/** M5 slice 7: one design hint. An opinion only: it never blocks, never changes a calculation and is never stored. */
+export interface DesignHint {
+  code: string;
+  message: string;
+  effectId?: string;
+  family?: RulesFamilyId;
+  level?: number;
+}
+
 /** M5 slice 5 (B19): one node of a content's relationship tree. */
 export interface TreeNode {
   id: string;

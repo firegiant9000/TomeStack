@@ -73,9 +73,13 @@ public sealed partial class TomeStackApp : IDisposable
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
-                bundled.UnionWith(app.Seed(pack).Revisions.Select(r => r.RevisionId));
+            {
+                var seeded = app.Seed(pack);
+                bundled.UnionWith(seeded.Revisions.Select(r => r.RevisionId));
+            }
             // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
             bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
+            app._bundledRevisions = bundled; // the design-feedback baseline (M5 slice 7; review fix: by revision id, not source)
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
             if (devFixtures)
             {
@@ -99,6 +103,12 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     private DataFolderLock? _folderLock;
+
+    /// <summary>
+    /// The revision ids this build seeded from the bundled SRD packs (a revision kept after a seed conflict is left out): the
+    /// design-feedback baseline. Selected by revision id, so nothing a user or a package adds, even under an SRD source id, joins it.
+    /// </summary>
+    private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).

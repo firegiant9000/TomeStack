@@ -29,6 +29,7 @@ import type {
   ContentReference,
   CreateCharacterRequest,
   DebugReport,
+  DesignHint,
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
@@ -48,8 +49,12 @@ import type {
   RestPreview,
   RollRecord,
   RollTarget,
+  RestorePreview,
+  RestoreResult,
   RulesFamilyId,
   SandboxRequest,
+  SnapshotPage,
+  SnapshotSummary,
   SandboxView,
   SaveOutcome,
   SourceChoice,
@@ -87,6 +92,8 @@ export function createClient(transport: Transport) {
     compare: (request: CompareRequest) => call<ContentComparison>('content.compare', request),
     /** The relationship tree of the unsaved revision on screen, among its source's drafts (M5 slice 5). Writes nothing. */
     tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
+    /** Design hints for the unsaved revision on screen (M5 slice 7), asked only while the setting is on. Writes nothing. */
+    feedback: (revision: ContentRevision) => call<DesignHint[]>('content.feedback', { revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
@@ -141,6 +148,11 @@ export function createClient(transport: Transport) {
     archiveCharacter: (characterId: string) => call<CharacterSummary>('character.archive', { characterId, confirm: true }),
     unarchiveCharacter: (characterId: string) => call<CharacterSummary>('character.unarchive', { characterId }),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
+    /** M5 slice 8: snapshots, taken by hand; a restore needs the preview's one-use token and a confirmation. */
+    takeSnapshot: (characterId: string, label?: string) => call<SnapshotSummary>('character.snapshot', { characterId, label }),
+    snapshots: (characterId: string, before?: string) => call<SnapshotPage>('character.snapshots', { characterId, before }),
+    restorePreview: (characterId: string, snapshotId: string) => call<RestorePreview>('character.restorePreview', { characterId, snapshotId }),
+    restoreSnapshot: (token: string) => call<RestoreResult>('character.restoreSnapshot', { token, confirm: true }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */

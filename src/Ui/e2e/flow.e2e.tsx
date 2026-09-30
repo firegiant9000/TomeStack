@@ -914,6 +914,94 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });
 
+it('shows design feedback only once it is switched on, as hints that do not block (M5 slice 7)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Feedback', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Feedback' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+
+  // Off by default: the editor has no feedback section.
+  const toggle = screen.getByRole('checkbox', { name: 'Show design feedback' });
+  expect((toggle as HTMLInputElement).checked).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  expect(within(editor()).queryByRole('region', { name: 'Design feedback' })).toBeNull();
+
+  try {
+    await user.click(toggle);
+    expect(localStorage.getItem('tomestack.designFeedback')).toBe('on');
+    const section = within(editor()).getByRole('region', { name: 'Design feedback' });
+    await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Hinted Class');
+    await user.click(within(section).getByRole('button', { name: 'Get design hints' }));
+    const hints = await within(section).findByRole('region', { name: 'Design hints' });
+    expect(hints.textContent).toMatch(/Class level\(s\) .* give no feature or choice, although every bundled SRD class gives one there/);
+
+    // The choice is remembered for next time (this machine only): a fresh studio starts with it on.
+    cleanup();
+    render(<App />);
+    const again = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+    await waitFor(() => expect(again.disabled).toBe(false));
+    await user.click(again);
+    expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Show design feedback' })).checked).toBe(true);
+
+    // Off again: the choice is forgotten.
+    await user.click(screen.getByRole('checkbox', { name: 'Show design feedback' }));
+    expect(localStorage.getItem('tomestack.designFeedback')).toBeNull();
+  } finally {
+    localStorage.removeItem('tomestack.designFeedback'); // later flows start from the default, off
+  }
+});
+
+it('takes a snapshot of a character, previews the restore, restores it and keeps an undo snapshot (M5 slice 8)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Snapshots', ['srd-5.2.1']);
+  const feat = (
+    await client.publish(
+      await client.saveDraft({
+        contentId: crypto.randomUUID(),
+        revisionId: '00000000-0000-0000-0000-000000000000',
+        kind: 'feat',
+        name: 'E2E Snapshot Feat',
+        rulesFamilies: ['srd-5.2.1'],
+        provenance: { sourceId: source.id },
+        status: 'draft',
+        effects: [{ type: 'modifier', id: 'quick', operation: 'bonus', target: 'initiative', value: '3' }],
+      }),
+    )
+  ).published;
+  const hero = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+  const panel = () => screen.getByRole('region', { name: 'Snapshots' });
+  await user.type(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('textbox', { name: /^Snapshot name/ }), 'E2E with the feat');
+  await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
+  await expectStatus(/Took a snapshot of E2E Snapshot Hero: E2E with the feat/);
+
+  // The character changes: the feat goes.
+  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [] });
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+
+  await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
+  const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
+  expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
+
+  await user.click(within(preview).getByRole('button', { name: 'Restore' }));
+  await expectStatus(/Restored the snapshot/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
+  expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);

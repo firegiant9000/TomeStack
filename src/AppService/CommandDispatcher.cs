@@ -20,11 +20,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "source.list", "source.createHomebrew",
+        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
         "character.archivePreview", "character.archive", "character.unarchive",
+        "character.snapshot", "character.snapshots", "character.restorePreview", "character.restoreSnapshot",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
@@ -102,6 +103,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.sandbox" => Sandbox(Payload<SandboxRequest>(payload)),
         "content.compare" => app.Compare(Payload<CompareRequest>(payload)),
         "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
+        "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
@@ -129,6 +131,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.archivePreview" => app.PreviewArchive(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.archive" => app.Archive(Payload<ArchiveRequest>(payload)),
         "character.unarchive" => app.Unarchive(Payload<CharacterIdPayload>(payload).CharacterId),
+        "character.snapshot" => app.Snapshot(Payload<SnapshotRequest>(payload)),
+        "character.snapshots" => ListSnapshots(Payload<SnapshotsPayload>(payload)),
+        "character.restorePreview" => app.PreviewRestore(Payload<RestorePreviewRequest>(payload)),
+        "character.restoreSnapshot" => app.RestoreSnapshot(Payload<RestoreSnapshotRequest>(payload)),
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
         "gap.listAll" => app.ListAllGapNotes(),
         "import.start" => app.StartImport(Payload<ImportStartRequest>(payload)),
@@ -191,6 +197,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         app.DeleteGapNote(payload);
         return new { deleted = true };
     }
+
+    private SnapshotPage ListSnapshots(SnapshotsPayload payload) => app.Snapshots(payload.CharacterId, payload.Before);
 
     private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
 
@@ -368,6 +376,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record IdPayload(Guid Id);
 
     private sealed record CharacterIdPayload(Guid CharacterId);
+
+    private sealed record SnapshotsPayload(Guid CharacterId, Guid? Before = null);
 
     private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 

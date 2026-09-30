@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Snapshots of a character (M5 slice 8):** "Take snapshot" on the sheet keeps a copy of the character to come back to. "Restore" first shows what would change. It then keeps a snapshot of the current state as well, so every restore can be undone. Snapshots stay on this computer: exports, shares and full backups leave them out. The data folder moves to database version 7; the previous version is backed up first (`tomestack.db.v6.bak`).
+- **Design feedback, if you want it (M5 slice 7):** a "Show design feedback" setting in the studio, off by default. When it is on, "Get design hints" compares a class or feature with the SRD classes. It points out more spell slots than any SRD full caster has, a multiclass share that gives more slots than the class's own table, a resource that grows faster than any SRD pool, and levels that give nothing. Hints never block publishing, never change a character and are never exported.
 - **Start homebrew from a template (M5 slice 6):** four starting points in the studio: a feature with limited uses, a stance you switch on and off, a subclass skeleton and a class skeleton. A template opens as an unsaved draft; nothing is saved or published until you do it. The skeletons leave empty feature slots at the usual levels, which you fill with your own published features. The studio can now also edit toggles, and bonuses that apply only while a toggle is on.
 - **See how your homebrew fits together (M5 slice 5):** "Show relationships" in the studio editor draws a tree. For a class it runs by level, through the features and choices it brings in, to the resources and to the rolls and rests that use them. It also shows what never applies, such as a grant inside granted content. It works fully by keyboard and with screen readers, and Enter on a rule jumps to it in the editor.
 - **Compare two versions of your homebrew (M5 slice 4):** "Compare revisions" in the studio editor shows what changed between any two versions, including the unsaved one on screen. It shows the rules and the texts line by line, and what each version would give copies of your characters (and a blank character, for a class or subclass). Nothing is changed. The update review uses the same calculation.
@@ -72,6 +74,9 @@
 
 ### Fixed
 
+- **Design feedback compares only with the bundled SRD (review of #36, 2026-09-29):** a revision you or a package added under an SRD source, or as a newer version of an SRD feature, no longer becomes the baseline of the hints.
+- **No false "multiclass share above table" hint (review of #36):** a class whose own slots skip a spell level (for example none of level 1, six of level 2) is compared by its highest spell level, not by how many levels have slots.
+- **Older snapshots stay reachable (review of #36):** the snapshot list shows 100 at a time, and "Show older snapshots" loads the rest, so a snapshot pushed down by many restores can still be restored.
 - **The relationship tree no longer treats a draft as granted (review 2026-09-29):** a grant or choice option that names a draft is shown with a note that characters get nothing from it until it is published, and content that extends a choice while a draft is marked as not offered yet.
 - **Compare revisions review fixes (2026-09-29):** a huge text that is too long to line up is now cut to a fixed number of lines and characters, and says "N more lines not shown". Compare now shows the problems a version resolves and the choices it leaves open, offers characters by the families of the two versions (and those with a recorded exception), and no longer sends a character you can no longer see.
 - **Homebrew debugger review fixes (2026-09-29; `docs/features/homebrew-studio.md`):** reach now follows the exact revision a grant or option names, as the calculator does, and every published revision that extends a choice; the scale problems still show when the walk is cut short; the "granted content's own grants never apply" note no longer hides that a character can pick the content directly.
@@ -107,6 +112,7 @@
 
 ### Migration
 
+- **Database schema 7** (M5 slice 8; approved by the owner 2026-09-29, LIVING_SPECS change history) adds `character_snapshots`, insert-only (triggers refuse updates and deletes). The data folder is backed up first (`tomestack.db.v6.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages and library backups are unchanged: snapshots are never in them.
 - **Database schema 6** (M4 D2) adds the local import tables (`import_jobs`, `import_pages`, `import_candidates`, `import_audit`). The data folder is backed up first (`tomestack.db.v5.bak`). After the upgrade, older builds refuse the folder; restore that backup to go back. Packages are unchanged.
 - **Content schema v7** (`docs/schemas/content-revision.v7.schema.json`) adds `spellcasting.multiclassCaster`. It is absent by default, so older revisions are unchanged. 0.3.0 refuses v7 revisions.
 - **Content schema v8** (`docs/schemas/content-revision.v8.schema.json`, M2.2) adds the Fighter fields and `armor.none`. `content.publish` now writes the lowest version a revision needs (at least v3) instead of the current one; the draft keeps its version and no stored revision or hash changes (`docs/schemas/README.md` "Versioning rules", `docs/features/package-format.md`).

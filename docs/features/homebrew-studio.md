@@ -226,6 +226,33 @@ Acceptance:
 - `templates.test.ts`;
 - the e2e flow "starts homebrew from a template as an unsaved draft, publishes a stance, and a skeleton waits for its slots". It also runs all four templates through the server's checks (only the skeletons' empty slots are errors) and removes a stance's toggle.
 
+## Design feedback (M5 slice 7; off by default)
+
+**Show design feedback**, a checkbox at the top of the studio, is **off by default**. It is a preference of this app on this machine, kept in the page's own storage (the WebView2 profile in the data folder). It is in no package, share or library backup, and nothing else reads it. While it is on, the editor has a **Design feedback** section. **Get design hints** calls `content.feedback { reference | revision }` (`RulesCore.DesignFeedback`) for the revision on screen. The hints are opinions: they never block publishing, never change a calculation, and are never stored or exported.
+
+The hint set is the owner's (LIVING_SPECS D14), and nothing else:
+
+| Code | When |
+| --- | --- |
+| `design.slots-above-full-caster` | At some class level, more slots of a spell level than any bundled SRD full caster of that family has there (the first such level). Full casters are found by their `spellcasting` effect's `multiclassCaster: full`, on whatever content holds it (the SRD packs put it on a class's granted "Spellcasting" feature) |
+| `design.multiclass-share-above-table` | The multiclass share (full, half or third, rounded by the family's policy; or the v9 table) counts caster levels whose row of the Multiclass Spellcaster table gives more slots, or a higher spell level, than the class's own table at that level |
+| `design.resource-faster-than-srd` | A resource's maximum grows more between levels 1 and 20 than **every** bundled SRD pool of the family does. The message names the fastest SRD pool. Owner decision, 2026-09-29: compared with the SRD pools, not with the proficiency bonus, which SRD pools also outgrow. **"Pool" means any SRD resource, whatever it counts:** resources have no unit, and TomeStack never tells content apart by name. So today the fastest pool in both families is a pool of hit points, five times the class level (+95), and only a resource growing faster than that is flagged. Every pool is evaluated the same way: `CLASS_LEVEL` = `LEVEL` = the level, the proficiency bonus by level, the revision's own automatic class columns, and ability scores of 10. A feature whose resource reads its class's column gets no resource hint, because that column is not its own |
+| `design.level-without-feature` | Levels where the class gains no content grant or choice, although **every** bundled SRD class of the family gains one there (a grant or choice with no level counts at level 1). Many SRD levels bring only slots, a column or a subclass feature, which are not class grants, so the SRD itself is the measure. No bundled class trips it |
+
+**What is compared:**
+- The baseline is the published revisions this build seeded from its SRD packs, chosen **by revision id** (kept from startup, after any seed conflict is set aside). Nothing added later joins it: not an imported source, not a revision added under an SRD source id, and not a newer revision of an SRD content id.
+- The slot hints look at the spellcasting the calculator uses: the first that is not reference-only, and only with ordinary spell slots and a well-formed table. Pact Magic and malformed tables get none.
+- Hints about slots, resources and levels are per rules family: a revision written for both families can get one of each.
+
+`DesignFeedbackCommandTests` show that no bundled SRD caster gets either slot hint, and no bundled class the level hint. They also show that an over-slotted class does get the slot hint, and that an imported source's caster never enters the baseline. A published revision under an SRD source id, and an inflated newer revision of an SRD caster feature, leave the hints unchanged.
+
+**Review fixes (2026-09-29):** the baseline is chosen by revision id, not by source id, because publishing and package import do not stop a revision from carrying an SRD source id, and a revision kept after a seed conflict is the user's own. The "higher spell level" test in `design.multiclass-share-above-table` compares the shared row's highest spell level with the highest spell level that has slots in the class's own row, so a row with a gap (none of level 1, six of level 2) is no longer flagged by mistake. The resource hint still compares with the fastest SRD pool (+95): that is the open owner question, unchanged.
+
+Acceptance:
+- `RulesCore.Tests/DesignFeedbackTests`;
+- `AppService.Tests/DesignFeedbackCommandTests`;
+- the e2e flow "shows design feedback only once it is switched on, as hints that do not block".
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
 A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.
