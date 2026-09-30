@@ -5,6 +5,7 @@ import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from '.
 import { AllGapNotesPanel } from './components/AllGapNotesPanel';
 import { BackupsPanel } from './components/BackupsPanel';
 import { CampaignsPanel } from './components/CampaignsPanel';
+import { ExtensionsPanel } from './components/ExtensionsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
@@ -20,6 +21,7 @@ type Screen =
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
   | { kind: 'backups' }
+  | { kind: 'extensions' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -160,6 +162,16 @@ export function App() {
           >
             Backups
           </button>
+          <button
+            type="button"
+            aria-current={screen.kind === 'extensions' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'extensions' });
+            }}
+          >
+            Extensions
+          </button>
         </div>
         <ul className="character-list">
           {active.map(characterLink)}
@@ -224,6 +236,14 @@ export function App() {
         {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={open} />}
         {screen.kind === 'backups' && (
           <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
+        )}
+        {screen.kind === 'extensions' && info && (
+          <ExtensionsPanel
+            characters={characters}
+            rulesFamilies={info.rulesFamilies}
+            onError={onError}
+            onStatus={(text) => setMessage({ tone: 'status', text })}
+          />
         )}
         {screen.kind === 'sheet' && (
           <CharacterSheet

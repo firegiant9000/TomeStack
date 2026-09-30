@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/extension-manifest.v1.schema.json",
+  "title": "TomeStack extension manifest (formatVersion 1)",
+  "description": "extension.json at the root of a *.tomestack-ext.zip (ADR-011, option A: declarative only; M6 slice 3; docs/features/extensions.md). The file holds this manifest and transforms/<hook id>.json for each hook, and nothing else. Unknown permissions, an unknown runtime, an unsupported extensionApi or unknown fields refuse the install.",
+  "type": "object",
+  "required": ["format", "formatVersion", "id", "name", "version", "author", "license", "extensionApi", "runtime", "permissions", "hooks"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "tomestack.extension" },
+    "formatVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/uuid", "description": "Identity (ADR-002): the name is never identity. Grants are bound to the file's SHA-256, not to this id." },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})$" },
+    "author": { "type": "string", "minLength": 1, "maxLength": 100, "description": "An update by a different author is refused (extension.author-changed)." },
+    "license": { "type": "string", "minLength": 1, "maxLength": 100, "description": "Required: the install is refused without it." },
+    "homepage": { "type": "string", "maxLength": 200, "description": "Shown as text; TomeStack never opens it." },
+    "description": { "type": "string", "maxLength": 2000 },
+    "extensionApi": { "const": 1, "description": "The API version it was written for; app.info.extensionApi lists what a build runs." },
+    "runtime": { "const": "declarative", "description": "ADR-011 option A: no third-party code runs." },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["read.sheet", "read.content", "import.file", "write.drafts", "export.file"] }
+    },
+    "hooks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["kind", "id", "label", "transform"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "enum": ["import", "export"] },
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "transform": { "type": "string", "pattern": "^transforms/[a-z0-9][a-z0-9-]{0,39}\\.json$", "description": "Must be transforms/<id>.json." },
+          "accepts": { "enum": ["json", "csv"], "description": "Import hooks." },
+          "produces": { "enum": ["text", "json"], "description": "Export hooks." },
+          "fileExtension": { "enum": [".txt", ".md", ".json", ".csv"], "description": "Export hooks; default .txt for text and .json for json." }
+        },
+        "allOf": [
+          { "if": { "properties": { "kind": { "const": "import" } } }, "then": { "required": ["accepts"] } },
+          { "if": { "properties": { "kind": { "const": "export" } } }, "then": { "required": ["produces"] } }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}

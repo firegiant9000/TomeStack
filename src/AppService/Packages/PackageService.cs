@@ -31,12 +31,21 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
     [GeneratedRegex("^(sources|content|characters|campaigns|gaps)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json$", RegexOptions.CultureInvariant)]
     private static partial Regex EntryPathPattern();
 
-    /// <summary>M2.1, library backups only: attachment records, and managed PDFs named by their SHA-256.</summary>
-    [GeneratedRegex("^(attachments/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json|files/[0-9a-f]{64}\\.pdf)$", RegexOptions.CultureInvariant)]
+    /// <summary>
+    /// M2.1, library backups only: attachment records, and managed PDFs named by their SHA-256. M6 slice 3: installed
+    /// extension files named by theirs (v9 library backups only).
+    /// </summary>
+    [GeneratedRegex("^(attachments/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json|files/[0-9a-f]{64}\\.pdf|extensions/[0-9a-f]{64}\\.zip)$", RegexOptions.CultureInvariant)]
     private static partial Regex LibraryEntryPathPattern();
 
     private const string AttachmentFolder = "attachments/";
     private const string PdfFolder = "files/";
+    private const string ExtensionFolder = "extensions/";
+
+    /// <summary>ADR-011: what an extension file, or a piece of one, looks like inside a package.</summary>
+    private static bool LooksLikeExtension(string path) =>
+        path == "extension.json" || path.StartsWith("transforms/", StringComparison.Ordinal) || path.StartsWith(ExtensionFolder, StringComparison.Ordinal)
+        || path.EndsWith(".tomestack-ext.zip", StringComparison.OrdinalIgnoreCase);
 
     private sealed record ExportPlan(
         List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
@@ -414,6 +423,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
 
     /// <param name="Attachments">Library backups only: attachment records (<c>attachments/</c>).</param>
     /// <param name="Pdfs">Library backups only: the <c>files/</c> entries by content hash. Valid while the archive is open; never read into memory.</param>
+    /// <param name="Extensions">v9 library backups only (M6 slice 3): installed extension files by their SHA-256, unchecked until a restore reads them.</param>
     private sealed record ParsedPackage(
         PackageManifest Manifest,
         IReadOnlyList<SourceRecord> Sources,
@@ -422,7 +432,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         IReadOnlyList<Campaign> Campaigns,
         IReadOnlyList<GapNote> GapNotes,
         IReadOnlyList<Attachment> Attachments,
-        IReadOnlyDictionary<string, ZipArchiveEntry> Pdfs);
+        IReadOnlyDictionary<string, ZipArchiveEntry> Pdfs,
+        IReadOnlyDictionary<string, byte[]> Extensions);
 
     private (PackagePreview Preview, ParsedPackage? Parsed) Read(byte[] package)
     {
@@ -625,6 +636,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             CheckCampaignPack(parsed, errors, warnings);
         if (parsed.Manifest.Scope is PackageScope.Library or PackageScope.Source or PackageScope.Campaign)
             warnings.AddRange(LibraryWarnings(parsed));
+        if (parsed.Extensions.Count > 0)
+            PreviewExtensions(parsed, items, warnings);
         foreach (var attachment in parsed.Attachments)
         {
             var action = store.FindAttachment(attachment.AttachmentId) is null ? PackageItemAction.Add : PackageItemAction.Unchanged;
@@ -679,7 +692,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             // Names are checked for every entry before any entry is decompressed.
             foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
-                errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
+            {
+                errors.Add(LooksLikeExtension(entry.FullName)
+                    ? new("package.extension-not-allowed", "A package never carries an extension, and importing one never installs one (ADR-011). Install extensions from the Extensions screen.")
+                    : new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
+            }
             if (errors.Count > 0)
                 return null;
             long remaining = limits.MaxJsonBytes;
@@ -748,6 +765,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             errors.Add(new("package.entry-not-allowed", "Only a full library backup may contain PDFs and attachment records."));
             return null;
         }
+        // M6 slice 3: installed extensions travel only in a v9 library backup, and never install by themselves.
+        if (files.Keys.Any(p => p.StartsWith(ExtensionFolder, StringComparison.Ordinal))
+            && (!library || manifest.FormatVersion < PackageManifest.LibraryExtensionsFormatVersion))
+        {
+            errors.Add(new("package.extension-not-allowed", "A package never carries an extension, and importing one never installs one (ADR-011). Only a full library backup keeps installed extensions."));
+            return null;
+        }
         if (manifest.Scope == PackageScope.Library && (manifest.FormatVersion < 6 || manifest.Purpose != ExportPurpose.Backup))
         {
             errors.Add(new("package.invalid-json", "A full library backup must be a format v6 backup."));
@@ -807,7 +831,17 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var campaigns = new List<Campaign>();
         var gapNotes = new List<GapNote>();
         var attachments = new List<Attachment>();
-        foreach (var (path, bytes) in files.Where(f => f.Key != ManifestPath).OrderBy(f => f.Key, StringComparer.Ordinal))
+        var extensions = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var (path, bytes) in files.Where(f => f.Key.StartsWith(ExtensionFolder, StringComparison.Ordinal)))
+        {
+            // Named by the file's SHA-256, which the manifest's hash already matched: the name must say the same.
+            var sha = path[ExtensionFolder.Length..^4];
+            if (Hash(bytes) != sha)
+                errors.Add(new("package.hash-mismatch", $"Entry '{path}' does not match the hash in its name."));
+            else
+                extensions[sha] = bytes;
+        }
+        foreach (var (path, bytes) in files.Where(f => f.Key != ManifestPath && !f.Key.StartsWith(ExtensionFolder, StringComparison.Ordinal)).OrderBy(f => f.Key, StringComparer.Ordinal))
         {
             var id = Guid.Parse(Path.GetFileNameWithoutExtension(path));
             switch (path[..path.IndexOf('/', StringComparison.Ordinal)])
@@ -855,7 +889,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // order the sender stored them, not in entry (id) order.
         if (library || sourcePack || campaignPack)
             revisions = OrderAsStored(revisions, manifest.RevisionOrder, errors);
-        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs);
+        return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs, extensions);
     }
 
     /// <summary>Field-by-field differences in serialized form, ignoring the machine-local <c>pdfRef</c> and <c>attachmentId</c>.</summary>

@@ -153,7 +153,8 @@ public sealed partial class TomeStackApp : IDisposable
         _store.SchemaVersion,
         RulesFamilies.All,
         _warnings,
-        CharacterCalculator.FieldInfos);
+        CharacterCalculator.FieldInfos,
+        Extensions.ExtensionReader.SupportedApis);
 
     /// <param name="campaignId">SPEC P-01: when set, each option says whether the campaign allows its source (<see cref="ContentOption.AllowedInCampaign"/>).</param>
     public IReadOnlyList<ContentOption> ListContent(string rulesFamily, Guid? campaignId = null)
@@ -412,7 +413,8 @@ public sealed partial class TomeStackApp : IDisposable
 
 /// <param name="Warnings">Startup warnings for the user, such as a data folder inside a sync root (<c>data-dir.sync-root</c>).</param>
 /// <param name="Fields">Every calculated field and its label, for the homebrew studio (M2 item 5).</param>
-public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings, IReadOnlyList<FieldInfo> Fields);
+/// <param name="ExtensionApi">M6 slice 3 (ADR-011): the extension API versions this build runs.</param>
+public sealed record AppInfo(string Version, int SchemaVersion, IReadOnlyList<RulesFamilyPolicy> RulesFamilies, IReadOnlyList<Diagnostic> Warnings, IReadOnlyList<FieldInfo> Fields, IReadOnlyList<int>? ExtensionApi = null);
 
 public sealed record ContentOption(
     ContentReference Reference,

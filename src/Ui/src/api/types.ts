@@ -654,6 +654,111 @@ export interface SourcePackPreview {
   warnings: Diagnostic[];
 }
 
+// ---- extensions (M6 slice 3, ADR-011 option A: declarative only) ----
+
+export type ExtensionPermission = 'read.sheet' | 'read.content' | 'import.file' | 'write.drafts' | 'export.file';
+
+export interface ExtensionHook {
+  kind: 'import' | 'export';
+  id: string;
+  label: string;
+  transform: string;
+  accepts?: 'json' | 'csv';
+  produces?: 'text' | 'json';
+  fileExtension?: string;
+}
+
+export interface ExtensionManifest {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  license: string;
+  homepage?: string;
+  description?: string;
+  extensionApi: number;
+  runtime: string;
+  permissions: ExtensionPermission[];
+  hooks: ExtensionHook[];
+}
+
+export interface InstalledExtension {
+  id: string;
+  sha256: string;
+  manifest: ExtensionManifest;
+  grants: ExtensionPermission[];
+  enabled: boolean;
+  installedAt: string;
+  updatedAt: string;
+}
+
+export interface ExtensionInstallPreview {
+  /** Set only when it can be installed. */
+  token?: string;
+  canInstall: boolean;
+  manifest?: ExtensionManifest;
+  sha256?: string;
+  permissions: { permission: ExtensionPermission; description: string }[];
+  update?: {
+    installedVersion: string;
+    newVersion: string;
+    sameFile: boolean;
+    permissionsAdded: string[];
+    permissionsRemoved: string[];
+    hooksAdded: string[];
+    hooksRemoved: string[];
+  };
+  errors: Diagnostic[];
+  warnings: Diagnostic[];
+}
+
+/** ADR-007 item 11: `share` keeps only totals for content that may not leave; `personal` also lets out your own homebrew. */
+export type SheetPurpose = 'share' | 'personal';
+
+export interface SheetDropped {
+  source: string;
+  publisher: string;
+  items: number;
+}
+
+export interface SheetNotice {
+  title: string;
+  publisher: string;
+  license: string;
+  redistributable: boolean;
+  attribution?: string;
+  modificationNotice?: string;
+  totalsOnly: boolean;
+}
+
+export interface ExtensionRunPreview {
+  token: string;
+  kind: 'import' | 'export';
+  purpose: SheetPurpose;
+  fileName?: string;
+  bytes?: number;
+  excerpt?: string;
+  sourceTitle?: string;
+  drafts: { name: string; kind: ContentKind; errors: Diagnostic[]; warnings: Diagnostic[] }[];
+  dropped: SheetDropped[];
+  notices: SheetNotice[];
+  warnings: Diagnostic[];
+}
+
+export interface ExtensionRunRequest {
+  extensionId: string;
+  hookId: string;
+  characterId?: string;
+  sourceIds?: string[];
+  purpose?: SheetPurpose;
+  rulesFamily?: RulesFamilyId;
+  sourceTitle?: string;
+  /** From chooseExtensionInput (desktop). */
+  inputToken?: string;
+  /** Browser development: the file's bytes. */
+  inputBase64?: string;
+}
+
 /** A source a campaign pack leaves out, and why (M6 slice 2). */
 export interface LeftOutSource {
   sourceId: string;

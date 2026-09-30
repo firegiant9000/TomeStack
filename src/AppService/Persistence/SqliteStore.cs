@@ -130,6 +130,16 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         // pages survive removing the PDF). Older builds refuse a v8 database, so none can rewrite a source without the
         // flag. Forward-only, with the usual copy of the v7 database first.
         new("ALTER TABLE sources ADD COLUMN import_derived INTEGER NOT NULL DEFAULT 0;", store => store.BackfillImportDerived()),
+        // v9 (M6 slice 3, ADR-011): installed extensions. The row holds the manifest, the SHA-256 of the file the grants are
+        // bound to, the grants and whether it is enabled; the file itself is <data dir>/extensions/<sha256>.zip, read-only.
+        // Forward-only, with the usual copy of the v8 database first.
+        new("""
+        CREATE TABLE extensions (
+            id TEXT PRIMARY KEY,
+            sha256 TEXT NOT NULL,
+            json TEXT NOT NULL
+        );
+        """),
     ];
 
     private readonly SqliteConnection _connection;
@@ -255,6 +265,28 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<Campaign> ListCampaigns() => Query<Campaign>("SELECT json FROM campaigns ORDER BY name, id;");
 
     public void DeleteCampaign(Guid id) => Execute("DELETE FROM campaigns WHERE id = $id;", ("$id", Key(id)));
+
+    // ---- extensions (M6 slice 3, ADR-011) ----
+
+    public void SaveExtension(Extensions.InstalledExtension extension)
+    {
+        ArgumentNullException.ThrowIfNull(extension);
+        Execute(
+            "INSERT INTO extensions (id, sha256, json) VALUES ($id, $sha, $json) ON CONFLICT(id) DO UPDATE SET sha256 = excluded.sha256, json = excluded.json;",
+            ("$id", Key(extension.Id)),
+            ("$sha", extension.Sha256),
+            ("$json", Serialize(extension)));
+    }
+
+    public Extensions.InstalledExtension? FindExtension(Guid id) => QuerySingle<Extensions.InstalledExtension>("SELECT json FROM extensions WHERE id = $id;", ("$id", Key(id)));
+
+    public IReadOnlyList<Extensions.InstalledExtension> ListExtensions() => Query<Extensions.InstalledExtension>("SELECT json FROM extensions ORDER BY id;");
+
+    public void DeleteExtension(Guid id) => Execute("DELETE FROM extensions WHERE id = $id;", ("$id", Key(id)));
+
+    /// <summary>Whether any installed extension still uses the file with this hash (a file is removed only when none does).</summary>
+    public bool ExtensionFileInUse(string sha256) =>
+        QueryScalar("SELECT id FROM extensions WHERE sha256 = $sha LIMIT 1;", ("$sha", sha256)) is not null;
 
     // ---- gap notes (M3 B3) ----
 

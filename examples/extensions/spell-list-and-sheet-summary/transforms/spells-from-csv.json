@@ -1,0 +1,41 @@
+{
+  "description": "One draft spell per CSV row. Columns: Name, Level, School, Casting Time, Range, Components, Duration, Concentration (yes/no), Lists (separated by ;), Description.",
+  "tables": {
+    "schools": {
+      "abjuration": "abjuration", "conjuration": "conjuration", "divination": "divination", "enchantment": "enchantment",
+      "evocation": "evocation", "illusion": "illusion", "necromancy": "necromancy", "transmutation": "transmutation"
+    }
+  },
+  "output": {
+    "map": {
+      "over": { "get": "/rows" },
+      "emit": {
+        "object": {
+          "kind": "spell",
+          "name": { "get": "/Name" },
+          "summary": { "get": "/Description" },
+          "effects": {
+            "array": [
+              {
+                "object": {
+                  "type": "spell",
+                  "id": "spell",
+                  "automation": "reference",
+                  "level": { "int": { "get": "/Level" } },
+                  "school": { "lookup": { "table": "schools", "key": { "lower": { "get": "/School" } } } },
+                  "castingTime": { "get": "/Casting Time" },
+                  "range": { "get": "/Range" },
+                  "components": { "get": "/Components" },
+                  "duration": { "get": "/Duration" },
+                  "concentration": { "equals": [{ "lower": { "get": "/Concentration" } }, "yes"] },
+                  "lists": { "map": { "over": { "split": { "text": { "get": "/Lists" }, "separator": ";" } }, "emit": { "lower": { "get": "" } } } },
+                  "text": { "get": "/Description" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

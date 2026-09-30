@@ -37,7 +37,10 @@ public sealed partial class PackageService
 
     private sealed record LibraryPlan(
         List<SourceRecord> Sources, List<ContentRevision> Revisions, List<Character> Characters, List<Campaign> Campaigns,
-        List<GapNote> GapNotes, List<Attachment> Attachments, int LinkedPdfs, List<string> Unreadable);
+        List<GapNote> GapNotes, List<Attachment> Attachments, int LinkedPdfs, List<string> Unreadable, List<Extensions.InstalledExtension> Extensions);
+
+    /// <summary>Where installed extension files are kept: <c>&lt;data dir&gt;/extensions</c> (M6 slice 3).</summary>
+    private string ExtensionDirectory => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(store.DatabasePath))!, TomeStackApp.ExtensionFolderName);
 
     /// <param name="verifyPdfs">Hash every managed PDF in full (writing); the preview only checks that each is there with its size.</param>
     private LibraryPlan PlanLibrary(bool verifyPdfs)
@@ -75,7 +78,8 @@ public sealed partial class PackageService
             [.. store.ListAllGapNotes().Where(n => ids.Contains(n.CharacterId))], // a note without its character cannot be restored
             attachments,
             linked,
-            unreadable);
+            unreadable,
+            [.. store.ListExtensions()]);
     }
 
     private LibraryBackupPreview Summary(LibraryPlan plan)
@@ -86,7 +90,7 @@ public sealed partial class PackageService
             $"TomeStack-full-backup-{stamp}.tomestack.zip",
             plan.Characters.Count, plan.Campaigns.Count, plan.GapNotes.Count, plan.Sources.Count,
             plan.Revisions.Count(r => r.Status == RevisionStatus.Published), plan.Revisions.Count(r => r.Status != RevisionStatus.Published),
-            managed.Count, managed.Sum(a => a.ByteLength), plan.LinkedPdfs, plan.Unreadable);
+            managed.Count, managed.Sum(a => a.ByteLength), plan.LinkedPdfs, plan.Unreadable, plan.Extensions.Count);
     }
 
     /// <summary><c>library.backupPreview</c>: what "Back up everything" would write. Nothing is written.</summary>
@@ -119,7 +123,17 @@ public sealed partial class PackageService
             files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
         foreach (var attachment in plan.Attachments)
             files[$"{AttachmentFolder}{attachment.AttachmentId:D}.json"] = ("attachment", Json(attachment));
-        var pdfs = plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
+        // M6 slice 3 (ADR-011): installed extension files, without their grants: a restore brings them back turned off.
+        var extensionsLeftOut = new List<string>();
+        foreach (var installed in plan.Extensions)
+        {
+            if (Extensions.ExtensionFiles.ReadIntact(ExtensionDirectory, installed.Sha256) is { } bytes)
+                files[$"{ExtensionFolder}{installed.Sha256}.zip"] = ("extension", bytes);
+            else
+                extensionsLeftOut.Add(installed.Manifest.Name);
+        }
+        var withExtensions = files.Keys.Any(p => p.StartsWith(ExtensionFolder, StringComparison.Ordinal));
+        var pdfs =plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
 
         // The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
         var jsonBytes = files.Values.Sum(f => f.Bytes.LongLength);
@@ -131,8 +145,9 @@ public sealed partial class PackageService
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
         {
-            // v7 (M6 slice 1): sources carry importDerived, origin and shareConfirmedAt, which a v6 reader would drop.
-            FormatVersion = PackageManifest.LibraryFormatVersion,
+            // v7 (M6 slice 1): sources carry importDerived, origin and shareConfirmedAt, which a v6 reader would drop. v9
+            // (M6 slice 3) only when it keeps an extension, so a backup without one stays readable by v7 builds.
+            FormatVersion = withExtensions ? PackageManifest.LibraryExtensionsFormatVersion : PackageManifest.LibraryFormatVersion,
             Scope = PackageScope.Library,
             Purpose = ExportPurpose.Backup,
             CreatedAt = createdAt,
@@ -169,6 +184,7 @@ public sealed partial class PackageService
 
         var warnings = plan.Unreadable
             .Select(title => new Diagnostic("backup.pdf-unreadable", $"The PDF copy for '{title}' is missing or damaged, so it is not in the backup. Attach the PDF again; everything else is backed up."))
+            .Concat(extensionsLeftOut.Select(name => new Diagnostic("backup.extension-unreadable", $"The file of the extension '{name}' is missing or changed, so it is not in the backup. Install it again.")))
             .ToList();
         return new(Summary(plan).FileName, written, Summary(plan), warnings);
     }
@@ -222,8 +238,63 @@ public sealed partial class PackageService
 
             var warnings = new List<Diagnostic>();
             var (added, replaced, unchanged) = Commit(parsed, keepLocal, warnings);
+            added += RestoreExtensions(parsed);
             return new LibraryRestoreResult(added, replaced, unchanged, copied, safetyCopy, warnings);
         });
+
+    /// <summary>
+    /// M6 slice 3 (ADR-011 "A restore installs nothing by itself"): each extension in the backup goes through the full
+    /// install checks and comes back turned off, with no permission granted, only when no extension with its id is
+    /// installed here. A backup handed over by someone else therefore cannot run their extensions.
+    /// </summary>
+    private int RestoreExtensions(ParsedPackage parsed)
+    {
+        var restored = 0;
+        foreach (var (sha, bytes) in parsed.Extensions)
+        {
+            Extensions.ExtensionPackage package;
+            try
+            {
+                package = Extensions.ExtensionReader.Read(bytes);
+            }
+            catch (Extensions.ExtensionException)
+            {
+                continue; // the preview warned (restore.extension-skipped)
+            }
+            if (store.FindExtension(package.Manifest.Id) is not null)
+                continue;
+            Extensions.ExtensionFiles.Write(ExtensionDirectory, sha, bytes);
+            var now = time.GetUtcNow();
+            store.InTransaction(() => store.SaveExtension(new(package.Manifest.Id, sha, package.Manifest, [], false, now, now)));
+            restored++;
+        }
+        return restored;
+    }
+
+    /// <summary>The restore preview's lines for extensions (M6 slice 3).</summary>
+    private void PreviewExtensions(ParsedPackage parsed, List<PackageItem> items, List<Diagnostic> warnings)
+    {
+        foreach (var (sha, bytes) in parsed.Extensions)
+        {
+            Extensions.ExtensionPackage package;
+            try
+            {
+                package = Extensions.ExtensionReader.Read(bytes);
+            }
+            catch (Extensions.ExtensionException ex)
+            {
+                warnings.Add(new("restore.extension-skipped", $"An extension in the backup does not pass the install checks ({ex.Errors[0].Code}), so it is not restored."));
+                continue;
+            }
+            var installed = store.FindExtension(package.Manifest.Id);
+            var detail = installed is null ? $"{package.Manifest.Version}; comes back turned off, with no permission granted"
+                : installed.Sha256 == sha ? "already installed"
+                : "a different version is installed here; it is kept";
+            items.Add(new("extension", package.Manifest.Id, package.Manifest.Name, installed is null ? PackageItemAction.Add : PackageItemAction.Unchanged, detail));
+        }
+        if (items.Any(i => i.Kind == "extension" && i.Action == PackageItemAction.Add))
+            warnings.Add(new("restore.extension-review", "Extensions come back turned off, with no permission granted. Review each one on the Extensions screen before you turn it on."));
+    }
 
     private T WithLibrary<T>(string path, Func<PackagePreview, ParsedPackage?, List<Diagnostic>, T> use)
     {

@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/sheet-export.v1.schema.json",
+  "title": "TomeStack sheet export model (formatVersion 1)",
+  "description": "A character's computed sheet as extension export hooks (ADR-011) and export adapters (ADR-012) read it; M6 slice 3. An ALLOWLIST: no property anywhere can hold a local path, an attachment id, a gap note, an override reason or a trace (additionalProperties is false throughout). Filtered by purpose (ADR-007 item 11): content from a source the purpose does not let out is dropped whole and counted in 'dropped'; totals keep its effect. Every contributing source is in 'notices'. Absent values are left out rather than null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "formatVersion", "purpose", "exportedAt", "character", "abilities", "skills", "fields", "hitPoints", "hitDice", "slots", "spellcasting", "resources", "attacks", "features", "toggles", "scales", "conditions", "dropped", "notices"],
+  "properties": {
+    "format": { "const": "tomestack.sheet" },
+    "formatVersion": { "const": 1 },
+    "purpose": { "enum": ["share", "personal"] },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "rulesFamily", "level", "classes"],
+      "properties": {
+        "name": { "type": "string" },
+        "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
+        "level": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "classes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "level", "source"],
+            "properties": {
+              "name": { "type": "string" },
+              "level": { "type": "integer", "minimum": 1, "maximum": 20 },
+              "hitDie": { "enum": [6, 8, 10, 12] },
+              "subclass": { "type": "string" },
+              "ref": { "$ref": "#/$defs/ref" },
+              "subclassRef": { "$ref": "#/$defs/ref" },
+              "source": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "abilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ability", "score", "modifier", "save", "saveProficiency"],
+        "properties": {
+          "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
+          "score": { "type": "integer" },
+          "modifier": { "type": "integer" },
+          "save": { "type": "integer" },
+          "saveProficiency": { "$ref": "#/$defs/proficiency" }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["skill", "label", "ability", "total", "proficiency"],
+        "properties": {
+          "skill": { "type": "string" },
+          "label": { "type": "string" },
+          "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
+          "total": { "type": "integer" },
+          "proficiency": { "$ref": "#/$defs/proficiency" }
+        }
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "value", "automation", "overridden"],
+        "properties": {
+          "id": { "enum": ["armorClass", "initiative", "proficiencyBonus", "hitPoints", "spellAttack", "spellSaveDc"] },
+          "label": { "type": "string" },
+          "value": { "type": "integer" },
+          "automation": { "$ref": "#/$defs/automation" },
+          "overridden": { "type": "boolean", "description": "The reason is never exported." }
+        }
+      }
+    },
+    "hitPoints": { "type": "object", "additionalProperties": false, "required": ["maximum", "current", "temporary"], "properties": { "maximum": { "type": "integer" }, "current": { "type": "integer" }, "temporary": { "type": "integer" } } },
+    "hitDice": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["die", "total", "spent"], "properties": { "die": { "type": "integer" }, "total": { "type": "integer" }, "spent": { "type": "integer" } } } },
+    "slots": { "type": "array", "items": { "$ref": "#/$defs/slots" } },
+    "pactSlots": { "$ref": "#/$defs/slots" },
+    "spellcasting": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "ability", "attackBonus", "saveDc", "classLevel", "preparation", "spells", "ref", "source"],
+        "properties": {
+          "name": { "type": "string" },
+          "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
+          "attackBonus": { "type": "integer" },
+          "saveDc": { "type": "integer" },
+          "classLevel": { "type": "integer" },
+          "preparation": { "enum": ["prepared", "known"] },
+          "spells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "level", "prepared", "concentration", "ritual", "ref", "source"],
+              "properties": {
+                "name": { "type": "string" }, "level": { "type": "integer", "minimum": 0, "maximum": 9 }, "prepared": { "type": "boolean" },
+                "school": { "type": "string" }, "castingTime": { "type": "string" }, "range": { "type": "string" }, "components": { "type": "string" },
+                "duration": { "type": "string" }, "concentration": { "type": "boolean" }, "ritual": { "type": "boolean" },
+                "summary": { "type": "string" }, "text": { "type": "string" }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" }
+              }
+            }
+          },
+          "ref": { "$ref": "#/$defs/ref" },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["label", "feature", "spent", "recovery", "ref", "source"],
+        "properties": { "label": { "type": "string" }, "feature": { "type": "string" }, "maximum": { "type": "integer" }, "spent": { "type": "integer" }, "recovery": { "type": "array", "items": { "type": "string" } }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" } }
+      }
+    },
+    "attacks": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "toHit", "damage", "damageType", "properties", "proficient", "ref", "source"],
+        "properties": { "name": { "type": "string" }, "toHit": { "type": "integer" }, "damage": { "type": "string" }, "versatileDamage": { "type": "string" }, "damageType": { "type": "string" }, "properties": { "type": "array", "items": { "type": "string" } }, "range": { "type": "string" }, "proficient": { "type": "boolean" }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" } }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "kind", "automation", "texts", "ref", "source"],
+        "properties": { "name": { "type": "string" }, "kind": { "type": "string" }, "summary": { "type": "string" }, "automation": { "$ref": "#/$defs/automation" }, "texts": { "type": "array", "items": { "type": "string" } }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" } }
+      }
+    },
+    "toggles": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["label", "feature", "on", "ref", "source"], "properties": { "label": { "type": "string" }, "feature": { "type": "string" }, "on": { "type": "boolean" }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" } } } },
+    "scales": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["label", "className", "value", "ref", "source"], "properties": { "label": { "type": "string" }, "className": { "type": "string" }, "value": { "type": "integer" }, "ref": { "$ref": "#/$defs/ref" }, "source": { "type": "string" } } } },
+    "conditions": { "type": "object", "additionalProperties": false, "required": ["active", "exhaustion"], "properties": { "active": { "type": "array", "items": { "type": "string" } }, "exhaustion": { "type": "integer", "minimum": 0, "maximum": 6 } } },
+    "dropped": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["source", "publisher", "items"], "properties": { "source": { "type": "string" }, "publisher": { "type": "string" }, "items": { "type": "integer", "minimum": 1 } } } },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["title", "publisher", "license", "redistributable", "totalsOnly"],
+        "properties": { "title": { "type": "string" }, "publisher": { "type": "string" }, "license": { "type": "string" }, "redistributable": { "type": "boolean" }, "attribution": { "type": "string" }, "modificationNotice": { "type": "string" }, "totalsOnly": { "type": "boolean" } }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "ref": { "type": "object", "additionalProperties": false, "required": ["contentId", "revisionId"], "properties": { "contentId": { "$ref": "#/$defs/uuid" }, "revisionId": { "$ref": "#/$defs/uuid" } } },
+    "proficiency": { "enum": ["none", "proficient", "expertise"] },
+    "automation": { "enum": ["automatic", "assisted", "reference"] },
+    "slots": { "type": "object", "additionalProperties": false, "required": ["level", "maximum", "spent"], "properties": { "level": { "type": "integer" }, "maximum": { "type": "integer" }, "spent": { "type": "integer" } } }
+  }
+}

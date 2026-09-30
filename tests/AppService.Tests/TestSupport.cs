@@ -13,14 +13,16 @@ internal sealed class TempApp : IDisposable
 {
     public static readonly DateTimeOffset Now = new(2026, 9, 24, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"));
+    private readonly string _directory;
 
     private readonly ImportWorker.IDocumentExtractor _extractor;
 
     // No sync roots: tests must not depend on this machine's OneDrive or registry (DataFolderTests covers discovery).
     // Imports extract in this process with PdfPig (the worker process itself is tested in ImportWorker.Tests).
-    public TempApp(ImportWorker.IDocumentExtractor? extractor = null)
+    /// <param name="folder">A folder name inside the random test folder (M6 slice 3: a data folder named after a sentinel user).</param>
+    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null)
     {
+        _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"), folder ?? "data");
         _extractor = extractor ?? new ImportWorker.Extraction.PdfPigExtractor();
         App = TomeStackApp.Open(_directory, new FixedTime(Now), syncRoots: [], devFixtures: true, extractor: _extractor);
     }
@@ -41,9 +43,10 @@ internal sealed class TempApp : IDisposable
         try
         {
             // Managed PDF copies are read-only (ADR-005); clear that so the folder can be deleted.
-            foreach (var file in System.IO.Directory.Exists(_directory) ? System.IO.Directory.GetFiles(_directory, "*", SearchOption.AllDirectories) : [])
+            var root = Path.GetDirectoryName(_directory)!; // the random folder around the data folder
+            foreach (var file in System.IO.Directory.Exists(root) ? System.IO.Directory.GetFiles(root, "*", SearchOption.AllDirectories) : [])
                 File.SetAttributes(file, FileAttributes.Normal);
-            System.IO.Directory.Delete(_directory, recursive: true);
+            System.IO.Directory.Delete(root, recursive: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort on Windows file locks */ }
     }

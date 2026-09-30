@@ -32,6 +32,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
         "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
         "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
+        "extension.list", "extension.installPreview", "extension.installChoose", "extension.install", "extension.setEnabled", "extension.remove",
+        "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
 
@@ -167,6 +169,17 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.campaignPackPreview" => app.PreviewCampaignPack(Payload<CampaignIdPayload>(payload).CampaignId),
         "package.campaignPackExport" => ExportCampaignPack(Payload<CampaignIdPayload>(payload)),
         "package.campaignPackSaveAs" => SaveCampaignPackAs(Payload<CampaignIdPayload>(payload)),
+        "extension.list" => app.ListExtensions(),
+        "extension.installPreview" => app.PreviewExtensionInstall(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
+        "extension.installChoose" => ChooseExtensionInstall(),
+        "extension.install" => InstallExtension(Payload<ExtensionInstallPayload>(payload)),
+        "extension.setEnabled" => SetExtensionEnabled(Payload<ExtensionEnablePayload>(payload)),
+        "extension.remove" => RemoveExtension(Payload<ExtensionRemovePayload>(payload)),
+        "extension.chooseInput" => ChooseExtensionInput(),
+        "extension.runPreview" => PreviewExtensionRun(Payload<ExtensionRunPayload>(payload)),
+        "extension.runImport" => RunExtensionImport(Payload<ExtensionTokenPayload>(payload)),
+        "extension.runExport" => RunExtensionExport(Payload<ExtensionTokenPayload>(payload)),
+        "extension.runSaveAs" => RunExtensionSaveAs(Payload<ExtensionTokenPayload>(payload)),
         "library.backupPreview" => app.PreviewLibraryBackup(),
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
@@ -284,16 +297,113 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         return SaveAs(app.ExportCampaignPack(payload.CampaignId));
     }
 
-    private SaveOutcome SaveAs(ExportResult export)
+    // ---- extensions (M6 slice 3, ADR-011): files come from native dialogs, or as bytes in browser development ----
+
+    /// <summary>Import files picked in the native Open dialog, by token: the path stays here, the bytes are read once.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (string FileName, byte[] Bytes)> _chosenInputs = new();
+
+    private object ChooseExtensionInstall()
     {
-        var path = host!.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "Choosing an extension file needs the desktop app's Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("TomeStack extension", ".tomestack-ext.zip");
+        if (path is null)
+            return new { chosen = false };
+        var bytes = ReadChosen(path, Extensions.ExtensionReader.MaxFileBytes, "extension.too-large");
+        return new { chosen = true, fileName = Path.GetFileName(path), preview = app.PreviewExtensionInstall(bytes) };
+    }
+
+    private object ChooseExtensionInput()
+    {
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "Choosing a file to import needs the desktop app's Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("JSON or CSV file", ".json;.csv");
+        if (path is null)
+            return new { chosen = false };
+        var bytes = ReadChosen(path, Extensions.ExtensionInput.MaxBytes, "input.too-large");
+        var token = Guid.NewGuid();
+        while (_chosenInputs.Count >= 8 && _chosenInputs.Keys.FirstOrDefault() is var oldest && oldest != Guid.Empty)
+            _chosenInputs.TryRemove(oldest, out _);
+        _chosenInputs[token] = (Path.GetFileName(path), bytes);
+        return new { chosen = true, token, fileName = Path.GetFileName(path) };
+    }
+
+    /// <summary>Reads a chosen file with a size limit checked before and while reading. Errors name the file, never the path.</summary>
+    private static byte[] ReadChosen(string path, long limit, string code)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            if (stream.Length > limit)
+                throw new AppValidationException([new(code, $"{Path.GetFileName(path)} is larger than {limit / (1024 * 1024)} MB.")]);
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            return buffer.Length > limit
+                ? throw new AppValidationException([new(code, $"{Path.GetFileName(path)} is larger than {limit / (1024 * 1024)} MB.")])
+                : buffer.ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new AppValidationException([new("file.unreadable", $"Could not read {Path.GetFileName(path)}.")]);
+        }
+    }
+
+    private Extensions.InstalledExtension InstallExtension(ExtensionInstallPayload payload) =>
+        app.InstallExtension(payload.Token, payload.Grants, payload.Confirm);
+
+    private Extensions.InstalledExtension SetExtensionEnabled(ExtensionEnablePayload payload) =>
+        app.SetExtensionEnabled(payload.ExtensionId, payload.Enabled);
+
+    private object RemoveExtension(ExtensionRemovePayload payload)
+    {
+        app.RemoveExtension(payload.ExtensionId, payload.Confirm);
+        return new { removed = true };
+    }
+
+    private Extensions.ExtensionRunPreview PreviewExtensionRun(ExtensionRunPayload payload)
+    {
+        byte[]? input = null;
+        if (payload.InputToken is { } token)
+        {
+            if (!_chosenInputs.TryRemove(token, out var chosen))
+                throw new AppValidationException([new("extension.input-expired", "Choose the file to import again.")]);
+            input = chosen.Bytes;
+        }
+        else if (payload.InputBase64 is { } base64)
+            input = Convert.FromBase64String(base64);
+        return app.PreviewExtensionRun(new(payload.ExtensionId, payload.HookId, payload.CharacterId, payload.SourceIds, payload.Purpose, payload.RulesFamily, payload.SourceTitle, input));
+    }
+
+    private Extensions.ExtensionImportResult RunExtensionImport(ExtensionTokenPayload payload) => app.ApplyExtensionImport(payload.Token, payload.Confirm);
+
+    /// <summary>Browser development and tests: the output as base64 (the desktop uses <c>extension.runSaveAs</c>).</summary>
+    private object RunExtensionExport(ExtensionTokenPayload payload)
+    {
+        var (fileName, bytes) = app.ExtensionExportOutput(payload.Token);
+        return new { fileName, base64 = Convert.ToBase64String(bytes) };
+    }
+
+    /// <summary>Writes the previewed output where the user chooses in the native Save dialog; the page never sees the path.</summary>
+    private SaveOutcome RunExtensionSaveAs(ExtensionTokenPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        var (fileName, bytes) = app.ExtensionExportOutput(payload.Token);
+        return SaveBytes(fileName, bytes, "Extension output", Path.GetExtension(fileName));
+    }
+
+    private SaveOutcome SaveAs(ExportResult export) => SaveBytes(export.FileName, export.Content, "TomeStack package", ".tomestack.zip");
+
+    private SaveOutcome SaveBytes(string fileName, byte[] content, string filterDescription, string extension)
+    {
+        var path = host!.ChooseSaveLocation(fileName, filterDescription, extension);
         if (path is null)
             return new SaveOutcome(false, null);
 
         var temporary = path + ".partial";
         try
         {
-            File.WriteAllBytes(temporary, export.Content);
+            File.WriteAllBytes(temporary, content);
             File.Move(temporary, path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -452,6 +562,20 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds);
 
     private sealed record CampaignIdPayload(Guid CampaignId);
+
+    /// <param name="Grants">The permissions the user ticked; a subset of what the extension asks for.</param>
+    private sealed record ExtensionInstallPayload(Guid Token, IReadOnlyList<string>? Grants, bool Confirm = false);
+
+    private sealed record ExtensionEnablePayload(Guid ExtensionId, bool Enabled);
+
+    private sealed record ExtensionRemovePayload(Guid ExtensionId, bool Confirm = false);
+
+    /// <param name="InputToken">From <c>extension.chooseInput</c> (desktop). <paramref name="InputBase64"/> is for browser development.</param>
+    private sealed record ExtensionRunPayload(
+        Guid ExtensionId, string HookId, Guid? CharacterId = null, IReadOnlyList<Guid>? SourceIds = null, Exports.SheetPurpose Purpose = Exports.SheetPurpose.Share,
+        string? RulesFamily = null, string? SourceTitle = null, Guid? InputToken = null, string? InputBase64 = null);
+
+    private sealed record ExtensionTokenPayload(Guid Token, bool Confirm = false);
 
     /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
     /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>

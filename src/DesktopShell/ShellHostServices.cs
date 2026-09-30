@@ -27,9 +27,11 @@ public sealed class ShellHostServices(MainWindow owner) : IHostServices
     public string? ChooseOpenFile(string filterDescription, string extension) =>
         owner.Dispatcher.Invoke(() =>
         {
+            // M6 slice 3: several extensions may be given as ".json;.csv".
+            var patterns = string.Join(";", extension.Split(';', StringSplitOptions.RemoveEmptyEntries).Select(e => "*" + e));
             var dialog = new OpenFileDialog
             {
-                Filter = $"{filterDescription} (*{extension})|*{extension}",
+                Filter = $"{filterDescription} ({patterns})|{patterns}",
                 CheckFileExists = true,
                 Multiselect = false,
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
