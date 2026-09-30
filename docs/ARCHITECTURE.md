@@ -38,6 +38,8 @@ IDs are stable UUIDs; display names are never identity. A revision is immutable 
 5. Return `{ value, units, trace[], warnings[], automationStatus }` for each field. Trace entries include effect ID, revision ID, source/page, operation, inputs and resulting value.
 6. Apply a labeled user override as the final display layer; preserve the computed value and its trace. A malformed feature is disabled with a diagnostic scoped to that feature.
 
+**Content graph (M5 slice 2).** Apart from any character, `RulesCore.ContentGraph` holds how content revisions reach each other (grants, choice options, `extendsChoice`) and every way each class reaches each content, by the same rules as step 1: grants only from a root and one level deep, choices from anything reached. It is read-only. The homebrew debugger (`ContentDebugger`, `content.diagnose`) and the relationship view read it; it never takes part in a calculation.
+
 Separate *calculation* from *commands*: `LongRest` examines recovery rules and generates a preview of proposed state changes. The user confirms the transaction. A roll records inputs/result but does not consume a resource unless the associated action explicitly requests it. This prevents accidental gameplay changes.
 
 ## Import lifecycle
@@ -49,6 +51,7 @@ Extraction and OCR are decided in [ADR-009](decisions/ADR-009-pdf-extraction-and
 ## Persistence, backups and exchange
 
 - SQLite transactions cover creation, leveling, rest, revision publication and import commits. Migrations are numbered and backed up before upgrading a user database.
+- Character snapshots (M5 slice 8, database v7) are insert-only rows, enforced by triggers. A restore writes its undo snapshot and the restored character in one transaction. Snapshots are local: no package or library backup carries them ([features/snapshots.md](features/snapshots.md)).
 - Keep PDFs/files outside the database, referenced through managed IDs and content hashes; prohibit archive path traversal. Allow choosing a data directory before large imports.
 - **Data folder (M2.1):** one process per data folder. `TomeStackApp.Open` takes `tomestack.lock` (opened without sharing, released by Windows when the process ends, even after a crash) before the database opens, because start-up interrupts leftover imports and deletes unreferenced attachment files. A second shell launch signals the first to come forward (a session-local named event keyed on a hash of the folder path) and exits with code 3; `scripts/single-instance-check.ps1` proves it with two real processes.
 - Portable package: ZIP with `manifest.json`, JSON schema version, `content/`, `characters/`, `campaigns/`, `gaps/` (backups only), optional permitted `assets/`; verify hashes and references before commit. Publisher/license metadata travels with content. Third-party PDFs are excluded from sharing by default.
@@ -61,4 +64,4 @@ Represent SRD 5.1 and SRD 5.2.1 as different rule-pack IDs, with tested policy d
 
 ## Early engineering decisions to record
 
-ADR-001 local-only Windows release; ADR-002 edition-aware content IDs and revision pins; ADR-003 declarative effect AST; ADR-004 review-before-publish import; ADR-005 managed PDF attachment versus external links; ADR-006 desktop host/IPC choice after spike; ADR-007 export package and license policy. Later: ADR-008 installer, ADR-009 PDF extraction and OCR; for M5 and M6 (2026-09-28): ADR-010 custom classes and progression (accepted), ADR-011 extension API and ADR-012 export adapters (both proposed). Record reversals in the decision log, not as silent edits.
+ADR-001 local-only Windows release; ADR-002 edition-aware content IDs and revision pins; ADR-003 declarative effect AST; ADR-004 review-before-publish import; ADR-005 managed PDF attachment versus external links; ADR-006 desktop host/IPC choice after spike; ADR-007 export package and license policy. Later: ADR-008 installer, ADR-009 PDF extraction and OCR; for M5 and M6 (2026-09-28): ADR-010 custom classes and progression (accepted), ADR-011 extension API and ADR-012 export adapters (both accepted 2026-09-29: declarative extensions only, and Foundry `dnd5e` plus a neutral JSON). Record reversals in the decision log, not as silent edits.

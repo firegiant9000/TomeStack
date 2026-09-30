@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tomestack.local/schemas/campaign.v1.schema.json",
   "title": "TomeStack campaign profile (schemaVersion 1)",
-  "description": "SPEC P-01, BACKLOG B12 (M2 item 7): a local campaign with its rules family, the sources its characters may use, and free-text house rules. It never changes calculation; content outside the allowed sources is flagged on the character unless an exception is recorded. Unknown properties round-trip.",
+  "description": "SPEC P-01, BACKLOG B12 (M2 item 7): a local campaign with its rules family, the sources its characters may use, and free-text house rules. It never changes calculation; content outside the allowed sources is flagged on the character unless an exception is recorded. Unknown properties round-trip. M6 slice 2 documents the optional pendingSources, which changes how no existing field is read, so the version stays 1 (schemas/README.md 'Versioning rules').",
   "type": "object",
   "required": ["id", "schemaVersion", "name", "rulesFamily", "allowedSources"],
   "properties": {
@@ -12,6 +12,22 @@
     "rulesFamily": { "enum": ["srd-5.1", "srd-5.2.1"] },
     "allowedSources": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/uuid" } },
     "houseRules": { "type": "string", "maxLength": 10000 },
+    "pendingSources": {
+      "description": "M6 slice 2 (optional; older builds round-trip it as an unknown property): allowed sources a campaign pack left out that are not installed here yet, with the title, publisher and license the pack named. Each is also in allowedSources. Not written when empty.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "title", "publisher", "license"],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": { "$ref": "#/$defs/uuid" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "publisher": { "type": "string", "maxLength": 200 },
+          "license": { "type": "string", "maxLength": 200 }
+        }
+      }
+    },
     "updatedAt": { "type": "string", "format": "date-time" }
   },
   "$defs": {

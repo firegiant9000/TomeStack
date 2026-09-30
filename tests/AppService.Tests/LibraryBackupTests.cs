@@ -139,7 +139,7 @@ public class LibraryBackupTests
             Assert.All(zip.Entries, e => Assert.Matches("^(manifest\\.json|(sources|content|characters|campaigns|gaps|attachments)/[0-9a-f-]{36}\\.json|files/[0-9a-f]{64}\\.pdf)$", e.FullName));
 
             using var manifest = JsonDocument.Parse(zip.GetEntry("manifest.json")!.Open());
-            Assert.Equal(("library", "backup", 6), (manifest.RootElement.GetProperty("scope").GetString(), manifest.RootElement.GetProperty("purpose").GetString(), manifest.RootElement.GetProperty("formatVersion").GetInt32()));
+            Assert.Equal(("library", "backup", PackageManifest.LibraryFormatVersion), (manifest.RootElement.GetProperty("scope").GetString(), manifest.RootElement.GetProperty("purpose").GetString(), manifest.RootElement.GetProperty("formatVersion").GetInt32()));
             Assert.Equal("", SchemaTests.Validate("package-manifest", manifest.RootElement));
             foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("attachments/", StringComparison.Ordinal)))
             {

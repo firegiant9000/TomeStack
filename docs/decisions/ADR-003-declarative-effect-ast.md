@@ -26,6 +26,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 | `roll` | `rollId`, `label`, `dice`, optional `resourceId` | dice engine (item 13) |
 | `spellcasting` (content v5 only) | `ability`, `preparation`, `spellList`, `slotKind`, `slots` (20 rows), optional `cantrips`, `spellsTable` or `spellsFormula`, and `multiclassCaster` (v7) | spell fields and `sheet.spellcasting` (`features/spellcasting.md`); combined multiclass slots (v7) |
 | `toggle` (content v6 only) | `toggleId`, `label`, optional `resourceId` | play-state switch; bound `whileActive` modifiers apply while it is on (`features/m3-effects.md`) |
+| `scale` (content v9 only) | `scaleId`, `label`, `values` (20 integers) | a per-level column of a class or subclass, read as `SCALE.<scaleId>` ([ADR-010](ADR-010-custom-classes-and-progression.md)) |
 | `weapon` (content v5 only) | `category`, `attack`, `damage`, `damageType`, `properties`, `versatile`, `range`, `weaponKey`, `mastery` | attacks of equipped items (`features/multiclass-and-attacks.md`) |
 | `spell` (content v5 only) | `level`, `lists`, `school`, `castingTime`, `range`, `components`, `duration`, `concentration`, `ritual`, `attack`, `save`, `dice` | spells of a caster; never active content |
 
@@ -59,6 +60,7 @@ unary   := "-" unary | primary
 primary := NUMBER | IDENT | FUNC "(" sum ("," sum)* ")" | "(" sum ")"
 FUNC    := floor | ceil | min | max | abs
 IDENT   := PB | LEVEL | CLASS_LEVEL | (STR|DEX|CON|INT|WIS|CHA) "." (MOD|SCORE)
+         | "SCALE" "." [a-z][A-Za-z0-9]{0,31}      (content v9 revisions only; ADR-010)
 NUMBER  := [0-9]+
 ```
 
@@ -116,6 +118,16 @@ NUMBER  := [0-9]+
 - **Why v7 and not more v6:** 0.3.0 (the M2 delivery, which already contains v6) was bumped before this change. A v6 build must not read a v7 caster and silently calculate its slots without combining them. As before, the field is nullable and absent by default, so no stored revision re-serializes (`MulticlassSpellSlotTests.An_older_spellcasting_revision_serializes_without_the_new_field`). Validation refuses it below v7 (`validate.requires-v7`).
 - **Without the field** (every revision before v7, and homebrew that leaves it out), a second slot caster keeps the M2 behavior: the first caster's slots, assisted, with `spellcasting.multiclass-slots` and an override as the manual step.
 - **SRD content:** new v7 revisions of the seven slot casters' Spellcasting features (with the same content ids), and new class revisions that pin them, in both families. They are insert-only. Characters keep their pins until a reviewed update.
+
+## Content schema v9 (M5 slice 1a, 2026-09-29)
+
+The design, the migration and the evidence are in [ADR-010](ADR-010-custom-classes-and-progression.md). In short:
+
+- **The `scale` effect** is typed only in a v9 revision (`VersionedEffects`). In a v2–v8 revision it stays unknown and byte for byte.
+- **The formula identifier `SCALE.<id>`** parses only in a v9 revision: `Formula.TryParse(…, allowScales)`, which every calculation site sets from the revision's version. Below v9 it is `formula.unknown-identifier`, exactly as in older builds. A scale is a table of literals, so it reads no field and adds no dependency edge; the formula bounds are unchanged.
+- **`spellcasting.multiclassCasterTable`** is nullable and absent by default, and typed only in a v9 revision. Below v9 the key stays extension data, in document order, so it is neither combined nor re-serialized.
+- **A `choice` with no declared options** (M5 slice 1b) offers only content that extends it, such as a new homebrew class's subclass choice. It is a warning (`validate.choice-options-none`) and needs v9, because v8 validation refused it.
+- **Versions:** `validate.requires-v9`. `RequiredSchemaVersion` now also reads formula identifiers, so `SCALE` in any of the six formula fields (value, maximum, amount, cost, bonus, spellsFormula) makes a revision v9. No stored revision changes, no database migration is needed, and the character schema stays v7.
 
 ## Consequences
 

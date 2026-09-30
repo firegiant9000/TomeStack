@@ -9,6 +9,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
+import { fromTemplate, templates } from '../src/templates';
 
 vi.mock('../src/api/client', async (importOriginal) => {
   const { inject } = await import('vitest');
@@ -405,7 +406,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   const values = await within(review).findByRole('table', { name: 'Calculated values that change' });
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/), { timeout: 5000 });
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/));
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
@@ -439,8 +440,8 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await user.click(within(book).getByRole('button', { name: 'Attach PDF…' }));
   const pdf = new File([new TextEncoder().encode('%PDF-1.4\n% e2e\n%%EOF\n')], 'e2e-book.pdf', { type: 'application/pdf' });
   await user.upload(screen.getByLabelText('PDF file'), pdf);
-  // The upload hashes and copies the file, then reloads every source: allow more than the 1 s default under load.
-  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy(), { timeout: 5000 });
+  // The upload hashes and copies the file, then reloads every source (e2e/timeouts.setup.ts allows for that).
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Book' })).getByText(/PDF: e2e-book\.pdf .*copy in TomeStack.*available/)).toBeTruthy());
 
   // SPEC I-03: pages 3-4 become a draft reference entry (nothing is extracted; it stays inactive until published).
   const pages = within(screen.getByRole('listitem', { name: 'E2E Book' })).getByRole('group', { name: 'Import pages of E2E Book as reference' });
@@ -454,6 +455,7 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
 
   // The feature offers its cited page; opening needs the desktop app's viewer, which DevHost does not have.
   await user.click(screen.getByRole('button', { name: /^E2E Reader/ }));
+  // The button appears once the sheet has fetched the source's attachment (e2e/timeouts.setup.ts allows for that).
   const open = await screen.findByRole('button', { name: 'Open E2E Cited Feat, p. 7' });
   await user.click(open);
   expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
@@ -470,6 +472,128 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   await screen.findByRole('article', { name: 'E2E Reader' });
   expect(screen.queryByRole('button', { name: 'Open E2E Cited Feat, p. 7' })).toBeNull();
   expect(within(screen.getByRole('region', { name: 'Features' })).getByText('E2E Cited Feat')).toBeTruthy();
+});
+
+it('marks a source as shareable after confirming it is your own work, saves a source pack and imports it (M6 slice 1)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: your own source with a published feat, and a source a PDF was attached to.
+  const own = await client.createHomebrewSource('E2E Own Notes', ['srd-5.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Own Feat',
+    rulesFamilies: ['srd-5.1'],
+    provenance: { sourceId: own.id },
+    status: 'draft',
+    summary: 'An original feat.',
+    effects: [],
+  });
+  await client.publish(draft);
+  const scanned = await client.createHomebrewSource('E2E Scanned Notes', ['srd-5.1']);
+  await client.attachPdfData(scanned.id, 'e2e-scan.pdf', btoa('%PDF-1.4\n% e2e\n%%EOF\n'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const mine = await screen.findByRole('listitem', { name: 'E2E Own Notes' });
+  expect(within(mine).getByText('Not shared.')).toBeTruthy();
+  // A source a PDF was attached to is import-derived for good: it offers no way to share it.
+  const theirs = screen.getByRole('listitem', { name: 'E2E Scanned Notes' });
+  expect(within(theirs).getByText(/Holds material imported from a PDF: never shared/)).toBeTruthy();
+  expect(within(theirs).queryByRole('button', { name: 'Mark as shareable…' })).toBeNull();
+
+  // Marking needs the author's confirmation.
+  await user.click(within(mine).getByRole('button', { name: 'Mark as shareable…' }));
+  const confirm = await screen.findByRole('alertdialog', { name: 'Mark E2E Own Notes as shareable?' });
+  const mark = within(confirm).getByRole<HTMLButtonElement>('button', { name: 'Mark as shareable' });
+  expect(mark.disabled).toBe(true);
+  await user.click(within(confirm).getByRole('checkbox', { name: /The source is my own work/ }));
+  await user.click(mark);
+  await expectStatus(/E2E Own Notes is marked as shareable/);
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Own Notes' })).getByText(/Marked as shareable/)).toBeTruthy());
+
+  // The pack offers only shareable sources; DevHost has no Save dialog, so it downloads.
+  const packForm = screen.getByRole('region', { name: 'Share sources as a pack' });
+  expect(within(packForm).queryByRole('checkbox', { name: 'E2E Scanned Notes' })).toBeNull();
+  await user.click(within(packForm).getByRole('checkbox', { name: 'E2E Own Notes' }));
+  await user.click(within(packForm).getByRole('button', { name: 'Preview pack' }));
+  const preview = await within(packForm).findByRole('region', { name: 'Source pack preview' });
+  expect(preview.textContent).toMatch(/1 source, 1 published revision/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(preview).getByRole('button', { name: 'Save pack…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Own-Notes-source-pack.tomestack.zip');
+
+  // Importing it: the preview says what a source pack is; here everything is already installed.
+  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  expect(within(importing).getByText(/This is a source pack\. Its sender stated that each source is their own work/)).toBeTruthy();
+  await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
+  await expectStatus(/unchanged/);
+});
+
+it('shares a campaign as a campaign pack that names what it leaves out, and imports it over a changed copy by choice (M6 slice 2)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: your own shareable homebrew, homebrew you did not mark, and a campaign allowing both and the SRD.
+  async function homebrew(title: string, shareable: boolean) {
+    const source = await client.createHomebrewSource(title, ['srd-5.2.1']);
+    if (shareable) await client.setShareable(source.id, true, true);
+    const draft = await client.saveDraft({
+      contentId: crypto.randomUUID(),
+      revisionId: '00000000-0000-0000-0000-000000000000',
+      kind: 'feat',
+      name: `${title} Feat`,
+      rulesFamilies: ['srd-5.2.1'],
+      provenance: { sourceId: source.id },
+      status: 'draft',
+      summary: 'An original feat.',
+      effects: [],
+    });
+    await client.publish(draft);
+    return source;
+  }
+  const harbor = await homebrew('E2E Harbor Notes', true);
+  const secret = await homebrew('E2E Secret Notes', false);
+  const campaign = await client.saveCampaign({
+    id: '00000000-0000-0000-0000-000000000000',
+    name: 'E2E Harbor Table',
+    rulesFamily: 'srd-5.2.1',
+    allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id, secret.id],
+    houseRules: 'Original house rule: rests take a full day.',
+  });
+
+  render(<App />);
+  const campaignsButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Campaigns' });
+  await waitFor(() => expect(campaignsButton.disabled).toBe(false));
+  await user.click(campaignsButton);
+  await user.click(await screen.findByRole('button', { name: 'Share E2E Harbor Table…' }));
+  const share = await screen.findByRole('region', { name: 'Share E2E Harbor Table' });
+  await waitFor(() => expect(share.textContent).toMatch(/1 source carried with 1 published revision; System Reference Document 5\.2\.1 named, not copied/));
+  // The guard: homebrew you did not mark as your own shareable work is only named.
+  const leftOut = within(share).getByRole('region', { name: 'Left out of the campaign pack' });
+  expect(leftOut.textContent).toMatch(/E2E Secret Notes .*not marked as shareable/);
+
+  // DevHost has no Save dialog, so it downloads.
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(share).getByRole('button', { name: 'Save campaign pack…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Harbor-Table-campaign-pack.tomestack.zip');
+
+  // Here the campaign changes after the pack was made; importing it asks which version to keep.
+  await client.saveCampaign({ ...campaign, name: 'E2E Harbor Table (local)', allowedSources: ['52500000-0000-4000-8000-000000000001', harbor.id] });
+  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  expect(within(importing).getByText(/This is a campaign pack/)).toBeTruthy();
+  const apply = within(importing).getByRole<HTMLButtonElement>('button', { name: 'Apply import' });
+  expect(apply.disabled).toBe(true);
+  const decision = within(importing).getByRole('group', { name: 'Campaign “E2E Harbor Table” differs from yours' });
+  expect(within(decision).getByRole('rowheader', { name: 'allowedSources' })).toBeTruthy();
+  await user.click(within(decision).getByRole('radio', { name: 'Use the imported version' }));
+  await user.click(apply);
+  await expectStatus(/1 replaced.*copied to backups\/pre-import-.*\.db/);
+  expect((await client.listCampaigns()).find((c) => c.id === campaign.id)?.name).toBe('E2E Harbor Table');
 });
 
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
@@ -643,6 +767,361 @@ it('keeps a resource linked to its recovery when the resource is renamed in the 
 
   const results = await within(editor()).findByRole('region', { name: 'Check results' });
   expect(results.textContent).not.toMatch(/does not define/);
+});
+
+it('finds a problem in a source with the debugger, shows its rule, and clears it in the editor (M5 slice 2)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Debugger', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Debugger/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Debugger' });
+
+  // A draft feature whose resource nothing spends or recovers.
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Dead Well');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(within(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })).getByRole('textbox', { name: 'Resource name' }), 'Echoes');
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Dead Well/);
+  await user.click(within(editor()).getByRole('button', { name: 'Close editor' }));
+
+  await user.click(await screen.findByRole('button', { name: 'Find problems in E2E Debugger' }));
+  const findings = await screen.findByRole('region', { name: 'Debugger findings for E2E Debugger' });
+  expect(findings.textContent).toMatch(/Warning in E2E Dead Well: Resource 'resource-1' is never spent/);
+
+  // "Show" opens the entry and moves focus to the rule the finding is about.
+  await user.click(within(findings).getByRole('button', { name: 'Show rule resource-1 of E2E Dead Well' }));
+  await screen.findByRole('heading', { name: 'Edit E2E Dead Well' });
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })));
+
+  // With the entry already open, Show keeps its unsaved edits and moves focus again (review fix).
+  const description = within(editor()).getByRole('textbox', { name: /^Description/ });
+  await user.type(description, 'Unsaved words');
+  await user.click(within(screen.getByRole('region', { name: 'Debugger findings for E2E Debugger' })).getByRole('button', { name: 'Show rule resource-1 of E2E Dead Well' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 1: Resource/ })));
+  expect((within(editor()).getByRole('textbox', { name: /^Description/ }) as HTMLTextAreaElement).value).toBe('Unsaved words');
+
+  // A recovery fixes it; the editor's own debugger checks the unsaved revision.
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Find problems' }));
+  const own = await within(editor()).findByRole('region', { name: 'Debugger findings' });
+  await waitFor(() => expect(own.textContent).toMatch(/The debugger found no problems/));
+});
+
+it('tries a draft class at a chosen level on a blank character without saving anything (M5 slice 3)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Sandbox', ['srd-5.2.1']);
+  const charactersBefore = (await client.listCharacters()).length;
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Sandbox/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Sandbox' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Trial Class');
+  await user.selectOptions(within(editor()).getByRole('combobox', { name: 'Hit die' }), 'd10');
+
+  const sandbox = within(editor()).getByRole('region', { name: 'Try it' });
+  await user.type(within(sandbox).getByRole('textbox', { name: /^Level in this class/ }), '3');
+  await user.click(within(sandbox).getByRole('button', { name: 'Try it' }));
+  const results = await within(sandbox).findByRole('region', { name: 'Try it results' });
+  expect(results.textContent).toMatch(/Unsaved blank character at total level 3/);
+  expect(results.textContent).toMatch(/Hit point maximum: 22/); // d10: 10, then 6 per level, Con +0
+  expect(results.textContent).not.toMatch(/Spell save DC/); // not a caster
+
+  // An edit hides the result until it is tried again, and nothing was saved.
+  await user.selectOptions(within(editor()).getByRole('combobox', { name: 'Hit die' }), 'd6');
+  expect(within(sandbox).queryByRole('region', { name: 'Try it results' })).toBeNull();
+  expect((await client.listCharacters()).length).toBe(charactersBefore);
+  expect(await client.contentBySource((await client.listSources()).find((s) => s.title === 'E2E Sandbox')!.id)).toEqual([]);
+});
+
+it('compares the published revision with the unsaved one by rules, text and on a character copy (M5 slice 4)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Diffs', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Diff Feat',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    summary: 'Old line',
+    effects: [{ type: 'modifier', id: 'quick', operation: 'bonus', target: 'initiative', value: '1' }],
+  });
+  const published = (await client.publish(draft)).published;
+  const hero = await client.createCharacter({ name: 'E2E Diff Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [published] });
+
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Diffs/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit E2E Diff Feat' }));
+
+  const editor = () => screen.getByRole('region', { name: /^Edit / });
+  const description = within(editor()).getByRole('textbox', { name: /^Description/ });
+  await user.clear(description);
+  await user.type(description, 'New line');
+  const value = within(within(editor()).getByRole('group', { name: /^Rule 1: Modifier/ })).getByRole('textbox', { name: /^Value/ });
+  await user.clear(value);
+  await user.type(value, '3');
+
+  const panel = within(editor()).getByRole('region', { name: 'Compare revisions' });
+  await user.click(within(panel).getByRole('checkbox', { name: 'E2E Diff Hero' }));
+  await user.click(within(panel).getByRole('button', { name: 'Compare' }));
+  const results = await within(panel).findByRole('region', { name: 'Comparison results' });
+  expect(within(results).getByRole('table', { name: 'Rule changes' }).textContent).toMatch(/quick.*changed/);
+  expect(results.textContent).toMatch(/removed: Old line/);
+  expect(results.textContent).toMatch(/added: New line/);
+  const run = within(results).getByRole('table', { name: 'Calculated values that change for E2E Diff Hero' });
+  expect(run.textContent).toMatch(/Initiative\s*1\s*3/);
+
+  // Nothing was applied: the character still uses the published revision.
+  expect((await client.getCharacter(hero.character.id)).sheet.fields.find((f) => f.field === 'initiative')?.value).toBe(1);
+
+  // A new entry has nothing stored to compare with until its first save; then the saved draft is "From" (review fix).
+  await user.click(within(editor()).getByRole('button', { name: 'Close editor' }));
+  await user.click(screen.getByRole('button', { name: 'New feat' }));
+  const fresh = () => screen.getByRole('region', { name: /^New / });
+  expect(within(fresh()).queryByRole('region', { name: 'Compare revisions' })).toBeNull();
+  await user.type(within(fresh()).getByRole('textbox', { name: 'Name' }), 'E2E Fresh Feat');
+  await user.click(within(fresh()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Fresh Feat/);
+  const freshPanel = await within(fresh()).findByRole('region', { name: 'Compare revisions' });
+  await user.click(within(freshPanel).getByRole('button', { name: 'Compare' }));
+  expect((await within(freshPanel).findByRole('region', { name: 'Comparison results' })).textContent).toMatch(/The rules are the same/);
+});
+
+it('shows an entry\'s relationships as a keyboard tree and jumps from a node to its rule (M5 slice 5)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Trees', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feature',
+    name: 'E2E Tree Feature',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'resource', id: 'embers', resourceId: 'embers', label: 'Embers', maximum: 'PB' },
+      { type: 'roll', id: 'flare', rollId: 'flare', label: 'Flare', dice: '1d6', resourceId: 'embers', timing: 'onRoll', automation: 'assisted' },
+      { type: 'recovery', id: 'rekindle', resourceId: 'embers', on: 'longRest', amount: 'all', timing: 'onLongRest' },
+    ],
+  });
+  await client.publish(draft);
+
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Trees/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Trees/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit E2E Tree Feature' }));
+  const editor = () => screen.getByRole('region', { name: /^Edit / });
+
+  await user.click(within(editor()).getByRole('button', { name: 'Show relationships' }));
+  const tree = await within(editor()).findByRole('tree', { name: 'Relationships of E2E Tree Feature' });
+  const root = within(tree).getAllByRole('treeitem')[0]!;
+  expect(root.getAttribute('aria-level')).toBe('1');
+  expect(root.getAttribute('aria-expanded')).toBe('true');
+  expect(root.tabIndex).toBe(0);
+
+  // Keyboard only, from the button: Tab enters the tree at its one tab stop (the root).
+  await user.tab();
+  expect(document.activeElement).toBe(root);
+  await user.keyboard('{ArrowDown}');
+  const resource = within(tree).getByRole('treeitem', { name: 'Resource: Embers (uses PB)' }); // named by its own label only
+  expect(document.activeElement).toBe(resource);
+  expect([resource.getAttribute('aria-level'), resource.getAttribute('aria-posinset'), resource.getAttribute('aria-setsize')]).toEqual(['2', '1', '1']);
+  expect(resource.getAttribute('aria-expanded')).toBe('false');
+  // Space opens and closes; Right opens, then goes to the first child.
+  await user.keyboard(' ');
+  expect(resource.getAttribute('aria-expanded')).toBe('true');
+  await user.keyboard(' ');
+  expect(resource.getAttribute('aria-expanded')).toBe('false');
+  await user.keyboard('{ArrowRight}');
+  expect(resource.getAttribute('aria-expanded')).toBe('true');
+  await user.keyboard('{ArrowRight}');
+  const roll = within(resource).getByRole('treeitem', { name: 'Roll: Flare (1d6), spends it' });
+  expect((document.activeElement as HTMLElement).id).toBe(roll.id);
+  expect([roll.getAttribute('aria-level'), roll.getAttribute('aria-posinset'), roll.getAttribute('aria-setsize')]).toEqual(['3', '1', '2']);
+  // End goes to the last visible item (the recovery), Home to the root, Up and Down between items.
+  await user.keyboard('{End}');
+  expect(document.activeElement).toBe(within(resource).getByRole('treeitem', { name: 'Recovery on a long rest: all' }));
+  await user.keyboard('{Home}');
+  expect(document.activeElement).toBe(root);
+  await user.keyboard('{ArrowDown}{ArrowDown}');
+  expect((document.activeElement as HTMLElement).id).toBe(roll.id);
+  await user.keyboard('{ArrowUp}');
+  expect(document.activeElement).toBe(resource);
+  await user.keyboard('{ArrowDown}');
+  // Enter shows the rule in the editor; Left from a child goes back to its parent.
+  await user.keyboard('{Enter}');
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 2: Roll or action/ })));
+  await user.click(within(tree).getByRole('treeitem', { name: 'Roll: Flare (1d6), spends it' }));
+  await user.keyboard('{ArrowLeft}');
+  expect(document.activeElement).toBe(resource);
+});
+
+it('starts homebrew from a template as an unsaved draft, publishes a stance, and a skeleton waits for its slots (M5 slice 6)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Templates', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Templates/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Templates/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Templates' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+
+  // The stance: a toggle that spends a use, and a bonus only while it is on. Nothing is stored until it is saved.
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A stance you switch on and off');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  expect(await client.contentBySource(source.id)).toEqual([]);
+  expect(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).toBeTruthy();
+  expect((within(within(editor()).getByRole('group', { name: /^Rule 4: Modifier/ })).getByRole('combobox', { name: 'Applies' }) as HTMLSelectElement).value).toBe('stance');
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Stance');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Stance/);
+
+  // The class skeleton: its hit die, saves and subclass choice are set; its improvement slots block publishing until filled.
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A class skeleton');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Skeleton Class');
+  expect((within(editor()).getByRole('combobox', { name: 'Hit die' }) as HTMLSelectElement).value).toBe('8');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  const results = await within(editor()).findByRole('region', { name: 'Check results' });
+  expect(results.textContent).toMatch(/improvement-4' grants content but names none/);
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  await expectStatus(/Saved a draft of E2E Skeleton Class/);
+  expect((await client.contentBySource(source.id)).find((e) => e.name === 'E2E Skeleton Class')?.latest.status).toBe('draft');
+
+  // Every template passes the server's checks; only the skeletons' empty slots are errors (review fix).
+  for (const t of templates) {
+    const draft = { ...fromTemplate(t.id, source.id, ['srd-5.2.1'], crypto.randomUUID()), name: `E2E ${t.label}`, revisionId: crypto.randomUUID() };
+    expect(draft.summary).toBeUndefined(); // a template never writes the description shown on the sheet
+    const report = await client.validateRevision(draft);
+    expect(report.errors.filter((e) => e.code !== 'validate.grant-content-missing')).toEqual([]);
+    expect(report.errors.length > 0).toBe(t.id === 'subclass-skeleton' || t.id === 'class-skeleton');
+  }
+
+  // Removing the stance's toggle turns its bonus back to always on, so nothing names a missing toggle (review fix).
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Start from a template' }), 'A stance you switch on and off');
+  await user.click(screen.getByRole('button', { name: 'Use template' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Loose Stance');
+  await user.click(within(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).getByRole('button', { name: 'Remove rule 3' }));
+  expect(within(editor()).queryByRole('combobox', { name: 'Applies' })).toBeNull();
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
+});
+
+it('shows design feedback only once it is switched on, as hints that do not block (M5 slice 7)', async () => {
+  const user = userEvent.setup();
+  await client.createHomebrewSource('E2E Feedback', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Feedback/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Feedback' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+
+  // Off by default: the editor has no feedback section.
+  const toggle = screen.getByRole('checkbox', { name: 'Show design feedback' });
+  expect((toggle as HTMLInputElement).checked).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  expect(within(editor()).queryByRole('region', { name: 'Design feedback' })).toBeNull();
+
+  try {
+    await user.click(toggle);
+    expect(localStorage.getItem('tomestack.designFeedback')).toBe('on');
+    const section = within(editor()).getByRole('region', { name: 'Design feedback' });
+    await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Hinted Class');
+    await user.click(within(section).getByRole('button', { name: 'Get design hints' }));
+    const hints = await within(section).findByRole('region', { name: 'Design hints' });
+    expect(hints.textContent).toMatch(/Class level\(s\) .* give no feature or choice, although every bundled SRD class gives one there/);
+
+    // The choice is remembered for next time (this machine only): a fresh studio starts with it on.
+    cleanup();
+    render(<App />);
+    const again = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+    await waitFor(() => expect(again.disabled).toBe(false));
+    await user.click(again);
+    expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Show design feedback' })).checked).toBe(true);
+
+    // Off again: the choice is forgotten.
+    await user.click(screen.getByRole('checkbox', { name: 'Show design feedback' }));
+    expect(localStorage.getItem('tomestack.designFeedback')).toBeNull();
+  } finally {
+    localStorage.removeItem('tomestack.designFeedback'); // later flows start from the default, off
+  }
+});
+
+it('takes a snapshot of a character, previews the restore, restores it and keeps an undo snapshot (M5 slice 8)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Snapshots', ['srd-5.2.1']);
+  const feat = (
+    await client.publish(
+      await client.saveDraft({
+        contentId: crypto.randomUUID(),
+        revisionId: '00000000-0000-0000-0000-000000000000',
+        kind: 'feat',
+        name: 'E2E Snapshot Feat',
+        rulesFamilies: ['srd-5.2.1'],
+        provenance: { sourceId: source.id },
+        status: 'draft',
+        effects: [{ type: 'modifier', id: 'quick', operation: 'bonus', target: 'initiative', value: '3' }],
+      }),
+    )
+  ).published;
+  const hero = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+  const panel = () => screen.getByRole('region', { name: 'Snapshots' });
+  await user.type(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('textbox', { name: /^Snapshot name/ }), 'E2E with the feat');
+  await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
+  await expectStatus(/Took a snapshot of E2E Snapshot Hero: E2E with the feat/);
+
+  // The character changes: the feat goes.
+  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [] });
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+
+  await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
+  const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
+  expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
+
+  await user.click(within(preview).getByRole('button', { name: 'Restore' }));
+  await expectStatus(/Restored the snapshot/);
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
+  expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
 });
 
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
@@ -1055,6 +1534,150 @@ it('adds a homebrew Fighter subclass through the studio and plays it: the Stardu
   await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
   await expectStatus(/Short rest finished/);
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'Second Wind: 2 of 2' })).toBeTruthy());
+});
+
+it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an SRD class (M5 exit gate, ADR-010)', async () => {
+  // An original nonstandard class, built in the studio with no code edits: a d8, Int and Wis saves, a multiclass
+  // prerequisite, a skill choice, a column ("Ink"), a resource that reads it, and a caster whose multiclass share is its
+  // own table (two thirds). Tables are invented for testing.
+  const user = userEvent.setup();
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const newSource = await screen.findByRole('form', { name: 'New homebrew source' });
+  await user.type(within(newSource).getByRole('textbox', { name: 'Source title' }), 'E2E Chronicle Homebrew');
+  await user.click(within(newSource).getByRole('checkbox', { name: 'SRD 5.2.1 (2024 rules)' }));
+  await user.click(within(newSource).getByRole('button', { name: 'Create source' }));
+  await screen.findByRole('heading', { name: 'Content in E2E Chronicle Homebrew' });
+
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(editor()).getByRole('group', { name });
+  await user.click(screen.getByRole('button', { name: 'New class' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Chronicler');
+
+  const basics = within(editor()).getByRole('region', { name: 'Class basics' });
+  await user.selectOptions(within(basics).getByRole('combobox', { name: 'Hit die' }), 'd8');
+  const saves = within(basics).getByRole('group', { name: /^Saving throw proficiencies/ });
+  await user.click(within(saves).getByRole('checkbox', { name: 'Intelligence' }));
+  await user.click(within(saves).getByRole('checkbox', { name: 'Wisdom' }));
+  const prerequisites = within(basics).getByRole('group', { name: /^Multiclass prerequisites/ });
+  await user.type(within(prerequisites).getByRole('spinbutton', { name: 'Intelligence at least' }), '13');
+  const skills = within(basics).getByRole('group', { name: /^Skill choice/ });
+  await user.click(within(skills).getByRole('checkbox', { name: 'History' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Arcana' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
+  await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy());
+  expect(within(skills).getByText(/3 new option features published, 0 reused/)).toBeTruthy(); // announced, and focus stays in the group
+  expect(document.activeElement).toBe(within(skills).getByText('Skill choice (starting class only)'));
+  // Removing the choice and creating it again reuses the three published features, never publishes duplicates (review fix).
+  await user.click(within(skills).getByRole('button', { name: 'Remove the skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/Skill choice removed/)).toBeTruthy());
+  await user.click(within(skills).getByRole('checkbox', { name: 'History' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Arcana' }));
+  await user.click(within(skills).getByRole('checkbox', { name: 'Investigation' }));
+  await user.click(within(skills).getByRole('button', { name: 'Create skill choice' }));
+  await waitFor(() => expect(within(skills).getByText(/0 new option features published, 3 reused/)).toBeTruthy());
+  expect(within(skills).getByText(/Choose 2 of 3 skills/)).toBeTruthy();
+  await user.click(within(within(basics).getByRole('group', { name: 'Subclass' })).getByRole('checkbox', { name: /^This class has subclasses/ }));
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add class column' }));
+  const column = rule(/^Rule 1: Class column/);
+  await user.type(within(column).getByRole('textbox', { name: 'Column name' }), 'Ink');
+  await user.clear(within(column).getByRole('textbox', { name: /^Key/ }));
+  await user.type(within(column).getByRole('textbox', { name: /^Key/ }), 'ink');
+  const values = within(column).getByRole('textbox', { name: /^Values at class levels/ });
+  await user.clear(values);
+  await user.type(values, '2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9');
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  const ink = rule(/^Rule 2: Resource/);
+  await user.type(within(ink).getByRole('textbox', { name: 'Resource name' }), 'Ink');
+  await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
+  await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'SCALE.ink');
+  await user.click(within(editor()).getByRole('button', { name: 'Add recovery' })); // all, on a long rest
+
+  await user.click(within(editor()).getByRole('button', { name: 'Add spellcasting' }));
+  const casting = rule(/^Rule 4: Spellcasting/);
+  await user.type(within(casting).getByRole('textbox', { name: /^Spell list key/ }), 'e2e-chronicle');
+  const slots = ['1', '2', '3', '3, 1', '3, 2', '4, 2', '4, 2, 1', '4, 3, 1', '4, 3, 2', '4, 3, 2, 1', '4, 3, 3, 1', '4, 3, 3, 2', '4, 3, 3, 2, 1', '4, 3, 3, 3, 1', '4, 3, 3, 3, 2', '4, 3, 3, 3, 2, 1', '4, 3, 3, 3, 2, 1', '4, 3, 3, 3, 3, 1', '4, 3, 3, 3, 3, 2', '4, 3, 3, 3, 3, 2, 1'];
+  await user.type(within(casting).getByRole('textbox', { name: /^Spell slots/ }), slots.join('{Enter}'));
+  await user.selectOptions(within(casting).getByRole('combobox', { name: /^With other casters/ }), 'Its own table of caster levels');
+  const share = within(casting).getByRole('textbox', { name: /^Caster levels it adds/ });
+  await user.clear(share);
+  await user.type(share, '0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 12, 12, 13');
+
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Chronicler.'));
+
+  // A homebrew subclass joins the new class's subclass choice, which declares no options of its own.
+  await user.click(screen.getByRole('button', { name: 'New subclass' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Order of Quills');
+  const offered = within(editor()).getByRole('combobox', { name: 'Offered in the choice' });
+  await waitFor(() => expect(within(offered).getByRole('option', { name: 'E2E Chronicler: Choose a subclass' })).toBeTruthy());
+  await user.selectOptions(offered, 'E2E Chronicler: Choose a subclass');
+  await user.click(within(editor()).getByRole('button', { name: 'Add modifier' })); // default: Initiative +1
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Published E2E Order of Quills.'));
+
+  // Level 1 in the builder: the class is offered like any other, with its skill choice.
+  await user.click(screen.getByRole('button', { name: 'New character' }));
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Scribe');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  const intelligence = within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Intelligence' });
+  await user.clear(intelligence);
+  await user.type(intelligence, '16');
+  await user.click(await screen.findByRole('radio', { name: /^E2E Chronicler/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: History/);
+  await pick(user, /^E2E Chronicler: choose 2/, /^E2E Chronicler: Arcana/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  let sheet = await screen.findByRole('article', { name: 'E2E Scribe' });
+  expect(within(sheet).getByRole('heading', { name: /^History: \+5/ })).toBeTruthy(); // the chosen option grants it: Int +3, PB +2
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 2 of 2' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Class columns' })).getByText('Ink: 2')).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 1 slots: 1 of 1' })).toBeTruthy();
+
+  // Level 20, and Chronicler 5 with the SRD Wizard 3: the same published class, no code edits.
+  const options = await client.listContent('srd-5.2.1');
+  const chronicler = options.find((o) => o.kind === 'class' && o.name === 'E2E Chronicler' && !o.superseded)!.reference;
+  const wizard = options.find((o) => o.kind === 'class' && o.name === 'Wizard' && o.compatible && !o.superseded)!.reference;
+  const order = options.find((o) => o.kind === 'subclass' && o.name === 'E2E Order of Quills' && !o.superseded)!.reference;
+  const scores = { str: 10, dex: 12, con: 14, int: 16, wis: 14, cha: 10 };
+  await client.createCharacter({
+    name: 'E2E Scribe 20',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: scores,
+    pins: [],
+    classes: [{ class: chronicler, level: 20 }],
+    choices: [{ source: chronicler, choiceId: 'subclass', selected: [order] }],
+  });
+  await client.createCharacter({
+    name: 'E2E Scribe Wizard',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: scores,
+    pins: [],
+    classes: [{ class: chronicler, level: 5 }, { class: wizard, level: 3 }],
+    choices: [],
+  });
+  cleanup();
+  render(<App />);
+
+  await user.click(await screen.findByRole('button', { name: /^E2E Scribe 20/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Scribe 20' });
+  expect(within(sheet).getByRole('heading', { name: /^Hit point maximum: 143/ })).toBeTruthy(); // 8 + 19 × 5 + 20 × Con 2
+  expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy(); // Dex +1, the homebrew subclass +1
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 9 of 9' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Spells and slots' })).getByRole('heading', { name: 'Level 7 slots: 1 of 1' })).toBeTruthy();
+
+  await user.click(screen.getByRole('button', { name: /^E2E Scribe Wizard/ }));
+  sheet = await screen.findByRole('article', { name: 'E2E Scribe Wizard' });
+  const spells = within(sheet).getByRole('region', { name: 'Spells and slots' });
+  // Chronicler 5 counts 3 (its table) + Wizard 3: caster level 6 on the Multiclass Spellcaster table.
+  expect(within(spells).getByRole('heading', { name: 'Level 1 slots: 4 of 4' })).toBeTruthy();
+  expect(within(spells).getByRole('heading', { name: 'Level 3 slots: 3 of 3' })).toBeTruthy();
+  expect(within(within(sheet).getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Ink: 4 of 4' })).toBeTruthy();
 });
 
 it('archives a character after a preview, lists it apart, and brings it back (SPEC C-08)', async () => {

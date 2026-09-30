@@ -52,6 +52,26 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
     ];
 
+    /// <summary>
+    /// The source ids of <see cref="BundledPacks"/>, read from the packs' <c>sources</c> alone. Database migration v8 uses
+    /// it before anything is seeded (M6 slice 1): the SRD sources are never import-derived.
+    /// </summary>
+    internal static IReadOnlySet<Guid> BundledSourceIds => LazyBundledSourceIds.Value;
+
+    private static readonly Lazy<IReadOnlySet<Guid>> LazyBundledSourceIds = new(() =>
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var pack in BundledPacks)
+        {
+            using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(pack)
+                ?? throw new InvalidOperationException($"Embedded content pack {pack} is missing.");
+            using var document = JsonDocument.Parse(stream);
+            foreach (var source in document.RootElement.GetProperty("sources").EnumerateArray())
+                ids.Add(source.GetProperty("id").GetGuid());
+        }
+        return ids;
+    });
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
     /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
@@ -73,10 +93,17 @@ public sealed partial class TomeStackApp : IDisposable
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
-                bundled.UnionWith(app.Seed(pack).Revisions.Select(r => r.RevisionId));
+            {
+                var seeded = app.Seed(pack);
+                bundled.UnionWith(seeded.Revisions.Select(r => r.RevisionId));
+                app._bundledSources.UnionWith(seeded.Sources.Select(s => s.Id)); // M6 slice 1: the SRD sources this build ships
+            }
             // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
             bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
+            app._bundledRevisions = bundled; // the design-feedback baseline (M5 slice 7; review fix: by revision id, not source)
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
+            app._packages.SetBundledSources(app._bundledSources); // M6 slice 1: never replaced by a package, never in a source pack
+            app._packages.SetCampaignImpact(app.CampaignImpactOf); // M6 slice 2: what "use the imported campaign" would disallow
             if (devFixtures)
             {
                 app.Seed("TomeStack.FixturePack.json");
@@ -99,6 +126,18 @@ public sealed partial class TomeStackApp : IDisposable
     }
 
     private DataFolderLock? _folderLock;
+
+    /// <summary>
+    /// The revision ids this build seeded from the bundled SRD packs (a revision kept after a seed conflict is left out): the
+    /// design-feedback baseline. Selected by revision id, so nothing a user or a package adds, even under an SRD source id, joins it.
+    /// </summary>
+    private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
+
+    /// <summary>
+    /// M6 slice 1: the source ids of the bundled SRD packs, as seeded. They are never import-derived, never marked as
+    /// shareable, never in a source pack, and no package replaces their records.
+    /// </summary>
+    private readonly HashSet<Guid> _bundledSources = [];
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
@@ -283,10 +322,23 @@ public sealed partial class TomeStackApp : IDisposable
 
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
 
+    /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
+
+    /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
+
+    /// <summary>M6 slice 2: what a campaign pack of this campaign would hold (<c>package.campaignPackPreview</c>). Writes nothing.</summary>
+    public CampaignPackPreview PreviewCampaignPack(Guid campaignId) => _packages.PreviewCampaignPack(campaignId);
+
+    /// <summary>M6 slice 2: a campaign pack: the profile and the shareable content of its allowed sources (<c>package.campaignPackExport</c>).</summary>
+    public ExportResult ExportCampaignPack(Guid campaignId) => _packages.ExportCampaignPack(campaignId);
+
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
-    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
-        _packages.Apply(package, sourceChoices);
+    /// <param name="campaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null) =>
+        _packages.Apply(package, sourceChoices, campaignChoices);
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
     public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
@@ -381,7 +433,7 @@ public sealed record ContentOption(
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null);
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

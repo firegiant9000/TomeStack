@@ -1,6 +1,6 @@
 # Campaign profiles
 
-SPEC P-01, S-03 · BACKLOG B12 · MVP "Campaign" ("two profiles show different allowed content"), definition of done 5 · status: implemented (M2 item 7).
+SPEC P-01, S-03 · BACKLOG B12, B13 · MVP "Campaign" ("two profiles show different allowed content"), definition of done 5 · status: implemented (M2 item 7); campaign packs implemented and fixture-verified on the unmerged M6 slice 2 PR (approved by the owner 2026-09-30; merging still waits for the owner).
 
 Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` package entries. UI: `src/Ui/src/components/CampaignsPanel.tsx`, the campaign picker in the builder, and campaign notes on the sheet. Acceptance: `tests/AppService.Tests/CampaignTests.cs` and the e2e test "shows different allowed content for two campaign profiles…".
 
@@ -19,7 +19,13 @@ Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` pack
 
 ## Packages (DoD 5)
 
-A package includes the campaign of every exported character (`campaigns/<id>.json`, kind `campaign`, package format v4). The import preview lists it (add, unchanged or replace, with a warning when it differs), and apply stores it in the same transaction. A campaign holds no rules text, so a share includes it too.
+A package includes the campaign of every exported character (`campaigns/<id>.json`, kind `campaign`, package format v4). The import preview lists it (add, unchanged or replace, with a warning when it differs), and apply stores it in the same transaction. A campaign holds no rules text, so a share includes it too, written as a campaign pack writes it: without `pendingSources` or unknown properties (M6 stack review, 2026-09-30); a backup keeps both. Since M6 slice 2, a character package that replaces a campaign copies the database first ([package-format.md](package-format.md) rule 10).
+
+## Campaign packs (M6 slice 2, B13)
+
+**Share … …** on the Campaigns screen previews and saves a **campaign pack**: the profile and the published content of the allowed homebrew you marked as your own work, with the SRD named rather than copied, and every other allowed source named in the pack's `omitted[]` with why it was left out. It never carries characters or gap notes. Importing one asks whether to keep your version of a campaign that differs or use the imported one, and lists the characters whose content the imported one would no longer allow. The rules are in [package-format.md](package-format.md#campaign-packs-m6-slice-2-b13).
+
+**Pending sources.** An allowed source that a campaign pack left out, and that is not installed here, stays allowed (it is in `allowedSources`), and the campaign records the pack's title, publisher and license for it in `pendingSources` (`PendingSource`, campaign v1; older builds keep the field as an unknown property). The Campaigns screen says which sources a campaign is waiting for, and the editor lists them as "not installed" so you can untick them. `campaign.save` accepts a source that is not installed only when the stored campaign has it as pending, and drops the pending entry once the source is installed. Pending entries are this machine's record: a character package never adds or removes them, and a damaged list in any file is cleaned on read, never refused ([package-format.md](package-format.md#campaign-packs-m6-slice-2-b13)).
 
 ## Not in this slice
 

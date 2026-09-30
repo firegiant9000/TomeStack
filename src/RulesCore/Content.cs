@@ -7,7 +7,10 @@ public enum Ability { Str, Dex, Con, Int, Wis, Cha }
 
 public enum ContentKind { Species, Background, Class, Subclass, Feature, Feat, Spell, Item }
 
-/// <summary>Only <see cref="Published"/> revisions can affect calculations (SPEC I-01, I-06).</summary>
+/// <summary>
+/// Only <see cref="Published"/> revisions affect saved characters (SPEC I-01, I-06). The studio sandbox alone calculates
+/// one draft, in memory, on an unsaved copy (<see cref="DraftOverlayCatalog"/>).
+/// </summary>
 public enum RevisionStatus { Draft, Published }
 
 /// <summary>SPEC I-05. Unhandled mechanics keep their text and are marked <see cref="Reference"/>.</summary>
@@ -39,6 +42,46 @@ public sealed record SourceRecord
 
     /// <summary>ADR-005 (M2 item 6): the source's PDF attachment on this machine. Machine-local; never exported.</summary>
     public Guid? AttachmentId { get; init; }
+
+    /// <summary>
+    /// M6 slice 1 (LIVING_SPECS D14 item 6): true once material from outside the author entered this source: a PDF
+    /// attached, a PDF candidate accepted, pages imported (and, later, an ADR-011 extension import). It is never cleared,
+    /// not even by removing the PDF, and such a source is never shared. Absent (null) means false. Set only by this
+    /// machine; a package can raise it but never lower it.
+    /// </summary>
+    public bool? ImportDerived { get; init; }
+
+    /// <summary>
+    /// M6 slice 1: where this source came from, set only by this machine. <see cref="SourceOrigin.Received"/> sources
+    /// arrived in a package from someone else and can never be marked as your own work. Null for the bundled SRD packs and
+    /// for sources stored before database v8, whose origin is not known.
+    /// </summary>
+    public SourceOrigin? Origin { get; init; }
+
+    /// <summary>
+    /// M6 slice 1, "Mark as shareable": when the author confirmed on this machine that the source is their own work. A
+    /// source pack carries only sources with this set. Cleared when sharing is turned off or the source becomes
+    /// import-derived.
+    /// </summary>
+    public DateTimeOffset? ShareConfirmedAt { get; init; }
+
+    /// <summary>
+    /// M6 slice 1: whether this source's content may leave the machine in a share (a character share, a source pack):
+    /// redistributable and not import-derived. The bundled SRD packs pass (CC-BY-4.0); the caller decides whether a
+    /// kind of export takes them at all.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool MayBeShared => Redistributable && ImportDerived != true;
+}
+
+/// <summary>M6 slice 1: <see cref="SourceRecord.Origin"/>.</summary>
+public enum SourceOrigin
+{
+    /// <summary>Made on this machine with <c>source.createHomebrew</c>.</summary>
+    Local,
+
+    /// <summary>Arrived in a character package or a source pack.</summary>
+    Received,
 }
 
 public sealed record PageRef(int Start, int? End = null)
@@ -75,8 +118,10 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// v8 (M2.2, the Fighter) adds the <c>attacks</c> and <c>criticalRange</c> fields as targets, armor proficiency grants
     /// (<c>armor.light</c> and so on), <c>armor.strength</c> and <c>armor.stealthDisadvantage</c>, <c>modifier.whileArmored</c>
     /// and <c>roll.bonus</c>. All are optional, so older revisions serialize unchanged.
+    /// v9 (M5, ADR-010) adds the <c>scale</c> effect, the formula identifier <c>SCALE.&lt;id&gt;</c> and
+    /// <c>spellcasting.multiclassCasterTable</c>, each read only in a v9 revision.
     /// </summary>
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     /// <summary>The content schema version that adds the M2.2 combat details listed above.</summary>
     public const int CombatDetailsSchemaVersion = 8;
@@ -133,6 +178,6 @@ public sealed record ContentRevision : IJsonOnDeserialized
         bool Typeable(Effect e) =>
             e is UnknownEffect unknown && VersionedEffects.ByName.TryGetValue(unknown.DeclaredType, out var typed) && _schemaVersion >= typed.Version;
         if (_effects.Any(Typeable))
-            _effects = [.. _effects.Select(e => Typeable(e) ? VersionedEffects.ByName[((UnknownEffect)e).DeclaredType].Type((UnknownEffect)e) : e)];
+            _effects = [.. _effects.Select(e => Typeable(e) ? VersionedEffects.ByName[((UnknownEffect)e).DeclaredType].Type((UnknownEffect)e, _schemaVersion) : e)];
     }
 }

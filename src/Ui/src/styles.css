@@ -40,6 +40,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .panel { display: grid; gap: 1rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; }
+fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .field { display: grid; gap: 0.2rem; font-weight: 500; }
 .choice { display: block; padding: 0.15rem 0; }
 .source-decision { margin: 0.75rem 0; }
@@ -127,3 +128,8 @@ dd { margin: 0; }
   .print-sheet { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
 }
+
+/* M5 slice 4: text diff (the words added/removed are also in the text for screen readers; colour is not the only cue) */
+.text-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.text-diff .diff-added { color: var(--accent); }
+.text-diff .diff-removed { color: var(--error); text-decoration: line-through; }

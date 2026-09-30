@@ -21,11 +21,27 @@ public sealed record PackageManifest
     /// v3 (ADR-007, D03): <see cref="Purpose"/> and <see cref="Omitted"/>. A share package may leave out pinned
     /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
     /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
+    /// v7 (M6 slice 1; the number is provisional until the slice merges, ROADMAP "Package format numbers"): the
+    /// <see cref="PackageScope.Source"/> scope (a source pack: shareable homebrew sources and their published revisions,
+    /// with <see cref="RevisionOrder"/> and <see cref="Attestations"/>), and library backups whose sources carry
+    /// <c>importDerived</c>, <c>origin</c> and <c>shareConfirmedAt</c>. Older builds refuse v7, so none drops the flag.
+    /// v8 (M6 slice 2; provisional like v7, fixed only when the slice merges): the <see cref="PackageScope.Campaign"/> scope
+    /// (a campaign pack: one campaign profile, and the sources of it that pass the source-pack guard with their published
+    /// revisions; allowed sources it leaves out are listed in <see cref="Omitted"/>).
     /// </summary>
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 8;
 
     /// <summary>Character packages (backup and share) have not changed since v5, so they stay readable by 0.3.0.</summary>
     public const int CharacterFormatVersion = 5;
+
+    /// <summary>M6 slice 1: library backups carry the sources' import-derived flag and origin from v7 on.</summary>
+    public const int LibraryFormatVersion = 7;
+
+    /// <summary>M6 slice 1: the first version with <see cref="PackageScope.Source"/>.</summary>
+    public const int SourceFormatVersion = 7;
+
+    /// <summary>M6 slice 2 (provisional): the first version with <see cref="PackageScope.Campaign"/>.</summary>
+    public const int CampaignFormatVersion = 8;
 
     public string Format { get; init; } = FormatName;
     public int FormatVersion { get; init; } = CurrentFormatVersion;
@@ -52,6 +68,12 @@ public sealed record PackageManifest
     /// </summary>
     public IReadOnlyList<Guid>? RevisionOrder { get; init; }
 
+    /// <summary>
+    /// Source packs only (v7): for each source, the sender's statement that it is their own work and when they confirmed
+    /// it. The receiver sees it as the sender's claim; TomeStack cannot verify it.
+    /// </summary>
+    public IReadOnlyList<SourceAttestation>? Attestations { get; init; }
+
     public string AttachmentPolicy { get; init; } = CharacterAttachmentPolicy;
 
     public const string CharacterAttachmentPolicy = "PDF attachments are never included in packages; linked pages must be re-attached on the receiving machine.";
@@ -65,8 +87,44 @@ public enum ExportPurpose { Backup, Share }
 /// <summary>
 /// M2.1. <see cref="Characters"/>: chosen characters and what they need (a character backup or share). <see cref="Library"/>:
 /// the whole data folder, including drafts, unused homebrew and managed PDFs ("Back up everything"); always a backup.
+/// <see cref="Source"/> (M6 slice 1, v7): a source pack, always a share: homebrew sources their author marked as shareable,
+/// with their published revisions and nothing else. <see cref="Campaign"/> (M6 slice 2, v8): a campaign pack, always a
+/// share: one campaign profile and the shareable content of its allowed sources, never characters or gap notes.
 /// </summary>
-public enum PackageScope { Characters, Library }
+public enum PackageScope { Characters, Library, Source, Campaign }
+
+/// <param name="Statement">The text the author confirmed (<see cref="TomeStackApp.OwnWorkStatement"/>).</param>
+/// <param name="ConfirmedAt">When they confirmed it on their machine. No user or machine name is recorded.</param>
+public sealed record SourceAttestation(Guid SourceId, string Statement, DateTimeOffset ConfirmedAt);
+
+/// <summary>What <c>package.sourcePackPreview</c> would write; nothing is written.</summary>
+/// <param name="Sources">The sources, with the license notice each carries.</param>
+/// <param name="Revisions">Published revisions included (superseded ones too, so pinned characters keep working).</param>
+/// <param name="Warnings">Content the pack refers to but does not carry (another source's), which the receiver must have.</param>
+/// <param name="Drafts">Drafts of these sources that stay on this machine (a pack never carries them).</param>
+public sealed record SourcePackPreview(string FileName, IReadOnlyList<LicenseNotice> Sources, int Revisions, int Drafts, IReadOnlyList<Diagnostic> Warnings);
+
+/// <summary>What <c>package.campaignPackPreview</c> would write (M6 slice 2); nothing is written.</summary>
+/// <param name="Included">Allowed sources the pack carries, with their published revisions (each passed the source-pack guard).</param>
+/// <param name="Referenced">Allowed sources bundled with TomeStack: referenced by id, never copied.</param>
+/// <param name="LeftOut">Allowed sources the pack leaves out and lists in <c>omitted[]</c>, each with why.</param>
+/// <param name="Revisions">Published revisions carried.</param>
+/// <param name="Warnings">Content the pack refers to but does not carry, which the receiver must have.</param>
+public sealed record CampaignPackPreview(
+    string FileName, Guid CampaignId, string Name, string RulesFamily,
+    IReadOnlyList<LicenseNotice> Included, IReadOnlyList<LicenseNotice> Referenced, IReadOnlyList<LeftOutSource> LeftOut,
+    int Revisions, IReadOnlyList<Diagnostic> Warnings);
+
+/// <param name="Reason">Why it is left out, as a diagnostic (<c>pack.source-not-shareable</c>, <c>pack.source-received</c>, …).</param>
+public sealed record LeftOutSource(Guid SourceId, string Title, string Publisher, string License, Diagnostic Reason);
+
+/// <summary>
+/// M6 slice 2: a character in a campaign that a campaign pack would replace, and what "use the imported one" would newly
+/// make not allowed for it. Shown in the import preview; nothing is changed.
+/// </summary>
+/// <param name="NotAllowed">Names of the content it uses that the imported profile does not allow (and the local one does).</param>
+/// <param name="RulesFamily">The imported profile's rules family, when it differs from the character's.</param>
+public sealed record CampaignImpact(Guid CampaignId, Guid CharacterId, string CharacterName, IReadOnlyList<string> NotAllowed, string? RulesFamily = null);
 
 /// <summary>What "Back up everything" would write (<c>library.backupPreview</c>); nothing is written.</summary>
 /// <param name="ManagedPdfs">PDFs TomeStack keeps a copy of (included), and their total size.</param>
@@ -108,15 +166,27 @@ public sealed record PackageItem(string Kind, Guid Id, string Name, PackageItemA
 /// <summary>What to do with a package source whose metadata (e.g. license) differs from the local record.</summary>
 public enum SourceChoice { KeepLocal, UseImported }
 
+/// <param name="CampaignImpact">
+/// M6 slice 2, campaign packs: for a campaign that differs from the local one, the local characters whose content "use the
+/// imported one" would make not allowed. Empty otherwise.
+/// </param>
 public sealed record PackagePreview(
     bool CanApply,
     PackageManifest? Manifest,
     IReadOnlyList<PackageItem> Items,
     IReadOnlyList<Diagnostic> Errors,
-    IReadOnlyList<Diagnostic> Warnings);
+    IReadOnlyList<Diagnostic> Warnings,
+    IReadOnlyList<CampaignImpact>? CampaignImpact = null);
 
-/// <param name="BackupFile">Path relative to the data directory of the pre-import backup, when characters were replaced.</param>
-public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters, string? BackupFile = null);
+/// <param name="BackupFile">
+/// Path relative to the data directory of the pre-import backup: a character package when characters were replaced, or a
+/// copy of the database (<c>pre-import-*.db</c>) before a source pack changed anything (M6 slice 1).
+/// </param>
+/// <param name="DatabaseCopy">
+/// M6 slice 2: a copy of the database (<c>pre-import-*.db</c>) taken because the import replaces a campaign, when
+/// <paramref name="BackupFile"/> is the character package of replaced characters (which holds only their campaigns).
+/// </param>
+public sealed record ImportResult(int Added, int Replaced, int Unchanged, IReadOnlyList<Guid> Characters, string? BackupFile = null, string? DatabaseCopy = null);
 
 public sealed record ExportResult(string FileName, byte[] Content, PackageManifest Manifest);
 

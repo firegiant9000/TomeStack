@@ -15,6 +15,8 @@ import type {
   OpenPageOutcome,
   ContentRevision,
   PublishResult,
+  SourcePackPreview,
+  CampaignPackPreview,
   SourceRecord,
   StudioEntry,
   UpdateOffer,
@@ -22,9 +24,14 @@ import type {
   Character,
   CharacterSummary,
   CharacterView,
+  CompareRequest,
+  ContentComparison,
+  ContentTreeView,
   ContentOption,
   ContentReference,
   CreateCharacterRequest,
+  DebugReport,
+  DesignHint,
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
@@ -44,7 +51,13 @@ import type {
   RestPreview,
   RollRecord,
   RollTarget,
+  RestorePreview,
+  RestoreResult,
   RulesFamilyId,
+  SandboxRequest,
+  SnapshotPage,
+  SnapshotSummary,
+  SandboxView,
   SaveOutcome,
   SourceChoice,
   ValidationReport,
@@ -72,9 +85,26 @@ export function createClient(transport: Transport) {
     contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
     affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
     contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
+    /** The homebrew debugger (M5 slice 2): a whole source, drafts included, or one unsaved revision. Writes nothing. */
+    diagnoseSource: (sourceId: string) => call<DebugReport>('content.diagnose', { sourceId }),
+    diagnoseRevision: (revision: ContentRevision) => call<DebugReport>('content.diagnose', { revision }),
+    /** "Try it" (M5 slice 3): a draft on an unsaved copy or a blank character, calculated as if published. Saves nothing. */
+    sandbox: (request: SandboxRequest) => call<SandboxView>('content.sandbox', request),
+    /** Diff two revisions of one content and run both on unsaved copies (M5 slice 4). Writes and applies nothing. */
+    compare: (request: CompareRequest) => call<ContentComparison>('content.compare', request),
+    /** The relationship tree of the unsaved revision on screen, among its source's drafts (M5 slice 5). Writes nothing. */
+    tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
+    /** Design hints for the unsaved revision on screen (M5 slice 7), asked only while the setting is on. Writes nothing. */
+    feedback: (revision: ContentRevision) => call<DesignHint[]>('content.feedback', { revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
+    /**
+     * M6 slice 1, "Mark as shareable": `shareable` needs `confirmOwnWork` (the author's statement that the source is their
+     * own work). The service refuses bundled, import-derived and received sources. Stopping sharing needs no confirmation.
+     */
+    setShareable: (sourceId: string, shareable: boolean, confirmOwnWork = false) =>
+      call<SourceRecord>('source.setShareable', { sourceId, shareable, confirmOwnWork }),
     /** The source's PDF (no path), or `{ attached: false }`. */
     attachment: async (sourceId: string) => {
       const result = await call<AttachmentInfo | { attached: false }>('source.attachment', { sourceId });
@@ -126,6 +156,11 @@ export function createClient(transport: Transport) {
     archiveCharacter: (characterId: string) => call<CharacterSummary>('character.archive', { characterId, confirm: true }),
     unarchiveCharacter: (characterId: string) => call<CharacterSummary>('character.unarchive', { characterId }),
     getCharacter: (id: string) => call<CharacterView>('character.get', { id }),
+    /** M5 slice 8: snapshots, taken by hand; a restore needs the preview's one-use token and a confirmation. */
+    takeSnapshot: (characterId: string, label?: string) => call<SnapshotSummary>('character.snapshot', { characterId, label }),
+    snapshots: (characterId: string, before?: string) => call<SnapshotPage>('character.snapshots', { characterId, before }),
+    restorePreview: (characterId: string, snapshotId: string) => call<RestorePreview>('character.restorePreview', { characterId, snapshotId }),
+    restoreSnapshot: (token: string) => call<RestoreResult>('character.restoreSnapshot', { token, confirm: true }),
     createCharacter: (request: CreateCharacterRequest) => call<CharacterView>('character.create', request),
     saveCharacter: (character: Character) => call<CharacterView>('character.save', character),
     /** Records the options picked for one choice; an empty list clears it (SPEC C-01). */
@@ -166,9 +201,22 @@ export function createClient(transport: Transport) {
      */
     saveExportAs: (characterIds: string[], purpose: ExportPurpose = 'backup') =>
       call<SaveOutcome>('package.saveAs', { characterIds, purpose }, { timeoutMs: null }),
+    // ---- source packs (M6 slice 1): only sources you marked as shareable; import goes through previewImport/applyImport ----
+    sourcePackPreview: (sourceIds: string[]) => call<SourcePackPreview>('package.sourcePackPreview', { sourceIds }),
+    exportSourcePack: (sourceIds: string[]) => call<ExportedPackage>('package.sourcePackExport', { sourceIds }),
+    /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
+    saveSourcePackAs: (sourceIds: string[]) =>
+      call<SaveOutcome>('package.sourcePackSaveAs', { sourceIds }, { timeoutMs: null }),
+    // ---- campaign packs (M6 slice 2): the profile and the shareable content of its allowed sources ----
+    campaignPackPreview: (campaignId: string) => call<CampaignPackPreview>('package.campaignPackPreview', { campaignId }),
+    exportCampaignPack: (campaignId: string) => call<ExportedPackage>('package.campaignPackExport', { campaignId }),
+    /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
+    saveCampaignPackAs: (campaignId: string) =>
+      call<SaveOutcome>('package.campaignPackSaveAs', { campaignId }, { timeoutMs: null }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
-    applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}) =>
-      call<ImportResult>('package.apply', { base64, sourceChoices }),
+    /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
+    applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>
+      call<ImportResult>('package.apply', { base64, sourceChoices, campaignChoices }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----
     libraryBackupPreview: () => call<LibraryBackupPreview>('library.backupPreview'),
     /** Native Save dialog, then writes everything (PDFs included). No timeout: it waits for the dialog and the copy. */

@@ -264,6 +264,18 @@ export interface CharacterSheet {
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
   toggles?: ToggleValue[];
+  /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
+  scales?: ScaleValue[];
+}
+
+export interface ScaleValue {
+  class: ContentReference;
+  className: string;
+  content: ContentReference;
+  scaleId: string;
+  label: string;
+  classLevel: number;
+  value: number;
 }
 
 export interface ResourceUse {
@@ -413,7 +425,19 @@ export interface Campaign {
   rulesFamily: RulesFamilyId;
   allowedSources: string[];
   houseRules?: string;
+  /**
+   * M6 slice 2: allowed sources a campaign pack left out that are not installed here yet (each is also in
+   * allowedSources). Set only by an import; the service keeps or drops them on save.
+   */
+  pendingSources?: PendingSource[];
   updatedAt?: string;
+}
+
+export interface PendingSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
 }
 
 export interface CampaignStatus {
@@ -442,6 +466,8 @@ export interface CharacterSummary {
   updatedAt: string;
   /** SPEC C-08: set while the character is archived. */
   archivedAt?: string;
+  /** The contents this character records a cross-family exception for (ids only). */
+  exceptionContentIds?: string[];
 }
 
 /** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */
@@ -611,6 +637,45 @@ export interface PackageManifest {
   notices: LicenseNotice[];
   omitted?: OmittedSource[];
   attachmentPolicy: string;
+  /** Absent for character packages; `source` is a source pack (format v7, M6 slice 1), `campaign` a campaign pack (v8, slice 2). */
+  scope?: 'characters' | 'library' | 'source' | 'campaign';
+  /** Source packs: the sender's statement, per source, that it is their own work. TomeStack cannot verify it. */
+  attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
+}
+
+/** M6 slice 1 (`package.sourcePackPreview`): what a source pack would hold. Nothing is written. */
+export interface SourcePackPreview {
+  fileName: string;
+  sources: LicenseNotice[];
+  /** Published revisions included, superseded ones too. */
+  revisions: number;
+  /** Drafts of these sources that stay on this machine. */
+  drafts: number;
+  warnings: Diagnostic[];
+}
+
+/** A source a campaign pack leaves out, and why (M6 slice 2). */
+export interface LeftOutSource {
+  sourceId: string;
+  title: string;
+  publisher: string;
+  license: string;
+  reason: Diagnostic;
+}
+
+/** M6 slice 2 (`package.campaignPackPreview`): what a campaign pack would hold. Nothing is written. */
+export interface CampaignPackPreview {
+  fileName: string;
+  campaignId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  /** Allowed sources the pack carries, with their published revisions. */
+  included: LicenseNotice[];
+  /** Bundled SRD sources: referenced by id, never copied. */
+  referenced: LicenseNotice[];
+  leftOut: LeftOutSource[];
+  revisions: number;
+  warnings: Diagnostic[];
 }
 
 export interface ExportPreview {
@@ -769,16 +834,29 @@ export interface FieldChange {
 }
 
 export interface PackageItem {
-  kind: 'source' | 'contentRevision' | 'character';
+  kind: 'source' | 'contentRevision' | 'character' | 'campaign' | 'gapNote' | 'attachment';
   id: string;
   name: string;
   action: PackageItemAction;
   detail?: string;
-  /** Set on a source that differs from the local record; apply needs a SourceChoice for it. */
+  /**
+   * Set on a source that differs from the local record, and (M6 slice 2) on a campaign pack's campaign that differs
+   * from yours; apply needs a SourceChoice for it.
+   */
   changes?: FieldChange[];
 }
 
 export type SourceChoice = 'keepLocal' | 'useImported';
+
+/** M6 slice 2: a character whose content "use the imported campaign" would make not allowed. */
+export interface CampaignImpact {
+  campaignId: string;
+  characterId: string;
+  characterName: string;
+  notAllowed: string[];
+  /** The imported campaign's rules family, when it differs from the character's. */
+  rulesFamily?: RulesFamilyId;
+}
 
 export interface PackagePreview {
   canApply: boolean;
@@ -786,6 +864,7 @@ export interface PackagePreview {
   items: PackageItem[];
   errors: Diagnostic[];
   warnings: Diagnostic[];
+  campaignImpact?: CampaignImpact[];
 }
 
 // ---- homebrew studio (M2 item 5) ----
@@ -799,14 +878,38 @@ interface EffectBase {
   text?: string;
 }
 
+/** Content v5 (D04): only for the starting class, or only for a class taken later. */
+export type ClassEntry = 'startingClass' | 'multiclass';
+
+export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
+
 export type Effect =
-  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string })
-  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number })
+  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
+  // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
+  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string })
+  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number; onlyAs?: ClassEntry })
   | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
-  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number });
+  | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
+  // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
+  | (EffectBase & { type: 'hitDie'; die: number })
+  | (EffectBase & { type: 'restriction'; field: string; minimum: number; multiclass?: boolean; group?: string })
+  | (EffectBase & { type: 'scale'; scaleId: string; label: string; values: number[] })
+  | (EffectBase & {
+      type: 'spellcasting';
+      ability: SpellcastingAbility;
+      preparation?: 'prepared' | 'known';
+      spellList: string;
+      slotKind?: 'spellSlots' | 'pactMagic';
+      slots: number[][];
+      cantrips?: number[];
+      spellsTable?: number[];
+      spellsFormula?: string;
+      multiclassCaster?: 'full' | 'half' | 'third';
+      multiclassCasterTable?: number[];
+    });
 
 export interface ChoiceExtension {
   contentId: string;
@@ -836,6 +939,12 @@ export interface SourceRecord {
   editionVersion: string;
   license: string;
   redistributable: boolean;
+  /** M6 slice 1: material from a PDF entered this source; it is never shared, and this never goes away. */
+  importDerived?: boolean;
+  /** M6 slice 1: `received` sources came in someone else's package and cannot be marked as your own work. */
+  origin?: 'local' | 'received';
+  /** M6 slice 1: when you confirmed the source is your own work ("Mark as shareable"). */
+  shareConfirmedAt?: string;
 }
 
 /** ADR-005: a source's PDF, without any path. */
@@ -930,6 +1039,154 @@ export interface ValidationReport {
   canPublish: boolean;
 }
 
+/** M5 slice 2 (B02): how much a debugger finding matters; errors block publishing. */
+export type FindingSeverity = 'error' | 'warning' | 'note';
+
+export interface DebugFinding {
+  code: string;
+  severity: FindingSeverity;
+  message: string;
+  content: ContentReference;
+  contentName: string;
+  effectId?: string;
+}
+
+/** `content.diagnose`: what the homebrew debugger found. It writes nothing. */
+export interface DebugReport {
+  scope: ContentReference[];
+  findings: DebugFinding[];
+  errors: number;
+  warnings: number;
+  /** The graph walk hit its bound, so some reach findings may be missing. */
+  truncated: boolean;
+}
+
+/** M5 slice 8 (B08): a snapshot of a character, as the list shows it. Snapshots are local: never in a package or backup. */
+export interface SnapshotSummary {
+  id: string;
+  characterId: string;
+  createdAt: string;
+  reason: 'manual' | 'beforeRestore';
+  label?: string;
+  name: string;
+  level: number;
+}
+
+/** One page of a character's snapshots, newest first. Older ones: ask again with `before` = the last item's id. */
+export interface SnapshotPage {
+  items: SnapshotSummary[];
+  hasMore: boolean;
+}
+
+/** `character.restorePreview`: what restoring would change. The token is good for one restore of this exact state. */
+export interface RestorePreview {
+  token: string;
+  snapshot: SnapshotSummary;
+  fields: FieldDelta[];
+  newDiagnostics: Diagnostic[];
+  added: ContentReference[];
+  removed: ContentReference[];
+  playChanges: boolean;
+  /** The name the restore brings back, when it differs. */
+  nameAfter?: string;
+  exceptionsChange?: boolean;
+  /** New campaign warnings: the campaign stays as it is, so the snapshot's content may not be allowed there. */
+  campaignWarnings?: Diagnostic[];
+}
+
+export interface RestoreResult {
+  view: CharacterView;
+  undo: SnapshotSummary;
+}
+
+/** M5 slice 7: one design hint. An opinion only: it never blocks, never changes a calculation and is never stored. */
+export interface DesignHint {
+  code: string;
+  message: string;
+  effectId?: string;
+  family?: RulesFamilyId;
+  level?: number;
+}
+
+/** M5 slice 5 (B19): one node of a content's relationship tree. */
+export interface TreeNode {
+  id: string;
+  kind: 'content' | 'level' | 'choice' | 'resource' | 'roll' | 'recovery' | 'toggle' | 'scale' | 'missing';
+  label: string;
+  content?: ContentReference;
+  /** The effect the node stands for; it belongs to `owner` (for a granted content, the content that grants it). */
+  effectId?: string;
+  owner?: ContentReference;
+  children: TreeNode[];
+  note?: string;
+}
+
+export interface ContentTreeView {
+  root: TreeNode;
+  truncated: boolean;
+}
+
+/** M5 slice 4 (B07): one text of a revision pair, line by line. `whole`: too long to align (all old lines, then all new). */
+export interface TextChange {
+  where: string;
+  lines: { kind: 'same' | 'added' | 'removed'; text: string }[];
+  whole: boolean;
+  /** Lines a whole text left out to stay under the caps (0: nothing cut). */
+  notShown: number;
+}
+
+/** One character with each revision (M5 slice 4, B04): what changes, or why it could not run. */
+export interface CompareRun {
+  name: string;
+  characterId?: string;
+  fields: FieldDelta[];
+  newDiagnostics: Diagnostic[];
+  resolvedDiagnostics: Diagnostic[];
+  unresolvedChoices: ChoiceStatus[];
+  problems: Diagnostic[];
+}
+
+/** `content.compare`: two revisions by mechanics and text, run on unsaved copies. Nothing is written. */
+export interface ContentComparison {
+  mechanics: UpdateReview['mechanics'];
+  text: TextChange[];
+  runs: CompareRun[];
+}
+
+export interface CompareRequest {
+  from: ContentReference;
+  to?: ContentReference;
+  toRevision?: ContentRevision;
+  characterIds?: string[];
+  blank?: { rulesFamily?: RulesFamilyId; level?: number };
+}
+
+/** A displayed value that would change. */
+export interface FieldDelta {
+  field: string;
+  label: string;
+  before: number;
+  after: number;
+}
+
+/** `content.sandbox` (M5 slice 3): one draft tried on an unsaved copy or a blank character. Nothing is saved. */
+export interface SandboxRequest {
+  revision?: ContentRevision;
+  reference?: ContentReference;
+  characterId?: string;
+  rulesFamily?: RulesFamilyId;
+  level?: number;
+}
+
+export interface SandboxView {
+  /** The unsaved copy and its sheet, with the draft counted as published. Never stored. */
+  view: CharacterView;
+  draft: ContentReference;
+  /** For a copy of a saved character: every calculated sheet field the draft changes (not resource maximums or class columns). */
+  changes: FieldDelta[];
+  validation: ValidationReport;
+}
+
 export interface ImportResult {
   added: number;
   replaced: number;
@@ -937,6 +1194,8 @@ export interface ImportResult {
   characters: string[];
   /** Relative to the data folder; set when a local character was replaced. Import it to restore. */
   backupFile?: string;
+  /** M6 slice 2: a database copy taken because a campaign was replaced, beside a character backup in backupFile. */
+  databaseCopy?: string;
 }
 
 // ---- full library backup (M2.1) ----

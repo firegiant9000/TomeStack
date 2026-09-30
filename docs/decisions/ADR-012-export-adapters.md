@@ -1,6 +1,6 @@
 # ADR-012: Export adapters for virtual tabletops (B20)
 
-Status: **proposed** (2026-09-28). Nothing is built. **The owner chooses the targets and versions.**
+Status: **accepted (owner, 2026-09-29): the recommended targets** (LIVING_SPECS D14). Foundry VTT `dnd5e` (the core and system pair is pinned at slice start and verified against that release's data models), the neutral sheet-export JSON, and Roll20 deferred. `purpose: "personal"` goes only as far as your own homebrew that is not import-derived. Nothing is built yet (M6 slice 4). ADR-007 is amended for the "totals only" share rule before that slice. Proposed 2026-09-28.
 Date: 2026-09-28
 
 ## Context
@@ -21,7 +21,7 @@ Date: 2026-09-28
 | **Roll20** | No documented, supported import file for its official 5e sheets was found in a web search on 2026-09-28 (the Roll20 wiki pages "Character Sheets/Import" and "Import", and forum threads on JSON import for the 2024 sheets). Character import goes through Pro-tier API scripts, importers built into some sheets, or browser userscripts. Check again at slice start | **Recommended: defer.** The alternatives are (i) a documented JSON plus a sample Roll20 API script that the user runs in their own Pro game (TomeStack would maintain third-party-runtime JavaScript it never runs), or (ii) a text summary for manual entry, which option C covers |
 | **Neutral JSON** (the ADR-011 sheet export model v1) | TomeStack's own documented JSON | **Recommended, and needed anyway.** It is the input of every adapter and of extensions. Any tool can read it |
 
-## Decision (proposed, for the recommended targets)
+## Decision (accepted 2026-09-29, for the recommended targets)
 
 ### Where it lives
 
@@ -62,7 +62,7 @@ A VTT file is meant to leave the machine, to a Foundry server that other people 
   - A `redistributable: false` source contributes only **aggregate totals**: ability scores, Armor Class, hit point maximum, save and skill totals, slot counts.
   - Its features, resources and their uses and recovery, attacks, spells and `scales` (ADR-010) are **dropped whole**, not kept without their names, because per-item values are the book's mechanics (ADR-007 "Alternatives"). The preview lists what was dropped, by source title and count.
   - **This amends ADR-007 and is made there before the slice ships (review fix).** ADR-007 shares omit whole revisions, and the receiver recalculates without them. Here the totals keep the omitted content's effect, because a VTT file has no recalculation that could restore it.
-- **Option `purpose: "personal"` (owner decision), narrowed (review fix):** it includes the full text of your **own** homebrew only: sources created locally that are not import-derived (M6 slice 1's durable flag). Other publishers' `redistributable: false` content is always filtered, even here, because the file's only use is a server that other people read. It is labelled as backups are: "Personal copy: includes your own homebrew. Do not share it."
+- **Option `purpose: "personal"` (owner decision), narrowed (review fix):** it includes the full text of your **own** homebrew only: sources created locally that are not import-derived (M6 slice 1's durable flag). As built in M6 slice 1: `origin: "local"` and no `importDerived`; a source of unknown origin (stored before database v8) counts only after its author marks it as shareable. Other publishers' `redistributable: false` content is always filtered, even here, because the file's only use is a server that other people read. It is labelled as backups are: "Personal copy: includes your own homebrew. Do not share it."
 - **Attribution for every included source, not only the SRD (review fix):** the file carries every `notices[]` entry of the sheet export model (title, publisher, license, attribution, modification notice) in the actor's biography, and the source titles in the flag. That covers the CC-BY-4.0 SRD statements, CC-BY third-party sources and shareable homebrew with an attribution.
 - **Trademarks (review fix):**
   - The adapter names its target software nominatively: "Foundry VTT (dnd5e system)".

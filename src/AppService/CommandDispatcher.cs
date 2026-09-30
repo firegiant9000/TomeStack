@@ -20,15 +20,18 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "content.bySource", "source.list", "source.createHomebrew",
+        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
         "character.archivePreview", "character.archive", "character.unarchive",
+        "character.snapshot", "character.snapshots", "character.restorePreview", "character.restoreSnapshot",
         "gap.list", "gap.listAll", "gap.add", "gap.setStatus", "gap.delete",
         "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
+        "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
+        "package.campaignPackPreview", "package.campaignPackExport", "package.campaignPackSaveAs",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
 
@@ -98,8 +101,14 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
         "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
         "content.bySource" => app.ContentBySource(Payload<SourceIdPayload>(payload).SourceId),
+        "content.diagnose" => Diagnose(Payload<DiagnoseRequest>(payload)),
+        "content.sandbox" => Sandbox(Payload<SandboxRequest>(payload)),
+        "content.compare" => app.Compare(Payload<CompareRequest>(payload)),
+        "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
+        "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
+        "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
         "source.attachPdf" => AttachPdf(Payload<AttachPayload>(payload)),
         "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
@@ -125,6 +134,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "character.archivePreview" => app.PreviewArchive(Payload<CharacterIdPayload>(payload).CharacterId),
         "character.archive" => app.Archive(Payload<ArchiveRequest>(payload)),
         "character.unarchive" => app.Unarchive(Payload<CharacterIdPayload>(payload).CharacterId),
+        "character.snapshot" => app.Snapshot(Payload<SnapshotRequest>(payload)),
+        "character.snapshots" => ListSnapshots(Payload<SnapshotsPayload>(payload)),
+        "character.restorePreview" => app.PreviewRestore(Payload<RestorePreviewRequest>(payload)),
+        "character.restoreSnapshot" => app.RestoreSnapshot(Payload<RestoreSnapshotRequest>(payload)),
         "gap.list" => app.ListGapNotes(Payload<CharacterIdPayload>(payload).CharacterId),
         "gap.listAll" => app.ListAllGapNotes(),
         "import.start" => app.StartImport(Payload<ImportStartRequest>(payload)),
@@ -148,6 +161,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
+        "package.sourcePackPreview" => app.PreviewSourcePack(Payload<SourcePackPayload>(payload).SourceIds ?? []),
+        "package.sourcePackExport" => ExportSourcePack(Payload<SourcePackPayload>(payload)),
+        "package.sourcePackSaveAs" => SaveSourcePackAs(Payload<SourcePackPayload>(payload)),
+        "package.campaignPackPreview" => app.PreviewCampaignPack(Payload<CampaignIdPayload>(payload).CampaignId),
+        "package.campaignPackExport" => ExportCampaignPack(Payload<CampaignIdPayload>(payload)),
+        "package.campaignPackSaveAs" => SaveCampaignPackAs(Payload<CampaignIdPayload>(payload)),
         "library.backupPreview" => app.PreviewLibraryBackup(),
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
@@ -159,6 +178,19 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         var report = app.ValidateContent(payload.Reference, payload.Revision);
         return new { report.Revision, report.Errors, report.Warnings, report.CanPublish };
+    }
+
+    private object Diagnose(DiagnoseRequest payload)
+    {
+        var report = app.Diagnose(payload);
+        return new { report.Scope, report.Findings, report.Errors, report.Warnings, report.Truncated };
+    }
+
+    private object Sandbox(SandboxRequest payload)
+    {
+        var result = app.Sandbox(payload);
+        var validation = new { result.Validation.Revision, result.Validation.Errors, result.Validation.Warnings, result.Validation.CanPublish };
+        return new { result.View, result.Draft, result.Changes, Validation = validation };
     }
 
     private IReadOnlyList<ContentOption> ListContent(RulesFamilyPayload payload) => app.ListContent(payload.RulesFamily, payload.CampaignId);
@@ -174,6 +206,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         app.DeleteGapNote(payload);
         return new { deleted = true };
     }
+
+    private SnapshotPage ListSnapshots(SnapshotsPayload payload) => app.Snapshots(payload.CharacterId, payload.Before);
 
     private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
 
@@ -217,8 +251,42 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
-        var path = host.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
+        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose));
+    }
+
+    /// <summary>M6 slice 1: a source pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
+    private object ExportSourcePack(SourcePackPayload payload)
+    {
+        var export = app.ExportSourcePack(payload.SourceIds ?? []);
+        return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
+    }
+
+    /// <summary>M6 slice 1: writes a source pack where the user chooses; the page never supplies a path.</summary>
+    private SaveOutcome SaveSourcePackAs(SourcePackPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        return SaveAs(app.ExportSourcePack(payload.SourceIds ?? []));
+    }
+
+    /// <summary>M6 slice 2: a campaign pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
+    private object ExportCampaignPack(CampaignIdPayload payload)
+    {
+        var export = app.ExportCampaignPack(payload.CampaignId);
+        return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
+    }
+
+    /// <summary>M6 slice 2: writes a campaign pack where the user chooses; the page never supplies a path.</summary>
+    private SaveOutcome SaveCampaignPackAs(CampaignIdPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        return SaveAs(app.ExportCampaignPack(payload.CampaignId));
+    }
+
+    private SaveOutcome SaveAs(ExportResult export)
+    {
+        var path = host!.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
         if (path is null)
             return new SaveOutcome(false, null);
 
@@ -331,7 +399,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     }
 
     private object ApplyImport(PackagePayload payload) =>
-        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices);
+        app.ApplyImport(Convert.FromBase64String(payload.Base64), payload.SourceChoices, payload.CampaignChoices);
 
     private static T Payload<T>(JsonElement? payload) =>
         payload is { ValueKind: JsonValueKind.Object } element
@@ -351,6 +419,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record IdPayload(Guid Id);
 
     private sealed record CharacterIdPayload(Guid CharacterId);
+
+    private sealed record SnapshotsPayload(Guid CharacterId, Guid? Before = null);
 
     private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
 
@@ -376,7 +446,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     /// <param name="Purpose">ADR-007: <c>backup</c> (default, everything) or <c>share</c> (leaves out non-redistributable sources).</param>
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
 
-    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
+    /// <param name="CampaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
+    private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null, Dictionary<Guid, SourceChoice>? CampaignChoices = null);
+
+    private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds);
+
+    private sealed record CampaignIdPayload(Guid CampaignId);
 
     /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
     /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>
