@@ -428,7 +428,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             {
                 // New content under a bundled SRD source would travel in every share with the SRD's CC-BY notice.
                 if (_bundledSources.Contains(revision.Provenance.SourceId))
-                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' claims to belong to a bundled SRD source, but is not part of it. It was not written by this TomeStack's SRD packs.", revision.Reference));
+                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' is new content under a bundled SRD source, which this TomeStack's SRD packs do not hold. If the package was made with a newer TomeStack, update and import it again.", revision.Reference));
                 // Only you add content to a source you made here. A source of unknown origin (stored before v8) may be yours
                 // from another machine, so it is not refused, but it must be marked as shareable again (Commit).
                 else if (store.FindSource(revision.Provenance.SourceId) is { Origin: SourceOrigin.Local } own)
@@ -544,9 +544,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
 
         // Inside the package too, a content's revisions belong to one source (every scope but a full restore; M6 review).
+        // Only the revisions it adds count: one already here was checked when it arrived, and the check against this
+        // machine above covers an added revision next to it. So your own backup of a content split by an earlier build,
+        // or the pre-import copy of it, imports again here and writes nothing (M6 stack review, 2026-09-30).
         if (parsed.Manifest.Scope != PackageScope.Library)
         {
-            foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
+            var added = parsed.Revisions.Where(r => store.RevisionHash(r.RevisionId) is null);
+            foreach (var split in added.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
                 errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the package's sources.", split.Last().Reference));
         }
         if (parsed.Manifest.Scope == PackageScope.Source)

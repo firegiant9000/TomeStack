@@ -144,11 +144,14 @@ public class SourcePackTests
         Assert.Contains("pack.sources-required", PackCodes(() => app.ExportSourcePack([])));
         Assert.Contains("pack.source-not-shareable", PackCodes(() => app.PreviewSourcePack([unmarked.Id]))); // the preview refuses too
 
-        // A content with revisions in two sources cannot leave with one of them.
+        // A content with revisions in two sources cannot leave with one of them. Saving a draft refuses the split now
+        // (content.source-mismatch), so it is stored the way an earlier build could.
         var shared = Shared(temp, "Test Shared Notes");
         var content = Guid.NewGuid();
         Publish(temp, Feat(shared.Id, "Test Split Step", content, Guid.NewGuid()));
-        Publish(temp, Feat(unmarked.Id, "Test Split Step", content, Guid.NewGuid()));
+        var elsewhere = Feat(unmarked.Id, "Test Split Step", content, Guid.NewGuid());
+        Assert.Equal("content.source-mismatch", Code(() => app.SaveDraft(elsewhere)));
+        app.Store.AddRevision(elsewhere with { Status = RevisionStatus.Published, SchemaVersion = 3 });
         Assert.Contains("pack.content-spans-sources", PackCodes(() => app.ExportSourcePack([shared.Id])));
     }
 
@@ -508,7 +511,57 @@ public class SourcePackTests
         var split = Feat(notes.Id, "Test Sender Leap", other.ContentId, Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
         var splitting = AddEntry(backup, $"content/{split.RevisionId:D}.json", "contentRevision", split);
         Assert.Contains(destination.App.PreviewImport(splitting).Errors, e => e.Code == "pack.content-conflict");
-        // A full restore is the user's own file and keeps what it holds.
+        // A full restore is the user's own file and keeps what it holds (A_full_restore_keeps_a_content_split_by_an_earlier_build).
+    }
+
+    [Fact]
+    public void Your_own_backup_of_content_split_by_an_earlier_build_imports_again_where_it_was_made()
+    {
+        // M6 stack review (2026-09-30): the in-package check counted revisions already here, so a backup of two characters
+        // that pin one content from two sources, and the pre-import copy written before replacing them, were refused.
+        using var temp = new TempApp();
+        var (first, second, heroes) = SplitLibrary(temp);
+        var backup = temp.App.ExportCharacters(heroes).Content;
+
+        var preview = temp.App.PreviewImport(backup);
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Code)));
+        Assert.All(preview.Items.Where(i => i.Kind == "contentRevision"), i => Assert.Equal(PackageItemAction.Unchanged, i.Action));
+        temp.App.ApplyImport(backup);
+        Assert.NotNull(temp.App.Store.FindRevision(first));
+        Assert.NotNull(temp.App.Store.FindRevision(second));
+
+        // Where neither revision is installed, the package would add the split, and is refused.
+        using var clean = new TempApp();
+        Assert.Contains(clean.App.PreviewImport(backup).Errors, e => e.Code == "pack.content-conflict");
+    }
+
+    [Fact]
+    public void A_full_restore_keeps_a_content_split_by_an_earlier_build()
+    {
+        using var origin = new TempApp();
+        var (first, second, _) = SplitLibrary(origin);
+        var file = Path.Combine(origin.Directory, "full.tomestack.zip");
+        using (var stream = File.Create(file))
+            origin.App.WriteLibraryBackup(stream);
+
+        using var destination = new TempApp();
+        destination.App.ApplyLibraryRestore(file);
+        Assert.NotNull(destination.App.Store.FindRevision(first));
+        Assert.NotNull(destination.App.Store.FindRevision(second));
+    }
+
+    /// <summary>One content published in two sources (stored directly, as an earlier build allowed) and a character pinning each.</summary>
+    private static (ContentReference First, ContentReference Second, Guid[] Heroes) SplitLibrary(TempApp temp)
+    {
+        var notes = Shared(temp, "Test Split Notes");
+        var more = Shared(temp, "Test Split More");
+        var first = Publish(temp, Feat(notes.Id, "Test Split Step", Guid.NewGuid(), Guid.NewGuid()));
+        var elsewhere = Feat(more.Id, "Test Split Step", first.ContentId, Guid.NewGuid()) with { Status = RevisionStatus.Published, SchemaVersion = 3 };
+        temp.App.Store.AddRevision(elsewhere);
+        var heroes = new[] { first, elsewhere.Reference }
+            .Select(pin => temp.App.SaveCharacter(HeroPinning(pin) with { Id = Guid.NewGuid() }).Character.Id)
+            .ToArray();
+        return (first, elsewhere.Reference, heroes);
     }
 
     [Fact]
