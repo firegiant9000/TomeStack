@@ -7,6 +7,7 @@ import type {
   ContentOption,
   ContentReference,
   ContentRevision,
+  ContentTreeView,
   DebugFinding,
   DebugReport,
   Effect,
@@ -21,6 +22,7 @@ import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBas
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
+import { TreeView } from './TreeView';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
@@ -361,6 +363,10 @@ function EntryEditor(props: {
   const [report, setReport] = useState<ValidationReport>();
   // The findings belong to the revision they were computed for: any edit makes a new revision object, which hides them.
   const [debugged, setDebugged] = useState<{ revision: ContentRevision; report: DebugReport }>();
+  // M5 slice 5: the relationship tree, for the revision it was built from (any edit hides it).
+  const [treed, setTreed] = useState<{ revision: ContentRevision; view: ContentTreeView }>();
+  const [treeBusy, setTreeBusy] = useState(false);
+  const treeRequest = useRef(0);
   const [diagnosing, setDiagnosing] = useState(false);
   const [classChoices, setClassChoices] = useState<ClassChoice[]>([]);
   const [busy, setBusy] = useState(false);
@@ -472,6 +478,21 @@ function EntryEditor(props: {
       onError(error);
     } finally {
       setDiagnosing(false);
+    }
+  }
+
+  async function showTree() {
+    const studied = revision;
+    const request = ++treeRequest.current;
+    setTreeBusy(true);
+    try {
+      const view = await client.tree({ ...forServer(studied), revisionId: crypto.randomUUID() });
+      // An older reply never replaces a newer one (review fix).
+      if (request === treeRequest.current) setTreed({ revision: studied, view });
+    } catch (error) {
+      onError(error);
+    } finally {
+      if (request === treeRequest.current) setTreeBusy(false);
     }
   }
 
@@ -645,6 +666,30 @@ function EntryEditor(props: {
           )}
         </div>
       )}
+
+      <section aria-labelledby="relations-heading" className="effect-editor">
+        <h4 id="relations-heading">Relationships</h4>
+        <p className="hint">
+          What this {revision.kind} brings in, level by level: features, choices, resources and the rolls and recoveries that use them. Enter on a
+          rule of this entry shows it above.
+        </p>
+        <button type="button" onClick={() => void showTree()} disabled={treeBusy}>
+          Show relationships
+        </button>
+        {treed?.revision === revision && (
+          <>
+            <TreeView
+              root={treed.view.root}
+              label={`Relationships of ${revision.name || `this ${revision.kind}`}`}
+              onActivate={(node) => {
+                // Only a rule this entry holds (review fix: a granted content's node carries the grant, owned by this entry).
+                if (node.owner?.contentId === revision.contentId && node.effectId) focusRule(node.effectId);
+              }}
+            />
+            {treed.view.truncated && <p className="warn">This tree is too large to show completely; some branches are cut.</p>}
+          </>
+        )}
+      </section>
 
       <ComparePanel
         entry={props.entries.find((e) => e.contentId === revision.contentId)}

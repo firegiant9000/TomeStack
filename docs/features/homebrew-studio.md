@@ -174,6 +174,39 @@ Acceptance:
 - `AppService.Tests/CompareTests`, which also shows that the copy's values equal `character.reviewUpdate`'s and that nothing is written;
 - the e2e flow "compares the published revision with the unsaved one by rules, text and on a character copy".
 
+## Relationships: the content tree (M5 slice 5, B19)
+
+**Show relationships** in the editor draws the revision on screen as a tree. It runs from the class, to the level each grant or choice applies from, to the feature or choice option it brings in, to that content's resources, and on to the rolls and toggles that spend them and the recoveries that restore them. Other rolls and the class columns are shown too. The revision on screen is placed among its source's latest revisions (drafts included), as the debugger studies it. `content.tree { reference | revision }` builds it (`RulesCore.ContentTree`, over `ContentGraph`) and writes nothing.
+- **As the calculator reads it:**
+  - a grant or declared option shows the exact revision it pins, which is what characters get when it is published, with a note when a newer revision exists. A pin on a draft is still shown, with the note "Draft: characters get nothing from it until it is published; publishing creates a new revision, so re-point this grant", because the calculator refuses a draft (`content.unpublished`). Content that extends a choice shows its current revision, with "Draft: not offered to characters until published" while that is a draft;
+  - a granted content's own grants are shown as "Not followed" (grants are one level deep);
+  - a grant that is not automatic, or not always applied, is shown as never applied, and one that names no content says so;
+  - a resource id defined twice keeps the first definition, and the repeat is marked ignored;
+  - toggles that spend nothing are listed too;
+  - a choice with nothing to pick says so;
+  - a recovery for a resource its content does not define says it never applies.
+  - **Not modeled:** rules families (as for the debugger).
+- **Cycles end:** content already on the path is shown once more, with no children ("Already shown above").
+- **Bounded (SPEC Q-02):**
+  - 12 levels deep, and no new node once 5,000 exist (plus the ancestors still open then). A cut tree says so.
+  - Each revision's effects are sorted once, so content reached along many paths costs its size once.
+  - Labels are cut at 120 characters, and node ids are positions (`0.2.1`), never user text.
+  - The revision on screen may have at most 5,000 rules (`tree.too-large`).
+  - The store is read once, and the graph is built without the class reach walk, which the tree does not use.
+- **Review fixes (2026-09-29):** draft grants and extensions are noted as above, and each owner's extension edges are grouped by choice once, so a choice reads its own instead of scanning every edge.
+- **Activation:** Enter on a node focuses its rule when the rule belongs to the entry being edited. Each node carries the owner of its rule, so a "Grants X" node shows the entry's own grant.
+- **Keyboard and screen readers (the WAI-ARIA APG tree view pattern; accessibility checklist item 22):**
+  - It is a `tree` of `treeitem`s in nested `group`s, each with `aria-level`, `aria-posinset`, `aria-setsize` and `aria-expanded`.
+  - One item is in the tab order (roving tabindex).
+  - Up and Down move between visible items. Right opens an item, then goes to its first child. Left closes it, then goes to its parent. Home and End go to the first and last item. Space opens or closes an item.
+  - Enter on a rule of the entry being edited moves focus to that rule's fieldset.
+  - It is not a canvas: every relation is text.
+
+Acceptance:
+- `RulesCore.Tests/ContentTreeTests`: the Test Chronicler, grants that are not followed, cycles, the bound;
+- `AppService.Tests/ContentTreeCommandTests`;
+- the e2e flow "shows an entry's relationships as a keyboard tree and jumps from a node to its rule".
+
 ## A homebrew subclass in an SRD class (content schema v4)
 
 A class's choice options are exact pins in a published revision, so the SRD Barbarian cannot list a homebrew subclass. Content schema v4 adds **`extendsChoice: { contentId, choiceId }`** to a revision. It says "I am also an option of that choice", naming the content by id, never by name. The calculator offers every *published* revision that extends a choice after the declared options (`IContentCatalog.ChoiceExtensions`). A draft is never offered to a saved character (the studio sandbox alone offers one draft, in memory; see "Try it"). `character.choose` accepts it like any option, and chosen from the class, its features follow the class level and `CLASS_LEVEL`.

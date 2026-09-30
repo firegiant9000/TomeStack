@@ -22,7 +22,7 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B16 | Optional local-language assistant | M7 | Turn text into reviewable suggestions without requiring AI |
 | B17 | Accessibility and customization | M2 baseline, M7 depth | Keyboard, scaling, high contrast and layout checks |
 | B18 | Themes | M7 | Offer modern, dark and tabletop themes |
-| B19 | Relationship graph | M5 | Navigate class → feature → resource dependencies |
+| B19 | Relationship graph | M5 | Navigate class → feature → resource dependencies. **Done 2026-09-29 (M5 slice 5, fixture-verified):** "Show relationships", a keyboard tree, [features/homebrew-studio.md](features/homebrew-studio.md#relationships-the-content-tree-m5-slice-5-b19) |
 | B20 | Foundry/Roll20 export adapters | M6+ | Document supported scope and validate generated file |
 
 ## Other approved directions

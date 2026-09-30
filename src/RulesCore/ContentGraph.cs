@@ -84,8 +84,10 @@ public sealed class ContentGraph
     /// </param>
     /// <param name="maxStates">The state bound (tests lower it).</param>
     /// <param name="maxEdgeSteps">The work bound: edges examined in the whole walk (tests lower it).</param>
+    /// <param name="reach">False: skip the reach walk (<see cref="Reaches"/> stays empty), for readers that need only the edges, such as <see cref="ContentTree"/>.</param>
     public static ContentGraph Build(
-        IEnumerable<ContentRevision> revisionsInOrder, IEnumerable<ContentRevision>? scope = null, int maxStates = MaxReachStates, int maxEdgeSteps = MaxEdgeSteps)
+        IEnumerable<ContentRevision> revisionsInOrder, IEnumerable<ContentRevision>? scope = null, int maxStates = MaxReachStates, int maxEdgeSteps = MaxEdgeSteps,
+        bool reach = true)
     {
         ArgumentNullException.ThrowIfNull(revisionsInOrder);
         var published = new Dictionary<Guid, List<ContentRevision>>();
@@ -167,7 +169,7 @@ public sealed class ContentGraph
         var visited = new HashSet<(GraphReach Reach, Guid RevisionId)>();
         var steps = 0;
         var truncated = false;
-        var classes = current.Values.Where(r => r.Kind == ContentKind.Class).OrderBy(r => scoped.Contains(r.ContentId) ? 0 : 1);
+        var classes = reach ? current.Values.Where(r => r.Kind == ContentKind.Class).OrderBy(r => scoped.Contains(r.ContentId) ? 0 : 1) : Enumerable.Empty<ContentRevision>();
         foreach (var classRevision in classes)
         {
             if (truncated)

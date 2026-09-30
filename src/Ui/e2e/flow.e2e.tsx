@@ -784,6 +784,79 @@ it('compares the published revision with the unsaved one by rules, text and on a
   expect((await within(freshPanel).findByRole('region', { name: 'Comparison results' })).textContent).toMatch(/The rules are the same/);
 });
 
+it('shows an entry\'s relationships as a keyboard tree and jumps from a node to its rule (M5 slice 5)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Trees', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feature',
+    name: 'E2E Tree Feature',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'resource', id: 'embers', resourceId: 'embers', label: 'Embers', maximum: 'PB' },
+      { type: 'roll', id: 'flare', rollId: 'flare', label: 'Flare', dice: '1d6', resourceId: 'embers', timing: 'onRoll', automation: 'assisted' },
+      { type: 'recovery', id: 'rekindle', resourceId: 'embers', on: 'longRest', amount: 'all', timing: 'onLongRest' },
+    ],
+  });
+  await client.publish(draft);
+
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Trees/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Trees/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit E2E Tree Feature' }));
+  const editor = () => screen.getByRole('region', { name: /^Edit / });
+
+  await user.click(within(editor()).getByRole('button', { name: 'Show relationships' }));
+  const tree = await within(editor()).findByRole('tree', { name: 'Relationships of E2E Tree Feature' });
+  const root = within(tree).getAllByRole('treeitem')[0]!;
+  expect(root.getAttribute('aria-level')).toBe('1');
+  expect(root.getAttribute('aria-expanded')).toBe('true');
+  expect(root.tabIndex).toBe(0);
+
+  // Keyboard only, from the button: Tab enters the tree at its one tab stop (the root).
+  await user.tab();
+  expect(document.activeElement).toBe(root);
+  await user.keyboard('{ArrowDown}');
+  const resource = within(tree).getByRole('treeitem', { name: 'Resource: Embers (uses PB)' }); // named by its own label only
+  expect(document.activeElement).toBe(resource);
+  expect([resource.getAttribute('aria-level'), resource.getAttribute('aria-posinset'), resource.getAttribute('aria-setsize')]).toEqual(['2', '1', '1']);
+  expect(resource.getAttribute('aria-expanded')).toBe('false');
+  // Space opens and closes; Right opens, then goes to the first child.
+  await user.keyboard(' ');
+  expect(resource.getAttribute('aria-expanded')).toBe('true');
+  await user.keyboard(' ');
+  expect(resource.getAttribute('aria-expanded')).toBe('false');
+  await user.keyboard('{ArrowRight}');
+  expect(resource.getAttribute('aria-expanded')).toBe('true');
+  await user.keyboard('{ArrowRight}');
+  const roll = within(resource).getByRole('treeitem', { name: 'Roll: Flare (1d6), spends it' });
+  expect((document.activeElement as HTMLElement).id).toBe(roll.id);
+  expect([roll.getAttribute('aria-level'), roll.getAttribute('aria-posinset'), roll.getAttribute('aria-setsize')]).toEqual(['3', '1', '2']);
+  // End goes to the last visible item (the recovery), Home to the root, Up and Down between items.
+  await user.keyboard('{End}');
+  expect(document.activeElement).toBe(within(resource).getByRole('treeitem', { name: 'Recovery on a long rest: all' }));
+  await user.keyboard('{Home}');
+  expect(document.activeElement).toBe(root);
+  await user.keyboard('{ArrowDown}{ArrowDown}');
+  expect((document.activeElement as HTMLElement).id).toBe(roll.id);
+  await user.keyboard('{ArrowUp}');
+  expect(document.activeElement).toBe(resource);
+  await user.keyboard('{ArrowDown}');
+  // Enter shows the rule in the editor; Left from a child goes back to its parent.
+  await user.keyboard('{Enter}');
+  await waitFor(() => expect(document.activeElement).toBe(within(editor()).getByRole('group', { name: /^Rule 2: Roll or action/ })));
+  await user.click(within(tree).getByRole('treeitem', { name: 'Roll: Flare (1d6), spends it' }));
+  await user.keyboard('{ArrowLeft}');
+  expect(document.activeElement).toBe(resource);
+});
+
 it('drops picks that do not fit when the rules family changes, in the builder and in a campaign', async () => {
   const user = userEvent.setup();
   render(<App />);
