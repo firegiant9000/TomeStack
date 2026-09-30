@@ -1,6 +1,6 @@
 # ADR-011: Extension API (M6, SPEC P-05)
 
-Status: **accepted (owner, 2026-09-29): option A, declarative transforms only** (LIVING_SPECS D14). Nothing is built yet (M6 slice 3). Proposed 2026-09-28. No third-party code runs: options B and C stay possible later only through a new revision of this ADR and a new owner decision, and D stays rejected. The sheet export model v1 below (its purpose filter and `notices[]`) is accepted with it, for ADR-012.
+Status: **accepted (owner, 2026-09-29): option A, declarative transforms only** (LIVING_SPECS D14). **Implemented in M6 slice 3 (2026-09-29; fixture-verified; unmerged): see [features/extensions.md](../features/extensions.md) and "Evidence" below.** The ADR-007 amendment it required is ADR-007 item 11. Proposed 2026-09-28. No third-party code runs: options B and C stay possible later only through a new revision of this ADR and a new owner decision, and D stays rejected. The sheet export model v1 below (its purpose filter and `notices[]`) is accepted with it, for ADR-012.
 Date: 2026-09-28
 
 ## Context
@@ -46,7 +46,7 @@ Extensions and export adapters (ADR-012) read the same documented shapes, never 
   - It has `notices[]` for every source whose content it includes: title, publisher, license, attribution and modification notice (ADR-007 item 1, CC-BY §3). Every consumer must carry them.
   - **It is filtered by the run's `purpose`, whatever the extension's permissions (review fix).** `share` is the default. In a share, a `redistributable: false` source contributes only aggregate totals: ability scores, Armor Class, hit point maximum, save and skill totals, slot counts. Its features, resources and uses, attacks, spells and `scales` (ADR-010) are dropped and listed in the preview. `personal` is allowed only for sources the user created locally and that are not import-derived (see M6 slice 1's durable provenance flag). Other `redistributable: false` sources are always filtered, because a VTT or extension output is meant to leave the machine. This rule needs an ADR-007 amendment, made in the slice that builds the model: shares have always omitted whole revisions, and the receiver recalculates without them.
 - **Content revisions** in their documented schema (`content-revision.v<N>`). An extension for API v1 sees revisions up to v9. A newer build maps a newer revision down to an older API only when a "fits schema ≤ N" check passes. That check covers formula identifiers too, not only effect types and fields (the gap found in ADR-010's review). Otherwise the build leaves the revision out and names it in the preview.
-- A new API version is a new ADR revision and a new entry in the compatibility table (`docs/authoring/extensions.md`, M6 slice 5).
+- A new API version is a new ADR revision and a new entry in the compatibility table ([`docs/authoring/extension.md`](../authoring/extension.md#compatibility), M6 slice 5).
 
 ### Permissions: declared, granted by the user, revocable
 
@@ -107,13 +107,20 @@ Extensions and export adapters (ADR-012) read the same documented shapes, never 
 - Adapters with a real mapping (Foundry, ADR-012) are first-party code, written against the same sheet export model, so extensions and adapters share one versioned data contract.
 - A new database table, and one more thing in the library backup.
 
-## Evidence (planned; none yet)
+## Evidence (M6 slice 3, 2026-09-29; fixture-verified)
 
-- `ExtensionManifestTests`: an unknown or newer API is refused; unknown permissions are refused; package limits and paths are enforced; content packs cannot carry an extension.
-- `DeclarativeTransformTests` (if A): hostile cases and fuzzing; each bound is refused with a diagnostic.
-- `ExtensionImportTests`: output becomes drafts only, is validated, and nothing is written before the preview.
-- `ExtensionExportTests`: the share rules apply; no paths, gap notes or attachment ids appear; a path in the output is refused.
-- e2e: install the sample from `examples/extensions/`, grant it, run both hooks, and remove it.
+- `ExtensionTests` (the planned `ExtensionManifestTests`, `ExtensionImportTests` and `ExtensionExportTests` in one suite): unknown or newer format and API, another runtime, unknown permissions and unknown fields refused; the package limits and path allowlist; content and campaign packs cannot carry an extension (`package.extension-not-allowed`); import output becomes drafts only, validated, in a new import-derived source, nothing written before the confirmed preview; grants bound to the file's hash, an author change refused; the share and personal filters; a data folder and a linked PDF under a **sentinel** user name, whose name never appears, and outputs that write a path in any spelling refused; a library backup keeping extensions without grants, and a restore bringing them back turned off.
+- `DeclarativeTransformTests`: each bound refused with its own code, the input reader's bounds, and 2,000 fuzzed transforms that only ever give a value or a `transform.*` refusal.
+- e2e: the sample from `examples/extensions/` installed, granted, both hooks run, and removed.
 - The smoke's existing checks stay: `blockedRequests: []` and no socket.
+
+**As built, where this ADR left a choice:**
+
+- The bounds: a step budget of 4,000,000 per run in which every value produced pays for its whole size (so it bounds memory too; dual-review fix), 5 seconds, 100,000 nested iterations in product, expressions 64 deep and data 128 deep, 10,000 table entries, 1 MB per transform, 5 MB of output measured while it is written; the extension file at most 5 MB and 64 entries.
+- The output scan looks for the Windows user name only as a path segment (dual-review fix: as a bare substring it refused ordinary words for short names; approved by the owner, 2026-09-30); the profile path covers the name inside it.
+- `extension.review` grants an installed extension again from its stored file, so a restored extension can be turned on without the original file.
+- Import hooks do not read content (`read.content` is an export permission here), so "drafts inherit the most restrictive redistribution among the sources the run read" has nothing to inherit: every import writes into a new, import-derived, non-redistributable source.
+- An install takes the file's bytes (the native Open dialog in the shell, or base64 in browser development); the preview holds them under a one-use token, so what is installed is exactly what was reviewed.
+- Library backups that keep an extension are written as format v9 (settled on the M5+M6 integration branch; final only when it merges to `main`); a backup without one stays v7.
 
 Supersedes: none. Extends ADR-004 (import output is drafts), ADR-006 (no socket) and ADR-007 (share rules apply to hook output).

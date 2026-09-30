@@ -12,7 +12,10 @@ public interface IHostServices
     /// <summary>Whether <see cref="ChooseOpenFile"/> and <see cref="OpenPdf"/> are available (M2 item 6).</summary>
     bool CanOpenFiles => false;
 
-    /// <summary>Shows a native Open dialog. Returns the full path the user chose, or null if they cancelled.</summary>
+    /// <summary>
+    /// Shows a native Open dialog. Returns the full path the user chose, or null if they cancelled. <paramref name="extension"/>
+    /// may list several, separated by semicolons (".json;.csv").
+    /// </summary>
     string? ChooseOpenFile(string filterDescription, string extension) => null;
 
     /// <summary>

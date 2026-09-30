@@ -17,6 +17,13 @@ import type {
   PublishResult,
   SourcePackPreview,
   CampaignPackPreview,
+  ExtensionInstallPreview,
+  ExtensionRunPreview,
+  ExtensionRunRequest,
+  InstalledExtension,
+  ExportTarget,
+  SheetPurpose,
+  VttExportPreview,
   SourceRecord,
   StudioEntry,
   UpdateOffer,
@@ -213,6 +220,36 @@ export function createClient(transport: Transport) {
     /** Native Save dialog in the shell; `unsupported` elsewhere (DevHost). No timeout, as for saveExportAs. */
     saveCampaignPackAs: (campaignId: string) =>
       call<SaveOutcome>('package.campaignPackSaveAs', { campaignId }, { timeoutMs: null }),
+    // ---- extensions (M6 slice 3, ADR-011): declarative only; every run previews first ----
+    listExtensions: () => call<InstalledExtension[]>('extension.list'),
+    /** Checks an extension file and shows what it asks for; installs nothing. */
+    previewExtensionInstall: (base64: string) => call<ExtensionInstallPreview>('extension.installPreview', { base64 }),
+    /** Native Open dialog, then the same check. `unsupported` elsewhere (DevHost). */
+    chooseExtensionInstall: () =>
+      call<{ chosen: boolean; fileName?: string; preview?: ExtensionInstallPreview }>('extension.installChoose', undefined, { timeoutMs: null }),
+    /** Only the install preview's button calls this, with the permissions the user ticked. */
+    installExtension: (token: string, grants: string[]) => call<InstalledExtension>('extension.install', { token, grants, confirm: true }),
+    /** The install review of an installed extension, read from its stored file (to grant permissions again after a restore). */
+    reviewExtension: (extensionId: string) => call<ExtensionInstallPreview>('extension.review', { extensionId }),
+    setExtensionEnabled: (extensionId: string, enabled: boolean) => call<InstalledExtension>('extension.setEnabled', { extensionId, enabled }),
+    /** Only the remove confirmation calls this. Drafts the extension made stay. */
+    removeExtension: (extensionId: string) => call<{ removed: boolean }>('extension.remove', { extensionId, confirm: true }),
+    /** Native Open dialog for an import hook's file; the path never reaches the page. `unsupported` elsewhere. */
+    chooseExtensionInput: () => call<{ chosen: boolean; token?: string; fileName?: string }>('extension.chooseInput', undefined, { timeoutMs: null }),
+    previewExtensionRun: (request: ExtensionRunRequest) => call<ExtensionRunPreview>('extension.runPreview', request),
+    /** Only the import preview's button calls this. */
+    runExtensionImport: (token: string) => call<{ sourceId: string; sourceTitle: string; drafts: number }>('extension.runImport', { token, confirm: true }),
+    /** Browser development: the previewed output as base64. */
+    runExtensionExport: (token: string) => call<{ fileName: string; base64: string }>('extension.runExport', { token }),
+    /** Native Save dialog; `unsupported` elsewhere. No timeout: it waits for the dialog. */
+    saveExtensionOutputAs: (token: string) => call<SaveOutcome>('extension.runSaveAs', { token }, { timeoutMs: null }),
+    // ---- export adapters (M6 slice 4, ADR-012): a file to import by hand; nothing is uploaded ----
+    previewVttExport: (characterId: string, target: ExportTarget, purpose: SheetPurpose) =>
+      call<VttExportPreview>('export.preview', { characterId, target, purpose }),
+    /** Native Save dialog; `unsupported` elsewhere (DevHost). No timeout: it waits for the dialog. */
+    saveVttExportAs: (token: string) => call<SaveOutcome>('export.saveAs', { token }, { timeoutMs: null }),
+    /** Browser development: the previewed file as base64. */
+    downloadVttExport: (token: string) => call<{ fileName: string; base64: string }>('export.download', { token }),
     previewImport: (base64: string) => call<PackagePreview>('package.preview', { base64 }),
     /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>

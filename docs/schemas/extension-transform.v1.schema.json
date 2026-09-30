@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/extension-transform.v1.schema.json",
+  "title": "TomeStack declarative transform (extension API 1)",
+  "description": "transforms/<hook id>.json of an extension (ADR-011 option A; docs/features/extensions.md 'The transform language'). An expression is a JSON literal (string, number, boolean, null) or an object with exactly one operator. Bounds are enforced when it runs: a step budget, a time limit, a cap on nested iterations (100,000), depth 64, tables of 10,000 entries in all, 5 MB of output, no regular expressions.",
+  "type": "object",
+  "required": ["output"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "tables": {
+      "type": "object",
+      "additionalProperties": { "type": "object", "description": "key → value; looked up with exact keys." }
+    },
+    "output": { "$ref": "#/$defs/expression" }
+  },
+  "$defs": {
+    "pointer": { "type": "string", "pattern": "^(/.*)?$", "maxLength": 512 },
+    "list": { "type": "array", "items": { "$ref": "#/$defs/expression" } },
+    "expression": {
+      "anyOf": [
+        { "type": ["string", "number", "boolean", "null"] },
+        { "type": "object", "required": ["const"], "maxProperties": 1 },
+        { "type": "object", "required": ["get"], "maxProperties": 1, "properties": { "get": { "$ref": "#/$defs/pointer" } } },
+        { "type": "object", "required": ["getRoot"], "maxProperties": 1, "properties": { "getRoot": { "$ref": "#/$defs/pointer" } } },
+        { "type": "object", "required": ["template"], "maxProperties": 1, "properties": { "template": { "type": "string", "description": "{/pointer} reads the current item, {#/pointer} the whole input; {{ and }} are braces." } } },
+        { "type": "object", "required": ["lookup"], "maxProperties": 1, "properties": { "lookup": { "type": "object", "required": ["table", "key"], "additionalProperties": false, "properties": { "table": { "type": "string" }, "key": { "$ref": "#/$defs/expression" }, "default": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["map"], "maxProperties": 1, "properties": { "map": { "type": "object", "required": ["over", "emit"], "additionalProperties": false, "properties": { "over": { "$ref": "#/$defs/expression" }, "emit": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["filter"], "maxProperties": 1, "properties": { "filter": { "type": "object", "required": ["over", "where"], "additionalProperties": false, "properties": { "over": { "$ref": "#/$defs/expression" }, "where": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["join"], "maxProperties": 1, "properties": { "join": { "type": "object", "required": ["items"], "additionalProperties": false, "properties": { "items": { "$ref": "#/$defs/expression" }, "separator": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["split"], "maxProperties": 1, "properties": { "split": { "type": "object", "required": ["text", "separator"], "additionalProperties": false, "properties": { "text": { "$ref": "#/$defs/expression" }, "separator": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["if"], "maxProperties": 1, "properties": { "if": { "type": "object", "required": ["cond", "then"], "additionalProperties": false, "properties": { "cond": { "$ref": "#/$defs/expression" }, "then": { "$ref": "#/$defs/expression" }, "else": { "$ref": "#/$defs/expression" } } } } },
+        { "type": "object", "required": ["object"], "maxProperties": 1, "properties": { "object": { "type": "object", "additionalProperties": { "$ref": "#/$defs/expression" } } } },
+        { "type": "object", "required": ["array"], "maxProperties": 1, "properties": { "array": { "$ref": "#/$defs/list" } } },
+        { "type": "object", "required": ["all"], "maxProperties": 1, "properties": { "all": { "$ref": "#/$defs/list" } } },
+        { "type": "object", "required": ["any"], "maxProperties": 1, "properties": { "any": { "$ref": "#/$defs/list" } } },
+        { "type": "object", "required": ["equals"], "maxProperties": 1, "properties": { "equals": { "$ref": "#/$defs/list", "minItems": 2, "maxItems": 2 } } },
+        { "type": "object", "required": ["startsWith"], "maxProperties": 1, "properties": { "startsWith": { "$ref": "#/$defs/list", "minItems": 2, "maxItems": 2 } } },
+        { "type": "object", "maxProperties": 1, "minProperties": 1, "propertyNames": { "enum": ["exists", "not", "int", "text", "lower", "upper", "count"] }, "additionalProperties": { "$ref": "#/$defs/expression" } }
+      ]
+    }
+  }
+}

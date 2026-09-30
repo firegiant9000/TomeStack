@@ -4,7 +4,7 @@ namespace TomeStack.AppService.Packages;
 
 /// <summary>
 /// M6 slice 2 (ROADMAP "M6 plan", B13): campaign packs. A campaign pack (<see cref="PackageScope.Campaign"/>, format v8,
-/// provisional until the slice merges) shares one campaign profile: its name, rules family, allowed sources and house
+/// settled on the M5+M6 integration branch, final when it merges to main) shares one campaign profile: its name, rules family, allowed sources and house
 /// rules, plus the published content of the allowed sources that pass the source-pack guard (<see cref="ShareProblem"/>).
 /// Bundled SRD sources are referenced by id and never copied; every other allowed source is left out and listed in
 /// <c>omitted[]</c>, and the receiver records it as pending until it is installed. A pack never carries characters, gap

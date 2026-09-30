@@ -1,11 +1,12 @@
 // End-to-end UI flow against the real DevHost (same CommandDispatcher as the shell): create -> sheet -> override
 // -> export -> import. Only the transport differs from the desktop app: HTTP to loopback instead of the WebView2
 // bridge, so export takes the download fallback instead of the native Save dialog.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, inject, it, vi } from 'vitest';
+import { zip } from './zip';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
@@ -596,6 +597,149 @@ it('shares a campaign as a campaign pack that names what it leaves out, and impo
   expect((await client.listCampaigns()).find((c) => c.id === campaign.id)?.name).toBe('E2E Harbor Table');
 });
 
+it('installs the sample extension after granting its permissions, runs its import and export hooks, and removes it (M6 slice 3)', async () => {
+  const user = userEvent.setup();
+  // The external sample, packed as a user would: extension.json and transforms/ from examples/extensions.
+  const folder = resolve(process.cwd(), '../../examples/extensions/spell-list-and-sheet-summary');
+  const files: Record<string, Uint8Array> = { 'extension.json': readFileSync(resolve(folder, 'extension.json')) };
+  for (const name of readdirSync(resolve(folder, 'transforms'))) files[`transforms/${name}`] = readFileSync(resolve(folder, 'transforms', name));
+  const extension = new File([zip(files)], 'spell-list-and-sheet-summary.tomestack-ext.zip', { type: 'application/zip' });
+  await client.createCharacter({ name: 'E2E Ext Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  // DevHost has no native Open dialog, so the browser picker is used.
+  await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
+  await user.upload(screen.getByLabelText('Extension file'), extension);
+  const review = await screen.findByRole('region', { name: 'Install Spell list and sheet summary (sample)?' });
+  const install = within(review).getByRole<HTMLButtonElement>('button', { name: 'Install with these permissions' });
+  expect(install.disabled).toBe(true); // nothing is granted until it is ticked
+  const permissions = within(within(review).getByRole('group', { name: 'Permissions to grant' })).getAllByRole('checkbox');
+  expect(permissions).toHaveLength(4);
+  for (const permission of permissions) await user.click(permission);
+  await user.click(install);
+  await expectStatus(/Installed Spell list and sheet summary \(sample\) with 4 permissions/);
+  const item = await screen.findByRole('listitem', { name: 'Spell list and sheet summary (sample)' });
+
+  // Import: a CSV spell list becomes drafts in a new source; nothing is written before "Create drafts".
+  await user.click(within(item).getByRole('button', { name: 'Import a CSV spell list as draft spells' }));
+  const importRun = await screen.findByRole('region', { name: 'Run Import a CSV spell list as draft spells' });
+  await user.clear(within(importRun).getByRole('textbox', { name: 'New source for the drafts' }));
+  await user.type(within(importRun).getByRole('textbox', { name: 'New source for the drafts' }), 'E2E Imported Spells');
+  await user.click(within(importRun).getByRole('button', { name: 'Choose CSV file…' }));
+  const csv = readFileSync(resolve(folder, 'sample-spells.csv'));
+  await user.upload(screen.getByLabelText('Import a CSV spell list as draft spells: file'), new File([csv], 'sample-spells.csv', { type: 'text/csv' }));
+  const drafts = await within(importRun).findByRole('region', { name: 'Preview of Import a CSV spell list as draft spells' });
+  expect(drafts.textContent).toMatch(/3 drafts in the new source E2E Imported Spells/);
+  expect(drafts.textContent).toMatch(/never shared/);
+  expect((await client.listSources()).some((s) => s.title === 'E2E Imported Spells')).toBe(false);
+  await user.click(within(drafts).getByRole('button', { name: 'Create drafts' }));
+  await expectStatus(/Created 3 drafts in the new source E2E Imported Spells/);
+  const imported = (await client.listSources()).find((s) => s.title === 'E2E Imported Spells')!;
+  expect(imported.importDerived).toBe(true);
+  expect((await client.contentBySource(imported.id)).every((e) => e.latest.status === 'draft')).toBe(true);
+
+  // Export: the sheet summary, previewed and then saved (DevHost downloads). No local path reaches it.
+  await user.click(within(screen.getByRole('listitem', { name: 'Spell list and sheet summary (sample)' })).getByRole('button', { name: 'Export a sheet summary as Markdown' }));
+  const exportRun = await screen.findByRole('region', { name: 'Run Export a sheet summary as Markdown' });
+  await user.selectOptions(within(exportRun).getByRole('combobox', { name: 'Character' }), 'E2E Ext Hero');
+  await user.click(within(exportRun).getByRole('button', { name: 'Preview output' }));
+  const output = await within(exportRun).findByRole('region', { name: 'Preview of Export a sheet summary as Markdown' });
+  expect(output.textContent).toMatch(/# E2E Ext Hero/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(output).getByRole('button', { name: 'Save output…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Ext-Hero-sheet-markdown.md');
+  const markdown = new TextDecoder().decode(bytesOf(base64));
+  expect(markdown).toMatch(/## Sources and licenses/);
+  expect(markdown.toLowerCase().replaceAll('\\', '/')).not.toContain(inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/'));
+
+  // Remove: its permissions and file go; its drafts stay.
+  await user.click(within(screen.getByRole('listitem', { name: 'Spell list and sheet summary (sample)' })).getByRole('button', { name: 'Remove Spell list and sheet summary (sample)…' }));
+  await user.click(within(await screen.findByRole('alertdialog', { name: 'Remove Spell list and sheet summary (sample)?' })).getByRole('button', { name: 'Remove' }));
+  await expectStatus(/Removed Spell list and sheet summary \(sample\)/);
+  expect(await client.listExtensions()).toEqual([]);
+  expect(await client.contentBySource(imported.id)).toHaveLength(3);
+});
+
+it('exports a character for Foundry VTT and as sheet JSON after a preview, with no local path in either file (M6 slice 4)', async () => {
+  const user = userEvent.setup();
+  const character = await client.createCharacter({ name: 'E2E VTT Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E VTT Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E VTT Hero' });
+  const panel = within(sheet).getByRole('region', { name: 'Export for a virtual tabletop' });
+  const dataDir = inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/');
+
+  // Foundry VTT (dnd5e): the preview names the pinned release, then DevHost downloads the file.
+  await user.click(within(panel).getByRole('radio', { name: /Foundry VTT \(dnd5e system\)/ }));
+  await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
+  const preview = await within(panel).findByRole('region', { name: 'Export preview' });
+  expect(preview.textContent).toMatch(/E2E-VTT-Hero\.foundry-dnd5e\.json.*checked against Foundry VTT 14\.367 with dnd5e 6\.0\.5/);
+  expect(preview.textContent).toMatch(/not affiliated with Foundry Gaming LLC/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(preview).getByRole('button', { name: 'Save export file…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [foundryName, foundry64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(foundryName).toBe('E2E-VTT-Hero.foundry-dnd5e.json');
+  const actorText = new TextDecoder().decode(bytesOf(foundry64));
+  const actor = JSON.parse(actorText) as { type: string; name: string; _stats: { systemVersion: string } };
+  expect([actor.type, actor.name, actor._stats.systemVersion]).toEqual(['character', 'E2E VTT Hero', '6.0.5']);
+  expect(actorText.toLowerCase().replaceAll('\\\\', '/').replaceAll('\\', '/')).not.toContain(dataDir);
+
+  // The neutral sheet JSON.
+  await user.click(within(panel).getByRole('radio', { name: /TomeStack sheet \(JSON\)/ }));
+  await user.click(within(panel).getByRole('button', { name: 'Preview export' }));
+  await user.click(within(await within(panel).findByRole('region', { name: 'Export preview' })).getByRole('button', { name: 'Save export file…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 2));
+  const [sheetName, sheet64] = vi.mocked(downloadBase64).mock.calls[downloads + 1]!;
+  expect(sheetName).toBe('E2E-VTT-Hero.tomestack-sheet.json');
+  const model = JSON.parse(new TextDecoder().decode(bytesOf(sheet64))) as { format: string; formatVersion: number; character: { name: string } };
+  expect([model.format, model.formatVersion, model.character.name]).toEqual(['tomestack.sheet', 1, 'E2E VTT Hero']);
+  expect(character.character.id).toBeTruthy();
+});
+
+it('follows the authoring guides: the extension guide, packed as written, installs, is granted and exports its features with every notice (M6 slice 5)', async () => {
+  const user = userEvent.setup();
+  // docs/authoring/extension.md, its tagged blocks exactly as the guide shows them.
+  const guide = readFileSync(resolve(process.cwd(), '../../docs/authoring/extension.md'), 'utf8');
+  const files: Record<string, Uint8Array> = {};
+  for (const match of guide.matchAll(/```json tomestack-example:([^\r\n]+)\r?\n([\s\S]*?)\r?\n```/g)) {
+    const name = match[1]!.trim();
+    if (name === 'extension.json' || name.startsWith('transforms/')) files[name] = new TextEncoder().encode(match[2]!);
+  }
+  expect(Object.keys(files).sort()).toEqual(['extension.json', 'transforms/features-md.json']);
+  // A class, so the file has feature lines and an SRD notice.
+  await client.createCharacter({ name: 'E2E Guide Reader', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [], classes: [{ class: srd(11), level: 1 }] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Extensions' }));
+  await user.click(await screen.findByRole('button', { name: 'Install extension…' }));
+  await user.upload(screen.getByLabelText('Extension file'), new File([zip(files)], 'example-feature-list.tomestack-ext.zip', { type: 'application/zip' }));
+  // "Tick the permissions and choose Install with these permissions."
+  const review = await screen.findByRole('region', { name: 'Install Example feature list?' });
+  for (const permission of within(within(review).getByRole('group', { name: 'Permissions to grant' })).getAllByRole('checkbox')) await user.click(permission);
+  await user.click(within(review).getByRole('button', { name: 'Install with these permissions' }));
+  await expectStatus(/Installed Example feature list with 2 permissions/);
+  // "Then choose the hook (Export features as Markdown), pick a character …, choose Preview output, and Save output…"
+  await user.click(within(await screen.findByRole('listitem', { name: 'Example feature list' })).getByRole('button', { name: 'Export features as Markdown' }));
+  const run = await screen.findByRole('region', { name: 'Run Export features as Markdown' });
+  await user.selectOptions(within(run).getByRole('combobox', { name: 'Character' }), 'E2E Guide Reader');
+  await user.click(within(run).getByRole('button', { name: 'Preview output' }));
+  const output = await within(run).findByRole('region', { name: 'Preview of Export features as Markdown' });
+  expect(output.textContent).toMatch(/# Features of E2E Guide Reader/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(output).getByRole('button', { name: 'Save output…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Guide-Reader-features-md.md');
+  const text = new TextDecoder().decode(bytesOf(base64));
+  expect(text).toMatch(/^- .+ \([a-z]+\), from .+$/m); // at least one feature line
+  expect(text).toMatch(/## Sources and licenses\n- .+CC-BY-4\.0/);
+  await client.removeExtension((await client.listExtensions()).find((x) => x.manifest.name === 'Example feature list')!.id);
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();
@@ -1118,7 +1262,16 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
 
-  await user.click(within(preview).getByRole('button', { name: 'Restore' }));
+  // "Keep the current state" closes the preview and returns focus to the button that opened it (accessibility item 23).
+  await user.click(within(preview).getByRole('button', { name: 'Keep the current state' }));
+  const reopen = within(panel()).getByRole('button', { name: 'Restore E2E with the feat…' });
+  await waitFor(() => expect(document.activeElement).toBe(reopen));
+  expect(within(panel()).queryByRole('region', { name: 'Restore E2E with the feat?' })).toBeNull();
+  expect((await client.getCharacter(hero.id)).character.pins).toEqual([]);
+
+  await user.click(reopen);
+  const again = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
+  await user.click(within(again).getByRole('button', { name: 'Restore' }));
   await expectStatus(/Restored the snapshot/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
   expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot

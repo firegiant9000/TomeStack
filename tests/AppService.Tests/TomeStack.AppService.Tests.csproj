@@ -32,6 +32,12 @@
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\AppService\Content\*.json" LinkBase="Content" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\licensing\*.md" LinkBase="licensing" CopyToOutputDirectory="PreserveNewest" />
+    <!-- M6 slice 3: the external sample extension, zipped by the tests as a user would (ADR-011). -->
+    <None Include="..\..\examples\extensions\**\*" LinkBase="examples\extensions" CopyToOutputDirectory="PreserveNewest" />
+    <!-- M6 slice 5: the author guides, whose tagged examples the tests follow. -->
+    <None Include="..\..\docs\authoring\*.md" LinkBase="authoring" CopyToOutputDirectory="PreserveNewest" />
+    <!-- M6 slice 4: golden export files (original fixture characters only). -->
+    <None Include="Golden\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

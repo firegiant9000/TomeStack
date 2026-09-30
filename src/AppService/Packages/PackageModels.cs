@@ -21,15 +21,20 @@ public sealed record PackageManifest
     /// v3 (ADR-007, D03): <see cref="Purpose"/> and <see cref="Omitted"/>. A share package may leave out pinned
     /// revisions; older builds would reject those pins, so they refuse v3 instead. v2 (ADR-003): content entries use
     /// content schemaVersion 2 (typed effects). v1 and v2 packages still import (as backups), and v1 revisions are upcast.
-    /// v7 (M6 slice 1; the number is provisional until the slice merges, ROADMAP "Package format numbers"): the
+    /// v7 (M6 slice 1; the number is settled on the M5+M6 integration branch and final when it merges to main, ROADMAP "Package format numbers"): the
     /// <see cref="PackageScope.Source"/> scope (a source pack: shareable homebrew sources and their published revisions,
     /// with <see cref="RevisionOrder"/> and <see cref="Attestations"/>), and library backups whose sources carry
     /// <c>importDerived</c>, <c>origin</c> and <c>shareConfirmedAt</c>. Older builds refuse v7, so none drops the flag.
-    /// v8 (M6 slice 2; provisional like v7, fixed only when the slice merges): the <see cref="PackageScope.Campaign"/> scope
+    /// v8 (M6 slice 2; settled with v7): the <see cref="PackageScope.Campaign"/> scope
     /// (a campaign pack: one campaign profile, and the sources of it that pass the source-pack guard with their published
     /// revisions; allowed sources it leaves out are listed in <see cref="Omitted"/>).
+    /// v9 (M6 slice 3; settled with v7 and v8): library backups that keep installed extensions (<c>extensions/&lt;sha256&gt;.zip</c>,
+    /// without their grants; ADR-011 "Storage and backup"). A backup with no extension is still written as v7.
     /// </summary>
-    public const int CurrentFormatVersion = 8;
+    public const int CurrentFormatVersion = 9;
+
+    /// <summary>M6 slice 3 (settled on the integration branch): the first library-backup version that may carry installed extensions.</summary>
+    public const int LibraryExtensionsFormatVersion = 9;
 
     /// <summary>Character packages (backup and share) have not changed since v5, so they stay readable by 0.3.0.</summary>
     public const int CharacterFormatVersion = 5;
@@ -40,7 +45,7 @@ public sealed record PackageManifest
     /// <summary>M6 slice 1: the first version with <see cref="PackageScope.Source"/>.</summary>
     public const int SourceFormatVersion = 7;
 
-    /// <summary>M6 slice 2 (provisional): the first version with <see cref="PackageScope.Campaign"/>.</summary>
+    /// <summary>M6 slice 2 (settled on the integration branch): the first version with <see cref="PackageScope.Campaign"/>.</summary>
     public const int CampaignFormatVersion = 8;
 
     public string Format { get; init; } = FormatName;
@@ -130,9 +135,10 @@ public sealed record CampaignImpact(Guid CampaignId, Guid CharacterId, string Ch
 /// <param name="ManagedPdfs">PDFs TomeStack keeps a copy of (included), and their total size.</param>
 /// <param name="LinkedPdfs">PDFs left where they are: their records are included, the files are not.</param>
 /// <param name="Unreadable">Managed PDFs that are missing or damaged on disk and would be left out, by source title.</param>
+/// <param name="Extensions">M6 slice 3: installed extensions kept (their files, not their grants).</param>
 public sealed record LibraryBackupPreview(
     string FileName, int Characters, int Campaigns, int GapNotes, int Sources, int PublishedRevisions, int DraftRevisions,
-    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable);
+    int ManagedPdfs, long ManagedPdfBytes, int LinkedPdfs, IReadOnlyList<string> Unreadable, int Extensions = 0);
 
 /// <param name="Warnings">Anything left out (a damaged PDF copy); the backup is still complete otherwise.</param>
 public sealed record LibraryBackupResult(string FileName, long Bytes, LibraryBackupPreview Contents, IReadOnlyList<Diagnostic> Warnings);

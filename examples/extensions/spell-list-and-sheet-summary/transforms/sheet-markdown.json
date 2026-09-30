@@ -1,0 +1,33 @@
+{
+  "description": "A Markdown summary of the sheet export model v1: abilities, skills, totals, features, and every license notice (ADR-011: every consumer carries notices).",
+  "output": {
+    "join": {
+      "separator": "\n",
+      "items": {
+        "array": [
+          { "template": "# {/sheet/character/name}" },
+          { "template": "Level {/sheet/character/level}, {/sheet/character/rulesFamily} rules ({/sheet/purpose} export)" },
+          "",
+          "## Abilities",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/abilities" }, "emit": { "template": "- {/ability}: {/score} (modifier {/modifier}, save {/save})" } } } } },
+          "",
+          "## Totals",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/fields" }, "emit": { "template": "- {/label}: {/value}" } } } } },
+          "",
+          "## Skills",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/skills" }, "emit": { "template": "- {/label}: {/total}" } } } } },
+          "",
+          "## Features",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/features" }, "emit": { "template": "- {/name} ({/source})" } } } } },
+          "",
+          "## Left out",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/dropped" }, "emit": { "template": "- {/items} item(s) from {/source}" } } } } },
+          "",
+          "## Sources and licenses",
+          { "join": { "separator": "\n", "items": { "map": { "over": { "get": "/sheet/notices" }, "emit": { "template": "- {/title} ({/publisher}), {/license}. {/attribution} {/modificationNotice}" } } } } },
+          ""
+        ]
+      }
+    }
+  }
+}
