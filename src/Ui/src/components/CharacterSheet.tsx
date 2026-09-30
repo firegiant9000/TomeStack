@@ -35,7 +35,8 @@ const groups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') },
   { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
-  // D04: the primary caster's numbers, with traces and overrides (the manual step for combined multiclass slots).
+  // D04: the caster numbers, with traces and overrides. Slots combine on the multiclass table (M3 C3); an override is the
+  // manual step only for class revisions that do not say how they combine.
   { title: 'Spellcasting', match: (f) => f === 'spellAttack' || f === 'spellSaveDc' || f === 'pactSlots' || f.startsWith('spellSlots.') },
 ];
 
