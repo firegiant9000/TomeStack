@@ -625,6 +625,21 @@ export interface PackageManifest {
   notices: LicenseNotice[];
   omitted?: OmittedSource[];
   attachmentPolicy: string;
+  /** Absent for character packages; `source` is a source pack (format v7, M6 slice 1). */
+  scope?: 'characters' | 'library' | 'source';
+  /** Source packs: the sender's statement, per source, that it is their own work. TomeStack cannot verify it. */
+  attestations?: { sourceId: string; statement: string; confirmedAt: string }[];
+}
+
+/** M6 slice 1 (`package.sourcePackPreview`): what a source pack would hold. Nothing is written. */
+export interface SourcePackPreview {
+  fileName: string;
+  sources: LicenseNotice[];
+  /** Published revisions included, superseded ones too. */
+  revisions: number;
+  /** Drafts of these sources that stay on this machine. */
+  drafts: number;
+  warnings: Diagnostic[];
 }
 
 export interface ExportPreview {
@@ -874,6 +889,12 @@ export interface SourceRecord {
   editionVersion: string;
   license: string;
   redistributable: boolean;
+  /** M6 slice 1: material from a PDF entered this source; it is never shared, and this never goes away. */
+  importDerived?: boolean;
+  /** M6 slice 1: `received` sources came in someone else's package and cannot be marked as your own work. */
+  origin?: 'local' | 'received';
+  /** M6 slice 1: when you confirmed the source is your own work ("Mark as shareable"). */
+  shareConfirmedAt?: string;
 }
 
 /** ADR-005: a source's PDF, without any path. */

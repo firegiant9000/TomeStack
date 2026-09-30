@@ -4,7 +4,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 
 | File | Describes | Version field |
 | --- | --- | --- |
-| `source.v1.schema.json` | `SourceRecord` (SPEC S-01) | none (v1) |
+| `source.v1.schema.json` | `SourceRecord` (SPEC S-01), as character packages and source packs write it | none (v1) |
+| `source.v2.schema.json` | Adds `importDerived`, `origin` and `shareConfirmedAt` (M6 slice 1; set only by the machine that holds the source). Stored from database v8 and written only in format v7 library backups; a record with any of them is v2 | none (by field) |
 | `content-revision.v1.schema.json` | `ContentRevision` with M0 string-typed effects (ADR-002). Read and upcast; no longer written | `schemaVersion` |
 | `content-revision.v2.schema.json` | `ContentRevision` with typed effects (ADR-003). Still read and kept as v2 (not upcast) | `schemaVersion` |
 | `content-revision.v3.schema.json` | Adds `grant.level`, `hitDie`, and the `armorClass` / `hitPoints` targets (ADR-003 "Content schema v3"). An `armor` effect in a v3 revision is unknown and reference-only. Still read and kept as v3 | `schemaVersion` |
@@ -26,7 +27,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Still importable | `formatVersion` |
 | `package-manifest.v4.schema.json` | Adds `campaigns/` entries (M2 item 7); entries may be content and character schema v4. Still imported | `formatVersion` |
 | `package-manifest.v5.schema.json` | Adds `gaps/` entries, backups only (M3 B3). Current for character packages | `formatVersion` |
-| `package-manifest.v6.schema.json` | Adds `scope` and `revisionOrder`; `attachments/` and `files/` entries in full library backups only (M2.1). Current for library backups | `formatVersion` |
+| `package-manifest.v6.schema.json` | Adds `scope` and `revisionOrder`; `attachments/` and `files/` entries in full library backups only (M2.1). Still restored | `formatVersion` |
+| `package-manifest.v7.schema.json` | Adds `scope: "source"` (a source pack: `sources/` and published `content/` only, with `revisionOrder` and `attestations`) and library backups whose sources are v2 (M6 slice 1; the number is provisional until it merges). Current for library backups and source packs | `formatVersion` |
 | `attachment.v1.schema.json` | `attachments/<attachmentId>.json` in a full library backup: a managed or linked PDF record (ADR-005, M2.1) | none (v1) |
 | `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Current | `schemaVersion` |
 | `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules. Current | `schemaVersion` |

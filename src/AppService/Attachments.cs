@@ -134,7 +134,12 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("attachment.unreadable", "The PDF could not be read. Check that it is not open elsewhere and try again.")]);
         }
         var previous = source.AttachmentId;
-        _store.InTransaction(() => _store.UpsertSource(source with { AttachmentId = attachment.AttachmentId, PdfRef = null }));
+        var attached = source with { AttachmentId = attachment.AttachmentId, PdfRef = null };
+        // M6 slice 1 (D14 item 6): a source with a PDF is import-derived from now on, even after the PDF is removed, and is
+        // never shared. The SRD sources are exempt: their content is this build's own.
+        if (!_bundledSources.Contains(source.Id))
+            attached = attached with { ImportDerived = true, Redistributable = false, ShareConfirmedAt = null };
+        _store.InTransaction(() => _store.UpsertSource(attached));
         if (previous is { } old && old != attachment.AttachmentId && _store.FindAttachment(old) is { } replaced && _store.SourcesUsing(old) == 0)
         {
             _store.InTransaction(() => _store.DeleteAttachment(old));

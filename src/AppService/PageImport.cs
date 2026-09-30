@@ -47,7 +47,11 @@ public sealed partial class TomeStackApp
             Status = RevisionStatus.Draft,
             Summary = $"Reference: {what} of {source.Title}. Imported as a page reference; the text is in the PDF, and nothing is calculated from it.",
         };
-        SaveDraft(draft);
+        _store.InTransaction(() =>
+        {
+            MarkImportDerived(source.Id); // M6 slice 1: the entry cites the PDF's pages
+            SaveDraft(draft);
+        });
         return draft;
     }
 }

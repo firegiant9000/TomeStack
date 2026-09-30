@@ -54,7 +54,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var plan = Plan(characterIds, purpose);
         var files = new SortedDictionary<string, (string Kind, byte[] Bytes)>(StringComparer.Ordinal);
         foreach (var source in plan.Sources)
-            files[$"sources/{source.Id:D}.json"] = ("source", Json(source with { PdfRef = null, AttachmentId = null })); // machine-local; a path may name the user (ADR-005)
+            files[$"sources/{source.Id:D}.json"] = ("source", Json(ForCharacterPackage(source))); // machine-local; a path may name the user (ADR-005)
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
@@ -154,7 +154,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         var omitted = new List<OmittedSource>();
         if (purpose == ExportPurpose.Share)
         {
-            foreach (var source in sources.Values.Where(s => !s.Redistributable).OrderBy(s => s.Id))
+            // M6 slice 1: an import-derived source is never shared, whatever its redistributable flag says.
+            foreach (var source in sources.Values.Where(s => !s.MayBeShared).OrderBy(s => s.Id))
             {
                 var left = revisions.Values.Where(r => r.Provenance.SourceId == source.Id).OrderBy(r => r.RevisionId).ToList();
                 omitted.Add(new(source.Id, source.Title, source.Publisher, source.License,
@@ -190,6 +191,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         // SPEC C-07/Q-01: never overwrite a local character without a restorable copy.
         var toReplace = parsed.Characters.Where(c => store.FindCharacter(c.Id) is not null).Select(c => c.Id).ToList();
         var backupFile = toReplace.Count > 0 ? WriteBackup(toReplace) : null;
+        // M6 slice 1: a source pack can replace source metadata and make its revisions the newest, so the whole database is
+        // copied first whenever it changes anything (package-format.md rule 10).
+        if (parsed.Manifest.Scope == PackageScope.Source && preview.Items.Any(i => (i.Action is PackageItemAction.Add or PackageItemAction.Replace) && !(i.Kind == "source" && keepLocal.Contains(i.Id))))
+            backupFile = WriteSafetyCopy("pre-import");
 
         var (added, replaced, unchanged) = Commit(parsed, keepLocal, []);
         return new ImportResult(added, replaced, unchanged, [.. parsed.Characters.Select(c => c.Id)], backupFile);
@@ -230,10 +235,26 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 if (store.FindAttachment(attachment.AttachmentId) is null) { store.AddAttachment(attachment); added++; }
                 else unchanged++;
             }
-            foreach (var source in parsed.Sources.Where(s => !keepLocal.Contains(s.Id)))
+            foreach (var source in parsed.Sources)
             {
-                // A PDF reference is machine-local; a package import never adds, changes or removes one.
                 var local = store.FindSource(source.Id);
+                if (local is not null && _bundledSources.Contains(source.Id))
+                {
+                    // M6 slice 1: bundled source records are this build's own. A full restore still gives an SRD source the
+                    // backup's PDF when it has none here (its page links), as for any source (review fix).
+                    if (library && local.AttachmentId is null && source.AttachmentId is { } srdPdf && linked.Contains(srdPdf) && store.FindAttachment(srdPdf) is not null)
+                        store.UpsertSource(local with { AttachmentId = srdPdf });
+                    continue;
+                }
+                if (keepLocal.Contains(source.Id))
+                {
+                    // The local metadata stays, but the import-derived flag still only goes up (M6 slice 1): the file's flag,
+                    // or, in a backup, a PDF the source had there.
+                    if (local is not null && local.ImportDerived != true && (source.ImportDerived == true || (library && source.AttachmentId is not null)))
+                        store.UpsertSource(local with { ImportDerived = true });
+                    continue;
+                }
+                // A PDF reference is machine-local; a package import never adds, changes or removes one.
                 var attachmentId = local?.AttachmentId;
                 if (library && source.AttachmentId is { } fromBackup && fromBackup != attachmentId)
                 {
@@ -242,12 +263,25 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                     else if (attachmentId is not null)
                         warnings.Add(new("restore.pdf-kept", $"'{source.Title}' already has a different PDF here; it is kept."));
                 }
-                store.UpsertSource(source with { PdfRef = local?.PdfRef, AttachmentId = attachmentId });
+                store.UpsertSource(Merged(source, local, parsed.Manifest.Scope, attachmentId) with { PdfRef = local?.PdfRef });
             }
+            var unconfirm = new HashSet<Guid>();
             foreach (var revision in parsed.Revisions)
             {
-                if (store.AddRevision(revision)) added++;
+                if (store.AddRevision(revision))
+                {
+                    added++;
+                    if (!library)
+                        unconfirm.Add(revision.Provenance.SourceId);
+                }
                 else unchanged++;
+            }
+            // M6 slice 1: a source of unknown origin that received content from a package must be confirmed again before
+            // it is shared as the author's own work (package.source-unconfirmed).
+            foreach (var sourceId in unconfirm)
+            {
+                if (store.FindSource(sourceId) is { Origin: null, ShareConfirmedAt: not null } unknown && !_bundledSources.Contains(sourceId))
+                    store.UpsertSource(unknown with { ShareConfirmedAt = null });
             }
             foreach (var campaign in parsed.Campaigns)
             {
@@ -355,6 +389,17 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         foreach (var source in parsed.Sources)
         {
             var local = store.FindSource(source.Id);
+            // M6 slice 1: a bundled SRD source record is this build's own; no package replaces it (its CC-BY notice
+            // travels in every later share).
+            if (local is not null && _bundledSources.Contains(source.Id))
+            {
+                if (SourceChanges(local, source).Count > 0)
+                    warnings.Add(new("package.bundled-source-kept", $"The package carries a different record for the bundled source '{local.Title}'. TomeStack keeps its own."));
+                items.Add(new("source", source.Id, local.Title, PackageItemAction.Unchanged, "bundled with TomeStack"));
+                continue;
+            }
+            if (source.ImportDerived == true && local?.ImportDerived != true)
+                warnings.Add(new("package.source-import-derived", $"'{source.Title}' holds material imported from a PDF on the sender's machine. It stays marked that way here and is never shared."));
             var changes = local is null ? [] : SourceChanges(local, source);
             var action = local is null ? PackageItemAction.Add
                 : changes.Count == 0 ? PackageItemAction.Unchanged
@@ -378,6 +423,23 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 : PackageItemAction.Conflict;
             if (action == PackageItemAction.Conflict)
                 errors.Add(new("package.revision-conflict", $"Revision {revision.RevisionId} of '{revision.Name}' differs from the installed revision with the same ID. Published revisions are immutable.", revision.Reference));
+            // M6 slice 1 (review fixes), every scope but a full restore (the user's own file):
+            if (action == PackageItemAction.Add && parsed.Manifest.Scope != PackageScope.Library)
+            {
+                // New content under a bundled SRD source would travel in every share with the SRD's CC-BY notice.
+                if (_bundledSources.Contains(revision.Provenance.SourceId))
+                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' claims to belong to a bundled SRD source, but is not part of it. It was not written by this TomeStack's SRD packs.", revision.Reference));
+                // Only you add content to a source you made here. A source of unknown origin (stored before v8) may be yours
+                // from another machine, so it is not refused, but it must be marked as shareable again (Commit).
+                else if (store.FindSource(revision.Provenance.SourceId) is { Origin: SourceOrigin.Local } own)
+                    errors.Add(new("package.own-source", $"'{revision.Name}' would be added to '{own.Title}', a source you made on this machine. Only you add content to your own sources.", revision.Reference));
+                else if (store.FindSource(revision.Provenance.SourceId) is { Origin: null, ShareConfirmedAt: not null } unknown)
+                    warnings.Add(new("package.source-unconfirmed", $"'{revision.Name}' is added to '{unknown.Title}'. Its share confirmation is withdrawn: mark it as shareable again once you have checked its content.", revision.Reference));
+                // A content's revisions belong to one source (M6 review): a new revision of an SRD or homebrew content here,
+                // under another source, would become its newest and leave that content in two sources for good.
+                if (store.RevisionsOf(revision.ContentId).FirstOrDefault(r => r.Provenance.SourceId != revision.Provenance.SourceId) is { } other)
+                    errors.Add(new("pack.content-conflict", $"'{revision.Name}' would add a revision to '{other.Name}', which belongs to another source here.", revision.Reference));
+            }
             if (revision.Status != RevisionStatus.Published)
                 warnings.Add(new("package.revision-draft", $"'{revision.Name}' is a draft and stays inactive after import.", revision.Reference));
             var families = string.Join(", ", revision.RulesFamilies);
@@ -481,7 +543,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             items.Add(new("gapNote", note.Id, note.Target?.Label ?? "(gap note)", action, $"{owner.Name} · {note.Status}"));
         }
 
-        if (parsed.Manifest.Scope == PackageScope.Library)
+        // Inside the package too, a content's revisions belong to one source (every scope but a full restore; M6 review).
+        if (parsed.Manifest.Scope != PackageScope.Library)
+        {
+            foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
+                errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the package's sources.", split.Last().Reference));
+        }
+        if (parsed.Manifest.Scope == PackageScope.Source)
+            CheckSourcePack(parsed, errors, warnings);
+        if (parsed.Manifest.Scope is PackageScope.Library or PackageScope.Source)
             warnings.AddRange(LibraryWarnings(parsed));
         foreach (var attachment in parsed.Attachments)
         {
@@ -535,7 +605,11 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            // Names are checked for every entry before any entry is decompressed.
+            // The format and version first (M6 slice 1), read bounded from the manifest alone: a newer package may add an
+            // entry path as well as a scope or field, and must be refused as "update TomeStack", not as a bad path.
+            if (zip.GetEntry(ManifestPath) is { } manifestEntry && !ManifestVersionReadable(ReadBounded(manifestEntry, limits.MaxJsonBytes), errors))
+                return null;
+            // Names are checked for every other entry before it is decompressed.
             foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
                 errors.Add(new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
             if (errors.Count > 0)
@@ -605,6 +679,18 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         if (manifest.Scope == PackageScope.Library && (manifest.FormatVersion < 6 || manifest.Purpose != ExportPurpose.Backup))
         {
             errors.Add(new("package.invalid-json", "A full library backup must be a format v6 backup."));
+            return null;
+        }
+        // M6 slice 1: a source pack is always a share and carries only sources and published content.
+        var sourcePack = manifest.Scope == PackageScope.Source;
+        if (sourcePack && (manifest.FormatVersion < PackageManifest.SourceFormatVersion || manifest.Purpose != ExportPurpose.Share))
+        {
+            errors.Add(new("package.invalid-json", $"A source pack must be a format v{PackageManifest.SourceFormatVersion} share."));
+            return null;
+        }
+        if (sourcePack && files.Keys.FirstOrDefault(p => p != ManifestPath && !p.StartsWith("sources/", StringComparison.Ordinal) && !p.StartsWith("content/", StringComparison.Ordinal)) is { } stray)
+        {
+            errors.Add(new("package.entry-not-allowed", $"Entry '{stray}' is not allowed in a source pack, which carries only sources and their published content."));
             return null;
         }
 
@@ -678,7 +764,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
         if (errors.Count > 0)
             return null;
-        if (library)
+        // Newest means last stored (SPEC I-06), so a library backup and a source pack add revisions in the order the
+        // sender stored them, not in entry (id) order.
+        if (library || sourcePack)
             revisions = OrderAsStored(revisions, manifest.RevisionOrder, errors);
         return errors.Count > 0 ? null : new ParsedPackage(manifest, sources, revisions, characters, campaigns, gapNotes, attachments, pdfs);
     }
@@ -691,7 +779,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         return
         [
             .. localNode.Select(p => p.Key).Union(importedNode.Select(p => p.Key)).Order(StringComparer.Ordinal)
-                .Where(field => field is not ("pdfRef" or "attachmentId"))
+                // Set only by the receiving machine (M6 slice 1), so never a choice: the flag only goes up, and origin and
+                // the share confirmation are this machine's own record.
+                .Where(field => field is not ("pdfRef" or "attachmentId" or "importDerived" or "origin" or "shareConfirmedAt"))
                 .Select(field => new FieldChange(field, localNode[field]?.ToJsonString(), importedNode[field]?.ToJsonString()))
                 .Where(change => change.Local != change.Imported),
         ];

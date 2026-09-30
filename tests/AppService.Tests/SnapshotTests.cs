@@ -259,7 +259,7 @@ public class SnapshotTests
 
             using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: []))
             {
-                Assert.Equal(7, app.GetInfo().SchemaVersion);
+                Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion); // through v7 and on
                 Assert.Equal(TempApp.Json(old), TempApp.Json(app.Store.FindCharacter(old.Id)));
                 Assert.Single([app.Snapshot(new(old.Id))]);
             }

@@ -52,6 +52,26 @@ public sealed partial class TomeStackApp : IDisposable
         "TomeStack.Content.srd-5.1-fighter.json", "TomeStack.Content.srd-5.2.1-fighter.json",
     ];
 
+    /// <summary>
+    /// The source ids of <see cref="BundledPacks"/>, read from the packs' <c>sources</c> alone. Database migration v8 uses
+    /// it before anything is seeded (M6 slice 1): the SRD sources are never import-derived.
+    /// </summary>
+    internal static IReadOnlySet<Guid> BundledSourceIds => LazyBundledSourceIds.Value;
+
+    private static readonly Lazy<IReadOnlySet<Guid>> LazyBundledSourceIds = new(() =>
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var pack in BundledPacks)
+        {
+            using var stream = typeof(TomeStackApp).Assembly.GetManifestResourceStream(pack)
+                ?? throw new InvalidOperationException($"Embedded content pack {pack} is missing.");
+            using var document = JsonDocument.Parse(stream);
+            foreach (var source in document.RootElement.GetProperty("sources").EnumerateArray())
+                ids.Add(source.GetProperty("id").GetGuid());
+        }
+        return ids;
+    });
+
     /// <param name="syncRoots">Cloud sync roots to warn about (ADR-005); discovered from this machine when null.</param>
     /// <param name="devFixtures">
     /// Also seed the original test fixture pack. Development only (DevHost, tests, <c>TOMESTACK_DEV_FIXTURES=1</c>): the
@@ -76,11 +96,13 @@ public sealed partial class TomeStackApp : IDisposable
             {
                 var seeded = app.Seed(pack);
                 bundled.UnionWith(seeded.Revisions.Select(r => r.RevisionId));
+                app._bundledSources.UnionWith(seeded.Sources.Select(s => s.Id)); // M6 slice 1: the SRD sources this build ships
             }
             // A stored revision that took a bundled id is the user's own data, so a full backup must keep it.
             bundled.ExceptWith(app._seedConflicts.Select(c => c.RevisionId));
             app._bundledRevisions = bundled; // the design-feedback baseline (M5 slice 7; review fix: by revision id, not source)
             app._packages.SetBundledRevisions(bundled); // every install seeds these, so a full backup leaves them out
+            app._packages.SetBundledSources(app._bundledSources); // M6 slice 1: never replaced by a package, never in a source pack
             if (devFixtures)
             {
                 app.Seed("TomeStack.FixturePack.json");
@@ -109,6 +131,12 @@ public sealed partial class TomeStackApp : IDisposable
     /// design-feedback baseline. Selected by revision id, so nothing a user or a package adds, even under an SRD source id, joins it.
     /// </summary>
     private IReadOnlySet<Guid> _bundledRevisions = new HashSet<Guid>();
+
+    /// <summary>
+    /// M6 slice 1: the source ids of the bundled SRD packs, as seeded. They are never import-derived, never marked as
+    /// shareable, never in a source pack, and no package replaces their records.
+    /// </summary>
+    private readonly HashSet<Guid> _bundledSources = [];
 
     /// <summary>
     /// Default data directory: <c>TOMESTACK_DATA_DIR</c> if set, else <c>%LOCALAPPDATA%\TomeStack</c> (D02, ADR-005).
@@ -292,6 +320,12 @@ public sealed partial class TomeStackApp : IDisposable
         _packages.Export(characterIds, purpose);
 
     public ExportPreview PreviewExport(IReadOnlyList<Guid> characterIds, ExportPurpose purpose) => _packages.PreviewExport(characterIds, purpose);
+
+    /// <summary>M6 slice 1: what a source pack of these sources would hold (<c>package.sourcePackPreview</c>). Writes nothing.</summary>
+    public SourcePackPreview PreviewSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.PreviewSourcePack(sourceIds);
+
+    /// <summary>M6 slice 1: a source pack of sources their author marked as shareable (<c>package.sourcePackExport</c>).</summary>
+    public ExportResult ExportSourcePack(IReadOnlyList<Guid> sourceIds) => _packages.ExportSourcePack(sourceIds);
 
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 

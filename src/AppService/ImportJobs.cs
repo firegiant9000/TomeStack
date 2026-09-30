@@ -131,6 +131,7 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new("import.busy", "Another import is running. Wait for it, or cancel it, then start this one.")]);
             _store.InTransaction(() =>
             {
+                MarkImportDerived(source.Id); // M6 slice 1: an import job is evidence too (migration v8 counts it)
                 _store.SaveImportJob(job);
                 _store.AddImportAudit(job.Id, now, "created", request.WholeDocument ? "whole document" : $"pages {first}-{(last is { } l ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : "end")}");
             });

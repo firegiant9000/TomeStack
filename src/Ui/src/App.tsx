@@ -268,9 +268,12 @@ export function App() {
                 tone: 'status',
                 text:
                   `Imported: ${result.added} added, ${result.replaced} replaced, ${result.unchanged} unchanged.` +
-                  (result.backupFile
-                    ? ` The replaced copy was backed up to ${result.backupFile} in your data folder; import that file to restore it.`
-                    : ''),
+                  (result.backupFile?.endsWith('.db')
+                    ? // M6 slice 1: a source pack copies the whole database first.
+                      ` Your library as it was before is copied to ${result.backupFile} in your data folder. To go back, close TomeStack and put that file in place of tomestack.db.`
+                    : result.backupFile
+                      ? ` The replaced copy was backed up to ${result.backupFile} in your data folder; import that file to restore it.`
+                      : ''),
               });
             }}
           />

@@ -192,6 +192,7 @@ public sealed partial class TomeStackApp
         // One transaction: a draft never exists without its candidate marked accepted, so a crash cannot lead to a second draft.
         _store.InTransaction(() =>
         {
+            MarkImportDerived(draft.Provenance.SourceId); // M6 slice 1: PDF material now lives in this source
             accepted = stored with
             {
                 Status = request.AsReference ? CandidateStatus.AcceptedAsReference : CandidateStatus.Accepted,

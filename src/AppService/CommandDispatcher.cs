@@ -20,7 +20,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     public static IReadOnlyList<string> Commands { get; } =
     [
         "app.info", "content.list", "campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
-        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew",
+        "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
         "character.play", "character.restPreview", "character.rest", "character.reviewUpdate", "character.applyUpdate", "character.updates", "character.mechanics", "roll",
@@ -30,6 +30,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.start", "import.status", "import.list", "import.cancel", "import.resume", "import.audit", "import.search", "import.page", "import.candidates",
         "import.candidate.check", "import.candidate.edit", "import.candidate.accept", "import.candidate.ignore",
         "package.exportPreview", "package.export", "package.saveAs", "package.preview", "package.apply",
+        "package.sourcePackPreview", "package.sourcePackExport", "package.sourcePackSaveAs",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
     ];
 
@@ -106,6 +107,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
+        "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
         "source.attachPdf" => AttachPdf(Payload<AttachPayload>(payload)),
         "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
@@ -158,6 +160,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "package.saveAs" => SavePackageAs(Payload<ExportPayload>(payload)),
         "package.preview" => app.PreviewImport(Convert.FromBase64String(Payload<PackagePayload>(payload).Base64)),
         "package.apply" => ApplyImport(Payload<PackagePayload>(payload)),
+        "package.sourcePackPreview" => app.PreviewSourcePack(Payload<SourcePackPayload>(payload).SourceIds ?? []),
+        "package.sourcePackExport" => ExportSourcePack(Payload<SourcePackPayload>(payload)),
+        "package.sourcePackSaveAs" => SaveSourcePackAs(Payload<SourcePackPayload>(payload)),
         "library.backupPreview" => app.PreviewLibraryBackup(),
         "library.backupSaveAs" => SaveLibraryBackupAs(),
         "library.restoreChoose" => ChooseLibraryRestore(),
@@ -242,8 +247,27 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null)
             throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
-        var export = app.ExportCharacters(payload.CharacterIds, payload.Purpose);
-        var path = host.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
+        return SaveAs(app.ExportCharacters(payload.CharacterIds, payload.Purpose));
+    }
+
+    /// <summary>M6 slice 1: a source pack as base64 (browser development and tests; the desktop uses the Save dialog).</summary>
+    private object ExportSourcePack(SourcePackPayload payload)
+    {
+        var export = app.ExportSourcePack(payload.SourceIds ?? []);
+        return new { export.FileName, Base64 = Convert.ToBase64String(export.Content), export.Manifest };
+    }
+
+    /// <summary>M6 slice 1: writes a source pack where the user chooses; the page never supplies a path.</summary>
+    private SaveOutcome SaveSourcePackAs(SourcePackPayload payload)
+    {
+        if (host is null)
+            throw new AppValidationException([new("host.unsupported", "This host has no native Save dialog.")], "unsupported");
+        return SaveAs(app.ExportSourcePack(payload.SourceIds ?? []));
+    }
+
+    private SaveOutcome SaveAs(ExportResult export)
+    {
+        var path = host!.ChooseSaveLocation(export.FileName, "TomeStack package", ".tomestack.zip");
         if (path is null)
             return new SaveOutcome(false, null);
 
@@ -404,6 +428,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record ExportPayload(IReadOnlyList<Guid> CharacterIds, ExportPurpose Purpose = ExportPurpose.Backup);
 
     private sealed record PackagePayload(string Base64, Dictionary<Guid, SourceChoice>? SourceChoices = null);
+
+    private sealed record SourcePackPayload(IReadOnlyList<Guid>? SourceIds);
 
     /// <param name="Token">From <c>library.restoreChoose</c>; used once.</param>
     /// <param name="Confirm">Must be true: only the preview's "Restore" button sends it.</param>

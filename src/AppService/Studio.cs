@@ -3,7 +3,17 @@ using TomeStack.RulesCore;
 namespace TomeStack.AppService;
 
 /// <param name="Redistributable">Default false: a share export leaves personal homebrew out unless the author says it may be shared (ADR-007).</param>
-public sealed record HomebrewSourceRequest(string Title, IReadOnlyList<string> RulesFamilies, string? Publisher = null, bool Redistributable = false);
+/// <param name="ConfirmOwnWork">
+/// M6 slice 1: required with <paramref name="Redistributable"/>, as for "Mark as shareable": the author confirms the source
+/// is their own work (<see cref="TomeStackApp.OwnWorkStatement"/>).
+/// </param>
+public sealed record HomebrewSourceRequest(string Title, IReadOnlyList<string> RulesFamilies, string? Publisher = null, bool Redistributable = false, bool ConfirmOwnWork = false);
+
+/// <summary>
+/// <c>source.setShareable</c> (M6 slice 1, "Mark as shareable"). <paramref name="Shareable"/> true needs
+/// <paramref name="ConfirmOwnWork"/>; false stops sharing and needs no confirmation.
+/// </summary>
+public sealed record ShareableRequest(Guid SourceId, bool Shareable, bool ConfirmOwnWork = false);
 
 /// <summary><c>content.diagnose</c>: exactly one of a source, a stored revision or an unsaved revision.</summary>
 public sealed record DiagnoseRequest(Guid? SourceId = null, ContentReference? Reference = null, ContentRevision? Revision = null);
@@ -41,9 +51,14 @@ public sealed partial class TomeStackApp
         var families = request.RulesFamilies ?? [];
         if (families.Count == 0 || families.Any(f => !RulesFamilies.IsKnown(f)) || families.Distinct().Count() != families.Count)
             problems.Add(new("source.rules-family-required", "Name the rules families this source is written for (srd-5.1, srd-5.2.1 or both), each once."));
+        // M6 slice 1 (D14 item 6): the same guard as "Mark as shareable". A new source cannot be import-derived yet, so the
+        // guard is the author's confirmation; attaching a PDF later turns sharing off for good.
+        if (request.Redistributable && !request.ConfirmOwnWork)
+            problems.Add(new("source.confirm-own-work", $"To share this source, confirm that it is your own work: {OwnWorkStatement}"));
         if (problems.Count > 0)
             throw new AppValidationException(problems);
 
+        var now = _time.GetUtcNow();
         var source = new SourceRecord
         {
             Id = Guid.NewGuid(),
@@ -53,10 +68,57 @@ public sealed partial class TomeStackApp
             EditionVersion = "homebrew",
             License = "Personal homebrew",
             Redistributable = request.Redistributable,
-            ImportedAt = _time.GetUtcNow(),
+            ImportedAt = now,
+            Origin = SourceOrigin.Local,
+            ShareConfirmedAt = request.Redistributable ? now : null,
         };
         _store.InTransaction(() => _store.UpsertSource(source));
         return source;
+    }
+
+    /// <summary>What the author confirms to mark a source as shareable (M6 slice 1). Shown in the UI and in refusals.</summary>
+    public const string OwnWorkStatement =
+        "the source is my own work, and it holds no text, tables or rules copied from a book, PDF or other material I did not write.";
+
+    /// <summary>
+    /// <c>source.setShareable</c> (M6 slice 1, "Mark as shareable"; LIVING_SPECS D14 item 6). Marking needs the author's
+    /// confirmation and is refused for a bundled source, an import-derived source and a source received from someone
+    /// else. It sets <c>redistributable</c> and records when it was confirmed. Stopping sharing is always allowed; it does
+    /// not recall files already sent.
+    /// </summary>
+    public SourceRecord SetShareable(ShareableRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var source = FindSourceOrThrow(request.SourceId);
+        if (_bundledSources.Contains(source.Id))
+            throw new AppValidationException([new("source.bundled", $"'{source.Title}' is bundled with TomeStack; its license is fixed.")]);
+        if (!request.Shareable)
+        {
+            var stopped = source with { Redistributable = false, ShareConfirmedAt = null };
+            _store.InTransaction(() => _store.UpsertSource(stopped));
+            return _store.FindSource(source.Id)!;
+        }
+        if (source.ImportDerived == true)
+            throw new AppValidationException([new("source.import-derived", $"'{source.Title}' holds material imported from a PDF, so it can never be shared. Removing the PDF does not change that. Put your own homebrew in a new source.")]);
+        if (source.Origin == SourceOrigin.Received)
+            throw new AppValidationException([new("source.received", $"'{source.Title}' came from someone else's package, so you cannot mark it as your own work.")]);
+        if (!request.ConfirmOwnWork)
+            throw new AppValidationException([new("source.confirm-own-work", $"To share '{source.Title}', confirm that {OwnWorkStatement}")]);
+        var marked = source with { Redistributable = true, ShareConfirmedAt = _time.GetUtcNow() };
+        _store.InTransaction(() => _store.UpsertSource(marked));
+        return _store.FindSource(source.Id)!;
+    }
+
+    /// <summary>
+    /// M6 slice 1: records that material from outside the author entered the source (a PDF attached, a candidate accepted,
+    /// pages imported). The flag never goes down, and sharing is turned off with it. Bundled sources are never marked.
+    /// Call inside the transaction that brings the material in.
+    /// </summary>
+    private void MarkImportDerived(Guid sourceId)
+    {
+        if (_bundledSources.Contains(sourceId) || _store.FindSource(sourceId) is not { } source || source.ImportDerived == true)
+            return;
+        _store.UpsertSource(source with { ImportDerived = true, Redistributable = false, ShareConfirmedAt = null });
     }
 
     /// <summary>

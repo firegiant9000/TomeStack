@@ -48,6 +48,10 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(revision);
         if (revision.Status != RevisionStatus.Draft)
             throw new AppValidationException([new("content.draft-required", "Only a draft can be saved. Publish it with content.publish, which validates it first.", revision.Reference)]);
+        // M6 slice 1 (review fix): a bundled SRD source holds only this build's SRD content. A draft saved under it would be
+        // published with the SRD's CC-BY record, shared everywhere and exempt from the import-derived flag.
+        if (_bundledSources.Contains(revision.Provenance.SourceId))
+            throw new AppValidationException([new("content.source-not-editable", "Bundled SRD sources cannot take your own content. Save it in a homebrew source of your own.", revision.Reference)]);
         // A draft may be incomplete, but not malformed: validation and publishing must be able to read it.
         if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
             throw new AppValidationException(empty);

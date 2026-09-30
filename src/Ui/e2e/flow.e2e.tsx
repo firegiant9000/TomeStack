@@ -474,6 +474,65 @@ it('attaches a PDF to a source, offers the cited page on a feature, and removes 
   expect(within(screen.getByRole('region', { name: 'Features' })).getByText('E2E Cited Feat')).toBeTruthy();
 });
 
+it('marks a source as shareable after confirming it is your own work, saves a source pack and imports it (M6 slice 1)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: your own source with a published feat, and a source a PDF was attached to.
+  const own = await client.createHomebrewSource('E2E Own Notes', ['srd-5.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Own Feat',
+    rulesFamilies: ['srd-5.1'],
+    provenance: { sourceId: own.id },
+    status: 'draft',
+    summary: 'An original feat.',
+    effects: [],
+  });
+  await client.publish(draft);
+  const scanned = await client.createHomebrewSource('E2E Scanned Notes', ['srd-5.1']);
+  await client.attachPdfData(scanned.id, 'e2e-scan.pdf', btoa('%PDF-1.4\n% e2e\n%%EOF\n'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const mine = await screen.findByRole('listitem', { name: 'E2E Own Notes' });
+  expect(within(mine).getByText('Not shared.')).toBeTruthy();
+  // A source a PDF was attached to is import-derived for good: it offers no way to share it.
+  const theirs = screen.getByRole('listitem', { name: 'E2E Scanned Notes' });
+  expect(within(theirs).getByText(/Holds material imported from a PDF: never shared/)).toBeTruthy();
+  expect(within(theirs).queryByRole('button', { name: 'Mark as shareable…' })).toBeNull();
+
+  // Marking needs the author's confirmation.
+  await user.click(within(mine).getByRole('button', { name: 'Mark as shareable…' }));
+  const confirm = await screen.findByRole('alertdialog', { name: 'Mark E2E Own Notes as shareable?' });
+  const mark = within(confirm).getByRole<HTMLButtonElement>('button', { name: 'Mark as shareable' });
+  expect(mark.disabled).toBe(true);
+  await user.click(within(confirm).getByRole('checkbox', { name: /The source is my own work/ }));
+  await user.click(mark);
+  await expectStatus(/E2E Own Notes is marked as shareable/);
+  await waitFor(() => expect(within(screen.getByRole('listitem', { name: 'E2E Own Notes' })).getByText(/Marked as shareable/)).toBeTruthy());
+
+  // The pack offers only shareable sources; DevHost has no Save dialog, so it downloads.
+  const packForm = screen.getByRole('region', { name: 'Share sources as a pack' });
+  expect(within(packForm).queryByRole('checkbox', { name: 'E2E Scanned Notes' })).toBeNull();
+  await user.click(within(packForm).getByRole('checkbox', { name: 'E2E Own Notes' }));
+  await user.click(within(packForm).getByRole('button', { name: 'Preview pack' }));
+  const preview = await within(packForm).findByRole('region', { name: 'Source pack preview' });
+  expect(preview.textContent).toMatch(/1 source, 1 published revision/);
+  const downloads = vi.mocked(downloadBase64).mock.calls.length;
+  await user.click(within(preview).getByRole('button', { name: 'Save pack…' }));
+  await waitFor(() => expect(vi.mocked(downloadBase64).mock.calls.length).toBe(downloads + 1));
+  const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[downloads]!;
+  expect(fileName).toBe('E2E-Own-Notes-source-pack.tomestack.zip');
+
+  // Importing it: the preview says what a source pack is; here everything is already installed.
+  await user.upload(screen.getByLabelText('Package file'), new File([bytesOf(base64)], fileName, { type: 'application/zip' }));
+  const importing = await screen.findByRole('region', { name: `Import ${fileName}` });
+  expect(within(importing).getByText(/This is a source pack\. Its sender stated that each source is their own work/)).toBeTruthy();
+  await user.click(within(importing).getByRole('button', { name: 'Apply import' }));
+  await expectStatus(/unchanged/);
+});
+
 it('reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio', async () => {
   // M4 D5 (SPEC I-02): the original fixture book, read by the real worker next to the DevHost.
   const user = userEvent.setup();
