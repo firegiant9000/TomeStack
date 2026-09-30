@@ -59,7 +59,7 @@ Every claim in the acceptance documents, the ROADMAP and the README uses one of 
 | Export round-trip test | `PackageRoundTripTests`, `M2AcceptanceTests` | ✅ |
 | Installer smoke check | `scripts/installer-smoke.ps1` (owner, below) | ✅ |
 | Backup recovery | `UpgradeTests` (backup before every schema change, WAL-safe) | ✅ |
-| Keyboard walkthrough | e2e keyboard test; owner walkthrough (`accessibility-checklist.md`) and Narrator pass on 0.2.2 | ✅ |
+| Keyboard walkthrough | e2e keyboard test; owner keyboard walkthrough on 0.2.2 (`accessibility-checklist.md`). The Narrator pass was not done (corrected 2026-09-28, below) | ✅ |
 | Manual play rehearsal | Owner: one session with an SRD character on 0.2.2 (the Stardust Guardian session is the M3 gate) | ✅ |
 
 ## Owner checks for 0.2.2
@@ -76,7 +76,7 @@ Record each result here: date, build, pass or fail, notes.
 | --- | --- | --- | --- | --- |
 | 2026-09-28 | 0.2.2 | 1. Installer upgrade 0.2.0 → 0.2.2 | Pass | Reported by the owner |
 | 2026-09-28 | 0.2.2 | 2. Keyboard walkthrough | Pass | Reported by the owner |
-| 2026-09-28 | 0.2.2 | 3. Narrator pass | Pass | Reported by the owner |
+| 2026-09-28 | 0.2.2 | 3. Narrator pass | **Not done** | Corrected 2026-09-28: the owner's 0.2.2 pass was the keyboard walkthrough only. Checklist items 15 and 17 stay open, and so do 6 (200% zoom) and 16 (High Contrast) |
 | 2026-09-28 | 0.2.2 | 4. The viewer lands on the cited page | Pass | Reported by the owner |
 | 2026-09-28 | 0.2.2 | Clean-VM install (ADR-008) | Pass | Reported by the owner |
 | 2026-09-28 | 0.2.2 | Manual play rehearsal (SRD character) | Pass | Reported by the owner |
