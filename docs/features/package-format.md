@@ -1,6 +1,6 @@
 # Portable package format (v9; v1 to v8 still importable)
 
-SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**) and for campaigns (M6 slice 2, "Campaign packs" below; **v8, provisional, waits for the owner's approval**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **the number v7 stays provisional until it merges**) and for campaigns (M6 slice 2, "Campaign packs" below; approved by the owner 2026-09-30; **the number v8 stays provisional until it merges**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -57,8 +57,8 @@ Every limit and check below has its own test in `tests/AppService.Tests/PackageL
     - the import-derived flag only goes up (`package.source-import-derived` warns when a package raises it), and in a restore a source that had a PDF in the backup is marked even if the PDF does not come back;
     - a source that is new here is recorded as `received`, and a received source can never be marked as the receiver's own work; a source already here keeps the origin this machine recorded (a source stored before database v8 keeps its unknown origin);
     - no package adds content to a source you made here (`package.own-source`); a source of unknown origin that gets content from a package loses its share confirmation (`package.source-unconfirmed`), so it must be marked as shareable again;
-    - no package adds content under a bundled SRD source (`package.bundled-source-content`), and `content.saveDraft` refuses it too (`content.source-not-editable`), so nothing else travels with the SRD's CC-BY notice;
-    - no package but a full restore adds a revision to a content that belongs to another source here, or splits one content across two of its own sources (`pack.content-conflict`; a character package too since the M6 stack review, 2026-09-30). Otherwise the added revision became that content's newest, SRD content included, and the content sat in two sources for good;
+    - no package adds content under a bundled SRD source (`package.bundled-source-content`), and `content.saveDraft` refuses it too (`content.source-not-editable`), so nothing else travels with the SRD's CC-BY notice. A character made with a newer build whose SRD packs hold a revision this build lacks is refused the same way, and the message says to update;
+    - no package but a full restore adds a revision to a content that belongs to another source here, or splits one content across two of its own sources (`pack.content-conflict`; a character package too since the M6 stack review, 2026-09-30). Otherwise the added revision became that content's newest, SRD content included, and the content sat in two sources for good. Only added revisions count: your own backup of a content an earlier build split, or its pre-import copy (rule 10), imports again on the machine that holds both revisions and writes nothing. `content.saveDraft` refuses a draft under a source other than the one its content already has (`content.source-mismatch`), so no new split is made here;
     - a character or source pack import never raises an existing source's `redistributable`;
     - a bundled SRD source record is never replaced (`package.bundled-source-kept`); a full restore still gives it the backup's PDF when it has none here;
     - `importDerived`, `origin` and `shareConfirmedAt` are never a `keepLocal` / `useImported` choice.
@@ -150,7 +150,7 @@ The database is versioned the same way: this build migrates a v7 database to v8 
 
 ## Campaign packs (M6 slice 2, B13)
 
-**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. Format v8 is provisional (the number is fixed only when it merges, ROADMAP "Package format numbers"); the scope and the campaign's `pendingSources` wait for the owner's approval.**
+**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. The owner approved the `campaign` scope and the campaign's `pendingSources` on 2026-09-30 (LIVING_SPECS change history); merging still waits for the owner.** Format v8 is provisional (the number is fixed only when it merges, ROADMAP "Package format numbers").
 
 A **campaign pack** shares one campaign profile with the people who play in it.
 

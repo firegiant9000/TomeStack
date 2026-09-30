@@ -47,6 +47,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         path == "extension.json" || path.StartsWith("transforms/", StringComparison.Ordinal) || path.StartsWith(ExtensionFolder, StringComparison.Ordinal)
         || path.EndsWith(".tomestack-ext.zip", StringComparison.OrdinalIgnoreCase);
 
+    private static readonly Diagnostic ExtensionNotAllowed = new("package.extension-not-allowed", "A package never carries an extension, and importing one never installs one (ADR-011). Install extensions from the Extensions screen.");
+
     private sealed record ExportPlan(
         List<Character> Characters, List<ContentRevision> Revisions, List<SourceRecord> Sources, List<OmittedSource> Omitted, string FileName);
 
@@ -502,7 +504,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             {
                 // New content under a bundled SRD source would travel in every share with the SRD's CC-BY notice.
                 if (_bundledSources.Contains(revision.Provenance.SourceId))
-                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' claims to belong to a bundled SRD source, but is not part of it. It was not written by this TomeStack's SRD packs.", revision.Reference));
+                    errors.Add(new("package.bundled-source-content", $"'{revision.Name}' is new content under a bundled SRD source, which this TomeStack's SRD packs do not hold. If the package was made with a newer TomeStack, update and import it again.", revision.Reference));
                 // Only you add content to a source you made here. A source of unknown origin (stored before v8) may be yours
                 // from another machine, so it is not refused, but it must be marked as shareable again (Commit).
                 else if (store.FindSource(revision.Provenance.SourceId) is { Origin: SourceOrigin.Local } own)
@@ -637,9 +639,13 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         }
 
         // Inside the package too, a content's revisions belong to one source (every scope but a full restore; M6 review).
+        // Only the revisions it adds count: one already here was checked when it arrived, and the check against this
+        // machine above covers an added revision next to it. So your own backup of a content split by an earlier build,
+        // or the pre-import copy of it, imports again here and writes nothing (M6 stack review, 2026-09-30).
         if (parsed.Manifest.Scope != PackageScope.Library)
         {
-            foreach (var split in parsed.Revisions.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
+            var added = parsed.Revisions.Where(r => store.RevisionHash(r.RevisionId) is null);
+            foreach (var split in added.GroupBy(r => r.ContentId).Where(g => g.Select(r => r.Provenance.SourceId).Distinct().Count() > 1))
                 errors.Add(new("pack.content-conflict", $"'{split.Last().Name}' has revisions in more than one of the package's sources.", split.Last().Reference));
         }
         if (parsed.Manifest.Scope is PackageScope.Source or PackageScope.Campaign)
@@ -702,6 +708,15 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 return null;
             }
             files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            // An extension file's own entries are refused as an extension even in a newer package (M6 stack re-review): no
+            // later format makes a package install one (ADR-011). A library backup's extensions/ folder is left to the version
+            // check, since a later backup may keep extensions in another shape.
+            if (zip.Entries.Any(e => LooksLikeExtension(e.FullName) && !e.FullName.StartsWith(ExtensionFolder, StringComparison.Ordinal)
+                && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
+            {
+                errors.Add(ExtensionNotAllowed);
+                return null;
+            }
             // The format and version first (M6 slice 1), read bounded from the manifest alone: a newer package may add an
             // entry path as well as a scope or field, and must be refused as "update TomeStack", not as a bad path.
             if (zip.GetEntry(ManifestPath) is { } manifestEntry && !ManifestVersionReadable(ReadBounded(manifestEntry, limits.MaxJsonBytes), errors))
@@ -710,7 +725,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             foreach (var entry in zip.Entries.Where(e => e.FullName != ManifestPath && !EntryPathPattern().IsMatch(e.FullName) && !LibraryEntryPathPattern().IsMatch(e.FullName)))
             {
                 errors.Add(LooksLikeExtension(entry.FullName)
-                    ? new("package.extension-not-allowed", "A package never carries an extension, and importing one never installs one (ADR-011). Install extensions from the Extensions screen.")
+                    ? ExtensionNotAllowed
                     : new("package.entry-not-allowed", $"Entry '{entry.FullName}' is not an allowed package path."));
             }
             if (errors.Count > 0)
