@@ -4,7 +4,9 @@
 # - Major version bumps of libraries are ignored here; take those deliberately
 #   in their own branch. GitHub Actions majors are included (they rarely break).
 # - Security updates are separate: Dependabot opens those as soon as an
-#   advisory affects a dependency, regardless of this schedule.
+#   advisory affects a dependency, regardless of this schedule. The ignore
+#   rules below may also hold back a security fix that needs a new major
+#   version, so check the Security tab's Dependabot alerts and take those by hand.
 # https://docs.github.com/code-security/dependabot/working-with-dependabot/configuring-multi-ecosystem-updates
 version: 2
 

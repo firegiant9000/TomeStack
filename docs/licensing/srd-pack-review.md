@@ -151,6 +151,18 @@ A 2014/2024 difference the spells show as content: Cure Wounds heals 1d8 (5.1 p.
 - **Also added:** a content v8 revision of the Paladin's and the Ranger's Extra Attack in both families (the same text, now counted as 2 attacks), and a new class revision that grants it. No new text. The earlier revisions stay for the characters that pin them.
 - **Armor training (PR #12 review fix):** further v8 Paladin and Ranger class revisions (`5xe9…`, identical to the first v8 ones otherwise) carry `armor.*` grants (Paladin: light, medium, shield, and heavy as the starting class only; Ranger: light, medium, shield), and new v8 Wizard and Sorcerer class revisions carry `armor.none`. The grant texts repeat each class's own proficiency line and multiclassing proficiencies already quoted in these packs (5.1 pp. 30, 35, 42, 52 and p. 57; 5.2.1 the Core Traits tables and multiclassing lines). No new SRD text beyond that restatement.
 
+## README screenshots (docs/media, reviewed 2026-09-30)
+
+Two screenshots of the app, shown in the README, reproduce bundled SRD 5.2.1 content as the app renders it. They add no SRD text that the packs above do not already hold, and nothing from outside the two checked PDFs.
+
+| File | SRD text shown | Pages |
+| --- | --- | --- |
+| `docs/media/builder-choices.png` | Verbatim: the background ability score paragraph ("A background lists three of your character's ability scores. … None of these increases can raise a score above 20."), the Barbarian skill line ("Skill Proficiencies: Choose 2: Animal Handling, Athletics, Intimidation, Nature, Perception, or Survival."), and the names of the Soldier ability score options and two Barbarian skill options, each with its page citation | 5.2.1 pp. 83 and 28 |
+| `docs/media/calculation-trace.png` | Names and a page citation only (the Soldier background and one of its ability score options); no rules text | 5.2.1 p. 83 |
+
+- **License:** CC-BY-4.0, as for the packs. The README links [ATTRIBUTION.md](../../ATTRIBUTION.md), which carries the approved SRD 5.2.1 statement and the modification notice, and each image's alt text names System Reference Document 5.2.1.
+- **Rule for later screenshots:** a screenshot may show SRD text only from the bundled packs. Add it to this table, with its pages, in the same change.
+
 ## How it was modified (recorded in each source's `modificationNotice`)
 
 - Passages are excerpted. Descriptive text not needed for play (for example age and alignment) is left out, and some passages are shortened. Nothing is reworded to change a rule.
