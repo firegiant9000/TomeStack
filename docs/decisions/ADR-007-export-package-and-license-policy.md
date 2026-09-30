@@ -43,7 +43,7 @@ SPEC S-01, P-02 and Q-03 require every source to carry license and redistributio
     - **`purpose: "personal"`** additionally includes the full content of **your own** homebrew: a source made on this machine (`origin: "local"`), not import-derived, or one of unknown origin (stored before database v8) only once its author marked it as shareable. Other publishers' `redistributable: false` content, and anything import-derived, is filtered even here, because the file's only use is a tool or server that other people may read. It is labelled as backups are: "Personal copy: includes your own homebrew. Do not share it."
     - **Notices:** every source that contributes anything (full content, or only totals) is listed in the model's `notices[]` (title, publisher, license, attribution, modification notice), and every consumer carries them.
     - **Never, under any purpose:** local paths, attachment ids, gap notes, override reasons, traces or extracted PDF text. The model's schema is an allowlist with no field a path could go in; an output scan (ADR-011) is the second line.
-    - Evidence: `SheetExportTests` (M6 slice 3).
+    - Evidence: `ExtensionTests` (M6 slice 3; the sheet export model is `SheetExport.cs`).
 
 **Accepted (D07, owner, 2026-09-26):**
 
