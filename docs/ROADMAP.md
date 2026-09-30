@@ -31,7 +31,7 @@ The rule from LIVING_SPECS D13 stands: everything M5 chose provisionally (templa
 | M7 Expanded tabletop | DEFERRED | Monsters, DM tools, local AI | Nothing in the evidence asks for it. | Unknown | None |
 | Content breadth (Monk, Rogue, Barbarian 4 to 20, species, backgrounds) | DEFERRED until T2 | MVP goal | Already an owner decision; the session decides what is missing. | High if needed | None |
 | Cloud sync, accounts, executable plugin sandbox | CANCELLED | (never planned; recorded to close the question) | Contradicts SPEC and ADR-011 option A. | n/a | n/a |
-| Accessibility owner checks (items 6, 16 and 18 to 27; 15 and 17 passed on 0.2.2) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
+| Accessibility owner checks (items 6, 15 to 17 and 18 to 27; the 0.2.2 pass was keyboard only, #24) | OPTIONAL | WCAG AA passes | Do the Narrator pass once with an artifact; do not block milestones on it. | Medium | Small |
 | ADR-008 pre-release checklist (trademark, REDIST, Velopack notices, signing) | SUPERSEDED by T5 | Before the first installer | Becomes the acceptance list of T5. | High | Release evidence |
 
 ### R3. Milestones
