@@ -92,7 +92,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "ability", "attackBonus", "saveDc", "classLevel", "preparation", "spells", "ref", "source"],
+        "required": ["name", "ability", "attackBonus", "saveDc", "classLevel", "preparation", "slotKind", "spells", "ref", "source"],
         "properties": {
           "name": { "type": "string" },
           "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
@@ -100,6 +100,7 @@
           "saveDc": { "type": "integer" },
           "classLevel": { "type": "integer" },
           "preparation": { "enum": ["prepared", "known"] },
+          "slotKind": { "enum": ["spellSlots", "pactMagic"], "description": "Which pool the caster's spells use: ordinary spell slots or the Pact Magic slots." },
           "spells": {
             "type": "array",
             "items": {

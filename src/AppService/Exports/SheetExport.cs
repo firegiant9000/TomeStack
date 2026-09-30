@@ -64,7 +64,8 @@ public sealed record SheetHitDice(int Die, int Total, int Spent);
 
 public sealed record SheetSlots(int Level, int Maximum, int Spent);
 
-public sealed record SheetCaster(string Name, string Ability, int AttackBonus, int SaveDc, int ClassLevel, string Preparation, IReadOnlyList<SheetSpell> Spells, ContentReference Ref, string Source);
+/// <param name="SlotKind">"spellSlots" or "pactMagic": which pool the caster's spells use (review fix: an adapter needs it).</param>
+public sealed record SheetCaster(string Name, string Ability, int AttackBonus, int SaveDc, int ClassLevel, string Preparation, string SlotKind, IReadOnlyList<SheetSpell> Spells, ContentReference Ref, string Source);
 
 public sealed record SheetSpell(string Name, int Level, bool Prepared, string? School, string? CastingTime, string? Range, string? Components, string? Duration, bool Concentration, bool Ritual, string? Summary, string? Text, ContentReference Ref, string Source);
 
@@ -209,7 +210,8 @@ public static class SheetExportBuilder
                 if (Out(spell.Spell, out var spellSource))
                     spells.Add(new(spell.Name, spell.Level, spell.Prepared, spell.School, spell.CastingTime, spell.Range, spell.Components, spell.Duration, spell.Concentration, spell.Ritual, spell.Summary, spell.Text, spell.Spell, spellSource));
             }
-            casters.Add(new(caster.Name, FieldIds.Key(caster.Ability), caster.AttackBonus, caster.SaveDc, caster.ClassLevel, caster.Preparation.ToString().ToLowerInvariant(), spells, caster.Content, casterSource));
+            casters.Add(new(caster.Name, FieldIds.Key(caster.Ability), caster.AttackBonus, caster.SaveDc, caster.ClassLevel, caster.Preparation.ToString().ToLowerInvariant(),
+                caster.SlotKind == SpellSlotKind.PactMagic ? "pactMagic" : "spellSlots", spells, caster.Content, casterSource));
         }
 
         List<SheetResource> resources = [];

@@ -136,7 +136,7 @@
                     "properties": {
                       "max": { "type": "string", "pattern": "^[0-9]+$" },
                       "spent": { "type": "integer", "minimum": 0 },
-                      "recovery": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["period", "type"], "properties": { "period": { "enum": ["lr", "sr"] }, "type": { "const": "recoverAll" } } } }
+                      "recovery": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["period", "type"], "properties": { "period": { "enum": ["lr", "sr"] }, "type": { "enum": ["recoverAll", "formula"] }, "formula": { "type": "string", "pattern": "^[1-9][0-9]*$" } }, "if": { "properties": { "type": { "const": "formula" } } }, "then": { "required": ["formula"] }, "else": { "not": { "required": ["formula"] } } } }
                     }
                   }
                 }
@@ -149,11 +149,13 @@
           "then": {
             "properties": {
               "system": {
-                "additionalProperties": false, "required": ["description", "identifier", "level", "prepared"],
+                "additionalProperties": false, "required": ["ability", "description", "identifier", "level", "method", "prepared"],
                 "properties": {
+                  "ability": { "enum": ["str", "dex", "con", "int", "wis", "cha"] },
                   "description": { "$ref": "#/$defs/description" },
                   "identifier": { "$ref": "#/$defs/identifier" },
                   "level": { "type": "integer", "minimum": 0, "maximum": 9 },
+                  "method": { "enum": ["spell", "pact"] },
                   "prepared": { "enum": [0, 1] },
                   "school": { "enum": ["abj", "con", "div", "enc", "evo", "ill", "nec", "trs"] }
                 }

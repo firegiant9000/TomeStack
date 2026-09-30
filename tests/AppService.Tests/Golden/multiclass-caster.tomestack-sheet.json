@@ -330,6 +330,7 @@
         "revisionId": "5f5de000-0000-4000-8000-000000000001"
       },
       "saveDc": 14,
+      "slotKind": "spellSlots",
       "source": "TomeStack Fixtures: Spellcasting",
       "spells": [
         {
@@ -383,6 +384,7 @@
         "revisionId": "5f5de000-0000-4000-8000-000000000002"
       },
       "saveDc": 13,
+      "slotKind": "spellSlots",
       "source": "TomeStack Fixtures: Spellcasting",
       "spells": []
     }
