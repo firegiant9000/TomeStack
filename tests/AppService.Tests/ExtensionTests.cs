@@ -142,6 +142,13 @@ public class ExtensionTests
             var planted = SourcePackTests.AddEntry(pack, path, "extension", new { });
             Assert.Contains("package.extension-not-allowed", temp.App.PreviewImport(planted).Errors.Select(e => e.Code));
         }
+        // A newer format is no way in either (M6 stack re-review): the extension's own entries are refused as an
+        // extension, not with "update TomeStack". A later library backup's extensions/ folder is left to the version check.
+        var newer = PackageEditor.Edit(pack, _ => false, _ => { }, m => m["formatVersion"] = PackageManifest.CurrentFormatVersion + 1);
+        foreach (var path in new[] { "extension.json", "transforms/x.json", "tool.tomestack-ext.zip" })
+            Assert.Equal("package.extension-not-allowed", Assert.Single(temp.App.PreviewImport(SourcePackTests.AddEntry(newer, path, "extension", new { })).Errors).Code);
+        var laterBackup = SourcePackTests.AddEntry(newer, $"extensions/{new string('a', 64)}/extension.json", "extension", new { });
+        Assert.Equal("package.unsupported-format", Assert.Single(temp.App.PreviewImport(laterBackup).Errors).Code);
     }
 
     [Fact]
