@@ -1,6 +1,6 @@
 # ADR-010: Custom base classes and arbitrary progression (content schema v9)
 
-Status: **accepted** (owner, 2026-09-28, as proposed: dice that scale by level stay out of v9). **Slice 1a (the rules core) is implemented and fixture-verified (2026-09-29)**, see "Evidence". **The v9 bump is approved by the owner (2026-09-29)**, including slice 1b's addition (a choice with no declared options). Merging still waits for the owner.
+Status: **accepted** (owner, 2026-09-28, as proposed: dice that scale by level stay out of v9). **Slice 1a (the rules core) is implemented and fixture-verified (2026-09-29)**, see "Evidence". **The v9 bump is approved by the owner (2026-09-29)**, including slice 1b's addition (a choice with no declared options). Merged to `main` 2026-09-30 via #46.
 Date: 2026-09-28
 
 ## Context

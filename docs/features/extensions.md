@@ -1,6 +1,6 @@
 # Extensions (ADR-011, option A)
 
-SPEC P-05 · ROADMAP M6 slice 3 · [ADR-011](../decisions/ADR-011-extension-api.md) (accepted, option A: declarative only) · status: **implemented and fixture-verified on the unmerged M6 slice 3 PR (2026-09-29)**; database v9, library-backup format v9 (the number settled on the integration branch, final only when it merges to `main`) and the new schemas approved by the owner 2026-09-30; merging still waits for the owner.
+SPEC P-05 · ROADMAP M6 slice 3 · [ADR-011](../decisions/ADR-011-extension-api.md) (accepted, option A: declarative only) · status: **implemented and fixture-verified (M6 slice 3, 2026-09-29; merged to `main` 2026-09-30 via #46)**; database v9, library-backup format v9 (final) and the new schemas approved by the owner 2026-09-30.
 
 An extension adds an **import** (a JSON or CSV file becomes draft content) or an **export** (a character's sheet, or published content, becomes a text or JSON file). **No extension code ever runs.** An extension is data: a manifest and one transform document per hook, which TomeStack's own bounded interpreter reads (`AppService/Extensions/DeclarativeTransform.cs`). The shipped app still opens no socket and makes no network call (ADR-001, ADR-006).
 
@@ -71,7 +71,7 @@ A transform is `{ "tables"?: { name: { key: value } }, "output": expression }`. 
 
 ## Library backups
 
-A full library backup keeps each installed extension's file (`extensions/<sha256>.zip`) and **not its grants**. Such a backup is written as package format **v9** (settled on the integration branch, final only when it merges to `main`; ROADMAP "Package format numbers"); a backup with no extension stays v7. A restore installs nothing by itself: each file goes through the full install checks and comes back **turned off, with no permission granted**, and only when no extension with its id is installed; the preview lists it. So a backup someone hands you cannot run their extensions.
+A full library backup keeps each installed extension's file (`extensions/<sha256>.zip`) and **not its grants**. Such a backup is written as package format **v9** (final, merged to `main` 2026-09-30; ROADMAP "Package format numbers"); a backup with no extension stays v7. A restore installs nothing by itself: each file goes through the full install checks and comes back **turned off, with no permission granted**, and only when no extension with its id is installed; the preview lists it. So a backup someone hands you cannot run their extensions.
 
 ## Storage
 

@@ -2,7 +2,7 @@
 
 A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
 
-> **Status: v0.3.0, a limited-content build.** The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet. M2.1 (data safety) is implemented and not released yet. The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
+> **Status: v0.3.0, a limited-content build.** The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet. M2.1 (data safety) is implemented and not released yet. The M3 and M4 engineering is done, and neither gate is met. The M5 (homebrew studio) and M6 (source and campaign packs, extensions, VTT export) work is merged to `main` (2026-09-30) and fixture-verified, not yet verified on an installed build ([ROADMAP](docs/ROADMAP.md)).
 >
 > - **Classes you can build:** the Fighter with the Champion (M2.2, implemented, not released yet) and the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. The SRD armor table is bundled with the Fighter. **Not yet:** Monk, Rogue, Barbarian 4–20.
 > - **Species and backgrounds:** one each per family (Half-Orc and Acolyte for SRD 5.1; Dwarf and Soldier for SRD 5.2.1). Anything else you add in the homebrew studio.

@@ -1,6 +1,6 @@
 # Export adapters (ADR-012)
 
-BACKLOG B20 · ROADMAP M6 slice 4 · [ADR-012](../decisions/ADR-012-export-adapters.md) (accepted) · status: **implemented and fixture-verified on the unmerged M6 slice 4 PR (2026-09-29); the Foundry adapter is labelled Experimental** until the owner check below is recorded.
+BACKLOG B20 · ROADMAP M6 slice 4 · [ADR-012](../decisions/ADR-012-export-adapters.md) (accepted) · status: **implemented and fixture-verified (M6 slice 4, 2026-09-29; merged to `main` 2026-09-30 via #46); the Foundry adapter is labelled Experimental** until the owner check below is recorded.
 
 "Export for a virtual tabletop" on the character sheet writes one file that you import into another tool by hand. Nothing is uploaded, no network call is made, and the shipped app still opens no socket (ADR-001, ADR-006). Both adapters are first-party code in `src/AppService/Exports/` that read only the **sheet export model v1** ([extensions.md](extensions.md#the-sheet-export-model-v1)), filtered by purpose ([ADR-007 item 11](../decisions/ADR-007-export-package-and-license-policy.md)).
 

@@ -1,6 +1,6 @@
 # Portable package format (v9; v1 to v8 still importable)
 
-SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **v7, settled on the M5+M6 integration branch; final only when it merges to `main`**) and for campaigns (M6 slice 2, "Campaign packs" below; approved by the owner 2026-09-30; **v8, settled on the integration branch; final only when it merges to `main`**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
+SPEC P-02 · status: implemented for characters (M0) and their campaigns (M2 item 7), for the whole library (M2.1, "Full library backup" below), for homebrew sources (M6 slice 1, "Source packs" below; approved by the owner 2026-09-29; **v7, final; merged to `main` 2026-09-30 via #46**) and for campaigns (M6 slice 2, "Campaign packs" below; approved by the owner 2026-09-30; **v8, final; merged to `main` 2026-09-30 via #46**). Character packages never include PDFs (ADR-005, ADR-007). A full library backup includes managed PDF copies and is never for sharing.
 
 A package is a ZIP file (`*.tomestack.zip`) with this fixed layout:
 
@@ -81,7 +81,7 @@ A character backup protects characters and what they use. It does not protect ho
   - Each managed PDF copy is included once, as `files/<sha256>.pdf`.
   - It leaves out the bundled SRD revisions (every install seeds them), the files of linked PDFs (their records are kept), and the local-only extracted text, import jobs and candidates (ADR-009). Those can be read again from the PDF.
   - It also leaves out **character snapshots** (M5 slice 8; owner decision LIVING_SPECS D14), as every character package does. Snapshots stay on this machine ([snapshots.md](snapshots.md)), so the format is unchanged.
-  - **Installed extensions (M6 slice 3, ADR-011):** each extension's file as `extensions/<sha256>.zip` (kind `extension`), counted in the backup's limits, and **not** its grants. A backup that keeps one is written as format **v9** (settled on the integration branch; final only when it merges to `main`); a backup with none stays v7. A restore checks each file as an install does and brings it back **turned off, with no permission granted**, only when no extension with its id is installed ([extensions.md](extensions.md#library-backups)). Only a v9 library backup may hold `extensions/` entries; any other package that carries an extension is refused (`package.extension-not-allowed`).
+  - **Installed extensions (M6 slice 3, ADR-011):** each extension's file as `extensions/<sha256>.zip` (kind `extension`), counted in the backup's limits, and **not** its grants. A backup that keeps one is written as format **v9** (final, merged to `main` 2026-09-30); a backup with none stays v7. A restore checks each file as an install does and brings it back **turned off, with no permission granted**, only when no extension with its id is installed ([extensions.md](extensions.md#library-backups)). Only a v9 library backup may hold `extensions/` entries; any other package that carries an extension is refused (`package.extension-not-allowed`).
   - A managed copy that is missing, or no longer matches its hash, is left out with `backup.pdf-unreadable`, so one damaged file never blocks the backup. Its source then has no PDF after a restore.
 - **Restore full backup** (`library.restoreChoose`, then `library.restoreApply { token, sourceChoices, confirm: true }`) reads a file picked in the native Open dialog. The path stays in the service; the page gets a one-use token and the file name.
   - The preview checks the file completely before anything is written. That includes rules 2 to 9 above, the attachment records, and every PDF's size, signature and SHA-256, streamed and never held in memory.
@@ -103,7 +103,7 @@ A character backup protects characters and what they use. It does not protect ho
 
 ## Source packs and "Mark as shareable" (M6 slice 1)
 
-**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 1. The owner approved the new source fields, the `source` scope and database v8 on 2026-09-29 (LIVING_SPECS D14 item 6); merging still waits for the owner.** Format v7 is the number it would take if it merged next; the number is fixed only when it merges (ROADMAP "Package format numbers").
+**Status: implemented and fixture-verified (2026-09-29) for M6 slice 1. The owner approved the new source fields, the `source` scope and database v8 on 2026-09-29 (LIVING_SPECS D14 item 6). Merged to `main` 2026-09-30 via #46.** Format v7 is final (ROADMAP "Package format numbers").
 
 A **source pack** shares your own homebrew: one or more sources and their published content, and nothing else.
 
@@ -150,7 +150,7 @@ The database is versioned the same way: this build migrates a v7 database to v8 
 
 ## Campaign packs (M6 slice 2, B13)
 
-**Status: implemented and fixture-verified (2026-09-29) on the unmerged PR for M6 slice 2. The owner approved the `campaign` scope and the campaign's `pendingSources` on 2026-09-30 (LIVING_SPECS change history); merging still waits for the owner.** Format v8 is settled on the M5+M6 integration branch and final only when it merges to `main` (ROADMAP "Package format numbers").
+**Status: implemented and fixture-verified (2026-09-29) for M6 slice 2. The owner approved the `campaign` scope and the campaign's `pendingSources` on 2026-09-30 (LIVING_SPECS change history). Merged to `main` 2026-09-30 via #46.** Format v8 is final (ROADMAP "Package format numbers").
 
 A **campaign pack** shares one campaign profile with the people who play in it.
 
