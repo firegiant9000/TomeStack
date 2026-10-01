@@ -1,6 +1,6 @@
 # ADR-007: Export package and license policy
 
-Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26; item 10, M2.1, 2026-09-28; item 11, the sheet-export share rule, amended 2026-09-29 for M6 as ADR-011 and ADR-012 require). Items 1–10 are implemented and tested; item 11 is implemented in M6 slice 3 (unmerged). The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
+Status: **accepted** (owner decisions D03, D07 and the SRD route, 2026-09-26; item 10, M2.1, 2026-09-28; item 11, the sheet-export share rule, amended 2026-09-29 for M6 as ADR-011 and ADR-012 require). Items 1–10 are implemented and tested; item 11 is implemented in M6 slice 3 (merged to `main` 2026-09-30 via #46). The SRD packs are M1 item 1 (`docs/licensing/srd-pack-review.md`).
 Date: 2026-09-25 (proposed), 2026-09-26 (accepted)
 
 ## Context

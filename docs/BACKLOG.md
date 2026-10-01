@@ -16,14 +16,14 @@ All 20 ideas from discovery are included here. A target milestone indicates plan
 | B10 | PDF full-text search | M7 | Search imported text and open matching page |
 | B11 | Tags/folders/collections | M6 (optional, after the M6 gate; ROADMAP "M6 plan") | Filter content and characters by custom labels |
 | B12 | Local campaign profiles | M2 | Filter sources and rule choices per campaign. **Implemented (M2 item 7, `features/campaigns.md`)** |
-| B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely. **Built 2026-09-29 (M6 slice 2, fixture-verified; not merged; the `campaign` scope and `pendingSources` approved by the owner 2026-09-30):** [features/package-format.md](features/package-format.md#campaign-packs-m6-slice-2-b13) |
+| B13 | Shareable campaign packs | M6 | Export/import rules and permitted assets safely. **Built 2026-09-29 (M6 slice 2, fixture-verified; merged to `main` 2026-09-30 via #46; the `campaign` scope and `pendingSources` approved by the owner 2026-09-30):** [features/package-format.md](features/package-format.md#campaign-packs-m6-slice-2-b13) |
 | B14 | Spell/item/feature cards | M7 | Produce readable quick-reference cards |
 | B15 | Homebrew templates | M5 | Start a resource, transformation or class pattern. **Done 2026-09-29 (M5 slice 6, fixture-verified, provisional set):** four draft-only templates, [features/homebrew-studio.md](features/homebrew-studio.md#templates-m5-slice-6-b15-provisional) |
 | B16 | Optional local-language assistant | M7 | Turn text into reviewable suggestions without requiring AI |
 | B17 | Accessibility and customization | M2 baseline, M7 depth | Keyboard, scaling, high contrast and layout checks |
 | B18 | Themes | M7 | Offer modern, dark and tabletop themes |
 | B19 | Relationship graph | M5 | Navigate class → feature → resource dependencies. **Done 2026-09-29 (M5 slice 5, fixture-verified):** "Show relationships", a keyboard tree, [features/homebrew-studio.md](features/homebrew-studio.md#relationships-the-content-tree-m5-slice-5-b19) |
-| B20 | Foundry/Roll20 export adapters | M6+ | Document supported scope and validate generated file. **Foundry built 2026-09-29 (M6 slice 4, ADR-012, fixture-verified; not merged; Experimental until the owner imports the golden files into a real Foundry world):** Foundry VTT dnd5e 6.0.5 and the neutral sheet JSON, [features/export-adapters.md](features/export-adapters.md). Roll20 deferred (ADR-012) |
+| B20 | Foundry/Roll20 export adapters | M6+ | Document supported scope and validate generated file. **Foundry built 2026-09-29 (M6 slice 4, ADR-012, fixture-verified; merged to `main` 2026-09-30 via #46; Experimental until the owner imports the golden files into a real Foundry world):** Foundry VTT dnd5e 6.0.5 and the neutral sheet JSON, [features/export-adapters.md](features/export-adapters.md). Roll20 deferred (ADR-012) |
 
 ## Other approved directions
 

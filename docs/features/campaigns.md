@@ -1,6 +1,6 @@
 # Campaign profiles
 
-SPEC P-01, S-03 · BACKLOG B12, B13 · MVP "Campaign" ("two profiles show different allowed content"), definition of done 5 · status: implemented (M2 item 7); campaign packs implemented and fixture-verified on the unmerged M6 slice 2 PR (approved by the owner 2026-09-30; merging still waits for the owner).
+SPEC P-01, S-03 · BACKLOG B12, B13 · MVP "Campaign" ("two profiles show different allowed content"), definition of done 5 · status: implemented (M2 item 7); campaign packs implemented and fixture-verified (M6 slice 2; approved by the owner 2026-09-30; merged to `main` 2026-09-30 via #46).
 
 Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` package entries. UI: `src/Ui/src/components/CampaignsPanel.tsx`, the campaign picker in the builder, and campaign notes on the sheet. Acceptance: `tests/AppService.Tests/CampaignTests.cs` and the e2e test "shows different allowed content for two campaign profiles…".
 

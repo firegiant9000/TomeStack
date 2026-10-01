@@ -2,6 +2,8 @@
 
 _Prepared 2026-09-29 against the local `m6-1-source-packs` tip (`e698aaf`, which is `origin/m6-1-source-packs` at `030f68c` plus twelve unpushed commits) and `origin/main` at `3eaf731`. Read-only audit; nothing here is a measured result._
 
+_Update 2026-10-01: the section 5 plan was carried out (the stack merged to `main` via #46 on 2026-09-30; branch, worktree and clone cleanup on 2026-10-01). The text below is the review as written._
+
 This review is the evidence base for the 2026-09 revision at the top of [`ROADMAP.md`](ROADMAP.md). It also contains the repository cleanup plan the revision requires before any other milestone.
 
 > **Status 2026-09-30 (reconciled, [LIVING_SPECS](LIVING_SPECS.md) D15).** The audit findings stand as the record of 2026-09-29. Made obsolete by the M6 stack and the owner's direction:

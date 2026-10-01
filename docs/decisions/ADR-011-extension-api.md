@@ -1,6 +1,6 @@
 # ADR-011: Extension API (M6, SPEC P-05)
 
-Status: **accepted (owner, 2026-09-29): option A, declarative transforms only** (LIVING_SPECS D14). **Implemented in M6 slice 3 (2026-09-29; fixture-verified; unmerged): see [features/extensions.md](../features/extensions.md) and "Evidence" below.** The ADR-007 amendment it required is ADR-007 item 11. Proposed 2026-09-28. No third-party code runs: options B and C stay possible later only through a new revision of this ADR and a new owner decision, and D stays rejected. The sheet export model v1 below (its purpose filter and `notices[]`) is accepted with it, for ADR-012.
+Status: **accepted (owner, 2026-09-29): option A, declarative transforms only** (LIVING_SPECS D14). **Implemented in M6 slice 3 (2026-09-29; fixture-verified; merged to `main` 2026-09-30 via #46): see [features/extensions.md](../features/extensions.md) and "Evidence" below.** The ADR-007 amendment it required is ADR-007 item 11. Proposed 2026-09-28. No third-party code runs: options B and C stay possible later only through a new revision of this ADR and a new owner decision, and D stays rejected. The sheet export model v1 below (its purpose filter and `notices[]`) is accepted with it, for ADR-012.
 Date: 2026-09-28
 
 ## Context
@@ -121,6 +121,6 @@ Extensions and export adapters (ADR-012) read the same documented shapes, never 
 - `extension.review` grants an installed extension again from its stored file, so a restored extension can be turned on without the original file.
 - Import hooks do not read content (`read.content` is an export permission here), so "drafts inherit the most restrictive redistribution among the sources the run read" has nothing to inherit: every import writes into a new, import-derived, non-redistributable source.
 - An install takes the file's bytes (the native Open dialog in the shell, or base64 in browser development); the preview holds them under a one-use token, so what is installed is exactly what was reviewed.
-- Library backups that keep an extension are written as format v9 (settled on the M5+M6 integration branch; final only when it merges to `main`); a backup without one stays v7.
+- Library backups that keep an extension are written as format v9 (final, merged to `main` 2026-09-30); a backup without one stays v7.
 
 Supersedes: none. Extends ADR-004 (import output is drafts), ADR-006 (no socket) and ADR-007 (share rules apply to hook output).

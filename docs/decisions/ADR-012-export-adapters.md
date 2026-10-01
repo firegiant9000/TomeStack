@@ -1,6 +1,6 @@
 # ADR-012: Export adapters for virtual tabletops (B20)
 
-Status: **accepted (owner, 2026-09-29): the recommended targets** (LIVING_SPECS D14). Foundry VTT `dnd5e` (the core and system pair is pinned at slice start and verified against that release's data models), the neutral sheet-export JSON, and Roll20 deferred. `purpose: "personal"` goes only as far as your own homebrew that is not import-derived. ADR-007 was amended for the "totals only" share rule (item 11, in M6 slice 3, before this slice). **Implemented in M6 slice 4 (2026-09-29; fixture-verified; unmerged; the Foundry adapter labelled Experimental): pinned to Foundry core 14.367 with dnd5e 6.0.5, [features/export-adapters.md](../features/export-adapters.md).** Proposed 2026-09-28.
+Status: **accepted (owner, 2026-09-29): the recommended targets** (LIVING_SPECS D14). Foundry VTT `dnd5e` (the core and system pair is pinned at slice start and verified against that release's data models), the neutral sheet-export JSON, and Roll20 deferred. `purpose: "personal"` goes only as far as your own homebrew that is not import-derived. ADR-007 was amended for the "totals only" share rule (item 11, in M6 slice 3, before this slice). **Implemented in M6 slice 4 (2026-09-29; fixture-verified; merged to `main` 2026-09-30 via #46; the Foundry adapter labelled Experimental): pinned to Foundry core 14.367 with dnd5e 6.0.5, [features/export-adapters.md](../features/export-adapters.md).** Proposed 2026-09-28.
 Date: 2026-09-28
 
 ## Context
