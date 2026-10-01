@@ -76,7 +76,7 @@ Add `FsCheck.Xunit` to `RulesCore.Tests` and `AppService.Tests`. Candidate prope
 - package export → import into a clean folder → export yields an equal manifest and equal hashes (source packs, campaign packs and library backups too, extending `M6ExitGateTests`);
 - schema migration v1 → v9 on generated databases preserves entity counts and hashes (the M6 stack review ran v6 → v9 once on a folder written by `main`'s build; this makes it a property).
 
-**Acceptance.** Properties exist for at least four of the six; each runs at a stated case count in CI; any counterexample found is recorded as a fixed bug with its shrunk input in the test.
+**Acceptance.** Properties exist for at least four of the six; each runs at a stated case count in CI; any counterexample found is recorded as a fixed bug with its shrunk input in the test. **Met (2026-10-01, fixture-verified):** all six, in 17 properties and 18 golden facts, 9,396 generated cases per run, each with its count in [testing/properties.md](testing/properties.md) (`tests/RulesCore.Tests/Properties/`, `tests/AppService.Tests/Properties/`). No counterexample in TomeStack; one generator bug, fixed. The package property re-imports instead of re-exporting source and campaign packs, which rule 11 forbids (see the doc).
 
 **Evidence produced.** The property tests, the CI log with case counts, the bug list if any.
 

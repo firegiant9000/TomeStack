@@ -1,6 +1,6 @@
 # ADR-003: Declarative effect AST and bounded formulas
 
-Status: accepted. The effect model and migration are implemented in `RulesCore/Effects.cs`, and the formula grammar in `RulesCore/Formulas.cs` (`tests/RulesCore.Tests/FormulaTests.cs`: explicit hostile cases, 20,000 fuzzed strings, 2,000 generated formulas, and feature isolation).
+Status: accepted. The effect model and migration are implemented in `RulesCore/Effects.cs`, and the formula grammar in `RulesCore/Formulas.cs` (`tests/RulesCore.Tests/FormulaTests.cs`: explicit hostile cases, 20,000 fuzzed strings, 2,000 generated formulas, and feature isolation). Property tests (roadmap T3, [testing/properties.md](../testing/properties.md)) add the parser round trip, evaluation totality, versioned-type gating and a golden hash per content schema version.
 Date: 2026-09-25
 
 ## Context
