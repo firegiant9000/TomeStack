@@ -11,7 +11,9 @@
     "summary": "Small, bright and curious.",
     "effects": [
       { "id": "lantern-dex", "type": "abilityScoreIncrease", "ability": "dex", "amount": 2 },
-      { "id": "lantern-quick", "type": "initiativeBonus", "amount": 1, "text": "Quick to the flame." }
+      { "id": "lantern-quick", "type": "initiativeBonus", "amount": 1, "text": "Quick to the flame." },
+      { "id": "lantern-glow", "type": "xLanternGlow", "radius": 10, "text": "Sheds a soft light." },
+      { "id": "lantern-hood", "type": "armor", "category": "light", "armorClass": 11 }
     ]
   },
   {
@@ -27,8 +29,10 @@
       { "type": "modifier", "id": "tide-init", "operation": "bonus", "target": "initiative", "value": "PB" },
       { "type": "resource", "id": "tide-pool", "resourceId": "tide", "label": "Tide", "maximum": "PB" },
       { "type": "recovery", "id": "tide-rest", "resourceId": "tide", "on": "longRest", "amount": "all" },
-      { "type": "roll", "id": "tide-surge", "rollId": "surge", "label": "Surge", "dice": "1d6+1", "resourceId": "tide" }
-    ]
+      { "type": "roll", "id": "tide-surge", "rollId": "surge", "label": "Surge", "dice": "1d6+1", "resourceId": "tide" },
+      { "type": "xTideChart", "id": "tide-chart", "phases": { "high": 3, "low": [1, 2] }, "note": "Kept as written." }
+    ],
+    "xFixtureNote": { "kept": "as written", "list": [1, "two", true, null] }
   },
   {
     "contentId": "6a7e0003-0000-4000-8000-000000000001",
@@ -42,7 +46,10 @@
     "effects": [
       { "type": "hitDie", "id": "gloam-hd", "die": 10 },
       { "type": "grant", "id": "gloam-save", "grant": "proficiency", "target": "save.wis", "level": 1 },
-      { "type": "grant", "id": "gloam-eyes", "grant": "proficiency", "target": "skill.perception", "level": 3 }
+      { "type": "grant", "id": "gloam-eyes", "grant": "proficiency", "target": "skill.perception", "level": 3 },
+      { "type": "choice", "id": "gloam-path", "choiceId": "path", "count": 1, "options": [], "level": 3 },
+      { "type": "armor", "id": "gloam-cloak", "category": "light", "armorClass": 11 },
+      { "type": "weapon", "id": "gloam-hook", "category": "simple", "attack": "melee", "damage": "1d6", "damageType": "slashing", "weaponKey": "gloamhook" }
     ]
   },
   {
@@ -56,7 +63,8 @@
     "status": "published",
     "extendsChoice": { "contentId": "6a7e0003-0000-4000-8000-000000000001", "choiceId": "path" },
     "effects": [
-      { "type": "armor", "id": "moss-bark", "category": "medium", "armorClass": 13, "dexterityCap": 2 }
+      { "type": "armor", "id": "moss-bark", "category": "medium", "armorClass": 13, "dexterityCap": 2 },
+      { "type": "toggle", "id": "moss-root", "toggleId": "root", "label": "Take root" }
     ]
   },
   {
@@ -71,13 +79,14 @@
     "effects": [
       {
         "type": "spellcasting", "id": "ink-casting", "ability": "int", "spellList": "inkbinder",
-        "slots": [[2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2],
-                  [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1],
-                  [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1]],
+        "slots": [[1], [2], [2, 1], [3, 1], [3, 2], [3, 2, 1], [3, 3, 1], [4, 3, 1], [4, 3, 2], [4, 3, 2, 1],
+                  [4, 3, 3, 1], [4, 4, 3, 1], [4, 4, 3, 2], [4, 4, 3, 2, 1], [5, 4, 3, 2, 1], [5, 4, 3, 3, 1],
+                  [5, 4, 4, 3, 1, 1], [5, 5, 4, 3, 2, 1], [5, 5, 4, 3, 2, 1, 1], [5, 5, 4, 4, 2, 2, 1]],
         "spellsFormula": "max(1, INT.MOD + CLASS_LEVEL)"
       },
       { "type": "grant", "id": "ink-quill", "grant": "proficiency", "target": "skill.arcana", "onlyAs": "startingClass" },
-      { "type": "weapon", "id": "ink-stylus", "category": "simple", "attack": "melee", "damage": "1d4", "damageType": "piercing", "weaponKey": "stylus", "properties": ["finesse", "light"] }
+      { "type": "weapon", "id": "ink-stylus", "category": "simple", "attack": "melee", "damage": "1d4", "damageType": "piercing", "weaponKey": "stylus", "properties": ["finesse", "light"] },
+      { "type": "spell", "id": "ink-blot", "level": 1, "school": "conjuration", "lists": ["inkbinder"], "attack": "ranged", "dice": "2d6" }
     ]
   },
   {
@@ -93,7 +102,8 @@
       { "type": "resource", "id": "ember-pool", "resourceId": "ember", "label": "Embers", "maximum": "PB" },
       { "type": "toggle", "id": "ember-stance", "toggleId": "stance", "label": "Emberward", "resourceId": "ember" },
       { "type": "modifier", "id": "ember-ac", "timing": "whileActive", "operation": "bonus", "target": "armorClass", "value": "2", "toggle": "stance" },
-      { "type": "roll", "id": "ember-flare", "rollId": "flare", "label": "Flare", "dice": "1d8", "resourceId": "ember", "cost": "3", "variableCost": true }
+      { "type": "roll", "id": "ember-flare", "rollId": "flare", "label": "Flare", "dice": "1d8", "resourceId": "ember", "cost": "3", "variableCost": true },
+      { "type": "scale", "id": "ember-heat", "scaleId": "heat", "label": "Heat", "values": [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5] }
     ]
   },
   {
@@ -108,7 +118,7 @@
     "effects": [
       {
         "type": "spellcasting", "id": "scribe-casting", "ability": "wis", "spellList": "scribe", "preparation": "known",
-        "slots": [[], [], [2], [3], [3], [3], [4, 2], [4, 2], [4, 2], [4, 3], [4, 3], [4, 3], [4, 3, 2], [4, 3, 2], [4, 3, 2], [4, 3, 3], [4, 3, 3], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 1]],
+        "slots": [[], [1], [1], [2], [2], [2, 1], [2, 1], [3, 1], [3, 1], [3, 2], [3, 2], [3, 2, 1], [3, 2, 1], [4, 2, 1], [4, 3, 1], [4, 3, 1], [4, 3, 2], [4, 3, 2], [4, 3, 2, 1], [4, 4, 2, 1]],
         "multiclassCaster": "third"
       }
     ]
@@ -143,7 +153,7 @@
       { "type": "resource", "id": "rope-pool", "resourceId": "knots", "label": "Knots", "maximum": "SCALE.knots" },
       {
         "type": "spellcasting", "id": "rope-casting", "ability": "cha", "spellList": "ropewalker",
-        "slots": [[], [2], [2], [3], [3], [3, 2], [3, 2], [3, 2], [4, 3], [4, 3], [4, 3, 2], [4, 3, 2], [4, 3, 2], [4, 3, 3], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 2], [4, 3, 3, 3]],
+        "slots": [[], [1], [2], [2], [2, 1], [3, 1], [3, 1], [3, 2], [3, 2], [3, 2, 1], [4, 2, 1], [4, 3, 1], [4, 3, 1], [4, 3, 2], [4, 3, 2], [4, 3, 2, 1], [4, 3, 3, 1], [4, 4, 3, 1], [4, 4, 3, 2], [5, 4, 3, 2]],
         "multiclassCasterTable": [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10]
       }
     ]

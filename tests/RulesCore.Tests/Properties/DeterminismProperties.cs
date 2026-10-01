@@ -43,6 +43,7 @@ public class DeterminismProperties
             Overrides = withOverride ? [new FieldOverride(FieldIds.Initiative, overrideValue, "Property test")] : character.Overrides,
         };
 
+    /// <summary>Within one process: a difference that only shows between two launches is outside what this checks.</summary>
     [Property(MaxTest = 300)]
     public Property A_sheet_computed_twice_from_the_same_pins_is_equal() =>
         Prop.ForAll(Variants.ToArbitrary(), character =>
@@ -60,18 +61,31 @@ public class DeterminismProperties
         from constant in Gen.Choose(-5, 10)
         select (terms.Length == 0 ? "1d20" : string.Join("+", terms)) + (constant == 0 ? "" : constant > 0 ? $"+{constant}" : $"{constant}");
 
+    /// <summary>A valid roll: any dice for a normal roll (critical or not), a d20 test for advantage and disadvantage.</summary>
+    private static Gen<(RollMode Mode, string Formula, bool Critical)> Rolls { get; } =
+        Gen.OneOf(
+            from formula in DiceFormulas
+            from critical in Gen.Elements(true, false)
+            select (RollMode.Normal, formula, critical),
+            from mode in Gen.Elements(RollMode.Advantage, RollMode.Disadvantage)
+            from constant in Gen.Choose(-5, 10)
+            select (mode, "1d20" + (constant == 0 ? "" : constant > 0 ? $"+{constant}" : $"{constant}"), false));
+
     [Property(MaxTest = 1000)]
     public Property The_same_seed_rolls_the_same_dice() =>
         Prop.ForAll(
             Gen.Choose(int.MinValue, int.MaxValue).Two().Select(s => ((ulong)(uint)s.Item1 << 32) | (uint)s.Item2).ToArbitrary(),
-            DiceFormulas.ToArbitrary(),
-            Gen.Elements(RollMode.Normal, RollMode.Advantage, RollMode.Disadvantage).ToArbitrary(),
-            (seed, formula, mode) =>
+            Rolls.ToArbitrary(),
+            (seed, roll) =>
             {
-                var request = new RollRequest(formula, mode, Critical: mode == RollMode.Normal && seed % 2 == 0);
+                var request = new RollRequest(roll.Formula, roll.Mode, roll.Critical);
                 var a = DiceRoller.TryRoll(request, new SeededRandomSource(seed), out var first, out var errorA);
                 var b = DiceRoller.TryRoll(request, new SeededRandomSource(seed), out var second, out var errorB);
-                return (a == b && Json(first) == Json(second) && errorA?.Code == errorB?.Code && first?.Dice.All(d => d.Value >= 1 && d.Value <= d.Sides) != false)
-                    .Label($"{seed} {formula} {mode}");
+                // Every generated roll is valid, so both must succeed; advantage and disadvantage keep one of two d20s.
+                var dropped = roll.Mode == RollMode.Normal ? 0 : 1;
+                return (a && b && Json(first) == Json(second)
+                        && first!.Dice.All(d => d.Value >= 1 && d.Value <= d.Sides)
+                        && first.Dice.Count(d => !d.Kept) == dropped)
+                    .Label($"{seed} {roll} → {errorA?.Code ?? errorB?.Code}");
             });
 }

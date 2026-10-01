@@ -14,15 +14,15 @@ internal static class GoldenRevisions
     /// </summary>
     public static readonly string[] Hashes =
     [
-        "3ac8c72026f7a90a8394aa300b156a67619e582dfd185ce0253da4e231c2a874", // v1, as upcast to v2 on read
-        "527a981f073ee832892c3a0cf78a38a019de349b875f327983b0affeb9ae66b4",
-        "ad41846f41e808c2d5c64c999bb79532b94e5962f2d8fe88812146221519c211",
-        "2c58028031a77815e138b41e90a6ef273afa42c0c9d85352fd54049ac06b9a52",
-        "6145fe2490041ed2c50677f9fbe2090c2a68bc00571c4fda1168b57d617129d0",
-        "9eb8d40c6e2be19d480cda502d0035b1c724ac1ea98ee14f1e76bfbd5a8dffb5",
-        "e334f59cdb39fbdc9c5ba9df6a9cd3968cfac473f534aa2adbe3969a4cc0e7a2",
+        "85800203fb31987f44f2d99f3a8f43c54bd4b4817e0e0d560695dca98debb897", // v1, as upcast to v2 on read
+        "b202a68281be4291c6966e21c9faffb6406aaed1018704bfe9e2ccc88f549352",
+        "f3e2aa4e0650cf957c441edf7c902fe5985665f1c530582fd8c3aff4d4edcc84",
+        "646186370a605b8b4c533abfe2b21a7c8a1ea600a0dfbf3b8074040e51d5402e",
+        "a3ccf4e08cd5c71c3a6fd2e491d6ffbe072982d1a8420d212dcf77dfd8b52e4b",
+        "054178f31cbe4519f7d05e04769612b32844f985a418b2d5abc65209f30b89a1",
+        "76e246dfd1ccf4e1e5e27e0127977d764797c95418fb3a12b02b082963e698b6",
         "2e1e8b8e9d4a812dc168ca37a1f18911f3888f42c3fddc42f10d3715f54d47e2",
-        "cbeac04ebf9be1df0e1f40ce15b4388ff12fecdf7c5d03a7c6a05718a6b3ff9f",
+        "fd177e2950867210d00ff9be73d2557b46b45df97b5bae103c28691e51a35916",
     ];
 
     /// <summary>The golden revision of content schema <paramref name="version"/>, as written in the fixture.</summary>

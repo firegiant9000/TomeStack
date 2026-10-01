@@ -35,8 +35,43 @@ public class RevisionHashProperties
         Assert.Equal(stored, Write(Read(stored)));
         // v1 is the one version upcast on read (to v2); every later version is stored as written.
         Assert.Equal(version == 1 ? ContentRevision.TypedEffectsSchemaVersion : version, Read(stored).SchemaVersion);
-        // Each golden revision uses only types its version knows, so the hash covers that version's typed fields.
-        Assert.DoesNotContain(Read(stored).Effects, e => e is UnknownEffect);
+        // The typed effects cover the version's own fields; the unknown ones (an unknown type, a versioned type below its
+        // version) and the unknown top-level field must come back exactly as written.
+        Assert.Null(UnknownPartsChanged(version, JsonNode.Parse(golden)!.AsObject(), stored));
+        Assert.Contains(Read(stored).Effects, e => e is not UnknownEffect);
+    }
+
+    /// <summary>
+    /// Null when every effect of <paramref name="input"/> is typed or unknown as <see cref="Generators.StaysUnknown"/> says,
+    /// every unknown effect, every below-v9 <c>multiclassCasterTable</c> and every unknown top-level field is in
+    /// <paramref name="stored"/> exactly as in the input; otherwise what differs.
+    /// </summary>
+    internal static string? UnknownPartsChanged(int version, JsonObject input, string stored)
+    {
+        var output = JsonNode.Parse(stored)!.AsObject();
+        var read = Read(stored);
+        var inputEffects = input["effects"]?.AsArray() ?? [];
+        var outputEffects = output["effects"]?.AsArray() ?? [];
+        if (inputEffects.Count != outputEffects.Count || read.Effects.Count != inputEffects.Count)
+            return $"{inputEffects.Count} effects in, {outputEffects.Count} out";
+        for (var i = 0; i < inputEffects.Count; i++)
+        {
+            var type = (string)inputEffects[i]!["type"]!;
+            var unknown = Generators.StaysUnknown(type, version);
+            if (read.Effects[i] is UnknownEffect != unknown)
+                return $"effect {i} ({type}) is {(unknown ? "typed" : "unknown")} in v{version}";
+            if (unknown && !JsonNode.DeepEquals(inputEffects[i], outputEffects[i]))
+                return $"unknown effect {i} ({type}) changed: {outputEffects[i]!.ToJsonString()}";
+            if (type == SpellcastingEffect.TypeName && version < SpellcastingEffect.MulticlassTableSchemaVersion
+                && inputEffects[i]!["multiclassCasterTable"] is { } table && !JsonNode.DeepEquals(table, outputEffects[i]!["multiclassCasterTable"]))
+                return $"effect {i}'s multiclassCasterTable changed below v9";
+        }
+        foreach (var (name, value) in input.Where(p => p.Key.StartsWith('x')))
+        {
+            if (!JsonNode.DeepEquals(value, output[name]))
+                return $"unknown field {name} changed";
+        }
+        return null;
     }
 
     [Property(MaxTest = 1000)]
@@ -57,27 +92,23 @@ public class RevisionHashProperties
             return (Hash(Write(Read(withNulls.ToJsonString()))) == expected).Label($"v{r.Version}: {withNulls.ToJsonString()}");
         });
 
-    [Property(MaxTest = 500)]
-    public Property A_versioned_effect_type_is_typed_only_from_its_schema_version_and_kept_unchanged_below_it() =>
+    /// <summary>
+    /// Compared with the generated input, not with a second write: a build that dropped unknown data would drop it from
+    /// both writes, and the byte-identity property above could not see it.
+    /// </summary>
+    [Property(MaxTest = 1000)]
+    public Property A_versioned_effect_type_is_typed_only_from_its_schema_version_and_unknown_parts_come_back_as_written() =>
         Prop.ForAll(Generators.AnyRevisionArb(), r =>
-        {
-            var revision = Read(r.Json.ToJsonString());
-            var effects = r.Json["effects"]?.AsArray() ?? [];
-            return effects.Select((e, i) => (Type: (string)e!["type"]!, Effect: revision.Effects[i])).All(e => e.Type switch
-            {
-                ToggleEffect.TypeName => e.Effect is ToggleEffect == (r.Version >= ToggleEffect.SchemaVersion),
-                ScaleEffect.TypeName => e.Effect is ScaleEffect == (r.Version >= ScaleEffect.SchemaVersion),
-                ArmorEffect.TypeName => e.Effect is ArmorEffect == (r.Version >= ArmorEffect.SchemaVersion),
-                SpellcastingEffect.TypeName => e.Effect is SpellcastingEffect == (r.Version >= SpellcastingEffect.SchemaVersion),
-                _ => true,
-            }).Label($"v{r.Version}");
-        });
+            UnknownPartsChanged(r.Version, r.Json, Write(Read(r.Json.ToJsonString()))) is not { } changed
+                ? true.ToProperty()
+                : false.Label($"v{r.Version}: {changed}"));
 
     /// <summary>Nullable members of typed effects, by type; unknown effects keep their JSON exactly, so they get none.</summary>
     private static readonly Dictionary<string, string[]> NullableMembers = new(StringComparer.Ordinal)
     {
         [ModifierEffect.TypeName] = ["stackGroup", "toggle", "whileArmored"],
         [GrantEffect.TypeName] = ["content", "level", "onlyAs"],
+        [ChoiceEffect.TypeName] = ["level", "onlyAs"],
         [ResourceEffect.TypeName] = [],
         [RecoveryEffect.TypeName] = [],
         [RestrictionEffect.TypeName] = ["multiclass", "group"],

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
@@ -27,7 +28,11 @@ public class SerializationProperties
         {
             var written = Write(c);
             var read = Read<Character>(written);
-            return (Write(read) == written && read.TotalLevel == c.TotalLevel && read.SchemaVersion == Character.CurrentSchemaVersion)
+            // Unknown fields are compared with the generated value, not only with a second write (which would lose them too).
+            var unknownKept = (c.Extensions ?? []).All(e =>
+                read.Extensions?.TryGetValue(e.Key, out var back) == true && JsonElement.DeepEquals(e.Value, back)
+                && JsonNode.DeepEquals(JsonNode.Parse(e.Value.GetRawText()), JsonNode.Parse(written)![e.Key]));
+            return (Write(read) == written && unknownKept && read.TotalLevel == c.TotalLevel && read.SchemaVersion == Character.CurrentSchemaVersion)
                 .Label(written);
         });
 

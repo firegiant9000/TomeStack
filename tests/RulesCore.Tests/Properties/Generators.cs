@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FsCheck;
 using FsCheck.Fluent;
@@ -70,21 +71,49 @@ internal static class Generators
         return target;
     }
 
+    /// <summary>The effect types every build since v2 types (the v1 shapes are typed as modifiers on read).</summary>
+    private static readonly HashSet<string> AlwaysTyped =
+    [
+        ModifierEffect.TypeName, GrantEffect.TypeName, ResourceEffect.TypeName, ChoiceEffect.TypeName, RestrictionEffect.TypeName,
+        RecoveryEffect.TypeName, RollEffect.TypeName, HitDieEffect.TypeName,
+        EffectJsonConverter.LegacyAbilityScoreIncrease, EffectJsonConverter.LegacyInitiativeBonus,
+    ];
+
+    /// <summary>The versioned effect types and the content schema version each is typed from (ADR-003, <c>VersionedEffects</c>).</summary>
+    public static readonly IReadOnlyDictionary<string, int> TypedFrom = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        [ArmorEffect.TypeName] = ArmorEffect.SchemaVersion,
+        [SpellcastingEffect.TypeName] = SpellcastingEffect.SchemaVersion,
+        [SpellEffect.TypeName] = SpellcastingEffect.SchemaVersion,
+        [WeaponEffect.TypeName] = SpellcastingEffect.SchemaVersion,
+        [ToggleEffect.TypeName] = ToggleEffect.SchemaVersion,
+        [ScaleEffect.TypeName] = ScaleEffect.SchemaVersion,
+    };
+
+    /// <summary>
+    /// Whether an effect of <paramref name="type"/> in a revision written as content schema <paramref name="version"/> must
+    /// read as an <see cref="UnknownEffect"/> and be written back exactly as stored: an unknown type, or a versioned type
+    /// below its version (v1 is read as v2).
+    /// </summary>
+    public static bool StaysUnknown(string type, int version) =>
+        !AlwaysTyped.Contains(type) && !(TypedFrom.TryGetValue(type, out var from) && Math.Max(version, ContentRevision.TypedEffectsSchemaVersion) >= from);
+
     /// <summary>One stored effect for a revision of content schema <paramref name="v"/> (v1 uses the legacy shapes).</summary>
     public static Gen<JsonObject> Effect(int v)
     {
         if (v == 1)
         {
-            return Gen.OneOf(
+            return Gen.OneOf([
                 Common(EffectJsonConverter.LegacyAbilityScoreIncrease,
                     from ability in Gen.Elements("str", "dex", "con", "int", "wis", "cha")
                     from amount in Gen.Choose(-2, 4)
                     select new JsonObject { ["ability"] = ability, ["amount"] = amount }),
                 Common(EffectJsonConverter.LegacyInitiativeBonus, Gen.Choose(1, 5).Select(a => new JsonObject { ["amount"] = a })),
-                Unknown());
+                Unknown(),
+                .. Versioned(v)]);
         }
-        var gens = new List<Gen<JsonObject>>
-        {
+        List<Gen<JsonObject>> gens =
+        [
             Common(ModifierEffect.TypeName,
                 from op in Gen.Elements("bonus", "set", "replace")
                 from target in Gen.Elements(FieldIds.Initiative, FieldIds.Score(Ability.Dex), FieldIds.ProficiencyBonus, FieldIds.HitPoints)
@@ -132,7 +161,33 @@ internal static class Generators
                 from min in Gen.Choose(1, 20)
                 from stackGroup in Optional(Keys)
                 select new JsonObject { ["field"] = field, ["minimum"] = min }.With("group", v >= SpellcastingEffect.SchemaVersion ? stackGroup : null)),
-            // Versioned types at any version: below their version they are kept as unknown effects, byte for byte.
+            Common(ChoiceEffect.TypeName,
+                from id in Keys
+                from count in Gen.Choose(1, 3)
+                from options in References.ArrayOf().Select(o => o.Take(4).ToArray())
+                from level in OptionalValue(Gen.Choose(1, 20))
+                from onlyAs in Gen.Elements<string?>(null, "startingClass", "multiclass")
+                select new JsonObject
+                {
+                    ["choiceId"] = id,
+                    ["count"] = count,
+                    ["options"] = new JsonArray([.. options.Select(o => (JsonNode)new JsonObject { ["contentId"] = o.ContentId.ToString(), ["revisionId"] = o.RevisionId.ToString() })]),
+                }
+                .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)),
+            .. Versioned(v),
+            Unknown(),
+        ];
+        if (v >= 3)
+            gens.Add(Common(HitDieEffect.TypeName, Gen.Elements(6, 8, 10, 12).Select(d => new JsonObject { ["die"] = d })));
+        return Gen.OneOf(gens);
+    }
+
+    /// <summary>
+    /// The versioned types, at any version: below their version they must stay unknown effects, byte for byte. Their
+    /// own optional fields still appear only from the version that added them.
+    /// </summary>
+    private static Gen<JsonObject>[] Versioned(int v) =>
+    [
             Common(ToggleEffect.TypeName,
                 from id in Keys
                 from label in Names
@@ -168,12 +223,31 @@ internal static class Generators
                 }
                 .With("multiclassCaster", v >= SpellcastingEffect.MulticlassSchemaVersion && !table ? multiclass : null)
                 .With("multiclassCasterTable", table ? new JsonArray([.. shares.Select(x => (JsonNode)x)]) : null)),
-            Unknown(),
-        };
-        if (v >= 3)
-            gens.Add(Common(HitDieEffect.TypeName, Gen.Elements(6, 8, 10, 12).Select(d => new JsonObject { ["die"] = d })));
-        return Gen.OneOf(gens);
-    }
+            Common(WeaponEffect.TypeName,
+                from category in Gen.Elements("simple", "martial")
+                from attack in Gen.Elements("melee", "ranged")
+                from damage in Gen.Elements("1d4", "1d6", "1d8", "2d6")
+                from damageType in Gen.Elements("slashing", "piercing", "bludgeoning")
+                from key in Keys
+                from properties in Gen.Elements("finesse", "light", "thrown", "versatile", "two-handed").ArrayOf().Select(p => p.Distinct().Take(3).ToArray())
+                from range in Optional(Gen.Elements("20/60", "80/320"))
+                select new JsonObject
+                {
+                    ["category"] = category, ["attack"] = attack, ["damage"] = damage, ["damageType"] = damageType, ["weaponKey"] = key,
+                    ["properties"] = new JsonArray([.. properties.Select(p => (JsonNode)p)]),
+                }.With("range", range)),
+            Common(SpellEffect.TypeName,
+                from level in Gen.Choose(0, SpellcastingEffect.MaxSpellLevel)
+                from school in Optional(Gen.Elements("evocation", "illusion", "conjuration"))
+                from lists in Keys.ArrayOf().Select(l => l.Distinct().Take(3).ToArray())
+                from concentration in Gen.Elements(true, false)
+                from attack in Gen.Elements("none", "melee", "ranged")
+                from dice in Optional(Gen.Elements("1d10", "3d6", "8d6"))
+                select new JsonObject
+                {
+                    ["level"] = level, ["concentration"] = concentration, ["lists"] = new JsonArray([.. lists.Select(l => (JsonNode)l)]), ["attack"] = attack,
+                }.With("school", school).With("dice", dice)),
+    ];
 
     /// <summary>An effect type no build knows, with nested data, so it must survive unchanged.</summary>
     private static Gen<JsonObject> Unknown() =>
@@ -282,6 +356,9 @@ internal static class Generators
         from temporary in Gen.Choose(0, 20)
         from updated in Gen.Choose(0, 1_000_000)
         from archived in OptionalValue(Gen.Choose(0, 1_000_000))
+        // A field this build does not know: it round-trips through Character.Extensions.
+        from extra in Optional(Keys)
+        from extraNumber in Gen.Choose(-1000, 1000)
         select new Character
         {
             Id = id,
@@ -298,5 +375,9 @@ internal static class Generators
             Play = new() { Inspiration = inspiration, TemporaryHitPoints = temporary },
             UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(updated),
             ArchivedAt = archived is { } a ? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(a) : null,
+            Extensions = extra is null ? null : new()
+            {
+                ["x" + extra] = JsonSerializer.SerializeToElement(new JsonObject { ["kept"] = extra, ["list"] = new JsonArray(extraNumber, "two", true, null) }),
+            },
         };
 }
