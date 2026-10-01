@@ -5,6 +5,8 @@ obj/
 .vs/
 TestResults/
 artifacts/
+# BenchmarkDotNet's default output; curated results go to docs/performance/raw/ (scrubbed)
+BenchmarkDotNet.Artifacts/
 
 # UI
 node_modules/

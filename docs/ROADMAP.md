@@ -88,7 +88,7 @@ Add `FsCheck.Xunit` to `RulesCore.Tests` and `AppService.Tests`. Candidate prope
 
 Add a `benchmarks/` project. Cases: a level-20 three-class character calculation with a full spell list and equipment; import of a large fixture content pack; formula evaluation over the SRD packs; dependency recalculation after one changed revision; time to first paint measured once by hand and recorded. Record mean, error, allocations and, where distribution matters, the percentiles BenchmarkDotNet reports. Record the machine, and run at least twice with the spread noted. Optimise nothing without a measured problem; if a number is surprising, the follow-up is a separate item with a before/after table.
 
-**Acceptance.** A benchmark table in `docs/performance.md` with machine, runtime, commit and the raw BenchmarkDotNet output committed; the README links it.
+**Acceptance.** A benchmark table in `docs/performance.md` with machine, runtime, commit and the raw BenchmarkDotNet output committed; the README links it. **Met except first paint (2026-10-01):** [performance.md](performance.md) has cases 1 to 4 (`benchmarks/TomeStack.Benchmarks`), two runs on commit `a96424f` with the environment and the spread, and the raw exports in `docs/performance/raw/2026-10-01/`; the README links it. The spread between runs was up to 39 % in time with allocations equal to within 1 %, recorded as follow-up P-4. Five numbers became follow-ups P-1 to P-5, unfixed: the largest is `character.updates` at about 13–17 ms and 8.3 MB per level-20 character. **Owed (owner):** cold start to first paint, measured by hand with the method in performance.md.
 
 **Evidence produced.** The table and the raw results.
 
