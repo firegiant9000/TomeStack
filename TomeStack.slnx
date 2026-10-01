@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/benchmarks/" />
+  <Folder Name="/benchmarks/TomeStack.Benchmarks/">
+    <Project Path="benchmarks/TomeStack.Benchmarks/TomeStack.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/AppService/">
     <Project Path="src/AppService/TomeStack.AppService.csproj" />
