@@ -197,6 +197,34 @@ public class FormReaderTests
     }
 
     [Fact]
+    public void The_fixture_sheets_read_exactly_as_generated()
+    {
+        foreach (var (pdf, specs) in new[] { (FixtureSheets.Sheet2014(), FixtureSheets.Fields2014), (FixtureSheets.Sheet2024(), FixtureSheets.Fields2024) })
+        {
+            var expected = specs.Select(s => s.Checked is { } on
+                ? new FormField(s.Name, "checkbox", s.Page, Checked: on, OnState: "Yes")
+                : new FormField(s.Name, "text", s.Page, s.Text));
+            Assert.Equal(expected, Read(pdf));
+        }
+    }
+
+    [Fact]
+    public void The_committed_fixture_sheet_has_exactly_the_generators_fields()
+    {
+        // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf). The field names
+        // are placeholders until the layout maps exist (plan S1, S2); regenerate when they change.
+        var generated = FixtureSheets.Sheet2014();
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-ddb-sheet.pdf"), generated);
+        }
+        Assert.Equal(Read(generated), AcroFormReader.Read(FixtureSheets.CommittedPath, Sheet, FormLimits.Default));
+    }
+
+    [Fact]
     public void A_file_that_is_not_a_pdf_is_pdf_not_a_pdf()
     {
         Assert.Equal("pdf.not-a-pdf", Refused("Fixture: not a PDF"u8.ToArray()).Code);
