@@ -61,6 +61,7 @@ Docs checked through Context7 (`/uglytoad/pdfpig`): `PdfDocument.Open`, `Parsing
 - One more executable ships. Velopack packs it with the rest (`scripts/pack-installer.ps1`).
 - OCR quality depends on the Windows language packs of the user's machine, and OCR has no confidence. A clean VM without the OCR language is an owner check.
 - The service keeps page navigation independent of extraction. A job that fails leaves the attachment and "Open page" working (ARCHITECTURE).
+- The worker answers a second request kind, `formFields` (the character-sheet importer's read, `features/ddb-pdf-import.md` S1), under the same isolation and its own smaller limits; extraction requests are unchanged ([pdf-import.md](../features/pdf-import.md) D1).
 
 ## Alternatives considered
 
