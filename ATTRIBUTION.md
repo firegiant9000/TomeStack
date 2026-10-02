@@ -34,7 +34,20 @@ Checked on 2026-09-25, and again on 2026-10-01 for 0.4.0, from `npm ls --omit=de
 
 The Microsoft Edge WebView2 **Runtime** is not redistributed. It is a system component that is preinstalled on Windows 11 or installed by the user. The UI uses system fonts and ships no fonts or icon sets.
 
-**Windows SDK Distributable Code (owner decision 2026-09-28, ADR-009):** the two projection assemblies are Microsoft's, under the Windows SDK license, not under Apache-2.0. They are shipped unmodified, and TomeStack's license does not apply to them. The SDK license lets them be distributed as part of a program that adds significant primary functionality, for the Windows platform only. The program must display its own copyright notice, must not alter Microsoft's notices, and must not use Microsoft's trademarks in its name. The license also asks that distributors and end users agree to terms that protect the code at least as much as the SDK license, and that the distributor indemnify Microsoft. **Checked 2026-10-01 (roadmap T5):** both files are on Microsoft's Windows SDK redistribution list, under "Microsoft.Windows.SDK.NET.Ref" (https://learn.microsoft.com/legal/windows-sdk/redist), so shipping them unmodified is allowed. The end-user terms and the indemnity are an owner decision, recorded in [docs/licensing/release-checklist.md](docs/licensing/release-checklist.md).
+**Windows SDK Distributable Code (owner decision 2026-09-28, ADR-009):** the two projection assemblies are Microsoft's, under the Windows SDK license, not under Apache-2.0. They are shipped unmodified, and TomeStack's license does not apply to them. The SDK license lets them be distributed as part of a program that adds significant primary functionality, for the Windows platform only. The program must display its own copyright notice, must not alter Microsoft's notices, and must not use Microsoft's trademarks in its name. The license also asks that distributors and end users agree to terms that protect the code at least as much as the SDK license, and that the distributor indemnify Microsoft. **Checked 2026-10-01 (roadmap T5):** both files are on Microsoft's Windows SDK redistribution list, under "Microsoft.Windows.SDK.NET.Ref" (https://learn.microsoft.com/legal/windows-sdk/redist), so shipping them unmodified is allowed. The owner accepted the license's distribution requirements, including the indemnity, on 2026-10-02 ([docs/licensing/release-checklist.md](docs/licensing/release-checklist.md)). The end-user terms they require follow.
+
+### Terms for the Microsoft Windows SDK files
+
+These terms apply to `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`, which ship with TomeStack. They do not apply to the rest of TomeStack.
+
+1. **Licence.** The two files are Microsoft's "Distributable Code", provided under the Microsoft Software License Terms for the Windows Software Development Kit (https://aka.ms/WinSDKLicenseURL). By installing or using TomeStack, you agree that those terms govern your use of the two files.
+2. **Restrictions.** You may use the two files only as part of TomeStack, on Windows. You may not:
+   - modify them;
+   - reverse engineer, decompile or disassemble them, except where the law allows it despite this restriction;
+   - remove or change Microsoft's copyright, trademark or patent notices;
+   - distribute them on their own, outside TomeStack.
+3. **No warranty from Microsoft.** Microsoft provides the files "as is". It gives no warranty and accepts no liability to you for them; the SDK terms set out the details.
+4. **Redistributors.** If you pass TomeStack on to others, you must pass these terms on with it. They are in this file, which is installed next to `TomeStack.exe`.
 
 The Velopack installer (ADR-008) installs this file, `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES-Velopack.md` next to `TomeStack.exe` (checked by `scripts/installer-smoke.ps1`). BSD-3-Clause, Apache-2.0 and MIT all require the notice to be kept.
 

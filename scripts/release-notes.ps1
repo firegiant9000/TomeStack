@@ -36,7 +36,7 @@ $body
 - **TomeStack.App-win-Portable.zip**: the same build without installing.
 - The ``.nupkg`` and ``releases.win.json`` files are Velopack's package and feed. You don't need them; TomeStack never downloads updates by itself.
 
-This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``.
+This build is **unsigned**. See the note at the top about the SmartScreen prompt. Third-party notices are in ``ATTRIBUTION.md`` next to ``TomeStack.exe``. Two Microsoft Windows SDK files that ship with TomeStack (``Microsoft.Windows.SDK.NET.dll``, ``WinRT.Runtime.dll``) are covered by the Microsoft Windows SDK license terms. By installing TomeStack you agree to those terms for those files; see "Terms for the Microsoft Windows SDK files" in ``ATTRIBUTION.md``.
 "@
 Set-Content -Path $Output -Value $notes -Encoding UTF8
 Write-Output "Release notes for $Version written to $Output ($((Get-Item $Output).Length) bytes)"
