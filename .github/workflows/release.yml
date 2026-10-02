@@ -1,0 +1,124 @@
+name: Release
+
+# Roadmap T5 (ADR-008): a version tag builds, checks and packs the installer and creates a DRAFT GitHub release.
+# Nothing is published until the owner reviews the draft and publishes it by hand. The build is unsigned
+# (owner decision 2026-10-01; docs/licensing/release-checklist.md), so the notes describe the SmartScreen prompt.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write   # create the draft release; nothing else
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Ui/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The tag, Directory.Build.props and the changelog must agree, and vpk must match the Velopack library it packs
+      # (ADR-008 "Versioning"), before anything is built.
+      - name: Check version, changelog and Velopack versions
+        id: version
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          $props = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ($props -ne $version) { throw "Tag $tag does not match Directory.Build.props Version $props" }
+          if (-not (Select-String -Path docs/CHANGELOG.md -Pattern "^## $([regex]::Escape($version))(\s|$)" -Quiet)) { throw "docs/CHANGELOG.md has no '## $version' section" }
+          $vpk = (Get-Content .config/dotnet-tools.json -Raw | ConvertFrom-Json).tools.vpk.version
+          $lib = ([xml](Get-Content src/DesktopShell/TomeStack.DesktopShell.csproj -Raw)).Project.ItemGroup.PackageReference | Where-Object { $_.Include -eq 'Velopack' } | ForEach-Object { $_.Version }
+          if ($vpk -ne $lib) { throw "vpk $vpk does not match the Velopack library $lib" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Releasing $version (vpk and Velopack $vpk)"
+
+      # The gate (CLAUDE.md), in order.
+      - name: UI install
+        working-directory: src/Ui
+        run: npm ci
+
+      - name: UI lint
+        working-directory: src/Ui
+        run: npm run lint
+
+      - name: UI unit tests
+        working-directory: src/Ui
+        run: npm test
+
+      - name: UI typecheck and build
+        working-directory: src/Ui
+        run: npm run build
+
+      - name: .NET build
+        run: dotnet build TomeStack.slnx -c Release
+
+      - name: .NET tests
+        run: dotnet test TomeStack.slnx -c Release --no-build
+
+      - name: UI flow against DevHost (e2e)
+        working-directory: src/Ui
+        run: npm run test:e2e
+
+      - name: Desktop shell smoke
+        shell: pwsh
+        run: scripts/smoke.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe -Report "$env:RUNNER_TEMP/smoke-result.json"
+
+      - name: Two instances on one data folder
+        shell: pwsh
+        run: scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-windows/TomeStack.exe
+
+      # Self-contained win-x64 publish and vpk pack (ADR-008), unsigned.
+      - name: Restore vpk
+        run: dotnet tool restore
+
+      - name: Pack the installer
+        shell: pwsh
+        run: scripts/pack-installer.ps1 -Version '${{ steps.version.outputs.version }}' -OutputDir "$env:RUNNER_TEMP/installer"
+
+      # Install, smoke, check the notices and uninstall with the data kept (no older build here to upgrade from;
+      # the upgrade test is an owner check, docs/features/m2-acceptance.md).
+      - name: Installer smoke
+        shell: pwsh
+        run: scripts/installer-smoke.ps1 -Adapter Velopack -InstallOnly -NewBuild "$env:RUNNER_TEMP/installer/${{ steps.version.outputs.version }}"
+
+      - name: Release notes from the changelog
+        shell: pwsh
+        run: scripts/release-notes.ps1 -Version '${{ steps.version.outputs.version }}' -Output "$env:RUNNER_TEMP/release-notes.md"
+
+      # A draft only: the owner reviews it and publishes it on GitHub. Re-running for the same tag fails rather than
+      # replacing an existing release.
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $dir = "$env:RUNNER_TEMP/installer/$version"
+          $assets = Get-ChildItem $dir -File | ForEach-Object { $_.FullName }
+          if (-not ($assets | Where-Object { $_ -like '*TomeStack.App-win-Setup.exe' })) { throw 'Setup.exe is missing' }
+          gh release create '${{ github.ref_name }}' $assets --draft --verify-tag --title "TomeStack $version" --notes-file "$env:RUNNER_TEMP/release-notes.md"
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-smoke-result
+          path: ${{ runner.temp }}/smoke-result.json
+          if-no-files-found: warn

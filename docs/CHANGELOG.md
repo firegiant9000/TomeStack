@@ -1,8 +1,27 @@
 # Changelog
 
-## Unreleased (M2.1, M2.2, M3, M4, M5 and M6)
+## Unreleased
+
+Nothing yet.
+
+## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
+
+The first release published on GitHub, with a downloadable installer. Version 0.4.0 comes after the 0.3.1 test installers that were built locally but never published (ADR-008 "Versioning"). It brings everything built since 0.3.0, listed below. How far each part is proven:
+
+- **Checked on test data only, not in real play yet:** M2.1 (data safety), M2.2 (the Fighter), M5 (the homebrew studio) and M6 (sharing, extensions, VTT export).
+- **M3, playing a real character end to end:** the engineering is done, but the gate is not met.
+- **M4, reading a PDF and proposing rules:** still experimental.
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating:** TomeStack never checks for updates and makes no network calls. To update, download the newer `Setup.exe` and run it. Your data folder (`%LOCALAPPDATA%\TomeStack`) is kept and is backed up before any database upgrade.
 
 ### Added
+
+- **Download TomeStack from GitHub (roadmap T5):**
+  - Releases now come as a downloadable installer on the project's Releases page, built and checked automatically from a version tag.
+  - The installed folder now also has `THIRD-PARTY-NOTICES-Velopack.md`, the licenses of the code inside the installer and updater.
+  - The installer components are updated to Velopack 1.2.161.
 
 - **M6 exit gate checked on fixtures (M6 slice 6):** a source pack, a campaign pack and a full backup with an extension each come back as they were in a fresh TomeStack data folder, except that shared sources are marked as received and an extension comes back turned off until you grant it again. Restoring on a second computer has not been tried yet.
 - **Guides for homebrew authors (M6 slice 5; its extension changes approved by the owner 2026-09-30):** `docs/authoring/` explains how to write a class in the Homebrew studio, share your homebrew as a source pack, and write an extension, with a compatibility table. Every example in them is tested by following it as written. An extension's export is now refused if it leaves out a license notice, and extension files made with Windows PowerShell's `Compress-Archive` now install.
