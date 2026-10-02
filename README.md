@@ -35,6 +35,7 @@ src/DevHost/        Development-only loopback host for running the UI in a brows
 src/Ui/             React + TypeScript (Vite)
 tests/RulesFixtures/  Original fixture content and characters for both rules families
 tests/*.Tests/      xUnit tests
+benchmarks/         BenchmarkDotNet measurements, run by hand (docs/performance.md)
 docs/               Specs, ADRs, feature docs, changelog, diagram
 ```
 
@@ -61,6 +62,8 @@ npm run test:e2e --prefix src/Ui       # UI flow against the real DevHost (needs
 ```
 
 CI runs the same steps on `windows-latest` ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+Performance: the measured baseline (a level-20 multiclass sheet, a 500-revision pack import, every SRD formula, update reviews across 100 characters) and how to run the benchmarks are in [docs/performance.md](docs/performance.md).
 
 ## Run
 

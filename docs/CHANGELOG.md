@@ -71,6 +71,11 @@
 
 ### Changed
 
+- **A measured performance baseline (roadmap T4, 2026-10-01; measurements only, nothing made faster):**
+  - A full level-20 character with three classes and over 300 spells is calculated in under a millisecond.
+  - Importing a 500-entry homebrew pack takes about 65 ms.
+  - Checking one such character for content updates takes 13–17 ms, the slowest step measured. It is noted for later, with the other findings.
+  - Details and how to repeat the measurements: [performance.md](performance.md).
 - **More checks that your data comes back exactly (roadmap T3, 2026-10-01; tests only, no behaviour change):** TomeStack's tests now try thousands of generated characters, homebrew entries, formulas and libraries on every build. They check that saving and reading never changes a thing, including data from newer versions that this one doesn't understand, and that each content version keeps its fingerprint. They check that the same dice seed rolls the same, and that backups, source packs and campaign packs come back equal in a fresh data folder. They also check that an older data folder upgrades with every character, campaign, gap note and source kept (sources change only where an upgrade step says so) and one backup copy left. They found no defects. Details: [testing/properties.md](testing/properties.md).
 - **Docs record M5 and M6 as merged (2026-10-01; docs only, no behaviour change):** the roadmap, backlog, feature notes and decision records now say that the M5 and M6 work is merged to main (2026-09-30), and that the package format numbers (7, 8 and 9) and database numbers (7, 8 and 9) are final. It is still checked on test fixtures only, not on an installed build.
 - **Roadmap: use it first, then prove it (revision of 2026-09-29, reconciled 2026-09-30; plans only, nothing built):** the next milestone is a played session with a written gap report (T2), after repository clean-up (T1), and then property tests, benchmarks, a real release and a restore drill on a second machine (T3 to T6). By owner direction, the M6 sharing and extension work already built stays; the played session decides what comes after it, including more content and anything in M7.
