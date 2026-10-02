@@ -84,6 +84,33 @@ Record each result here: date, build, pass or fail, notes.
 
 The results were reported by the owner; the development session did not observe them.
 
+## Upgrade to 0.4.0 (roadmap T5, ADR-008 R3)
+
+0.4.0 is the first published release; the newest earlier installer is the locally built 0.3.1, which never left this machine (ADR-008 "Versioning"). The upgrade moves the database from **v6 to v9** in one step (migrations 7 snapshots, 8 import-derived, 9 extensions). It must leave **exactly one** copy, `tomestack.db.v6.bak`, at the version the folder was opened with, and no `.v7.bak` or `.v8.bak` (ARCHITECTURE "Data folder"; T3's migration property checks the same thing on generated databases).
+
+1. **Harness (throwaway data folder):** `scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/0.3.1 -NewBuild artifacts/installer/0.4.0`. It checks:
+   - the install;
+   - the smoke;
+   - the in-place upgrade with the character kept;
+   - `tomestack.db.v6.bak`;
+   - the notices, including `THIRD-PARTY-NOTICES-Velopack.md`;
+   - the uninstall with the data kept.
+
+   It does not check that only one `.bak` exists. Look in the data folder for that.
+2. **Owner, on a populated folder.** Use a clean VM, or a Windows user with no TomeStack data: this machine's real data folder is at database v2, from an earlier development build, not v6.
+   1. Install 0.3.1. Create a character, a homebrew source with a published feature, a campaign and a gap note, and attach a PDF. Then use **Back up everything**.
+   2. Close TomeStack and run the published 0.4.0 `Setup.exe`. Then check:
+      - TomeStack opens on the same library;
+      - `%LOCALAPPDATA%\TomeStack` holds `tomestack.db.v6.bak` and no other `.bak`;
+      - the character opens with the same sheet;
+      - the homebrew, the campaign, the gap note and the PDF are there;
+      - the 0.3.1 backup restores into an empty folder (`--data-dir`) under 0.4.0.
+
+| Date | Old → new | Data | Steps | Result | Notes |
+|---|---|---|---|---|---|
+| 2026-10-01 | 0.3.1 → 0.4.0 (local pack of the release branch) | throwaway (harness) | 1 | **Pass** | Development machine, Windows 11 26200, Windows PowerShell 5.1. All steps passed: 0.3.1 (schema 6) installed and ran; 0.4.0 (schema 9) upgraded in place with the character kept; `tomestack.db.v6.bak` present and the **only** `.bak` in the data folder; the four notice files installed; the data kept after uninstall; the real `%LOCALAPPDATA%\TomeStack` untouched. `-InstallOnly` on 0.4.0 also passed. This is Windows-install verified for the installer path, on the locally packed build, not the published one |
+| — | 0.3.1 → 0.4.0 | populated (owner) | 2 | owed (owner) | |
+
 ## Could not be verified here
 
 - The owner checks above were run outside the development session. Their evidence is the owner's report.

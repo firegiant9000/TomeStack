@@ -16,7 +16,7 @@ No other third-party rules text is bundled. The test fixtures in `tests/RulesFix
 
 ## Third-party components in the shipped app
 
-Checked on 2026-09-25 from `npm ls --omit=dev` and `dotnet list src/DesktopShell package --include-transitive`. Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
+Checked on 2026-09-25, and again on 2026-10-01 for 0.4.0, from `npm ls --omit=dev` and `dotnet list src/DesktopShell package --include-transitive`. Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
 
 | Component | Version | License | Copyright |
 | --- | --- | --- | --- |
@@ -28,12 +28,17 @@ Checked on 2026-09-25 from `npm ls --omit=dev` and `dotnet list src/DesktopShell
 | SQLitePCLRaw (`core`, `bundle_e_sqlite3`, `provider.e_sqlite3`, `lib.e_sqlite3`) | 2.1.12 | Apache-2.0 | SourceGear, LLC |
 | SQLite (native `e_sqlite3`, via SQLitePCLRaw) | bundled | Public domain | D. Richard Hipp and contributors |
 | .NET runtime, WPF (self-contained publish and the installer) | 10.0 | MIT | .NET Foundation and contributors |
-| Velopack (library, plus the installer's `Setup.exe` and `Update.exe`) | 1.2.158 | MIT | Velopack Ltd. |
+| Velopack (library, plus the installer's `Setup.exe` and `Update.exe`) | 1.2.161 | MIT | Caelan Sayler (Velopack). `Setup.exe` and `Update.exe` also contain Rust crates under their own licenses: see `THIRD-PARTY-NOTICES-Velopack.md` |
 | PdfPig (`UglyToad.PdfPig` and its `Core`, `Fonts`, `Tokens`, `Tokenization`, `DocumentLayoutAnalysis` and `Package` assemblies), in the import worker (ADR-009) | 0.1.16 | Apache-2.0 | UglyToad and PdfPig contributors |
 | Windows SDK C#/WinRT projection (`Microsoft.Windows.SDK.NET.dll`, `WinRT.Runtime.dll`, from `Microsoft.Windows.SDK.NET.Ref`), for Windows OCR in the import worker (ADR-009) | 10.0.19041.57 | **Microsoft Windows SDK license** (Distributable Code; https://aka.ms/WinSDKLicenseURL). Not an open-source license; see below | Microsoft Corporation |
 
 The Microsoft Edge WebView2 **Runtime** is not redistributed. It is a system component that is preinstalled on Windows 11 or installed by the user. The UI uses system fonts and ships no fonts or icon sets.
 
-**Windows SDK Distributable Code (owner decision 2026-09-28, ADR-009):** the two projection assemblies are Microsoft's, under the Windows SDK license, not under Apache-2.0. They are shipped unmodified, and TomeStack's license does not apply to them. The SDK license lets them be distributed as part of a program that adds significant primary functionality, for the Windows platform only. The program must display its own copyright notice, must not alter Microsoft's notices, and must not use Microsoft's trademarks in its name. The license also asks that distributors and end users agree to terms that protect the code at least as much as the SDK license, and that the distributor indemnify Microsoft. **Open items before a public release:** confirm both files are on the SDK's REDIST.TXT list, and add those end-user terms to the installer or the About screen.
+**Windows SDK Distributable Code (owner decision 2026-09-28, ADR-009):** the two projection assemblies are Microsoft's, under the Windows SDK license, not under Apache-2.0. They are shipped unmodified, and TomeStack's license does not apply to them. The SDK license lets them be distributed as part of a program that adds significant primary functionality, for the Windows platform only. The program must display its own copyright notice, must not alter Microsoft's notices, and must not use Microsoft's trademarks in its name. The license also asks that distributors and end users agree to terms that protect the code at least as much as the SDK license, and that the distributor indemnify Microsoft. **Checked 2026-10-01 (roadmap T5):** both files are on Microsoft's Windows SDK redistribution list, under "Microsoft.Windows.SDK.NET.Ref" (https://learn.microsoft.com/legal/windows-sdk/redist), so shipping them unmodified is allowed. The end-user terms and the indemnity are an owner decision, recorded in [docs/licensing/release-checklist.md](docs/licensing/release-checklist.md).
 
-The Velopack installer (ADR-008) installs this file, `LICENSE` and `NOTICE` next to `TomeStack.exe` (checked by `scripts/installer-smoke.ps1`). BSD-3-Clause, Apache-2.0 and MIT all require the notice to be kept. Velopack's `Setup.exe` and `Update.exe` are compiled from Rust and statically include third-party crates; their individual notices have not been reviewed yet (open item before public release).
+The Velopack installer (ADR-008) installs this file, `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES-Velopack.md` next to `TomeStack.exe` (checked by `scripts/installer-smoke.ps1`). BSD-3-Clause, Apache-2.0 and MIT all require the notice to be kept.
+
+**Velopack's `Setup.exe` and `Update.exe`** are compiled from Rust and statically include third-party crates. Velopack publishes no notices for them. `THIRD-PARTY-NOTICES-Velopack.md` (from [docs/licensing/velopack-third-party-notices.md](docs/licensing/velopack-third-party-notices.md)) is generated by `scripts/velopack-notices.mjs` from Velopack's `Cargo.lock` at the pinned tag.
+- It lists every crate in the closure for all targets, a superset of what the Windows binaries contain, with each crate's license and license text.
+- Every crate is under a permissive license, or offers one: MIT, Apache-2.0, BSD, ISC, Zlib, Unicode-3.0, CDLA-Permissive-2.0, CC0, NCSA, 0BSD or Unlicense. None needs copyleft terms.
+- Run the script again whenever the Velopack version changes.

@@ -21,21 +21,29 @@
     5. (Velopack) The installed folder carries LICENSE, NOTICE and ATTRIBUTION.md (ADR-008 R6), and the app version
        increased.
 
+  -InstallOnly (T5, the release workflow, which has no older build): installs -NewBuild alone, smokes it on a fresh data
+  folder, checks the notices (step 5 without the version comparison) and uninstalls (step 4). Steps 2 and 3 need an
+  older build and are skipped.
+
   -DataDir defaults to a throwaway folder. On a clean VM, pass -DataDir "$env:LOCALAPPDATA\TomeStack" to check the
   real default location. Never do that on a machine with real TomeStack data.
 .EXAMPLE
   scripts/installer-smoke.ps1 -Adapter Velopack -OldBuild artifacts/installer/0.1.0 -NewBuild artifacts/installer/0.1.1
 .EXAMPLE
+  scripts/installer-smoke.ps1 -Adapter Velopack -InstallOnly -NewBuild artifacts/installer/0.4.0
+.EXAMPLE
   scripts/installer-smoke.ps1 -Adapter Xcopy -OldBuild artifacts/old -NewBuild artifacts/new
 #>
 param(
   [Parameter(Mandatory)] [ValidateSet('Velopack', 'Xcopy')] [string] $Adapter,
-  [Parameter(Mandatory)] [string] $OldBuild,
+  [string] $OldBuild,
   [Parameter(Mandatory)] [string] $NewBuild,
   [string] $DataDir,
-  [string] $InstallRoot
+  [string] $InstallRoot,
+  [switch] $InstallOnly
 )
 $ErrorActionPreference = 'Stop'
+if (-not $InstallOnly -and -not $OldBuild) { throw '-OldBuild is required unless -InstallOnly is given' }
 $smoke = Join-Path $PSScriptRoot 'smoke.ps1'
 if (-not $DataDir) { $DataDir = Join-Path ([IO.Path]::GetTempPath()) "tomestack-installer-smoke-$([guid]::NewGuid().ToString('N'))" }
 $defaultData = Join-Path $env:LOCALAPPDATA 'TomeStack'
@@ -91,6 +99,26 @@ if ($Adapter -eq 'Velopack' -and (Test-Path $InstallRoot)) {
 }
 
 Write-Output "adapter: $Adapter; install folder: $InstallRoot; data dir: $DataDir"
+
+if ($InstallOnly) {
+  $database = Join-Path $DataDir 'tomestack.db'
+  Install-Build $NewBuild
+  $new = Invoke-Step 'install smoke' 0
+  Write-Output "PASS 1: v$($new.appVersion) (schema $($new.schemaVersion)) installed and ran"
+  Write-Output 'SKIP 2, 3: install only; no older build to upgrade from'
+  if ($Adapter -eq 'Velopack') {
+    $missing = @('LICENSE', 'NOTICE', 'ATTRIBUTION.md', 'THIRD-PARTY-NOTICES-Velopack.md') | Where-Object { -not (Test-Path (Join-Path $InstallRoot "current\$_")) }
+    if ($missing) { throw "installed folder lacks $($missing -join ', ')" }
+    Write-Output 'PASS 5: LICENSE, NOTICE, ATTRIBUTION.md and the Velopack notices installed'
+  }
+  Uninstall-App
+  if (-not (Test-Path $database)) { throw 'uninstall removed the database' }
+  if ($defaultDataExisted -and -not (Test-Path $defaultData)) { throw "uninstall removed $defaultData" }
+  if ($Adapter -eq 'Velopack' -and (Test-Path (Get-InstalledExe))) { throw 'uninstall left the app in place' }
+  Write-Output "PASS 4: uninstalled; data folder preserved ($database)"
+  return
+}
+
 Install-Build $OldBuild
 $old = Invoke-Step 'old build smoke' 0
 Write-Output "PASS 1: old build v$($old.appVersion) (schema $($old.schemaVersion)) installed and ran"
@@ -109,10 +137,10 @@ if ($new.schemaVersion -ne $old.schemaVersion) {
 }
 
 if ($Adapter -eq 'Velopack') {
-  $missing = @('LICENSE', 'NOTICE', 'ATTRIBUTION.md') | Where-Object { -not (Test-Path (Join-Path $InstallRoot "current\$_")) }
+  $missing = @('LICENSE', 'NOTICE', 'ATTRIBUTION.md', 'THIRD-PARTY-NOTICES-Velopack.md') | Where-Object { -not (Test-Path (Join-Path $InstallRoot "current\$_")) }
   if ($missing) { throw "installed folder lacks $($missing -join ', ')" }
   if ([version]$new.appVersion -le [version]$old.appVersion) { throw "version did not increase ($($old.appVersion) -> $($new.appVersion))" }
-  Write-Output "PASS 5: v$($old.appVersion) -> v$($new.appVersion); LICENSE, NOTICE and ATTRIBUTION.md installed"
+  Write-Output "PASS 5: v$($old.appVersion) -> v$($new.appVersion); LICENSE, NOTICE, ATTRIBUTION.md and the Velopack notices installed"
 }
 
 Uninstall-App

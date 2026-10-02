@@ -1,16 +1,19 @@
 # TomeStack
 
-A local-first Windows desktop app for building fifth-edition characters and homebrew. It works offline, with no account.
+A local-first Windows desktop app for building 5E-compatible characters and homebrew. It works offline, with no account.
 
-> **Status: v0.3.0, a limited-content build.** The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet. M2.1 (data safety) is implemented and not released yet. The M3 and M4 engineering is done, and neither gate is met. The M5 (homebrew studio) and M6 (source and campaign packs, extensions, VTT export) work is merged to `main` (2026-09-30) and fixture-verified, not yet verified on an installed build ([ROADMAP](docs/ROADMAP.md)).
+> **Status: v0.4.0, a limited-content build, the first one published as a GitHub release (unsigned; see [CHANGELOG](docs/CHANGELOG.md)).**
+> - The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet.
+> - M2.1 (data safety), M2.2 (the Fighter), M5 (homebrew studio) and M6 (source and campaign packs, extensions, VTT export) are in 0.4.0. They are fixture-verified; the checks on the installed 0.4.0 are owner checks ([release-0.4.0-verification.md](docs/features/release-0.4.0-verification.md)).
+> - The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
 >
-> - **Classes you can build:** the Fighter with the Champion (M2.2, implemented, not released yet) and the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. The SRD armor table is bundled with the Fighter. **Not yet:** Monk, Rogue, Barbarian 4–20.
+> - **Classes you can build:** the Fighter with the Champion (M2.2, in 0.4.0) and the eight SRD spellcasters (Bard, Cleric, Druid, Paladin, Ranger, Sorcerer, Warlock, Wizard), levels 1–20 in both rules families, and the Barbarian at levels 1–3. The SRD armor table is bundled with the Fighter. **Not yet:** Monk, Rogue, Barbarian 4–20.
 > - **Species and backgrounds:** one each per family (Half-Orc and Acolyte for SRD 5.1; Dwarf and Soldier for SRD 5.2.1). Anything else you add in the homebrew studio.
 > - **Works today:** build under SRD 5.1 (2014) or SRD 5.2.1 (2024) rules as a cancelable draft (classes, level-ups, multiclassing, spells, every choice), and see every calculated field with a source-aware trace. Play: hit points, resources, spell slots, conditions, equipment, rolls, short and long rests, death saves. Author homebrew subclasses and features, review updates, attach your own PDFs to open cited pages, keep campaign profiles, and print a sheet. Back up and restore your whole library, PDFs included, or export one character to back it up or share it.
 > - **Experimental:** reading a PDF's text and proposing candidates (M4). Nothing becomes a rule until you review and publish it, and it has not yet been proven on a real third-party book.
 > - **Evidence:** checks are either fixture-verified (automated tests), Windows-install verified (the CI desktop smoke, or an owner check on an installed build), or accepted in real play. Nothing is accepted in real play yet (that is the M3 gate). See [features/m2-acceptance.md](docs/features/m2-acceptance.md#evidence-levels-m21-2026-09-28).
 >
-> The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). No installer has been published; build from source (below). Milestone evidence is in [ROADMAP](docs/ROADMAP.md) and [`docs/features/*-acceptance.md`](docs/features/).
+> The bundled content is a small, attributed slice of both SRDs (CC-BY-4.0; see [ATTRIBUTION.md](ATTRIBUTION.md)). From 0.4.0 the installer is on the [Releases page](https://github.com/firegiant9000/TomeStack/releases): unsigned, so Windows asks you to confirm the first run. You can also build from source (below). Milestone evidence is in [ROADMAP](docs/ROADMAP.md) and [`docs/features/*-acceptance.md`](docs/features/).
 
 ![The Strength score expanded on a character sheet: a table traces the value from the chosen base score of 15, plus 2 from the Soldier background's ability score choice, to 17, citing System Reference Document 5.2.1, page 83](docs/media/calculation-trace.png)
 

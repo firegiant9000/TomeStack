@@ -102,6 +102,21 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
 
 **Acceptance.** A release tag and downloadable installer; the four checklist items closed in writing; one upgrade v(N) → v(N+1) tested and recorded in `m2-acceptance.md` (from 0.3.x, it runs database v6 → v9 and leaves one `tomestack.db.v6.bak`); install verification of M2.2, M5 slice 1 and the M6 screens done on that build.
 
+**Status (2026-10-01): prepared, not met.**
+- **Done:**
+  - version 0.4.0 (owner, above the unpublished local 0.3.1; no tags for earlier versions);
+  - `release.yml` (a tag runs the gate, pack and installer smoke, and creates a draft release);
+  - the checklist closed in writing in [licensing/release-checklist.md](licensing/release-checklist.md): the trademark check passes; the Velopack notices are generated and installed; unsigned (owner); manual updates;
+  - the upgrade harness 0.3.1 → 0.4.0 passed on a locally packed build with throwaway data: database 6 → 9, one `tomestack.db.v6.bak` ([features/m2-acceptance.md](features/m2-acceptance.md)).
+- **Open before publishing:** the Windows SDK license's end-user-terms and indemnity conditions for the two projection DLLs that ship. This is an owner decision; the roadmap's "likely none ship" was wrong.
+- **Owner:**
+  - push the tag;
+  - publish the draft;
+  - run the 0.3.1 → 0.4.0 upgrade test ([features/m2-acceptance.md](features/m2-acceptance.md));
+  - run the install checks ([features/release-0.4.0-verification.md](features/release-0.4.0-verification.md)).
+
+  M5 counts as delivered once S1–S3 there pass.
+
 **Evidence produced.** The release page, the upgrade record, the closed checklist.
 
 **Resume potential.** "Shipped TomeStack as a [signed / unsigned] Velopack release with a tested upgrade path and a resolved third-party licensing checklist."

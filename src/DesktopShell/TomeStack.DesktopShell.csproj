@@ -23,13 +23,16 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-    <PackageReference Include="Velopack" Version="1.2.158" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <!-- License and third-party notices ship next to TomeStack.exe (ADR-008 R6). -->
   <ItemGroup>
     <Content Include="$(MSBuildThisFileDirectory)..\..\LICENSE;$(MSBuildThisFileDirectory)..\..\NOTICE;$(MSBuildThisFileDirectory)..\..\ATTRIBUTION.md"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    <!-- T5: the notices of the Rust crates in Velopack's Setup.exe and Update.exe (scripts/velopack-notices.mjs). -->
+    <Content Include="$(MSBuildThisFileDirectory)..\..\docs\licensing\velopack-third-party-notices.md"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="THIRD-PARTY-NOTICES-Velopack.md" />
   </ItemGroup>
 
   <ItemGroup>

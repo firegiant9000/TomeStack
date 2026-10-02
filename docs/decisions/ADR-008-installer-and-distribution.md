@@ -35,18 +35,24 @@ Sources: Velopack [preserved files](https://docs.velopack.io/integrating/preserv
 
 ## Decision
 
-- **Velopack, per-user, self-contained** (win-x64, about 145 MB unpacked, so no .NET runtime is needed on the machine; R2). Built by `scripts/pack-installer.ps1`: `dotnet publish --self-contained`, then `vpk pack`. `vpk` is a repo-local dotnet tool pinned in `.config/dotnet-tools.json` (1.2.158), and the `Velopack` library has the same version.
+- **Velopack, per-user, self-contained** (win-x64, about 145 MB unpacked, so no .NET runtime is needed on the machine; R2). Built by `scripts/pack-installer.ps1`: `dotnet publish --self-contained`, then `vpk pack`. `vpk` is a repo-local dotnet tool pinned in `.config/dotnet-tools.json` (1.2.161 since 0.4.0), and the `Velopack` library has the same version; the release workflow refuses to pack when they differ.
 - **Pack id `TomeStack.App`, never `TomeStack`.** Velopack installs to `%LOCALAPPDATA%\<packId>` and deletes that folder on uninstall. `%LOCALAPPDATA%\TomeStack` is the data folder (ADR-005), so the pack id must differ. `installer-smoke.ps1` refuses an install folder equal to the data folder and checks that the data folder survives uninstall.
 - `App.Main` calls `VelopackApp.Build().Run()` first, so Velopack's install, update and uninstall hooks run and exit before WPF starts. TomeStack never creates an `UpdateManager`, so there is no update check or network call (ADR-001). Updates are installed by running a newer `Setup.exe`.
-- **No code signing yet.** SmartScreen will warn (R7). Signing is required before a public release.
+- **Unsigned (owner decision 2026-10-01, roadmap T5).** This replaces "signing is required before a public release". SmartScreen warns (R7), and the release notes say what to do. The options and costs, and how to add signing later (`vpk pack --azureTrustedSignFile` or `--signParams`), are in [release-checklist.md](../licensing/release-checklist.md).
+- **Releases (roadmap T5):**
+  - Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`. It runs the gate, packs, smokes the installer (`installer-smoke.ps1 -InstallOnly`) and creates a **draft** GitHub release, with notes from the changelog (`scripts/release-notes.ps1`).
+  - The owner publishes the draft.
+  - The pre-release checklist (trademark, Windows SDK binaries, Velopack notices, signing) is closed in writing per release in [release-checklist.md](../licensing/release-checklist.md).
+- **Updates are manual (confirmed for 0.4.0):** run the newer `Setup.exe`. There is no `UpdateManager` (the `App.Main` point above; the checklist's "Updates").
 - **Windows 10: best-effort** (ADR-001). It is not tested and not blocking.
-- `LICENSE`, `NOTICE` and `ATTRIBUTION.md` are copied next to `TomeStack.exe` by the shell project, so they are in every build and install (R6).
+- `LICENSE`, `NOTICE`, `ATTRIBUTION.md` and (since 0.4.0) `THIRD-PARTY-NOTICES-Velopack.md` are copied next to `TomeStack.exe` by the shell project, so they are in every build and install (R6).
 
 ### Versioning
 
 - `<Version>` in `Directory.Build.props` is the single source for the assembly version, `app.info`, the smoke report and `vpk --packVersion`.
 - Semantic versions `MAJOR.MINOR.PATCH`, with no pre-release suffixes. Before 1.0, MINOR goes up when a milestone is delivered (M1 → 0.2.0) and PATCH for any other build given to a user. Velopack refuses to update to a version that is not higher, so a version is never reused or lowered.
 - The bump goes in the same commit as the change being released. 0.1.1 is the first installable build.
+- **0.4.0 (owner decision 2026-10-01):** the first published release. It follows the locally built, never-published 0.3.1, because Velopack needs a higher number than any installer a user might have. No tags are added for the earlier, unpublished versions (owner decision); `m5-m6-merged` stays a marker, not a version tag.
 
 ## Installer-neutral evidence (2026-09-25, Windows 11 26200)
 
