@@ -108,7 +108,7 @@ One downloadable GitHub release built by a tag-triggered release workflow (`rele
   - `release.yml` (a tag runs the gate, pack and installer smoke, and creates a draft release);
   - the checklist closed in writing in [licensing/release-checklist.md](licensing/release-checklist.md): the trademark check passes; the Velopack notices are generated and installed; unsigned (owner); manual updates;
   - the upgrade harness 0.3.1 → 0.4.0 passed on a locally packed build with throwaway data: database 6 → 9, one `tomestack.db.v6.bak` ([features/m2-acceptance.md](features/m2-acceptance.md)).
-- **Open before publishing:** the Windows SDK license's end-user-terms and indemnity conditions for the two projection DLLs that ship. This is an owner decision; the roadmap's "likely none ship" was wrong.
+- **Windows SDK DLLs (2026-10-02):** two projection DLLs ship; the roadmap's "likely none ship" was wrong. The owner accepted the SDK license's end-user-terms and indemnity conditions (option (a)), and the terms are in `ATTRIBUTION.md`. All four checklist items are closed.
 - **Owner:**
   - push the tag;
   - publish the draft;

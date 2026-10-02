@@ -22,6 +22,7 @@ The first release published on GitHub, with a downloadable installer. Version 0.
   - Releases now come as a downloadable installer on the project's Releases page, built and checked automatically from a version tag.
   - The installed folder now also has `THIRD-PARTY-NOTICES-Velopack.md`, the licenses of the code inside the installer and updater.
   - The installer components are updated to Velopack 1.2.161.
+  - `ATTRIBUTION.md` now has the terms for two Microsoft Windows SDK files that TomeStack uses to read text from scanned PDFs. By installing TomeStack you agree to those terms for those two files.
 
 - **M6 exit gate checked on fixtures (M6 slice 6):** a source pack, a campaign pack and a full backup with an extension each come back as they were in a fresh TomeStack data folder, except that shared sources are marked as received and an extension comes back turned off until you grant it again. Restoring on a second computer has not been tried yet.
 - **Guides for homebrew authors (M6 slice 5; its extension changes approved by the owner 2026-09-30):** `docs/authoring/` explains how to write a class in the Homebrew studio, share your homebrew as a source pack, and write an extension, with a compatibility table. Every example in them is tested by following it as written. An extension's export is now refused if it leaves out a license notice, and extension files made with Windows PowerShell's `Compress-Archive` now install.

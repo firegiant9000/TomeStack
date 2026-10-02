@@ -5,7 +5,7 @@ The four items ADR-008 left open before the first published installer (LIVING_SP
 | # | Item | Result for 0.4.0 |
 |---|---|---|
 | 1 | Trademark | **Pass.** No D&D mark in the product |
-| 2 | Windows SDK binaries (OCR) | **Allowed to ship.** Two conditions wait on an owner decision (below) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` |
 | 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed |
 | 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) |
 
@@ -40,10 +40,15 @@ A search on 2026-10-01 for `D&D`, `Dungeons`, `Dragons`, `D&D Beyond`, `Wizards 
 | Ship them unmodified, keep Microsoft's notices, don't use Microsoft's trademarks in the program's name | Met |
 | Windows only | Met |
 | Display your own copyright notice | Met: `LICENSE` and `NOTICE` |
-| **Distributors and end users must agree to terms that protect the code at least as much as the SDK license** | **Owner decision** |
-| **The distributor indemnifies Microsoft against claims arising from the distribution or use of the program** | **Owner decision** |
+| **Distributors and end users must agree to terms that protect the code at least as much as the SDK license** | **Met:** "Terms for the Microsoft Windows SDK files" in `ATTRIBUTION.md`, installed next to `TomeStack.exe`, and pointed to from the release notes |
+| **The distributor indemnifies Microsoft against claims arising from the distribution or use of the program** | **Accepted by the owner** (2026-10-02) |
 
-**Owner decision needed before publishing 0.4.0.** The last two conditions are legal commitments, so they are for the owner, not the build. The options:
+**Decided (owner, 2026-10-02): option (a).**
+- Keep the DLLs and accept the conditions, including the indemnity.
+- Why: it is the standard path for every .NET app that calls Windows APIs through the SDK projection, and the alternatives cost an engineering change (b) or a feature (c).
+- The end-user terms are in `ATTRIBUTION.md`, with a pointer to them on every release page (`scripts/release-notes.ps1`).
+
+The options that were considered:
 - **(a) Accept them:** keep the DLLs; add short end-user terms covering them (a line in `ATTRIBUTION.md` and on the release page, or an installer licence page); and accept the indemnity.
 - **(b) Remove the DLLs:** C#/WinRT can compile the projection into the worker ("embedded" mode, C#/WinRT 1.4.1 and later), so no Microsoft DLL ships. This is an engineering change to the worker, with its own test run, and the build-time license terms still apply.
 - **(c) Ship without OCR:** build the worker without the Windows TFM, so nothing from the SDK ships. Scanned PDFs then can't be read.
