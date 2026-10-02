@@ -35,15 +35,28 @@ internal sealed class TempApp : IDisposable
 
     public string Directory => _directory;
 
+    private bool _closed;
+
     public void Reopen()
     {
-        App.Dispose();
+        if (!_closed)
+            App.Dispose();
+        _closed = false;
         App = TomeStackApp.Open(_directory, new FixedTime(_now), syncRoots: [], devFixtures: true, extractor: _extractor);
+    }
+
+    /// <summary>Closes the app and releases the folder, keeping it for inspection until <see cref="Dispose"/> (T6 drill).</summary>
+    public void Close()
+    {
+        if (!_closed)
+            App.Dispose();
+        _closed = true;
     }
 
     public void Dispose()
     {
-        App.Dispose();
+        if (!_closed)
+            App.Dispose();
         try
         {
             // Managed PDF copies are read-only (ADR-005); clear that so the folder can be deleted.

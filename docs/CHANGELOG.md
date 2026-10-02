@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- **A recovery-drill counter, for developers (roadmap T6; not in the app):**
+  - The development host can count what a closed TomeStack data folder holds, and compare two counts: the library before a backup and after a restore on another computer.
+  - It reports only numbers and fingerprints, including one for every character's calculated sheet. It never changes the folder.
+  - How to run the drill: [features/restore-drill-procedure.md](features/restore-drill-procedure.md).
 
 ## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
 
