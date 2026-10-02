@@ -34,7 +34,7 @@ src/RulesCore/      Pure rules: rules-family policies, content/character/provena
 src/AppService/     Application service: SQLite store, package export/import, CommandDispatcher (JSON protocol)
 src/ImportWorker/   Import contracts; candidates can only become inactive drafts
 src/DesktopShell/   WPF + WebView2 shell (TomeStack.exe); in-process service over the message bridge
-src/DevHost/        Development-only loopback host for running the UI in a browser
+src/DevHost/        Development-only loopback host for running the UI in a browser; also the restore-drill counter (--drill-report)
 src/Ui/             React + TypeScript (Vite)
 tests/RulesFixtures/  Original fixture content and characters for both rules families
 tests/*.Tests/      xUnit tests

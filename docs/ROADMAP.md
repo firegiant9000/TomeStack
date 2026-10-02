@@ -129,6 +129,13 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
 
 **Acceptance.** `docs/features/restore-drill-YYYY-MM-DD.md` with counts before and after, elapsed time, failures and what was done about them; the M2.1 owner check closed; the M6 exit gate's cross-machine part recorded; the ROADMAP risk-table row for the restore drill points at it.
 
+**Status (2026-10-02): tooling and procedure ready; the drill is owed (owner), on the published 0.4.0.**
+- **The tool:** the DevHost `--drill-report` / `--drill-compare` modes (`AppService.Diagnostics.RestoreDrill`, `RestoreDrillTests`).
+  - It reads a closed data folder through a temporary copy, and a test proves the folder is unchanged.
+  - It reports counts, byte totals and per-table digests, including every calculated sheet, and nothing else.
+  - The compare marks the drill's expected differences.
+- **The procedure:** [features/restore-drill-procedure.md](features/restore-drill-procedure.md), with the record template.
+
 **Evidence produced.** The drill record.
 
 **Resume potential.** "Verified full backup and restore of a local-first SQLite application on a clean machine ([N] revisions, [M] attachments, [T] s) and closed [K] gaps found by the drill."

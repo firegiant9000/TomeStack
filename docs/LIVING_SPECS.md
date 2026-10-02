@@ -150,6 +150,23 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
   - ROADMAP gains "M5 plan" and "M6 plan", approved by the owner the same day. [ADR-010](decisions/ADR-010-custom-classes-and-progression.md) (custom base classes, content schema v9) is accepted. The v9 bump itself still needed the owner's approval before it merged (approved 2026-09-29, entry above). [ADR-011](decisions/ADR-011-extension-api.md) (the extension API, SPEC P-05) and [ADR-012](decisions/ADR-012-export-adapters.md) (VTT export adapters, B20) stay proposed until the owner picks the execution model and the targets.
 - **2026-09-26 · M1 item 5:** D04 decided (see the table). Character schema v3 (`classes`) and content schema v3 (`grant.level`, `hitDie`) were added, with hit points, armor class and all 18 skills in the field graph ([features/levels-and-classes.md](features/levels-and-classes.md), ADR-003).
 - **2026-09-28 · outstanding-items audit (M0–M4):** D05 is decided but WCAG 2.2 AA is not met yet: the owner's 0.2.2 accessibility pass was the keyboard walkthrough only, so the Narrator pass recorded in `features/m2-acceptance.md` is corrected to "not done". D08: "public release" is the first published installer. The bundled Unarmored Defense text still says armor "is not modeled yet"; by owner decision it is corrected with the next real Barbarian revision, not a wording-only update.
+- **2026-10-02 · roadmap T6, recovery drill: tooling and procedure (dev-only tool and docs):**
+  - `AppService.Diagnostics.RestoreDrill` is run only by the dev-only DevHost (`--drill-report`, `--drill-compare`). The shipped app has no entry point to it and still opens no socket (ADR-006).
+  - It refuses a folder TomeStack holds, reads the database through a temporary copy opened `Mode=ReadOnly`, and reports only counts, byte totals and per-table SHA-256 digests. That includes a digest of every character's calculated sheet, so the drill compares what the player sees.
+  - The compare marks the drill's expected differences:
+    - snapshots (not in backups, D14);
+    - extensions off and ungranted (ADR-011);
+    - import jobs (machine-local);
+    - the bundled SRD seeded by each build.
+  - `RestoreDrillTests` prove that:
+    - the folder is unchanged byte for byte;
+    - the counts match the library;
+    - a folder in use is refused;
+    - no name, title, path or user name appears in the report;
+    - a full backup restored into a clean folder differs only where expected, with sheets equal.
+  - [features/restore-drill-procedure.md](features/restore-drill-procedure.md) has the source-machine and clean-machine steps and the record template.
+  - The drill itself is owed by the owner, on the published 0.4.0.
+  - No schema, package-format or database change.
 - **2026-10-02 · owner decision: the Windows SDK DLLs (T5 checklist item 2):**
   - Option (a): keep `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll` in the import worker, and accept the Windows SDK license's distribution requirements, including the indemnity of Microsoft.
   - End-user terms for the two files are in `ATTRIBUTION.md`, which installs next to `TomeStack.exe`, and every release page points to them (`scripts/release-notes.ps1`).
