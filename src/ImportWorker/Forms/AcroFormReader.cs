@@ -38,7 +38,7 @@ public static class AcroFormReader
             foreach (var (name, field) in terminals)
             {
                 var read = ToField(document, name, field);
-                total += Chars(read, form);
+                total += form.Chars(read) ?? throw TooLong(form);
                 if (total > form.MaxTotalValueChars)
                     throw new ExtractionException("ddb.value-too-long", $"The form fields hold more than {form.MaxTotalValueChars} characters in total.");
                 fields.Add(read);
@@ -108,16 +108,6 @@ public static class AcroFormReader
 
     private static IToken? Resolve(PdfDocument document, IToken? token) =>
         token is IndirectReferenceToken reference ? document.Structure.GetObject(reference.Data)?.Data : token;
-
-    /// <summary>The characters a field adds to the total; refuses one name or value over the per-value limit.</summary>
-    private static long Chars(FormField field, FormLimits form)
-    {
-        // A selected option also counts its separator, so an empty option still costs a character.
-        var selected = field.Selected?.Sum(s => (long)s.Length + 1) ?? 0;
-        if ((field.Value?.Length ?? 0) > form.MaxValueChars || selected > form.MaxValueChars || (field.OnState?.Length ?? 0) > form.MaxValueChars)
-            throw TooLong(form);
-        return field.Name.Length + (field.Value?.Length ?? 0) + selected + (field.OnState?.Length ?? 0);
-    }
 
     private static ExtractionException TooLong(FormLimits form) =>
         new("ddb.value-too-long", $"A form field's name or value is longer than {form.MaxValueChars} characters.");

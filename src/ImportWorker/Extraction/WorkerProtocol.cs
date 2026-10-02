@@ -1,20 +1,28 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TomeStack.ImportWorker.Forms;
 
 namespace TomeStack.ImportWorker.Extraction;
 
 /// <summary>
 /// ADR-009 (c): the one request line the worker reads from stdin. <paramref name="Path"/> is a file the app resolved, never one from the UI.
 /// <paramref name="ParentProcessId"/> is the app's process: the worker exits when it does, so a crashed app leaves no worker behind.
+/// <paramref name="Kind"/> is <c>extract</c> (page text, the default when null) or <c>formFields</c> (the form fields of a
+/// character sheet, read under <paramref name="Form"/>, or <see cref="FormLimits.Default"/> when null).
 /// </summary>
-public sealed record WorkerRequest(string Path, int? FirstPage, int? LastPage, ExtractionLimits Limits, int? ParentProcessId = null);
+public sealed record WorkerRequest(string Path, int? FirstPage, int? LastPage, ExtractionLimits Limits, int? ParentProcessId = null, string? Kind = null, FormLimits? Form = null)
+{
+    public const string ExtractKind = "extract";
+    public const string FormFieldsKind = "formFields";
+}
 
 /// <summary>
 /// One line the worker writes to stdout: <c>worker</c> first (with its managed-heap limit, <paramref name="HeapLimit"/>), then
-/// <c>document</c>, <c>page</c>, <c>error</c> (with a code) or <c>done</c>.
+/// <c>document</c>, <c>page</c>, <c>error</c> (with a code) or <c>done</c>. A <c>formFields</c> request gets one <c>fields</c>
+/// line (<paramref name="Fields"/>) instead of <c>document</c> and <c>page</c>.
 /// </summary>
-public sealed record WorkerMessage(string Type, int? PageCount = null, ExtractedPage? Page = null, string? Code = null, string? Message = null, long? HeapLimit = null);
+public sealed record WorkerMessage(string Type, int? PageCount = null, ExtractedPage? Page = null, string? Code = null, string? Message = null, long? HeapLimit = null, IReadOnlyList<FormField>? Fields = null);
 
 /// <summary>JSON lines over the child's stdin and stdout: compact camelCase, one object per line.</summary>
 public static class WorkerJson
@@ -42,7 +50,7 @@ public static class WorkerJson
 
 /// <summary>
 /// The worker process's entry (<c>TomeStack.ImportWorker.Host.exe</c>): read one request, report its heap limit, extract,
-/// write one line per event, then <c>done</c>. It writes nothing else to stdout. Exit codes: 0 done, 2 a document-level
+/// write one line per event, then <c>done</c>. A <c>formFields</c> request is answered with one <c>fields</c> line, then <c>done</c>. It writes nothing else to stdout. Exit codes: 0 done, 2 a document-level
 /// failure (reported first as an <c>error</c> line), 3 a malformed request, 4 the app that started it has exited.
 /// </summary>
 public static class WorkerMain
@@ -61,7 +69,8 @@ public static class WorkerMain
         {
             request = null;
         }
-        if (request is null || string.IsNullOrWhiteSpace(request.Path) || request.Limits is null)
+        if (request is null || string.IsNullOrWhiteSpace(request.Path) || request.Limits is null
+            || request.Kind is not (null or WorkerRequest.ExtractKind or WorkerRequest.FormFieldsKind))
         {
             await WriteAsync(output, new("error", Code: "worker.bad-request", Message: "The worker received no valid request.")).ConfigureAwait(false);
             return 3;
@@ -76,6 +85,13 @@ public static class WorkerMain
 
         try
         {
+            if (request.Kind == WorkerRequest.FormFieldsKind)
+            {
+                var fields = AcroFormReader.Read(request.Path, request.Limits, request.Form ?? FormLimits.Default);
+                await WriteAsync(output, new("fields", Fields: fields)).ConfigureAwait(false);
+                await WriteAsync(output, new("done")).ConfigureAwait(false);
+                return 0;
+            }
             var extractor = new PdfPigExtractor(ocr, request.Limits);
             await foreach (var item in extractor.ExtractAsync(request.Path, new(request.FirstPage, request.LastPage), cancellationToken).ConfigureAwait(false))
             {

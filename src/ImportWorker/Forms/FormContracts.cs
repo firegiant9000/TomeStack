@@ -31,6 +31,17 @@ public sealed record FormLimits
     public static FormLimits Default { get; } = new();
 
     /// <summary>
+    /// The characters <paramref name="field"/> counts toward <see cref="MaxTotalValueChars"/> (its name, value, selected options
+    /// each with one more for its separator, and on-state), or null when one of them is over <see cref="MaxValueChars"/>.
+    /// </summary>
+    internal long? Chars(FormField field)
+    {
+        var selected = field.Selected?.Sum(s => (long)s.Length + 1) ?? 0;
+        long name = field.Name.Length, value = field.Value?.Length ?? 0, onState = field.OnState?.Length ?? 0;
+        return name > MaxValueChars || value > MaxValueChars || selected > MaxValueChars || onState > MaxValueChars ? null : name + value + selected + onState;
+    }
+
+    /// <summary>
     /// The longest <c>fields</c> line the app reads from the worker under these limits: each character escaped as at most six,
     /// plus 256 for each field's keys and numbers, plus 64 KiB. Anything longer fails with <c>worker.message-too-large</c>
     /// before it is held in the app's memory.
