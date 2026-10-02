@@ -47,7 +47,7 @@ public static class FormInventory
             text.AppendLine(CultureInfo.InvariantCulture, $"  {type.Key} {type.Count()}");
         foreach (var page in report.Fields.GroupBy(f => f.Page).OrderBy(g => g.Key ?? int.MaxValue))
             text.AppendLine(CultureInfo.InvariantCulture, $"  page {page.Key?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}: {page.Count()}");
-        text.AppendLine(CultureInfo.InvariantCulture, $"  nested names: {report.Fields.Count(f => f.Name.Contains('.', StringComparison.Ordinal))}");
+        text.AppendLine(CultureInfo.InvariantCulture, $"  names with a period: {report.Fields.Count(f => f.Name.Contains('.', StringComparison.Ordinal))}");
         return text.ToString();
     }
 }
