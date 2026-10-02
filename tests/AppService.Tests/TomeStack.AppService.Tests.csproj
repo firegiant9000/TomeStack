@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <!-- T3 property tests. 3.x supports xUnit v2 (xunit.extensibility.execution [2.4.1, 3.0.0)). -->
+    <PackageReference Include="FsCheck.Xunit" Version="3.4.0" />
     <PackageReference Include="JsonSchema.Net" Version="9.4.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -24,6 +26,12 @@
     <ProjectReference Include="..\..\src\ImportWorker\TomeStack.ImportWorker.csproj" />
     <!-- Copied next to the tests, which start it as a child process like the app does. -->
     <ProjectReference Include="..\..\src\ImportWorker.Host\TomeStack.ImportWorker.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- T3: the property-test generators and golden hashes are shared with RulesCore.Tests. -->
+    <Compile Include="..\RulesCore.Tests\Properties\Generators.cs" Link="Properties\Shared\Generators.cs" />
+    <Compile Include="..\RulesCore.Tests\Properties\GoldenRevisions.cs" Link="Properties\Shared\GoldenRevisions.cs" />
   </ItemGroup>
 
   <ItemGroup>
