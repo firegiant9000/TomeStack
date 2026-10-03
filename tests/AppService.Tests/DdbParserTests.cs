@@ -196,11 +196,11 @@ public class DdbParserTests
     [Fact]
     public void Class_levels_adding_to_exactly_twenty_read_and_more_than_twenty_parts_do_not()
     {
-        var twenty = Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", "Fixture Fighter 12 / Fixture Mage 8")).Classes;
+        var twenty = Parse(With(Fields(FixtureSheets.Fields2014), "CLASS  LEVEL", "Fixture Fighter 12 / Fixture Mage 8")).Classes;
         Assert.Equal([12, 8], twenty.Value!.Select(c => c.Level));
 
         var parts = string.Join(" / ", Enumerable.Range(0, 21).Select(i => $"Fixture Class {(char)('A' + i)} 1"));
-        Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", parts)).Classes);
+        Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "CLASS  LEVEL", parts)).Classes);
     }
 
     // ---- review fixes: map checks, recognition, patterns, rows, printing ----

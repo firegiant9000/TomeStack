@@ -319,11 +319,16 @@ public class DdbImportTests
     [Fact]
     public void Play_state_fields_that_cannot_be_read_are_reported_when_play_state_is_asked_for()
     {
+        // The 2014 layout has no spent-hit-dice fields (S0); the placeholder 2024 layout still names them.
         using var h = new DdbHarness();
-        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Text("hitDiceSpent.d12", "Fixture");
+        DdbPreview Preview(bool play)
+        {
+            h.Fields = [new("fixture.2024.name", "text", 1, "Testy McFixture"), new("fixture.2024.classLevel", "text", 1, $"{h.Name(Barbarian)} 1"), new("fixture.2024.hitDiceSpent.d12", "text", 1, "Fixture")];
+            return h.Temp.App.PreviewDdbImport(new(h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token, RulesFamilies.Srd521, null, null, null, play));
+        }
 
-        Assert.DoesNotContain(h.Preview(sheet, RulesFamilies.Srd521).Diagnostics, d => d.Code == "ddb.play-unreadable");
-        var asked = h.Preview(sheet, RulesFamilies.Srd521, play: true);
+        Assert.DoesNotContain(Preview(play: false).Diagnostics, d => d.Code == "ddb.play-unreadable");
+        var asked = Preview(play: true);
         Assert.Contains(asked.Diagnostics, d => d.Code == "ddb.play-unreadable" && !d.Message.Contains("Fixture", StringComparison.Ordinal));
     }
 
