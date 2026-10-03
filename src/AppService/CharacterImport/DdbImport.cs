@@ -116,10 +116,23 @@ public sealed partial class TomeStackApp
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
             (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision);
         planner.Plan(sheet);
+        var diagnostics = new List<Diagnostic>();
+        var answered = planner.Character;
+        foreach (var answer in (request.Answers ?? []).Where(a => a?.Source is not null))
+        {
+            try
+            {
+                answered = WithChoice(Levelled(answered), answer.Source, answer.ChoiceId, answer.Selected);
+            }
+            catch (AppValidationException ex)
+            {
+                diagnostics.AddRange(ex.Problems); // a refused answer stays open, as in the builder
+            }
+        }
 
         var scores = sheet.Abilities.Where(a => a.Value.Status == ReadStatus.Ok).ToDictionary(a => a.Key, a => a.Value.Value);
-        var plan = AbilitySolver.Solve(bases => Calculate(planner.Character with { BaseAbilities = bases }), scores);
-        var character = Levelled(planner.Character with { BaseAbilities = plan.ProposedBase });
+        var plan = AbilitySolver.Solve(bases => Calculate(answered with { BaseAbilities = bases }), scores);
+        var character = Levelled(answered with { BaseAbilities = plan.ProposedBase });
         if (request.IncludePlayState)
             character = character with { Play = PlayFrom(sheet.Play) };
 
@@ -142,7 +155,6 @@ public sealed partial class TomeStackApp
             Overrides = [.. comparison.Where(n => n.Differs && kept.Contains(n.Field)).Select(n => new FieldOverride(n.Field, n.Sheet!.Value, ImportedOverrideReason))],
         };
 
-        var diagnostics = new List<Diagnostic>();
         var valid = true;
         try
         {
@@ -231,7 +243,8 @@ public sealed record DdbPreview(
     IReadOnlyList<Diagnostic> Diagnostics,
     bool CanApply);
 
-public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState);
+/// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null);
 
 /// <param name="Name">The character's name as read (shown to the user only, never logged).</param>
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>
