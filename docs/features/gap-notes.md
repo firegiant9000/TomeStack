@@ -22,12 +22,14 @@ Notes can describe private homebrew, so:
 
 ## A note
 
-`{ id, schemaVersion: 1, characterId, target, text, status, createdAt, updatedAt }` ([schema](../schemas/gap-note.v1.schema.json)):
+`{ id, schemaVersion, characterId, target, text, status, createdAt, updatedAt }` ([v1 schema](../schemas/gap-note.v1.schema.json), [v2 schema](../schemas/gap-note.v2.schema.json)):
 
 - **`target`:**
   - `{ kind: "feature", contentId, effectId? }` or `{ kind: "field", fieldId }`.
   - It must be on the character's sheet when the note is written (`gap.target-not-found`).
   - `label` is the feature name (with `: <effect label>` for an effect) or the field label. It is taken from the sheet, so a note stays readable after the feature is removed or updated.
+  - **`{ kind: "import", label }`** (schema v2, D16b): an item of a D&D Beyond sheet import that TomeStack could not match or place, named by its label alone (1 to 200 characters, cut to 200). Only `ddb.apply` writes these, in its own transaction, with a fixed text; `gap.add` refuses them (`gap.target-invalid`). They list, resolve, delete, print and travel in a personal backup like the others ([ddb-pdf-import.md](ddb-pdf-import.md)).
+- **`schemaVersion`:** the lowest version that holds the note: 1 for a feature or field note, 2 for an import note. So a backup without an import note is still read by builds that know only v1; one with an import note is refused by them with `package.schema-unsupported`.
 - **`text`:** 1 to 2,000 characters, trimmed (`gap.text-required`).
 - **`status`:** `open` or `resolved`.
 - **Limit:** at most 500 notes per character (`gap.too-many`).

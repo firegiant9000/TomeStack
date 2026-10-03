@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Import a character from a D&D Beyond PDF sheet:**
+  - "Import from D&D Beyond PDF…" in the Characters list turns an exported D&D Beyond character sheet into a **new** TomeStack character. You review every match and every number first. Nothing is saved until you choose "Create character", and Cancel at any step saves nothing.
+  - TomeStack reads the sheet's form fields once and keeps nothing of the PDF. It matches names against the content you have installed, in the rules family you pick; names it cannot match or place are listed and kept as gap notes on the new character. A sheet printed to PDF, without form fields, cannot be read.
+  - For each number that differs, you choose TomeStack's number, the sheet's number (an override), or a gap note.
+  - Current hit points, spent slots and similar play state come over only if you tick the box. Currency, notes, speed, languages and the player name are not brought over.
+  - The field names of the sheet layouts are not yet confirmed against a real export, so real sheets are not recognised yet.
+  - Gap notes gain a new kind for these unmatched items (gap-note schema v2). A personal backup that holds one cannot be opened by older TomeStack versions; other backups can.
+
 - **A recovery-drill counter, for developers (roadmap T6; not in the app):**
   - The development host can count what a closed TomeStack data folder holds, and compare two counts: the library before a backup and after a restore on another computer.
   - It reports only numbers and fingerprints, including one for every character's calculated sheet. It never changes the folder.
