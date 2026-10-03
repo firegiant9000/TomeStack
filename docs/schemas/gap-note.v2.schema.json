@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/gap-note.v2.schema.json",
+  "title": "TomeStack gap note (schemaVersion 2)",
+  "description": "A session feedback note (M3 B3; docs/features/gap-notes.md): stored in the local database, gaps/<id>.json in a personal backup only. Never transmitted. v2 (D16b) adds the target kind import: an item of a character-sheet import that TomeStack could not match or place, named by its label alone (docs/features/ddb-pdf-import.md). A note without an import target is written as v1.",
+  "type": "object",
+  "required": ["id", "schemaVersion", "characterId", "target", "text", "status", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "schemaVersion": { "const": 2 },
+    "characterId": { "$ref": "#/$defs/uuid" },
+    "target": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["feature", "field", "import"] },
+        "contentId": { "$ref": "#/$defs/uuid" },
+        "effectId": { "type": "string", "maxLength": 200 },
+        "fieldId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "label": { "type": "string", "maxLength": 200 }
+      },
+      "oneOf": [
+        { "properties": { "kind": { "const": "feature" } }, "required": ["contentId"], "not": { "required": ["fieldId"] } },
+        { "properties": { "kind": { "const": "field" } }, "required": ["fieldId"], "not": { "anyOf": [{ "required": ["contentId"] }, { "required": ["effectId"] }] } },
+        {
+          "properties": { "kind": { "const": "import" }, "label": { "type": "string", "minLength": 1, "maxLength": 200 } },
+          "required": ["label"],
+          "not": { "anyOf": [{ "required": ["contentId"] }, { "required": ["effectId"] }, { "required": ["fieldId"] }] }
+        }
+      ]
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "status": { "enum": ["open", "resolved"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+  }
+}
