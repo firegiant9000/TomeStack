@@ -36,7 +36,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
-        "ddb.read", "ddb.readData", "ddb.preview", "ddb.discard",
+        "ddb.read", "ddb.readData", "ddb.preview", "ddb.apply", "ddb.discard",
     ];
 
     /// <summary>
@@ -119,6 +119,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "ddb.read" => ReadDdbSheet(),
         "ddb.readData" => ReadDdbSheetData(Payload<DdbDataPayload>(payload)),
         "ddb.preview" => app.PreviewDdbImport(Payload<DdbPreviewRequest>(payload)),
+        "ddb.apply" => app.ApplyDdbImport(Payload<DdbApplyRequest>(payload)),
         "ddb.discard" => new { discarded = app.DiscardDdbSheet(Payload<DdbTokenPayload>(payload).Token) },
         "source.detachPreview" => app.PreviewDetach(Payload<SourceIdPayload>(payload).SourceId),
         "source.detach" => Detach(Payload<DetachPayload>(payload)),

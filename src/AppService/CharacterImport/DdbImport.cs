@@ -98,6 +98,56 @@ public sealed partial class TomeStackApp
         return ProposeDdbCharacter(sheet, request, Guid.NewGuid());
     }
 
+    /// <summary>The text of a note the user asked for on a differing number (it names no value).</summary>
+    public const string ImportFieldNoteText = "The D&D Beyond sheet showed a different number here when this character was imported.";
+
+    /// <summary>
+    /// <c>ddb.apply</c>: refused without <c>confirm</c> (<c>ddb.confirmation-required</c>) and with an unknown, used or
+    /// expired token (<c>ddb.token-invalid</c>). Rebuilds the previewed character under a new id and saves it through the
+    /// same path as <c>character.save</c>, with its import notes and noted differences, in one transaction; then spends the
+    /// token. A refusal anywhere writes nothing and keeps the token.
+    /// </summary>
+    public DdbApplyResult ApplyDdbImport(DdbApplyRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw Refused("ddb.confirmation-required", "Creating the character needs confirmation.");
+        var sheet = DdbSessions.Peek(request.Token)
+            ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
+        var proposal = ProposeDdbCharacter(sheet,
+            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers),
+            Guid.NewGuid());
+
+        var problems = new List<Diagnostic>();
+        if (sheet.Classes.Status != ReadStatus.Ok)
+            problems.Add(new("character.level-out-of-range", $"The sheet's class levels could not be read, or add up to more than {Character.MaxLevel}. Fix the classes before creating the character."));
+        if (proposal.Matches.Any(m => m.Status == MatchStatus.Choose))
+            problems.Add(new("ddb.choice-required", $"{proposal.Matches.Count(m => m.Status == MatchStatus.Choose)} item(s) still need a choice or \"Leave out\"."));
+        if (!proposal.CanApply && problems.Count == 0)
+            problems.AddRange(proposal.Diagnostics.Where(d => d.Code.StartsWith("character.", StringComparison.Ordinal)));
+        if (!proposal.CanApply && problems.Count == 0)
+            problems.Add(new("ddb.cannot-apply", "The character cannot be created yet: it needs at least one class."));
+        if (problems.Count > 0)
+            throw new AppValidationException(problems, problems[0].Code);
+
+        var character = proposal.Character;
+        var labels = proposal.Matches
+            .Where(m => m.Status is MatchStatus.NotFound or MatchStatus.NoPlace or MatchStatus.Unreadable && !string.IsNullOrWhiteSpace(m.Label))
+            .Select(m => m.Label)
+            .ToList();
+        var noted = (request.NumberChoices ?? []).Where(n => n?.Action == NumberAction.Note && n.Field is not null).Select(n => n.Field).Distinct(StringComparer.Ordinal).ToList();
+        var importNotes = 0;
+        _store.InTransaction(() =>
+        {
+            SaveCharacter(character);
+            importNotes = AddImportGapNotes(character.Id, labels);
+            foreach (var field in noted)
+                AddGapNote(new(character.Id, new(GapTargetKind.Field, FieldId: field), ImportFieldNoteText)); // refused: everything rolls back
+        });
+        DdbSessions.Take(request.Token);
+        return new DdbApplyResult(character.Id, character.Overrides.Count, importNotes + noted.Count, labels.Count - importNotes, proposal.Report);
+    }
+
     /// <summary>Builds the proposal for <paramref name="sheet"/> (shared with <c>ddb.apply</c>, which saves it under <paramref name="id"/>).</summary>
     internal DdbPreview ProposeDdbCharacter(DdbSheet sheet, DdbPreviewRequest request, Guid id)
     {
@@ -245,6 +295,13 @@ public sealed record DdbPreview(
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
 public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null);
+
+/// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false);
+
+/// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
+/// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>
+public sealed record DdbApplyResult(Guid CharacterId, int Overrides, int GapNotes, int GapNotesNotStored, DdbReport Report);
 
 /// <param name="Name">The character's name as read (shown to the user only, never logged).</param>
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>
