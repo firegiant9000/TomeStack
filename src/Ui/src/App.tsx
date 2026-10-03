@@ -5,6 +5,7 @@ import type { AppInfo, CharacterSummary, CharacterView, PackagePreview } from '.
 import { AllGapNotesPanel } from './components/AllGapNotesPanel';
 import { BackupsPanel } from './components/BackupsPanel';
 import { CampaignsPanel } from './components/CampaignsPanel';
+import { DdbImportPanel } from './components/ddb/DdbImportPanel';
 import { ExtensionsPanel } from './components/ExtensionsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
@@ -22,6 +23,7 @@ type Screen =
   | { kind: 'gaps' }
   | { kind: 'backups' }
   | { kind: 'extensions' }
+  | { kind: 'ddb-import' }
   | { kind: 'sheet'; view: CharacterView }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
@@ -106,10 +108,25 @@ export function App() {
           >
             New character
           </button>
-          <button type="button" onClick={() => fileInput.current?.click()}>
+          <button
+            type="button"
+            title="Package import is for TomeStack .zip files. For a D&D Beyond character, use Import from D&D Beyond PDF."
+            onClick={() => fileInput.current?.click()}
+          >
             Import package…
           </button>
           <input ref={fileInput} type="file" accept=".zip" hidden onChange={chooseImport} aria-label="Package file" />
+          <button
+            type="button"
+            disabled={!info}
+            aria-current={screen.kind === 'ddb-import' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'ddb-import' });
+            }}
+          >
+            Import from D&amp;D Beyond PDF…
+          </button>
           <button
             type="button"
             disabled={!info}
@@ -243,6 +260,26 @@ export function App() {
             rulesFamilies={info.rulesFamilies}
             onError={onError}
             onStatus={(text) => setMessage({ tone: 'status', text })}
+          />
+        )}
+        {screen.kind === 'ddb-import' && info && (
+          <DdbImportPanel
+            rulesFamilies={info.rulesFamilies}
+            onError={onError}
+            onCancel={() => {
+              setScreen({ kind: 'empty' });
+              setMessage({ tone: 'status', text: 'Import cancelled. Nothing was saved.' });
+            }}
+            onCreated={async (characterId, result) => {
+              await refresh();
+              await open(characterId);
+              setMessage({
+                tone: 'status',
+                text:
+                  `Character created from the D&D Beyond sheet: ${result.overrides} override(s), ${result.gapNotes} gap note(s).` +
+                  (result.gapNotesNotStored > 0 ? ` ${result.gapNotesNotStored} more items were not noted: the character's note limit was reached.` : ''),
+              });
+            }}
           />
         )}
         {screen.kind === 'sheet' && (
