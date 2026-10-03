@@ -217,7 +217,7 @@ public class DdbSessionTests
     {
         const string player = "Testy Player Sentinel";
         var fields = Sheet();
-        fields.Add(new FormField("fixture.2014.playerName", "text", 1, player));
+        fields.Add(new FormField("PLAYER NAME", "text", 1, player));
         using var temp = new TempApp(formReader: new FakeFormReader(fields));
 
         var read = temp.App.ReadDdbSheet("C:/fixture/sheet.pdf");

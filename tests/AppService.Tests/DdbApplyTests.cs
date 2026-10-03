@@ -98,13 +98,20 @@ public class DdbApplyTests
     public void Apply_with_play_state_ticked_keeps_the_sheets_hit_points_and_spent_slots_and_without_it_the_character_is_rested()
     {
         using var h = new DdbHarness();
-        var sheet = new SheetBuilder("Fixture Arcanist 3").Text("currentHitPoints", "7").Text("spellSlotsSpent.1", "1");
+        var sheet = new SheetBuilder("Fixture Arcanist 3").Text("currentHitPoints", "7").Text("temporaryHitPoints", "3").Text("spellSlotsSpent.1", "1");
 
         var played = h.Temp.App.GetCharacter(h.Temp.App.ApplyDdbImport(Apply(h.Read(sheet), play: true)).CharacterId).Character.Play;
         var rested = h.Temp.App.GetCharacter(h.Temp.App.ApplyDdbImport(Apply(h.Read(sheet))).CharacterId).Character.Play;
 
-        Assert.Equal((7, 1), (played.CurrentHitPoints, played.SlotsSpentOf(1)));
-        Assert.Equal((null, 0), (rested.CurrentHitPoints, rested.SlotsSpentOf(1)));
+        // The 2014 layout has no spent-slot fields (S0), so the asked-for spent slot is not on the sheet and none are spent.
+        Assert.Equal((7, 3, 0), (played.CurrentHitPoints, played.TemporaryHitPoints, played.SlotsSpentOf(1)));
+        Assert.Equal((null, 0, 0), (rested.CurrentHitPoints, rested.TemporaryHitPoints, rested.SlotsSpentOf(1)));
+
+        // The placeholder 2024 layout still names spent slots, so they come over with play state there.
+        h.Fields = [new("fixture.2024.name", "text", 1, "Testy McFixture"), new("fixture.2024.classLevel", "text", 1, "Fixture Arcanist 3"),
+            new("fixture.2024.currentHitPoints", "text", 1, "7"), new("fixture.2024.spellSlotsSpent.1", "text", 1, "1")];
+        var slots = h.Temp.App.GetCharacter(h.Temp.App.ApplyDdbImport(Apply(h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token, play: true)).CharacterId).Character.Play;
+        Assert.Equal((7, 1), (slots.CurrentHitPoints, slots.SlotsSpentOf(1)));
     }
 
     [Fact]

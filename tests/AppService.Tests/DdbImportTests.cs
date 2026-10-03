@@ -2,16 +2,23 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using TomeStack.AppService.CharacterImport;
 using TomeStack.ImportWorker.Forms;
+using TomeStack.ImportWorker.Tests;
 using TomeStack.RulesCore;
 using static TomeStack.AppService.Tests.DdbTestContent;
 
 namespace TomeStack.AppService.Tests;
 
-/// <summary>A sheet's form fields under the placeholder 2014 layout, built item by item. Every value is invented or an installed name.</summary>
+/// <summary>
+/// A sheet's form fields under the 2014 layout, built item by item through <see cref="FixtureSheets.Ddb2014"/>'s real field
+/// names. A key the layout lacks (an equipped mark, death saves, spent hit dice or slots) writes nothing, as on a real
+/// export. <c>features</c> and <c>feats</c> are newline lists composed into one features text. Every value is invented or an
+/// installed name.
+/// </summary>
 internal sealed class SheetBuilder
 {
-    private const string P = "fixture.2014.";
     private readonly List<FormField> _fields = [];
+    private readonly List<string> _features = [];
+    private readonly List<string> _feats = [];
     private int _spells;
     private int _items;
 
@@ -23,14 +30,27 @@ internal sealed class SheetBuilder
 
     public SheetBuilder Text(string field, string value)
     {
-        _fields.RemoveAll(f => f.Name == P + field);
-        _fields.Add(new(P + field, "text", 1, value));
+        if (field is "features" or "feats")
+        {
+            var list = field == "features" ? _features : _feats;
+            list.Clear();
+            list.AddRange(value.Split('\n').Where(v => !string.IsNullOrWhiteSpace(v)));
+            return this;
+        }
+        if (FixtureSheets.Ddb2014(field) is not { } layout)
+            return this;
+        _fields.RemoveAll(f => f.Name == layout.Name);
+        _fields.Add(new(layout.Name, "text", 1, value));
         return this;
     }
 
+    /// <summary>A mark: "P" or empty text for the layout's text marks, a checkbox otherwise (inspiration).</summary>
     public SheetBuilder Box(string field, bool on)
     {
-        _fields.Add(new(P + field, "checkbox", 1, Checked: on, OnState: "Yes"));
+        if (FixtureSheets.Ddb2014(field) is not { } layout)
+            return this;
+        _fields.RemoveAll(f => f.Name == layout.Name);
+        _fields.Add(layout.TextMark ? new(layout.Name, "text", 1, on ? "P" : "") : new(layout.Name, "checkbox", 1, Checked: on, OnState: "Yes"));
         return this;
     }
 
@@ -56,7 +76,14 @@ internal sealed class SheetBuilder
         return this;
     }
 
-    public List<FormField> Build() => [.. _fields];
+    /// <summary>The fields, with the features text and, like a real export, an empty first equipment row when no item was added.</summary>
+    public List<FormField> Build()
+    {
+        List<FormField> fields = [.. _fields, new("FeaturesTraits1", "text", 2, FixtureSheets.FeaturesText(_features, _feats))];
+        if (_items == 0)
+            fields.Add(new(FixtureSheets.Ddb2014("equipment.0.name")!.Value.Name, "text", 3, ""));
+        return fields;
+    }
 }
 
 /// <summary>An app whose form reader returns whatever sheet the test sets.</summary>
@@ -372,7 +399,8 @@ public class DdbImportTests
 
         var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Rope Coil", 6_000).Item("fixture rope coil", 5_000, equipped: true), RulesFamilies.Srd521);
 
-        Assert.Equal([new EquipmentEntry(item, Equipped: true, Quantity: EquipmentEntry.MaxQuantity)], preview.Character.Equipment);
+        // The 2014 layout has no equipped mark (S0), so the asked-for mark is not on the sheet and the entry is not equipped.
+        Assert.Equal([new EquipmentEntry(item, Equipped: false, Quantity: EquipmentEntry.MaxQuantity)], preview.Character.Equipment);
         Assert.All(preview.Matches.Where(r => r.Kind == MatchKind.Item), r => Assert.Equal(PlacementKind.Equipment, r.Chosen!.Placement.Kind));
     }
 
@@ -503,8 +531,9 @@ public class DdbImportTests
         var report = h.Preview(sheet, RulesFamilies.Srd521).Report;
         Assert.Contains("playState", report.NotBroughtOver);
 
+        // The 2014 layout has no death-save or spent-hit-dice fields (S0): those stay rested even when play state is asked for.
         var play = h.Preview(sheet, RulesFamilies.Srd521, play: true).Character.Play;
-        Assert.Equal((7, 3, 1, true, 1), (play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
+        Assert.Equal((7, 3, 0, true, 0),(play.CurrentHitPoints, play.TemporaryHitPoints, play.DeathSaves.Failures, play.Inspiration, play.HitDiceSpentOf(12)));
     }
 
     [Fact]

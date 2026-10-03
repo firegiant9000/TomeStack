@@ -20,11 +20,13 @@ public class FormInventoryTests
     {
         var report = FormInventory.Read(Worker, FixtureSheet);
 
-        Assert.Equal(40, report.FieldCount);
+        Assert.Equal(34, report.FieldCount);
         Assert.Equal(report.FieldCount, report.Fields.Count);
-        Assert.Equal(new FormInventory.Entry("fixture.2014.name", "text", 1, "Testy McFixture".Length, null, null), report.Fields[0]);
-        Assert.Contains(new FormInventory.Entry("fixture.2014.spells.0.prepared", "checkbox", 2, 0, true, "Yes"), report.Fields);
-        Assert.Contains(new FormInventory.Entry("fixture.2014.equipment.3.name", "text", 3, "Fixture Lantern".Length, null, null), report.Fields);
+        Assert.Equal(new FormInventory.Entry("CharacterName", "text", 1, "Testy McFixture".Length, null, null), report.Fields[0]);
+        // The 2014 layout's prepared mark is a one-character text field (S0); inspiration stays a checkbox.
+        Assert.Contains(new FormInventory.Entry("Prepared0", "text", 2, 1, null, null), report.Fields);
+        Assert.Contains(new FormInventory.Entry("Inspiration", "checkbox", 1, 0, false, "Yes"), report.Fields);
+        Assert.Contains(new FormInventory.Entry("Eq Name3", "text", 3, "Fixture Lantern".Length, null, null), report.Fields);
 
         var json = FormInventory.ToJson(report);
         using var document = JsonDocument.Parse(json);
@@ -38,10 +40,12 @@ public class FormInventoryTests
     {
         var summary = FormInventory.Format(FormInventory.Read(Worker, FixtureSheet));
 
-        Assert.Contains("40 fields", summary, StringComparison.Ordinal);
-        Assert.Contains("text 29", summary, StringComparison.Ordinal);
-        Assert.Contains("checkbox 11", summary, StringComparison.Ordinal);
-        Assert.DoesNotContain("fixture.", summary, StringComparison.Ordinal);
+        var lines = summary.Split(Environment.NewLine);
+        Assert.Contains("34 fields", lines);
+        Assert.Contains("  text 33", lines);
+        Assert.Contains("  checkbox 1", lines);
+        foreach (var name in new[] { "CharacterName", "CLASS  LEVEL", "Prepared0", "Eq Name0", "Inspiration" })
+            Assert.DoesNotContain(name, summary, StringComparison.Ordinal);
         Assert.DoesNotContain("Testy", summary, StringComparison.Ordinal);
     }
 

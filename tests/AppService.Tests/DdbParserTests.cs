@@ -10,7 +10,7 @@ namespace TomeStack.AppService.Tests;
 /// Character-sheet import S2 (<c>features/ddb-pdf-import.md</c> "Architecture"): the layout maps and the parser from form
 /// fields to a <see cref="DdbSheet"/>. The parser is total: what it cannot read is <see cref="ReadStatus.Missing"/> or
 /// <see cref="ReadStatus.Unreadable"/>, never an exception, and it never echoes a value it could not read. Every value is
-/// invented; the field names are the fixture's placeholders until S0's findings settle the maps.
+/// invented; the 2014 field names are the real layout's (S0), the 2024 ones placeholders.
 /// </summary>
 public class DdbParserTests
 {
@@ -87,12 +87,13 @@ public class DdbParserTests
             Read<SpellText>.Ok(new("Fixture Veil", false)),
             Read<SpellText>.Ok(new("Fixture Mending Word", true)),
         ], sheet.Spells);
+        // The 2014 layout has no equipped mark (S0): equipped is unknown (null), never guessed.
         Assert.Equal(
         [
-            Read<ItemText>.Ok(new("Fixture Longblade", 1, true)),
-            Read<ItemText>.Ok(new("Fixture Padded Jerkin", 1, true)),
-            Read<ItemText>.Ok(new("Fixture Rope Coil", 2, false)),
-            Read<ItemText>.Ok(new("Fixture Lantern", 1, false)),
+            Read<ItemText>.Ok(new("Fixture Longblade", 1, null)),
+            Read<ItemText>.Ok(new("Fixture Padded Jerkin", 1, null)),
+            Read<ItemText>.Ok(new("Fixture Rope Coil", 2, null)),
+            Read<ItemText>.Ok(new("Fixture Lantern", 1, null)),
         ], sheet.Items);
         Assert.Equal(
             new Dictionary<string, Read<int>>
@@ -104,7 +105,8 @@ public class DdbParserTests
             }, sheet.Numbers);
         Assert.Equal(Read<int>.Ok(21), sheet.Play.CurrentHitPoints);
         Assert.Equal(Read<int>.Missing, sheet.Play.TemporaryHitPoints);
-        Assert.Equal((Read<int>.Ok(1), Read<int>.Missing), (sheet.Play.DeathSuccesses, sheet.Play.DeathFailures));
+        // Death saves are unnamed checkboxes on the 2014 export (S0), not mapped: Missing.
+        Assert.Equal((Read<int>.Missing, Read<int>.Missing), (sheet.Play.DeathSuccesses, sheet.Play.DeathFailures));
         Assert.Equal(Read<bool>.Ok(false), sheet.Play.Inspiration);
         Assert.Empty(sheet.Play.HitDiceSpent);
         Assert.Empty(sheet.Play.SpellSlotsSpent);
@@ -133,7 +135,7 @@ public class DdbParserTests
     public void A_field_set_missing_a_required_name_is_not_recognised()
     {
         var fields = Fields(FixtureSheets.Fields2014);
-        Assert.Null(DdbParser.Recognise([.. fields.Where(f => f.Name != "fixture.2014.name")]));
+        Assert.Null(DdbParser.Recognise([.. fields.Where(f => f.Name != "CharacterName")]));
         Assert.Null(DdbParser.Recognise([new FormField("fixture.other", "text", 1, "Fixture")]));
         Assert.Null(DdbParser.Recognise([]));
     }
@@ -142,11 +144,11 @@ public class DdbParserTests
     public void A_missing_optional_field_is_Missing_and_an_unparsable_value_is_Unreadable_not_an_error()
     {
         var fields = Fields(FixtureSheets.Fields2014);
-        fields = With(fields, "fixture.2014.classLevel", "Fixture Fighter 25");
-        fields = With(fields, "fixture.2014.str", "abc");
-        fields = With(fields, "fixture.2014.equipment.0.quantity", "0");
-        fields = With(fields, "fixture.2014.armorClass", "lots");
-        fields = [.. fields.Where(f => f.Name != "fixture.2014.species")];
+        fields = With(fields, "CLASS  LEVEL", "Fixture Fighter 25");
+        fields = With(fields, "STR", "abc");
+        fields = With(fields, "Eq Qty0", "0");
+        fields = With(fields, "AC", "lots");
+        fields = [.. fields.Where(f => f.Name != "RACE")];
 
         var sheet = Parse(fields);
 
@@ -164,8 +166,8 @@ public class DdbParserTests
     [Fact]
     public void A_blank_spell_or_equipment_row_is_skipped()
     {
-        var fields = With(Fields(FixtureSheets.Fields2014), "fixture.2014.spells.1.name", "  ");
-        fields = With(fields, "fixture.2014.equipment.3.name", null);
+        var fields = With(Fields(FixtureSheets.Fields2014), "SpellName1", "  ");
+        fields = With(fields, "Eq Name3", null);
 
         var sheet = Parse(fields);
 
@@ -176,7 +178,7 @@ public class DdbParserTests
     [Fact]
     public void Class_text_with_two_classes_keeps_the_sheets_order_and_reads_each_subclass()
     {
-        var sheet = Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", "Fixture Fighter 5 (Fixture Vanguard) / Fixture Mage 3"));
+        var sheet = Parse(With(Fields(FixtureSheets.Fields2014), "CLASS  LEVEL", "Fixture Fighter 5 (Fixture Vanguard) / Fixture Mage 3"));
 
         Assert.Equal([new ClassText("Fixture Fighter", 5, "Fixture Vanguard"), new ClassText("Fixture Mage", 3, null)], sheet.Classes.Value!);
     }
@@ -188,15 +190,15 @@ public class DdbParserTests
     [InlineData("Fixture Fighter 0")]
     public void Class_levels_that_add_to_more_than_twenty_are_Unreadable_as_a_whole(string text)
     {
-        Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", text)).Classes);
+        Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "CLASS  LEVEL", text)).Classes);
     }
 
     [Fact]
     public void Signed_numbers_read_with_a_plus_a_hyphen_or_a_minus_sign()
     {
-        var fields = With(Fields(FixtureSheets.Fields2014), "fixture.2014.initiative", "−1");
-        fields = With(fields, "fixture.2014.proficiencyBonus", " +3 ");
-        var sheet = Parse(With(fields, "fixture.2014.armorClass", "-2"));
+        var fields = With(Fields(FixtureSheets.Fields2014), "Init", "−1");
+        fields = With(fields, "ProfBonus", " +3 ");
+        var sheet = Parse(With(fields, "AC", "-2"));
 
         Assert.Equal((-1, 3, -2), (sheet.Numbers[FieldIds.Initiative].Value, sheet.Numbers[FieldIds.ProficiencyBonus].Value, sheet.Numbers[FieldIds.ArmorClass].Value));
     }
@@ -249,28 +251,29 @@ public class DdbParserTests
     {
         const string player = "Testy Player Sentinel";
         var fields = Fields(FixtureSheets.Fields2014);
-        fields.Add(new FormField("fixture.2014.playerName", "text", 1, player));
-        fields.Add(new FormField("fixture.2014.unmapped.box", "checkbox", 1, Checked: true, OnState: "FixtureSentinelState"));
+        fields.Add(new FormField("PLAYER NAME", "text", 1, player));
+        fields.Add(new FormField("Check Box 12", "checkbox", 1, Checked: true, OnState: "FixtureSentinelState"));
 
         var json = Json(Parse(fields));
 
         Assert.DoesNotContain(player, json, StringComparison.Ordinal);
         Assert.DoesNotContain("FixtureSentinelState", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("playerName", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("PLAYER NAME", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Check Box", json, StringComparison.Ordinal);
     }
 
     [Fact]
     public void No_message_or_diagnostic_quotes_a_field_value()
     {
         // Every number, mark and class field gets a value it cannot read, each a unique sentinel. The sheet holds no
-        // message of its own, and an unreadable read keeps nothing of what it could not read.
+        // message of its own, and an unreadable read keeps nothing of what it could not read. The 2014 layout's text marks
+        // read any text as marked (S0), so a sentinel there is a plain true, and still nothing of it is kept.
         var fields = Fields(FixtureSheets.Fields2014);
         var sentinels = new List<string>();
-        var text = new HashSet<string>(StringComparer.Ordinal) { "name", "species", "background", "feats", "features" };
+        var text = new HashSet<string>(StringComparer.Ordinal) { "CharacterName", "RACE", "BACKGROUND", "FeaturesTraits1" };
         fields = [.. fields.Select((f, i) =>
         {
-            var leaf = f.Name["fixture.2014.".Length..];
-            if (text.Contains(leaf) || leaf.EndsWith(".name", StringComparison.Ordinal))
+            if (text.Contains(f.Name) || f.Name.StartsWith("SpellName", StringComparison.Ordinal) || f.Name.StartsWith("Eq Name", StringComparison.Ordinal))
                 return f;
             var sentinel = $"FixtureSentinel{i:D3}";
             sentinels.Add(sentinel);
@@ -280,7 +283,9 @@ public class DdbParserTests
         var sheet = Parse(fields);
         var json = Json(sheet);
 
-        Assert.Equal(28, sentinels.Count);
+        // The class, six scores, three marks, inspiration, four numbers, current hit points, three prepared marks and four
+        // quantities (the layout has no equipped mark or death saves).
+        Assert.Equal(23, sentinels.Count);
         Assert.All(sentinels, s => Assert.DoesNotContain(s, json, StringComparison.Ordinal));
         Assert.Equal(ReadStatus.Unreadable, sheet.Classes.Status);
         Assert.All(sheet.Items, i => Assert.Equal(ReadStatus.Unreadable, i.Status));

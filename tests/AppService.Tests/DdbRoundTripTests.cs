@@ -6,10 +6,11 @@ namespace TomeStack.AppService.Tests;
 
 /// <summary>
 /// Character-sheet import S3 acceptance (<c>features/ddb-pdf-import.md</c> "Slices and acceptance"): a character built from
-/// installed content is written out as a sheet from its own calculated values, read back through the placeholder 2014
-/// layout, and previewed. Classes, pins, choices, spells, equipment and base scores come back equal, with zero number
-/// differences. Skill options are compared as a set: when two choices could each take a skill, the importer fills them in
-/// skill order, which may differ from the original's split but gives the same proficiencies.
+/// installed content is written out as a sheet from its own calculated values, read back through the 2014 layout, and
+/// previewed. Classes, pins, choices, spells, equipment and base scores come back equal, with zero number differences.
+/// Skill options are compared as a set: when two choices could each take a skill, the importer fills them in skill order,
+/// which may differ from the original's split but gives the same proficiencies. The originals equip nothing: the 2014
+/// layout has no equipped mark (S0), so an import never equips an item.
 /// </summary>
 public class DdbRoundTripTests
 {
@@ -133,7 +134,7 @@ public class DdbRoundTripTests
             Pins = [Option(h.Temp, family, ContentKind.Species, "Half-Orc").Reference, Option(h.Temp, family, ContentKind.Background, "Acolyte").Reference,
                 Option(h.Temp, family, ContentKind.Feat, "Grappler").Reference],
             Classes = [new(barbarian, 3)],
-            Equipment = [.. Items(h.Temp, family).Select((r, i) => new EquipmentEntry(r, i == 0, i + 1))],
+            Equipment = [.. Items(h.Temp, family).Select((r, i) => new EquipmentEntry(r, false, i + 1))],
         };
         character = AnswerAll(h.Temp, character, _ => true);
 
@@ -152,7 +153,7 @@ public class DdbRoundTripTests
             Id = Guid.NewGuid(), Name = "Testy McFixture", RulesFamily = family, BaseAbilities = new(15, 13, 14, 8, 12, 10),
             Pins = [Option(h.Temp, family, ContentKind.Species, "Dwarf").Reference, soldier],
             Classes = [new(barbarian, 3)],
-            Equipment = [.. Items(h.Temp, family).Select((r, i) => new EquipmentEntry(r, i == 0, i + 1))],
+            Equipment = [.. Items(h.Temp, family).Select((r, i) => new EquipmentEntry(r, false, i + 1))],
         };
         character = AnswerAll(h.Temp, character, _ => true);
 

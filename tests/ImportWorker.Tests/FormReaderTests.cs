@@ -262,7 +262,7 @@ public class FormReaderTests
     public void The_committed_fixture_sheet_has_exactly_the_generators_fields()
     {
         // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf). The field names
-        // are placeholders until the layout maps exist (plan S1, S2); regenerate when they change.
+        // are the ddb-2014 layout map's (S0); regenerate when the map or the generator changes.
         var generated = FixtureSheets.Sheet2014();
         if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
         {
