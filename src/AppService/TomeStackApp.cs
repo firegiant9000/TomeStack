@@ -79,8 +79,9 @@ public sealed partial class TomeStackApp : IDisposable
     /// that already contain fixture content keep it (published revisions are never deleted).
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
+    /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -89,7 +90,8 @@ public sealed partial class TomeStackApp : IDisposable
         try
         {
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
             foreach (var pack in BundledPacks)
@@ -356,6 +358,7 @@ public sealed partial class TomeStackApp : IDisposable
     public void Dispose()
     {
         StopImportsForDispose(); // a running import becomes "interrupted" and resumes after the next start
+        DdbSessions.Clear(); // read sheets live only in memory, until used, discarded, expired or the app closes
         _store.Dispose();
         _folderLock?.Dispose(); // last: the folder is free only once the database is closed
     }
