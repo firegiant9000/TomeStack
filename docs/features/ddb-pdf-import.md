@@ -178,7 +178,7 @@ Done for the feature = S1 to S4 and S6, the gate passing, and the owner's real c
 
 ## Risks (what could bite us)
 
-- **The format is not ours and is undocumented.** D&D Beyond can rename fields or change layouts at any time. Mitigations: maps are versioned data, unknown layouts are refused rather than guessed, and S6 re-runs on a fresh export before each release that touches this.
+- **The format is not ours and is undocumented.** D&D Beyond can rename fields or change layouts at any time. Mitigations: maps are versioned data, unknown layouts are refused rather than guessed, and S6 re-runs on a fresh export before each release that touches this. A sheet that satisfies two layouts' required names equally is refused as ambiguous, so each real map must require at least one name the other layout's export lacks (the 2024 map, once inventoried, especially).
 - **Low match rate.** With SRD-only content most real characters are partly unmatched. The value of v1 is the skeleton plus a precise list of what is missing. The owner should expect that, and it is useful T2 evidence.
 - **Overrides can hide calculation bugs.** "Keep the sheet's number" is tempting, and a blanket choice would cover real rule gaps. So it is per field, never "keep all", and each difference can be noted as a gap instead.
 - **Subtly wrong matches.** Two sources with the same name are the S-03 case, so the user must pick. There is no fuzzy matching, so a near-miss name stays unmatched rather than being matched wrongly. Importing a 2014 sheet as `srd-5.2.1` matches 2024 content by the same names; the family warning in step 2 is the guard.

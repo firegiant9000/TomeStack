@@ -59,8 +59,26 @@ public class DdbParserPropertyTests
                 _ = DdbParser.Parse(map, fields);
         });
 
+    /// <summary>A field set with each name once (the worker never sends a name twice) and the same set in another order.</summary>
+    private static Gen<(List<FormField> Fields, List<FormField> Shuffled)> Reordered { get; } =
+        from fields in FieldSets
+        from seed in Gen.Choose(0, int.MaxValue)
+        let distinct = fields.DistinctBy(f => f.Name, StringComparer.Ordinal).ToList()
+        select (distinct, distinct.Shuffled(seed));
+
     [Property(MaxTest = 200)]
-    public Property Parsing_is_deterministic() =>
-        Prop.ForAll(FieldSets.ToArbitrary(), fields =>
-            LayoutMaps.All.All(map => DdbParserTests.Json(DdbParser.Parse(map, fields)) == DdbParserTests.Json(DdbParser.Parse(map, [.. fields]))));
+    public Property Parsing_does_not_depend_on_the_order_of_the_fields() =>
+        Prop.ForAll(Reordered.ToArbitrary(), pair =>
+            LayoutMaps.All.All(map => DdbParserTests.Json(DdbParser.Parse(map, pair.Fields)) == DdbParserTests.Json(DdbParser.Parse(map, pair.Shuffled))));
+}
+
+internal static class ShuffleExtensions
+{
+    /// <summary>The list in a seeded random order.</summary>
+    public static List<T> Shuffled<T>(this List<T> list, int seed)
+    {
+        var copy = list.ToList();
+        new Random(seed).Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(copy));
+        return copy;
+    }
 }

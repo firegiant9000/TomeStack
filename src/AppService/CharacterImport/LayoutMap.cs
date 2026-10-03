@@ -7,8 +7,8 @@ namespace TomeStack.AppService.CharacterImport;
 /// <summary>
 /// How a field of a layout is read. <paramref name="Pattern"/> is optional: for most semantics it is matched against the
 /// whole value and its <c>value</c> group (or the whole match) is kept; for <c>classLevels</c> it reads each class part and
-/// must have <c>name</c> and <c>level</c> groups (and may have <c>sub</c>). Patterns run without backtracking and with a
-/// 100 ms timeout; a value that does not match is <see cref="ReadStatus.Unreadable"/>.
+/// must have <c>name</c> and <c>level</c> groups (and may have <c>sub</c>). Patterns must be anchored (<c>^…$</c>), run
+/// without backtracking and with a 100 ms timeout; a value that does not match is <see cref="ReadStatus.Unreadable"/>.
 /// </summary>
 public sealed record FieldRule(string Semantic, string? Pattern = null);
 
@@ -89,6 +89,12 @@ public static class LayoutMaps
             problems.Add("required names must be plain field names, at least one");
         if (string.IsNullOrEmpty(map.CheckboxOnState))
             problems.Add("the checkbox on-state is empty");
+        // The parser reads both, so a map without them would throw on a sheet instead of failing here, at load.
+        if (map.Fields is null)
+            problems.Add("the map has no fields");
+        if (map.Splits is null || map.Splits.Any(s => s is null))
+            problems.Add("the map's splits are missing or hold an empty entry");
+        var named = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, rule) in map.Fields ?? new Dictionary<string, FieldRule>())
         {
             if (rule?.Semantic is not { } semantic || !DdbSemantics.Known.Contains(semantic))
@@ -96,6 +102,11 @@ public static class LayoutMaps
                 problems.Add($"{name}: unknown semantic {rule?.Semantic}");
                 continue;
             }
+            // The parser keeps whichever field the worker returns first, so a semantic named twice reads by chance.
+            if (!named.Add(semantic))
+                problems.Add($"{name}: the semantic {semantic} is named by more than one field");
+            if (rule.Pattern is { } anchoring && !(anchoring.StartsWith('^') && anchoring.EndsWith('$')))
+                problems.Add($"{name}: the pattern must be anchored (^…$), so a partial match is not read as the value");
             var rows = name.Split("{n}").Length - 1;
             if (rows > 1 || (rows == 1) != semantic.Contains("[n]", StringComparison.Ordinal))
                 problems.Add($"{name}: a row index {{n}} must be in both the field name and the semantic, once");
@@ -113,7 +124,7 @@ public static class LayoutMaps
                 }
             }
         }
-        foreach (var split in map.Splits ?? [])
+        foreach (var split in (map.Splits ?? []).Where(s => s is not null))
         {
             if (!DdbSemantics.Lists.Contains(split.Semantic) || string.IsNullOrEmpty(split.Separator))
                 problems.Add($"split {split.Semantic}: only a list semantic can be split, on a non-empty separator");
