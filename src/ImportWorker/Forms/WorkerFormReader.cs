@@ -37,7 +37,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         ArgumentNullException.ThrowIfNull(path);
         await using var session = WorkerSession.Start(workerPath, _limits, FormLimits.MaxFieldsMessageChars(_form), cancellationToken);
         await session.SendAsync(new WorkerRequest(Path.GetFullPath(path), null, null, _limits, Environment.ProcessId, WorkerRequest.FormFieldsKind, _form)).ConfigureAwait(false);
-        await session.ReadHelloAsync(cancellationToken).ConfigureAwait(false);
+        await session.ReadHelloAsync(cancellationToken, KnownError).ConfigureAwait(false);
 
         IReadOnlyList<FormField>? fields = null;
         while (true)
@@ -64,6 +64,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
     /// </summary>
     private string? KnownError(string code) => code switch
     {
+        "worker.bad-request" => "The import worker could not read the request. Reinstall TomeStack if this keeps happening.",
         "pdf.missing" => "The PDF file is missing.",
         "pdf.too-large" => $"The PDF is larger than {_limits.MaxBytes / (1024 * 1024)} MB.",
         "pdf.not-a-pdf" => "The file is not a PDF.",

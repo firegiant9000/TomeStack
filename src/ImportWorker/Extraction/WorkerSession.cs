@@ -76,11 +76,15 @@ internal sealed class WorkerSession : IAsyncDisposable
 
     /// <summary>
     /// Reads the child's first line, which must report a managed-heap limit inside the cap the app set, before the child
-    /// parses anything (<c>worker.limits</c> otherwise). An <c>error</c> line becomes its code. Returns the reported limit.
+    /// parses anything (<c>worker.limits</c> otherwise). An <c>error</c> line becomes its code; with
+    /// <paramref name="knownError"/>, only a code it knows, with the text it gives (never the child's), and any other is
+    /// <c>worker.protocol</c>. Returns the reported limit.
     /// </summary>
-    public async Task<long> ReadHelloAsync(CancellationToken cancellationToken)
+    public async Task<long> ReadHelloAsync(CancellationToken cancellationToken, Func<string, string?>? knownError = null)
     {
         var hello = await NextAsync(_limits.PageTimeout, cancellationToken).ConfigureAwait(false);
+        if (hello.Type == "error" && knownError is not null)
+            throw hello.Code is { } code && knownError(code) is { } text ? new ExtractionException(code, text) : Fail("worker.protocol", "The import worker sent an unexpected message.");
         if (hello.Type == "error")
             throw new ExtractionException(hello.Code ?? "worker.failed", hello.Message ?? "The import worker failed.");
         if (hello.Type != "worker" || hello.HeapLimit is not { } heap || heap <= 0 || heap > _limits.HeapHardLimit)

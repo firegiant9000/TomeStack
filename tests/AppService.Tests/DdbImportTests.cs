@@ -588,6 +588,22 @@ public class DdbImportTests
     // ---- classes, numbers, report ----
 
     [Fact]
+    public void A_refused_answer_does_not_keep_a_choice_the_sheet_filled_listed_as_if_answered()
+    {
+        using var h = new DdbHarness();
+        // The sheet fills the Barbarian's skill choice; the answer names an option the choice does not offer.
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Skill("perception").Skill("survival");
+        var filled = h.Preview(sheet, RulesFamilies.Srd521).Character.Choices.Single(c => c.ChoiceId == "barbarian-skills");
+        var refused = new ChoiceSelection(filled.Source, filled.ChoiceId, [Dwarf]);
+
+        var preview = h.Temp.App.PreviewDdbImport(new(h.Read(sheet), RulesFamilies.Srd521, null, null, null, false, [refused]));
+
+        Assert.NotEmpty(preview.Diagnostics);
+        Assert.DoesNotContain(preview.OpenChoices, c => c.ChoiceId == "barbarian-skills");
+        Assert.Equal(filled.Selected, preview.Character.Choices.Single(c => c.ChoiceId == "barbarian-skills").Selected);
+    }
+
+    [Fact]
     public void An_open_choice_the_user_answered_stays_listed_so_the_answer_can_be_changed()
     {
         using var h = new DdbHarness();

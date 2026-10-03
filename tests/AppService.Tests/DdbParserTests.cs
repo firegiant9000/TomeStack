@@ -315,18 +315,46 @@ public class DdbParserTests
 
     // ---- S0 findings: what the real 2014-style export needs from a map ----
 
-    private static LayoutMap Map(IReadOnlyDictionary<string, FieldRule> fields, IReadOnlyList<SplitRule>? splits = null, bool marks = false) => new(
-        "fixture-layout", 1, RulesFamilies.Srd51, ["fixture name"], fields, "Yes", splits ?? [], MarkedWhenAnyText: marks);
+    private static LayoutMap Map(IReadOnlyDictionary<string, FieldRule> fields, IReadOnlyList<SplitRule>? splits = null, IReadOnlyList<string>? marks = null) => new(
+        "fixture-layout", 1, RulesFamilies.Srd51, ["fixture name"], fields, "Yes", splits ?? [], MarkValues: marks ?? []);
+
+    [Theory]
+    [InlineData("P", true)]
+    [InlineData(" e ", true)]
+    [InlineData("", false)]
+    [InlineData("Q", null)]
+    [InlineData("Fixture", null)]
+    public void A_text_field_used_as_a_mark_is_on_only_for_the_maps_mark_values(string value, bool? marked)
+    {
+        // S0 and the owner: the 2014 export writes P (proficient) or E (expertise); anything else is not guessed.
+        var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture prof"] = new("skills.athletics.proficient") }, marks: ["P", "E"]);
+        FormField[] fields = [new("fixture name", "text", 1, "Testy McFixture"), new("fixture prof", "text", 1, value)];
+
+        var read = DdbParser.Parse(map, fields).SkillProficient["athletics"];
+
+        Assert.Equal(marked is { } on ? Read<bool>.Ok(on) : Read<bool>.Unreadable, read);
+        if (value.Trim().Length > 0)
+            Assert.Equal(Read<bool>.Unreadable, DdbParser.Parse(map with { MarkValues = [] }, fields).SkillProficient["athletics"]);
+    }
 
     [Fact]
-    public void A_text_field_used_as_a_mark_is_on_when_it_holds_any_text_if_the_map_says_so()
+    public void Feats_from_a_feats_field_and_a_feats_section_together_keep_at_most_MaxListItems()
     {
-        var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture prof"] = new("skills.athletics.proficient"), ["fixture none"] = new("skills.stealth.proficient") }, marks: true);
-        FormField[] fields = [new("fixture name", "text", 1, "Testy McFixture"), new("fixture prof", "text", 1, "Q"), new("fixture none", "text", 1, "")];
+        var map = Map(
+            new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture feats"] = new("feats"), ["fixture traits"] = new("features") },
+            [new("feats", "\n"), new("features", "\n", SectionHeading: @"^===\s*(?<section>.+?)\s*===$", FeatsSection: "^FEATS$")]);
+        string Lines(string prefix) => string.Join('\n', Enumerable.Range(0, DdbParser.MaxListItems).Select(i => $"{prefix} {i:D4}"));
+        FormField[] fields =
+        [
+            new("fixture name", "text", 1, "Testy McFixture"),
+            new("fixture feats", "text", 2, Lines("Fixture Field Feat")),
+            new("fixture traits", "text", 2, "=== FEATS ===\n" + Lines("Fixture Section Feat")),
+        ];
 
-        var sheet = DdbParser.Parse(map, fields);
-        Assert.Equal((Read<bool>.Ok(true), Read<bool>.Ok(false)), (sheet.SkillProficient["athletics"], sheet.SkillProficient["stealth"]));
-        Assert.Equal(Read<bool>.Unreadable, DdbParser.Parse(map with { MarkedWhenAnyText = false }, fields).SkillProficient["athletics"]);
+        var feats = DdbParser.Parse(map, fields).Feats;
+
+        Assert.Equal(DdbParser.MaxListItems + 1, feats.Count);
+        Assert.Equal(Read<string>.Unreadable, feats[^1]);
     }
 
     [Fact]
@@ -414,7 +442,7 @@ public class DdbParserTests
     {
         // Every number, mark and class field gets a value it cannot read, each a unique sentinel. The sheet holds no
         // message of its own, and an unreadable read keeps nothing of what it could not read. The 2014 layout's text marks
-        // read any text as marked (S0), so a sentinel there is a plain true, and still nothing of it is kept.
+        // read only "P" or "E" as marked, so a sentinel there is unreadable too.
         var fields = Fields(FixtureSheets.Fields2014);
         var sentinels = new List<string>();
         var text = new HashSet<string>(StringComparer.Ordinal) { "CharacterName", "RACE", "BACKGROUND", "FeaturesTraits1" };

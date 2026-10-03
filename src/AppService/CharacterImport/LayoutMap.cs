@@ -23,6 +23,8 @@ public sealed record SplitRule(string Semantic, string Separator, string? ItemPa
 /// fields. A field name may hold one <c>{n}</c>, a row number, when its semantic holds <c>[n]</c> (<c>spells[n].name</c>).
 /// A layout is recognised when every <paramref name="Required"/> name is present. The map holds field names only,
 /// never text from a sheet. <paramref name="Unverified"/> marks names not yet confirmed against a real export (S0).
+/// <paramref name="MarkValues"/> are the texts that mark a text field used as a checkbox (S0: the 2014 export writes P for
+/// proficient and E for expertise), compared trimmed and ignoring case; any other text is unreadable, never guessed.
 /// </summary>
 public sealed record LayoutMap(
     string Id,
@@ -33,7 +35,7 @@ public sealed record LayoutMap(
     string CheckboxOnState,
     IReadOnlyList<SplitRule> Splits,
     bool Unverified = false,
-    bool MarkedWhenAnyText = false);
+    IReadOnlyList<string>? MarkValues = null);
 
 /// <summary>The semantic fields a map may name.</summary>
 public static class DdbSemantics

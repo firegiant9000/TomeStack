@@ -99,6 +99,12 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         setPreview(next);
         setPreviewFor(requestKey);
         setPreviewError(undefined);
+        // An answer stays while its choice is still offered (answered ones stay listed); a changed match that takes the
+        // choice away drops it, so it cannot re-add an option the user since left out.
+        setAnswers((all) => {
+          const kept = all.filter((a) => next.openChoices.some((c) => c.choiceId === a.choiceId && c.source.contentId === a.source.contentId));
+          return kept.length === all.length ? all : kept;
+        });
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -123,6 +129,13 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const failed = previewError?.key === requestKey ? previewError : undefined;
   const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
+
+  /** A changed match drops every answer that holds one of that row's options: it was made with the earlier match. */
+  function dropAnswersHolding(rowId: string) {
+    const revisions = new Set((preview?.matches.find((m) => m.rowId === rowId)?.candidates ?? []).map((c) => c.reference.revisionId));
+    if (revisions.size === 0) return;
+    setAnswers((all) => all.filter((a) => !a.selected.some((s) => revisions.has(s.revisionId))));
+  }
 
   function onRead(result: DdbReadResult) {
     if (!open.current) {
@@ -221,10 +234,9 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             campaignId={campaignId}
             resolutions={resolutions}
             answers={answers}
-            // A changed match changes what the open choices hold, so answers made on the earlier proposal are dropped.
             onResolve={(resolution) => {
               setResolutions((all) => ({ ...all, [resolution.rowId]: resolution }));
-              setAnswers([]);
+              dropAnswersHolding(resolution.rowId);
             }}
             onClear={(rowId) => {
               setResolutions((all) => {
@@ -232,7 +244,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
                 delete next[rowId];
                 return next;
               });
-              setAnswers([]);
+              dropAnswersHolding(rowId);
             }}
             onAnswer={(answer) => setAnswers((all) => [...all.filter((a) => !(a.choiceId === answer.choiceId && a.source.contentId === answer.source.contentId)), answer])}
             onError={onError}

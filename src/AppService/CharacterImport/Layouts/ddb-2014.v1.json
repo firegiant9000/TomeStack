@@ -3,7 +3,7 @@
   "version": 1,
   "suggestedFamily": "srd-5.1",
   "unverified": false,
-  "markedWhenAnyText": true,
+  "markValues": ["P", "E"],
   "required": [
     "CharacterName",
     "CLASS  LEVEL",

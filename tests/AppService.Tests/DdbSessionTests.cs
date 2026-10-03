@@ -213,14 +213,15 @@ public class DdbSessionTests
     }
 
     [Fact]
-    public void A_temporary_copy_another_program_still_holds_does_not_fail_the_read_and_is_left_for_the_sweep()
+    public void A_temporary_copy_another_program_still_holds_does_not_fail_the_read_and_the_next_read_sweeps_it()
     {
         FileStream? held = null;
         FakeFormReader reader = null!;
-        // Like a virus scanner: the copy is open without delete sharing when the read returns.
+        // Like a virus scanner: the first copy is open without delete sharing when the read returns.
         reader = new FakeFormReader(() =>
         {
-            held = new FileStream(reader.Paths[^1], FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (reader.Paths.Count == 1)
+                held = new FileStream(reader.Paths[^1], FileMode.Open, FileAccess.Read, FileShare.Read);
             return Sheet();
         });
         using var temp = new TempApp(formReader: reader);
@@ -229,12 +230,17 @@ public class DdbSessionTests
             var read = temp.App.ReadDdbSheetData("fixture.pdf", "%PDF-1.7 fixture"u8.ToArray());
 
             Assert.NotNull(temp.App.DdbSessions.Peek(read.Token));
-            Assert.True(File.Exists(reader.Paths[^1]));
+            Assert.True(File.Exists(reader.Paths[0]));
         }
         finally
         {
             held?.Dispose();
         }
+
+        temp.App.ReadDdbSheetData("fixture.pdf", "%PDF-1.7 fixture"u8.ToArray());
+
+        Assert.False(File.Exists(reader.Paths[0]));
+        Assert.Empty(Directory.EnumerateFiles(TmpFolder(temp)));
     }
 
     [Fact]

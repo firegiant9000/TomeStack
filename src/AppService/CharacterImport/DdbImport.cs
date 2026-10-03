@@ -59,13 +59,15 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// <c>ddb.readData</c> (DevHost, browser, e2e): the bytes go to <c>tmp/ddb-&lt;guid&gt;.pdf</c> under the data folder, are
-    /// read, and the file is deleted whatever happens. The size is checked before anything is written.
+    /// read, and the file is deleted whatever happens. The size is checked before anything is written. A copy another
+    /// program still held is retried briefly, then left for the sweep that runs before the next read and at start.
     /// </summary>
     public DdbReadResult ReadDdbSheetData(string fileName, byte[] data)
     {
         ArgumentNullException.ThrowIfNull(data);
         if (data.LongLength > MaxDdbSheetBytes)
             throw Refused("pdf.too-large", $"The PDF is larger than {MaxDdbSheetBytes / (1024 * 1024)} MB.");
+        DeleteLeftoverDdbFiles(); // an earlier copy that could not be deleted then
         Directory.CreateDirectory(DdbTempFolder);
         var path = Path.Combine(DdbTempFolder, $"{DdbTempPrefix}{Guid.NewGuid():N}.pdf");
         try
@@ -75,13 +77,19 @@ public sealed partial class TomeStackApp
         }
         finally
         {
-            try
+            for (var attempt = 0; attempt < 3; attempt++)
             {
-                File.Delete(path);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Held for a moment by another program (a virus scanner): the sweep at the next start removes it.
+                try
+                {
+                    File.Delete(path);
+                    break;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Held for a moment by another program (a virus scanner).
+                    if (attempt < 2)
+                        Thread.Sleep(100 * (attempt + 1));
+                }
             }
         }
     }
@@ -179,11 +187,13 @@ public sealed partial class TomeStackApp
         planner.Plan(sheet);
         var diagnostics = new List<Diagnostic>();
         var answered = planner.Character;
+        var accepted = new HashSet<(ContentReference, string)>();
         foreach (var answer in (request.Answers ?? []).Where(a => a?.Source is not null))
         {
             try
             {
                 answered = WithChoice(Levelled(answered), answer.Source, answer.ChoiceId, answer.Selected);
+                accepted.Add((answer.Source, answer.ChoiceId));
             }
             catch (AppValidationException ex)
             {
@@ -246,9 +256,9 @@ public sealed partial class TomeStackApp
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
-        // A choice the user answered stays listed once it is full, so step 3 can still change the answer.
-        var answeredChoices = (request.Answers ?? []).Where(a => a?.Source is not null).Select(a => (a.Source, a.ChoiceId)).ToHashSet();
-        var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || answeredChoices.Contains((c.Source, c.ChoiceId))).ToList();
+        // A choice the user answered stays listed once it is full, so step 3 can still change the answer; a refused answer
+        // does not keep a choice the sheet filled listed (its diagnostic says why).
+        var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || accepted.Contains((c.Source, c.ChoiceId))).ToList();
         return new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply);
     }
 

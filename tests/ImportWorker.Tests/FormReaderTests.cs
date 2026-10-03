@@ -165,6 +165,63 @@ public class FormReaderTests
     }
 
     [Fact]
+    public void Without_AcroForm_a_group_takes_its_type_and_value_from_the_parent_and_its_on_state_from_the_widget_that_is_on()
+    {
+        var fields = Read(Write([new("fixture.name", "Testy McFixture")], withAcroForm: false, groups:
+        [
+            new("fixture.saves", ["FixtureA", "FixtureB"], On: 1),
+            new("fixture.pick", ["FixtureX", "FixtureY", "FixtureZ"], On: 2, Radio: true),
+            new("fixture.none", ["FixtureP", "FixtureQ"], On: null, Radio: true),
+        ]));
+
+        // Widgets that share a name are one field here (a checkbox is on if any of its widgets is).
+        Assert.Equal(
+        [
+            new FormField("fixture.name", "text", 1, "Testy McFixture"),
+            new FormField("fixture.saves", "checkbox", 1, Checked: true, OnState: "FixtureB"),
+            new FormField("fixture.pick", "radio", 1, Checked: true, OnState: "FixtureZ"),
+            new FormField("fixture.none", "radio", 1, Checked: false, OnState: "FixtureP"),
+        ], fields);
+    }
+
+    /// <summary>A catalog without <c>/AcroForm</c> and one page whose <c>/Annots</c> is <paramref name="annots"/>, then the extra objects (from 4).</summary>
+    private static byte[] OnePage(string annots, params string[] extra) => FixturePdfs.Raw(
+    [
+        .. new[] { "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [{annots}] >>" }
+            .Concat(extra).Select(o => System.Text.Encoding.ASCII.GetBytes(o)),
+    ]);
+
+    [Fact]
+    public void One_widget_listed_many_times_is_read_once_and_past_the_annotation_cap_is_refused()
+    {
+        const string widget = "<< /Type /Annot /Subtype /Widget /T (fixture.a) /FT /Tx /V (Fixture) /P 3 0 R /Rect [0 0 1 1] >>";
+
+        var fields = Read(OnePage(string.Join(' ', Enumerable.Repeat("4 0 R", 5_000)), widget));
+        Assert.Equal([new FormField("fixture.a", "text", 1, "Fixture")], fields);
+
+        // Every entry counts toward the cap (four times the field limit), repeated or not.
+        Assert.Equal("ddb.too-many-fields", Refused(OnePage(string.Join(' ', Enumerable.Repeat("4 0 R", 4 * FormLimits.Default.MaxFields + 1)), widget)).Code);
+    }
+
+    [Fact]
+    public void A_flood_of_annotations_is_ddb_too_many_fields_even_when_none_is_a_named_widget()
+    {
+        var pdf = OnePage(string.Join(' ', Enumerable.Repeat("<< /Subtype /Link /Rect [0 0 1 1] >>", 9_000)));
+
+        Assert.Equal("ddb.too-many-fields", Refused(pdf).Code);
+    }
+
+    [Fact]
+    public void A_parent_loop_stops_the_name_walk()
+    {
+        var fields = Read(OnePage("4 0 R",
+            "<< /Type /Annot /Subtype /Widget /T (fixture.a) /FT /Tx /V (Fixture) /Parent 5 0 R /P 3 0 R /Rect [0 0 1 1] >>",
+            "<< /T (fixture.p) /Kids [4 0 R] /Parent 4 0 R >>"));
+
+        Assert.Equal(["fixture.p.fixture.a"], fields.Select(f => f.Name));
+    }
+
+    [Fact]
     public void A_pdf_without_a_form_is_refused_with_ddb_no_form_fields()
     {
         var refused = Refused(FixturePdfs.Pages(2));

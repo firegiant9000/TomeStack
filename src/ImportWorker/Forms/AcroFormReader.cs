@@ -62,20 +62,34 @@ public static class AcroFormReader
     /// The form fields of a PDF whose catalog has no <c>/AcroForm</c>: every widget annotation on every page, named by its
     /// own <c>/T</c> and its parents' (period-joined), with the type, flags and value taken from the nearest dictionary in
     /// that chain that has them (PDF field inheritance). Widgets sharing a full name are one field (a checkbox is on if any
-    /// of its widgets is). Stops at <see cref="FormLimits.MaxFields"/> and at a name over the per-value limit before any
-    /// value is read. A widget without a name is skipped: nothing could map it.
+    /// of its widgets is). The pages are walked as raw dictionaries, so no page content is parsed. Every annotation entry
+    /// counts toward a cap (four times <see cref="FormLimits.MaxFields"/>), named or not and repeated or not, and a widget
+    /// object listed twice is read once; the walk stops at <see cref="FormLimits.MaxFields"/> fields and at a name over the
+    /// per-value limit, before any value is read. A widget without a name is skipped: nothing could map it.
     /// </summary>
     private static List<(string Name, Func<FormField> Read)> Widgets(PdfDocument document, int pageCount, FormLimits form)
     {
         var byName = new Dictionary<string, (int Page, List<DictionaryToken> Widgets, List<DictionaryToken> Chain)>(StringComparer.Ordinal);
         var order = new List<string>();
-        for (var page = 1; page <= pageCount; page++)
+        var seen = new HashSet<UglyToad.PdfPig.Core.IndirectReference>();
+        var maxAnnotations = 4L * form.MaxFields;
+        var annotations = 0L;
+        var page = 0;
+        foreach (var pageDictionary in PageDictionaries(document, pageCount))
         {
-            foreach (var annotation in document.GetPage(page).GetAnnotations())
+            page++;
+            if (Resolve(document, pageDictionary.Data.GetValueOrDefault(NameToken.Annots.Data)) is not ArrayToken annots)
+                continue;
+            foreach (var entry in annots.Data)
             {
-                if (annotation.Type != UglyToad.PdfPig.Annotations.AnnotationType.Widget)
+                if (++annotations > maxAnnotations)
+                    throw new ExtractionException("ddb.too-many-fields", $"The PDF has more than {form.MaxFields} form fields.");
+                if (entry is IndirectReferenceToken reference && !seen.Add(reference.Data))
                     continue;
-                var chain = Chain(document, annotation.AnnotationDictionary);
+                if (Resolve(document, entry) is not DictionaryToken annotation
+                    || (Resolve(document, annotation.Data.GetValueOrDefault(NameToken.Subtype.Data)) as NameToken)?.Data != "Widget")
+                    continue;
+                var chain = Chain(document, annotation);
                 var name = string.Join('.', chain.Select(d => Text(document, d.Data.GetValueOrDefault(NameToken.T.Data))).Where(t => !string.IsNullOrEmpty(t)).Reverse());
                 if (name.Length == 0)
                     continue;
@@ -83,16 +97,43 @@ public static class AcroFormReader
                     throw TooLong(form);
                 if (byName.TryGetValue(name, out var known))
                 {
-                    known.Widgets.Add(annotation.AnnotationDictionary);
+                    known.Widgets.Add(annotation);
                     continue;
                 }
                 if (order.Count == form.MaxFields)
                     throw new ExtractionException("ddb.too-many-fields", $"The PDF has more than {form.MaxFields} form fields.");
-                byName[name] = (page, [annotation.AnnotationDictionary], chain);
+                byName[name] = (page, [annotation], chain);
                 order.Add(name);
             }
         }
         return [.. order.Select(name => (name, (Func<FormField>)(() => WidgetField(document, name, byName[name]))))];
+    }
+
+    /// <summary>
+    /// The page dictionaries in page order, walked from the catalog's <c>/Pages</c> without recursion and without building
+    /// a page (no content stream, font or image is parsed). At most <paramref name="pageCount"/> pages (already checked
+    /// against the limit), each node once, so a looped page tree ends.
+    /// </summary>
+    private static IEnumerable<DictionaryToken> PageDictionaries(PdfDocument document, int pageCount)
+    {
+        var pending = new Stack<IToken>();
+        if (document.Structure.Catalog.CatalogDictionary.Data.GetValueOrDefault(NameToken.Pages.Data) is { } root)
+            pending.Push(root);
+        var visited = new HashSet<DictionaryToken>(ReferenceEqualityComparer.Instance);
+        var pages = 0;
+        while (pending.Count > 0 && pages < pageCount)
+        {
+            if (Resolve(document, pending.Pop()) is not DictionaryToken node || !visited.Add(node))
+                continue;
+            if (Resolve(document, node.Data.GetValueOrDefault(NameToken.Kids.Data)) is ArrayToken kids)
+            {
+                for (var i = kids.Data.Count - 1; i >= 0; i--)
+                    pending.Push(kids.Data[i]);
+                continue;
+            }
+            pages++;
+            yield return node;
+        }
     }
 
     /// <summary>The widget and its parents, nearest first; at most 32 deep, and a loop stops the walk.</summary>
@@ -126,7 +167,9 @@ public static class AcroFormReader
                 var on = states.Any(s => s is not null)
                     ? states.Any(s => s is not null && s != "Off")
                     : value is NameToken current && current.Data != "Off";
-                var onState = field.Widgets.Select(w => OnStateOf(document, w)).FirstOrDefault(s => s is not null)
+                // The on-state of the widget that is on; otherwise the first widget's.
+                var onState = states.FirstOrDefault(s => s is not null && s != "Off")
+                    ?? field.Widgets.Select(w => OnStateOf(document, w)).FirstOrDefault(s => s is not null)
                     ?? (value is NameToken v && v.Data != "Off" ? v.Data : null);
                 return new(name, (flags & RadioFlag) != 0 ? "radio" : "checkbox", field.Page, Checked: on, OnState: onState);
             case "Ch":

@@ -66,7 +66,7 @@ public static partial class DdbParser
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Int($"abilities.{FieldIds.Key(a)}", 1, 30)),
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Bool($"saves.{FieldIds.Key(a)}.proficient")),
             CharacterCalculator.Skills.ToDictionary(s => s.Key, s => sheet.Bool($"skills.{s.Key}.proficient"), StringComparer.Ordinal),
-            [.. sheet.List("feats"), .. features.Feats],
+            SheetReader.Capped([.. sheet.List("feats"), .. features.Feats]), // one list, one cap, wherever the feats came from
             [.. sheet.SpellRows(), .. sheet.List("spells").Select(r => r.Status == ReadStatus.Ok ? Read<SpellText>.Ok(new(r.Value!, null)) : Read<SpellText>.Unreadable)],
             [.. sheet.ItemRows(), .. sheet.List("equipment").Select(r => r.Status == ReadStatus.Ok ? Read<ItemText>.Ok(new(r.Value!, 1, null)) : Read<ItemText>.Unreadable)],
             features.Items,
@@ -187,8 +187,9 @@ public static partial class DdbParser
         }
 
         /// <summary>
-        /// A checkbox's state. A text field is marked when it holds the layout's on-state (or, with
-        /// <see cref="LayoutMap.MarkedWhenAnyText"/>, any text: S0 found proficiency marks drawn as text) and unmarked when empty.
+        /// A checkbox's state. A text field is marked when it holds the layout's on-state or one of its
+        /// <see cref="LayoutMap.MarkValues"/> (S0 found proficiency marks drawn as text), unmarked when empty, and
+        /// unreadable otherwise.
         /// </summary>
         public Read<bool> Bool(string semantic)
         {
@@ -199,9 +200,9 @@ public static partial class DdbParser
             var value = hit.Field.Value?.Trim();
             if (string.IsNullOrEmpty(value))
                 return Read<bool>.Ok(false);
-            if (compiled.Map.MarkedWhenAnyText)
-                return Read<bool>.Ok(true);
-            return string.Equals(value, compiled.Map.CheckboxOnState, StringComparison.OrdinalIgnoreCase) ? Read<bool>.Ok(true) : Read<bool>.Unreadable;
+            var marked = string.Equals(value, compiled.Map.CheckboxOnState, StringComparison.OrdinalIgnoreCase)
+                || (compiled.Map.MarkValues ?? []).Any(m => string.Equals(value, m, StringComparison.OrdinalIgnoreCase));
+            return marked ? Read<bool>.Ok(true) : Read<bool>.Unreadable;
         }
 
         /// <summary>A list field's items (see <see cref="ListItems"/>).</summary>
@@ -263,7 +264,7 @@ public static partial class DdbParser
         }
 
         /// <summary>At most <see cref="MaxListItems"/> items, then one unreadable item for the rest.</summary>
-        private static List<Read<string>> Capped(List<Read<string>> list) =>
+        internal static List<Read<string>> Capped(List<Read<string>> list) =>
             list.Count <= MaxListItems ? list : [.. list.Take(MaxListItems), Read<string>.Unreadable];
 
         /// <summary>The class-and-level text: each part read, at most 20 parts, levels adding up to 1 to 20, or unreadable as a whole.</summary>

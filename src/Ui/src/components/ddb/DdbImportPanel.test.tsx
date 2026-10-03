@@ -152,9 +152,13 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   expect(client.ddbDiscard).not.toHaveBeenCalled();
 });
 
-it('drops open-choice answers when a match changes, since they were made on the earlier proposal', async () => {
+it('keeps open-choice answers while their choice is still offered and drops one whose choice went away', async () => {
   const choice = { source: ref(3), sourceName: 'Fixture Wanderer', choiceId: 'fixture-skill', count: 1, options: [ref(4), ref(5)], selected: [], resolved: false };
-  vi.mocked(client.ddbPreview).mockImplementation(async (request) => ({ ...preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0')), openChoices: [choice] }));
+  // Leaving the species out takes away the choice it offered; picking a spell's caster does not touch it.
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => ({
+    ...preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0')),
+    openChoices: (request.resolutions ?? []).some((r) => r.rowId === 'species' && r.leaveOut) ? [] : [choice],
+  }));
   const user = userEvent.setup();
   renderPanel();
   await toMatches(user);
@@ -164,9 +168,35 @@ it('drops open-choice answers when a match changes, since they were made on the 
   await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ answers: [expect.objectContaining({ choiceId: 'fixture-skill' })] })));
 
   await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() =>
+    expect(client.ddbPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'spell:0' })], answers: [expect.objectContaining({ choiceId: 'fixture-skill' })] }),
+    ),
+  );
+
+  await user.click(screen.getByRole('checkbox', { name: /Leave out\s+Fixture Quickfoot/ }));
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ answers: [] })));
+});
+
+it('drops an answer that holds the option of a row the user then leaves out', async () => {
+  const choice = { source: ref(3), sourceName: 'Fixture Wanderer', choiceId: 'fixture-skill', count: 1, options: [ref(4), ref(5)], selected: [], resolved: false };
+  const skillRow: MatchRow = { rowId: 'skill:arcana', kind: 'skill', label: 'Arcana', status: 'matched', candidates: [candidate(4, 'Fixture Arcana Lesson')], chosen: candidate(4, 'Fixture Arcana Lesson') };
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    const base = preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0'));
+    return { ...base, matches: [...base.matches, skillRow], openChoices: [choice] };
+  });
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+
+  const [option] = await screen.findAllByRole('checkbox', { name: 'Option' });
+  await user.click(option as HTMLElement); // the first option is ref(4), the Arcana row's
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ answers: [expect.objectContaining({ choiceId: 'fixture-skill' })] })));
+
+  await user.click(screen.getByRole('checkbox', { name: /Leave out\s+Arcana/ }));
 
   await waitFor(() =>
-    expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'spell:0' })], answers: [] })),
+    expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'skill:arcana', leaveOut: true })], answers: [] })),
   );
 });
 

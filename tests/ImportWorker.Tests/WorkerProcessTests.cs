@@ -281,15 +281,20 @@ public class WorkerProcessTests
     }
 
     [Theory]
-    [InlineData("pdf.encrypted", "pdf.encrypted")]
-    [InlineData("ddb.no-form-fields", "ddb.no-form-fields")]
-    [InlineData("pdf.too-many-pages", "pdf.too-many-pages")]
-    [InlineData("fixture.made-up", "worker.protocol")]
-    [InlineData("worker.crashed", "worker.protocol")]
-    public async Task A_formFields_error_keeps_only_a_known_code_and_the_apps_own_message(string sent, string expected)
+    [InlineData("pdf.encrypted", "pdf.encrypted", false)]
+    [InlineData("ddb.no-form-fields", "ddb.no-form-fields", false)]
+    [InlineData("pdf.too-many-pages", "pdf.too-many-pages", false)]
+    [InlineData("fixture.made-up", "worker.protocol", false)]
+    [InlineData("worker.crashed", "worker.protocol", false)]
+    [InlineData("fixture.made-up", "worker.protocol", true)]
+    [InlineData("pdf.encrypted", "pdf.encrypted", true)]
+    [InlineData("worker.bad-request", "worker.bad-request", true)]
+    public async Task A_formFields_error_keeps_only_a_known_code_and_the_apps_own_message(string sent, string expected, bool asFirstLine)
     {
-        // A stand-in for a compromised worker: its code is checked against the reader's own, and its text is never shown.
-        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", $"{{\"type\":\"error\",\"code\":\"{sent}\",\"message\":\"Fixture worker text\"}}");
+        // A stand-in for a compromised worker: its code is checked against the reader's own, and its text is never shown,
+        // whether the error comes after its hello or in place of it.
+        var error = $"{{\"type\":\"error\",\"code\":\"{sent}\",\"message\":\"Fixture worker text\"}}";
+        using var fake = asFirstLine ? FakeWorker(error) : FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", error);
         using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
 
         var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path).ReadAsync(file.Path, CancellationToken.None));
