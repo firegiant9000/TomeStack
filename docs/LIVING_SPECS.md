@@ -70,6 +70,12 @@ Create `CHANGELOG.md` with `## Unreleased` and subsections `Added`, `Changed`, `
 
 ## Change history
 
+- **2026-10-03 · character-sheet import S4, per-PR review fixes:** no schema, package or database change.
+  - Changing the rules family in the import panel now also clears the campaign; the shown preview is dropped when the family or campaign changes, and Next waits while a preview loads.
+  - A failed preview no longer loads forever: it shows its error with "Try again", and an expired sheet (`ddb.token-invalid`) returns the user to step 1 with the error.
+  - The panel waits for `onCreated` and keeps Create disabled after a successful apply, so a second click cannot save a duplicate.
+  - A sheet read still in flight when the panel is cancelled or closed is discarded when it resolves.
+  - `gap.add` now refuses an import-kind target with its own message ("Import notes are written only by a character-sheet import."); the guard previously never ran because validation rejected the note first.
 - **2026-09-24 · v0.1:** Initial product specification, Windows-first architecture proposal, two-rule-family MVP, accepted 20-item backlog, milestone plan and editable diagram. No implementation is claimed.
 - **2026-09-24 · M0 foundation:** Documents moved to `docs/`. The desktop spike resolved D06: in-process service over the WebView2 message bridge instead of a local ASP.NET Core service ([ADR-006](decisions/ADR-006-desktop-host-and-ipc.md)). Content IDs and pins are recorded in [ADR-002](decisions/ADR-002-edition-aware-ids-and-revision-pins.md), and package format v1 in [features/package-format.md](features/package-format.md). The first vertical slice (initiative with trace, local save, export/import) is implemented against original fixtures; see [CHANGELOG.md](CHANGELOG.md). The functional overview diagram (`diagrams/TomeStack-Architecture.svg`) does not depict process topology, so ADR-006 needs no diagram change. The repo has no editable `.drawio` source yet.
 - **2026-09-25 · owner decisions:** D02, D05, D07 and the installer part of D06 decided. D09–D12 added and decided (SRD route, Windows 10/11, fixture seeding, third-party homebrew). Code is licensed Apache-2.0. The M3 Stardust Guardian acceptance fixture is deferred until the author grants permission (D12).
