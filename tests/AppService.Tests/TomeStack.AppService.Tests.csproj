@@ -39,7 +39,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\RulesFixtures\**\*.json" LinkBase="RulesFixtures" CopyToOutputDirectory="PreserveNewest" />
+    <!-- local\ holds the owner's private files; tests read them from the source tree, so none is copied to bin. -->
+    <None Include="..\RulesFixtures\**\*.json" Exclude="..\RulesFixtures\local\**" LinkBase="RulesFixtures" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\RulesFixtures\pdf\*.pdf" LinkBase="RulesFixtures\pdf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\docs\schemas\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\AppService\Content\*.json" LinkBase="Content" CopyToOutputDirectory="PreserveNewest" />

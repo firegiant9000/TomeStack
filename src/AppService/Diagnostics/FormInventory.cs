@@ -28,10 +28,29 @@ public static class FormInventory
         ArgumentNullException.ThrowIfNull(workerPath);
         ArgumentNullException.ThrowIfNull(pdfPath);
         var fields = new WorkerFormReader(workerPath).ReadAsync(pdfPath, CancellationToken.None).GetAwaiter().GetResult();
+        // A radio widget's on-state name is the group's selected value once its state is known, so only the state is kept.
         return new Report(fields.Count,
         [
-            .. fields.Select(f => new Entry(f.Name, f.Type, f.Page, f.Value?.Length ?? f.Selected?.Sum(s => s.Length) ?? 0, f.Checked, f.OnState)),
+            .. fields.Select(f => new Entry(f.Name, f.Type, f.Page, f.Value?.Length ?? f.Selected?.Sum(s => s.Length) ?? 0, f.Checked, f.Type == "radio" ? null : f.OnState)),
         ]);
+    }
+
+    /// <summary>
+    /// The <c>--out</c> path, resolved before the PDF is read: refused (<see cref="ArgumentException"/>, naming no path)
+    /// when it is the PDF itself, and its folder created. <paramref name="outsideLocal"/> is true when it is not under
+    /// <c>tests/RulesFixtures/local/</c>, the one gitignored home for an inventory of a real export.
+    /// </summary>
+    public static string PrepareOutput(string pdfPath, string outPath, out bool outsideLocal)
+    {
+        ArgumentNullException.ThrowIfNull(pdfPath);
+        ArgumentNullException.ThrowIfNull(outPath);
+        var output = Path.GetFullPath(outPath);
+        if (string.Equals(output, Path.GetFullPath(pdfPath), StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("--out names the PDF itself; choose another file.", nameof(outPath));
+        var local = $"{Path.DirectorySeparatorChar}tests{Path.DirectorySeparatorChar}RulesFixtures{Path.DirectorySeparatorChar}local{Path.DirectorySeparatorChar}";
+        outsideLocal = !output.Contains(local, StringComparison.OrdinalIgnoreCase);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        return output;
     }
 
     /// <summary>The report as indented JSON: names and lengths, no value.</summary>

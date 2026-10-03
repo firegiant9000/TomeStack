@@ -188,9 +188,13 @@ public class WorkerProcessTests
     /// A stand-in worker that ignores its request and writes <paramref name="lines"/> (a batch file that types a file), for
     /// what the real worker never sends.
     /// </summary>
-    private static FixturePdfs.TempFile FakeWorker(params string[] lines)
+    private static FixturePdfs.TempFile FakeWorker(params string[] lines) => FakeWorker(stallSeconds: 0, lines);
+
+    /// <summary>A stand-in worker that writes <paramref name="lines"/>, then sends nothing for about <paramref name="stallSeconds"/> seconds.</summary>
+    private static FixturePdfs.TempFile FakeWorker(int stallSeconds, params string[] lines)
     {
-        var script = FixturePdfs.Write("@type \"%~dp0lines.txt\"\r\n"u8.ToArray(), "fake-worker.cmd");
+        var stall = stallSeconds > 0 ? $"@ping -n {stallSeconds + 1} 127.0.0.1 >nul\r\n" : "";
+        var script = FixturePdfs.Write(System.Text.Encoding.ASCII.GetBytes("@type \"%~dp0lines.txt\"\r\n" + stall), "fake-worker.cmd");
         File.WriteAllText(Path.Combine(Path.GetDirectoryName(script.Path)!, "lines.txt"), string.Join('\n', lines) + "\n");
         return script;
     }
@@ -261,6 +265,9 @@ public class WorkerProcessTests
     [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\"},{\"name\":\"fixture.b\",\"type\":\"text\"}]}")]
     [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"value\":\"Fixture value over ten\"}]}")]
     [InlineData("{\"type\":\"fields\",\"fields\":[]}\n{\"type\":\"fields\",\"fields\":[]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"fixture-kind\"}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"page\":-5}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"page\":51}]}")]
     public async Task A_formFields_worker_that_sends_anything_but_worker_fields_done_or_error_is_a_protocol_error(string sent)
     {
         var form = new FormLimits { MaxFields = 1, MaxValueChars = 10 };
@@ -276,10 +283,12 @@ public class WorkerProcessTests
     [Fact]
     public async Task A_formFields_read_that_sends_no_line_for_the_timeout_is_stopped_with_worker_page_timeout()
     {
+        // A stand-in sends its hello, then stalls: the timeout that fires is the one on the fields line, not the hello's.
+        using var fake = FakeWorker(stallSeconds: 8, "{\"type\":\"worker\",\"heapLimit\":1}");
         using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
-        var limits = WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(1) };
+        var limits = WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromSeconds(3) };
 
-        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker, limits).ReadAsync(file.Path, CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, limits).ReadAsync(file.Path, CancellationToken.None));
 
         Assert.Equal("worker.page-timeout", refused.Code);
     }
@@ -298,7 +307,8 @@ public class WorkerProcessTests
         // features/ddb-pdf-import.md "Limits": 20 MB, 50 pages, 30 s per read; 2,000 fields, 20,000 characters per value, 1 MB in total.
         var limits = WorkerFormReader.DefaultLimits;
         Assert.Equal((20L << 20, 50, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)), (limits.MaxBytes, limits.MaxPages, limits.PageTimeout, limits.RunTimeout));
-        Assert.Equal((ExtractionLimits.Default.HeapHardLimit, ExtractionLimits.Default.MaxWorkingSet), (limits.HeapHardLimit, limits.MaxWorkingSet));
+        // Sheet-sized memory: a parse of a few pages never needs the book limits (1 GiB heap).
+        Assert.Equal((256L << 20, 512L << 20), (limits.HeapHardLimit, limits.MaxWorkingSet));
         Assert.Equal((2_000, 20_000, 1_048_576), (FormLimits.Default.MaxFields, FormLimits.Default.MaxValueChars, FormLimits.Default.MaxTotalValueChars));
     }
 }
