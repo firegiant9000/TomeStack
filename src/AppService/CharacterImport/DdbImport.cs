@@ -79,6 +79,110 @@ public sealed partial class TomeStackApp
         }
     }
 
+    /// <summary>The override reason of a number the user keeps from the sheet (step 4).</summary>
+    public const string ImportedOverrideReason = "Imported from D&D Beyond";
+
+    /// <summary>What the import leaves out by design (D16d, D16e), listed in every report.</summary>
+    private static readonly string[] NotBroughtOver =
+        ["currency", "notes", "speed", "passivePerception", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
+
+    /// <summary>
+    /// <c>ddb.preview</c>: the proposed character for the read sheet under the chosen family and campaign, with every match,
+    /// the open choices, the number comparison and the ability plan. The token stays; nothing is written.
+    /// </summary>
+    public DdbPreview PreviewDdbImport(DdbPreviewRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var sheet = DdbSessions.Peek(request.Token)
+            ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
+        return ProposeDdbCharacter(sheet, request, Guid.NewGuid());
+    }
+
+    /// <summary>Builds the proposal for <paramref name="sheet"/> (shared with <c>ddb.apply</c>, which saves it under <paramref name="id"/>).</summary>
+    internal DdbPreview ProposeDdbCharacter(DdbSheet sheet, DdbPreviewRequest request, Guid id)
+    {
+        var options = ListContent(request.RulesFamily, request.CampaignId).Where(o => o.Compatible && !o.Superseded).ToList();
+        static Character Levelled(Character c) => c.Classes.Count > 0 ? c with { Level = c.Classes.Sum(l => l.Level) } : c;
+        CharacterSheet Calculate(Character c) => CharacterCalculator.Calculate(Levelled(c), _store);
+
+        var start = new Character
+        {
+            Id = id,
+            Name = sheet.Name.Value is { } name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : "Imported character",
+            RulesFamily = request.RulesFamily,
+            BaseAbilities = new(AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase),
+            CampaignId = request.CampaignId,
+        };
+        var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
+            (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision);
+        planner.Plan(sheet);
+
+        var scores = sheet.Abilities.Where(a => a.Value.Status == ReadStatus.Ok).ToDictionary(a => a.Key, a => a.Value.Value);
+        var plan = AbilitySolver.Solve(bases => Calculate(planner.Character with { BaseAbilities = bases }), scores);
+        var character = Levelled(planner.Character with { BaseAbilities = plan.ProposedBase });
+        if (request.IncludePlayState)
+            character = character with { Play = PlayFrom(sheet.Play) };
+
+        var calculated = Calculate(character);
+        var comparison = new List<NumberRow>();
+        void Compare(string field, int value)
+        {
+            if (calculated.Fields.FirstOrDefault(f => f.Field == field) is { } derived)
+                comparison.Add(new(field, derived.Label, value, derived.ComputedValue, derived.ComputedValue != value));
+        }
+        foreach (var (ability, score) in scores)
+            Compare(FieldIds.Score(ability), score);
+        foreach (var (field, read) in sheet.Numbers.Where(n => n.Value.Status == ReadStatus.Ok))
+            Compare(field, read.Value);
+        comparison = [.. comparison.OrderByDescending(n => n.Differs)];
+
+        var kept = (request.NumberChoices ?? []).Where(n => n?.Action == NumberAction.KeepSheet).Select(n => n.Field).ToHashSet(StringComparer.Ordinal);
+        character = character with
+        {
+            Overrides = [.. comparison.Where(n => n.Differs && kept.Contains(n.Field)).Select(n => new FieldOverride(n.Field, n.Sheet!.Value, ImportedOverrideReason))],
+        };
+
+        var diagnostics = new List<Diagnostic>();
+        var valid = true;
+        try
+        {
+            character = Checked(character);
+        }
+        catch (AppValidationException ex)
+        {
+            diagnostics.AddRange(ex.Problems);
+            valid = false;
+        }
+        var final = Calculate(character);
+        diagnostics.AddRange(final.Diagnostics);
+
+        var rows = planner.Rows;
+        int Count(MatchStatus status) => rows.Count(r => r.Status == status);
+        var report = new DdbReport(
+            Count(MatchStatus.Matched) - planner.ChosenByUser,
+            planner.ChosenByUser,
+            Count(MatchStatus.NotFound),
+            Count(MatchStatus.NoPlace),
+            Count(MatchStatus.Unreadable),
+            Count(MatchStatus.LeftOut),
+            [.. NotBroughtOver, .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
+            ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
+            sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
+        var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
+        return new DdbPreview(character, rows, [.. (final.Choices ?? []).Where(c => !c.Resolved)], comparison, plan, report, diagnostics, canApply);
+    }
+
+    /// <summary>D16d: only what <see cref="PlayState"/> has and the layout read.</summary>
+    private static PlayState PlayFrom(DdbPlay play) => new()
+    {
+        CurrentHitPoints = play.CurrentHitPoints.Status == ReadStatus.Ok ? play.CurrentHitPoints.Value : null,
+        TemporaryHitPoints = play.TemporaryHitPoints.Status == ReadStatus.Ok ? play.TemporaryHitPoints.Value : 0,
+        HitDiceSpent = [.. play.HitDiceSpent.Select(h => new HitDiceUse(h.Die, h.Spent))],
+        DeathSaves = new(play.DeathSuccesses.Status == ReadStatus.Ok ? play.DeathSuccesses.Value : 0, play.DeathFailures.Status == ReadStatus.Ok ? play.DeathFailures.Value : 0),
+        Inspiration = play.Inspiration is { Status: ReadStatus.Ok, Value: true },
+        SpellSlotsSpent = [.. play.SpellSlotsSpent.Select(s => new SpellSlotUse(s.Level, s.Spent))],
+    };
+
     /// <summary><c>ddb.discard</c>: drops the token. False when it was unknown, used or expired.</summary>
     public bool DiscardDdbSheet(Guid token) => DdbSessions.Discard(token);
 
@@ -102,6 +206,32 @@ public sealed partial class TomeStackApp
 
     private static AppValidationException Refused(string code, string message) => new([new Diagnostic(code, message)], code);
 }
+
+public enum NumberAction { UseTomeStack, KeepSheet, Note }
+
+/// <summary>The user's answer for one differing number (step 4): TomeStack's number, the sheet's as an override, or a gap note.</summary>
+public sealed record NumberChoice(string Field, NumberAction Action);
+
+/// <param name="Sheet">The sheet's number; <paramref name="Calculated"/> is TomeStack's, before any override.</param>
+public sealed record NumberRow(string Field, string Label, int? Sheet, int Calculated, bool Differs);
+
+/// <param name="NotBroughtOver">Codes of what the import leaves out by design (<c>currency</c>, <c>speed</c>, <c>playState</c> unless asked, …).</param>
+public sealed record DdbReport(int Matched, int Chosen, int NotFound, int NoPlace, int Unreadable, int LeftOut, IReadOnlyList<string> NotBroughtOver, bool SameNameExists, bool FamilyMismatch);
+
+/// <param name="Character">The proposed character (a new id), as <c>ddb.apply</c> would save it. Nothing is stored.</param>
+/// <param name="OpenChoices">Choices the draft offers that the sheet did not settle; the builder can answer them later.</param>
+/// <param name="CanApply">No row waits for a choice, the classes were read, and the character passes the save checks.</param>
+public sealed record DdbPreview(
+    Character Character,
+    IReadOnlyList<MatchRow> Matches,
+    IReadOnlyList<ChoiceStatus> OpenChoices,
+    IReadOnlyList<NumberRow> Comparison,
+    AbilityPlan AbilityPlan,
+    DdbReport Report,
+    IReadOnlyList<Diagnostic> Diagnostics,
+    bool CanApply);
+
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState);
 
 /// <param name="Name">The character's name as read (shown to the user only, never logged).</param>
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>

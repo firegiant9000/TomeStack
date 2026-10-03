@@ -3,39 +3,315 @@
   "version": 1,
   "suggestedFamily": "srd-5.1",
   "unverified": true,
-  "required": ["fixture.2014.name", "fixture.2014.classLevel"],
+  "required": [
+    "fixture.2014.name",
+    "fixture.2014.classLevel"
+  ],
   "checkboxOnState": "Yes",
   "fields": {
-    "fixture.2014.name": { "semantic": "name" },
-    "fixture.2014.classLevel": { "semantic": "classLevels" },
-    "fixture.2014.species": { "semantic": "species" },
-    "fixture.2014.background": { "semantic": "background" },
-    "fixture.2014.str": { "semantic": "abilities.str" },
-    "fixture.2014.dex": { "semantic": "abilities.dex" },
-    "fixture.2014.con": { "semantic": "abilities.con" },
-    "fixture.2014.int": { "semantic": "abilities.int" },
-    "fixture.2014.wis": { "semantic": "abilities.wis" },
-    "fixture.2014.cha": { "semantic": "abilities.cha" },
-    "fixture.2014.saves.str.proficient": { "semantic": "saves.str.proficient" },
-    "fixture.2014.saves.dex.proficient": { "semantic": "saves.dex.proficient" },
-    "fixture.2014.skills.athletics.proficient": { "semantic": "skills.athletics.proficient" },
-    "fixture.2014.hitPoints": { "semantic": "numbers.hitPoints" },
-    "fixture.2014.proficiencyBonus": { "semantic": "numbers.proficiencyBonus" },
-    "fixture.2014.armorClass": { "semantic": "numbers.armorClass" },
-    "fixture.2014.initiative": { "semantic": "numbers.initiative" },
-    "fixture.2014.inspiration": { "semantic": "play.inspiration" },
-    "fixture.2014.currentHitPoints": { "semantic": "play.currentHitPoints" },
-    "fixture.2014.deathSuccesses": { "semantic": "play.deathSuccesses" },
-    "fixture.2014.feats": { "semantic": "feats" },
-    "fixture.2014.features": { "semantic": "features" },
-    "fixture.2014.spells.{n}.name": { "semantic": "spells[n].name" },
-    "fixture.2014.spells.{n}.prepared": { "semantic": "spells[n].prepared" },
-    "fixture.2014.equipment.{n}.name": { "semantic": "equipment[n].name" },
-    "fixture.2014.equipment.{n}.quantity": { "semantic": "equipment[n].quantity" },
-    "fixture.2014.equipment.{n}.equipped": { "semantic": "equipment[n].equipped" }
+    "fixture.2014.name": {
+      "semantic": "name"
+    },
+    "fixture.2014.classLevel": {
+      "semantic": "classLevels"
+    },
+    "fixture.2014.species": {
+      "semantic": "species"
+    },
+    "fixture.2014.background": {
+      "semantic": "background"
+    },
+    "fixture.2014.str": {
+      "semantic": "abilities.str"
+    },
+    "fixture.2014.dex": {
+      "semantic": "abilities.dex"
+    },
+    "fixture.2014.con": {
+      "semantic": "abilities.con"
+    },
+    "fixture.2014.int": {
+      "semantic": "abilities.int"
+    },
+    "fixture.2014.wis": {
+      "semantic": "abilities.wis"
+    },
+    "fixture.2014.cha": {
+      "semantic": "abilities.cha"
+    },
+    "fixture.2014.saves.str.proficient": {
+      "semantic": "saves.str.proficient"
+    },
+    "fixture.2014.saves.dex.proficient": {
+      "semantic": "saves.dex.proficient"
+    },
+    "fixture.2014.saves.con.proficient": {
+      "semantic": "saves.con.proficient"
+    },
+    "fixture.2014.saves.int.proficient": {
+      "semantic": "saves.int.proficient"
+    },
+    "fixture.2014.saves.wis.proficient": {
+      "semantic": "saves.wis.proficient"
+    },
+    "fixture.2014.saves.cha.proficient": {
+      "semantic": "saves.cha.proficient"
+    },
+    "fixture.2014.skills.acrobatics.proficient": {
+      "semantic": "skills.acrobatics.proficient"
+    },
+    "fixture.2014.skills.animalHandling.proficient": {
+      "semantic": "skills.animalHandling.proficient"
+    },
+    "fixture.2014.skills.arcana.proficient": {
+      "semantic": "skills.arcana.proficient"
+    },
+    "fixture.2014.skills.athletics.proficient": {
+      "semantic": "skills.athletics.proficient"
+    },
+    "fixture.2014.skills.deception.proficient": {
+      "semantic": "skills.deception.proficient"
+    },
+    "fixture.2014.skills.history.proficient": {
+      "semantic": "skills.history.proficient"
+    },
+    "fixture.2014.skills.insight.proficient": {
+      "semantic": "skills.insight.proficient"
+    },
+    "fixture.2014.skills.intimidation.proficient": {
+      "semantic": "skills.intimidation.proficient"
+    },
+    "fixture.2014.skills.investigation.proficient": {
+      "semantic": "skills.investigation.proficient"
+    },
+    "fixture.2014.skills.medicine.proficient": {
+      "semantic": "skills.medicine.proficient"
+    },
+    "fixture.2014.skills.nature.proficient": {
+      "semantic": "skills.nature.proficient"
+    },
+    "fixture.2014.skills.perception.proficient": {
+      "semantic": "skills.perception.proficient"
+    },
+    "fixture.2014.skills.performance.proficient": {
+      "semantic": "skills.performance.proficient"
+    },
+    "fixture.2014.skills.persuasion.proficient": {
+      "semantic": "skills.persuasion.proficient"
+    },
+    "fixture.2014.skills.religion.proficient": {
+      "semantic": "skills.religion.proficient"
+    },
+    "fixture.2014.skills.sleightOfHand.proficient": {
+      "semantic": "skills.sleightOfHand.proficient"
+    },
+    "fixture.2014.skills.stealth.proficient": {
+      "semantic": "skills.stealth.proficient"
+    },
+    "fixture.2014.skills.survival.proficient": {
+      "semantic": "skills.survival.proficient"
+    },
+    "fixture.2014.hitPoints": {
+      "semantic": "numbers.hitPoints"
+    },
+    "fixture.2014.proficiencyBonus": {
+      "semantic": "numbers.proficiencyBonus"
+    },
+    "fixture.2014.armorClass": {
+      "semantic": "numbers.armorClass"
+    },
+    "fixture.2014.initiative": {
+      "semantic": "numbers.initiative"
+    },
+    "fixture.2014.spellAttack": {
+      "semantic": "numbers.spellAttack"
+    },
+    "fixture.2014.spellSaveDc": {
+      "semantic": "numbers.spellSaveDc"
+    },
+    "fixture.2014.saves.str.bonus": {
+      "semantic": "numbers.save.str"
+    },
+    "fixture.2014.saves.dex.bonus": {
+      "semantic": "numbers.save.dex"
+    },
+    "fixture.2014.saves.con.bonus": {
+      "semantic": "numbers.save.con"
+    },
+    "fixture.2014.saves.int.bonus": {
+      "semantic": "numbers.save.int"
+    },
+    "fixture.2014.saves.wis.bonus": {
+      "semantic": "numbers.save.wis"
+    },
+    "fixture.2014.saves.cha.bonus": {
+      "semantic": "numbers.save.cha"
+    },
+    "fixture.2014.skills.acrobatics.bonus": {
+      "semantic": "numbers.skill.acrobatics"
+    },
+    "fixture.2014.skills.animalHandling.bonus": {
+      "semantic": "numbers.skill.animalHandling"
+    },
+    "fixture.2014.skills.arcana.bonus": {
+      "semantic": "numbers.skill.arcana"
+    },
+    "fixture.2014.skills.athletics.bonus": {
+      "semantic": "numbers.skill.athletics"
+    },
+    "fixture.2014.skills.deception.bonus": {
+      "semantic": "numbers.skill.deception"
+    },
+    "fixture.2014.skills.history.bonus": {
+      "semantic": "numbers.skill.history"
+    },
+    "fixture.2014.skills.insight.bonus": {
+      "semantic": "numbers.skill.insight"
+    },
+    "fixture.2014.skills.intimidation.bonus": {
+      "semantic": "numbers.skill.intimidation"
+    },
+    "fixture.2014.skills.investigation.bonus": {
+      "semantic": "numbers.skill.investigation"
+    },
+    "fixture.2014.skills.medicine.bonus": {
+      "semantic": "numbers.skill.medicine"
+    },
+    "fixture.2014.skills.nature.bonus": {
+      "semantic": "numbers.skill.nature"
+    },
+    "fixture.2014.skills.perception.bonus": {
+      "semantic": "numbers.skill.perception"
+    },
+    "fixture.2014.skills.performance.bonus": {
+      "semantic": "numbers.skill.performance"
+    },
+    "fixture.2014.skills.persuasion.bonus": {
+      "semantic": "numbers.skill.persuasion"
+    },
+    "fixture.2014.skills.religion.bonus": {
+      "semantic": "numbers.skill.religion"
+    },
+    "fixture.2014.skills.sleightOfHand.bonus": {
+      "semantic": "numbers.skill.sleightOfHand"
+    },
+    "fixture.2014.skills.stealth.bonus": {
+      "semantic": "numbers.skill.stealth"
+    },
+    "fixture.2014.skills.survival.bonus": {
+      "semantic": "numbers.skill.survival"
+    },
+    "fixture.2014.spellSlots.1": {
+      "semantic": "numbers.spellSlots.1"
+    },
+    "fixture.2014.spellSlots.2": {
+      "semantic": "numbers.spellSlots.2"
+    },
+    "fixture.2014.spellSlots.3": {
+      "semantic": "numbers.spellSlots.3"
+    },
+    "fixture.2014.spellSlots.4": {
+      "semantic": "numbers.spellSlots.4"
+    },
+    "fixture.2014.spellSlots.5": {
+      "semantic": "numbers.spellSlots.5"
+    },
+    "fixture.2014.spellSlots.6": {
+      "semantic": "numbers.spellSlots.6"
+    },
+    "fixture.2014.spellSlots.7": {
+      "semantic": "numbers.spellSlots.7"
+    },
+    "fixture.2014.spellSlots.8": {
+      "semantic": "numbers.spellSlots.8"
+    },
+    "fixture.2014.spellSlots.9": {
+      "semantic": "numbers.spellSlots.9"
+    },
+    "fixture.2014.inspiration": {
+      "semantic": "play.inspiration"
+    },
+    "fixture.2014.currentHitPoints": {
+      "semantic": "play.currentHitPoints"
+    },
+    "fixture.2014.temporaryHitPoints": {
+      "semantic": "play.temporaryHitPoints"
+    },
+    "fixture.2014.deathSuccesses": {
+      "semantic": "play.deathSuccesses"
+    },
+    "fixture.2014.deathFailures": {
+      "semantic": "play.deathFailures"
+    },
+    "fixture.2014.hitDiceSpent.d6": {
+      "semantic": "play.hitDiceSpent.d6"
+    },
+    "fixture.2014.hitDiceSpent.d8": {
+      "semantic": "play.hitDiceSpent.d8"
+    },
+    "fixture.2014.hitDiceSpent.d10": {
+      "semantic": "play.hitDiceSpent.d10"
+    },
+    "fixture.2014.hitDiceSpent.d12": {
+      "semantic": "play.hitDiceSpent.d12"
+    },
+    "fixture.2014.spellSlotsSpent.1": {
+      "semantic": "play.spellSlotsSpent.1"
+    },
+    "fixture.2014.spellSlotsSpent.2": {
+      "semantic": "play.spellSlotsSpent.2"
+    },
+    "fixture.2014.spellSlotsSpent.3": {
+      "semantic": "play.spellSlotsSpent.3"
+    },
+    "fixture.2014.spellSlotsSpent.4": {
+      "semantic": "play.spellSlotsSpent.4"
+    },
+    "fixture.2014.spellSlotsSpent.5": {
+      "semantic": "play.spellSlotsSpent.5"
+    },
+    "fixture.2014.spellSlotsSpent.6": {
+      "semantic": "play.spellSlotsSpent.6"
+    },
+    "fixture.2014.spellSlotsSpent.7": {
+      "semantic": "play.spellSlotsSpent.7"
+    },
+    "fixture.2014.spellSlotsSpent.8": {
+      "semantic": "play.spellSlotsSpent.8"
+    },
+    "fixture.2014.spellSlotsSpent.9": {
+      "semantic": "play.spellSlotsSpent.9"
+    },
+    "fixture.2014.feats": {
+      "semantic": "feats"
+    },
+    "fixture.2014.features": {
+      "semantic": "features"
+    },
+    "fixture.2014.spells.{n}.name": {
+      "semantic": "spells[n].name"
+    },
+    "fixture.2014.spells.{n}.prepared": {
+      "semantic": "spells[n].prepared"
+    },
+    "fixture.2014.equipment.{n}.name": {
+      "semantic": "equipment[n].name"
+    },
+    "fixture.2014.equipment.{n}.quantity": {
+      "semantic": "equipment[n].quantity"
+    },
+    "fixture.2014.equipment.{n}.equipped": {
+      "semantic": "equipment[n].equipped"
+    }
   },
   "splits": [
-    { "semantic": "feats", "separator": "\n" },
-    { "semantic": "features", "separator": "\n" }
+    {
+      "semantic": "feats",
+      "separator": "\n"
+    },
+    {
+      "semantic": "features",
+      "separator": "\n"
+    }
   ]
 }
