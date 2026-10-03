@@ -386,6 +386,7 @@ They were planned to land in no fixed order, so no plan text fixed a number. Eac
 | 7 | source packs (`scope: "source"`) and full library backups whose sources are v2 (M6 slice 1) | `character_snapshots` (M5 slice 8; approved) |
 | 8 | campaign packs (`scope: "campaign"`; M6 slice 2; approved 2026-09-30) | `sources.import_derived` with its backfill (M6 slice 1; approved) |
 | 9 | full library backups that keep installed extensions (M6 slice 3; approved 2026-09-30); a backup without one stays 7 | `extensions` (M6 slice 3; approved 2026-09-30) |
+| 10 | (none) | no table change: the number marks a folder that may hold import gap notes (gap-note v2), so builds before it refuse the folder instead of failing on those notes (character-sheet import S4; owner-approved 2026-10-03; **provisional until #61 merges**) |
 
 Character packages stay format 5.
 
