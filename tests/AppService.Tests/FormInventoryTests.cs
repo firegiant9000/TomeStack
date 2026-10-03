@@ -46,6 +46,56 @@ public class FormInventoryTests
     }
 
     [Fact]
+    public void A_radio_group_keeps_each_widgets_state_but_not_its_on_state_name()
+    {
+        // A radio widget's on-state name is the group's value once you know which one is on, so it is dropped.
+        var folder = Directory.CreateTempSubdirectory("tomestack-inventory-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "fixture.pdf");
+            File.WriteAllBytes(file, TomeStack.ImportWorker.Tests.FormPdfWriter.Write([new("fixture.name", "Testy McFixture")],
+                groups: [new("fixture.pick", ["FixtureX", "FixtureY"], On: 1, Radio: true)]));
+
+            var report = FormInventory.Read(Worker, file);
+            var radios = report.Fields.Where(f => f.Type == "radio").ToList();
+
+            Assert.Equal([false, true], radios.Select(r => r.Checked));
+            Assert.All(radios, r => Assert.Null(r.OnState));
+            Assert.DoesNotContain("FixtureY", FormInventory.ToJson(report), StringComparison.Ordinal);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void The_output_path_is_refused_when_it_is_the_pdf_and_its_folder_is_created_before_the_read()
+    {
+        var folder = Directory.CreateTempSubdirectory("tomestack-inventory-");
+        try
+        {
+            var pdf = Path.Combine(folder.FullName, "fixture.pdf");
+            File.WriteAllText(pdf, "Fixture");
+
+            var same = Assert.Throws<ArgumentException>(() => FormInventory.PrepareOutput(pdf, Path.Combine(folder.FullName, ".", "FIXTURE.pdf"), out _));
+            Assert.DoesNotContain(folder.FullName, same.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Fixture", File.ReadAllText(pdf));
+
+            var output = FormInventory.PrepareOutput(pdf, Path.Combine(folder.FullName, "new", "fields.json"), out var outsideLocal);
+            Assert.True(Directory.Exists(Path.GetDirectoryName(output)));
+            Assert.True(outsideLocal);
+
+            FormInventory.PrepareOutput(pdf, Path.Combine(folder.FullName, "tests", "RulesFixtures", "local", "ddb-import", "fields.json"), out var outside);
+            Assert.False(outside);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void The_inventory_refuses_a_file_that_is_not_a_pdf_with_a_code()
     {
         var folder = Directory.CreateTempSubdirectory("tomestack-inventory-");
