@@ -10,8 +10,10 @@ namespace TomeStack.ImportWorker.Forms;
 /// never run (ADR-009). This class parses untrusted bytes, so it runs only inside the worker process
 /// (<see cref="WorkerMain"/>), never in the app. The checks run in this order: the file (<c>pdf.missing</c>,
 /// <c>pdf.too-large</c>, <c>pdf.not-a-pdf</c>), opening it (<c>pdf.encrypted</c>, <c>pdf.unreadable</c>), the page count
-/// (<c>pdf.too-many-pages</c>), the form (<c>ddb.no-form-fields</c>), the field count (<c>ddb.too-many-fields</c>, before
-/// any value is read), then each name and value (<c>ddb.value-too-long</c>). Messages never quote the document.
+/// (<c>pdf.too-many-pages</c>), the form (<c>ddb.no-form-fields</c>), the field count (<c>ddb.too-many-fields</c>), then
+/// each name and value (<c>ddb.value-too-long</c>), all before anything is sent. PdfPig builds the form's fields with their
+/// values before they can be counted, so that parse is bounded by the file size and the worker's memory and time caps,
+/// not by the field limits. Messages never quote the document.
 /// </summary>
 public static class AcroFormReader
 {
