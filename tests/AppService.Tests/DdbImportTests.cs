@@ -229,6 +229,77 @@ public class DdbImportTests
         Assert.Contains(wanderer, preview.Character.Pins);
     }
 
+    /// <summary>A homebrew skill option: one effect, the skill's proficiency, as the SRD's are.</summary>
+    private static ContentReference SkillOption(TempApp temp, Guid source, string name, string skill) =>
+        Publish(temp, source, ContentKind.Feature, name, [RulesFamilies.Srd521], [new GrantEffect { Id = "skill", Grant = GrantKind.Proficiency, Target = FieldIds.Skill(skill) }]);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Skills_are_placed_together_so_a_wide_choice_never_takes_the_only_skill_a_narrow_choice_offers(bool wideOnSpecies)
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Lore Notes", RulesFamilies.Srd521);
+        var arcana = SkillOption(h.Temp, source, "Fixture Arcana Lesson", "arcana");
+        var history = SkillOption(h.Temp, source, "Fixture History Lesson", "history");
+        ChoiceEffect Wide() => new() { Id = "fixture-wide", ChoiceId = "fixture-wide", Count = 1, Options = [arcana, history] };
+        ChoiceEffect Narrow() => new() { Id = "fixture-narrow", ChoiceId = "fixture-narrow", Count = 1, Options = [arcana] };
+        Publish(h.Temp, source, ContentKind.Species, "Fixture Lorefolk", [RulesFamilies.Srd521], [wideOnSpecies ? Wide() : Narrow()]);
+        Publish(h.Temp, source, ContentKind.Background, "Fixture Scholar", [RulesFamilies.Srd521], [wideOnSpecies ? Narrow() : Wide()]);
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Text("species", "Fixture Lorefolk").Text("background", "Fixture Scholar").Skill("arcana").Skill("history"), RulesFamilies.Srd521);
+
+        Assert.Equal((MatchStatus.Matched, MatchStatus.Matched), (Row(preview, "skill:arcana").Status, Row(preview, "skill:history").Status));
+        var chosen = preview.Character.Choices.ToDictionary(c => c.ChoiceId, c => Assert.Single(c.Selected).ContentId);
+        Assert.Equal((arcana.ContentId, history.ContentId), (chosen["fixture-narrow"], chosen["fixture-wide"]));
+    }
+
+    [Fact]
+    public void A_skill_is_never_placed_by_selecting_an_option_that_is_more_than_that_skill()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Talent Notes", RulesFamilies.Srd521);
+        // A homebrew feat that grants Arcana and something else, offered by a background choice.
+        var feat = Publish(h.Temp, source, ContentKind.Feat, "Fixture Arcane Dabbler", [RulesFamilies.Srd521],
+            [new GrantEffect { Id = "skill", Grant = GrantKind.Proficiency, Target = FieldIds.Skill("arcana") }, Modifier("bonus", FieldIds.Initiative, ModifierOperation.Bonus, 1)]);
+        Publish(h.Temp, source, ContentKind.Background, "Fixture Dabbler", [RulesFamilies.Srd521], [new ChoiceEffect { Id = "fixture-talent", ChoiceId = "fixture-talent", Count = 1, Options = [feat] }]);
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Text("background", "Fixture Dabbler").Skill("arcana"), RulesFamilies.Srd521);
+
+        Assert.Equal((MatchStatus.NoPlace, "skill.no-open-choice"), (Row(preview, "skill:arcana").Status, Row(preview, "skill:arcana").Note));
+        Assert.DoesNotContain(preview.Character.Choices.SelectMany(c => c.Selected), s => s.ContentId == feat.ContentId);
+    }
+
+    [Fact]
+    public void A_resolution_that_no_longer_resolves_asks_again_instead_of_falling_back_to_the_name_match()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Revision Notes", RulesFamilies.Srd521);
+        Publish(h.Temp, source, ContentKind.Feat, "Fixture Alpha Feat", [RulesFamilies.Srd521]);
+        var beta = Publish(h.Temp, source, ContentKind.Feat, "Fixture Beta Feat", [RulesFamilies.Srd521]);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Text("feats", "Fixture Alpha Feat");
+        Assert.Equal(MatchStatus.Matched, Row(h.Preview(sheet, RulesFamilies.Srd521, [new("feat:0", beta, false)]), "feat:0").Status);
+
+        // A newer revision of the picked feat is published between two previews: the pick names a superseded revision.
+        h.Temp.App.Publish(h.Temp.App.SaveDraft(h.Temp.App.Store.FindRevision(beta)! with { RevisionId = Guid.Empty, Status = RevisionStatus.Draft, Summary = "Fixture content, second revision." }));
+        var stale = h.Preview(sheet, RulesFamilies.Srd521, [new("feat:0", beta, false)]);
+
+        var row = Row(stale, "feat:0");
+        Assert.Equal((MatchStatus.Choose, "resolution.not-found"), (row.Status, row.Note));
+        Assert.False(stale.CanApply);
+    }
+
+    [Fact]
+    public void Play_state_fields_that_cannot_be_read_are_reported_when_play_state_is_asked_for()
+    {
+        using var h = new DdbHarness();
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Text("hitDiceSpent.d12", "Fixture");
+
+        Assert.DoesNotContain(h.Preview(sheet, RulesFamilies.Srd521).Diagnostics, d => d.Code == "ddb.play-unreadable");
+        var asked = h.Preview(sheet, RulesFamilies.Srd521, play: true);
+        Assert.Contains(asked.Diagnostics, d => d.Code == "ddb.play-unreadable" && !d.Message.Contains("Fixture", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void A_skill_a_grant_already_gives_is_Matched_without_a_choice()
     {
@@ -322,7 +393,9 @@ public class DdbImportTests
         using var h = new DdbHarness();
         var once = h.Preview(new SheetBuilder($"{Arcanist} 3").Spell("Fixture Frost Ring").Spell("Fixture Frost Ring"), RulesFamilies.Srd521);
         Assert.Single(once.Character.Spells);
-        Assert.Equal("spell.duplicate", Row(once, "spell:1").Note);
+        // The repeat adds nothing, so it is not counted as a match; it is left out, with the reason.
+        Assert.Equal((MatchStatus.LeftOut, "spell.duplicate"), (Row(once, "spell:1").Status, Row(once, "spell:1").Note));
+        Assert.Equal(1, once.Report.LeftOut);
 
         var sheet = new SheetBuilder($"{Arcanist} 3 / {Chanter} 2").Spell("Fixture Veil").Spell("Fixture Veil");
         var choose = h.Preview(sheet, RulesFamilies.Srd521);
@@ -432,7 +505,8 @@ public class DdbImportTests
         Assert.Contains(dwarf, picked.Character.Pins);
 
         var wrongKind = h.Preview(sheet, RulesFamilies.Srd521, [new("species", h.Temp.App.ListContent(RulesFamilies.Srd521).First(o => o.Kind == ContentKind.Class && !o.Superseded).Reference, false)]);
-        Assert.Equal(MatchStatus.NotFound, Row(wrongKind, "species").Status);
+        // A pick of another kind cannot be honoured, so the row asks again (never a silent fallback).
+        Assert.Equal((MatchStatus.Choose, "resolution.not-found"), (Row(wrongKind, "species").Status, Row(wrongKind, "species").Note));
     }
 
     [Fact]
