@@ -131,9 +131,10 @@ public sealed partial class TomeStackApp
             CreatedAt = now,
             UpdatedAt = now,
         };
+        // Checked before Validate: the note above is built at schema 1, which Validate rejects for an import target.
+        if (request.Target?.Kind == GapTargetKind.Import)
+            throw new AppValidationException([new("gap.target-invalid", "Import notes are written only by a character-sheet import.")]);
         var problems = note.Validate().ToList();
-        if (request.Target?.Kind == GapTargetKind.Import && problems.Count == 0)
-            problems.Add(new("gap.target-invalid", "Import notes are written only by a character-sheet import."));
         if (problems.Count == 0)
         {
             var sheet = CharacterCalculator.Calculate(character, _store);
