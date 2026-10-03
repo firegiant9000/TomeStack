@@ -36,6 +36,7 @@ public static partial class DdbParser
                 values.TryAdd(hit.Semantic, (field, hit.Rule));
         }
         var sheet = new SheetReader(compiled, values);
+        var features = sheet.ListItems("features"); // S0: feats can sit in a section of the features text
         return new DdbSheet(
             map.Id,
             map.SuggestedFamily,
@@ -46,10 +47,10 @@ public static partial class DdbParser
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Int($"abilities.{FieldIds.Key(a)}", 1, 30)),
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Bool($"saves.{FieldIds.Key(a)}.proficient")),
             CharacterCalculator.Skills.ToDictionary(s => s.Key, s => sheet.Bool($"skills.{s.Key}.proficient"), StringComparer.Ordinal),
-            sheet.List("feats"),
+            [.. sheet.List("feats"), .. features.Feats],
             [.. sheet.SpellRows(), .. sheet.List("spells").Select(r => r.Status == ReadStatus.Ok ? Read<SpellText>.Ok(new(r.Value!, null)) : Read<SpellText>.Unreadable)],
             [.. sheet.ItemRows(), .. sheet.List("equipment").Select(r => r.Status == ReadStatus.Ok ? Read<ItemText>.Ok(new(r.Value!, 1, null)) : Read<ItemText>.Unreadable)],
-            sheet.List("features"),
+            features.Items,
             DdbSemantics.NumberIds.Where(id => values.ContainsKey($"numbers.{id}")).ToDictionary(id => id, id => sheet.Int($"numbers.{id}", -999, 9_999), StringComparer.Ordinal),
             new DdbPlay(
                 sheet.Int("play.currentHitPoints", 0, 9_999),
@@ -89,6 +90,14 @@ public static partial class DdbParser
                     _rows.Add((name[..at], name[(at + 3)..], rule));
                 if (rule.Pattern is { } pattern)
                     Patterns[pattern] = LayoutMaps.Compile(pattern);
+            }
+            foreach (var split in map.Splits)
+            {
+                foreach (var pattern in new[] { split.ItemPattern, split.SectionHeading, split.FeatsSection })
+                {
+                    if (pattern is not null)
+                        Patterns[pattern] = LayoutMaps.Compile(pattern);
+                }
             }
         }
 
@@ -157,7 +166,10 @@ public static partial class DdbParser
             }
         }
 
-        /// <summary>A checkbox's state; a text field is marked when it holds the layout's on-state and unmarked when empty.</summary>
+        /// <summary>
+        /// A checkbox's state. A text field is marked when it holds the layout's on-state (or, with
+        /// <see cref="LayoutMap.MarkedWhenAnyText"/>, any text: S0 found proficiency marks drawn as text) and unmarked when empty.
+        /// </summary>
         public Read<bool> Bool(string semantic)
         {
             if (!values.TryGetValue(semantic, out var hit))
@@ -167,16 +179,66 @@ public static partial class DdbParser
             var value = hit.Field.Value?.Trim();
             if (string.IsNullOrEmpty(value))
                 return Read<bool>.Ok(false);
+            if (compiled.Map.MarkedWhenAnyText)
+                return Read<bool>.Ok(true);
             return string.Equals(value, compiled.Map.CheckboxOnState, StringComparison.OrdinalIgnoreCase) ? Read<bool>.Ok(true) : Read<bool>.Unreadable;
         }
 
-        /// <summary>A list field's items, split on the map's separator for it (one item when it has none).</summary>
-        public List<Read<string>> List(string semantic)
+        /// <summary>A list field's items (see <see cref="ListItems"/>).</summary>
+        public List<Read<string>> List(string semantic) => ListItems(semantic).Items;
+
+        /// <summary>
+        /// A list's items: its own field and then its numbered fields (<c>features[1]</c>, <c>features[2]</c>, …) in order,
+        /// each split on the map's separator for it (one item when it has none). With the split's patterns, a heading line
+        /// starts a section, only lines the item pattern matches are items, and items in the feats section are returned
+        /// apart (<paramref name="semantic"/> <c>features</c> only).
+        /// </summary>
+        public (List<Read<string>> Items, List<Read<string>> Feats) ListItems(string semantic)
         {
-            var text = Text(semantic);
-            if (text.Status != ReadStatus.Ok)
-                return text.Status == ReadStatus.Missing ? [] : [Read<string>.Unreadable];
-            return [.. Split(text.Value!, semantic, null).Where(item => item.Length > 0).Select(Read<string>.Ok)];
+            var items = new List<Read<string>>();
+            var feats = new List<Read<string>>();
+            var split = compiled.Map.Splits.FirstOrDefault(s => s.Semantic == semantic);
+            var texts = new List<Read<string>> { Text(semantic) };
+            texts.AddRange(Rows(semantic).Select(n => Text($"{semantic}[{n}]")));
+            foreach (var text in texts)
+            {
+                if (text.Status == ReadStatus.Missing)
+                    continue;
+                if (text.Status == ReadStatus.Unreadable)
+                {
+                    items.Add(Read<string>.Unreadable);
+                    continue;
+                }
+                try
+                {
+                    string? section = null;
+                    foreach (var line in Split(text.Value!, semantic, null))
+                    {
+                        if (split?.SectionHeading is { } heading && compiled.Patterns[heading].Match(line) is { Success: true } start)
+                        {
+                            section = start.Groups["section"].Value.Trim();
+                            continue;
+                        }
+                        var item = line;
+                        if (split?.ItemPattern is { } itemPattern)
+                        {
+                            var match = compiled.Patterns[itemPattern].Match(line);
+                            if (!match.Success)
+                                continue;
+                            item = match.Groups["value"].Value.Trim();
+                        }
+                        if (item.Length == 0)
+                            continue;
+                        var inFeats = split?.FeatsSection is { } featsSection && section is not null && compiled.Patterns[featsSection].IsMatch(section);
+                        (inFeats ? feats : items).Add(Read<string>.Ok(item));
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    items.Add(Read<string>.Unreadable);
+                }
+            }
+            return (items, feats);
         }
 
         /// <summary>The class-and-level text: each part read, at most 20 parts, levels adding up to 1 to 20, or unreadable as a whole.</summary>

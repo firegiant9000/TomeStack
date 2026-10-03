@@ -201,6 +201,49 @@ public class DdbParserTests
         Assert.Equal((-1, 3, -2), (sheet.Numbers[FieldIds.Initiative].Value, sheet.Numbers[FieldIds.ProficiencyBonus].Value, sheet.Numbers[FieldIds.ArmorClass].Value));
     }
 
+    // ---- S0 findings: what the real 2014-style export needs from a map ----
+
+    private static LayoutMap Map(IReadOnlyDictionary<string, FieldRule> fields, IReadOnlyList<SplitRule>? splits = null, bool marks = false) => new(
+        "fixture-layout", 1, RulesFamilies.Srd51, ["fixture name"], fields, "Yes", splits ?? [], MarkedWhenAnyText: marks);
+
+    [Fact]
+    public void A_text_field_used_as_a_mark_is_on_when_it_holds_any_text_if_the_map_says_so()
+    {
+        var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture prof"] = new("skills.athletics.proficient"), ["fixture none"] = new("skills.stealth.proficient") }, marks: true);
+        FormField[] fields = [new("fixture name", "text", 1, "Testy McFixture"), new("fixture prof", "text", 1, "Q"), new("fixture none", "text", 1, "")];
+
+        var sheet = DdbParser.Parse(map, fields);
+        Assert.Equal((Read<bool>.Ok(true), Read<bool>.Ok(false)), (sheet.SkillProficient["athletics"], sheet.SkillProficient["stealth"]));
+        Assert.Equal(Read<bool>.Unreadable, DdbParser.Parse(map with { MarkedWhenAnyText = false }, fields).SkillProficient["athletics"]);
+    }
+
+    [Fact]
+    public void A_list_spread_over_numbered_fields_reads_them_in_order_and_keeps_bullet_items_by_section()
+    {
+        var map = Map(
+            new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture traits {n}"] = new("features[n]") },
+            [new("features", "\n", ItemPattern: @"^\*\s+(?<value>[^•]+?)\s*(?:•.*)?$", SectionHeading: @"^===\s*(?<section>.+?)\s*===$", FeatsSection: "^FEATS$")]);
+        FormField[] fields =
+        [
+            new("fixture name", "text", 1, "Testy McFixture"),
+            new("fixture traits 2", "text", 2, "* Fixture Bold Surge •\nFixture description line.\n\n=== FEATS ===\n* Fixture Keen Watcher • FX 2"),
+            new("fixture traits 1", "text", 2, "=== FIXTURE FEATURES ===\n* Fixture Steady Breath • FX 1\n  | Fixture option line\nFixture description line."),
+        ];
+
+        var sheet = DdbParser.Parse(map, fields);
+
+        Assert.Equal([Read<string>.Ok("Fixture Steady Breath"), Read<string>.Ok("Fixture Bold Surge")], sheet.Features);
+        Assert.Equal([Read<string>.Ok("Fixture Keen Watcher")], sheet.Feats);
+    }
+
+    [Fact]
+    public void The_map_check_finds_bad_split_patterns()
+    {
+        var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name") },
+            [new("features", "\n", ItemPattern: "(unclosed"), new("feats", "\n", SectionHeading: "^no section group$")]);
+        Assert.Equal(2, LayoutMaps.Problems(map).Count);
+    }
+
     [Fact]
     public void Unmapped_fields_are_not_in_the_DdbSheet()
     {

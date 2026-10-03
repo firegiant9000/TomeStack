@@ -13,7 +13,10 @@ namespace TomeStack.AppService.CharacterImport;
 public sealed record FieldRule(string Semantic, string? Pattern = null);
 
 /// <summary>A field that holds a list: its value is split on <paramref name="Separator"/> (literal; <c>\n</c> is any line break).</summary>
-public sealed record SplitRule(string Semantic, string Separator);
+/// <param name="ItemPattern">When set, only items it matches are kept, as its <c>value</c> group (S0: a bullet line names a feature; description lines are not items).</param>
+/// <param name="SectionHeading">A line it matches starts a section named by its <c>section</c> group; the line itself is no item.</param>
+/// <param name="FeatsSection">For <c>features</c>: items in a section whose name it matches are feats, not features (S0: one text holds both).</param>
+public sealed record SplitRule(string Semantic, string Separator, string? ItemPattern = null, string? SectionHeading = null, string? FeatsSection = null);
 
 /// <summary>
 /// A layout map (<c>features/ddb-pdf-import.md</c> "Layout maps are data, not code"): full field names to semantic
@@ -29,7 +32,8 @@ public sealed record LayoutMap(
     IReadOnlyDictionary<string, FieldRule> Fields,
     string CheckboxOnState,
     IReadOnlyList<SplitRule> Splits,
-    bool Unverified = false);
+    bool Unverified = false,
+    bool MarkedWhenAnyText = false);
 
 /// <summary>The semantic fields a map may name.</summary>
 public static class DdbSemantics
@@ -55,6 +59,8 @@ public static class DdbSemantics
         .. Enum.GetValues<Ability>().Select(a => $"abilities.{FieldIds.Key(a)}"),
         .. Enum.GetValues<Ability>().Select(a => $"saves.{FieldIds.Key(a)}.proficient"),
         .. CharacterCalculator.Skills.Select(s => $"skills.{s.Key}.proficient"),
+        // S0: a list may also be spread over numbered text fields, read in order.
+        "features[n]", "feats[n]",
         "spells[n].name", "spells[n].prepared", "equipment[n].name", "equipment[n].quantity", "equipment[n].equipped",
         .. NumberIds.Select(id => $"numbers.{id}"),
         "play.currentHitPoints", "play.temporaryHitPoints", "play.deathSuccesses", "play.deathFailures", "play.inspiration",
@@ -117,6 +123,20 @@ public static class LayoutMaps
         {
             if (!DdbSemantics.Lists.Contains(split.Semantic) || string.IsNullOrEmpty(split.Separator))
                 problems.Add($"split {split.Semantic}: only a list semantic can be split, on a non-empty separator");
+            foreach (var (pattern, group) in new[] { (split.ItemPattern, "value"), (split.SectionHeading, "section"), (split.FeatsSection, null) })
+            {
+                if (pattern is null)
+                    continue;
+                try
+                {
+                    if (group is not null && !Compile(pattern).GetGroupNames().Contains(group))
+                        problems.Add($"split {split.Semantic}: the pattern needs the group {group}");
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+                {
+                    problems.Add($"split {split.Semantic}: a pattern does not compile without backtracking");
+                }
+            }
         }
         return problems;
     }
