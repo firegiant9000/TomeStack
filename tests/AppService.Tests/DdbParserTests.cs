@@ -239,6 +239,43 @@ public class DdbParserTests
     }
 
     [Fact]
+    public void A_section_carries_over_into_the_next_numbered_field_until_another_heading()
+    {
+        var map = Map(
+            new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture traits {n}"] = new("features[n]") },
+            [new("features", "\n", ItemPattern: @"^\*\s+(?<value>[^•]+?)\s*(?:•.*)?$", SectionHeading: @"^===\s*(?<section>.+?)\s*===$", FeatsSection: "^FEATS$")]);
+        FormField[] fields =
+        [
+            new("fixture name", "text", 1, "Testy McFixture"),
+            new("fixture traits 1", "text", 2, "* Fixture Bold Surge •\n=== FEATS ===\n* Fixture Keen Watcher •"),
+            new("fixture traits 2", "text", 2, "* Fixture Second Wind Feat •\nFixture description line."),
+            new("fixture traits 3", "text", 2, "=== FIXTURE TRAITS ===\n* Fixture Steady Breath •"),
+        ];
+
+        var sheet = DdbParser.Parse(map, fields);
+
+        Assert.Equal([Read<string>.Ok("Fixture Keen Watcher"), Read<string>.Ok("Fixture Second Wind Feat")], sheet.Feats);
+        Assert.Equal([Read<string>.Ok("Fixture Bold Surge"), Read<string>.Ok("Fixture Steady Breath")], sheet.Features);
+    }
+
+    [Fact]
+    public void A_list_keeps_at_most_MaxListItems_items_and_marks_the_rest_with_one_unreadable_item()
+    {
+        var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture feats"] = new("feats") }, [new("feats", "\n")]);
+        FormField[] fields =
+        [
+            new("fixture name", "text", 1, "Testy McFixture"),
+            new("fixture feats", "text", 2, string.Join('\n', Enumerable.Range(0, DdbParser.MaxListItems + 50).Select(i => $"Fixture Feat {i:D4}"))),
+        ];
+
+        var feats = DdbParser.Parse(map, fields).Feats;
+
+        Assert.Equal(DdbParser.MaxListItems + 1, feats.Count);
+        Assert.All(feats.Take(DdbParser.MaxListItems), f => Assert.Equal(ReadStatus.Ok, f.Status));
+        Assert.Equal(Read<string>.Unreadable, feats[^1]);
+    }
+
+    [Fact]
     public void The_map_check_finds_bad_split_patterns()
     {
         var map = Map(new Dictionary<string, FieldRule> { ["fixture name"] = new("name") },

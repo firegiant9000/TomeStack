@@ -71,7 +71,7 @@ internal sealed class ImportPlanner
     private void Classes(Read<IReadOnlyList<ClassText>> read)
     {
         if (read.Status == ReadStatus.Unreadable)
-            _rows.Add(new("classes", MatchKind.Class, "", MatchStatus.Unreadable, [], null, null));
+            _rows.Add(new("classes", MatchKind.Class, UnreadableLabel(MatchKind.Class), MatchStatus.Unreadable, [], null, null));
         if (read.Status != ReadStatus.Ok)
             return;
         var levels = new List<ClassLevel>();
@@ -127,11 +127,12 @@ internal sealed class ImportPlanner
             return;
         if (read.Status == ReadStatus.Unreadable)
         {
-            _rows.Add(new(rowId, kind, "", MatchStatus.Unreadable, [], null, null));
+            _rows.Add(new(rowId, kind, UnreadableLabel(kind), MatchStatus.Unreadable, [], null, null));
             return;
         }
-        var draft = Calculate();
-        MatchCandidate For(ContentOption o) => Candidate(o, PlaceContent(o, draft, out var inChoice), inChoice);
+        // Calculated only when an option needs placing: most names on a real sheet match nothing.
+        CharacterSheet? draft = null;
+        MatchCandidate For(ContentOption o) => Candidate(o, PlaceContent(o, draft ??= Calculate(), out var inChoice), inChoice);
         Place(rowId, kind, read.Value!, contentKind, [.. Lookup(contentKind, read.Value!).Select(For)], For);
     }
 
@@ -182,7 +183,7 @@ internal sealed class ImportPlanner
             var rowId = $"item:{i}";
             if (items[i].Status != ReadStatus.Ok)
             {
-                _rows.Add(new(rowId, MatchKind.Item, items[i].Value?.Name ?? "", MatchStatus.Unreadable, [], null, null));
+                _rows.Add(new(rowId, MatchKind.Item, items[i].Value?.Name ?? UnreadableLabel(MatchKind.Item), MatchStatus.Unreadable, [], null, null));
                 continue;
             }
             var item = items[i].Value!;
@@ -211,7 +212,7 @@ internal sealed class ImportPlanner
             var rowId = $"spell:{i}";
             if (spells[i].Status != ReadStatus.Ok)
             {
-                _rows.Add(new(rowId, MatchKind.Spell, spells[i].Value?.Name ?? "", MatchStatus.Unreadable, [], null, null));
+                _rows.Add(new(rowId, MatchKind.Spell, spells[i].Value?.Name ?? UnreadableLabel(MatchKind.Spell), MatchStatus.Unreadable, [], null, null));
                 continue;
             }
             var spell = spells[i].Value!;
@@ -242,9 +243,11 @@ internal sealed class ImportPlanner
                     note = "spell.duplicate";
                 else if (known.Count >= Character.MaxSpells)
                     (status, note) = (MatchStatus.NoPlace, "character.spells-too-many");
+                // A resolution's caster that is not a caster of this draft (its class left out, or never on the sheet).
+                else if (casters.FirstOrDefault(c => c.Content.ContentId == caster) is not { } entry)
+                    (status, note) = (MatchStatus.NoPlace, "spell.caster-not-found");
                 else
                 {
-                    var entry = casters.First(c => c.Content.ContentId == caster);
                     var level = _byContent.GetValueOrDefault(chosen.Reference.ContentId)?.Spell?.Level;
                     known.Add(new KnownSpell(caster, chosen.Reference, level == 0 || entry.Preparation == SpellPreparation.Known || (spell.Prepared ?? true)));
                     note ??= CampaignNote(chosen);
@@ -266,7 +269,7 @@ internal sealed class ImportPlanner
             var rowId = $"feature:{i}";
             if (features[i].Status != ReadStatus.Ok)
             {
-                _rows.Add(new(rowId, MatchKind.Feature, "", MatchStatus.Unreadable, [], null, null));
+                _rows.Add(new(rowId, MatchKind.Feature, UnreadableLabel(MatchKind.Feature), MatchStatus.Unreadable, [], null, null));
                 continue;
             }
             var name = features[i].Value!;
@@ -387,6 +390,9 @@ internal sealed class ImportPlanner
     private bool IsProficiencyGrant(TraceOrigin origin, string field) =>
         origin.Content is { } content && origin.EffectId is { } effect
         && _find(content)?.Effects.OfType<GrantEffect>().Any(g => g.Id == effect && g.Grant is GrantKind.Proficiency or GrantKind.Expertise && g.Target == field) == true;
+
+    /// <summary>The label of a row whose name could not be read: its kind only, never a value, so its gap note says what it was.</summary>
+    private static string UnreadableLabel(MatchKind kind) => $"Unreadable {kind.ToString().ToLowerInvariant()}";
 
     private static string? CampaignNote(MatchCandidate candidate) => candidate.AllowedInCampaign == false ? "campaign.source-not-allowed" : null;
 

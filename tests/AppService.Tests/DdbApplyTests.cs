@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using TomeStack.AppService.CharacterImport;
 using TomeStack.RulesCore;
 
@@ -63,15 +64,23 @@ public class DdbApplyTests
         var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Text("armorClass", "19").Text("feats", "Fixture Unknown Feat");
         var token = h.Read(sheet);
 
-        // The last write, the note on a field the sheet does not have, is refused, so nothing before it stays.
-        var refused = Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(token,
-            [new(FieldIds.ArmorClass, NumberAction.KeepSheet), new("fixture-no-such-field", NumberAction.Note)])));
+        // The last write, a gap note, fails in the database, so the character saved before it does not stay.
+        void Sql(string text)
+        {
+            using var connection = new SqliteConnection($"Data Source={h.Temp.App.Store.DatabasePath};Pooling=False");
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = text;
+            command.ExecuteNonQuery();
+        }
+        Sql("CREATE TRIGGER fixture_refuse_notes BEFORE INSERT ON gap_notes BEGIN SELECT RAISE(ABORT, 'fixture refusal'); END;");
+        Assert.Throws<SqliteException>(() => h.Temp.App.ApplyDdbImport(Apply(token, [new(FieldIds.ArmorClass, NumberAction.KeepSheet)])));
 
-        Assert.Equal("gap.target-not-found", refused.Problems[0].Code);
         Assert.Empty(h.Temp.App.ListCharacters());
         Assert.Equal("[]", Notes(h.Temp));
-        Assert.NotNull(h.Temp.App.DdbSessions.Peek(token)); // a refused apply does not spend the token
+        Assert.NotNull(h.Temp.App.DdbSessions.Peek(token)); // a failed apply does not spend the token
 
+        Sql("DROP TRIGGER fixture_refuse_notes;");
         var applied = h.Temp.App.ApplyDdbImport(Apply(token, [new(FieldIds.ArmorClass, NumberAction.KeepSheet)]));
         Assert.Equal((1, 1), (applied.Overrides, applied.GapNotes));
         Assert.Single(h.Temp.App.ListCharacters());
@@ -153,6 +162,34 @@ public class DdbApplyTests
 
         Assert.Equal((GapNote.MaxNotesPerCharacter, 5), (applied.GapNotes, applied.GapNotesNotStored));
         Assert.Equal(GapNote.MaxNotesPerCharacter, h.Temp.App.ListGapNotes(applied.CharacterId).Count);
+    }
+
+    [Fact]
+    public void A_noted_difference_is_stored_even_when_unmatched_items_fill_the_note_limit()
+    {
+        using var h = new DdbHarness();
+        var features = string.Join("\n", Enumerable.Range(0, GapNote.MaxNotesPerCharacter + 5).Select(i => $"Fixture Missing Feature {i:D3}"));
+        var token = h.Read(new SheetBuilder($"{h.Name(Barbarian)} 1").Text("armorClass", "19").Text("features", features));
+
+        var applied = h.Temp.App.ApplyDdbImport(Apply(token, [new(FieldIds.ArmorClass, NumberAction.Note)]));
+
+        // The field note takes its room first; the import notes fill the rest and the remainder is counted.
+        Assert.Equal((GapNote.MaxNotesPerCharacter, 6), (applied.GapNotes, applied.GapNotesNotStored));
+        Assert.Single(h.Temp.App.ListGapNotes(applied.CharacterId), n => n.Target.Kind == GapTargetKind.Field && n.Target.FieldId == FieldIds.ArmorClass);
+    }
+
+    [Fact]
+    public void A_note_asked_for_on_a_number_that_does_not_differ_or_is_not_compared_writes_nothing_and_refuses_nothing()
+    {
+        using var h = new DdbHarness();
+        // Initiative matches (Dexterity 14 gives +2); the spell attack is not on this sheet; the third field does not exist.
+        var token = h.Read(new SheetBuilder($"{h.Name(Barbarian)} 1").Score(Ability.Dex, 14).Text("initiative", "+2").Text("armorClass", "19"));
+
+        var applied = h.Temp.App.ApplyDdbImport(Apply(token,
+            [new(FieldIds.ArmorClass, NumberAction.Note), new(FieldIds.Initiative, NumberAction.Note), new("spellAttack", NumberAction.Note), new("fixture-no-such-field", NumberAction.Note)]));
+
+        Assert.Equal(1, applied.GapNotes);
+        Assert.Equal([FieldIds.ArmorClass], h.Temp.App.ListGapNotes(applied.CharacterId).Select(n => n.Target.FieldId));
     }
 
     [Fact]

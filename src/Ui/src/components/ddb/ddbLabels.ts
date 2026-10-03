@@ -39,6 +39,7 @@ export const noteLabels: Record<string, string> = {
   'skill.no-open-choice': 'No open choice offers this skill.',
   'spell.no-caster': 'No class or subclass of the character casts spells.',
   'spell.duplicate': 'Already listed for this caster; recorded once.',
+  'spell.caster-not-found': 'The caster picked for it is no longer one of the classes; pick again.',
   'character.spells-too-many': 'Past the 500 spells a character can hold.',
   'character.class-duplicate': 'The same class is listed twice.',
 };

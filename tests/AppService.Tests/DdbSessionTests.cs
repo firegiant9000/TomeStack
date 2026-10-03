@@ -213,6 +213,31 @@ public class DdbSessionTests
     }
 
     [Fact]
+    public void A_temporary_copy_another_program_still_holds_does_not_fail_the_read_and_is_left_for_the_sweep()
+    {
+        FileStream? held = null;
+        FakeFormReader reader = null!;
+        // Like a virus scanner: the copy is open without delete sharing when the read returns.
+        reader = new FakeFormReader(() =>
+        {
+            held = new FileStream(reader.Paths[^1], FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Sheet();
+        });
+        using var temp = new TempApp(formReader: reader);
+        try
+        {
+            var read = temp.App.ReadDdbSheetData("fixture.pdf", "%PDF-1.7 fixture"u8.ToArray());
+
+            Assert.NotNull(temp.App.DdbSessions.Peek(read.Token));
+            Assert.True(File.Exists(reader.Paths[^1]));
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+    }
+
+    [Fact]
     public void An_unmapped_field_never_reaches_the_token()
     {
         const string player = "Testy Player Sentinel";

@@ -152,6 +152,24 @@ it('shows Needs a choice rows first under the filter and requires a pick before 
   expect(client.ddbDiscard).not.toHaveBeenCalled();
 });
 
+it('drops open-choice answers when a match changes, since they were made on the earlier proposal', async () => {
+  const choice = { source: ref(3), sourceName: 'Fixture Wanderer', choiceId: 'fixture-skill', count: 1, options: [ref(4), ref(5)], selected: [], resolved: false };
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => ({ ...preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0')), openChoices: [choice] }));
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+
+  const [option] = await screen.findAllByRole('checkbox', { name: 'Option' });
+  await user.click(option as HTMLElement);
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ answers: [expect.objectContaining({ choiceId: 'fixture-skill' })] })));
+
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+
+  await waitFor(() =>
+    expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'spell:0' })], answers: [] })),
+  );
+});
+
 it('falls back to a file input when the host has no dialog', async () => {
   vi.mocked(client.ddbRead).mockRejectedValue(new TomeStackError({ code: 'unsupported', message: 'Fixture: no dialog.' }));
   const user = userEvent.setup();

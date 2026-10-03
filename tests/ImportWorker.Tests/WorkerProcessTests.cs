@@ -273,6 +273,25 @@ public class WorkerProcessTests
         Assert.DoesNotContain("Fixture value", refused.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("pdf.encrypted", "pdf.encrypted")]
+    [InlineData("ddb.no-form-fields", "ddb.no-form-fields")]
+    [InlineData("pdf.too-many-pages", "pdf.too-many-pages")]
+    [InlineData("fixture.made-up", "worker.protocol")]
+    [InlineData("worker.crashed", "worker.protocol")]
+    public async Task A_formFields_error_keeps_only_a_known_code_and_the_apps_own_message(string sent, string expected)
+    {
+        // A stand-in for a compromised worker: its code is checked against the reader's own, and its text is never shown.
+        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", $"{{\"type\":\"error\",\"code\":\"{sent}\",\"message\":\"Fixture worker text\"}}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal(expected, refused.Code);
+        Assert.DoesNotContain("Fixture worker text", refused.Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(refused.Message));
+    }
+
     [Fact]
     public async Task A_formFields_read_that_sends_no_line_for_the_timeout_is_stopped_with_worker_page_timeout()
     {

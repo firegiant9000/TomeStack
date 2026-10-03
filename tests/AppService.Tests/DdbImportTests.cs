@@ -312,6 +312,38 @@ public class DdbImportTests
     }
 
     [Fact]
+    public void A_spell_resolved_to_a_caster_that_is_not_a_caster_of_the_draft_is_NoPlace_not_an_error()
+    {
+        using var h = new DdbHarness();
+        var sheet = new SheetBuilder($"{Arcanist} 3 / {Chanter} 2").Spell("Fixture Veil");
+        var open = h.Preview(sheet, RulesFamilies.Srd521);
+        var chanter = Row(open, "spell:0").Candidates.Single(c => c.Placement.Caster == open.Character.Classes[1].Class.ContentId);
+
+        // The user picks the Chanter for the spell, then leaves the Chanter class out: the pick is stale.
+        var stale = h.Preview(sheet, RulesFamilies.Srd521, [new("spell:0", chanter.Reference, false, chanter.Placement.Caster), new("class:1", null, true)]);
+        Assert.Equal((MatchStatus.NoPlace, "spell.caster-not-found"), (Row(stale, "spell:0").Status, Row(stale, "spell:0").Note));
+        Assert.Empty(stale.Character.Spells);
+
+        // A caster id that was never on the sheet is treated the same way.
+        var crafted = h.Preview(sheet, RulesFamilies.Srd521, [new("spell:0", chanter.Reference, false, Guid.NewGuid())]);
+        Assert.Equal((MatchStatus.NoPlace, "spell.caster-not-found"), (Row(crafted, "spell:0").Status, Row(crafted, "spell:0").Note));
+    }
+
+    [Fact]
+    public void An_unreadable_row_has_a_label_that_names_its_kind_and_no_value()
+    {
+        using var h = new DdbHarness();
+        // More feats than a list keeps: the rest is one unreadable row.
+        var feats = string.Join("\n", Enumerable.Range(0, DdbParser.MaxListItems + 3).Select(i => $"Fixture Many Feat {i:D4}"));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 1").Text("feats", feats), RulesFamilies.Srd521);
+
+        var row = Row(preview, $"feat:{DdbParser.MaxListItems}");
+        Assert.Equal((MatchStatus.Unreadable, "Unreadable feat"), (row.Status, row.Label));
+        Assert.Equal(DdbParser.MaxListItems + 1, preview.Matches.Count(r => r.Kind == MatchKind.Feat));
+    }
+
+    [Fact]
     public void A_spell_on_no_casters_list_asks_with_every_caster()
     {
         using var h = new DdbHarness();
@@ -475,6 +507,22 @@ public class DdbImportTests
     }
 
     // ---- classes, numbers, report ----
+
+    [Fact]
+    public void An_open_choice_the_user_answered_stays_listed_so_the_answer_can_be_changed()
+    {
+        using var h = new DdbHarness();
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Text("background", h.Name(Soldier));
+        var open = h.Preview(sheet, RulesFamilies.Srd521);
+        var choice = open.OpenChoices.First(c => c.Source.ContentId == Soldier.ContentId);
+        var answer = new ChoiceSelection(choice.Source, choice.ChoiceId, [.. choice.Options.Take(choice.Count)]);
+
+        var answered = h.Temp.App.PreviewDdbImport(new(h.Read(sheet), RulesFamilies.Srd521, null, null, null, false, [answer]));
+
+        var kept = Assert.Single(answered.OpenChoices, c => c.Source == choice.Source && c.ChoiceId == choice.ChoiceId);
+        Assert.True(kept.Resolved);
+        Assert.Equal(answer.Selected, kept.Selected);
+    }
 
     [Fact]
     public void Unreadable_class_levels_give_no_classes_and_the_preview_cannot_apply()

@@ -39,8 +39,8 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
                 case "fields" when fields is null && message.Fields is { } read && WithinLimits(read):
                     fields = read;
                     break;
-                case "error":
-                    throw new ExtractionException(message.Code ?? "worker.failed", message.Message ?? "The import worker failed.");
+                case "error" when message.Code is { } code && KnownError(code) is { } text:
+                    throw new ExtractionException(code, text);
                 case "done" when fields is not null:
                     return fields;
                 default:
@@ -48,6 +48,24 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
             }
         }
     }
+
+    /// <summary>
+    /// The child is trusted with nothing: an error keeps its code only when it is one the reader can raise, with the app's
+    /// own message for it (built from the limits, never from the child's text). Any other code is <c>worker.protocol</c>.
+    /// </summary>
+    private string? KnownError(string code) => code switch
+    {
+        "pdf.missing" => "The PDF file is missing.",
+        "pdf.too-large" => $"The PDF is larger than {_limits.MaxBytes / (1024 * 1024)} MB.",
+        "pdf.not-a-pdf" => "The file is not a PDF.",
+        "pdf.encrypted" => "The PDF is encrypted. Remove the password in another program, then import it again.",
+        "pdf.unreadable" => "The PDF could not be read. It may be damaged.",
+        "pdf.too-many-pages" => $"The PDF has more than {_limits.MaxPages} pages, the most that can be read.",
+        "ddb.no-form-fields" => "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.",
+        "ddb.too-many-fields" => $"The PDF has more than {_form.MaxFields} form fields.",
+        "ddb.value-too-long" => $"The form fields hold more text than can be read (at most {_form.MaxValueChars} characters in one, {_form.MaxTotalValueChars} in all).",
+        _ => null,
+    };
 
     /// <summary>The child is trusted with nothing: the list must hold to the limits it was given.</summary>
     private bool WithinLimits(IReadOnlyList<FormField> fields)

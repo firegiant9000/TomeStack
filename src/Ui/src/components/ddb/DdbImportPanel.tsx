@@ -168,14 +168,19 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             campaignId={campaignId}
             resolutions={resolutions}
             answers={answers}
-            onResolve={(resolution) => setResolutions((all) => ({ ...all, [resolution.rowId]: resolution }))}
-            onClear={(rowId) =>
+            // A changed match changes what the open choices hold, so answers made on the earlier proposal are dropped.
+            onResolve={(resolution) => {
+              setResolutions((all) => ({ ...all, [resolution.rowId]: resolution }));
+              setAnswers([]);
+            }}
+            onClear={(rowId) => {
               setResolutions((all) => {
                 const next = { ...all };
                 delete next[rowId];
                 return next;
-              })
-            }
+              });
+              setAnswers([]);
+            }}
             onAnswer={(answer) => setAnswers((all) => [...all.filter((a) => !(a.choiceId === answer.choiceId && a.source.contentId === answer.source.contentId)), answer])}
             onError={onError}
           />

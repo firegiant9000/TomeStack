@@ -75,7 +75,14 @@ public sealed partial class TomeStackApp
         }
         finally
         {
-            File.Delete(path);
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Held for a moment by another program (a virus scanner): the sweep at the next start removes it.
+            }
         }
     }
 
@@ -135,14 +142,18 @@ public sealed partial class TomeStackApp
             .Where(m => m.Status is MatchStatus.NotFound or MatchStatus.NoPlace or MatchStatus.Unreadable && !string.IsNullOrWhiteSpace(m.Label))
             .Select(m => m.Label)
             .ToList();
-        var noted = (request.NumberChoices ?? []).Where(n => n?.Action == NumberAction.Note && n.Field is not null).Select(n => n.Field).Distinct(StringComparer.Ordinal).ToList();
+        // A note only on a number this proposal compares and finds different: a choice left from an earlier preview (its
+        // field gone, or now equal) writes nothing rather than refusing the apply or noting a difference that is not there.
+        var noteFields = (request.NumberChoices ?? []).Where(n => n?.Action == NumberAction.Note && n.Field is not null).Select(n => n.Field).ToHashSet(StringComparer.Ordinal);
+        var noted = proposal.Comparison.Where(n => n.Differs && noteFields.Contains(n.Field)).Select(n => n.Field).Distinct(StringComparer.Ordinal).ToList();
         var importNotes = 0;
         _store.InTransaction(() =>
         {
             SaveCharacter(character);
-            importNotes = AddImportGapNotes(character.Id, labels);
+            // The few noted differences first, so the import notes (counted past the limit, not stored) never crowd them out.
             foreach (var field in noted)
                 AddGapNote(new(character.Id, new(GapTargetKind.Field, FieldId: field), ImportFieldNoteText)); // refused: everything rolls back
+            importNotes = AddImportGapNotes(character.Id, labels);
         });
         DdbSessions.Take(request.Token);
         return new DdbApplyResult(character.Id, character.Overrides.Count, importNotes + noted.Count, labels.Count - importNotes, proposal.Report);
@@ -231,7 +242,10 @@ public sealed partial class TomeStackApp
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
-        return new DdbPreview(character, rows, [.. (final.Choices ?? []).Where(c => !c.Resolved)], comparison, plan, report, diagnostics, canApply);
+        // A choice the user answered stays listed once it is full, so step 3 can still change the answer.
+        var answeredChoices = (request.Answers ?? []).Where(a => a?.Source is not null).Select(a => (a.Source, a.ChoiceId)).ToHashSet();
+        var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || answeredChoices.Contains((c.Source, c.ChoiceId))).ToList();
+        return new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply);
     }
 
     /// <summary>D16d: only what <see cref="PlayState"/> has and the layout read.</summary>
@@ -251,18 +265,25 @@ public sealed partial class TomeStackApp
     /// <summary>At startup: a crash during <c>ddb.readData</c> can leave its temporary copy.</summary>
     private void DeleteLeftoverDdbFiles()
     {
-        if (!Directory.Exists(DdbTempFolder))
-            return;
-        foreach (var file in Directory.EnumerateFiles(DdbTempFolder, $"{DdbTempPrefix}*.pdf"))
+        try
         {
-            try
+            if (!Directory.Exists(DdbTempFolder))
+                return;
+            foreach (var file in Directory.EnumerateFiles(DdbTempFolder, $"{DdbTempPrefix}*.pdf"))
             {
-                File.Delete(file);
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Held by another program for a moment: the next start tries again.
+                }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Held by another program for a moment: the next start tries again.
-            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable tmp folder must not stop the app from opening; the next start tries again.
         }
     }
 
@@ -281,7 +302,7 @@ public sealed record NumberRow(string Field, string Label, int? Sheet, int Calcu
 public sealed record DdbReport(int Matched, int Chosen, int NotFound, int NoPlace, int Unreadable, int LeftOut, IReadOnlyList<string> NotBroughtOver, bool SameNameExists, bool FamilyMismatch);
 
 /// <param name="Character">The proposed character (a new id), as <c>ddb.apply</c> would save it. Nothing is stored.</param>
-/// <param name="OpenChoices">Choices the draft offers that the sheet did not settle; the builder can answer them later.</param>
+/// <param name="OpenChoices">Choices the draft offers that the sheet did not settle, and those the user answered (so the answer can change); the builder can answer them later.</param>
 /// <param name="CanApply">No row waits for a choice, the classes were read, and the character passes the save checks.</param>
 public sealed record DdbPreview(
     Character Character,

@@ -15,6 +15,12 @@ namespace TomeStack.AppService.CharacterImport;
 /// </summary>
 public static partial class DdbParser
 {
+    /// <summary>
+    /// The most items one list keeps (features, feats, a split spell or equipment list); the rest are one unreadable item.
+    /// Above the 500 gap notes a character can hold, so the import notes' limit is still what users meet first.
+    /// </summary>
+    public const int MaxListItems = 1_000;
+
     /// <summary>The layout whose required field names are all present (the one with the most, if several), or null.</summary>
     public static LayoutMap? Recognise(IReadOnlyList<FormField> fields)
     {
@@ -190,8 +196,9 @@ public static partial class DdbParser
         /// <summary>
         /// A list's items: its own field and then its numbered fields (<c>features[1]</c>, <c>features[2]</c>, …) in order,
         /// each split on the map's separator for it (one item when it has none). With the split's patterns, a heading line
-        /// starts a section, only lines the item pattern matches are items, and items in the feats section are returned
-        /// apart (<paramref name="semantic"/> <c>features</c> only).
+        /// starts a section, which carries on into the next numbered field (the fields are one text cut into boxes), only
+        /// lines the item pattern matches are items, and items in the feats section are returned apart (<paramref name="semantic"/>
+        /// <c>features</c> only). Each list keeps at most <see cref="MaxListItems"/> items.
         /// </summary>
         public (List<Read<string>> Items, List<Read<string>> Feats) ListItems(string semantic)
         {
@@ -200,6 +207,7 @@ public static partial class DdbParser
             var split = compiled.Map.Splits.FirstOrDefault(s => s.Semantic == semantic);
             var texts = new List<Read<string>> { Text(semantic) };
             texts.AddRange(Rows(semantic).Select(n => Text($"{semantic}[{n}]")));
+            string? section = null;
             foreach (var text in texts)
             {
                 if (text.Status == ReadStatus.Missing)
@@ -211,7 +219,6 @@ public static partial class DdbParser
                 }
                 try
                 {
-                    string? section = null;
                     foreach (var line in Split(text.Value!, semantic, null))
                     {
                         if (split?.SectionHeading is { } heading && compiled.Patterns[heading].Match(line) is { Success: true } start)
@@ -238,8 +245,12 @@ public static partial class DdbParser
                     items.Add(Read<string>.Unreadable);
                 }
             }
-            return (items, feats);
+            return (Capped(items), Capped(feats));
         }
+
+        /// <summary>At most <see cref="MaxListItems"/> items, then one unreadable item for the rest.</summary>
+        private static List<Read<string>> Capped(List<Read<string>> list) =>
+            list.Count <= MaxListItems ? list : [.. list.Take(MaxListItems), Read<string>.Unreadable];
 
         /// <summary>The class-and-level text: each part read, at most 20 parts, levels adding up to 1 to 20, or unreadable as a whole.</summary>
         public Read<IReadOnlyList<ClassText>> Classes()
