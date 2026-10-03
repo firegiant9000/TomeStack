@@ -45,7 +45,7 @@ public class DdbParserTests
             Fields = new Dictionary<string, FieldRule>
             {
                 ["fixture.a"] = new("fixture-unknown"),
-                ["fixture.b"] = new("name", "(unclosed"),
+                ["fixture.b"] = new("name", "^(unclosed$"),
                 ["fixture.c.{n}"] = new("species"),
                 ["fixture.d"] = new("spells[n].name"),
             },
@@ -189,6 +189,116 @@ public class DdbParserTests
     public void Class_levels_that_add_to_more_than_twenty_are_Unreadable_as_a_whole(string text)
     {
         Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", text)).Classes);
+    }
+
+    [Fact]
+    public void Class_levels_adding_to_exactly_twenty_read_and_more_than_twenty_parts_do_not()
+    {
+        var twenty = Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", "Fixture Fighter 12 / Fixture Mage 8")).Classes;
+        Assert.Equal([12, 8], twenty.Value!.Select(c => c.Level));
+
+        var parts = string.Join(" / ", Enumerable.Range(0, 21).Select(i => $"Fixture Class {(char)('A' + i)} 1"));
+        Assert.Equal(Read<IReadOnlyList<ClassText>>.Unreadable, Parse(With(Fields(FixtureSheets.Fields2014), "fixture.2014.classLevel", parts)).Classes);
+    }
+
+    // ---- review fixes: map checks, recognition, patterns, rows, printing ----
+
+    private static LayoutMap Custom(IReadOnlyList<string> required, IReadOnlyDictionary<string, FieldRule> fields, string id = "fixture-layout") =>
+        new(id, 1, RulesFamilies.Srd51, required, fields, "Yes", []);
+
+    [Fact]
+    public void Two_layouts_whose_required_names_are_all_present_in_equal_number_are_ambiguous_and_neither_is_picked()
+    {
+        var a = Custom(["fixture name", "fixture a"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-a");
+        var b = Custom(["fixture name", "fixture b"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-b");
+        var c = Custom(["fixture name", "fixture a", "fixture c"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-c");
+        FormField[] both = [new("fixture name", "text", 1, "Testy"), new("fixture a", "text", 1, ""), new("fixture b", "text", 1, "")];
+
+        Assert.Null(DdbParser.Recognise(both, [a, b]));
+        Assert.Equal("fixture-c", DdbParser.Recognise([.. both, new("fixture c", "text", 1, "")], [a, b, c])?.Id);
+        Assert.Equal("fixture-a", DdbParser.Recognise(both, [a])?.Id);
+    }
+
+    [Fact]
+    public void The_map_check_finds_a_semantic_named_twice_missing_fields_or_splits_and_an_unanchored_pattern()
+    {
+        var twice = Custom(["fixture name"], new Dictionary<string, FieldRule>
+        {
+            ["fixture name"] = new("name"), ["fixture other name"] = new("name"),
+            ["fixture a {n}"] = new("spells[n].name"), ["fixture b {n}"] = new("spells[n].name"),
+        });
+        Assert.Equal(2, LayoutMaps.Problems(twice).Count(p => p.Contains("more than one field", StringComparison.Ordinal)));
+
+        Assert.NotEmpty(LayoutMaps.Problems(twice with { Fields = null! }));
+        Assert.NotEmpty(LayoutMaps.Problems(twice with { Splits = null! }));
+        Assert.NotEmpty(LayoutMaps.Problems(twice with { Splits = [null!] }));
+
+        var unanchored = Custom(["fixture name"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name", "(?<value>Fixture)") });
+        Assert.Contains(LayoutMaps.Problems(unanchored), p => p.Contains("anchored", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Map_patterns_keep_their_value_group_or_whole_match_and_a_classLevels_pattern_reads_each_part()
+    {
+        var map = Custom(["fixture name"], new Dictionary<string, FieldRule>
+        {
+            ["fixture name"] = new("name", @"^Name: (?<value>.+)$"),
+            ["fixture species"] = new("species", @"^Fixture [A-Za-z]+$"),
+            ["fixture class"] = new("classLevels", @"^(?<name>Fixture [A-Za-z]+) L(?<level>\d{1,2})$"),
+            ["fixture background"] = new("background", @"^Background: (?<value>.+)$"),
+        });
+        FormField[] fields =
+        [
+            new("fixture name", "text", 1, "Name: Testy McFixture"),
+            new("fixture species", "text", 1, "Fixture Quickfoot"),
+            new("fixture class", "text", 1, "Fixture Fighter L3 / Fixture Mage L2"),
+            new("fixture background", "text", 1, "not the shape"),
+        ];
+
+        var sheet = DdbParser.Parse(map, fields);
+
+        Assert.Empty(LayoutMaps.Problems(map));
+        Assert.Equal(Read<string>.Ok("Testy McFixture"), sheet.Name);
+        Assert.Equal(Read<string>.Ok("Fixture Quickfoot"), sheet.Species);
+        Assert.Equal([new ClassText("Fixture Fighter", 3, null), new ClassText("Fixture Mage", 2, null)], sheet.Classes.Value!);
+        Assert.Equal(Read<string>.Unreadable, sheet.Background);
+    }
+
+    [Fact]
+    public void A_row_number_with_a_leading_zero_is_not_a_row()
+    {
+        var map = Custom(["fixture name"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name"), ["fixture spell {n}"] = new("spells[n].name") });
+        FormField[] fields = [new("fixture name", "text", 1, "Testy"), new("fixture spell 01", "text", 1, "Fixture Veil"), new("fixture spell 0", "text", 1, "Fixture Spark")];
+
+        Assert.Equal(["Fixture Spark"], DdbParser.Parse(map, fields).Spells.Select(s => s.Value!.Name));
+    }
+
+    [Fact]
+    public void An_unreadable_spent_hit_die_or_slot_is_counted_not_dropped_as_if_missing()
+    {
+        var map = Custom(["fixture name"], new Dictionary<string, FieldRule>
+        {
+            ["fixture name"] = new("name"), ["fixture d8"] = new("play.hitDiceSpent.d8"), ["fixture d10"] = new("play.hitDiceSpent.d10"), ["fixture slots 1"] = new("play.spellSlotsSpent.1"),
+        });
+        FormField[] fields = [new("fixture name", "text", 1, "Testy"), new("fixture d8", "text", 1, "abc"), new("fixture d10", "text", 1, "2"), new("fixture slots 1", "text", 1, "Fixture")];
+
+        var play = DdbParser.Parse(map, fields).Play;
+
+        Assert.Equal([new DieSpent(10, 2)], play.HitDiceSpent);
+        Assert.Empty(play.SpellSlotsSpent);
+        Assert.Equal(2, play.UnreadableSpent);
+    }
+
+    [Fact]
+    public void A_parsed_sheet_prints_statuses_and_counts_never_a_value()
+    {
+        var sheet = Parse(Fields(FixtureSheets.Fields2014));
+
+        string[] printed = [sheet.ToString(), sheet.Name.ToString(), sheet.Classes.Value![0].ToString(), sheet.Spells[0].Value!.ToString(), sheet.Items[0].Value!.ToString(), sheet.Play.ToString()];
+
+        Assert.All(printed, p => Assert.DoesNotContain("Fixture", p, StringComparison.Ordinal));
+        Assert.All(printed, p => Assert.DoesNotContain("Testy", p, StringComparison.Ordinal));
+        Assert.Contains("Ok", sheet.Name.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
