@@ -20,6 +20,10 @@ internal static class FormPdfWriter
     /// <param name="nested">Names with periods become a parent chain (<c>/Kids</c> and <c>/Parent</c>), each part its own partial name.</param>
     /// <param name="withJavaScript">The catalog gets an <c>/OpenAction</c> and an <c>/AA</c> JavaScript action.</param>
     /// <param name="javaScript">The script of those actions.</param>
+    /// <param name="withAcroForm">
+    /// False leaves <c>/AcroForm</c> out of the catalog, so the fields are reachable only as the pages' widget annotations
+    /// (the shape S0 found in a real export).
+    /// </param>
     public static byte[] Write(
         IReadOnlyList<FormSpec> fields,
         int pages = 2,
@@ -27,7 +31,8 @@ internal static class FormPdfWriter
         string onState = "Yes",
         bool withJavaScript = false,
         bool nested = false,
-        string javaScript = "app.alert('Fixture');")
+        string javaScript = "app.alert('Fixture');",
+        bool withAcroForm = true)
     {
         ArgumentNullException.ThrowIfNull(fields);
         // Object numbers: 1 catalog, 2 pages, 3.. one per page, then fields (and parents), then the script.
@@ -92,7 +97,8 @@ internal static class FormPdfWriter
             objects[js - 1] = $"<< /Type /Action /S /JavaScript /JS {Str(javaScript)} >>";
             script = $" /OpenAction {js} 0 R /AA << /WC {js} 0 R /DS {js} 0 R >>";
         }
-        objects[0] = $"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [{Refs(roots)}] /NeedAppearances {(needAppearances ? "true" : "false")} >>{script} >>";
+        var acroForm = withAcroForm ? $" /AcroForm << /Fields [{Refs(roots)}] /NeedAppearances {(needAppearances ? "true" : "false")} >>" : "";
+        objects[0] = $"<< /Type /Catalog /Pages 2 0 R{acroForm}{script} >>";
         objects[1] = $"<< /Type /Pages /Kids [{Refs(pageRefs)}] /Count {pages} >>";
         foreach (var page in pageRefs)
             objects[page - 1] = $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [{Refs(annots[page])}] >>";

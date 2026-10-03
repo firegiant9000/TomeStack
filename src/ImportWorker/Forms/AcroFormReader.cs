@@ -27,17 +27,21 @@ public static class AcroFormReader
             var pageCount = document.NumberOfPages;
             if (pageCount > limits.MaxPages)
                 throw new ExtractionException("pdf.too-many-pages", $"The PDF has {pageCount} pages; at most {limits.MaxPages} can be read.");
-            if (!document.TryGetForm(out var acroForm) || acroForm is null)
-                throw NoForm();
-            var terminals = Terminals(acroForm.Fields, form);
-            if (terminals.Count == 0)
+            // S0 finding (features/ddb-pdf-import.md): a real export had named widget fields on its pages but no /AcroForm in
+            // its catalog, so the form is also read from the pages' widget annotations when the catalog has none.
+            List<(string Name, Func<FormField> Read)> pending;
+            if (document.TryGetForm(out var acroForm) && acroForm is not null && Terminals(acroForm.Fields, form) is { Count: > 0 } terminals)
+                pending = [.. terminals.Select(t => (t.Name, (Func<FormField>)(() => ToField(document, t.Name, t.Field))))];
+            else
+                pending = Widgets(document, pageCount, form);
+            if (pending.Count == 0)
                 throw NoForm();
 
             var total = 0L;
-            var fields = new List<FormField>(terminals.Count);
-            foreach (var (name, field) in terminals)
+            var fields = new List<FormField>(pending.Count);
+            foreach (var (_, readField) in pending)
             {
-                var read = ToField(document, name, field);
+                var read = readField();
                 total += form.Chars(read) ?? throw TooLong(form);
                 if (total > form.MaxTotalValueChars)
                     throw new ExtractionException("ddb.value-too-long", $"The form fields hold more than {form.MaxTotalValueChars} characters in total.");
@@ -51,6 +55,103 @@ public static class AcroFormReader
             throw new ExtractionException("pdf.unreadable", "The PDF could not be read. It may be damaged.");
         }
     }
+
+    /// <summary>
+    /// The form fields of a PDF whose catalog has no <c>/AcroForm</c>: every widget annotation on every page, named by its
+    /// own <c>/T</c> and its parents' (period-joined), with the type, flags and value taken from the nearest dictionary in
+    /// that chain that has them (PDF field inheritance). Widgets sharing a full name are one field (a checkbox is on if any
+    /// of its widgets is). Stops at <see cref="FormLimits.MaxFields"/> and at a name over the per-value limit before any
+    /// value is read. A widget without a name is skipped: nothing could map it.
+    /// </summary>
+    private static List<(string Name, Func<FormField> Read)> Widgets(PdfDocument document, int pageCount, FormLimits form)
+    {
+        var byName = new Dictionary<string, (int Page, List<DictionaryToken> Widgets, List<DictionaryToken> Chain)>(StringComparer.Ordinal);
+        var order = new List<string>();
+        for (var page = 1; page <= pageCount; page++)
+        {
+            foreach (var annotation in document.GetPage(page).GetAnnotations())
+            {
+                if (annotation.Type != UglyToad.PdfPig.Annotations.AnnotationType.Widget)
+                    continue;
+                var chain = Chain(document, annotation.AnnotationDictionary);
+                var name = string.Join('.', chain.Select(d => Text(document, d.Data.GetValueOrDefault(NameToken.T.Data))).Where(t => !string.IsNullOrEmpty(t)).Reverse());
+                if (name.Length == 0)
+                    continue;
+                if (name.Length > form.MaxValueChars)
+                    throw TooLong(form);
+                if (byName.TryGetValue(name, out var known))
+                {
+                    known.Widgets.Add(annotation.AnnotationDictionary);
+                    continue;
+                }
+                if (order.Count == form.MaxFields)
+                    throw new ExtractionException("ddb.too-many-fields", $"The PDF has more than {form.MaxFields} form fields.");
+                byName[name] = (page, [annotation.AnnotationDictionary], chain);
+                order.Add(name);
+            }
+        }
+        return [.. order.Select(name => (name, (Func<FormField>)(() => WidgetField(document, name, byName[name]))))];
+    }
+
+    /// <summary>The widget and its parents, nearest first; at most 32 deep, and a loop stops the walk.</summary>
+    private static List<DictionaryToken> Chain(PdfDocument document, DictionaryToken widget)
+    {
+        var chain = new List<DictionaryToken> { widget };
+        var seen = new HashSet<DictionaryToken>(ReferenceEqualityComparer.Instance) { widget };
+        while (chain.Count < 32 && Resolve(document, chain[^1].Data.GetValueOrDefault(NameToken.Parent.Data)) is DictionaryToken parent && seen.Add(parent))
+            chain.Add(parent);
+        return chain;
+    }
+
+    private const int RadioFlag = 1 << 15;
+    private const int PushButtonFlag = 1 << 16;
+    private const int ComboFlag = 1 << 17;
+
+    private static FormField WidgetField(PdfDocument document, string name, (int Page, List<DictionaryToken> Widgets, List<DictionaryToken> Chain) field)
+    {
+        IToken? Inherited(string key) => field.Chain.Select(d => d.Data.GetValueOrDefault(key)).FirstOrDefault(t => t is not null) is { } token ? Resolve(document, token) : null;
+        var type = (Inherited(NameToken.Ft.Data) as NameToken)?.Data;
+        var flags = Inherited(NameToken.Ff.Data) is NumericToken number ? number.Int : 0;
+        var value = Inherited(NameToken.V.Data);
+        switch (type)
+        {
+            case "Tx":
+                return new(name, "text", field.Page, Value: Text(document, value));
+            case "Btn" when (flags & PushButtonFlag) != 0:
+                return new(name, "other", field.Page);
+            case "Btn":
+                var states = field.Widgets.Select(w => (Resolve(document, w.Data.GetValueOrDefault(NameToken.As.Data)) as NameToken)?.Data).ToList();
+                var on = states.Any(s => s is not null)
+                    ? states.Any(s => s is not null && s != "Off")
+                    : value is NameToken current && current.Data != "Off";
+                var onState = field.Widgets.Select(w => OnStateOf(document, w)).FirstOrDefault(s => s is not null)
+                    ?? (value is NameToken v && v.Data != "Off" ? v.Data : null);
+                return new(name, (flags & RadioFlag) != 0 ? "radio" : "checkbox", field.Page, Checked: on, OnState: onState);
+            case "Ch":
+                IReadOnlyList<string> selected = value is ArrayToken array
+                    ? [.. array.Data.Select(t => Text(document, t)).OfType<string>()]
+                    : Text(document, value) is { } one ? [one] : [];
+                return new(name, (flags & ComboFlag) != 0 ? "combo" : "list", field.Page, Selected: selected);
+            default:
+                return new(name, "other", field.Page);
+        }
+    }
+
+    /// <summary>A widget's normal appearance that is not <c>Off</c>.</summary>
+    private static string? OnStateOf(PdfDocument document, DictionaryToken widget) =>
+        Resolve(document, widget.Data.GetValueOrDefault(NameToken.Ap.Data)) is DictionaryToken appearance
+        && Resolve(document, appearance.Data.GetValueOrDefault(NameToken.N.Data)) is DictionaryToken normal
+            ? normal.Data.Keys.FirstOrDefault(k => k != "Off")
+            : null;
+
+    /// <summary>A string, hex string or name as text; anything else is no text.</summary>
+    private static string? Text(PdfDocument document, IToken? token) => Resolve(document, token) switch
+    {
+        StringToken s => s.Data,
+        HexToken h => h.Data,
+        NameToken n => n.Data,
+        _ => null,
+    };
 
     private static ExtractionException NoForm() =>
         new("ddb.no-form-fields", "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.");

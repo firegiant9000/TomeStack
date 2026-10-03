@@ -82,6 +82,56 @@ public class FormReaderTests
         Assert.Null(field.Value);
     }
 
+    // ---- S0 finding: a real export had 874 named widget fields but no /AcroForm in its catalog ----
+
+    private static readonly FormSpec[] WidgetSheet =
+    [
+        new("fixture.name", "Testy McFixture"),
+        new("fixture.class", "Fixture Arcanist 3", Page: 1),
+        new("fixture.empty"),
+        new("fixture.inspired", Checked: true, Page: 2),
+        new("fixture.rested", Checked: false, Page: 2),
+        new("fixture.ünïcode", "Fixture Ünïcode – value"),
+        new("fixture.choice", Selected: ["Fixture Option"]),
+    ];
+
+    [Fact]
+    public void A_form_whose_catalog_has_no_AcroForm_is_read_from_its_page_widgets_exactly_as_with_one()
+    {
+        var withForm = Read(Write(WidgetSheet));
+        var widgetsOnly = Read(Write(WidgetSheet, withAcroForm: false));
+
+        // Widgets come in page order, the form in its own; the parser keys by name, so the order does not matter.
+        static IEnumerable<FormField> ByName(IEnumerable<FormField> fields) => fields.Select(f => f with { Selected = null }).OrderBy(f => f.Name, StringComparer.Ordinal);
+        Assert.Equal(ByName(withForm), ByName(widgetsOnly));
+        Assert.Equal(["Fixture Option"], widgetsOnly.Single(f => f.Name == "fixture.choice").Selected!);
+    }
+
+    [Fact]
+    public void Nested_widget_fields_without_AcroForm_get_the_period_joined_full_name_from_their_parents()
+    {
+        var fields = Read(Write(
+        [
+            new("fixture.spells.0.name", "Fixture Frost Ring"),
+            new("fixture.spells.0.prepared", Checked: true),
+            new("fixture.top", "Fixture Top"),
+        ], nested: true, withAcroForm: false));
+
+        Assert.Equal(["fixture.spells.0.name", "fixture.spells.0.prepared", "fixture.top"], fields.Select(f => f.Name));
+        Assert.True(fields[1].Checked);
+    }
+
+    [Fact]
+    public void The_limits_hold_for_widget_fields_too()
+    {
+        var tooLong = new string('F', 50);
+        var pdf = Write([new("fixture.a", tooLong), new("fixture.b", tooLong), new("fixture.c", tooLong)], withAcroForm: false);
+
+        Assert.Equal("ddb.too-many-fields", Refused(pdf, form: new FormLimits { MaxFields = 2, MaxValueChars = 10 }).Code);
+        Assert.Equal("ddb.value-too-long", Refused(pdf, form: new FormLimits { MaxValueChars = 10 }).Code);
+        Assert.Equal("ddb.value-too-long", Refused(pdf, form: new FormLimits { MaxTotalValueChars = 100 }).Code);
+    }
+
     [Fact]
     public void A_pdf_without_a_form_is_refused_with_ddb_no_form_fields()
     {
