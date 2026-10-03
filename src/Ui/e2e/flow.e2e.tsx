@@ -1880,3 +1880,81 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   expect(within(characters).getByRole('button', { name: /E2E Archivist/ })).toBeTruthy();
   await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Archive…' })));
 });
+
+// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md S4) ----
+// The committed sheet is invented: "Testy McFixture", an original fixture Arcanist 3 / Chanter 2 whose spell "Fixture Veil"
+// is on both casters' lists. The DevHost has no Open dialog, so the file input sends the bytes (ddb.readData).
+
+const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
+
+async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
+  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import from D&D Beyond PDF…' });
+  await waitFor(() => expect(start.disabled).toBe(false));
+  await user.click(start);
+}
+
+async function readDdbSheet(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('D&D Beyond PDF file'), new File([ddbSheet()], 'fixture-ddb-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Arcanist 3 / Fixture Chanter 2', {}, { timeout: 30000 })).toBeTruthy();
+}
+
+it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an override and creates the character', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+  await readDdbSheet(user);
+
+  await user.click(screen.getByRole('button', { name: 'Next: rules' }));
+  // The 2014-style layout suggests SRD 5.1; the user could pick the other family.
+  expect(screen.getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  const veil = await within(matches).findByRole('combobox', { name: 'Match for Fixture Veil' });
+  await user.click(within(matches).getByRole('radio', { name: 'Needs a choice' }));
+  expect(within(matches).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Fixture Veil']);
+  const chanter = within(veil).getAllByRole<HTMLOptionElement>('option').find((o) => /Fixture Chanter/.test(o.textContent ?? ''))!;
+  await user.selectOptions(veil, chanter);
+  await waitFor(() => expect(within(matches).queryAllByRole('rowheader')).toHaveLength(0));
+  // Not installed (the background, a feat, two items, the features): listed, and kept as gap notes.
+  await user.click(within(matches).getByRole('radio', { name: 'Not found' }));
+  expect(within(matches).getByRole('rowheader', { name: 'Fixture Archivist' })).toBeTruthy();
+
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  const armorClass = await screen.findByRole('radiogroup', { name: 'Armor Class' });
+  await user.click(within(armorClass).getByRole('radio', { name: "Keep the sheet's number" }));
+  await user.click(screen.getByRole('button', { name: 'Next: summary' }));
+
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the D&D Beyond sheet: 1 override\(s\), \d+ gap note\(s\)/);
+  const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
+  expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
+});
+
+it('cancelling the D&D Beyond import at each step leaves the character list unchanged', async () => {
+  const user = userEvent.setup();
+  const before = (await client.listCharacters()).map((c) => c.id).sort();
+  render(<App />);
+  const next = ['Next: rules', 'Next: matches', 'Next: numbers', 'Next: summary'];
+
+  for (let step = 1; step <= 5; step++) {
+    await startDdbImport(user);
+    await readDdbSheet(user);
+    for (const label of next.slice(0, step - 1)) {
+      const button = await screen.findByRole<HTMLButtonElement>('button', { name: label });
+      await waitFor(() => expect(button.disabled).toBe(false));
+      await user.click(button);
+    }
+    await screen.findByRole('heading', { name: ['Choose the sheet', 'Rules and campaign', 'Matches', 'Numbers', 'Create'][step - 1] });
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Choose PDF…' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Create' })).toBeNull());
+    await expectStatus(/Import cancelled\. Nothing was saved\./);
+  }
+
+  expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
+});
