@@ -141,6 +141,11 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             json TEXT NOT NULL
         );
         """),
+        // v10 (character-sheet import S4, gap-note schema v2, owner decision 2026-10-03): no table changes. Import gap
+        // notes are stored like any note, and a build that knows only v1 notes would open the folder, then fail on every
+        // read of one (the strict enum reader), full backups included. The number alone makes such a build refuse the
+        // folder cleanly (NewerDatabaseException). Forward-only, with the usual single copy first.
+        new("SELECT 1;"),
     ];
 
     private readonly SqliteConnection _connection;

@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Text.Json;
 using TomeStack.ImportWorker.Extraction;
+using TomeStack.ImportWorker.Forms;
 
 namespace TomeStack.ImportWorker.Tests;
 
@@ -164,5 +166,173 @@ public class WorkerProcessTests
         var exit = await WorkerMain.RunAsync(new StringReader("{ not json"), output, null, CancellationToken.None);
         Assert.Equal(3, exit);
         Assert.Contains("worker.bad-request", output.ToString(), StringComparison.Ordinal);
+    }
+
+    // The character-sheet importer's reads (features/ddb-pdf-import.md S1): the same child, a second request kind.
+
+    private static readonly FormPdfWriter.FormSpec[] FixtureForm =
+    [
+        new("fixture.name", "Testy McFixture"),
+        new("fixture.inspired", Checked: true, Page: 2),
+    ];
+
+    private static async Task<(int Exit, List<WorkerMessage> Lines)> RunInProcess(WorkerRequest request)
+    {
+        var output = new StringWriter();
+        var exit = await WorkerMain.RunAsync(new StringReader(JsonSerializer.Serialize(request, WorkerJson.Options)), output, null, CancellationToken.None);
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonSerializer.Deserialize<WorkerMessage>(l, WorkerJson.Options)!).ToList();
+        return (exit, lines);
+    }
+
+    /// <summary>
+    /// A stand-in worker that ignores its request and writes <paramref name="lines"/> (a batch file that types a file), for
+    /// what the real worker never sends.
+    /// </summary>
+    private static FixturePdfs.TempFile FakeWorker(params string[] lines) => FakeWorker(stallSeconds: 0, lines);
+
+    /// <summary>A stand-in worker that writes <paramref name="lines"/>, then sends nothing for about <paramref name="stallSeconds"/> seconds.</summary>
+    private static FixturePdfs.TempFile FakeWorker(int stallSeconds, params string[] lines)
+    {
+        var stall = stallSeconds > 0 ? $"@ping -n {stallSeconds + 1} 127.0.0.1 >nul\r\n" : "";
+        var script = FixturePdfs.Write(System.Text.Encoding.ASCII.GetBytes("@type \"%~dp0lines.txt\"\r\n" + stall), "fake-worker.cmd");
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(script.Path)!, "lines.txt"), string.Join('\n', lines) + "\n");
+        return script;
+    }
+
+    [Fact]
+    public async Task A_formFields_request_gets_worker_fields_and_done_through_the_child_process()
+    {
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "formFields"));
+        Assert.Equal(0, exit);
+        Assert.Equal(["worker", "fields", "done"], lines.Select(l => l.Type));
+
+        var inWorker = await new WorkerFormReader(Worker).ReadAsync(file.Path, CancellationToken.None);
+        Assert.Equal(AcroFormReader.Read(file.Path, WorkerFormReader.DefaultLimits, FormLimits.Default), inWorker);
+        Assert.Equal(new FormField("fixture.inspired", "checkbox", 2, Checked: true, OnState: "Yes"), inWorker[1]);
+    }
+
+    [Fact]
+    public async Task A_formFields_request_on_a_file_without_a_form_gets_an_error_line_and_exit_code_2()
+    {
+        using var file = FixturePdfs.Write(FixturePdfs.Pages(1));
+
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "formFields"));
+        Assert.Equal(2, exit);
+        Assert.Equal(["worker", "error"], lines.Select(l => l.Type));
+        Assert.Equal("ddb.no-form-fields", lines[1].Code);
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker).ReadAsync(file.Path, CancellationToken.None));
+        Assert.Equal("ddb.no-form-fields", refused.Code);
+    }
+
+    [Fact]
+    public async Task A_formFields_request_uses_the_form_limits_it_carries()
+    {
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker, form: new FormLimits { MaxFields = 1 }).ReadAsync(file.Path, CancellationToken.None));
+        Assert.Equal("ddb.too-many-fields", refused.Code);
+    }
+
+    [Fact]
+    public async Task An_unknown_request_kind_is_a_bad_request()
+    {
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "fixture-kind"));
+        Assert.Equal(3, exit);
+        Assert.Equal("worker.bad-request", Assert.Single(lines).Code);
+    }
+
+    [Fact]
+    public async Task A_fields_line_longer_than_the_form_limit_is_refused_before_it_is_held()
+    {
+        // The real worker stops at the limits, so a stand-in sends what a compromised one could.
+        var form = new FormLimits { MaxFields = 1, MaxTotalValueChars = 10 };
+        var value = new string('F', FormLimits.MaxFieldsMessageChars(form));
+        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", $"{{\"type\":\"fields\",\"fields\":[{{\"name\":\"fixture.a\",\"type\":\"text\",\"value\":\"{value}\"}}]}}", "{\"type\":\"done\"}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, form: form).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal("worker.message-too-large", refused.Code);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"page\",\"page\":{\"pageNumber\":1,\"text\":\"\",\"fromOcr\":false}}")]
+    [InlineData("{\"type\":\"done\"}")]
+    [InlineData("{\"type\":\"fields\"}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\"},{\"name\":\"fixture.b\",\"type\":\"text\"}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"value\":\"Fixture value over ten\"}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[]}\n{\"type\":\"fields\",\"fields\":[]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"fixture-kind\"}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"page\":-5}]}")]
+    [InlineData("{\"type\":\"fields\",\"fields\":[{\"name\":\"fixture.a\",\"type\":\"text\",\"page\":51}]}")]
+    public async Task A_formFields_worker_that_sends_anything_but_worker_fields_done_or_error_is_a_protocol_error(string sent)
+    {
+        var form = new FormLimits { MaxFields = 1, MaxValueChars = 10 };
+        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", sent, "{\"type\":\"done\"}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, form: form).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal("worker.protocol", refused.Code);
+        Assert.DoesNotContain("Fixture value", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("pdf.encrypted", "pdf.encrypted", false)]
+    [InlineData("ddb.no-form-fields", "ddb.no-form-fields", false)]
+    [InlineData("pdf.too-many-pages", "pdf.too-many-pages", false)]
+    [InlineData("fixture.made-up", "worker.protocol", false)]
+    [InlineData("worker.crashed", "worker.protocol", false)]
+    [InlineData("fixture.made-up", "worker.protocol", true)]
+    [InlineData("pdf.encrypted", "pdf.encrypted", true)]
+    [InlineData("worker.bad-request", "worker.bad-request", true)]
+    public async Task A_formFields_error_keeps_only_a_known_code_and_the_apps_own_message(string sent, string expected, bool asFirstLine)
+    {
+        // A stand-in for a compromised worker: its code is checked against the reader's own, and its text is never shown,
+        // whether the error comes after its hello or in place of it.
+        var error = $"{{\"type\":\"error\",\"code\":\"{sent}\",\"message\":\"Fixture worker text\"}}";
+        using var fake = asFirstLine ? FakeWorker(error) : FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", error);
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal(expected, refused.Code);
+        Assert.DoesNotContain("Fixture worker text", refused.Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(refused.Message));
+    }
+
+    [Fact]
+    public async Task A_formFields_read_that_sends_no_line_for_the_timeout_is_stopped_with_worker_page_timeout()
+    {
+        // A stand-in sends its hello, then stalls: the timeout that fires is the one on the fields line, not the hello's.
+        using var fake = FakeWorker(stallSeconds: 8, "{\"type\":\"worker\",\"heapLimit\":1}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+        var limits = WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromSeconds(3) };
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, limits).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal("worker.page-timeout", refused.Code);
+    }
+
+    [Fact]
+    public async Task A_formFields_read_with_a_missing_worker_is_reported()
+    {
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Path.Combine(AppContext.BaseDirectory, "no-such-worker.exe")).ReadAsync(file.Path, CancellationToken.None));
+        Assert.Equal("worker.missing", refused.Code);
+    }
+
+    [Fact]
+    public void The_form_reader_defaults_are_the_sheet_limits()
+    {
+        // features/ddb-pdf-import.md "Limits": 20 MB, 50 pages, 30 s per read; 2,000 fields, 20,000 characters per value, 1 MB in total.
+        var limits = WorkerFormReader.DefaultLimits;
+        Assert.Equal((20L << 20, 50, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30)), (limits.MaxBytes, limits.MaxPages, limits.PageTimeout, limits.RunTimeout));
+        // Sheet-sized memory: a parse of a few pages never needs the book limits (1 GiB heap).
+        Assert.Equal((256L << 20, 512L << 20), (limits.HeapHardLimit, limits.MaxWorkingSet));
+        Assert.Equal((2_000, 20_000, 1_048_576), (FormLimits.Default.MaxFields, FormLimits.Default.MaxValueChars, FormLimits.Default.MaxTotalValueChars));
     }
 }

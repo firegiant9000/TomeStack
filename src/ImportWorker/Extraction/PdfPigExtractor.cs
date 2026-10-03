@@ -23,7 +23,7 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(scope);
-        CheckFile(path);
+        CheckFile(path, _limits);
         using var document = Open(path);
         var pageCount = document.NumberOfPages;
         if (pageCount > _limits.MaxPages)
@@ -38,20 +38,32 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
         }
     }
 
-    private void CheckFile(string path)
+    /// <summary>Refuses a missing file, one over <see cref="ExtractionLimits.MaxBytes"/>, and one without a PDF header, before PdfPig reads it.</summary>
+    internal static void CheckFile(string path, ExtractionLimits limits)
     {
         var info = new FileInfo(path);
         if (!info.Exists)
             throw new ExtractionException("pdf.missing", "The PDF file is missing.");
-        if (info.Length > _limits.MaxBytes)
-            throw new ExtractionException("pdf.too-large", $"The PDF is larger than {_limits.MaxBytes / (1024 * 1024)} MB.");
+        if (info.Length > limits.MaxBytes)
+            throw new ExtractionException("pdf.too-large", $"The PDF is larger than {limits.MaxBytes / (1024 * 1024)} MB.");
         Span<byte> header = stackalloc byte[5];
-        using var stream = File.OpenRead(path);
-        if (stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) < header.Length || !header.SequenceEqual("%PDF-"u8))
+        int read;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Locked by another program or not readable: a code, never the path the exception names.
+            throw new ExtractionException("pdf.unreadable", "The PDF could not be opened. Close it in other programs and check you can read it, then try again.");
+        }
+        if (read < header.Length || !header.SequenceEqual("%PDF-"u8))
             throw new ExtractionException("pdf.not-a-pdf", "The file is not a PDF.");
     }
 
-    private static PdfDocument Open(string path)
+    /// <summary>Opens the document, mapping every PdfPig failure to a code (<c>pdf.encrypted</c>, <c>pdf.unreadable</c>).</summary>
+    internal static PdfDocument Open(string path)
     {
         try
         {

@@ -4,14 +4,15 @@ using TomeStack.RulesCore;
 
 namespace TomeStack.AppService;
 
-public enum GapTargetKind { Feature, Field }
+public enum GapTargetKind { Feature, Field, Import }
 
 public enum GapNoteStatus { Open, Resolved }
 
 /// <summary>
-/// What a gap note is about: a feature (content id, and optionally one of its effects) or a calculated field.
-/// <paramref name="Label"/> is the feature or field name when the note was written, so the note stays readable after the
-/// feature is removed or updated. The service fills it in.
+/// What a gap note is about: a feature (content id, and optionally one of its effects), a calculated field, or (schema v2,
+/// D16b) an item of a character-sheet import that TomeStack could not match or place, named by <paramref name="Label"/>
+/// alone. <paramref name="Label"/> is the feature or field name when the note was written, so the note stays readable
+/// after the feature is removed or updated. The service fills it in; only the importer writes import targets.
 /// </summary>
 public sealed record GapTarget(GapTargetKind Kind, Guid? ContentId = null, string? EffectId = null, string? FieldId = null, string? Label = null);
 
@@ -23,13 +24,21 @@ public sealed record GapTarget(GapTargetKind Kind, Guid? ContentId = null, strin
 /// </summary>
 public sealed record GapNote
 {
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>
+    /// v2 (D16b) adds the <see cref="GapTargetKind.Import"/> target. A note is written at the lowest version that holds it:
+    /// a feature or field note stays v1, so a backup without an import note is still read by builds that know only v1.
+    /// </summary>
+    public const int CurrentSchemaVersion = 2;
+
+    /// <summary>The version a note with an <see cref="GapTargetKind.Import"/> target needs.</summary>
+    public const int ImportTargetSchemaVersion = 2;
+
     public const int MaxTextLength = 2_000;
     public const int MaxLabelLength = 200;
     public const int MaxNotesPerCharacter = 500;
 
     public required Guid Id { get; init; }
-    public int SchemaVersion { get; init; } = CurrentSchemaVersion;
+    public int SchemaVersion { get; init; } = 1;
     public required Guid CharacterId { get; init; }
     public required GapTarget Target { get; init; }
     public required string Text { get; init; }
@@ -50,6 +59,12 @@ public sealed record GapNote
             problems.Add(new("gap.text-required", $"A gap note needs text of 1 to {MaxTextLength} characters."));
         if (Target is null || !Enum.IsDefined(Target.Kind))
             problems.Add(new("gap.target-required", "A gap note is about a feature or a field."));
+        else if (Target.Kind == GapTargetKind.Import)
+        {
+            if (SchemaVersion < ImportTargetSchemaVersion || string.IsNullOrWhiteSpace(Target.Label) || Target.Label.Length > MaxLabelLength
+                || Target.ContentId is not null || Target.EffectId is not null || Target.FieldId is not null)
+                problems.Add(new("gap.target-invalid", $"An import note (schema v{ImportTargetSchemaVersion}) names only a label of 1 to {MaxLabelLength} characters."));
+        }
         else if (Target.Kind == GapTargetKind.Feature ? Target.ContentId is null || Target.FieldId is not null : string.IsNullOrWhiteSpace(Target.FieldId) || Target.ContentId is not null || Target.EffectId is not null)
             problems.Add(new("gap.target-invalid", "A feature note names a content id (and optionally an effect); a field note names only a field."));
         else if (Target.Label is { Length: > MaxLabelLength } || Target.EffectId is { Length: > MaxLabelLength } || Target.FieldId is { Length: > MaxLabelLength })
@@ -116,6 +131,9 @@ public sealed partial class TomeStackApp
             CreatedAt = now,
             UpdatedAt = now,
         };
+        // Checked before Validate: the note above is built at schema 1, which Validate rejects for an import target.
+        if (request.Target?.Kind == GapTargetKind.Import)
+            throw new AppValidationException([new("gap.target-invalid", "Import notes are written only by a character-sheet import.")]);
         var problems = note.Validate().ToList();
         if (problems.Count == 0)
         {
@@ -156,6 +174,38 @@ public sealed partial class TomeStackApp
         if (_store.FindGapNote(request.Id) is null)
             throw new AppValidationException([new("gap.not-found", $"Gap note {request.Id} does not exist.")]);
         _store.InTransaction(() => _store.DeleteGapNote(request.Id));
+    }
+
+    /// <summary>The text of every import note (never a value from the sheet: the label names the item).</summary>
+    public const string ImportNoteText = "Not brought over from the D&D Beyond sheet: TomeStack had no match or no place for it.";
+
+    /// <summary>
+    /// D16b: one <see cref="GapTargetKind.Import"/> note per unmatched item, written by <c>ddb.apply</c> inside its
+    /// transaction (the caller's). At most <see cref="GapNote.MaxNotesPerCharacter"/> notes per character are kept; the rest
+    /// are counted by the caller, not stored. Labels are cut to <see cref="GapNote.MaxLabelLength"/>. Returns how many were stored.
+    /// </summary>
+    internal int AddImportGapNotes(Guid characterId, IReadOnlyList<string> labels)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+        var room = Math.Max(0, GapNote.MaxNotesPerCharacter - _store.ListGapNotes(characterId).Count);
+        var now = _time.GetUtcNow();
+        var stored = 0;
+        foreach (var label in labels.Where(l => !string.IsNullOrWhiteSpace(l)).Take(room))
+        {
+            var trimmed = label.Trim();
+            _store.SaveGapNote(new GapNote
+            {
+                Id = Guid.NewGuid(),
+                SchemaVersion = GapNote.ImportTargetSchemaVersion,
+                CharacterId = characterId,
+                Target = new(GapTargetKind.Import, Label: trimmed[..Math.Min(trimmed.Length, GapNote.MaxLabelLength)]),
+                Text = ImportNoteText,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            stored++;
+        }
+        return stored;
     }
 
     private static string? LabelOf(CharacterSheet sheet, GapTarget target)

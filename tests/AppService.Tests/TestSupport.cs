@@ -17,18 +17,23 @@ internal sealed class TempApp : IDisposable
 
     private readonly ImportWorker.IDocumentExtractor _extractor;
 
-    private readonly DateTimeOffset _now;
+    private readonly TimeProvider _time;
+
+    private readonly ImportWorker.Forms.IFormReader? _formReader;
 
     // No sync roots: tests must not depend on this machine's OneDrive or registry (DataFolderTests covers discovery).
     // Imports extract in this process with PdfPig (the worker process itself is tested in ImportWorker.Tests).
     /// <param name="folder">A folder name inside the random test folder (M6 slice 3: a data folder named after a sentinel user).</param>
     /// <param name="now">The app's clock (default <see cref="Now"/>); a later one shows a restore keeps the original times.</param>
-    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null)
+    /// <param name="formReader">Character-sheet import: the form reader (a fake, so no worker runs).</param>
+    /// <param name="time">A clock that can move (token expiry); overrides <paramref name="now"/>.</param>
+    public TempApp(ImportWorker.IDocumentExtractor? extractor = null, string? folder = null, DateTimeOffset? now = null, ImportWorker.Forms.IFormReader? formReader = null, TimeProvider? time = null)
     {
-        _now = now ?? Now;
+        _time = time ?? new FixedTime(now ?? Now);
+        _formReader = formReader;
         _directory = Path.Combine(Path.GetTempPath(), "tomestack-tests", Guid.NewGuid().ToString("N"), folder ?? "data");
         _extractor = extractor ?? new ImportWorker.Extraction.PdfPigExtractor();
-        App = TomeStackApp.Open(_directory, new FixedTime(_now), syncRoots: [], devFixtures: true, extractor: _extractor);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
     }
 
     public TomeStackApp App { get; private set; }
@@ -42,7 +47,7 @@ internal sealed class TempApp : IDisposable
         if (!_closed)
             App.Dispose();
         _closed = false;
-        App = TomeStackApp.Open(_directory, new FixedTime(_now), syncRoots: [], devFixtures: true, extractor: _extractor);
+        App = TomeStackApp.Open(_directory, _time, syncRoots: [], devFixtures: true, extractor: _extractor, formReader: _formReader);
     }
 
     /// <summary>Closes the app and releases the folder, keeping it for inspection until <see cref="Dispose"/> (T6 drill).</summary>

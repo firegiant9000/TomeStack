@@ -36,6 +36,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
+        "ddb.read", "ddb.readData", "ddb.preview", "ddb.apply", "ddb.discard",
     ];
 
     /// <summary>
@@ -115,6 +116,11 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachment" => (object?)app.GetAttachment(Payload<SourceIdPayload>(payload).SourceId) ?? new { attached = false },
         "source.attachPdf" => AttachPdf(Payload<AttachPayload>(payload)),
         "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
+        "ddb.read" => ReadDdbSheet(),
+        "ddb.readData" => ReadDdbSheetData(Payload<DdbDataPayload>(payload)),
+        "ddb.preview" => app.PreviewDdbImport(Payload<DdbPreviewRequest>(payload)),
+        "ddb.apply" => app.ApplyDdbImport(Payload<DdbApplyRequest>(payload)),
+        "ddb.discard" => new { discarded = app.DiscardDdbSheet(Payload<DdbTokenPayload>(payload).Token) },
         "source.detachPreview" => app.PreviewDetach(Payload<SourceIdPayload>(payload).SourceId),
         "source.detach" => Detach(Payload<DetachPayload>(payload)),
         "source.openPage" => OpenPage(Payload<OpenPagePayload>(payload)),
@@ -240,6 +246,24 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private AttachmentInfo AttachPdfData(AttachDataPayload payload) =>
         app.AttachPdf(payload.SourceId, payload.FileName, Convert.FromBase64String(payload.Base64));
+
+    /// <summary>
+    /// Character-sheet import: the native Open dialog picks the sheet, and its path never crosses the bridge (ADR-006), as
+    /// for <c>source.attachPdf</c>. The worker reads it there; nothing is copied or kept.
+    /// </summary>
+    private object ReadDdbSheet()
+    {
+        if (host is null || !host.CanOpenFiles)
+            throw new AppValidationException([new("host.unsupported", "Choosing a character sheet needs the desktop app's Open dialog.")], "unsupported");
+        var path = host.ChooseOpenFile("D&D Beyond character sheet", ".pdf");
+        if (path is null)
+            return new { chosen = false };
+        var read = app.ReadDdbSheet(path);
+        return new { chosen = true, read.Token, read.Layout, read.SuggestedFamily, read.Summary };
+    }
+
+    private DdbReadResult ReadDdbSheetData(DdbDataPayload payload) =>
+        app.ReadDdbSheetData(payload.FileName ?? "", Convert.FromBase64String(payload.Data ?? throw new JsonException("ddb.readData needs data.")));
 
     private object Detach(DetachPayload payload)
     {
@@ -574,6 +598,10 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record AttachPayload(Guid SourceId, AttachmentMode Mode = AttachmentMode.Managed);
 
     private sealed record AttachDataPayload(Guid SourceId, string FileName, string Base64);
+
+    private sealed record DdbDataPayload(string? FileName, string? Data);
+
+    private sealed record DdbTokenPayload(Guid Token);
 
     /// <param name="Confirm">Must be true: the UI shows <c>source.detachPreview</c> first (SPEC S-04).</param>
     private sealed record DetachPayload(Guid SourceId, bool Confirm = false);

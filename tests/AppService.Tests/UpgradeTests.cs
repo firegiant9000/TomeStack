@@ -47,6 +47,34 @@ public class UpgradeTests
     }
 
     [Fact]
+    public void Database_10_changes_no_table_so_a_folder_that_may_hold_import_notes_is_refused_by_a_version_9_build()
+    {
+        // Import gap notes (gap-note v2) are stored like any note; a build that knows only v1 notes would open the folder
+        // and then fail on every read of them. Version 10 changes nothing but the number, so such a build refuses it.
+        Assert.Equal(10, SqliteStore.LatestSchemaVersion);
+        var directory = NewDirectory();
+        Directory.CreateDirectory(directory);
+        var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
+        string Tables()
+        {
+            using var connection = new SqliteConnection($"Data Source={database};Mode=ReadOnly;Pooling=False");
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT group_concat(type || ':' || name || ':' || ifnull(sql, ''), '|') FROM (SELECT * FROM sqlite_master ORDER BY name);";
+            return (string)command.ExecuteScalar()!;
+        }
+        using (var version9 = new SqliteStore(database, SqliteStore.Migrations[..9]))
+            Assert.Equal(9, version9.SchemaVersion);
+        var before = Tables();
+
+        using (var current = new SqliteStore(database))
+            Assert.Equal(10, current.SchemaVersion);
+
+        Assert.Equal(before, Tables());
+        Assert.Throws<NewerDatabaseException>(() => new SqliteStore(database, SqliteStore.Migrations[..9]));
+    }
+
+    [Fact]
     public void Backup_includes_committed_data_still_in_the_wal_after_a_crash()
     {
         var live = NewDirectory();

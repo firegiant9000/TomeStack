@@ -12,6 +12,12 @@ using TomeStack.AppService.Diagnostics;
 if (args.Length > 0 && args[0] is "--drill-report" or "--drill-compare")
     return RunDrill(args);
 
+// Character-sheet import S0 (docs/features/ddb-pdf-import.md), also read-only and before any host:
+//   --ddb-fields <pdf> [--out <fields.json>]   the form-field inventory (names, types, pages, lengths; never a value).
+//   The console gets counts only; the JSON, which has the names, belongs in tests/RulesFixtures/local/ddb-import/.
+if (args.Length > 0 && args[0] == "--ddb-fields")
+    return RunFieldInventory(args);
+
 // Development-only transport: exposes the same CommandDispatcher as the WebView2 bridge over
 // 127.0.0.1 so the UI can run under Vite with hot reload. Never binds other interfaces.
 // Each launch writes a fresh random token to <data dir>/devhost.token; the Vite proxy attaches it.
@@ -97,6 +103,46 @@ static int RunDrill(string[] args)
     {
         // The message names no path: the drill record is public.
         Console.Error.WriteLine($"{ex.GetType().Name}: {(ex is DataFolderInUseException ? ex.Message : "the file or folder could not be read")}");
+        return 2;
+    }
+}
+
+static int RunFieldInventory(string[] args)
+{
+    if (args.Length is not (2 or 4) || (args.Length == 4 && args[2] != "--out"))
+    {
+        Console.Error.WriteLine("Usage: --ddb-fields <pdf> [--out <fields.json>]");
+        return 2;
+    }
+    var stage = "checked";
+    try
+    {
+        // The output is resolved, checked and its folder created before the PDF is read.
+        string? output = null;
+        if (args.Length == 4)
+        {
+            output = FormInventory.PrepareOutput(args[1], args[3], out var outsideLocal);
+            if (outsideLocal)
+                Console.Error.WriteLine("Warning: --out is outside tests/RulesFixtures/local/, which is the only gitignored place for an inventory of a real export.");
+        }
+        stage = "read";
+        var report = FormInventory.Read(Path.Combine(AppContext.BaseDirectory, TomeStackApp.WorkerFileName), args[1]);
+        Console.Write(FormInventory.Format(report));
+        stage = "written";
+        if (output is not null)
+            File.WriteAllText(output, FormInventory.ToJson(report));
+        return 0;
+    }
+    catch (TomeStack.ImportWorker.ExtractionException ex)
+    {
+        // A code and the reader's message, which never quotes the document.
+        Console.Error.WriteLine($"{ex.Code}: {ex.Message}");
+        return 2;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.ComponentModel.Win32Exception)
+    {
+        // No path in the message: a path can name the owner's files.
+        Console.Error.WriteLine(ex is ArgumentException { ParamName: "outPath" } ? ex.Message.Split(" (Parameter", 2)[0] : $"{ex.GetType().Name}: a file could not be {stage}");
         return 2;
     }
 }

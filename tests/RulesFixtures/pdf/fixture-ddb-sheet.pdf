@@ -1,0 +1,165 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 19 0 R 20 0 R 21 0 R 22 0 R 23 0 R 24 0 R 25 0 R 26 0 R 27 0 R 28 0 R 29 0 R 30 0 R 31 0 R 32 0 R 33 0 R 34 0 R 35 0 R 36 0 R 37 0 R 38 0 R 39 0 R] /NeedAppearances true >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 19 0 R 20 0 R 21 0 R 22 0 R 23 0 R 25 0 R] >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [24 0 R 26 0 R 27 0 R 28 0 R 29 0 R 30 0 R 31 0 R] >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [32 0 R 33 0 R 34 0 R 35 0 R 36 0 R 37 0 R 38 0 R 39 0 R] >>
+endobj
+6 0 obj
+<< /Type /Annot /Subtype /Widget /T (CharacterName) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (Testy McFixture) >>
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Widget /T (CLASS  LEVEL) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (Fixture Arcanist 3 / Fixture Chanter 2) >>
+endobj
+8 0 obj
+<< /Type /Annot /Subtype /Widget /T (RACE) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Quickfoot) >>
+endobj
+9 0 obj
+<< /Type /Annot /Subtype /Widget /T (BACKGROUND) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (Fixture Archivist) >>
+endobj
+10 0 obj
+<< /Type /Annot /Subtype /Widget /T (STR) /P 3 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (16) >>
+endobj
+11 0 obj
+<< /Type /Annot /Subtype /Widget /T (DEX) /P 3 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (14) >>
+endobj
+12 0 obj
+<< /Type /Annot /Subtype /Widget /T (CON) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (15) >>
+endobj
+13 0 obj
+<< /Type /Annot /Subtype /Widget /T (INT) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (10) >>
+endobj
+14 0 obj
+<< /Type /Annot /Subtype /Widget /T (WIS) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (12) >>
+endobj
+15 0 obj
+<< /Type /Annot /Subtype /Widget /T (CHA) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (8) >>
+endobj
+16 0 obj
+<< /Type /Annot /Subtype /Widget /T (StrProf) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (P) >>
+endobj
+17 0 obj
+<< /Type /Annot /Subtype /Widget /T (DexProf) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V () >>
+endobj
+18 0 obj
+<< /Type /Annot /Subtype /Widget /T (AthleticsProf) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (P) >>
+endobj
+19 0 obj
+<< /Type /Annot /Subtype /Widget /T (MaxHP) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (28) >>
+endobj
+20 0 obj
+<< /Type /Annot /Subtype /Widget /T (Inspiration) /P 3 0 R /Rect [250 600 290 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
+endobj
+21 0 obj
+<< /Type /Annot /Subtype /Widget /T (ProfBonus) /P 3 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (+2) >>
+endobj
+22 0 obj
+<< /Type /Annot /Subtype /Widget /T (AC) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (16) >>
+endobj
+23 0 obj
+<< /Type /Annot /Subtype /Widget /T (Init) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (+2) >>
+endobj
+24 0 obj
+<< /Type /Annot /Subtype /Widget /T (FeaturesTraits1) /P 4 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V <FEFF003D003D003D002000460049005800540055005200450020004600450041005400550052004500530020003D003D003D000A002A00200046006900780074007500720065002000530074006500610064007900200042007200650061007400680020202200200046005800200031000A0041006E00200069006E00760065006E0074006500640020006C0069006E00650020006F0066002000660069007800740075007200650020006400650073006300720069007000740069006F006E002E000A002A0020004600690078007400750072006500200042006F006C00640020005300750072006700650020202200200046005800200031000A0041006E00200069006E00760065006E0074006500640020006C0069006E00650020006F0066002000660069007800740075007200650020006400650073006300720069007000740069006F006E002E000A000A003D003D003D0020004600450041005400530020003D003D003D000A002A002000460069007800740075007200650020004B00650065006E0020005700610074006300680065007200202022> >>
+endobj
+25 0 obj
+<< /Type /Annot /Subtype /Widget /T (CurrentHP) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (21) >>
+endobj
+26 0 obj
+<< /Type /Annot /Subtype /Widget /T (SpellName0) /P 4 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (Fixture Frost Ring) >>
+endobj
+27 0 obj
+<< /Type /Annot /Subtype /Widget /T (Prepared0) /P 4 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (P) >>
+endobj
+28 0 obj
+<< /Type /Annot /Subtype /Widget /T (SpellName1) /P 4 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Veil) >>
+endobj
+29 0 obj
+<< /Type /Annot /Subtype /Widget /T (Prepared1) /P 4 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V () >>
+endobj
+30 0 obj
+<< /Type /Annot /Subtype /Widget /T (SpellName2) /P 4 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (Fixture Mending Word) >>
+endobj
+31 0 obj
+<< /Type /Annot /Subtype /Widget /T (Prepared2) /P 4 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (P) >>
+endobj
+32 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Name0) /P 5 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (Fixture Longblade) >>
+endobj
+33 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Qty0) /P 5 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (1) >>
+endobj
+34 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Name1) /P 5 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (Fixture Padded Jerkin) >>
+endobj
+35 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Qty1) /P 5 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (1) >>
+endobj
+36 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Name2) /P 5 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (Fixture Rope Coil) >>
+endobj
+37 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Qty2) /P 5 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (2) >>
+endobj
+38 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Name3) /P 5 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Lantern) >>
+endobj
+39 0 obj
+<< /Type /Annot /Subtype /Widget /T (Eq Qty3) /P 5 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (1) >>
+endobj
+xref
+0 40
+0000000000 65535 f 
+0000000009 00000 n 
+0000000340 00000 n 
+0000000409 00000 n 
+0000000636 00000 n 
+0000000783 00000 n 
+0000000937 00000 n 
+0000001072 00000 n 
+0000001231 00000 n 
+0000001361 00000 n 
+0000001497 00000 n 
+0000001612 00000 n 
+0000001727 00000 n 
+0000001842 00000 n 
+0000001957 00000 n 
+0000002072 00000 n 
+0000002186 00000 n 
+0000002302 00000 n 
+0000002419 00000 n 
+0000002543 00000 n 
+0000002660 00000 n 
+0000002834 00000 n 
+0000002955 00000 n 
+0000003069 00000 n 
+0000003185 00000 n 
+0000004134 00000 n 
+0000004255 00000 n 
+0000004391 00000 n 
+0000004511 00000 n 
+0000004643 00000 n 
+0000004762 00000 n 
+0000004902 00000 n 
+0000005022 00000 n 
+0000005157 00000 n 
+0000005275 00000 n 
+0000005414 00000 n 
+0000005532 00000 n 
+0000005665 00000 n 
+0000005783 00000 n 
+0000005916 00000 n 
+trailer
+<< /Size 40 /Root 1 0 R >>
+startxref
+6034
+%%EOF

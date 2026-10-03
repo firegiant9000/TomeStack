@@ -812,7 +812,8 @@ export interface ExportPreview {
   gapNotes: number;
 }
 
-export type GapTargetKind = 'feature' | 'field';
+/** `import` (gap-note schema v2, D16b): an item a D&D Beyond sheet import could not match or place, named by its label. Only the importer writes it. */
+export type GapTargetKind = 'feature' | 'field' | 'import';
 
 export type GapNoteStatus = 'open' | 'resolved';
 
@@ -1356,4 +1357,137 @@ export interface LibraryRestoreResult {
   /** Relative to the data folder: the database as it was before the restore, when anything was replaced. */
   safetyCopy?: string;
   warnings: Diagnostic[];
+}
+
+// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md) ----
+
+export interface DdbSummary {
+  /** The character's name as read; shown, never logged. */
+  name: string;
+  /** "Name level (subclass)" joined with " / ", or empty when the classes could not be read. */
+  classText: string;
+  features: number;
+  spells: number;
+  items: number;
+}
+
+/** `ddb.read` and `ddb.readData`: the sheet is held in memory under the one-use token. `chosen` is false when the dialog was cancelled. */
+export interface DdbReadResult {
+  chosen?: boolean;
+  token: string;
+  layout: string;
+  suggestedFamily?: RulesFamilyId;
+  summary: DdbSummary;
+}
+
+export type MatchKind = 'species' | 'background' | 'class' | 'subclass' | 'feat' | 'skill' | 'spell' | 'item' | 'feature';
+export type MatchStatus = 'matched' | 'choose' | 'notFound' | 'noPlace' | 'unreadable' | 'leftOut';
+export type PlacementKind = 'pin' | 'choice' | 'class' | 'spell' | 'equipment' | 'none' | 'nowhere';
+
+export interface Placement {
+  kind: PlacementKind;
+  choiceSource?: ContentReference;
+  choiceId?: string;
+  /** For a spell: the content id of the class or subclass that casts it. */
+  caster?: string;
+}
+
+export interface MatchCandidate {
+  reference: ContentReference;
+  name: string;
+  sourceTitle: string;
+  families: RulesFamilyId[];
+  /** With a campaign: whether it allows the option's source. */
+  allowedInCampaign?: boolean;
+  placement: Placement;
+}
+
+export interface MatchRow {
+  /** Stable per sheet item: `species`, `class:0`, `class:0:subclass`, `skill:athletics`, `spell:3`, … */
+  rowId: string;
+  kind: MatchKind;
+  /** The sheet's text. */
+  label: string;
+  status: MatchStatus;
+  candidates: MatchCandidate[];
+  chosen?: MatchCandidate;
+  /** A code: why a row has no place, or a warning on a match. */
+  note?: string;
+}
+
+export interface Resolution {
+  rowId: string;
+  chosen?: ContentReference;
+  leaveOut: boolean;
+  caster?: string;
+}
+
+export type NumberAction = 'useTomeStack' | 'keepSheet' | 'note';
+
+export interface NumberChoice {
+  field: string;
+  action: NumberAction;
+}
+
+export interface NumberRow {
+  field: string;
+  label: string;
+  sheet?: number;
+  calculated: number;
+  differs: boolean;
+}
+
+export interface AbilityNote {
+  ability: Ability;
+  code: string;
+  message: string;
+}
+
+export interface AbilityPlan {
+  proposedBase: AbilityScores;
+  notes: AbilityNote[];
+}
+
+export interface DdbReport {
+  matched: number;
+  chosen: number;
+  notFound: number;
+  noPlace: number;
+  unreadable: number;
+  leftOut: number;
+  /** Codes of what the import leaves out by design (`currency`, `speed`, `playState`, …). */
+  notBroughtOver: string[];
+  sameNameExists: boolean;
+  familyMismatch: boolean;
+}
+
+export interface DdbPreviewRequest {
+  token: string;
+  rulesFamily: RulesFamilyId;
+  campaignId?: string;
+  resolutions?: Resolution[];
+  numberChoices?: NumberChoice[];
+  includePlayState: boolean;
+  /** Open choices answered in the matches step (a 2024 background's ability scores). */
+  answers?: ChoiceSelection[];
+}
+
+/** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */
+export interface DdbPreview {
+  character: Character;
+  matches: MatchRow[];
+  openChoices: ChoiceStatus[];
+  comparison: NumberRow[];
+  abilityPlan: AbilityPlan;
+  report: DdbReport;
+  diagnostics: Diagnostic[];
+  canApply: boolean;
+}
+
+export interface DdbApplyResult {
+  characterId: string;
+  overrides: number;
+  gapNotes: number;
+  gapNotesNotStored: number;
+  report: DdbReport;
 }

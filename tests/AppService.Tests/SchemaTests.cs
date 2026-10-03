@@ -91,6 +91,7 @@ public class SchemaTests
         var sheet = temp.App.GetCharacter(ids[0]).Sheet;
         temp.App.AddGapNote(new(ids[0], new(GapTargetKind.Field, FieldId: FieldIds.ArmorClass), "Field note."));
         temp.App.AddGapNote(new(ids[0], new(GapTargetKind.Feature, sheet.Features![0].Content.ContentId), "Feature note."));
+        temp.App.Store.InTransaction(() => temp.App.AddImportGapNotes(ids[0], ["Fixture Lost Feat"])); // a v2 note (D16b)
         var package = temp.App.ExportCharacters(ids).Content;
 
         using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
@@ -103,7 +104,7 @@ public class SchemaTests
             AssertValid(kind, document.RootElement, entry.FullName);
         }
         Assert.Contains(zip.Entries, e => e.FullName.StartsWith("content/", StringComparison.Ordinal));
-        Assert.Equal(2, zip.Entries.Count(e => e.FullName.StartsWith("gaps/", StringComparison.Ordinal)));
+        Assert.Equal(3, zip.Entries.Count(e => e.FullName.StartsWith("gaps/", StringComparison.Ordinal)));
     }
 
     [Fact]

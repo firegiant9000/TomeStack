@@ -36,7 +36,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `sheet-export.v1.schema.json` | The sheet export model v1 that extension exports and adapters read (ADR-011, ADR-007 item 11): an allowlist, filtered by purpose | `formatVersion` |
 | `export-foundry-dnd5e.6.0.5.schema.json` | Exactly the Foundry VTT Actor subset the dnd5e adapter writes, pinned to dnd5e 6.0.5 with Foundry 14.367 (ADR-012; [export-adapters.md](../features/export-adapters.md)). A new target version gets a new file | none (named by the target version) |
 | `attachment.v1.schema.json` | `attachments/<attachmentId>.json` in a full library backup: a managed or linked PDF record (ADR-005, M2.1) | none (v1) |
-| `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Current | `schemaVersion` |
+| `gap-note.v1.schema.json` | A session gap note (M3 B3; [gap-notes.md](../features/gap-notes.md)). Still written for every note about a feature or a field, so a backup without an import note stays readable by older builds | `schemaVersion` |
+| `gap-note.v2.schema.json` | v2 adds target kind `import` (D16b): an unmatched item of a character-sheet import, with only a label (`features/ddb-pdf-import.md`). Written only for import notes; an older build refuses it with `package.invalid-json`, not `package.schema-unsupported`: it reads the entry before its version, and the unknown kind `import` fails that read. Current | `schemaVersion` |
 | `campaign.v1.schema.json` | `Campaign` (SPEC P-01): rules family, allowed sources, house rules, and (M6 slice 2) the optional `pendingSources`, which changes how no existing field is read, so it stays v1. Current | `schemaVersion` |
 
 The files are named `<kind>.v<version>.schema.json`. The test picks the schema from the document's own version field.

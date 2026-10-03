@@ -190,6 +190,93 @@ public class GapNoteTests
         Assert.False(File.Exists(log) && File.ReadAllText(log).Contains(Secret, StringComparison.Ordinal));
     }
 
+    // ---- gap-note schema v2 (D16b): the import target ----
+
+    private static GapNote ImportNote(int schemaVersion = 2, string? label = "Fixture Lost Feat", Guid? contentId = null, string? fieldId = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        SchemaVersion = schemaVersion,
+        CharacterId = Guid.NewGuid(),
+        Target = new(GapTargetKind.Import, ContentId: contentId, FieldId: fieldId, Label: label),
+        Text = "Not brought over.",
+    };
+
+    [Fact]
+    public void A_v1_note_reads_unchanged_and_an_ordinary_note_is_still_written_as_v1()
+    {
+        // A note is written at the lowest version that holds it, so a backup without an import note stays readable by
+        // older builds (risk R10 is only "a backup with an import note").
+        const string v1 = """{"id":"9d1e4c4e-1f0b-4a51-9a4b-0c1d2e3f4a5b","schemaVersion":1,"characterId":"0f9e8d7c-6b5a-4c3d-9e2f-1a0b9c8d7e6f","target":{"kind":"field","fieldId":"armorClass","label":"Armor Class"},"text":"Fixture note.","status":"open","createdAt":"2026-09-24T12:00:00+00:00","updatedAt":"2026-09-24T12:00:00+00:00"}""";
+        var read = JsonSerializer.Deserialize<GapNote>(v1, RulesJson.Options)!;
+        Assert.Empty(read.Validate());
+        Assert.Equal(1, read.SchemaVersion);
+        Assert.Equal(JsonNode.Parse(v1)!.ToJsonString(), JsonNode.Parse(JsonSerializer.Serialize(read, RulesJson.Compact))!.ToJsonString());
+
+        var (temp, view) = Brenna();
+        using var _ = temp;
+        Assert.Equal(1, temp.App.AddGapNote(new(view.Character.Id, FeatureOf(view), "Fixture note.")).SchemaVersion);
+        Assert.Equal(2, GapNote.CurrentSchemaVersion);
+    }
+
+    [Fact]
+    public void An_import_target_needs_only_a_label_and_is_refused_from_gap_add()
+    {
+        Assert.Empty(ImportNote().Validate());
+        Assert.Contains(ImportNote(contentId: Guid.NewGuid()).Validate(), p => p.Code == "gap.target-invalid");
+        Assert.Contains(ImportNote(fieldId: FieldIds.ArmorClass).Validate(), p => p.Code == "gap.target-invalid");
+        Assert.Contains(ImportNote(label: " ").Validate(), p => p.Code == "gap.target-invalid");
+        Assert.Contains(ImportNote(label: new string('x', GapNote.MaxLabelLength + 1)).Validate(), p => p.Code == "gap.target-invalid");
+        Assert.Contains(ImportNote(schemaVersion: 1).Validate(), p => p.Code == "gap.target-invalid");
+        Assert.Contains(ImportNote(schemaVersion: 3).Validate(), p => p.Code == "gap.schema-unsupported");
+
+        var (temp, view) = Brenna();
+        using var _ = temp;
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.AddGapNote(new(view.Character.Id, new(GapTargetKind.Import, Label: "Fixture Lost Feat"), Secret)));
+        Assert.Equal("gap.target-invalid", refused.Problems[0].Code);
+        Assert.Equal("Import notes are written only by a character-sheet import.", refused.Problems[0].Message);
+        Assert.Empty(temp.App.ListGapNotes(view.Character.Id));
+    }
+
+    [Fact]
+    public void An_import_note_lists_resolves_and_deletes_like_the_others()
+    {
+        var (temp, view) = Brenna();
+        using var _ = temp;
+        var id = view.Character.Id;
+
+        temp.App.Store.InTransaction(() => temp.App.AddImportGapNotes(id, ["Fixture Lost Feat", new string('y', GapNote.MaxLabelLength + 20)]));
+
+        var notes = temp.App.ListGapNotes(id);
+        Assert.Equal(2, notes.Count);
+        Assert.All(notes, n => Assert.Equal((GapTargetKind.Import, 2), (n.Target.Kind, n.SchemaVersion)));
+        Assert.Contains(notes, n => n.Target.Label == "Fixture Lost Feat");
+        Assert.All(notes, n => Assert.True(n.Target.Label!.Length <= GapNote.MaxLabelLength));
+        Assert.Equal(2, temp.App.ListAllGapNotes().Count);
+        var first = notes[0];
+        Assert.Equal(GapNoteStatus.Resolved, temp.App.SetGapNoteStatus(new(first.Id, GapNoteStatus.Resolved)).Status);
+        temp.App.DeleteGapNote(new(first.Id, Confirm: true));
+        Assert.Single(temp.App.ListGapNotes(id));
+    }
+
+    [Fact]
+    public void A_backup_with_an_import_note_round_trips_and_a_share_still_has_none()
+    {
+        var (temp, view) = Brenna();
+        using var _ = temp;
+        var id = view.Character.Id;
+        temp.App.Store.InTransaction(() => temp.App.AddImportGapNotes(id, ["Fixture Lost Feat"]));
+        var note = temp.App.ListGapNotes(id).Single();
+
+        var share = temp.App.ExportCharacters([id], ExportPurpose.Share);
+        Assert.DoesNotContain(share.Manifest.Entries, e => e.Path.StartsWith("gaps/", StringComparison.Ordinal));
+
+        var backup = temp.App.ExportCharacters([id], ExportPurpose.Backup);
+        using var clean = new TempApp();
+        Assert.True(clean.App.PreviewImport(backup.Content).CanApply);
+        clean.App.ApplyImport(backup.Content);
+        Assert.Equal(TempApp.Json(note), TempApp.Json(clean.App.ListGapNotes(id).Single()));
+    }
+
     private static string EntireText(byte[] package)
     {
         using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);

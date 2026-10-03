@@ -1,0 +1,241 @@
+{
+  "id": "ddb-2014",
+  "version": 1,
+  "suggestedFamily": "srd-5.1",
+  "unverified": false,
+  "markValues": ["P", "E"],
+  "required": [
+    "CharacterName",
+    "CLASS  LEVEL",
+    "FeaturesTraits1",
+    "Eq Name0"
+  ],
+  "checkboxOnState": "Yes",
+  "fields": {
+    "CharacterName": {
+      "semantic": "name"
+    },
+    "CLASS  LEVEL": {
+      "semantic": "classLevels"
+    },
+    "RACE": {
+      "semantic": "species"
+    },
+    "BACKGROUND": {
+      "semantic": "background"
+    },
+    "STR": {
+      "semantic": "abilities.str"
+    },
+    "StrProf": {
+      "semantic": "saves.str.proficient"
+    },
+    "ST Strength": {
+      "semantic": "numbers.save.str"
+    },
+    "DEX": {
+      "semantic": "abilities.dex"
+    },
+    "DexProf": {
+      "semantic": "saves.dex.proficient"
+    },
+    "ST Dexterity": {
+      "semantic": "numbers.save.dex"
+    },
+    "CON": {
+      "semantic": "abilities.con"
+    },
+    "ConProf": {
+      "semantic": "saves.con.proficient"
+    },
+    "ST Constitution": {
+      "semantic": "numbers.save.con"
+    },
+    "INT": {
+      "semantic": "abilities.int"
+    },
+    "IntProf": {
+      "semantic": "saves.int.proficient"
+    },
+    "ST Intelligence": {
+      "semantic": "numbers.save.int"
+    },
+    "WIS": {
+      "semantic": "abilities.wis"
+    },
+    "WisProf": {
+      "semantic": "saves.wis.proficient"
+    },
+    "ST Wisdom": {
+      "semantic": "numbers.save.wis"
+    },
+    "CHA": {
+      "semantic": "abilities.cha"
+    },
+    "ChaProf": {
+      "semantic": "saves.cha.proficient"
+    },
+    "ST Charisma": {
+      "semantic": "numbers.save.cha"
+    },
+    "AcrobaticsProf": {
+      "semantic": "skills.acrobatics.proficient"
+    },
+    "Acrobatics": {
+      "semantic": "numbers.skill.acrobatics"
+    },
+    "AnimalHandlingProf": {
+      "semantic": "skills.animalHandling.proficient"
+    },
+    "Animal": {
+      "semantic": "numbers.skill.animalHandling"
+    },
+    "ArcanaProf": {
+      "semantic": "skills.arcana.proficient"
+    },
+    "Arcana": {
+      "semantic": "numbers.skill.arcana"
+    },
+    "AthleticsProf": {
+      "semantic": "skills.athletics.proficient"
+    },
+    "Athletics": {
+      "semantic": "numbers.skill.athletics"
+    },
+    "DeceptionProf": {
+      "semantic": "skills.deception.proficient"
+    },
+    "Deception": {
+      "semantic": "numbers.skill.deception"
+    },
+    "HistoryProf": {
+      "semantic": "skills.history.proficient"
+    },
+    "History": {
+      "semantic": "numbers.skill.history"
+    },
+    "InsightProf": {
+      "semantic": "skills.insight.proficient"
+    },
+    "Insight": {
+      "semantic": "numbers.skill.insight"
+    },
+    "IntimidationProf": {
+      "semantic": "skills.intimidation.proficient"
+    },
+    "Intimidation": {
+      "semantic": "numbers.skill.intimidation"
+    },
+    "InvestigationProf": {
+      "semantic": "skills.investigation.proficient"
+    },
+    "Investigation": {
+      "semantic": "numbers.skill.investigation"
+    },
+    "MedicineProf": {
+      "semantic": "skills.medicine.proficient"
+    },
+    "Medicine": {
+      "semantic": "numbers.skill.medicine"
+    },
+    "NatureProf": {
+      "semantic": "skills.nature.proficient"
+    },
+    "Nature": {
+      "semantic": "numbers.skill.nature"
+    },
+    "PerceptionProf": {
+      "semantic": "skills.perception.proficient"
+    },
+    "Perception": {
+      "semantic": "numbers.skill.perception"
+    },
+    "PerformanceProf": {
+      "semantic": "skills.performance.proficient"
+    },
+    "Performance": {
+      "semantic": "numbers.skill.performance"
+    },
+    "PersuasionProf": {
+      "semantic": "skills.persuasion.proficient"
+    },
+    "Persuasion": {
+      "semantic": "numbers.skill.persuasion"
+    },
+    "ReligionProf": {
+      "semantic": "skills.religion.proficient"
+    },
+    "Religion": {
+      "semantic": "numbers.skill.religion"
+    },
+    "SleightOfHandProf": {
+      "semantic": "skills.sleightOfHand.proficient"
+    },
+    "SleightofHand": {
+      "semantic": "numbers.skill.sleightOfHand"
+    },
+    "StealthProf": {
+      "semantic": "skills.stealth.proficient"
+    },
+    "Stealth ": {
+      "semantic": "numbers.skill.stealth"
+    },
+    "SurvivalProf": {
+      "semantic": "skills.survival.proficient"
+    },
+    "Survival": {
+      "semantic": "numbers.skill.survival"
+    },
+    "Init": {
+      "semantic": "numbers.initiative"
+    },
+    "AC": {
+      "semantic": "numbers.armorClass"
+    },
+    "ProfBonus": {
+      "semantic": "numbers.proficiencyBonus"
+    },
+    "MaxHP": {
+      "semantic": "numbers.hitPoints"
+    },
+    "spellAtkBonus0": {
+      "semantic": "numbers.spellAttack"
+    },
+    "spellSaveDC0": {
+      "semantic": "numbers.spellSaveDc"
+    },
+    "CurrentHP": {
+      "semantic": "play.currentHitPoints"
+    },
+    "TempHP": {
+      "semantic": "play.temporaryHitPoints"
+    },
+    "Inspiration": {
+      "semantic": "play.inspiration"
+    },
+    "FeaturesTraits{n}": {
+      "semantic": "features[n]"
+    },
+    "Eq Name{n}": {
+      "semantic": "equipment[n].name"
+    },
+    "Eq Qty{n}": {
+      "semantic": "equipment[n].quantity"
+    },
+    "SpellName{n}": {
+      "semantic": "spells[n].name"
+    },
+    "Prepared{n}": {
+      "semantic": "spells[n].prepared"
+    }
+  },
+  "splits": [
+    {
+      "semantic": "features",
+      "separator": "\n",
+      "itemPattern": "^\\*\\s+(?<value>[^•]+?)\\s*(?:•.*)?$",
+      "sectionHeading": "^===\\s*(?<section>.+?)\\s*===$",
+      "featsSection": "^FEATS$"
+    }
+  ]
+}
