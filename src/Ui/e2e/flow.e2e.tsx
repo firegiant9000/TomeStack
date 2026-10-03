@@ -1921,10 +1921,16 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await user.click(within(matches).getByRole('radio', { name: 'Not found' }));
   expect(within(matches).getByRole('rowheader', { name: 'Fixture Archivist' })).toBeTruthy();
 
-  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  // Next waits while the proposal for the latest choice is loading.
+  const nextStep = async (name: string) => {
+    const next = screen.getByRole<HTMLButtonElement>('button', { name });
+    await waitFor(() => expect(next.disabled).toBe(false));
+    await user.click(next);
+  };
+  await nextStep('Next: numbers');
   const armorClass = await screen.findByRole('radiogroup', { name: 'Armor Class' });
   await user.click(within(armorClass).getByRole('radio', { name: "Keep the sheet's number" }));
-  await user.click(screen.getByRole('button', { name: 'Next: summary' }));
+  await nextStep('Next: summary');
 
   const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
   await waitFor(() => expect(create.disabled).toBe(false));
