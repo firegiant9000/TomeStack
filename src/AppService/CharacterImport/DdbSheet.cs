@@ -18,6 +18,10 @@ public enum ReadStatus
 /// One value read from a sheet. An <see cref="ReadStatus.Unreadable"/> read keeps nothing of the text it could not read; a
 /// spell or item row may keep the parts it could read (its name), so the row can be listed as left out.
 /// </summary>
+/// <remarks>
+/// These types hold a character's text, so <c>ToString</c> prints statuses and counts only: a log line, an interpolation or
+/// a test failure message never quotes a sheet value.
+/// </remarks>
 public readonly record struct Read<T>(T? Value, ReadStatus Status)
 {
     public static Read<T> Ok(T value) => new(value, ReadStatus.Ok);
@@ -25,22 +29,34 @@ public readonly record struct Read<T>(T? Value, ReadStatus Status)
     public static Read<T> Missing => new(default, ReadStatus.Missing);
 
     public static Read<T> Unreadable => new(default, ReadStatus.Unreadable);
+
+    public override string ToString() => $"Read {{ Status = {Status} }}";
 }
 
 /// <summary>One class of the class-and-level text, in the sheet's order.</summary>
-public sealed record ClassText(string Name, int Level, string? Subclass);
+public sealed record ClassText(string Name, int Level, string? Subclass)
+{
+    public override string ToString() => $"ClassText {{ Level = {Level}, Subclass = {Subclass is not null} }}";
+}
 
 /// <param name="Prepared">Null when the layout has no prepared mark.</param>
-public sealed record SpellText(string Name, bool? Prepared);
+public sealed record SpellText(string Name, bool? Prepared)
+{
+    public override string ToString() => $"SpellText {{ Prepared = {Prepared} }}";
+}
 
 /// <param name="Equipped">Null when the layout has no equipped mark.</param>
-public sealed record ItemText(string Name, int Quantity, bool? Equipped);
+public sealed record ItemText(string Name, int Quantity, bool? Equipped)
+{
+    public override string ToString() => $"ItemText {{ Quantity = {Quantity}, Equipped = {Equipped} }}";
+}
 
 public sealed record DieSpent(int Die, int Spent);
 
 public sealed record SlotsSpent(int Level, int Spent);
 
 /// <summary>The play state a layout can fill (D16d): only what <c>PlayState</c> has.</summary>
+/// <param name="UnreadableSpent">Spent hit dice and slot fields that were there but could not be read (left out, not taken as zero).</param>
 public sealed record DdbPlay(
     Read<int> CurrentHitPoints,
     Read<int> TemporaryHitPoints,
@@ -48,7 +64,11 @@ public sealed record DdbPlay(
     Read<int> DeathSuccesses,
     Read<int> DeathFailures,
     Read<bool> Inspiration,
-    IReadOnlyList<SlotsSpent> SpellSlotsSpent);
+    IReadOnlyList<SlotsSpent> SpellSlotsSpent,
+    int UnreadableSpent = 0)
+{
+    public override string ToString() => $"DdbPlay {{ HitDiceSpent = {HitDiceSpent.Count}, SpellSlotsSpent = {SpellSlotsSpent.Count}, UnreadableSpent = {UnreadableSpent} }}";
+}
 
 /// <summary>
 /// What the parser read from a character sheet's form fields (<c>features/ddb-pdf-import.md</c>): semantic values only,
@@ -72,4 +92,8 @@ public sealed record DdbSheet(
     IReadOnlyList<Read<ItemText>> Items,
     IReadOnlyList<Read<string>> Features,
     IReadOnlyDictionary<string, Read<int>> Numbers,
-    DdbPlay Play);
+    DdbPlay Play)
+{
+    public override string ToString() =>
+        $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, Numbers = {Numbers.Count} }}";
+}

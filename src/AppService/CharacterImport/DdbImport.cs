@@ -184,7 +184,11 @@ public sealed partial class TomeStackApp
         var plan = AbilitySolver.Solve(bases => Calculate(answered with { BaseAbilities = bases }), scores);
         var character = Levelled(answered with { BaseAbilities = plan.ProposedBase });
         if (request.IncludePlayState)
+        {
             character = character with { Play = PlayFrom(sheet.Play) };
+            if (sheet.Play.UnreadableSpent > 0)
+                diagnostics.Add(new("ddb.play-unreadable", $"{sheet.Play.UnreadableSpent} spent hit dice or spell slot field(s) could not be read and are left as not spent."));
+        }
 
         var calculated = Calculate(character);
         var comparison = new List<NumberRow>();

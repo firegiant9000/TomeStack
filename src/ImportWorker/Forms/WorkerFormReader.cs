@@ -14,14 +14,23 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
     private readonly ExtractionLimits _limits = limits ?? DefaultLimits;
     private readonly FormLimits _form = form ?? FormLimits.Default;
 
-    /// <summary>A character sheet is a few pages: 20 MB, 50 pages, and 30 s for the line and the whole read.</summary>
+    /// <summary>
+    /// A character sheet is a few pages: 20 MB, 50 pages, and 30 s for the line and the whole read. Memory is sheet-sized
+    /// too (a 256 MiB managed heap, 512 MiB in all), not the book limits: PdfPig builds the form's fields with their values
+    /// before the field limits can count them, so these caps are what bound that parse.
+    /// </summary>
     public static ExtractionLimits DefaultLimits { get; } = new()
     {
         MaxBytes = 20L << 20,
         MaxPages = 50,
         PageTimeout = TimeSpan.FromSeconds(30),
         RunTimeout = TimeSpan.FromSeconds(30),
+        HeapHardLimit = 256L << 20,
+        MaxWorkingSet = 512L << 20,
     };
+
+    /// <summary>The field types the worker reports (<see cref="FormField.Type"/>).</summary>
+    private static readonly HashSet<string> Types = new(StringComparer.Ordinal) { "text", "checkbox", "radio", "combo", "list", "other" };
 
     public async Task<IReadOnlyList<FormField>> ReadAsync(string path, CancellationToken cancellationToken)
     {
@@ -49,7 +58,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         }
     }
 
-    /// <summary>The child is trusted with nothing: the list must hold to the limits it was given.</summary>
+    /// <summary>The child is trusted with nothing: the list must hold to the limits it was given, with a known type and a page in range.</summary>
     private bool WithinLimits(IReadOnlyList<FormField> fields)
     {
         if (fields.Count > _form.MaxFields)
@@ -58,7 +67,8 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         foreach (var field in fields)
         {
             // JSON can send null where the record says it cannot.
-            if (field?.Name is null || field.Type is null || field.Selected?.Any(s => s is null) == true || _form.Chars(field) is not { } chars)
+            if (field?.Name is null || field.Type is null || !Types.Contains(field.Type) || field.Page is < 1 || field.Page > _limits.MaxPages
+                || field.Selected?.Any(s => s is null) == true || _form.Chars(field) is not { } chars)
                 return false;
             total += chars;
         }

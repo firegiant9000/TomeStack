@@ -114,12 +114,23 @@ static int RunFieldInventory(string[] args)
         Console.Error.WriteLine("Usage: --ddb-fields <pdf> [--out <fields.json>]");
         return 2;
     }
+    var stage = "checked";
     try
     {
+        // The output is resolved, checked and its folder created before the PDF is read.
+        string? output = null;
+        if (args.Length == 4)
+        {
+            output = FormInventory.PrepareOutput(args[1], args[3], out var outsideLocal);
+            if (outsideLocal)
+                Console.Error.WriteLine("Warning: --out is outside tests/RulesFixtures/local/, which is the only gitignored place for an inventory of a real export.");
+        }
+        stage = "read";
         var report = FormInventory.Read(Path.Combine(AppContext.BaseDirectory, TomeStackApp.WorkerFileName), args[1]);
         Console.Write(FormInventory.Format(report));
-        if (args.Length == 4)
-            File.WriteAllText(args[3], FormInventory.ToJson(report));
+        stage = "written";
+        if (output is not null)
+            File.WriteAllText(output, FormInventory.ToJson(report));
         return 0;
     }
     catch (TomeStack.ImportWorker.ExtractionException ex)
@@ -128,9 +139,10 @@ static int RunFieldInventory(string[] args)
         Console.Error.WriteLine($"{ex.Code}: {ex.Message}");
         return 2;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.ComponentModel.Win32Exception)
     {
-        Console.Error.WriteLine($"{ex.GetType().Name}: the file could not be written");
+        // No path in the message: a path can name the owner's files.
+        Console.Error.WriteLine(ex is ArgumentException { ParamName: "outPath" } ? ex.Message.Split(" (Parameter", 2)[0] : $"{ex.GetType().Name}: a file could not be {stage}");
         return 2;
     }
 }

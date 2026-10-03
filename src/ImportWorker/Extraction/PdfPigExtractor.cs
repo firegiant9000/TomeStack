@@ -47,8 +47,18 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
         if (info.Length > limits.MaxBytes)
             throw new ExtractionException("pdf.too-large", $"The PDF is larger than {limits.MaxBytes / (1024 * 1024)} MB.");
         Span<byte> header = stackalloc byte[5];
-        using var stream = File.OpenRead(path);
-        if (stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) < header.Length || !header.SequenceEqual("%PDF-"u8))
+        int read;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Locked by another program or not readable: a code, never the path the exception names.
+            throw new ExtractionException("pdf.unreadable", "The PDF could not be opened. Close it in other programs and check you can read it, then try again.");
+        }
+        if (read < header.Length || !header.SequenceEqual("%PDF-"u8))
             throw new ExtractionException("pdf.not-a-pdf", "The file is not a PDF.");
     }
 

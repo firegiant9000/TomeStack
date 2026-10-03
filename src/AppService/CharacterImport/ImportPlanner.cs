@@ -135,43 +135,80 @@ internal sealed class ImportPlanner
         Place(rowId, kind, read.Value!, contentKind, [.. Lookup(contentKind, read.Value!).Select(For)], For);
     }
 
+    /// <summary>
+    /// Proficient skills: one a grant already gives is matched as it is; the rest are placed together on the open choices'
+    /// free slots (a maximum matching), so a choice that offers many skills never takes the only skill another choice could
+    /// have held. Only a skill option counts as an offer: one effect, that skill's proficiency, nothing more.
+    /// </summary>
     private void Skills(IReadOnlyDictionary<string, Read<bool>> proficient)
     {
+        var draft = Calculate();
+        var rows = new Dictionary<string, MatchRow>(StringComparer.Ordinal);
+        var open = new List<(string Key, string RowId, string Label, string Field)>();
         foreach (var (key, label, _) in CharacterCalculator.Skills)
         {
             if (!proficient.TryGetValue(key, out var read) || read is not { Status: ReadStatus.Ok, Value: true })
                 continue;
             var rowId = $"skill:{key}";
-            if (LeftOut(rowId))
-            {
-                _rows.Add(new(rowId, MatchKind.Skill, label, MatchStatus.LeftOut, [], null, null));
-                continue;
-            }
-            var draft = Calculate();
             var field = FieldIds.Skill(key);
-            if (draft.Field(field).Trace.FirstOrDefault(t => t.Operation == "add" && t.Field == field && IsProficiencyGrant(t.Origin, field)) is { Origin.Content: { } granter } step)
+            if (LeftOut(rowId))
+                rows[key] = new(rowId, MatchKind.Skill, label, MatchStatus.LeftOut, [], null, null);
+            else if (draft.Field(field).Trace.FirstOrDefault(t => t.Operation == "add" && t.Field == field && IsProficiencyGrant(t.Origin, field)) is { Origin.Content: { } granter } step)
             {
                 var already = Candidate(granter, step.Origin.ContentName ?? "", new(PlacementKind.None));
-                _rows.Add(new(rowId, MatchKind.Skill, label, MatchStatus.Matched, [already], already, null));
-                continue;
+                rows[key] = new(rowId, MatchKind.Skill, label, MatchStatus.Matched, [already], already, null);
             }
-            // An option already chosen anywhere has given its proficiency, so the branch above took the row.
-            var offer = (draft.Choices ?? [])
-                .Where(c => c.Selected.Count < c.Count)
-                .SelectMany(c => c.Options.Select(o => (Choice: c, Option: o)))
-                .FirstOrDefault(x => _find(x.Option)?.Effects.OfType<GrantEffect>().Any(g => g.Grant == GrantKind.Proficiency && g.Target == field) == true);
-            if (offer.Choice is null)
-            {
-                _rows.Add(new(rowId, MatchKind.Skill, label, MatchStatus.NoPlace, [], null, "skill.no-open-choice"));
-                continue;
-            }
-            var candidate = Candidate(offer.Option, _find(offer.Option)?.Name ?? "", new(PlacementKind.Choice, offer.Choice.Source, offer.Choice.ChoiceId));
-            var refused = Apply(candidate);
-            _rows.Add(refused is null
-                ? new(rowId, MatchKind.Skill, label, MatchStatus.Matched, [candidate], candidate, null)
-                : new(rowId, MatchKind.Skill, label, MatchStatus.NoPlace, [candidate], null, refused));
+            else
+                open.Add((key, rowId, label, field));
         }
+
+        // An option already chosen anywhere has given its proficiency, so the grant branch above took that skill.
+        var chosenAnywhere = _character.Choices.SelectMany(c => c.Selected).ToHashSet();
+        var slots = (draft.Choices ?? []).Where(c => c.Selected.Count < c.Count).SelectMany(c => Enumerable.Repeat(c, c.Count - c.Selected.Count)).ToList();
+        ContentReference? OptionFor(ChoiceStatus choice, string field) => choice.Options.FirstOrDefault(o => !chosenAnywhere.Contains(o) && IsSkillOption(o, field));
+        var slotOf = new int?[open.Count];
+        var skillIn = new int?[slots.Count];
+        // Kuhn's augmenting paths: at most 18 skills over a handful of slots.
+        bool Assign(int skill, bool[] seen)
+        {
+            for (var slot = 0; slot < slots.Count; slot++)
+            {
+                if (seen[slot] || OptionFor(slots[slot], open[skill].Field) is null)
+                    continue;
+                seen[slot] = true;
+                if (skillIn[slot] is not { } other || Assign(other, seen))
+                {
+                    (skillIn[slot], slotOf[skill]) = (skill, slot);
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (var skill = 0; skill < open.Count; skill++)
+            Assign(skill, new bool[slots.Count]);
+
+        for (var skill = 0; skill < open.Count; skill++)
+        {
+            var (key, rowId, label, field) = open[skill];
+            if (slotOf[skill] is not { } slot)
+            {
+                rows[key] = new(rowId, MatchKind.Skill, label, MatchStatus.NoPlace, [], null, "skill.no-open-choice");
+                continue;
+            }
+            var choice = slots[slot];
+            var option = OptionFor(choice, field)!;
+            var candidate = Candidate(option, _find(option)?.Name ?? "", new(PlacementKind.Choice, choice.Source, choice.ChoiceId));
+            var refused = Apply(candidate);
+            rows[key] = refused is null
+                ? new(rowId, MatchKind.Skill, label, MatchStatus.Matched, [candidate], candidate, null)
+                : new(rowId, MatchKind.Skill, label, MatchStatus.NoPlace, [candidate], null, refused);
+        }
+        _rows.AddRange(CharacterCalculator.Skills.Where(s => rows.ContainsKey(s.Key)).Select(s => rows[s.Key]));
     }
+
+    /// <summary>A skill option: its only effect is the proficiency in <paramref name="field"/> (as every SRD skill option is).</summary>
+    private bool IsSkillOption(ContentReference option, string field) =>
+        _find(option)?.Effects is [GrantEffect { Grant: GrantKind.Proficiency } grant] && grant.Target == field;
 
     private void Items(IReadOnlyList<Read<ItemText>> items)
     {
@@ -239,7 +276,7 @@ internal sealed class ImportPlanner
             {
                 var caster = chosen!.Placement.Caster!.Value;
                 if (known.Any(k => k.Caster == caster && k.Spell.ContentId == chosen.Reference.ContentId))
-                    note = "spell.duplicate";
+                    (status, note) = (MatchStatus.LeftOut, "spell.duplicate"); // adds nothing, so not counted as a match
                 else if (known.Count >= Character.MaxSpells)
                     (status, note) = (MatchStatus.NoPlace, "character.spells-too-many");
                 else
@@ -313,6 +350,9 @@ internal sealed class ImportPlanner
                     _chosenByUser.Add(rowId);
                     return (MatchStatus.Matched, chosen, null);
                 }
+                // The user's pick no longer resolves (a newer revision was published, or it is not installed in this
+                // family): ask again rather than quietly falling back to the name's own match.
+                return (MatchStatus.Choose, null, "resolution.not-found");
             }
         }
         return candidates.Count switch

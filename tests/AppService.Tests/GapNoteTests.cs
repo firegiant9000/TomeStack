@@ -233,6 +233,7 @@ public class GapNoteTests
         using var _ = temp;
         var refused = Assert.Throws<AppValidationException>(() => temp.App.AddGapNote(new(view.Character.Id, new(GapTargetKind.Import, Label: "Fixture Lost Feat"), Secret)));
         Assert.Equal("gap.target-invalid", refused.Problems[0].Code);
+        Assert.Equal("Import notes are written only by a character-sheet import.", refused.Problems[0].Message);
         Assert.Empty(temp.App.ListGapNotes(view.Character.Id));
     }
 
