@@ -1,0 +1,41 @@
+{
+  "id": "ddb-2024",
+  "version": 1,
+  "suggestedFamily": "srd-5.2.1",
+  "unverified": true,
+  "required": ["fixture.2024.name", "fixture.2024.classLevel"],
+  "checkboxOnState": "Yes",
+  "fields": {
+    "fixture.2024.name": { "semantic": "name" },
+    "fixture.2024.classLevel": { "semantic": "classLevels" },
+    "fixture.2024.species": { "semantic": "species" },
+    "fixture.2024.background": { "semantic": "background" },
+    "fixture.2024.str": { "semantic": "abilities.str" },
+    "fixture.2024.dex": { "semantic": "abilities.dex" },
+    "fixture.2024.con": { "semantic": "abilities.con" },
+    "fixture.2024.int": { "semantic": "abilities.int" },
+    "fixture.2024.wis": { "semantic": "abilities.wis" },
+    "fixture.2024.cha": { "semantic": "abilities.cha" },
+    "fixture.2024.saves.str.proficient": { "semantic": "saves.str.proficient" },
+    "fixture.2024.saves.dex.proficient": { "semantic": "saves.dex.proficient" },
+    "fixture.2024.skills.athletics.proficient": { "semantic": "skills.athletics.proficient" },
+    "fixture.2024.hitPoints": { "semantic": "numbers.hitPoints" },
+    "fixture.2024.proficiencyBonus": { "semantic": "numbers.proficiencyBonus" },
+    "fixture.2024.armorClass": { "semantic": "numbers.armorClass" },
+    "fixture.2024.initiative": { "semantic": "numbers.initiative" },
+    "fixture.2024.inspiration": { "semantic": "play.inspiration" },
+    "fixture.2024.currentHitPoints": { "semantic": "play.currentHitPoints" },
+    "fixture.2024.deathSuccesses": { "semantic": "play.deathSuccesses" },
+    "fixture.2024.feats": { "semantic": "feats" },
+    "fixture.2024.features": { "semantic": "features" },
+    "fixture.2024.spells.{n}.name": { "semantic": "spells[n].name" },
+    "fixture.2024.spells.{n}.prepared": { "semantic": "spells[n].prepared" },
+    "fixture.2024.equipment.{n}.name": { "semantic": "equipment[n].name" },
+    "fixture.2024.equipment.{n}.quantity": { "semantic": "equipment[n].quantity" },
+    "fixture.2024.equipment.{n}.equipped": { "semantic": "equipment[n].equipped" }
+  },
+  "splits": [
+    { "semantic": "feats", "separator": "\n" },
+    { "semantic": "features", "separator": "\n" }
+  ]
+}

@@ -13,21 +13,25 @@ internal static class FixtureSheets
     /// <summary>The committed fixture's path in the test output.</summary>
     public static string CommittedPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-ddb-sheet.pdf");
 
-    public static IReadOnlyList<FormSpec> Fields2014 { get; } = Character("fixture.2014.");
+    public static IReadOnlyList<FormSpec> Fields2014 { get; } = Character("fixture.2014.", "Fixture Fighter 3");
 
-    public static IReadOnlyList<FormSpec> Fields2024 { get; } = Character("fixture.2024.");
+    /// <summary>The 2024 sheet names a subclass, as a Fighter 3 has one.</summary>
+    public static IReadOnlyList<FormSpec> Fields2024 { get; } = Character("fixture.2024.", "Fixture Fighter 3 (Fixture Vanguard)");
 
     public static byte[] Sheet2014() => Write(Fields2014, pages: 3);
 
     public static byte[] Sheet2024() => Write(Fields2024, pages: 3, nested: true);
 
-    /// <summary>Testy McFixture, a Fixture Fighter 3: page 1 the character, page 2 the spells, page 3 the equipment.</summary>
-    private static List<FormSpec> Character(string prefix)
+    /// <summary>
+    /// Testy McFixture, a Fixture Fighter 3: page 1 the character, its numbers, feat, features (one field, a line each)
+    /// and play state; page 2 the spells; page 3 the equipment.
+    /// </summary>
+    private static List<FormSpec> Character(string prefix, string classLevel)
     {
         var fields = new List<FormSpec>
         {
             new(prefix + "name", "Testy McFixture"),
-            new(prefix + "classLevel", "Fixture Fighter 3"),
+            new(prefix + "classLevel", classLevel),
             new(prefix + "species", "Fixture Glimmerkin"),
             new(prefix + "background", "Fixture Archivist"),
             new(prefix + "str", "16"),
@@ -41,6 +45,13 @@ internal static class FixtureSheets
             new(prefix + "skills.athletics.proficient", Checked: true),
             new(prefix + "hitPoints", "28"),
             new(prefix + "inspiration", Checked: false),
+            new(prefix + "proficiencyBonus", "+2"),
+            new(prefix + "armorClass", "16"),
+            new(prefix + "initiative", "+2"),
+            new(prefix + "feats", "Fixture Keen Watcher"),
+            new(prefix + "features", "Fixture Steady Breath\nFixture Bold Surge"),
+            new(prefix + "currentHitPoints", "21"),
+            new(prefix + "deathSuccesses", "1"),
         };
         string[] spells = ["Fixture Ember Lance", "Fixture Frost Veil", "Fixture Thunder Word"];
         for (var i = 0; i < spells.Length; i++)

@@ -32,6 +32,10 @@
     <!-- T3: the property-test generators and golden hashes are shared with RulesCore.Tests. -->
     <Compile Include="..\RulesCore.Tests\Properties\Generators.cs" Link="Properties\Shared\Generators.cs" />
     <Compile Include="..\RulesCore.Tests\Properties\GoldenRevisions.cs" Link="Properties\Shared\GoldenRevisions.cs" />
+    <!-- Character-sheet import S2: the invented fixture sheets, shared with ImportWorker.Tests, which writes them as PDFs. -->
+    <Compile Include="..\ImportWorker.Tests\FixtureSheets.cs" Link="CharacterImport\Shared\FixtureSheets.cs" />
+    <Compile Include="..\ImportWorker.Tests\FormPdfWriter.cs" Link="CharacterImport\Shared\FormPdfWriter.cs" />
+    <Compile Include="..\ImportWorker.Tests\FixturePdfs.cs" Link="CharacterImport\Shared\FixturePdfs.cs" />
   </ItemGroup>
 
   <ItemGroup>

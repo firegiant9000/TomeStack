@@ -20,7 +20,7 @@ public class FormInventoryTests
     {
         var report = FormInventory.Read(Worker, FixtureSheet);
 
-        Assert.Equal(33, report.FieldCount);
+        Assert.Equal(40, report.FieldCount);
         Assert.Equal(report.FieldCount, report.Fields.Count);
         Assert.Equal(new FormInventory.Entry("fixture.2014.name", "text", 1, "Testy McFixture".Length, null, null), report.Fields[0]);
         Assert.Contains(new FormInventory.Entry("fixture.2014.spells.0.prepared", "checkbox", 2, 0, true, "Yes"), report.Fields);
@@ -38,8 +38,8 @@ public class FormInventoryTests
     {
         var summary = FormInventory.Format(FormInventory.Read(Worker, FixtureSheet));
 
-        Assert.Contains("33 fields", summary, StringComparison.Ordinal);
-        Assert.Contains("text 22", summary, StringComparison.Ordinal);
+        Assert.Contains("40 fields", summary, StringComparison.Ordinal);
+        Assert.Contains("text 29", summary, StringComparison.Ordinal);
         Assert.Contains("checkbox 11", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("fixture.", summary, StringComparison.Ordinal);
         Assert.DoesNotContain("Testy", summary, StringComparison.Ordinal);
