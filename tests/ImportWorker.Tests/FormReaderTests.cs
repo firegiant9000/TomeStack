@@ -64,6 +64,38 @@ public class FormReaderTests
     }
 
     [Fact]
+    public void A_button_group_whose_widgets_have_no_name_is_listed_once_per_widget_under_the_fields_name()
+    {
+        var fields = Read(Write([new("fixture.name", "Testy McFixture")], groups:
+        [
+            new("fixture.saves", ["FixtureA", "FixtureB"], On: 1),
+            new("fixture.pick", ["FixtureX", "FixtureY", "FixtureZ"], On: 2, Radio: true),
+        ]));
+
+        Assert.Equal(
+        [
+            new FormField("fixture.name", "text", 1, "Testy McFixture"),
+            new FormField("fixture.saves", "checkbox", 1, Checked: false, OnState: "FixtureA"),
+            new FormField("fixture.saves", "checkbox", 1, Checked: true, OnState: "FixtureB"),
+            new FormField("fixture.pick", "radio", 1, Checked: false, OnState: "FixtureX"),
+            new FormField("fixture.pick", "radio", 1, Checked: false, OnState: "FixtureY"),
+            new FormField("fixture.pick", "radio", 1, Checked: true, OnState: "FixtureZ"),
+        ], fields);
+    }
+
+    [Fact]
+    public void A_file_another_program_holds_open_is_pdf_unreadable_not_a_crash()
+    {
+        using var file = FixturePdfs.Write(Write([new("fixture.name", "Testy McFixture")]));
+        using var held = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var refused = Assert.Throws<ExtractionException>(() => AcroFormReader.Read(file.Path, Sheet, FormLimits.Default));
+
+        Assert.Equal("pdf.unreadable", refused.Code);
+        Assert.DoesNotContain(file.Path, refused.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void A_checkbox_with_another_on_state_is_read_as_checked()
     {
         var fields = Read(Write([new("fixture.on", Checked: true), new("fixture.off", Checked: false)], onState: "FixtureOn"));

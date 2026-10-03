@@ -22,12 +22,23 @@ public static partial class DdbParser
     public const int MaxListItems = 1_000;
 
     /// <summary>The layout whose required field names are all present (the one with the most, if several), or null.</summary>
-    public static LayoutMap? Recognise(IReadOnlyList<FormField> fields)
+    /// <summary>
+    /// The layout whose required field names are all present: the one with the most, if several. Two or more tied for the
+    /// most are ambiguous, and none is picked (null), rather than one chosen by the order the maps happen to load in.
+    /// </summary>
+    public static LayoutMap? Recognise(IReadOnlyList<FormField> fields) => Recognise(fields, LayoutMaps.All);
+
+    internal static LayoutMap? Recognise(IReadOnlyList<FormField> fields, IReadOnlyList<LayoutMap> maps)
     {
         if (fields is null)
             return null;
         var names = new HashSet<string>(fields.Where(f => f?.Name is not null).Select(f => f.Name), StringComparer.Ordinal);
-        return LayoutMaps.All.Where(m => m.Required.All(names.Contains)).OrderByDescending(m => m.Required.Count).FirstOrDefault();
+        var present = maps.Where(m => m.Required.All(names.Contains)).ToList();
+        if (present.Count == 0)
+            return null;
+        var most = present.Max(m => m.Required.Count);
+        var best = present.Where(m => m.Required.Count == most).ToList();
+        return best.Count == 1 ? best[0] : null;
     }
 
     public static DdbSheet Parse(LayoutMap map, IReadOnlyList<FormField> fields)
@@ -43,6 +54,8 @@ public static partial class DdbParser
         }
         var sheet = new SheetReader(compiled, values);
         var features = sheet.ListItems("features"); // S0: feats can sit in a section of the features text
+        var hitDice = DdbSemantics.HitDice.Select(d => (Die: d, Read: sheet.Int($"play.hitDiceSpent.d{d}", 0, 20))).ToList();
+        var slots = Enumerable.Range(1, 9).Select(l => (Level: l, Read: sheet.Int($"play.spellSlotsSpent.{l}", 0, 99))).ToList();
         return new DdbSheet(
             map.Id,
             map.SuggestedFamily,
@@ -61,11 +74,12 @@ public static partial class DdbParser
             new DdbPlay(
                 sheet.Int("play.currentHitPoints", 0, 9_999),
                 sheet.Int("play.temporaryHitPoints", 0, 9_999),
-                [.. DdbSemantics.HitDice.Select(d => (Die: d, Read: sheet.Int($"play.hitDiceSpent.d{d}", 0, 20))).Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new DieSpent(x.Die, x.Read.Value))],
+                [.. hitDice.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new DieSpent(x.Die, x.Read.Value))],
                 sheet.Int("play.deathSuccesses", 0, 3),
                 sheet.Int("play.deathFailures", 0, 3),
                 sheet.Bool("play.inspiration"),
-                [.. Enumerable.Range(1, 9).Select(l => (Level: l, Read: sheet.Int($"play.spellSlotsSpent.{l}", 0, 99))).Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new SlotsSpent(x.Level, x.Read.Value))]));
+                [.. slots.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new SlotsSpent(x.Level, x.Read.Value))],
+                hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable)));
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];
@@ -121,8 +135,8 @@ public static partial class DdbParser
                 if (name.Length <= prefix.Length + suffix.Length || !name.StartsWith(prefix, StringComparison.Ordinal) || !name.EndsWith(suffix, StringComparison.Ordinal))
                     continue;
                 var row = name.AsSpan(prefix.Length, name.Length - prefix.Length - suffix.Length);
-                // NumberStyles.None: ASCII digits only, no sign or spaces.
-                if (row.Length <= 3 && int.TryParse(row, NumberStyles.None, CultureInfo.InvariantCulture, out var n))
+                // NumberStyles.None: ASCII digits only, no sign or spaces. No leading zero ("01" and "1" are not one row).
+                if (row.Length <= 3 && (row.Length == 1 || row[0] != '0') && int.TryParse(row, NumberStyles.None, CultureInfo.InvariantCulture, out var n))
                     return (rule.Semantic.Replace("[n]", $"[{n}]", StringComparison.Ordinal), rule);
             }
             return null;

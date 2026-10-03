@@ -203,3 +203,121 @@ it('every table has a caption and row headers', async () => {
   check();
   expect(screen.getByRole('radiogroup', { name: 'Armor Class' })).toBeTruthy();
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const fixtureCampaign = { id: 'fixture-campaign', name: 'Fixture Campaign', rulesFamily: 'srd-5.1' as const, allowedSources: [] };
+
+it('clears the campaign when the rules family changes, so later previews do not send it', async () => {
+  vi.mocked(client.listCampaigns).mockResolvedValue([fixtureCampaign]);
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.selectOptions(await screen.findByRole('combobox', { name: /Campaign/ }), 'fixture-campaign');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /Campaign/ }).value).toBe('');
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+
+  await screen.findByRole('heading', { name: 'Matches' });
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenCalled());
+  const last = vi.mocked(client.ddbPreview).mock.calls.at(-1)![0];
+  expect(last.rulesFamily).toBe('srd-5.2.1');
+  expect(last.campaignId).toBeUndefined();
+});
+
+it('drops the shown preview when the family changes and disables Next while the new one loads', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+
+  const pending = deferred<DdbPreview>();
+  vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(true);
+  pending.resolve(preview(false));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+});
+
+it('shows a failed preview with Try again, which asks again', async () => {
+  vi.mocked(client.ddbPreview).mockRejectedValueOnce(new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' }));
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Fixture preview failed.');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(true);
+  expect(screen.queryByText('Working…')).toBeNull();
+
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+});
+
+it('sends the user back to choose the sheet, with the error, when the token is no longer valid', async () => {
+  vi.mocked(client.ddbPreview).mockRejectedValueOnce(new TomeStackError({ code: 'ddb.token-invalid', message: 'Fixture: this sheet is no longer open.' }));
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: matches' }));
+
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose the sheet' })).toBeTruthy());
+  expect((await screen.findByRole('alert')).textContent).toContain('Fixture: this sheet is no longer open.');
+  expect(screen.getByRole('button', { name: 'Choose PDF…' })).toBeTruthy();
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: rules' }).disabled).toBe(true);
+});
+
+it('awaits onCreated and keeps Create disabled for good after a successful apply', async () => {
+  const user = userEvent.setup();
+  const done = deferred<void>();
+  const onCreated = vi.fn(() => done.promise);
+  render(<DdbImportPanel rulesFamilies={families} onError={vi.fn()} onCancel={vi.fn()} onCreated={onCreated} />);
+  await toMatches(user);
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.anything()] })));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalled());
+
+  // Still inside onCreated: Create stays disabled.
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  done.resolve();
+  await waitFor(() => expect(screen.queryByText('Working…')).toBeNull());
+
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  expect(client.ddbApply).toHaveBeenCalledTimes(1);
+});
+
+it('discards the token of a read that resolves after Cancel', async () => {
+  const pending = deferred<DdbReadResult>();
+  vi.mocked(client.ddbRead).mockReturnValueOnce(pending.promise);
+  const user = userEvent.setup();
+  const { onCancel } = renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(onCancel).toHaveBeenCalled();
+  expect(client.ddbDiscard).not.toHaveBeenCalled();
+
+  pending.resolve(read);
+  await waitFor(() => expect(client.ddbDiscard).toHaveBeenCalledWith('fixture-token'));
+});

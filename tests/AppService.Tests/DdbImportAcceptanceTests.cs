@@ -19,7 +19,7 @@ namespace TomeStack.AppService.Tests;
 /// ids and codes only, never a name or value, because test output is a log. The synthetic test runs the same pipeline on
 /// the committed fixture sheet, so the gate proves the checks themselves.
 /// </summary>
-public partial class DdbImportAcceptanceTests
+public class DdbImportAcceptanceTests
 {
     /// <summary>
     /// The owner's expectations: <c>{ "layout": "ddb-2014", "family": "srd-5.1", "classes": [{ "level": 5 }],
@@ -77,22 +77,42 @@ public partial class DdbImportAcceptanceTests
         var sheet = temp.App.DdbSessions.Peek(read.Token)!;
         var family = expectations?.Family ?? read.SuggestedFamily ?? RulesFamilies.Srd521;
         report.Append(CultureInfo.InvariantCulture, $"- layout: {read.Layout}\n- family: {family}\n");
-        report.Append(CultureInfo.InvariantCulture, $"- name: {sheet.Name.Status}\n- classes: {sheet.Classes.Status}, {sheet.Classes.Value?.Count ?? 0} read, levels {string.Join(" / ", sheet.Classes.Value?.Select(c => c.Level) ?? [])}\n");
+        var levels = string.Join(" / ", sheet.Classes.Value?.Select(c => c.Level) ?? []);
+        report.Append(CultureInfo.InvariantCulture, $"- name: {sheet.Name.Status}\n- classes: {sheet.Classes.Status}, {sheet.Classes.Value?.Count ?? 0} read, levels {(levels.Length > 0 ? levels : "none")}\n");
         if (sheet.Name.Status != ReadStatus.Ok || sheet.Classes.Status != ReadStatus.Ok)
             failures.Add($"A required field did not read: name {sheet.Name.Status}, classes {sheet.Classes.Status}.");
 
-        var first = temp.App.PreviewDdbImport(new(read.Token, family, null, null, null, false));
-        var resolutions = first.Matches.Where(m => m.Status == MatchStatus.Choose)
-            .Select(m => new Resolution(m.RowId, m.Candidates[0].Reference, false, m.Candidates[0].Placement.Caster)).ToList();
+        // Answering one "Choose" row (a class) can make others (spells, a subclass) become "Choose", so iterate until no
+        // new row needs an answer.
+        var resolutions = new List<Resolution>();
+        for (var pass = 0; pass < MaxChoosePasses; pass++)
+        {
+            var added = temp.App.PreviewDdbImport(new(read.Token, family, null, resolutions, null, false)).Matches
+                .Where(m => m.Status == MatchStatus.Choose && resolutions.All(r => r.RowId != m.RowId))
+                .Select(m => new Resolution(m.RowId, m.Candidates[0].Reference, false, m.Candidates[0].Placement.Caster)).ToList();
+            if (added.Count == 0)
+                break;
+            resolutions.AddRange(added);
+        }
         var resolved = temp.App.PreviewDdbImport(new(read.Token, family, null, resolutions, null, false));
         var differing = resolved.Comparison.Where(n => n.Differs).ToList();
         var kept = temp.App.PreviewDdbImport(new(read.Token, family, null, resolutions, [.. differing.Select(n => new NumberChoice(n.Field, NumberAction.KeepSheet))], false));
-        var shown = temp.App.Preview(kept.Character).Sheet;
-        var remaining = kept.Comparison.Count(n => n.Sheet is { } value && shown.Fields.FirstOrDefault(f => f.Field == n.Field)?.Value != value);
+        int? remaining = null;
+        try
+        {
+            var shown = temp.App.Preview(kept.Character).Sheet;
+            remaining = kept.Comparison.Count(n => n.Sheet is { } value && shown.Fields.FirstOrDefault(f => f.Field == n.Field)?.Value != value);
+        }
+        catch (AppValidationException ex)
+        {
+            var codes = string.Join(", ", ex.Problems.Select(p => p.Code).Distinct());
+            report.Append(CultureInfo.InvariantCulture, $"- validation: refused, {(codes.Length > 0 ? codes : ex.Code)}\n");
+            failures.Add($"The proposal does not validate: {(codes.Length > 0 ? codes : ex.Code)}.");
+        }
 
         int Count(MatchStatus status) => resolved.Matches.Count(m => m.Status == status);
-        report.Append(CultureInfo.InvariantCulture, $"- rows: {resolved.Matches.Count}; matched {Count(MatchStatus.Matched)}, chosen to measure {resolutions.Count}, not found {Count(MatchStatus.NotFound)}, no place {Count(MatchStatus.NoPlace)}, unreadable {Count(MatchStatus.Unreadable)}\n");
-        report.Append(CultureInfo.InvariantCulture, $"- numbers compared: {resolved.Comparison.Count}; differences {differing.Count}; overrides proposed {kept.Character.Overrides.Count}; differences after the overrides {remaining}\n");
+        report.Append(CultureInfo.InvariantCulture, $"- rows: {resolved.Matches.Count}; matched {Count(MatchStatus.Matched)}, still to choose {Count(MatchStatus.Choose)}, chosen to measure {resolutions.Count}, not found {Count(MatchStatus.NotFound)}, no place {Count(MatchStatus.NoPlace)}, unreadable {Count(MatchStatus.Unreadable)}\n");
+        report.Append(CultureInfo.InvariantCulture, $"- numbers compared: {resolved.Comparison.Count}; differences {differing.Count}; overrides proposed {kept.Character.Overrides.Count}; differences after the overrides {(remaining?.ToString(CultureInfo.InvariantCulture) ?? "n/a")}\n");
         var noteCodes = string.Join(", ", resolved.AbilityPlan.Notes.Select(n => n.Code).Distinct());
         report.Append(CultureInfo.InvariantCulture, $"- open choices: {resolved.OpenChoices.Count}; ability notes: {(noteCodes.Length > 0 ? noteCodes : "none")}\n");
         report.Append(CultureInfo.InvariantCulture, $"- can apply: {kept.CanApply}\n\n## Rows not matched\n\n");
@@ -102,7 +122,7 @@ public partial class DdbImportAcceptanceTests
         foreach (var row in differing)
             report.Append(CultureInfo.InvariantCulture, $"- {row.Field}\n");
 
-        if (remaining != 0)
+        if (remaining is > 0)
             failures.Add($"{remaining} number(s) still differ after the proposed overrides (see report.md).");
         if (!kept.CanApply)
             failures.Add("The proposal cannot be applied (see report.md).");
@@ -125,12 +145,138 @@ public partial class DdbImportAcceptanceTests
                 Expect("differences", counts.Differences, differing.Count);
             }
         }
-        return new Outcome(report.ToString(), failures, [.. resolved.Matches.Select(m => m.Label).Where(l => l.Length > 0), sheet.Name.Value ?? ""]);
+        return new Outcome(report.ToString(), failures, LabelsFor(sheet, resolved.Matches));
     }
 
-    /// <summary>Every report line is a heading, a count, a row id, a field id or a code.</summary>
-    [GeneratedRegex(@"^(#.*|Counts, row ids and codes only\.|- [a-z ]+: [\w.\-/ ,;():]*|- [a-zA-Z]+(:[a-zA-Z0-9]+)?(:subclass)?: \w+( \([a-z.\-]+\))?|- [a-zA-Z.]+\d*|)$")]
-    private static partial Regex ReportLine();
+    /// <summary>How many times a new "Choose" row is answered before the loop gives up (it normally settles in two).</summary>
+    private const int MaxChoosePasses = 5;
+
+    /// <summary>
+    /// Every sheet value the report must not quote: the matched rows' labels, the name (when it was read) and each class
+    /// name (which the report otherwise carries only as a level). Empty labels are dropped, because every string contains "".
+    /// </summary>
+    internal static IReadOnlyList<string> LabelsFor(DdbSheet sheet, IEnumerable<MatchRow> rows) =>
+        [.. rows.Select(m => m.Label)
+            .Append(sheet.Name.Value ?? "")
+            .Concat(sheet.Classes.Value?.Select(c => c.Name) ?? [])
+            .Where(l => l.Length > 0)
+            .Distinct(StringComparer.Ordinal)];
+
+    // Exact per-line shapes: fixed keys, and values that are only digits, enum names, layout/family ids, row ids, field ids
+    // and codes. A name or any free text matches none of them.
+    private const string Code = @"[a-z]+(?:\.[a-z\-]+)+";
+    private const string Enum = @"[A-Z][A-Za-z]*";
+    private const string Id = @"[a-z0-9]+(?:[.\-][a-z0-9]+)*";
+    private const string RowId = @"(?:species|background|class:\d+|class:\d+:subclass|feat:\d+|skill:[a-z\-]+|item:\d+|spell:\d+|feature:\d+)";
+    private const string FieldId = @"[a-z][A-Za-z]*(?:\.[a-z0-9]+)?";
+
+    /// <summary>The lines before the first section heading, by their fixed keys.</summary>
+    private static readonly Regex[] HeaderLines =
+    [
+        Exact(@"# D&D Beyond sheet import: acceptance run"),
+        Exact(@"Counts, row ids and codes only\."),
+        Exact(@"- read: refused, " + Code),
+        Exact($@"- layout: {Id}"),
+        Exact($@"- family: {Id}"),
+        Exact($@"- name: {Enum}"),
+        Exact($@"- classes: {Enum}, \d+ read, levels (?:none|\d+(?: / \d+)*)"),
+        Exact($@"- validation: refused, (?:{Code}|validation)(?:, (?:{Code}|validation))*"),
+        Exact(@"- rows: \d+; matched \d+, still to choose \d+, chosen to measure \d+, not found \d+, no place \d+, unreadable \d+"),
+        Exact(@"- numbers compared: \d+; differences \d+; overrides proposed \d+; differences after the overrides (?:\d+|n/a)"),
+        Exact($@"- open choices: \d+; ability notes: (?:none|{Code}(?:, {Code})*)"),
+        Exact($@"- can apply: (?:True|False)"),
+    ];
+
+    private static readonly Regex RowsNotMatchedLine = Exact($@"- {RowId}: {Enum}(?: \({Code}\))?");
+
+    private static readonly Regex DifferingNumberLine = Exact($@"- {FieldId}");
+
+    private static Regex Exact(string pattern) => new($"^{pattern}$", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Checks the exact report before it is written: every line has one of the fixed shapes above, and no label appears in
+    /// it. The messages carry line numbers only, never a line or a label, because test output is a log.
+    /// </summary>
+    internal static IReadOnlyList<string> ReportProblems(string report, IReadOnlyList<string> labels)
+    {
+        var problems = new List<string>();
+        var section = "";
+        var lines = report.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            bool ok;
+            if (line == "## Rows not matched" || line == "## Differing numbers")
+            {
+                section = line;
+                ok = true;
+            }
+            else if (line.Length == 0)
+                ok = true;
+            else if (section == "## Rows not matched")
+                ok = RowsNotMatchedLine.IsMatch(line);
+            else if (section == "## Differing numbers")
+                ok = DifferingNumberLine.IsMatch(line);
+            else
+                ok = HeaderLines.Any(r => r.IsMatch(line));
+            if (!ok)
+                problems.Add($"Report line {i + 1} is not a heading, count, id or code.");
+        }
+        if (labels.Any(l => l.Length > 0 && report.Contains(l, StringComparison.Ordinal)))
+            problems.Add("The report quotes a sheet value.");
+        return problems;
+    }
+
+    private const string FixtureReport = "# D&D Beyond sheet import: acceptance run\n\nCounts, row ids and codes only.\n\n"
+        + "- layout: ddb-2014\n- family: srd-5.1\n- name: Ok\n- classes: Ok, 2 read, levels 3 / 2\n"
+        + "- rows: 9; matched 6, still to choose 0, chosen to measure 1, not found 1, no place 1, unreadable 0\n"
+        + "- numbers compared: 12; differences 3; overrides proposed 3; differences after the overrides 0\n"
+        + "- open choices: 0; ability notes: ability.set-by-content, ability.cap-ambiguous\n"
+        + "- can apply: True\n\n## Rows not matched\n\n- feat:3: NotFound\n- skill:arcana: NoPlace (skill.no-open-choice)\n\n## Differing numbers\n\n- armorClass\n- save.str\n";
+
+    [Fact]
+    public void A_well_formed_fixture_report_passes_the_report_checks()
+    {
+        Assert.Empty(ReportProblems(FixtureReport, ["Fixture Hero", "Fixture Fighter"]));
+    }
+
+    [Theory]
+    [InlineData("- layout: Some Person Name")]
+    [InlineData("# Testy Person")]
+    [InlineData("- family: srd-5.1 Testy")]
+    [InlineData("- feat:3: NotFound (Testy note)")]
+    public void A_report_line_that_could_carry_free_text_is_rejected(string line)
+    {
+        var report = FixtureReport.Replace("- can apply: True", line, StringComparison.Ordinal);
+        var problems = ReportProblems(report, ["Fixture Hero"]);
+        Assert.NotEmpty(problems);
+        Assert.DoesNotContain(problems, p => p.Contains("Testy", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_report_that_quotes_a_label_is_rejected_by_the_label_check()
+    {
+        // The line is shape-valid (an enum-like word), so only the label check can catch it.
+        var report = FixtureReport.Replace("- name: Ok", "- name: Fixturehero", StringComparison.Ordinal);
+        Assert.Empty(ReportProblems(report, ["Other"]));
+        Assert.NotEmpty(ReportProblems(report, ["Fixturehero"]));
+    }
+
+    [Fact]
+    public void Labels_drop_an_unread_name_and_include_every_class_name()
+    {
+        var pdf = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-ddb-sheet.pdf"));
+        using var temp = new TempApp();
+        var read = temp.App.ReadDdbSheetData("sheet.pdf", pdf);
+        var sheet = temp.App.DdbSessions.Peek(read.Token)!;
+        var unnamed = sheet with { Name = Read<string>.Missing };
+        var preview = temp.App.PreviewDdbImport(new(read.Token, read.SuggestedFamily ?? RulesFamilies.Srd521, null, null, null, false));
+
+        var labels = LabelsFor(unnamed, preview.Matches);
+
+        Assert.DoesNotContain("", labels);
+        Assert.All(sheet.Classes.Value!, c => Assert.Contains(c.Name, labels));
+    }
 
     [LocalSheetFact]
     public void The_owners_sheet_is_recognised_and_parses_with_no_unreadable_required_field()
@@ -148,7 +294,11 @@ public partial class DdbImportAcceptanceTests
 
         var outcome = Check(File.ReadAllBytes(Path.Combine(LocalFolder, "sheet.pdf")), expectations);
 
-        File.WriteAllText(Path.Combine(LocalFolder, "report.md"), outcome.Report, Encoding.UTF8);
+        // The report is written only when this exact text passes the privacy checks.
+        var problems = ReportProblems(outcome.Report, outcome.Labels);
+        if (problems.Count == 0)
+            File.WriteAllText(Path.Combine(LocalFolder, "report.md"), outcome.Report, Encoding.UTF8);
+        Assert.True(problems.Count == 0, $"report.md was not written. {string.Join(" ", problems)}");
         Assert.True(outcome.Failures.Count == 0, string.Join(" ", outcome.Failures));
     }
 
@@ -156,9 +306,8 @@ public partial class DdbImportAcceptanceTests
     public void The_owners_report_names_no_value()
     {
         var outcome = Check(File.ReadAllBytes(Path.Combine(LocalFolder, "sheet.pdf")), null);
-        var bad = outcome.Report.Split('\n').Select((line, i) => (line, i)).Where(x => !ReportLine().IsMatch(x.line)).Select(x => x.i + 1).ToList();
-        Assert.True(bad.Count == 0, $"Report lines {string.Join(", ", bad)} are not counts, ids or codes.");
-        Assert.True(outcome.Labels.All(l => !outcome.Report.Contains(l, StringComparison.Ordinal)), "The report quotes a sheet value.");
+        var problems = ReportProblems(outcome.Report, outcome.Labels);
+        Assert.True(problems.Count == 0, string.Join(" ", problems));
     }
 
     [Fact]
@@ -171,12 +320,11 @@ public partial class DdbImportAcceptanceTests
         var outcome = Check(pdf, new Expectations("ddb-2014", RulesFamilies.Srd51, [new(3), new(2)], new(null, null, null, 3)));
 
         Assert.True(outcome.Failures.Count == 0, string.Join(" ", outcome.Failures));
-        var bad = outcome.Report.Split('\n').Where(line => !ReportLine().IsMatch(line)).ToList();
-        // The fixture sheet is invented, so its lines may appear here; the owner's test reports line numbers only.
-        Assert.True(bad.Count == 0, $"Report lines that are not counts, ids or codes: {string.Join(" | ", bad)}");
+        Assert.Empty(ReportProblems(outcome.Report, outcome.Labels));
         Assert.NotEmpty(outcome.Labels);
         Assert.All(outcome.Labels, l => Assert.DoesNotContain(l, outcome.Report, StringComparison.Ordinal));
         Assert.Contains("- rows:", outcome.Report, StringComparison.Ordinal);
+        Assert.Contains("still to choose 0", outcome.Report, StringComparison.Ordinal);
     }
 
     [Fact]

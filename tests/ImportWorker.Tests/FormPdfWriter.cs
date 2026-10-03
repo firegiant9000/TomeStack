@@ -17,6 +17,13 @@ internal static class FormPdfWriter
     /// </summary>
     public sealed record FormSpec(string Name, string? Text = null, bool? Checked = null, int Page = 1, IReadOnlyList<string>? Selected = null);
 
+    /// <summary>
+    /// A button field with one widget per state and no name of its own on the widgets (a checkbox group, or a radio group
+    /// when <paramref name="Radio"/>): the field carries <c>/T</c>, <c>/FT</c> and <c>/V</c>, its widgets only <c>/Parent</c>,
+    /// <c>/AS</c> and <c>/AP</c>. <paramref name="On"/> is the index of the widget that is on, or null for none.
+    /// </summary>
+    public sealed record GroupSpec(string Name, IReadOnlyList<string> States, int? On, bool Radio = false, int Page = 1);
+
     /// <param name="nested">Names with periods become a parent chain (<c>/Kids</c> and <c>/Parent</c>), each part its own partial name.</param>
     /// <param name="withJavaScript">The catalog gets an <c>/OpenAction</c> and an <c>/AA</c> JavaScript action.</param>
     /// <param name="javaScript">The script of those actions.</param>
@@ -24,6 +31,7 @@ internal static class FormPdfWriter
     /// False leaves <c>/AcroForm</c> out of the catalog, so the fields are reachable only as the pages' widget annotations
     /// (the shape S0 found in a real export).
     /// </param>
+    /// <param name="groups">Button groups written after <paramref name="fields"/>.</param>
     public static byte[] Write(
         IReadOnlyList<FormSpec> fields,
         int pages = 2,
@@ -32,7 +40,8 @@ internal static class FormPdfWriter
         bool withJavaScript = false,
         bool nested = false,
         string javaScript = "app.alert('Fixture');",
-        bool withAcroForm = true)
+        bool withAcroForm = true,
+        IReadOnlyList<GroupSpec>? groups = null)
     {
         ArgumentNullException.ThrowIfNull(fields);
         // Object numbers: 1 catalog, 2 pages, 3.. one per page, then fields (and parents), then the script.
@@ -83,6 +92,24 @@ internal static class FormPdfWriter
                 { Selected: { } selected } => $"<< {common} /FT /Ch /Ff 131072 /Opt [{string.Concat(selected.Select(Str))}] /V {(selected.Count == 1 ? Str(selected[0]) : $"[{string.Concat(selected.Select(Str))}]")} >>",
                 _ => $"<< {common} /FT /Tx" + (field.Text is { } text ? $" /V {Str(text)}" : "") + " >>",
             };
+        }
+        foreach (var group in groups ?? [])
+        {
+            var self = Reserve();
+            roots.Add(self);
+            var page = pageRefs[Math.Clamp(group.Page, 1, pages) - 1];
+            var kids = new List<int>();
+            for (var i = 0; i < group.States.Count; i++)
+            {
+                var kid = Reserve();
+                kids.Add(kid);
+                annots[page].Add(kid);
+                var state = i == group.On ? group.States[i] : "Off";
+                objects[kid - 1] = $"<< /Type /Annot /Subtype /Widget /Parent {self} 0 R /P {page} 0 R /Rect [{x} 560 {x + 20} 580] /F 4 /AS /{state} /AP << /N << /{group.States[i]} 0 0 R /Off 0 0 R >> >> >>";
+                x = x >= 500 ? 50 : x + 50;
+            }
+            var value = group.On is { } on ? group.States[on] : "Off";
+            objects[self - 1] = $"<< /T {Str(group.Name)} /FT /Btn{(group.Radio ? " /Ff 49152" : "")} /V /{value} /Kids [{Refs(kids)}] >>";
         }
         foreach (var (name, node) in parents)
         {

@@ -10,7 +10,7 @@
   - For each number that differs, you choose TomeStack's number, the sheet's number (an override), or a gap note.
   - Current and temporary hit points and inspiration come over only if you tick the box. Currency, notes, speed, languages and the player name are not brought over.
   - The 2014-style sheet is recognised, its layout confirmed against a real export. That sheet has no equipped mark, death saves, or spent hit dice and slots, so imported items are not equipped and the character starts rested on those. 2024-style sheets are not recognised yet.
-  - Gap notes gain a new kind for these unmatched items (gap-note schema v2). A personal backup that holds one cannot be opened by older TomeStack versions, which report the backup entry as not valid rather than asking for an update; other backups can.
+  - Gap notes gain a new kind for these unmatched items (gap-note schema v2). The data folder moves to database version 10 (no table changes; the previous version is backed up first, `tomestack.db.v9.bak`), so older TomeStack versions refuse the folder rather than failing on these notes. A personal backup that holds one cannot be opened by older versions, which report the backup entry as not valid; other backups can.
 
 - **A recovery-drill counter, for developers (roadmap T6; not in the app):**
   - The development host can count what a closed TomeStack data folder holds, and compare two counts: the library before a backup and after a restore on another computer.
