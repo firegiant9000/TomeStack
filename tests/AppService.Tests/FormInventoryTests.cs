@@ -29,7 +29,7 @@ public class FormInventoryTests
         var json = FormInventory.ToJson(report);
         using var document = JsonDocument.Parse(json);
         Assert.All(document.RootElement.GetProperty("fields").EnumerateArray(), f => Assert.False(f.TryGetProperty("value", out _)));
-        foreach (var value in new[] { "Testy McFixture", "Fixture Fighter 3", "Fixture Glimmerkin", "Fixture Archivist", "Fixture Ember Lance", "Fixture Hookblade", "Fixture Rope Coil" })
+        foreach (var value in new[] { "Testy McFixture", "Fixture Arcanist 3", "Fixture Quickfoot", "Fixture Archivist", "Fixture Frost Ring", "Fixture Longblade", "Fixture Rope Coil" })
             Assert.DoesNotContain(value, json, StringComparison.Ordinal);
     }
 

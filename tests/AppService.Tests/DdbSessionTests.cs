@@ -73,7 +73,7 @@ public class DdbSessionTests
 
         Assert.NotEqual(Guid.Empty, read.Token);
         Assert.Equal(("ddb-2014", RulesFamilies.Srd51), (read.Layout, read.SuggestedFamily));
-        Assert.Equal(new DdbSummary("Testy McFixture", "Fixture Fighter 3", 2, 3, 4), read.Summary);
+        Assert.Equal(new DdbSummary("Testy McFixture", "Fixture Arcanist 3 / Fixture Chanter 2", 2, 3, 4), read.Summary);
         Assert.NotNull(temp.App.DdbSessions.Peek(read.Token));
     }
 

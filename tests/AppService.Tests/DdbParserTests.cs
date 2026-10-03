@@ -70,8 +70,8 @@ public class DdbParserTests
         Assert.Equal(("ddb-2014", RulesFamilies.Srd51), (sheet.Layout, sheet.SuggestedFamily));
         Assert.Equal(Read<string>.Ok("Testy McFixture"), sheet.Name);
         Assert.Equal(ReadStatus.Ok, sheet.Classes.Status);
-        Assert.Equal([new ClassText("Fixture Fighter", 3, null)], sheet.Classes.Value!);
-        Assert.Equal((Read<string>.Ok("Fixture Glimmerkin"), Read<string>.Ok("Fixture Archivist")), (sheet.Species, sheet.Background));
+        Assert.Equal([new ClassText("Fixture Arcanist", 3, null), new ClassText("Fixture Chanter", 2, null)], sheet.Classes.Value!);
+        Assert.Equal((Read<string>.Ok("Fixture Quickfoot"), Read<string>.Ok("Fixture Archivist")), (sheet.Species, sheet.Background));
         Assert.Equal([16, 14, 15, 10, 12, 8], Enum.GetValues<Ability>().Select(a => sheet.Abilities[a].Value));
         Assert.Equal(Read<bool>.Ok(true), sheet.SaveProficient[Ability.Str]);
         Assert.Equal(Read<bool>.Ok(false), sheet.SaveProficient[Ability.Dex]);
@@ -83,14 +83,14 @@ public class DdbParserTests
         Assert.Equal([Read<string>.Ok("Fixture Steady Breath"), Read<string>.Ok("Fixture Bold Surge")], sheet.Features);
         Assert.Equal(
         [
-            Read<SpellText>.Ok(new("Fixture Ember Lance", true)),
-            Read<SpellText>.Ok(new("Fixture Frost Veil", false)),
-            Read<SpellText>.Ok(new("Fixture Thunder Word", true)),
+            Read<SpellText>.Ok(new("Fixture Frost Ring", true)),
+            Read<SpellText>.Ok(new("Fixture Veil", false)),
+            Read<SpellText>.Ok(new("Fixture Mending Word", true)),
         ], sheet.Spells);
         Assert.Equal(
         [
-            Read<ItemText>.Ok(new("Fixture Hookblade", 1, true)),
-            Read<ItemText>.Ok(new("Fixture Quilted Coat", 1, true)),
+            Read<ItemText>.Ok(new("Fixture Longblade", 1, true)),
+            Read<ItemText>.Ok(new("Fixture Padded Jerkin", 1, true)),
             Read<ItemText>.Ok(new("Fixture Rope Coil", 2, false)),
             Read<ItemText>.Ok(new("Fixture Lantern", 1, false)),
         ], sheet.Items);
@@ -157,7 +157,7 @@ public class DdbParserTests
         Assert.Equal(Read<int>.Unreadable, sheet.Numbers[FieldIds.ArmorClass]);
         // The row's name was readable, so it is kept for the list of what was left out.
         Assert.Equal(ReadStatus.Unreadable, sheet.Items[0].Status);
-        Assert.Equal("Fixture Hookblade", sheet.Items[0].Value!.Name);
+        Assert.Equal("Fixture Longblade", sheet.Items[0].Value!.Name);
         Assert.Equal(ReadStatus.Ok, sheet.Items[1].Status);
     }
 
@@ -169,7 +169,7 @@ public class DdbParserTests
 
         var sheet = Parse(fields);
 
-        Assert.Equal(["Fixture Ember Lance", "Fixture Thunder Word"], sheet.Spells.Select(s => s.Value!.Name));
+        Assert.Equal(["Fixture Frost Ring", "Fixture Mending Word"], sheet.Spells.Select(s => s.Value!.Name));
         Assert.Equal(3, sheet.Items.Count);
     }
 

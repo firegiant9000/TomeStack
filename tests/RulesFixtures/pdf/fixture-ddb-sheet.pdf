@@ -18,10 +18,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.name) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (Testy McFixture) >>
 endobj
 7 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.classLevel) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (Fixture Fighter 3) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.classLevel) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (Fixture Arcanist 3 / Fixture Chanter 2) >>
 endobj
 8 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.species) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Glimmerkin) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.species) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Quickfoot) >>
 endobj
 9 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.background) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (Fixture Archivist) >>
@@ -81,25 +81,25 @@ endobj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.deathSuccesses) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (1) >>
 endobj
 28 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.0.name) /P 4 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Ember Lance) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.0.name) /P 4 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (Fixture Frost Ring) >>
 endobj
 29 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.spells.0.prepared) /P 4 0 R /Rect [200 600 240 620] /F 4 /FT /Btn /V /Yes /AS /Yes /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 30 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.1.name) /P 4 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (Fixture Frost Veil) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.1.name) /P 4 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (Fixture Veil) >>
 endobj
 31 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.spells.1.prepared) /P 4 0 R /Rect [300 600 340 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 32 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.2.name) /P 4 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (Fixture Thunder Word) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.spells.2.name) /P 4 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (Fixture Mending Word) >>
 endobj
 33 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.spells.2.prepared) /P 4 0 R /Rect [400 600 440 620] /F 4 /FT /Btn /V /Yes /AS /Yes /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 34 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.0.name) /P 5 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (Fixture Hookblade) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.0.name) /P 5 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (Fixture Longblade) >>
 endobj
 35 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.0.quantity) /P 5 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (1) >>
@@ -108,7 +108,7 @@ endobj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.0.equipped) /P 5 0 R /Rect [50 600 90 620] /F 4 /FT /Btn /V /Yes /AS /Yes /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 37 0 obj
-<< /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.1.name) /P 5 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (Fixture Quilted Coat) >>
+<< /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.1.name) /P 5 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (Fixture Padded Jerkin) >>
 endobj
 38 0 obj
 << /Type /Annot /Subtype /Widget /T (fixture.2014.equipment.1.quantity) /P 5 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (1) >>
@@ -144,46 +144,46 @@ xref
 0000000839 00000 n 
 0000001021 00000 n 
 0000001160 00000 n 
-0000001309 00000 n 
-0000001456 00000 n 
-0000001605 00000 n 
-0000001733 00000 n 
-0000001861 00000 n 
-0000001989 00000 n 
-0000002117 00000 n 
-0000002245 00000 n 
-0000002372 00000 n 
-0000002566 00000 n 
-0000002762 00000 n 
-0000002965 00000 n 
-0000003099 00000 n 
-0000003286 00000 n 
-0000003427 00000 n 
-0000003562 00000 n 
-0000003697 00000 n 
-0000003845 00000 n 
-0000004140 00000 n 
-0000004279 00000 n 
-0000004417 00000 n 
-0000004572 00000 n 
-0000004765 00000 n 
-0000004919 00000 n 
-0000005112 00000 n 
-0000005268 00000 n 
-0000005461 00000 n 
-0000005617 00000 n 
-0000005761 00000 n 
-0000005955 00000 n 
-0000006114 00000 n 
-0000006258 00000 n 
-0000006454 00000 n 
-0000006610 00000 n 
-0000006754 00000 n 
-0000006950 00000 n 
-0000007104 00000 n 
-0000007248 00000 n 
+0000001330 00000 n 
+0000001476 00000 n 
+0000001625 00000 n 
+0000001753 00000 n 
+0000001881 00000 n 
+0000002009 00000 n 
+0000002137 00000 n 
+0000002265 00000 n 
+0000002392 00000 n 
+0000002586 00000 n 
+0000002782 00000 n 
+0000002985 00000 n 
+0000003119 00000 n 
+0000003306 00000 n 
+0000003447 00000 n 
+0000003582 00000 n 
+0000003717 00000 n 
+0000003865 00000 n 
+0000004160 00000 n 
+0000004299 00000 n 
+0000004437 00000 n 
+0000004591 00000 n 
+0000004784 00000 n 
+0000004932 00000 n 
+0000005125 00000 n 
+0000005281 00000 n 
+0000005474 00000 n 
+0000005630 00000 n 
+0000005774 00000 n 
+0000005968 00000 n 
+0000006128 00000 n 
+0000006272 00000 n 
+0000006468 00000 n 
+0000006624 00000 n 
+0000006768 00000 n 
+0000006964 00000 n 
+0000007118 00000 n 
+0000007262 00000 n 
 trailer
 << /Size 46 /Root 1 0 R >>
 startxref
-7444
+7458
 %%EOF

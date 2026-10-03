@@ -177,6 +177,31 @@ public class DdbApplyTests
     }
 
     [Fact]
+    public void The_committed_fixture_sheet_reads_through_the_worker_and_creates_a_character_once_its_choice_is_resolved()
+    {
+        // The real worker (no fake reader), the committed PDF, the seeded fixture casters: the path the e2e flow takes.
+        using var temp = new TempApp();
+        var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-ddb-sheet.pdf"));
+        var read = temp.App.ReadDdbSheetData("fixture-ddb-sheet.pdf", bytes);
+        Assert.Equal(("ddb-2014", RulesFamilies.Srd51), (read.Layout, read.SuggestedFamily));
+
+        var open = temp.App.PreviewDdbImport(new(read.Token, RulesFamilies.Srd51, null, null, null, false));
+        var veil = open.Matches.Single(m => m.Kind == MatchKind.Spell && m.Status == MatchStatus.Choose);
+        Assert.False(open.CanApply);
+        Assert.Contains(open.Matches, m => m.RowId == "species" && m.Status == MatchStatus.Matched);
+        Assert.Contains(open.Comparison, n => n.Field == FieldIds.ArmorClass && n.Differs);
+
+        var chanter = veil.Candidates.Single(c => c.Placement.Caster == open.Character.Classes[1].Class.ContentId);
+        var applied = temp.App.ApplyDdbImport(new(read.Token, RulesFamilies.Srd51, null, [new(veil.RowId, chanter.Reference, false, chanter.Placement.Caster)],
+            [new(FieldIds.ArmorClass, NumberAction.KeepSheet)], false, Confirm: true));
+
+        var view = temp.App.GetCharacter(applied.CharacterId);
+        Assert.Equal(("Testy McFixture", 2, 1), (view.Character.Name, view.Character.Classes.Count, applied.Overrides));
+        Assert.Equal(3, view.Character.Spells.Count);
+        Assert.True(applied.GapNotes > 0);
+    }
+
+    [Fact]
     public void ddb_apply_works_through_the_dispatcher()
     {
         using var h = new DdbHarness();
