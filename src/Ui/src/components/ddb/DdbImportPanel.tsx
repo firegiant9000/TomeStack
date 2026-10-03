@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../../api/client';
+import { TomeStackError } from '../../api/transport';
 import type {
   ChoiceSelection,
   DdbApplyResult,
@@ -22,7 +23,8 @@ interface Props {
   onError: (error: unknown) => void;
   /** Cancel at any step: the read sheet is discarded and nothing was written (SPEC C-07). */
   onCancel: () => void;
-  onCreated: (characterId: string, result: DdbApplyResult) => void;
+  /** May be async: the panel waits for it, and keeps Create disabled once the character is saved. */
+  onCreated: (characterId: string, result: DdbApplyResult) => Promise<void> | void;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -46,21 +48,31 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
+  /** A preview that failed, keyed to the request it answered; it ends the loading state and offers "Try again". */
+  const [previewError, setPreviewError] = useState<{ key: string; message: string }>();
+  const [retry, setRetry] = useState(0);
+  /** Why the user was sent back to step 1 (the sheet was spent, discarded or expired). */
+  const [sheetError, setSheetError] = useState<string>();
   const [applying, setApplying] = useState(false);
+  /** Set once the character is saved: Create never enables again, so a second click cannot save a duplicate. */
+  const [created, setCreated] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   /** The token to discard if the panel goes away before "Create character" spent it. */
   const live = useRef<string | undefined>(undefined);
+  /** False once the panel is cancelled or unmounted: a read still in flight then discards its own token. */
+  const open = useRef(true);
 
   useEffect(() => {
     heading.current?.focus();
   }, [step]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
       if (live.current) void client.ddbDiscard(live.current).catch(() => undefined);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const request: DdbPreviewRequest | undefined =
     read && family
@@ -86,18 +98,38 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         if (!current) return;
         setPreview(next);
         setPreviewFor(requestKey);
+        setPreviewError(undefined);
       })
-      .catch(onError);
+      .catch((error: unknown) => {
+        if (!current) return;
+        if (error instanceof TomeStackError && error.code === 'ddb.token-invalid') {
+          live.current = undefined; // the service no longer holds it
+          setSheetError(error.message);
+          setRead(undefined);
+          setPreview(undefined);
+          setPreviewFor(undefined);
+          setPreviewError(undefined);
+          setStep(1);
+          return;
+        }
+        setPreviewError({ key: requestKey, message: error instanceof Error ? error.message : 'The preview could not be built.' });
+      });
     return () => {
       current = false;
     };
     // requestKey stands for the request's content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, requestKey, onError]);
-  const loading = step >= 3 && request !== undefined && previewFor !== requestKey;
+  }, [step, requestKey, retry]);
+  const failed = previewError?.key === requestKey ? previewError : undefined;
+  const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
 
   function onRead(result: DdbReadResult) {
+    if (!open.current) {
+      void client.ddbDiscard(result.token).catch(() => undefined); // cancelled while the sheet was being read
+      return;
+    }
+    setSheetError(undefined);
     if (live.current && live.current !== result.token) void client.ddbDiscard(live.current).catch(() => undefined);
     live.current = result.token;
     setRead(result);
@@ -110,6 +142,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   }
 
   async function cancel() {
+    open.current = false;
     const token = live.current;
     live.current = undefined;
     if (token) await client.ddbDiscard(token).catch(() => undefined);
@@ -117,12 +150,13 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   }
 
   async function create() {
-    if (!request) return;
+    if (!request || created || applying) return;
     try {
       setApplying(true);
       const result = await client.ddbApply(request);
       live.current = undefined; // spent
-      onCreated(result.characterId, result);
+      setCreated(true);
+      await onCreated(result.characterId, result);
     } catch (error) {
       onError(error);
     } finally {
@@ -145,6 +179,18 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         <h3 id={headingId} ref={heading} tabIndex={-1}>
           {titles[step]}
         </h3>
+        {step === 1 && sheetError && <p role="alert" className="warn">{sheetError}</p>}
+        {step >= 3 && failed && (
+          <div role="alert" className="warn">
+            <p>{failed.message}</p>
+            <button type="button" onClick={() => {
+                setPreviewError(undefined);
+                setRetry((n) => n + 1);
+              }}>
+              Try again
+            </button>
+          </div>
+        )}
         {step === 1 && <DdbChooseStep read={read} onRead={onRead} onError={onError} />}
         {step === 2 && read && family && (
           <DdbFamilyStep
@@ -154,10 +200,17 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             campaignId={campaignId}
             onFamily={(next) => {
               setFamily(next);
+              setCampaignId(undefined); // campaigns belong to one family; the select only lists the new family's
               setResolutions({});
               setAnswers([]);
+              setPreview(undefined);
+              setPreviewFor(undefined);
             }}
-            onCampaign={setCampaignId}
+            onCampaign={(next) => {
+              setCampaignId(next);
+              setPreview(undefined);
+              setPreviewFor(undefined);
+            }}
             onError={onError}
           />
         )}
@@ -195,12 +248,12 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           </button>
         )}
         {step < 5 && (
-          <button type="button" disabled={step === 1 ? !read : !preview && step > 2} onClick={() => setStep((s) => (s + 1) as Step)}>
+          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || loading)} onClick={() => setStep((s) => (s + 1) as Step)}>
             {step === 1 ? 'Next: rules' : step === 2 ? 'Next: matches' : step === 3 ? 'Next: numbers' : 'Next: summary'}
           </button>
         )}
         {step === 5 && (
-          <button type="button" disabled={busy || !preview?.canApply} onClick={create}>
+          <button type="button" disabled={busy || created || !preview?.canApply} onClick={create}>
             Create character
           </button>
         )}
