@@ -36,11 +36,12 @@ export function TabList<Id extends string>({ label, idPrefix, tabs, active, onAc
   function go(index: number) {
     const next = tabs[(index + tabs.length) % tabs.length];
     if (!next) return;
-    moveFocus.current = true;
+    moveFocus.current = next.id !== active; // no change means no effect run, so do not leave the flag set
     onActivate(next.id);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return; // browser and shell shortcuts (Alt+Left is back) pass through
     const index = tabs.findIndex((t) => t.id === active);
     switch (event.key) {
       case 'ArrowRight':

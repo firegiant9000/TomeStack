@@ -72,6 +72,47 @@ it('moves with the arrow keys (wrapping), Home and End, activating as it goes', 
   expect(screen.getByRole('tabpanel', { name: 'One' })).toBeTruthy();
 });
 
+function ExternalHarness() {
+  const [active, setActive] = useState<Id>('one');
+  return (
+    <>
+      <button type="button" onClick={() => setActive('three')}>
+        Fixture jump
+      </button>
+      <TabList label="Fixture sections" idPrefix="fx" tabs={tabs} active={active} onActivate={setActive} />
+      {tabs.map((t) => (
+        <TabPanel key={t.id} idPrefix="fx" id={t.id} active={t.id === active}>
+          <p>Panel {t.label}</p>
+        </TabPanel>
+      ))}
+    </>
+  );
+}
+
+it('does not steal focus on a later programmatic change after a key press that moved nothing', async () => {
+  const user = userEvent.setup();
+  render(<ExternalHarness />);
+  await user.tab(); // the jump button
+  await user.tab(); // tab One
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'One' }));
+  await user.keyboard('{Home}'); // already first: nothing changes
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'One' }));
+  await user.click(screen.getByRole('button', { name: 'Fixture jump' }));
+  expect(screen.getByRole('tab', { name: 'Three' }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Fixture jump' }));
+});
+
+it('lets modified keys through (Alt+Arrow, Ctrl+End) without moving or consuming them', async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+  await user.tab();
+  await user.keyboard('{Alt>}{ArrowRight}{/Alt}');
+  await user.keyboard('{Control>}{End}{/Control}');
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'One' }));
+  expect(screen.getByRole('tab', { name: 'One' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('tabpanel', { name: 'One' })).toBeTruthy();
+});
+
 it('activates on click and keeps focus on the tab', async () => {
   const user = userEvent.setup();
   render(<Harness />);
