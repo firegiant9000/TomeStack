@@ -1,5 +1,5 @@
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
-import { RollModePicker, RollResult } from './PlayPanels';
+import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const abilityNames: Record<(typeof abilities)[number], string> = {
@@ -42,7 +42,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
   const play = character.play;
   const conditions = play?.conditions ?? [];
   const exhaustion = play?.exhaustion ?? 0;
-  const inspirationLabel = character.rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration';
+  const maximumOverridden = Boolean(field('hitPoints')?.override);
 
   return (
     <section className="sheet-summary" role="region" aria-label="Summary">
@@ -84,6 +84,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
             <dt>Hit points</dt>
             <dd>
               {hp.current} of {hp.maximum}
+              {maximumOverridden ? ' (maximum overridden)' : ''}
               {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
             </dd>
           </div>
@@ -95,7 +96,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
           </div>
         )}
         <div>
-          <dt>{inspirationLabel}</dt>
+          <dt>{inspirationLabel(character.rulesFamily)}</dt>
           <dd>{play?.inspiration ? 'yes' : 'no'}</dd>
         </div>
         {(conditions.length > 0 || exhaustion > 0) && (

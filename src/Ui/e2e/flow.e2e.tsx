@@ -1444,6 +1444,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Gaps' });
   const armorClass = summaryValue(sheet, 'Armor Class');
+  const armorClassHeading = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
 
   const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
   expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
@@ -1501,6 +1502,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
 
   // Notes never change the character's sheet.
   expect(summaryValue(screen.getByRole('article', { name: 'E2E Gaps' }), 'Armor Class')).toBe(armorClass);
+  expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClassHeading);
 });
 
 it('prints a sheet with its license notices, and gap notes only when ticked', async () => {

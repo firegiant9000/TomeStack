@@ -60,6 +60,7 @@ function fixtureView(sheetOver: Partial<CharacterSheet> = {}, play?: PlayState, 
       field('proficiencyBonus', 'Proficiency bonus', 2, 'bonus'),
       field('armorClass', 'Armor Class', 16, 'score', { field: 'armorClass', value: 16, reason: 'Table ruling' }),
       field('initiative', 'Initiative', 2, 'modifier'),
+      field('hitPoints', 'Hit point maximum', 35, 'score'),
     ],
     hitPoints: { maximum: 35, current: 28, temporary: 5 },
     hitDice: [{ die: 12, total: 3, spent: 1, remaining: 2, classes: ['Fixture Brute'] }],
@@ -139,4 +140,11 @@ it('marks an overridden ability modifier in text outside the button, whose name 
   expect(screen.getByRole('button', { name: 'Roll Strength check (+5)' })).toBeTruthy();
   expect(strengthDd()).toContain('(modifier overridden)');
   expect(strengthDd()).not.toContain('16 (overridden)');
+});
+
+it('marks an overridden hit point maximum in text, before the temporary part', () => {
+  const view = overriddenView('hitPoints', 40);
+  const overridden = { ...view, sheet: { ...view.sheet, hitPoints: { maximum: 40, current: 28, temporary: 5 } } }; // the sheet carries the overridden maximum
+  render(<SheetSummary view={overridden} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(dd('Hit points')).toBe('28 of 40 (maximum overridden), 5 temporary');
 });

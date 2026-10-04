@@ -2,7 +2,7 @@
 
 SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **slice 2 of 4** (the summary bar).
 
-UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`. Tests: `TabList.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helper `openTab`).
+UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
 
 ## Layout
 
@@ -18,7 +18,7 @@ A definition list, not headings or named regions, so it never shares a name with
 
 - each ability's score with a "Roll <Ability> check (+N)" button (a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
 - Proficiency bonus, Armor Class, Initiative; an overridden number reads "16 (overridden)";
-- Hit points "current of maximum, N temporary", Hit dice per size, Inspiration or Heroic Inspiration (by family) as yes/no;
+- Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size, Inspiration or Heroic Inspiration (by family) as yes/no;
 - Conditions and exhaustion, only when there are any;
 - the d20 roll mode (Normal, Advantage, Disadvantage) and the "Last roll" live region, moved here from the old "Rolls" section so they are reachable from every tab.
 
@@ -28,7 +28,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 
 | Tab | Holds |
 | --- | --- |
-| Sheet | Everything that was on the page except the admin panels and the notices above the tabs, in the old order |
+| Sheet | Everything that was on the page except the admin panels, the summary and the notices above the tabs, in the old order; the old "Rolls" section is now in the summary |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots |
 
 ## Keyboard
