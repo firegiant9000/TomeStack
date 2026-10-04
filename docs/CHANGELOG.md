@@ -20,6 +20,7 @@
 ### Changed
 
 - **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab; the rest of the sheet is under **Sheet**. Open choices and content problems now sit above the tabs, visible whichever tab is open. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-014.
+- **A summary at the top of the sheet:** abilities with a roll button each, proficiency bonus, Armor Class, initiative, hit points, hit dice, inspiration and active conditions, with the d20 roll mode and the last roll. An overridden number says "(overridden)". The old "Rolls" section is gone; nothing else moved.
 
 ## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
 

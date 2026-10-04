@@ -49,6 +49,12 @@ async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElem
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
 }
 
+/** One value of the sheet's summary bar: the text of the `<dd>` after the `<dt>` named `term` (slice 2). */
+function summaryValue(sheet: HTMLElement, term: string): string {
+  const summary = within(sheet).getByRole('region', { name: 'Summary' });
+  return within(summary).getByText(term, { selector: 'dt' }).nextElementSibling!.textContent!.trim();
+}
+
 it('creates a character, shows its traced sheet, overrides, exports and re-imports it', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -214,6 +220,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(screen.getByRole('checkbox', { name: /Critical hit/ }));
   await user.click(screen.getByRole('button', { name: 'Roll Frenzy extra damage (Rage Damage +2: 2d6) (2d6)' }));
   const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  expect(within(screen.getByRole('region', { name: 'Summary' })).getByRole('region', { name: 'Last roll' })).toBe(lastRoll);
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/));
   expect(lastRoll.textContent).toMatch(/d6 \d \(critical\)/); // doubled dice are marked
   expect(lastRoll.textContent).toMatch(/Frenzy \(System Reference Document 5\.2\.1, p\. \d+\)/);
@@ -1397,9 +1404,9 @@ it('switches a toggled effect on and off, spends a chosen amount, and a long res
   await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
   await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
-  await screen.findByRole('article', { name: 'E2E Stance' });
+  const stance = await screen.findByRole('article', { name: 'E2E Stance' });
 
-  const armorClass = () => Number(/^Armor Class: (\d+)/.exec(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent ?? '')![1]);
+  const armorClass = () => Number(/^(\d+)/.exec(summaryValue(stance, 'Armor Class'))![1]);
   const before = armorClass();
   const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
   await user.click(within(actions()).getByRole('checkbox', { name: /^Radiant stance/ }));
@@ -1435,8 +1442,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(await screen.findByRole('radio', { name: /^Fixture Quickfoot/ }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
-  await screen.findByRole('article', { name: 'E2E Gaps' });
-  const armorClass = screen.getByRole('heading', { name: /^Armor Class:/ }).textContent;
+  const sheet = await screen.findByRole('article', { name: 'E2E Gaps' });
+  const armorClass = summaryValue(sheet, 'Armor Class');
 
   const gaps = () => screen.getByRole('region', { name: /^Gap notes/ });
   expect(await within(gaps()).findByText('No gap notes yet.')).toBeTruthy();
@@ -1493,7 +1500,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   expect(within(gaps()).getByRole('heading').textContent).toBe('Gap notes: 0 open');
 
   // Notes never change the character's sheet.
-  expect(screen.getByRole('heading', { name: /^Armor Class:/ }).textContent).toBe(armorClass);
+  expect(summaryValue(screen.getByRole('article', { name: 'E2E Gaps' }), 'Armor Class')).toBe(armorClass);
 });
 
 it('prints a sheet with its license notices, and gap notes only when ticked', async () => {
@@ -1955,6 +1962,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
 
   await expectStatus(/Character created from the D&D Beyond sheet: 1 override\(s\), \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
+  expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
 });
 

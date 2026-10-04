@@ -16,11 +16,12 @@ import type {
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
-import { ActionsPanel, ClassColumnsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel, RollModePicker, RollResult } from './PlayPanels';
+import { ActionsPanel, ClassColumnsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
+import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
@@ -320,6 +321,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         />
       )}
 
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
           <h3 id="campaign-heading">Campaign: {view.campaign.name}</h3>
@@ -405,12 +408,6 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
               .catch(onError)
           }
         />
-        <section aria-labelledby="rolls-heading" className="play-panel">
-          <h3 id="rolls-heading">Rolls</h3>
-          <RollModePicker mode={rollMode} onChange={setRollMode} />
-          <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
-          <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
-        </section>
         <ActionsPanel view={view} roll={roll} act={act} />
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
