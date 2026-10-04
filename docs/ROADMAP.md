@@ -8,6 +8,8 @@ _This revision sits above the milestone table and changes what happens next, not
 
 _**Reconciled with the owner's direction of 2026-09-30 (LIVING_SPECS D15):** M6 slices 2 to 6 were built on purpose before T2 and are kept. T1, T2 as the gate for M7, content breadth and further studio work, T3 to T6 and the audit findings still apply. What the M6 stack made obsolete is struck through, with the reason. The revision branch held two drafts of this section (T1–T6 and a near copy, U1–U6); this is the one kept, with the few details only U had folded in._
 
+_**2026-10-03 (LIVING_SPECS D16):** the sheet's summary bar and tabs ([features/sheet-layout.md](features/sheet-layout.md), ADR-013) are owner-use polish done during T2. They are not M7 "deeper accessibility/themes" work and do not wait for the T2 gap report._
+
 ### R1. Decision
 
 The next thing TomeStack needs is not a feature. It is a **played session**. M5 (eight studio slices) and M6 slice 1 were built in three days and are all fixture-verified and unreleased (merged to `main` on 2026-09-30 via #46), while the M3 played session, the M4 third-party PDF run, the second-machine restore and the first installer are still owner checks. By owner direction, M6 slices 2 to 6 were then built in the same days (D15). Until the M3 gate produces a gap report, no further studio, DM, combat, extension, cloud or content-breadth work starts. After it, the repository specialises in what it already does best: .NET architecture, local-first desktop engineering, correctness (FsCheck), performance (BenchmarkDotNet), desktop release engineering (Velopack) and recovery evidence (a real restore drill). This repository owns those four kinds of evidence for the whole portfolio.
