@@ -107,7 +107,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
         )}
       </dl>
       <RollModePicker mode={rollMode} onChange={onRollMode} />
-      <p className="hint">Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.</p>
+      <p className="hint">Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.</p>
       <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
     </section>
   );

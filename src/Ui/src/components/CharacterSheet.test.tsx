@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// The sheet's tabs (ADR-014): Spells only for casters, a tab that is not offered falls back to Play, and "Report a gap"
-// switches to Notes and focuses the note text even when Notes is already open. The client is mocked; values are invented.
+// The sheet's tabs (ADR-014): Spells only when there is something to show, a tab that is not offered falls back to Play,
+// "Report a gap" switches to Notes and focuses the note text every time it is pressed, and choosing Notes by hand keeps
+// focus on the tab. The client is mocked; values are invented.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -72,6 +73,32 @@ it('offers Spells only to a caster and opens on Play', () => {
   cleanup();
   renderSheet(view({ spellcasting: [] , spellSlots: [{ level: 1, maximum: 2, spent: 0, remaining: 2, field: 'spellSlots.1' }], fields: [...view().sheet.fields, field('spellSlots.1', 'Level 1 spell slots', 2, 'score')] }));
   expect(screen.getByRole('tab', { name: 'Spells' })).toBeTruthy(); // a spell field with a value counts, even with no caster entry
+  cleanup();
+  const ref = { contentId: '00000000-0000-4000-8000-0000000000a1', revisionId: '00000000-0000-4000-8000-0000000000b1' };
+  renderSheet(
+    view({
+      spellcasting: [
+        {
+          content: ref,
+          name: 'Fixture Arcanist',
+          effectId: 'fixture-spellcasting',
+          classLevel: 1,
+          ability: 'int',
+          attackBonus: 4,
+          saveDc: 12,
+          preparation: 'prepared',
+          spellList: 'fixture-list',
+          slotKind: 'spellSlots',
+          slots: [2],
+          primary: true,
+          origin: { kind: 'content', rulesFamily: 'srd-5.1', content: ref, contentName: 'Fixture Arcanist' },
+          spells: [],
+          warnings: [],
+        },
+      ],
+    }),
+  );
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
 });
 
 it('falls back to Play when the requested tab is not offered', () => {
@@ -80,7 +107,7 @@ it('falls back to Play when the requested tab is not offered', () => {
   expect(screen.getByRole('tabpanel', { name: 'Play' })).toBeTruthy();
 });
 
-it('"Report a gap" switches to Notes, pre-fills About and focuses the text, also when Notes is already open', async () => {
+it('"Report a gap" switches to Notes, pre-fills About and focuses the text, every time it is pressed', async () => {
   const user = userEvent.setup();
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Stats' }));
@@ -93,7 +120,7 @@ it('"Report a gap" switches to Notes, pre-fills About and focuses the text, also
   await waitFor(() => expect(document.activeElement).toBe(text));
   expect((within(form).getByRole('combobox', { name: /^About/ }) as HTMLSelectElement).value).toBe('field:armorClass');
 
-  // Notes is open now; a second report from Stats must still land focus on the text box.
+  // A second report, after leaving Notes and moving focus away, must move focus to the text box again.
   await user.click(screen.getByRole('tab', { name: 'Stats' }));
   text.blur();
   await user.click(within(screen.getByRole('region', { name: /^Initiative:/ })).getByRole('heading'));
@@ -106,6 +133,8 @@ it('keeps typed text in the gap note box when switching tabs and back', async ()
   const user = userEvent.setup();
   renderSheet(view());
   await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  // Choosing Notes by hand keeps focus on the tab (APG); only "Report a gap" moves focus into the text box.
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Notes' }));
   const form = screen.getByRole('form', { name: 'New gap note' });
   const text = within(form).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement;
   await user.type(text, 'Fixture draft: the rule text is unclear');
