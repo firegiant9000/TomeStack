@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -248,26 +248,22 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   ];
   // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
   const [tab, setTabState] = useState<SheetTabId>(() => initialTab ?? rememberedSheetTab(character.id) ?? 'play');
-  const characterId = character.id;
-  const setTab = useCallback(
-    (next: SheetTabId) => {
-      setTabState(next);
-      rememberSheetTab(characterId, next);
-    },
-    [characterId],
-  );
+  function setTab(next: SheetTabId) {
+    setTabState(next);
+    rememberSheetTab(character.id, next);
+  }
   const active: SheetTabId = tabs.some((t) => t.id === tab) ? tab : 'play';
+  // A tab that is no longer offered becomes Play (React's adjust-state-while-rendering). The stored memory is not touched:
+  // it only changes when the user picks a tab, so a remembered Spells comes back if the character becomes a caster again.
+  if (tab !== active) setTabState('play');
 
-  // A tab that stops being offered (the last spell override was removed on a non-caster) unmounts with focus inside it,
-  // which would drop focus to <body> (WCAG 2.4.3): put it on the Play tab. Focus is never moved otherwise, so a remembered
-  // tab that is not offered falls back silently while the heading holds focus on mount.
+  // The open tab stopping being offered (the last spell override was removed on a non-caster) unmounts its panel with focus
+  // inside, which would drop focus to <body> (WCAG 2.4.3): put it on the Play tab. Focus is never moved otherwise, so a
+  // remembered tab that is not offered falls back silently while the heading holds focus on mount.
   useEffect(() => {
-    if (tab === active) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacts to the offered tabs changing after a save, and must run with the focus check below
-    setTab('play');
     const focused = document.activeElement;
     if (!focused || focused === document.body) document.getElementById(tabId('sheet', 'play'))?.focus();
-  }, [tab, active, setTab]);
+  }, [showSpells]);
 
   // M3 C5: "Report a gap" pre-fills the gap note form, opens Notes and moves focus to its text box. A counter, not a flag:
   // setting the tab to the value it already has causes no render, so the focus must not depend on a tab change.

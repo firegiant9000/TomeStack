@@ -1502,6 +1502,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
   expect(document.activeElement).toBe(text);
+  // "Report a gap" left Notes as the remembered tab; move the memory off it so the deep link below is what selects Notes.
+  await openTab(user, sheet, 'Play');
 
   // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
   await user.click(screen.getByRole('button', { name: 'Gap notes' }));
@@ -1513,9 +1515,9 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(mine()).toHaveLength(2));
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
-  // The reopened sheet loads its notes again; wait for them before using them.
   // "Open <character>" from the Gap notes screen opens the sheet on Notes.
   expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  // The reopened sheet loads its notes again; wait for them before using them.
   await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
 
   // Deleting asks first; "Keep note" leaves it.

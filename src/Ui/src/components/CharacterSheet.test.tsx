@@ -167,7 +167,7 @@ it('remembers the tab chosen, so the next opening of the same character starts t
   expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
 });
 
-it('moves focus to Play when the open tab stops being offered, and leaves focus alone otherwise', async () => {
+it('moves focus to Play when the open tab stops being offered', async () => {
   const user = userEvent.setup();
   const fields = view().sheet.fields;
   const withOverride = view({ fields: fields.map((f) => (f.field === 'spellAttack' ? { ...f, override: { field: 'spellAttack', value: 3 }, value: 3 } : f)) });
@@ -184,9 +184,10 @@ it('moves focus to Play when the open tab stops being offered, and leaves focus 
   expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Play' }));
 });
 
-it('falls back from a remembered tab that is not offered without taking focus from the heading', () => {
+it('falls back from a remembered tab that is not offered, without taking focus from the heading or rewriting the memory', () => {
   localStorage.setItem('tomestack.sheetTab.fixture-2', 'spells');
   renderSheet(view());
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
+  expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('spells');
 });

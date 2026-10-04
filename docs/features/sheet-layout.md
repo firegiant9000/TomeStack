@@ -48,8 +48,8 @@ Only the information architecture (summary above, pages below) is borrowed. The 
 
 ## Remembered tab and deep links
 
-The sheet reopens on the tab used last for that character. The memory is `tomestack.sheetTab.<characterId>` in the page's own storage (the WebView2 profile in the data folder): on this computer only, in no package, share or backup. "Open <character>" on the Gap notes screen opens Notes instead (and leaves the memory alone). A remembered tab that is not offered (Spells for a character who is no longer a caster) falls back to Play. If the open tab stops being offered while you are on it (the last spell override is removed on a non-caster), the sheet moves to Play and, only if focus would otherwise be lost, puts focus on the Play tab.
+The sheet reopens on the tab used last for that character. The memory is `tomestack.sheetTab.<characterId>` in the page's own storage (the WebView2 profile in the data folder): kept in this data folder only, in no package, share or backup. "Open <character>" on the Gap notes screen opens Notes instead (and leaves the memory alone). A tab that is not offered (Spells for a character who is no longer a caster) falls back to Play, and the memory is left alone: it changes only when you pick a tab, so a remembered Spells returns if the character becomes a caster again. If the open tab stops being offered while you are on it (the last spell override is removed on a non-caster), the sheet moves to Play and, only if focus would otherwise be lost, puts focus on the Play tab.
 
 ## Reflow
 
-Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`) and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6).
+Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6).
