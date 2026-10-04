@@ -19,7 +19,7 @@
 
 ### Changed
 
-- **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab; the rest of the sheet is under **Sheet**. Open choices and content problems stay listed above the tabs. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-013.
+- **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab; the rest of the sheet is under **Sheet**. Open choices and content problems now sit above the tabs, visible whichever tab is open. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-014.
 
 ## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
 

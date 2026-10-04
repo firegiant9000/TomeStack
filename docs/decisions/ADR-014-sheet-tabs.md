@@ -1,7 +1,8 @@
-# ADR-013: Sheet navigation: an in-sheet tablist with every panel kept mounted
+# ADR-014: Sheet navigation: an in-sheet tablist with every panel kept mounted
 
-Status: accepted (owner, 2026-10-03; LIVING_SPECS D16)
+Status: accepted (owner, 2026-10-03; LIVING_SPECS D17)
 Date: 2026-10-03
+Implementation: slice 1 of 4 (the strip with "Sheet" and "Manage"; features/sheet-layout.md). The summary (slice 2), the seven tabs with "Report a gap" opening Notes (slice 3), and the remembered tab and deep link (slice 4) follow; the Consequences and Evidence below describe the finished design.
 
 ## Context
 
@@ -29,4 +30,4 @@ The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of
 
 ## Evidence
 
-`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box); `docs/features/sheet-layout.md`.
+`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box (slice 3)); `docs/features/sheet-layout.md`.

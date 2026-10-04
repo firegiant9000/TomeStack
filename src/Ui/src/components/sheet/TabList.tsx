@@ -19,7 +19,7 @@ interface ListProps<Id extends string> {
 }
 
 /**
- * WAI-ARIA APG tabs (ADR-013; accessibility checklist item 29). One tab is in the tab order (roving tabindex). Left and
+ * WAI-ARIA APG tabs (ADR-014; accessibility checklist item 29). One tab is in the tab order (roving tabindex). Left and
  * Right move to the previous and next tab and wrap, Home and End go to the first and last. Activation is automatic:
  * moving selects, because every panel is already mounted and switching costs nothing. Focus follows the selected tab
  * only after a key press, never on first render or after a click elsewhere.

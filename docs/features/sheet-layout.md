@@ -1,6 +1,6 @@
 # Sheet layout: summary and tabs
 
-SPEC P-03 · ADR-013 · LIVING_SPECS D16 (owner, 2026-10-03) · status: **slice 1 of 4** (the strip with "Sheet" and "Manage").
+SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **slice 1 of 4** (the strip with "Sheet" and "Manage").
 
 UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`. Tests: `TabList.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helper `openTab`).
 
@@ -15,7 +15,7 @@ UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/Tab
 
 | Tab | Holds |
 | --- | --- |
-| Sheet | Everything that was on the page except the admin panels, in the old order |
+| Sheet | Everything that was on the page except the admin panels and the notices above the tabs, in the old order |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots |
 
 ## Keyboard

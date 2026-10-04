@@ -227,7 +227,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [resting, setResting] = useState<RestPeriod>();
   const [printing, setPrinting] = useState(false);
   const [gapAbout, setGapAbout] = useState('');
-  // ADR-013: the sheet is tabbed. Slice 1 has two tabs; slice 3 splits "Sheet".
+  // ADR-014: the sheet is tabbed. Slice 1 has two tabs; slice 3 splits "Sheet".
   type Tab = 'sheet' | 'manage';
   const [tab, setTab] = useState<Tab>('sheet');
   const tabs: readonly TabSpec<Tab>[] = [

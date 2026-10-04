@@ -8,7 +8,7 @@ _This revision sits above the milestone table and changes what happens next, not
 
 _**Reconciled with the owner's direction of 2026-09-30 (LIVING_SPECS D15):** M6 slices 2 to 6 were built on purpose before T2 and are kept. T1, T2 as the gate for M7, content breadth and further studio work, T3 to T6 and the audit findings still apply. What the M6 stack made obsolete is struck through, with the reason. The revision branch held two drafts of this section (T1–T6 and a near copy, U1–U6); this is the one kept, with the few details only U had folded in._
 
-_**2026-10-03 (LIVING_SPECS D16):** the sheet's summary bar and tabs ([features/sheet-layout.md](features/sheet-layout.md), ADR-013) are owner-use polish done during T2. They are not M7 "deeper accessibility/themes" work and do not wait for the T2 gap report._
+_**2026-10-03 (LIVING_SPECS D17):** the sheet's summary bar and tabs ([features/sheet-layout.md](features/sheet-layout.md), ADR-014) are owner-use polish done during T2. They are not M7 "deeper accessibility/themes" work and do not wait for the T2 gap report._
 
 ### R1. Decision
 

@@ -106,7 +106,7 @@ span.warn { color: var(--warn); }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
-/* ADR-013: sheet tabs (WAI-ARIA APG tabs). The class sets display, so [hidden] must be restated or a hidden panel shows. */
+/* ADR-014: sheet tabs (WAI-ARIA APG tabs). The class sets display, so [hidden] must be restated or a hidden panel shows. */
 .tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); }
 .tabs [role='tab'] { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: inherit; }
 .tabs [role='tab'][aria-selected='true'] { border-color: var(--line); font-weight: 700; margin-bottom: -1px; background: var(--bg); }

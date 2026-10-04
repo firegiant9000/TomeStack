@@ -41,7 +41,7 @@ async function expectStatus(text: RegExp): Promise<HTMLElement> {
 }
 
 /**
- * Activates one tab of a character sheet (ADR-013). Inactive panels are hidden, so a query finds only the active
+ * Activates one tab of a character sheet (ADR-014). Inactive panels are hidden, so a query finds only the active
  * tab's sections; a test must open the tab a user would open. A no-op when the tab is already selected.
  */
 async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElement, name: string): Promise<void> {
