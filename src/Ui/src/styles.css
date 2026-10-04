@@ -121,6 +121,12 @@ span.warn { color: var(--warn); }
 .sheet-summary dt { font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
 
+/* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 400% zoom) the sidebar stacks above the content. */
+@media (max-width: 40rem) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+}
+
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
 pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }

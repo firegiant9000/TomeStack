@@ -25,7 +25,10 @@ beforeEach(() => {
   vi.mocked(client.listContent).mockResolvedValue([]);
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear(); // the remembered tab is per character id, and these tests share one
+});
 
 const field = (id: string, label: string, value: number, units: string): DerivedValue => ({ field: id, label, value, computedValue: value, trace: [], warnings: [], automation: 'automatic', units });
 
@@ -63,8 +66,10 @@ function view(sheetOver: Partial<SheetModel> = {}): CharacterView {
 }
 
 const noop = () => {};
-const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) =>
-  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />);
+const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => (
+  <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
+);
+const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
 
 it('offers Spells only to a caster and opens on Play', () => {
   renderSheet(view());
@@ -141,4 +146,47 @@ it('keeps typed text in the gap note box when switching tabs and back', async ()
   await user.click(screen.getByRole('tab', { name: 'Stats' }));
   await user.click(screen.getByRole('tab', { name: 'Notes' }));
   expect((within(screen.getByRole('form', { name: 'New gap note' })).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement).value).toBe('Fixture draft: the rule text is unclear');
+});
+
+it('opens on the remembered tab, and an explicit initialTab wins over it', () => {
+  localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
+  renderSheet(view());
+  expect(screen.getByRole('tab', { name: 'Stats' }).getAttribute('aria-selected')).toBe('true');
+  cleanup();
+  renderSheet(view(), 'notes');
+  expect(screen.getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('stats'); // opening on a deep link does not rewrite the memory
+});
+
+it('remembers the tab chosen, so the next opening of the same character starts there', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('tab', { name: 'Manage' }));
+  cleanup();
+  renderSheet(view());
+  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('moves focus to Play when the open tab stops being offered, and leaves focus alone otherwise', async () => {
+  const user = userEvent.setup();
+  const fields = view().sheet.fields;
+  const withOverride = view({ fields: fields.map((f) => (f.field === 'spellAttack' ? { ...f, override: { field: 'spellAttack', value: 3 }, value: 3 } : f)) });
+  const { rerender } = renderSheet(withOverride);
+  await user.click(screen.getByRole('tab', { name: 'Spells' }));
+  const card = screen.getByRole('region', { name: /^Spell attack bonus:/ });
+  await user.click(within(card).getByRole('heading'));
+  within(card).getByRole('button', { name: 'Report a gap: Spell attack bonus' }).focus();
+  expect(screen.getByRole('tabpanel', { name: 'Spells' }).contains(document.activeElement)).toBe(true);
+
+  rerender(sheetElement(view())); // the save that removed the override: no spell field has a value any more
+  expect(screen.queryByRole('tab', { name: 'Spells' })).toBeNull();
+  expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Play' }));
+});
+
+it('falls back from a remembered tab that is not offered without taking focus from the heading', () => {
+  localStorage.setItem('tomestack.sheetTab.fixture-2', 'spells');
+  renderSheet(view());
+  expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
 });

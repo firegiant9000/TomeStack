@@ -13,6 +13,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
+import type { SheetTabId } from './sheetTab';
 
 type Screen =
   | { kind: 'empty' }
@@ -24,7 +25,7 @@ type Screen =
   | { kind: 'backups' }
   | { kind: 'extensions' }
   | { kind: 'ddb-import' }
-  | { kind: 'sheet'; view: CharacterView }
+  | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
 
 function describeError(error: unknown): string {
@@ -49,10 +50,10 @@ export function App() {
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
-  async function open(id: string) {
+  async function open(id: string, tab?: SheetTabId) {
     try {
       setMessage(undefined);
-      setScreen({ kind: 'sheet', view: await client.getCharacter(id) });
+      setScreen({ kind: 'sheet', view: await client.getCharacter(id), tab });
     } catch (error) {
       onError(error);
     }
@@ -250,7 +251,7 @@ export function App() {
           <CampaignsPanel rulesFamilies={info.rulesFamilies} onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />
         )}
         {screen.kind === 'sources' &&<SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
-        {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={open} />}
+        {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={(id) => open(id, 'notes')} />}
         {screen.kind === 'backups' && (
           <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />
         )}
@@ -286,6 +287,7 @@ export function App() {
           <CharacterSheet
             key={screen.view.character.id}
             view={screen.view}
+            initialTab={screen.tab}
             onError={onError}
             onLevelUp={() => {
               setMessage(undefined);

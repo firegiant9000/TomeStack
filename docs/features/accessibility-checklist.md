@@ -31,7 +31,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 3 | All actions work from the keyboard; no keyboard traps | 2.1.1, 2.1.2 | ✅ the e2e keyboard test covers the primary actions, and the owner's manual walkthrough passed on 0.1.0 and again on 0.2.2, including the export purpose radios (below) |
 | 4 | A visible focus indicator | 2.4.7, 2.4.11 | ✅ `:focus-visible` 3 px outline; accent contrast is 6.2:1 (light) and 8.9:1 (dark) |
 | 5 | Text contrast ≥ 4.5:1 in light **and** dark scheme | 1.4.3 | 🔧 Dark mode failed: error 2.87, accent 3.04, warn 3.45. Now `light-dark()` gives 7.8 / 8.9 / 10.1. Light mode: text 21, muted 7.0, accent 6.2, warn 5.4, error 6.5 |
-| 6 | Text resizes to 200% without loss of content | 1.4.4, 1.4.10 | ☐ The layout uses `rem` and `font-size: 100%`, but the check has not been run at 200% / 400% in WebView2 |
+| 6 | Text resizes to 200% without loss of content | 1.4.4, 1.4.10 | 🔧 The layout uses rem and font-size 100%; since ADR-014 slice 4 the app grid stacks to one column under 40rem and the summary and tab strip wrap. **Owner check pending:** 200% and 400% zoom in WebView2 (date, build, result to be recorded here). Narrator still open (item 15) |
 | 7 | Errors are announced and described in text | 3.3.1, 4.1.3 | ✅ errors use `role="alert"`, status messages `role="status"` |
 | 8 | Status after import stays visible | 4.1.3 | 🔧 The import summary, including the backup location, was cleared immediately by opening the character. Found by the e2e test |
 | 9 | Focus moves sensibly after navigation (create → sheet, import → sheet) | 2.4.3 | 🔧 Focus used to fall back to `body` when the form unmounted. Opening a sheet now focuses its heading (`tabIndex=-1`); the e2e flow asserts it after create |

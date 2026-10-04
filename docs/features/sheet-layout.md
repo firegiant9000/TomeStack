@@ -1,8 +1,8 @@
 # Sheet layout: summary and tabs
 
-SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **slice 3 of 4** (the summary bar and the seven tabs).
+SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **implemented** (slices 1 to 4, 2026-10-04).
 
-UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
+UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx`, `sheetTab.test.ts`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
 
 ## Layout
 
@@ -44,8 +44,12 @@ One tab stop on the strip. Left and Right move (and wrap), Home and End jump, an
 
 ## No trade dress (P-03)
 
-Only the information architecture (summary above, pages below) is borrowed. Labels are TomeStack's own section names; the strip is plain buttons in the system colours.
+Only the information architecture (summary above, pages below) is borrowed. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04. The strip is plain buttons in the system colours.
 
-## Not yet
+## Remembered tab and deep links
 
-Slice 4: the remembered tab (per character, in the page's own storage), the deep link from the Gap notes screen, and the reflow of the summary at narrow widths.
+The sheet reopens on the tab used last for that character. The memory is `tomestack.sheetTab.<characterId>` in the page's own storage (the WebView2 profile in the data folder): on this computer only, in no package, share or backup. "Open <character>" on the Gap notes screen opens Notes instead (and leaves the memory alone). A remembered tab that is not offered (Spells for a character who is no longer a caster) falls back to Play. If the open tab stops being offered while you are on it (the last spell override is removed on a non-caster), the sheet moves to Play and, only if focus would otherwise be lost, puts focus on the Play tab.
+
+## Reflow
+
+Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`) and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6).
