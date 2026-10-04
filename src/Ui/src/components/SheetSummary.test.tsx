@@ -106,6 +106,37 @@ it('rolls an ability check from its button, named apart from the field card\'s "
   render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={onRoll} />);
   await user.click(screen.getByRole('button', { name: 'Roll Strength check (+3)' }));
   expect(onRoll).toHaveBeenCalledWith('ability.str.mod');
-  expect(screen.queryByRole('button', { name: 'Roll Strength modifier' })).toBeNull();
+  // The summary's roll buttons are exactly the six ability checks, none of them the field cards' "Roll … modifier".
+  const rollButtons = within(screen.getByRole('region', { name: 'Summary' })).getAllByRole('button', { name: /^Roll / });
+  expect(rollButtons).toHaveLength(6);
+  for (const button of rollButtons) {
+    expect(button.textContent!.replace(/\s+/g, ' ').trim()).toMatch(/^Roll (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) check \([+-]\d+\)$/);
+  }
+  expect(screen.getByRole('button', { name: 'Roll Intelligence check (-1)' })).toBeTruthy();
   expect(screen.getByRole('radio', { name: 'Advantage' })).toBeTruthy(); // the roll-mode picker lives here now
+});
+
+/** The fixture view with one field replaced by an overridden copy. */
+function overriddenView(id: string, value: number): CharacterView {
+  const view = fixtureView();
+  const fields = view.sheet.fields.map((f) =>
+    f.field === id ? field(id, f.label, value, f.units ?? '', { field: id, value, reason: 'Fixture ruling' }) : f,
+  );
+  return { ...view, sheet: { ...view.sheet, fields } };
+}
+
+const strengthDd = () =>
+  within(screen.getByRole('region', { name: 'Summary' })).getByText('Strength', { selector: 'dt' }).nextElementSibling!.textContent!;
+
+it('marks an overridden ability score in text, and not the modifier', () => {
+  render(<SheetSummary view={overriddenView('ability.str.score', 16)} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(strengthDd()).toContain('16 (overridden)');
+  expect(strengthDd()).not.toContain('modifier overridden');
+});
+
+it('marks an overridden ability modifier in text outside the button, whose name stays the contract', () => {
+  render(<SheetSummary view={overriddenView('ability.str.mod', 5)} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Strength check (+5)' })).toBeTruthy();
+  expect(strengthDd()).toContain('(modifier overridden)');
+  expect(strengthDd()).not.toContain('16 (overridden)');
 });

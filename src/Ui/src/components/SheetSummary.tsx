@@ -60,6 +60,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
                 <button type="button" className="link" onClick={() => onRoll(mod.field)}>
                   Roll {abilityNames[a]} check ({signed(mod.value)})
                 </button>
+                {mod.override && <span className="override-label"> (modifier overridden)</span>}
               </dd>
             </div>
           );
@@ -105,7 +106,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
         )}
       </dl>
       <RollModePicker mode={rollMode} onChange={onRollMode} />
-      <p className="hint">Rolling never spends anything. Roll a check here, a save or skill from its field on Stats, or an attack or feature on Play.</p>
+      <p className="hint">Rolling never spends anything. Roll a check here, a save or skill from its field card, or an attack or feature from its section.</p>
       <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
     </section>
   );
