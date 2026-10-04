@@ -10,7 +10,7 @@ A paper (or "Microsoft Print to PDF") copy of the character to play from if the 
 
 ## Flow
 
-1. **Print…** in the sheet header opens the "Print preview" region at the top of the sheet. Focus returns to the button when it closes.
+1. **Print…** in the sheet header opens the "Print preview" region at the top of the sheet, above the summary and the tabs (ADR-014). Focus returns to the button when it closes.
 2. **Include gap notes** is off by default, because notes may describe private homebrew (`gap-notes.md`).
 3. **Print…** in the preview calls `window.print()`. WebView2 shows its print dialog, and the printed page contains only the preview, because the print CSS hides the rest of the app.
 

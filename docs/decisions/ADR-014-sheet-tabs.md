@@ -2,7 +2,7 @@
 
 Status: accepted (owner, 2026-10-03; LIVING_SPECS D17)
 Date: 2026-10-03
-Implementation: slices 1 and 2 of 4 (the strip with "Sheet" and "Manage", and the summary; features/sheet-layout.md). The seven tabs with "Report a gap" opening Notes (slice 3) and the remembered tab and deep link (slice 4) follow; the Consequences and Evidence below describe the finished design.
+Implementation: slices 1 to 3 of 4 (the summary and the seven tabs; features/sheet-layout.md). The remembered tab and the deep link from Gap notes (slice 4) follow; the Consequences and Evidence below describe the finished design.
 
 ## Context
 
@@ -30,4 +30,4 @@ The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of
 
 ## Evidence
 
-`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); `src/Ui/src/components/SheetSummary.test.tsx` (the summary: a definition list, no headings, overrides in text); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box (slice 3)); `docs/features/sheet-layout.md`.
+`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); `src/Ui/src/components/SheetSummary.test.tsx` (the summary: a definition list, no headings, overrides in text); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box); `src/Ui/src/components/CharacterSheet.test.tsx` (Spells only for casters, fallback to Play, "Report a gap" opens Notes and focuses the text, typed text survives a tab switch); `docs/features/sheet-layout.md`.
