@@ -21,19 +21,23 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 
 .app {
   display: grid;
-  grid-template-columns: minmax(14rem, 18rem) 1fr;
+  /* minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
+     which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-height: 100vh;
 }
 .app-header {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 1rem;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
 .app-header h1 { margin: 0; font-size: 1.4rem; }
+.app-header .hint { min-width: 0; overflow-wrap: anywhere; }
 .sidebar { padding: 1rem; border-right: 1px solid var(--line); }
 .content { padding: 1rem 1.5rem; max-width: 70rem; }
 
@@ -70,7 +74,8 @@ button.link[aria-current='page'] { font-weight: 700; }
 
 .sheet-header { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .sheet-header h2 { margin: 0; overflow-wrap: anywhere; }
-.sheet-header button { margin-left: auto; }
+/* Only the first button takes the free space, so "Level up" and "Print…" sit together at the right. */
+.sheet-header button:first-of-type { margin-left: auto; }
 .derived { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
 .field-group h3 { margin: 0.75rem 0 0.25rem; }
 .field-card details { border-bottom: 1px solid var(--line); padding: 0.25rem 0; }
