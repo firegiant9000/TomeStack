@@ -16,6 +16,8 @@ vi.mock('../api/client', () => ({
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
     snapshots: vi.fn(),
+    previewExport: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
@@ -165,6 +167,16 @@ it('remembers the tab chosen, so the next opening of the same character starts t
   cleanup();
   renderSheet(view());
   expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+});
+
+it('renders the print preview after the summary and before the body, matching the grid order', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Print…' }));
+  const article = document.querySelector('article.sheet') as HTMLElement;
+  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
 });
 
 it('moves focus to Play when the open tab stops being offered', async () => {

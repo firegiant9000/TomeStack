@@ -2041,18 +2041,22 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
 
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
   const user = userEvent.setup();
-  const { unmount } = render(<App />);
-  await user.click(await screen.findByRole('button', { name: 'Settings' }));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
-  await user.click(screen.getByRole('radio', { name: 'Violet' }));
-  expect(document.documentElement.dataset.theme).toBe('violet');
-  unmount();
-  render(<App />);
-  await screen.findByRole('button', { name: 'Settings' });
-  expect(document.documentElement.dataset.theme).toBe('violet');
-  // Leave the shared jsdom window as it was for the next test.
-  localStorage.removeItem('tomestack.theme');
-  delete document.documentElement.dataset.theme;
+  try {
+    const { unmount } = render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+    await user.click(screen.getByRole('radio', { name: 'Violet' }));
+    expect(document.documentElement.dataset.theme).toBe('violet');
+    unmount();
+    delete document.documentElement.dataset.theme; // so the final check proves the mount effect re-applied the saved theme
+    render(<App />);
+    await screen.findByRole('button', { name: 'Settings' });
+    expect(document.documentElement.dataset.theme).toBe('violet');
+  } finally {
+    // Leave the shared jsdom window as it was for the next test.
+    localStorage.removeItem('tomestack.theme');
+    delete document.documentElement.dataset.theme;
+  }
 });
 
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
@@ -2082,4 +2086,21 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
   expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
+
+  // A focused checkbox or radio must not block the shortcut (WCAG 2.1.1); a text field keeps Ctrl+B.
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  for (const control of [screen.getByRole('checkbox', { name: 'Animate dice' }), screen.getByRole('radio', { name: 'Violet' })]) {
+    control.focus();
+    await user.keyboard('{Control>}b{/Control}');
+    expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+    await user.keyboard('{Control>}b{/Control}');
+    expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+  }
+  await user.click(screen.getByRole('button', { name: 'New character' }));
+  const name = await screen.findByRole('textbox', { name: /^Name/ });
+  name.focus();
+  await user.keyboard('{Control>}b{/Control}');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
+  localStorage.removeItem('tomestack.theme');
+  delete document.documentElement.dataset.theme;
 });

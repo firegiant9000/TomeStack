@@ -359,6 +359,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </button>
       </header>
 
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+
       {printing && (
         <PrintView
           view={view}
@@ -369,8 +371,6 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           }}
         />
       )}
-
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
       <div className="sheet-body">
 
       {view.campaign && view.campaign.warnings.length > 0 && (

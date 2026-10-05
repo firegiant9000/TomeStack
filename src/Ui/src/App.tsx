@@ -61,7 +61,9 @@ export function App() {
     function onKey(event: KeyboardEvent) {
       if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== 'b') return;
       const target = event.target as HTMLElement | null;
-      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (target && (target.isContentEditable || /^(TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      // Only text-entry inputs keep Ctrl+B; a focused checkbox, radio or button must not block the shortcut (WCAG 2.1.1).
+      if (target?.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|reset|range|color|file)$/.test((target as HTMLInputElement).type)) return;
       event.preventDefault();
       if (event.repeat) return; // holding the keys must not flicker the sidebar
       toggleSidebar();
