@@ -1,8 +1,8 @@
 # Sheet layout: summary and tabs
 
-SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **slice 2 of 4** (the summary bar).
+SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **slice 3 of 4** (the summary bar and the seven tabs).
 
-UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
+UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
 
 ## Layout
 
@@ -10,7 +10,7 @@ UI: `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/Tab
 2. Print preview, when open (unchanged; `printable-backup.md`).
 3. The summary (below).
 4. Campaign warnings, "Choices to make" and "Content not applied": always visible, above the tabs.
-5. The tab strip "Sheet sections" and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+5. The tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
 
 ## Summary (always visible)
 
@@ -24,12 +24,19 @@ A definition list, not headings or named regions, so it never shares a name with
 
 Traces, overrides and "Report a gap" stay on the field cards.
 
-## Tabs (slice 1)
+## Tabs
 
 | Tab | Holds |
 | --- | --- |
-| Sheet | Everything that was on the page except the admin panels, the summary and the notices above the tabs, in the old order; the old "Rolls" section is now in the summary |
+| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Attacks and actions, Conditions, Resources, Class columns |
+| Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override |
+| Inventory | Equipment |
+| Features | Features, with "Open page" and "Report a gap" |
+| Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap" |
+| Notes | Gap notes |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots |
+
+"Report a gap" on a feature or a field opens Notes, pre-fills "About" and moves focus to the note text (WCAG 2.4.3). Open choices and content problems stay above the tabs on every page (SPEC C-03).
 
 ## Keyboard
 
@@ -41,4 +48,4 @@ Only the information architecture (summary above, pages below) is borrowed. Labe
 
 ## Not yet
 
-The split into Play, Spells, Inventory, Features, Stats and Notes (slice 3), the remembered tab and deep links (slice 4).
+Slice 4: the remembered tab (per character, in the page's own storage), the deep link from the Gap notes screen, and the reflow of the summary at narrow widths.
