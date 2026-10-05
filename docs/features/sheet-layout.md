@@ -11,15 +11,17 @@ The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
 1. The app header: "TomeStack", the "Offline" tag and, at the right, the sidebar toggle ("Hide sidebar"/"Show sidebar").
 2. The sheet header across the window: name, rules family, level, campaign, "Level up", "Print…".
 3. The summary across the window (below).
-4. Campaign warnings, "Choices to make" and "Content not applied": always visible, above the tabs.
-5. Print preview, when open (`printable-backup.md`; a direct child of the article).
-6. Below, the sidebar on the left and the sheet body on the right: the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+4. Messages (status and errors).
+5. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
+6. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+
+The sidebar sits on the left from the messages row down, so an open print preview or a long list of messages does not push it down.
 
 Under 40rem everything flows in DOM order.
 
 ## Sidebar
 
-The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks.
+The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks; the messages have it too, because the article spans their cell.
 
 ## Summary (always visible)
 
