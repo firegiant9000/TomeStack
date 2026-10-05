@@ -1,16 +1,25 @@
 # Sheet layout: summary and tabs
 
-SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **implemented** (slices 1 to 4, 2026-10-04).
+SPEC P-03 · ADR-014 · LIVING_SPECS D17 (owner, 2026-10-03) · status: **implemented** (slices 1 to 4, 2026-10-04) · ADR-015, D18 (2026-10-05).
 
 UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/src/components/sheet/TabList.tsx`, `src/Ui/src/components/SheetSummary.tsx`, `src/Ui/src/sheetTab.ts`. Tests: `TabList.test.tsx`, `SheetSummary.test.tsx`, `sheetTab.test.ts`, `CharacterSheet.test.tsx` and every sheet test in `src/Ui/e2e/flow.e2e.tsx` (helpers `openTab` and `summaryValue`).
 
 ## Layout
 
-1. Header: name, rules family, level, campaign, "Level up", "Print…" (unchanged).
-2. Print preview, when open (unchanged; `printable-backup.md`).
-3. The summary (below).
+The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
+
+1. The app header: the sidebar toggle, the name and the "Offline" tag.
+2. The sheet header across the window: name, rules family, level, campaign, "Level up", "Print…".
+3. The summary across the window (below).
 4. Campaign warnings, "Choices to make" and "Content not applied": always visible, above the tabs.
-5. The tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+5. Print preview, when open (`printable-backup.md`; a direct child of the article).
+6. Below, the sidebar on the left and the sheet body on the right: the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+
+Under 40rem everything flows in DOM order.
+
+## Sidebar
+
+The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks.
 
 ## Summary (always visible)
 
@@ -18,7 +27,7 @@ A definition list, not headings or named regions, so it never shares a name with
 
 - each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
 - Proficiency bonus, Armor Class, Initiative; an overridden number reads "16 (overridden)";
-- Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size, Inspiration or Heroic Inspiration (by family) as yes/no;
+- Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size as "N of M (dX)", Inspiration or Heroic Inspiration (by family) as a checkbox (the confirmed `setInspiration` play action), and one-point hit-point buttons "Lose 1 hit point" and "Regain 1 hit point" (`damage`/`heal`) in a second `<dd>`;
 - Conditions and exhaustion, only when there are any;
 - the d20 roll mode (Normal, Advantage, Disadvantage) as one row of radios with 3:1 boundaries (`--line-strong`) and the "Last roll" live region, moved here from the old "Rolls" section so they are reachable from every tab.
 
@@ -44,7 +53,11 @@ One tab stop on the strip. Left and Right move (and wrap), Home and End jump, an
 
 ## No trade dress (P-03)
 
-Only the information architecture (summary above, pages below) is borrowed. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04. The strip is plain buttons in the system colours.
+Only the information architecture is borrowed. The palette is TomeStack's own (ADR-015): three themes on the system colours, no red or parchment. Dice are plain polygons. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04.
+
+## Settings
+
+A Settings screen holds Theme (forest, cool, violet), "Animate dice" and the app version with the data schema. The choices are kept in the page's storage (`tomestack.theme`, `tomestack.diceAnimation`): on this computer only, in no backup, package or share.
 
 ## Remembered tab and deep links
 
@@ -52,4 +65,4 @@ The sheet reopens on the tab used last for that character. The memory is `tomest
 
 ## Reflow
 
-Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column and the sheet's own grid are `minmax(0, 1fr)`, so a wide table or excerpt can no longer widen the window: the app header and the sheet header's buttons stay in view, and only the wide element itself overflows; the app header wraps.
+Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column and the sheet's own grid are `minmax(0, 1fr)`, so a wide table or excerpt can no longer widen the window: the app header and the sheet header's buttons stay in view, and only the wide element itself overflows; the app header wraps. The sheet bar spans the window (ADR-015), so the 200% and 400% check also covers it with the sidebar collapsed and expanded.

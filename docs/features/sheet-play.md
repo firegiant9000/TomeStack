@@ -67,10 +67,10 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 
 - Every ability modifier, saving throw, skill and initiative field has a "Roll" button on the Stats tab (a d20 test through the `roll` command), and the summary has a "Roll <Ability> check (+N)" button per ability. The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014 ([sheet-layout.md](sheet-layout.md)), chooses normal, advantage or disadvantage.
 - **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice.
-- The **Last roll** region (in the summary, visible on every tab; `aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page).
+- The **Last roll** region (in the summary, visible on every tab; `aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page). Since ADR-015 the region also draws the dice (hidden from assistive tech; the text is the result): they show the service's values at once and tumble for 0.6 s, unless reduced motion is on or the setting is off. At most ten are drawn; the text lists every die.
 - **Rolling never spends anything.** If the roll names a resource (`linkedResourceId`), the record offers a separate "Spend 1 …" button, which is a confirmed `character.play`.
 - **Death saving throws** (the panel appears at 0 hit points, or while saves are recorded): "Roll death saving throw" rolls a d20 (`roll` with `deathSave: true`), and "Record death saving throw (N)" records it. "d20 rolled at the table" + "Record this roll" records a physical roll. The heading reads "Death saving throws: 1 of 3 successes, 2 of 3 failures".
-- The hit points panel shows the hit dice left and an "Inspiration" / "Heroic Inspiration" checkbox.
+- The hit points panel shows the hit dice left and an "Inspiration" / "Heroic Inspiration" checkbox, and the summary has the same checkbox and one-point hit-point buttons.
 
 ## Not in this slice
 
