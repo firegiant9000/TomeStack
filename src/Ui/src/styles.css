@@ -98,16 +98,18 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   grid-template-columns: subgrid;
   grid-template-rows: subgrid;
   column-gap: var(--space-5);
-  padding: 0 var(--space-5) var(--space-4) 0;
+  padding: 0 0 var(--space-4) 0;
 }
-.content > .messages { grid-column: main; grid-row: messages; display: grid; gap: var(--space-2); }
+/* The right inset lives on the main-column items, not on .content, so the spanning sheet header and summary
+   (which carry their own --space-5 on both sides) end the same distance from the window edge as the tabs and body. */
+.content > .messages { grid-column: main; grid-row: messages; display: grid; gap: var(--space-2); margin-right: var(--space-5); }
 .content > .messages:empty { display: none; }
-.content > :not(.messages, .sheet) { grid-column: main; grid-row: body; align-self: start; }
+.content > :not(.messages, .sheet) { grid-column: main; grid-row: body; align-self: start; margin-right: var(--space-5); }
 article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
 article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
-article.sheet > .print-sheet { grid-column: main; grid-row: print; }
-article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; }
+article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
+article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; margin-right: var(--space-5); }
 
 .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -216,6 +218,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .app, .content, article.sheet { display: block; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
   .content { padding: var(--space-4); }
+  .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
@@ -235,6 +238,7 @@ dd { margin: 0; }
   :root { color-scheme: light; }
   .app { display: block; }
   .content, article.sheet { display: block; }
+  article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }
