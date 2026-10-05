@@ -23,15 +23,17 @@ internal sealed class ImportPlanner
     private readonly List<MatchRow> _rows = [];
     private readonly HashSet<string> _chosenByUser = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ContentReference> _classes = [];
+    private readonly bool _equipMatched;
     private Character _character;
 
     /// <param name="options">The listing for the chosen family and campaign: published, compatible and current only.</param>
-    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find)
+    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find, bool equipMatched = false)
     {
         _character = start;
         _calculate = calculate;
         _choose = choose;
         _find = find;
+        _equipMatched = equipMatched;
         foreach (var option in options)
         {
             var key = (option.Kind, Normalise.Name(option.Name));
@@ -265,7 +267,32 @@ internal sealed class ImportPlanner
             }
             _rows.Add(new(rowId, MatchKind.Item, item.Name, status, candidates, status == MatchStatus.Matched ? chosen : null, note));
         }
-        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped, merged[r].Quantity))] };
+        // D16g: the 2014 sheet has no equipped mark. When asked, equip every matched weapon, the first body armour and the
+        // first shield, in sheet order, so an import never raises equipment.multiple-armor or equipment.multiple-shields.
+        var wornBody = false;
+        var wornShield = false;
+        bool Wear(ContentReference reference)
+        {
+            if (!_equipMatched)
+                return false;
+            var effects = _find(reference)?.Effects ?? [];
+            if (effects.OfType<ArmorEffect>().FirstOrDefault() is { } armor)
+            {
+                if (armor.Category == ArmorCategory.Shield)
+                {
+                    if (wornShield)
+                        return false;
+                    wornShield = true;
+                    return true;
+                }
+                if (wornBody)
+                    return false;
+                wornBody = true;
+                return true;
+            }
+            return effects.Any(e => e is WeaponEffect);
+        }
+        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped || Wear(r), merged[r].Quantity))] };
     }
 
     private void Spells(IReadOnlyList<Read<SpellText>> spells)
@@ -459,7 +486,6 @@ internal sealed class ImportPlanner
         origin.Content is { } content && origin.EffectId is { } effect
         && _find(content)?.Effects.OfType<GrantEffect>().Any(g => g.Id == effect && g.Grant is GrantKind.Proficiency or GrantKind.Expertise && g.Target == field) == true;
 
-    /// <summary>The label of a row whose name could not be read: its kind only, never a value, so its gap note says what it was.</summary>
     /// <summary>The normalised names of the content a revision grants (its features), for D16f detection.</summary>
     private HashSet<string> GrantedNames(ContentReference reference) =>
         (_find(reference)?.Effects ?? []).OfType<GrantEffect>()
@@ -469,6 +495,7 @@ internal sealed class ImportPlanner
             .Select(Normalise.Name)
             .ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>The label of a row whose name could not be read: its kind only, never a value, so its gap note says what it was.</summary>
     private static string UnreadableLabel(MatchKind kind) => $"Unreadable {kind.ToString().ToLowerInvariant()}";
 
     private static string? CampaignNote(MatchCandidate candidate) => candidate.AllowedInCampaign == false ? "campaign.source-not-allowed" : null;

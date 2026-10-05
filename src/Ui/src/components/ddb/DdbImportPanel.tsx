@@ -45,6 +45,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [numbers, setNumbers] = useState<Record<string, NumberAction>>({});
   const [answers, setAnswers] = useState<ChoiceSelection[]>([]);
   const [includePlayState, setIncludePlayState] = useState(false);
+  const [equipMatched, setEquipMatched] = useState(true);
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
@@ -84,6 +85,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           numberChoices: Object.entries(numbers).map(([field, action]) => ({ field, action })),
           includePlayState,
           answers,
+          equipMatched,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -252,7 +254,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         )}
         {step === 4 && <DdbNumbersStep preview={preview} numbers={numbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} />}
         {step === 5 && (
-          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
+          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} equipMatched={equipMatched} onEquipMatched={setEquipMatched} />
         )}
       </section>
       <p aria-live="polite" className="hint">

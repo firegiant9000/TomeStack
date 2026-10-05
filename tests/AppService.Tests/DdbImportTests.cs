@@ -101,8 +101,8 @@ internal sealed class DdbHarness : IDisposable
         return Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
     }
 
-    public DdbPreview Preview(SheetBuilder sheet, string family, IReadOnlyList<Resolution>? resolutions = null, IReadOnlyList<NumberChoice>? numbers = null, bool play = false, Guid? campaign = null) =>
-        Temp.App.PreviewDdbImport(new(Read(sheet), family, campaign, resolutions, numbers, play));
+    public DdbPreview Preview(SheetBuilder sheet, string family, IReadOnlyList<Resolution>? resolutions = null, IReadOnlyList<NumberChoice>? numbers = null, bool play = false, Guid? campaign = null, bool equip = false) =>
+        Temp.App.PreviewDdbImport(new(Read(sheet), family, campaign, resolutions, numbers, play, EquipMatched: equip));
 
     /// <summary>The installed name of a revision (so the tests hold ids, not rules text).</summary>
     public string Name(ContentReference reference, string family = RulesFamilies.Srd521) =>
@@ -865,5 +865,42 @@ public class DdbImportTests
 
         Assert.NotEmpty(strings);
         Assert.All(sentinels, s => Assert.DoesNotContain(strings, m => m.Contains(s, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Equip_matched_equips_weapons_and_armour_but_not_other_items_and_is_off_by_default()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Gear Notes", RulesFamilies.Srd521);
+        var rope = Publish(h.Temp, source, ContentKind.Item, "Fixture Rope Coil", [RulesFamilies.Srd521]);
+        var blade = Publish(h.Temp, source, ContentKind.Item, "Fixture Short Blade", [RulesFamilies.Srd521],
+            effects: [new WeaponEffect { Id = "blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "piercing", WeaponKey = "fixture-blade" }]);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Rope Coil", 1).Item("Fixture Short Blade", 1);
+
+        var off = h.Preview(sheet, RulesFamilies.Srd521);
+        Assert.All(off.Character.Equipment, e => Assert.False(e.Equipped));
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+        Assert.Equal([(rope, false), (blade, true)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+    }
+
+    [Fact]
+    public void Equip_matched_wears_only_the_first_body_armour_and_the_first_shield()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Armoury Notes", RulesFamilies.Srd521);
+        ContentReference Armour(string name, ArmorCategory category, int ac) => Publish(h.Temp, source, ContentKind.Item, name, [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = $"armor-{ac}-{category}", Category = category, ArmorClass = ac }]);
+        var mail = Armour("Fixture Mail", ArmorCategory.Heavy, 16);
+        var spare = Armour("Fixture Spare Coat", ArmorCategory.Light, 11);
+        var shield = Armour("Fixture Buckler", ArmorCategory.Shield, 2);
+        var second = Armour("Fixture Second Buckler", ArmorCategory.Shield, 2);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1")
+            .Item("Fixture Mail", 1).Item("Fixture Spare Coat", 1).Item("Fixture Buckler", 1).Item("Fixture Second Buckler", 1);
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+
+        Assert.Equal([(mail, true), (spare, false), (shield, true), (second, false)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+        Assert.DoesNotContain(on.Diagnostics, w => w.Code is "equipment.multiple-armor" or "equipment.multiple-shields");
     }
 }
