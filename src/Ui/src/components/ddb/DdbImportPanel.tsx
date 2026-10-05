@@ -237,13 +237,19 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             resolutions={resolutions}
             answers={answers}
             onResolve={(resolution) => {
-              setResolutions((all) => ({ ...all, [resolution.rowId]: resolution }));
+              // A new class match makes an earlier pick for that class's subclass row stale (its choice may differ).
+              setResolutions((all) => {
+                const next = { ...all, [resolution.rowId]: resolution };
+                if (/^class:\d+$/.test(resolution.rowId)) delete next[`${resolution.rowId}:subclass`];
+                return next;
+              });
               dropAnswersHolding(resolution.rowId);
             }}
             onClear={(rowId) => {
               setResolutions((all) => {
                 const next = { ...all };
                 delete next[rowId];
+                if (/^class:\d+$/.test(rowId)) delete next[`${rowId}:subclass`];
                 return next;
               });
               dropAnswersHolding(rowId);
@@ -252,9 +258,9 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             onError={onError}
           />
         )}
-        {step === 4 && <DdbNumbersStep preview={preview} numbers={numbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} />}
+        {step === 4 && <DdbNumbersStep preview={preview} numbers={numbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} />}
         {step === 5 && (
-          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} equipMatched={equipMatched} onEquipMatched={setEquipMatched} />
+          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
         )}
       </section>
       <p aria-live="polite" className="hint">

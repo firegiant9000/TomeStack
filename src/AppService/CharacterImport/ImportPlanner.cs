@@ -141,8 +141,15 @@ internal sealed class ImportPlanner
                 var pick = For(detected[0]);
                 var refused = Apply(pick);
                 _rows.Add(refused is null
-                    ? new(rowId, MatchKind.Subclass, label, MatchStatus.Matched, ordered, pick, "subclass.detected-from-features")
+                    ? new(rowId, MatchKind.Subclass, label, MatchStatus.Matched, ordered, pick, CampaignNote(pick) ?? "subclass.detected-from-features")
                     : new(rowId, MatchKind.Subclass, label, MatchStatus.NoPlace, ordered, null, refused));
+                continue;
+            }
+            // A pick that is not one of this choice's options (a stale resolution) would end as "No place" and unblock Create
+            // with the choice still open: ask again instead.
+            if (_resolutions.GetValueOrDefault(rowId) is { LeaveOut: false, Chosen: { } picked } && !offered.Any(o => o.Reference == picked))
+            {
+                _rows.Add(new(rowId, MatchKind.Subclass, label, MatchStatus.Choose, ordered, null, "resolution.not-found"));
                 continue;
             }
             // One option is never taken silently: the sheet did not name it (autoPick: false).
@@ -243,7 +250,8 @@ internal sealed class ImportPlanner
 
     private void Items(IReadOnlyList<Read<ItemText>> items)
     {
-        var merged = new Dictionary<ContentReference, (int Quantity, bool Equipped)>();
+        // Equipped is null when no merged row carried a mark (the 2014 layout has none); an explicit false is a mark too.
+        var merged = new Dictionary<ContentReference, (int Quantity, bool? Equipped)>();
         var order = new List<ContentReference>();
         for (var i = 0; i < items.Count; i++)
         {
@@ -262,21 +270,31 @@ internal sealed class ImportPlanner
                 var (quantity, equipped) = merged.GetValueOrDefault(chosen!.Reference);
                 if (!merged.ContainsKey(chosen.Reference))
                     order.Add(chosen.Reference);
-                merged[chosen.Reference] = ((int)Math.Min(EquipmentEntry.MaxQuantity, (long)quantity + item.Quantity), equipped || item.Equipped == true);
+                merged[chosen.Reference] = ((int)Math.Min(EquipmentEntry.MaxQuantity, (long)quantity + item.Quantity), equipped is null ? item.Equipped : item.Equipped is null ? equipped : equipped == true || item.Equipped == true);
                 note ??= CampaignNote(chosen);
             }
             _rows.Add(new(rowId, MatchKind.Item, item.Name, status, candidates, status == MatchStatus.Matched ? chosen : null, note));
         }
         // D16g: the 2014 sheet has no equipped mark. When asked, equip every matched weapon, the first body armour and the
         // first shield, in sheet order, so an import never raises equipment.multiple-armor or equipment.multiple-shields.
+        // The sheet's own marks win: armour it marks equipped takes the slot first, and an item it marks unequipped stays so.
+        // Only armour and weapons the calculator would count (automatic, always on; not reference-only) take part.
         var wornBody = false;
         var wornShield = false;
+        ArmorEffect? CountedArmor(ContentReference reference) =>
+            (_find(reference)?.Effects ?? []).OfType<ArmorEffect>().FirstOrDefault(a => a.Automation == AutomationStatus.Automatic && a.Timing == EffectTiming.Always);
+        foreach (var r in order.Where(r => merged[r].Equipped == true))
+        {
+            if (CountedArmor(r) is not { } marked)
+                continue;
+            if (marked.Category == ArmorCategory.Shield)
+                wornShield = true;
+            else
+                wornBody = true;
+        }
         bool Wear(ContentReference reference)
         {
-            if (!_equipMatched)
-                return false;
-            var effects = _find(reference)?.Effects ?? [];
-            if (effects.OfType<ArmorEffect>().FirstOrDefault() is { } armor)
+            if (CountedArmor(reference) is { } armor)
             {
                 if (armor.Category == ArmorCategory.Shield)
                 {
@@ -290,9 +308,9 @@ internal sealed class ImportPlanner
                 wornBody = true;
                 return true;
             }
-            return effects.Any(e => e is WeaponEffect);
+            return (_find(reference)?.Effects ?? []).OfType<WeaponEffect>().Any(w => w.Automation != AutomationStatus.Reference);
         }
-        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped || Wear(r), merged[r].Quantity))] };
+        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped ?? (_equipMatched && Wear(r)), merged[r].Quantity))] };
     }
 
     private void Spells(IReadOnlyList<Read<SpellText>> spells)

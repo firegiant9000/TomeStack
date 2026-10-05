@@ -903,4 +903,82 @@ public class DdbImportTests
         Assert.Equal([(mail, true), (spare, false), (shield, true), (second, false)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
         Assert.DoesNotContain(on.Diagnostics, w => w.Code is "equipment.multiple-armor" or "equipment.multiple-shields");
     }
+
+    [Fact]
+    public void Equip_matched_does_not_give_the_body_slot_to_armour_the_calculator_ignores()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Odd Armoury Notes", RulesFamilies.Srd521);
+        var coat = Publish(h.Temp, source, ContentKind.Item, "Fixture Assisted Coat", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "assisted-coat", Category = ArmorCategory.Light, ArmorClass = 11, Automation = AutomationStatus.Assisted }]);
+        var cloak = Publish(h.Temp, source, ContentKind.Item, "Fixture Timed Cloak", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "timed-cloak", Category = ArmorCategory.Light, ArmorClass = 12, Timing = EffectTiming.WhileActive }]);
+        var mail = Publish(h.Temp, source, ContentKind.Item, "Fixture Real Mail", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "real-mail", Category = ArmorCategory.Heavy, ArmorClass = 16 }]);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Assisted Coat", 1).Item("Fixture Timed Cloak", 1).Item("Fixture Real Mail", 1);
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+
+        Assert.Equal([(coat, false), (cloak, false), (mail, true)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+    }
+
+    [Fact]
+    public void A_sheets_own_equipped_marks_win_and_the_guess_only_fills_items_with_no_mark()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Marked Notes", RulesFamilies.Srd521);
+        ContentReference Armour(string name, ArmorCategory category, int ac) => Publish(h.Temp, source, ContentKind.Item, name, [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = $"armor-{ac}-{category}", Category = category, ArmorClass = ac }]);
+        var weapon = new WeaponEffect { Id = "marked-blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "piercing", WeaponKey = "fixture-marked-blade" };
+        var spare = Armour("Fixture Spare Coat", ArmorCategory.Light, 11);
+        var mail = Armour("Fixture Marked Mail", ArmorCategory.Heavy, 16);
+        var shield = Armour("Fixture Marked Buckler", ArmorCategory.Shield, 2);
+        var other = Armour("Fixture Other Buckler", ArmorCategory.Shield, 2);
+        var blade = Publish(h.Temp, source, ContentKind.Item, "Fixture Marked Blade", [RulesFamilies.Srd521], effects: [weapon]);
+        var token = h.Read(new SheetBuilder($"{h.Name(Barbarian)} 1")
+            .Item("Fixture Spare Coat", 1).Item("Fixture Marked Mail", 1).Item("Fixture Marked Buckler", 1).Item("Fixture Other Buckler", 1).Item("Fixture Marked Blade", 1));
+        var read = h.Temp.App.DdbSessions.Peek(token)!;
+        // The 2014 layout has no equipped mark, so the marks are set on the read sheet itself (what a layout with a mark would give).
+        bool?[] marks = [null, true, false, null, false];
+        var marked = read with { Items = [.. read.Items.Select((r, i) => Read<ItemText>.Ok(r.Value! with { Equipped = marks[i] }))] };
+
+        var preview = h.Temp.App.ProposeDdbCharacter(marked, new DdbPreviewRequest(token, RulesFamilies.Srd521, null, null, null, false, EquipMatched: true), Guid.NewGuid());
+
+        Assert.Equal(
+            [(spare, false), (mail, true), (shield, false), (other, true), (blade, false)],
+            preview.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+        Assert.DoesNotContain(preview.Diagnostics, w => w.Code is "equipment.multiple-armor" or "equipment.multiple-shields");
+    }
+
+    [Fact]
+    public void A_detected_subclass_from_a_source_the_campaign_does_not_allow_carries_the_campaign_warning()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Path Notes", RulesFamilies.Srd521);
+        var sense = Publish(h.Temp, source, ContentKind.Feature, "Fixture Storm Sense", [RulesFamilies.Srd521]);
+        Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Storms", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-sense", Grant = GrantKind.Content, Content = sense, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+        var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Fixture Table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [Guid.Parse("52500000-0000-4000-8000-000000000001")], HouseRules = "Fixture notes." });
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Storm Sense"), RulesFamilies.Srd521, campaign: campaign.Id);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "campaign.source-not-allowed"), (row.Status, row.Note));
+    }
+
+    [Fact]
+    public void A_resolution_for_a_subclass_the_class_choice_does_not_offer_asks_again_and_keeps_create_blocked()
+    {
+        using var h = new DdbHarness();
+        var elsewhere = Publish(h.Temp, Source(h.Temp, "Fixture Elsewhere Notes", RulesFamilies.Srd521), ContentKind.Subclass, "Fixture Path of Elsewhere", [RulesFamilies.Srd521]);
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
+            resolutions: [new Resolution("class:0:subclass", elsewhere, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Choose, "resolution.not-found"), (row.Status, row.Note));
+        Assert.Contains(row.Candidates, c => c.Reference.ContentId == Berserker.ContentId);
+        Assert.False(preview.CanApply);
+    }
 }

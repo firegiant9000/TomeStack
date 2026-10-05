@@ -7,12 +7,10 @@ interface Props {
   suggested?: RulesFamilyId;
   includePlayState: boolean;
   onIncludePlayState: (include: boolean) => void;
-  equipMatched: boolean;
-  onEquipMatched: (equip: boolean) => void;
 }
 
 /** Step 5: what will be created and what will not, before the one write. */
-export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, equipMatched, onEquipMatched }: Props) {
+export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState }: Props) {
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
@@ -37,10 +35,6 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
         <input type="checkbox" checked={includePlayState} onChange={(e) => onIncludePlayState(e.target.checked)} /> Bring over current hit points,
         spent hit dice and slots, death saves and inspiration
       </label>
-      <label>
-        <input type="checkbox" checked={equipMatched} onChange={(e) => onEquipMatched(e.target.checked)} /> Equip matched weapons and armour
-      </label>
-      <p className="hint">The sheet does not mark what is equipped: this equips every matched weapon, the first armour and the first shield. Check Inventory afterwards.</p>
       <section aria-labelledby="ddb-not-brought-over">
         <h4 id="ddb-not-brought-over">Not brought over</h4>
         <ul>
