@@ -290,5 +290,6 @@ dd { margin: 0; }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
-  .die[data-kept='false'] { opacity: 1; background: GrayText; }
+  .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
+  .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
 }

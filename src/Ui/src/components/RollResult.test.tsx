@@ -58,6 +58,14 @@ it('marks dropped and critical dice, and draws a fresh row for an identical seco
   expect(dice()[0]!.dataset.critical).toBe('true');
 });
 
+it('keeps the same dice row when re-rendered with the same record, so unrelated re-renders do not re-tumble', () => {
+  const same = record();
+  const { rerender } = render(<RollResult record={same} resources={[]} features={[]} act={() => {}} />);
+  const before = region().querySelector('.dice');
+  rerender(<RollResult record={same} resources={[]} features={[]} act={() => {}} />);
+  expect(region().querySelector('.dice')).toBe(before);
+});
+
 it('draws at most ten dice and counts the rest without adding text', () => {
   const many = record({ formula: '12d6', dice: Array.from({ length: 12 }, (_, i) => die(6, (i % 6) + 1)), total: 42 });
   render(<RollResult record={many} resources={[]} features={[]} act={() => {}} />);
