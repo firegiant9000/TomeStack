@@ -1295,7 +1295,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
 
-  await openTab(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Manage');
+  // ADR-014: the sheet reopens on the tab used last for this character (kept in the page's own storage).
+  expect(within(await screen.findByRole('article', { name: 'E2E Snapshot Hero' })).getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
   await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
@@ -1501,6 +1502,8 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
   expect(document.activeElement).toBe(text);
+  // "Report a gap" left Notes as the remembered tab; move the memory off it so the deep link below is what selects Notes.
+  await openTab(user, sheet, 'Play');
 
   // M3 C5: the list across characters shows the open note with its character; resolved ones only on request.
   await user.click(screen.getByRole('button', { name: 'Gap notes' }));
@@ -1512,8 +1515,9 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await waitFor(() => expect(mine()).toHaveLength(2));
   await user.click(within(all).getAllByRole('button', { name: 'Open E2E Gaps' })[0]!);
   await screen.findByRole('article', { name: 'E2E Gaps' });
+  // "Open <character>" from the Gap notes screen opens the sheet on Notes.
+  expect(within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
   // The reopened sheet loads its notes again; wait for them before using them.
-  await openTab(user, screen.getByRole('article', { name: 'E2E Gaps' }), 'Notes');
   await within(gaps()).findByText('Speed bonus should apply while unarmored only.');
 
   // Deleting asks first; "Keep note" leaves it.

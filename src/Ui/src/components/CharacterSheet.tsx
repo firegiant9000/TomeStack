@@ -26,8 +26,8 @@ import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
-import { TabList, TabPanel, type TabSpec } from './sheet/TabList';
-import type { SheetTabId } from '../sheetTab';
+import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
+import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
@@ -246,8 +246,29 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     { id: 'notes', label: 'Notes' },
     { id: 'manage', label: 'Manage' },
   ];
-  const [tab, setTab] = useState<SheetTabId>(initialTab ?? 'play');
+  // The sheet is keyed by character, so this runs once per opened character. A deep link wins over the memory.
+  const [tab, setTabState] = useState<SheetTabId>(() => initialTab ?? rememberedSheetTab(character.id) ?? 'play');
+  function setTab(next: SheetTabId) {
+    setTabState(next);
+    rememberSheetTab(character.id, next);
+  }
   const active: SheetTabId = tabs.some((t) => t.id === tab) ? tab : 'play';
+  // A tab that is no longer offered becomes Play (React's adjust-state-while-rendering). The stored memory is not touched:
+  // it only changes when the user picks a tab, so a remembered Spells comes back if the character becomes a caster again.
+  if (tab !== active) setTabState('play');
+
+  // The open tab stopping being offered (the last spell override was removed on a non-caster) unmounts its panel with focus
+  // inside, which would drop focus to <body> (WCAG 2.4.3): put it on the Play tab. Focus is never moved otherwise, so a
+  // remembered tab that is not offered falls back silently while the heading holds focus on mount.
+  // It goes to the selected tab (Play when the open tab vanished). `active` is read through a ref so only showSpells triggers it.
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  });
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (!focused || focused === document.body) document.getElementById(tabId('sheet', activeRef.current))?.focus();
+  }, [showSpells]);
 
   // M3 C5: "Report a gap" pre-fills the gap note form, opens Notes and moves focus to its text box. A counter, not a flag:
   // setting the tab to the value it already has causes no render, so the focus must not depend on a tab change.
@@ -349,7 +370,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         />
       )}
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
@@ -449,6 +470,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
+        {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
       </TabPanel>
 

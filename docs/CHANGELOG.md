@@ -21,7 +21,8 @@
 
 - **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab. Open choices and content problems now sit above the tabs, visible whichever tab is open. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-014.
 - **A summary at the top of the sheet:** abilities with a roll button each, proficiency bonus, Armor Class, initiative, hit points, hit dice, inspiration and active conditions, with the d20 roll mode and the last roll. An overridden number says "(overridden)". The old "Rolls" section is gone.
-- **The sheet's pages:** Play (hit points, rests, attacks, conditions, resources), Spells (for casters, or when a spell number is set; with the spellcasting traces), Inventory, Features, Stats (every calculated field with its trace and override), Notes (gap notes) and Manage. The sheet opens on Play. "Report a gap" opens Notes and puts the cursor in the note. Nothing on the sheet was removed. SPEC P-03.
+- **The sheet's pages:** Play (hit points, rests, attacks, conditions, resources), Spells (for casters, or when a spell number is set; with the spellcasting traces), Inventory, Features, Stats (every other calculated field with its trace and override), Notes (gap notes) and Manage. The sheet opens on Play the first time. "Report a gap" opens Notes and puts the cursor in the note. Nothing on the sheet was removed. SPEC P-03.
+- The sheet reopens on the page you used last for that character (remembered in this data folder only, in no package, share or backup). "Open <character>" from Gap notes opens the Notes page. At 400% zoom or in a narrow window the character list stacks above the sheet instead of squeezing it.
 
 ## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
 
