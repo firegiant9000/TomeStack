@@ -343,7 +343,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     );
 
   return (
-    <article className="panel" aria-labelledby="sheet-heading">
+    <article className="panel sheet" aria-labelledby="sheet-heading">
       <header className="sheet-header">
         <h2 id="sheet-heading" tabIndex={-1} ref={heading}>
           {character.name}
@@ -371,6 +371,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <div className="sheet-body">
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
@@ -494,6 +495,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
         <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
       </TabPanel>
+      </div>
     </article>
   );
 }

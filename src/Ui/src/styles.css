@@ -65,27 +65,49 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
+/* ADR-015: a named grid. `main` and the sheet article use subgrid, so the sheet's own header and summary land in the
+   shell's rows (across the window) while staying direct children of the article: print and the e2e queries are unchanged.
+   minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
+   which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
 .app {
   display: grid;
-  /* minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
-     which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
-  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-columns: [side] minmax(14rem, 18rem) [main] minmax(0, 1fr);
+  grid-template-rows: [top] auto [head] auto [summary] auto [messages] auto [print] auto [body] 1fr;
   min-height: 100vh;
 }
+.app[data-sidebar='collapsed'] { grid-template-columns: [side] 0 [main] minmax(0, 1fr); }
 .app-header {
   grid-column: 1 / -1;
+  grid-row: top;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--line);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
-.app-header .hint { min-width: 0; overflow-wrap: anywhere; }
-.sidebar { padding: 1rem; border-right: 1px solid var(--line); }
-.content { padding: 1rem 1.5rem; max-width: 70rem; }
+/* z-index (F1): main and the sheet article span both columns, so without it they sit over the sidebar and take its clicks
+   (verified in headless Edge, 2026-10-05). Grid items honour z-index without position. */
+.sidebar { grid-column: side; grid-row: body; z-index: 1; padding: var(--space-4); border-right: 1px solid var(--line); background: var(--surface); }
+.sidebar .actions { flex-direction: column; align-items: stretch; }
+.content {
+  grid-column: 1 / -1;
+  grid-row: head / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  column-gap: var(--space-5);
+  padding: 0 var(--space-5) var(--space-4) 0;
+}
+.content > .messages { grid-column: main; grid-row: messages; display: grid; gap: var(--space-2); }
+.content > .messages:empty { display: none; }
+.content > :not(.messages, .sheet) { grid-column: main; grid-row: body; align-self: start; }
+article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
+article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
+article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
+article.sheet > .print-sheet { grid-column: main; grid-row: print; }
+article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; }
 
 .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
@@ -188,10 +210,13 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
 }
 
-/* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) the sidebar stacks above the content. */
+/* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) everything flows in
+   DOM order: header, sidebar, then the sheet's header, summary and body. */
 @media (max-width: 40rem) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
+  .app, .content, article.sheet { display: block; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  .content { padding: var(--space-4); }
+  article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
@@ -209,6 +234,7 @@ dd { margin: 0; }
 @media print {
   :root { color-scheme: light; }
   .app { display: block; }
+  .content, article.sheet { display: block; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }

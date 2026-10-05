@@ -211,3 +211,12 @@ it('falls back from a remembered tab that is not offered, without taking focus f
   expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
   expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('spells');
 });
+
+it('keeps the header, print preview slot and summary as direct children of the article, with everything else in one body wrapper (ADR-015)', () => {
+  renderSheet(view());
+  const article = screen.getByRole('article');
+  const children = Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
+  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
+  const body = article.querySelector('.sheet-body')!;
+  expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
+});

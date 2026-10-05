@@ -219,17 +219,19 @@ export function App() {
       </nav>
 
       <main className="content">
-        {info?.warnings.map((w) => (
-          <p key={w.code} role="note" className="warn">
-            {w.message}
-          </p>
-        ))}
-        {message && (
-          <p role={message.tone === 'error' ? 'alert' : 'status'} className={message.tone}>
-            {message.text}
-          </p>
-        )}
-        {screen.kind === 'empty' && <p className="hint">Create a character or open one from the list.</p>}
+        <div className="messages">
+          {info?.warnings.map((w) => (
+            <p key={w.code} role="note" className="warn">
+              {w.message}
+            </p>
+          ))}
+          {message && (
+            <p role={message.tone === 'error' ? 'alert' : 'status'} className={message.tone}>
+              {message.text}
+            </p>
+          )}
+        </div>
+        {screen.kind === 'empty' && <p className="hint">Create a character, open one from the list, or pick a theme in Settings.</p>}
         {screen.kind === 'builder' && info && (
           <CharacterBuilder
             key={screen.mode.kind === 'create' ? 'create' : `${screen.mode.kind}-${screen.mode.view.character.id}`}
