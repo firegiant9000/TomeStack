@@ -14,6 +14,9 @@ import type {
 } from '../api/types';
 import { rollBonus } from '../format';
 
+/** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
+export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
+
 const conditionLabels: Record<string, string> = {
   blinded: 'Blinded',
   charmed: 'Charmed',
@@ -93,7 +96,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           checked={view.character.play?.inspiration ?? false}
           onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
         />
-        {view.character.rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration'}
+        {inspirationLabel(view.character.rulesFamily)}
       </label>
     </section>
   );
