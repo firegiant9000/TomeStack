@@ -14,7 +14,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
-import { applyTheme, theme } from './settings';
+import { applyTheme, setSidebarCollapsed, sidebarCollapsed, theme } from './settings';
 import type { SheetTabId } from './sheetTab';
 
 type Screen =
@@ -44,6 +44,30 @@ export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: 'empty' });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
+  const [collapsed, setCollapsed] = useState(sidebarCollapsed);
+  const sidebar = useRef<HTMLElement>(null);
+  const sidebarToggle = useRef<HTMLButtonElement>(null);
+
+  // ADR-015: the sidebar can be hidden. WCAG 2.4.3 / 2.4.11: hiding it while focus is inside moves focus to the toggle.
+  // F7: no side effects inside a state updater (StrictMode runs updaters twice); the nav's own `hidden` is the current state.
+  const toggleSidebar = useCallback(() => {
+    const hiding = !(sidebar.current?.hidden ?? false);
+    if (hiding && sidebar.current?.contains(document.activeElement)) sidebarToggle.current?.focus();
+    setSidebarCollapsed(hiding);
+    setCollapsed(hiding);
+  }, []);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== 'b') return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      event.preventDefault();
+      toggleSidebar();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [toggleSidebar]);
 
   const onError = useCallback((error: unknown) => setMessage({ tone: 'error', text: describeError(error) }), []);
 
@@ -92,13 +116,25 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-sidebar={collapsed ? 'collapsed' : undefined}>
       <header className="app-header">
         <h1>TomeStack</h1>
         <span className="tag">Offline</span>
+        <button
+          type="button"
+          className="sidebar-toggle"
+          ref={sidebarToggle}
+          aria-expanded={!collapsed}
+          aria-controls="sidebar"
+          aria-keyshortcuts="Control+B"
+          title={collapsed ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
+          onClick={toggleSidebar}
+        >
+          {collapsed ? 'Show sidebar' : 'Hide sidebar'}
+        </button>
       </header>
 
-      <nav className="sidebar" aria-label="Characters">
+      <nav id="sidebar" className="sidebar" aria-label="Characters" ref={sidebar} hidden={collapsed}>
         <div className="actions">
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button

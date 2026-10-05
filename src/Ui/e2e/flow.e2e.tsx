@@ -1359,6 +1359,8 @@ it('reaches the primary actions by keyboard alone', async () => {
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
 
   await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's one header control comes first
+  await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New character' }));
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import package…' }));
@@ -2051,4 +2053,33 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   // Leave the shared jsdom window as it was for the next test.
   localStorage.removeItem('tomestack.theme');
   delete document.documentElement.dataset.theme;
+});
+
+it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  const toggle = await screen.findByRole('button', { name: 'Hide sidebar' });
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  await user.click(toggle);
+  expect(screen.getByRole('button', { name: 'Show sidebar' }).getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+
+  await user.keyboard('{Control>}b{/Control}');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
+  const newCharacter = screen.getByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  newCharacter.focus();
+  await user.keyboard('{Control>}b{/Control}');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+
+  unmount();
+  render(<App />);
+  expect(await screen.findByRole('button', { name: 'Show sidebar' })).toBeTruthy();
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
+  expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
 });

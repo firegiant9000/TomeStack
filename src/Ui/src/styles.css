@@ -87,6 +87,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   border-bottom: 1px solid var(--line);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
+.sidebar-toggle { margin-left: auto; }
+/* With the side column at 0 the subgrid gap would leave a strip at the left edge. */
+.app[data-sidebar='collapsed'] .content, .app[data-sidebar='collapsed'] article.sheet { column-gap: 0; }
+.sidebar-toggle::before { content: ''; display: inline-block; width: 1em; height: 0.75em; margin-right: var(--space-2); vertical-align: -0.05em; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; box-shadow: inset 0 0.3em 0 -0.18em currentColor; }
 /* z-index (F1): main and the sheet article span both columns, so without it they sit over the sidebar and take its clicks
    (verified in headless Edge, 2026-10-05). Grid items honour z-index without position. */
 .sidebar { grid-column: side; grid-row: body; z-index: 1; padding: var(--space-4); border-right: 1px solid var(--line); background: var(--surface); }
