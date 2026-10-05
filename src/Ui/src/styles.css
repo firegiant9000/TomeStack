@@ -1,4 +1,5 @@
-/* Plain, system-font styling. No external fonts or assets: the app must render offline. */
+/* Plain, system-font styling. No external fonts or assets: the app must render offline (ADR-006). */
+/* ADR-015: tokens. Three themes on the system-colour base; contrast ratios are in accessibility-checklist.md item 5. */
 :root {
   color-scheme: light dark;
   --bg: Canvas;
@@ -7,13 +8,56 @@
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
   /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
   --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
-  /* Text contrast on Canvas: light 6.2 / 5.4 / 6.5, dark 8.9 / 10.1 / 7.8 (docs/features/accessibility-checklist.md). */
-  --accent: light-dark(#2f5fb3, #8ab4f8);
+  /* Forest is the default theme (owner, 2026-10-05). */
+  --surface: light-dark(#f2f7f2, #161d17);
+  --accent: light-dark(#1e6a3a, #7fd49a);
+  --accent-2: light-dark(#7a5a00, #e2c35b);
   --warn: light-dark(#9a5b00, #f0b35a);
   --error: light-dark(#b3261e, #f28b82);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.4rem;
+  --text-2xl: 1.75rem;
+  --radius: 0.375rem;
+  /* Numbers in the summary and on the dice: Bahnschrift ships with Windows 10 (1709+) and 11; nothing is bundled. */
+  --font-numbers: Bahnschrift, system-ui, sans-serif;
   font-family: system-ui, 'Segoe UI', sans-serif;
   font-size: 100%;
   line-height: 1.45;
+}
+html[data-theme='cool'] {
+  --surface: light-dark(#f2f4fb, #191c26);
+  --accent: light-dark(#3449b8, #9eaaff);
+  --accent-2: light-dark(#0f6e66, #5fe0cf);
+}
+html[data-theme='violet'] {
+  --surface: light-dark(#f7f3fc, #1b1624);
+  --accent: light-dark(#6a33c4, #c9adff);
+  --accent-2: light-dark(#0a6b86, #6fd9f0);
+}
+/* WCAG 1.4.11 under Windows High Contrast: every token maps to a system colour; borders carry what colour carried. */
+@media (forced-colors: active) {
+  :root {
+    --surface: Canvas;
+    --accent: LinkText;
+    --accent-2: Highlight;
+    --warn: CanvasText;
+    --error: CanvasText;
+    --line: CanvasText;
+    --line-strong: CanvasText;
+    --muted: CanvasText;
+  }
+  .tabs [role='tab'][aria-selected='true'] { border: 2px solid Highlight; }
+}
+/* WCAG 2.3.3: no motion for a user who asked for none. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
 }
 
 * { box-sizing: border-box; }
@@ -38,14 +82,14 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
-.app-header h1 { margin: 0; font-size: 1.4rem; }
+.app-header h1 { margin: 0; font-size: var(--text-xl); }
 .app-header .hint { min-width: 0; overflow-wrap: anywhere; }
 .sidebar { padding: 1rem; border-right: 1px solid var(--line); }
 .content { padding: 1rem 1.5rem; max-width: 70rem; }
 
-.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .field { display: grid; gap: 0.2rem; font-weight: 500; }
 .choice { display: block; padding: 0.15rem 0; }
@@ -53,14 +97,14 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
 input { font: inherit; padding: 0.3rem 0.4rem; }
-button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; }
+button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; border-radius: var(--radius); }
 button.link { background: none; border: none; padding: 0.2rem 0; text-align: left; color: inherit; }
 button.link[aria-current='page'] { font-weight: 700; }
 
 .hint { color: var(--muted); margin: 0.25rem 0; }
 .tag {
   display: inline-block;
-  font-size: 0.8em;
+  font-size: var(--text-sm);
   padding: 0 0.4em;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -72,19 +116,19 @@ button.link[aria-current='page'] { font-weight: 700; }
 .options li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.3rem 0; }
 .options .incompatible { color: var(--muted); }
 .option-name { font-weight: 600; }
-.option-source { display: block; font-size: 0.9em; color: var(--muted); }
+.option-source { display: block; font-size: var(--text-sm); color: var(--muted); }
 
 .sheet-header { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .sheet-header h2 { margin: 0; overflow-wrap: anywhere; }
 /* Only the first button takes the free space, so "Level up" and "Print…" sit together at the right. */
 .sheet-header button:first-of-type { margin-left: auto; }
-.derived { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.derived { font-family: var(--font-numbers); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .field-group h3 { margin: 0.75rem 0 0.25rem; }
 .field-card details { border-bottom: 1px solid var(--line); padding: 0.25rem 0; }
 .field-card summary { cursor: pointer; }
-.field-card summary h4 { display: inline; margin: 0; font-size: 1rem; font-weight: 600; }
-.warning-count { color: var(--warn); font-size: 0.9rem; }
-.override-label { font-size: 0.9rem; color: var(--warn); font-weight: 600; }
+.field-card summary h4 { display: inline; margin: 0; font-size: var(--text-md); font-weight: 600; }
+.warning-count { color: var(--warn); font-size: var(--text-sm); }
+.override-label { font-size: var(--text-sm); color: var(--warn); font-weight: 600; }
 .override { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-top: 0.75rem; }
 
 table { border-collapse: collapse; width: 100%; }
@@ -109,24 +153,24 @@ span.warn { color: var(--warn); }
 .conditions { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
-.resource h4 { margin: 0; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
 /* ADR-014: sheet tabs (WAI-ARIA APG tabs). The class sets display, so [hidden] must be restated or a hidden panel shows. */
 .tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); }
 .tabs [role='tab'] { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: inherit; }
-.tabs [role='tab'][aria-selected='true'] { border-color: var(--line); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
+.tabs [role='tab'][aria-selected='true'] { border-color: var(--line); border-bottom: 2px solid var(--accent); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
 .tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
 .tabpanel[hidden] { display: none; }
 
 /* ADR-014 slice 2: the summary. All rem, no fixed widths: the abilities grid and the lines wrap at 200% and 400% zoom. */
-.sheet-summary { display: grid; gap: 0.5rem; border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
+.sheet-summary { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3) var(--space-4); background: var(--surface); }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0; }
 .sheet-summary dl.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; }
-.sheet-summary dt { font-weight: 600; font-size: 0.9rem; color: var(--muted); }
-.sheet-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+.sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+.sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
 button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
 button.roll:hover { background: var(--accent); color: var(--bg); }
@@ -158,9 +202,9 @@ dd { margin: 0; }
 /* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
 .print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
 .print-sheet table { margin: 0.5rem 0; }
-.print-title { font-size: 1.4rem; margin: 0.5rem 0 0; }
+.print-title { font-size: var(--text-xl); margin: var(--space-2) 0 0; }
 .print-feature p { margin: 0.2rem 0; }
-.print-notice { font-size: 0.85em; color: var(--muted); }
+.print-notice { font-size: var(--text-sm); color: var(--muted); }
 @media print {
   :root { color-scheme: light; }
   .app { display: block; }
@@ -168,6 +212,7 @@ dd { margin: 0; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }
   .print-sheet { border: none; padding: 0; }
+  .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
 }
 

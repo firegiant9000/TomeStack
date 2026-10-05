@@ -13,6 +13,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
+import { applyTheme, theme } from './settings';
 import type { SheetTabId } from './sheetTab';
 
 type Screen =
@@ -47,6 +48,7 @@ export function App() {
   const refresh = useCallback(async () => setCharacters(await client.listCharacters()), []);
 
   useEffect(() => {
+    applyTheme(theme()); // ADR-015: the themes are CSS keyed on html[data-theme]
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
