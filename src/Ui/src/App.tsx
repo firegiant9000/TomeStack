@@ -7,6 +7,7 @@ import { BackupsPanel } from './components/BackupsPanel';
 import { CampaignsPanel } from './components/CampaignsPanel';
 import { DdbImportPanel } from './components/ddb/DdbImportPanel';
 import { ExtensionsPanel } from './components/ExtensionsPanel';
+import { SettingsPanel } from './components/SettingsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
@@ -25,6 +26,7 @@ type Screen =
   | { kind: 'gaps' }
   | { kind: 'backups' }
   | { kind: 'extensions' }
+  | { kind: 'settings' }
   | { kind: 'ddb-import' }
   | { kind: 'sheet'; view: CharacterView; tab?: SheetTabId }
   | { kind: 'import'; fileName: string; base64: string; preview: PackagePreview };
@@ -93,9 +95,7 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <h1>TomeStack</h1>
-        <span className="hint">
-          Offline · local data{info ? ` · v${info.version} · schema ${info.schemaVersion}` : ''}
-        </span>
+        <span className="tag">Offline</span>
       </header>
 
       <nav className="sidebar" aria-label="Characters">
@@ -192,6 +192,16 @@ export function App() {
           >
             Extensions
           </button>
+          <button
+            type="button"
+            aria-current={screen.kind === 'settings' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'settings' });
+            }}
+          >
+            Settings
+          </button>
         </div>
         <ul className="character-list">
           {active.map(characterLink)}
@@ -265,6 +275,7 @@ export function App() {
             onStatus={(text) => setMessage({ tone: 'status', text })}
           />
         )}
+        {screen.kind === 'settings' && <SettingsPanel info={info} />}
         {screen.kind === 'ddb-import' && info && (
           <DdbImportPanel
             rulesFamilies={info.rulesFamilies}

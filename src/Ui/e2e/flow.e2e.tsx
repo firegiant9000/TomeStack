@@ -2036,3 +2036,19 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
 
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
 });
+
+it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Violet' }));
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  unmount();
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  // Leave the shared jsdom window as it was for the next test.
+  localStorage.removeItem('tomestack.theme');
+  delete document.documentElement.dataset.theme;
+});
