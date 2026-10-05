@@ -8,7 +8,7 @@ Rules core: `ArmorEffect` in `src/RulesCore/Effects.cs`, and `AddArmor` plus the
 
 `equipment: [{ item, equipped, quantity }]`: an exact pin per item, one entry per item (`character.equipment-duplicate`), quantity 1–9,999. **Only equipped items apply.** They are active content like a pin: their effects count, and they appear in the features list. Equipping content that is not an item is refused on the sheet (`equipment.not-an-item`). Unequipped items are still references, so packages carry them and `content.affected` reports them (`equipment`).
 
-The sheet's **Equipment** panel adds an item from the character's rules family, equips and unequips it, and removes it. Each change is saved with the character.
+The sheet's **Equipment** panel adds an item from the character's rules family, equips and unequips it, and removes it. Each change is saved with the character. Inventory says how many carried items are not equipped, and that a weapon must be equipped to list its attack and armor to set the Armor Class. A D&D Beyond 2014 import creates every item unequipped (`ddb-pdf-import.md`).
 
 ## The `armor` effect
 
