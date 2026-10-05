@@ -87,8 +87,8 @@ it('lists the core numbers as terms and definitions, with no heading or named re
   expect(dd('Armor Class')).toBe('16 (overridden)');
   expect(dd('Initiative')).toBe('+2');
   expect(dd('Hit points')).toBe('28 of 35, 5 temporary');
-  expect(dd('Hit dice')).toBe('d12 2 of 3');
-  expect(dd('Heroic Inspiration')).toBe('no');
+  expect(dd('Hit dice')).toBe('2 of 3 (d12)');
+  expect(within(summary).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(false);
   expect(within(summary).queryByText('Conditions', { selector: 'dt' })).toBeNull();
   expect(within(summary).getByText('Strength', { selector: 'dt' })).toBeTruthy();
   expect(within(summary).getByText('16', { selector: '.derived' })).toBeTruthy();
@@ -104,7 +104,7 @@ it('names inspiration by family and lists conditions and exhaustion when present
       onRoll={() => {}}
     />,
   );
-  expect(dd('Inspiration')).toBe('yes');
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Inspiration' }).checked).toBe(true);
   expect(dd('Conditions')).toBe('Poisoned, Prone, exhaustion 2');
 });
 
@@ -122,6 +122,35 @@ it('rolls an ability check from its button, named apart from the field card\'s "
   }
   expect(screen.getByRole('button', { name: 'Roll Intelligence check (-1)' })).toBeTruthy();
   expect(screen.getByRole('radio', { name: 'Advantage' })).toBeTruthy(); // the roll-mode picker lives here now
+});
+
+it('toggles inspiration from the summary through the play command', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={act} onRoll={() => {}} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Heroic Inspiration' }));
+  expect(act).toHaveBeenCalledWith({ action: 'setInspiration', amount: 1 });
+});
+
+it('adjusts hit points by one from the summary without changing the Hit points text', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={act} onRoll={() => {}} />);
+  expect(dd('Hit points')).toBe('28 of 35, 5 temporary');
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  expect(act).toHaveBeenCalledWith({ action: 'damage', amount: 1 });
+  await user.click(screen.getByRole('button', { name: 'Regain 1 hit point' }));
+  expect(act).toHaveBeenCalledWith({ action: 'heal', amount: 1 });
+});
+
+it('disables "Lose" at 0 hit points and "Regain" at the maximum', () => {
+  const view = fixtureView();
+  render(<SheetSummary view={{ ...view, sheet: { ...view.sheet, hitPoints: { maximum: 35, current: 0, temporary: 0 } } }} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Lose 1 hit point' }).disabled).toBe(true);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' }).disabled).toBe(false);
+  cleanup();
+  render(<SheetSummary view={{ ...view, sheet: { ...view.sheet, hitPoints: { maximum: 35, current: 35, temporary: 0 } } }} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' }).disabled).toBe(true);
 });
 
 /** The fixture view with one field replaced by an overridden copy. */

@@ -201,6 +201,9 @@ span.warn { color: var(--warn); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; }
 .sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+/* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
+.quick-hp { display: inline-flex; gap: var(--space-1); }
+.quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); }
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
 button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
 button.roll:hover { background: var(--accent); color: var(--bg); }
@@ -210,6 +213,8 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 .sheet-summary .roll-mode .choice:first-of-type { border-radius: 4px 0 0 4px; margin-left: 0; }
 .sheet-summary .roll-mode .choice:last-of-type { border-radius: 0 4px 4px 0; }
 .sheet-summary .roll-mode .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+/* The checked radio's dot would otherwise blend into the accent-filled segment. */
+.sheet-summary .roll-mode .choice:has(:checked) input { accent-color: var(--bg); }
 /* The selected segment is accent-filled, so its focus ring uses --fg on the page background (WCAG 2.4.7). */
 .sheet-summary .roll-mode .choice:has(:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
 .sheet-summary .roll-mode input:focus-visible { outline: none; }

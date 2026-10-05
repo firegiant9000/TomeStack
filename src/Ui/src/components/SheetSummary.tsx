@@ -89,17 +89,36 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
               {maximumOverridden ? ' (maximum overridden)' : ''}
               {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
             </dd>
+            {/* ADR-015: one-point adjustments, the same confirmed play command as the Hit points panel. A second <dd> so the
+                first keeps only the text (summaryValue reads the first). */}
+            <dd className="quick-hp">
+              <button type="button" aria-label="Lose 1 hit point" disabled={hp.current <= 0} onClick={() => act({ action: 'damage', amount: 1 })}>
+                −
+              </button>
+              <button type="button" aria-label="Regain 1 hit point" disabled={hp.current >= hp.maximum} onClick={() => act({ action: 'heal', amount: 1 })}>
+                +
+              </button>
+            </dd>
           </div>
         )}
         {(sheet.hitDice ?? []).length > 0 && (
           <div>
             <dt>Hit dice</dt>
-            <dd>{sheet.hitDice!.map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}</dd>
+            <dd>{sheet.hitDice!.map((h) => `${h.remaining} of ${h.total} (d${h.die})`).join(', ')}</dd>
           </div>
         )}
         <div>
-          <dt>{inspirationLabel(character.rulesFamily)}</dt>
-          <dd>{play?.inspiration ? 'yes' : 'no'}</dd>
+          <dt aria-hidden="true">{inspirationLabel(character.rulesFamily)}</dt>
+          <dd>
+            <label className="choice">
+              <input
+                type="checkbox"
+                checked={play?.inspiration ?? false}
+                onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
+              />{' '}
+              {inspirationLabel(character.rulesFamily)}
+            </label>
+          </dd>
         </div>
         {(conditions.length > 0 || exhaustion > 0) && (
           <div>
