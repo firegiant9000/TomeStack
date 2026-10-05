@@ -43,7 +43,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .sidebar { padding: 1rem; border-right: 1px solid var(--line); }
 .content { padding: 1rem 1.5rem; max-width: 70rem; }
 
-.panel { display: grid; gap: 1rem; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -136,6 +136,9 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 .sheet-summary .roll-mode .choice:first-of-type { border-radius: 4px 0 0 4px; margin-left: 0; }
 .sheet-summary .roll-mode .choice:last-of-type { border-radius: 0 4px 4px 0; }
 .sheet-summary .roll-mode .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+/* The selected segment is accent-filled, so its focus ring uses --fg on the page background (WCAG 2.4.7). */
+.sheet-summary .roll-mode .choice:has(:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
+.sheet-summary .roll-mode input:focus-visible { outline: none; }
 @media (forced-colors: active) {
   .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
 }

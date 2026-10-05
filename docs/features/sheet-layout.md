@@ -16,7 +16,7 @@ UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/sr
 
 A definition list, not headings or named regions, so it never shares a name with a panel. It shows:
 
-- each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour) (a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
+- each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
 - Proficiency bonus, Armor Class, Initiative; an overridden number reads "16 (overridden)";
 - Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size, Inspiration or Heroic Inspiration (by family) as yes/no;
 - Conditions and exhaustion, only when there are any;
@@ -52,4 +52,4 @@ The sheet reopens on the tab used last for that character. The memory is `tomest
 
 ## Reflow
 
-Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column is `minmax(0, 1fr)`, so a wide table or excerpt scrolls inside its own box instead of widening the window and pushing the app header past its edge; the header wraps.
+Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column and the sheet's own grid are `minmax(0, 1fr)`, so a wide table or excerpt can no longer widen the window: the app header and the sheet header's buttons stay in view, and only the wide element itself overflows; the app header wraps.
