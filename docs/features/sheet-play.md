@@ -65,7 +65,7 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 
 ## Rolls on the sheet (SPEC C-04)
 
-- Every ability modifier, saving throw, skill and initiative field has a "Roll" button (a d20 test through the `roll` command). The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014, chooses normal, advantage or disadvantage.
+- Every ability modifier, saving throw, skill and initiative field has a "Roll" button on the Stats tab (a d20 test through the `roll` command), and the summary has a "Roll <Ability> check (+N)" button per ability. The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014 ([sheet-layout.md](sheet-layout.md)), chooses normal, advantage or disadvantage.
 - **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice.
 - The **Last roll** region (in the summary, visible on every tab; `aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page).
 - **Rolling never spends anything.** If the roll names a resource (`linkedResourceId`), the record offers a separate "Spend 1 …" button, which is a confirmed `character.play`.

@@ -20,7 +20,7 @@ The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of
 - Testing Library's default queries skip hidden elements, so e2e tests open the tab a user would (`openTab`). This made about 40 query sites explicit about where a section lives.
 - The summary must never carry a heading or region whose name matches a panel's (two regions with one name break `getByRole` and confuse screen readers). It is a `<dl>`.
 - Print is unchanged: the print view is its own layout and a direct child of `article.panel`.
-- Open accessibility checks: a Narrator pass of the strip and a 200%/400% zoom check (checklist items 6, 15, 29).
+- Open accessibility checks: a Narrator pass of the strip and a 200%/400% zoom check (checklist items 6, 15, 29, 30).
 
 ## Alternatives considered
 
@@ -30,4 +30,4 @@ The character sheet (`src/Ui/src/components/CharacterSheet.tsx`) was one page of
 
 ## Evidence
 
-`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); `src/Ui/src/components/SheetSummary.test.tsx` (the summary: a definition list, no headings, overrides in text); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box); `src/Ui/src/components/CharacterSheet.test.tsx` (Spells only for casters, fallback to Play, "Report a gap" opens Notes and focuses the text, typed text survives a tab switch); `src/Ui/src/sheetTab.test.ts` (per-character memory, junk and throwing storage); `docs/features/sheet-layout.md`.
+`src/Ui/src/components/sheet/TabList.test.tsx` (roles, keyboard, hidden panels); `src/Ui/src/components/SheetSummary.test.tsx` (the summary: a definition list, no headings, overrides in text); the e2e flow (every sheet test opens its tabs; "Report a gap" switches to Notes and focuses the text box); `src/Ui/src/components/CharacterSheet.test.tsx` (Spells for a caster, or when a spell field has a value or override, fallback to Play, "Report a gap" opens Notes and focuses the text, typed text survives a tab switch); `src/Ui/src/sheetTab.test.ts` (per-character memory, junk and throwing storage); `docs/features/sheet-layout.md`.

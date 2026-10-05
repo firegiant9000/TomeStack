@@ -260,9 +260,14 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   // The open tab stopping being offered (the last spell override was removed on a non-caster) unmounts its panel with focus
   // inside, which would drop focus to <body> (WCAG 2.4.3): put it on the Play tab. Focus is never moved otherwise, so a
   // remembered tab that is not offered falls back silently while the heading holds focus on mount.
+  // It goes to the selected tab (Play when the open tab vanished). `active` is read through a ref so only showSpells triggers it.
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  });
   useEffect(() => {
     const focused = document.activeElement;
-    if (!focused || focused === document.body) document.getElementById(tabId('sheet', 'play'))?.focus();
+    if (!focused || focused === document.body) document.getElementById(tabId('sheet', activeRef.current))?.focus();
   }, [showSpells]);
 
   // M3 C5: "Report a gap" pre-fills the gap note form, opens Notes and moves focus to its text box. A counter, not a flag:
@@ -365,7 +370,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         />
       )}
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
 
       {view.campaign && view.campaign.warnings.length > 0 && (
         <section aria-labelledby="campaign-heading">
@@ -465,6 +470,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
+        {(sheet.features ?? []).length === 0 && <p className="hint">No features yet.</p>}
         <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
       </TabPanel>
 

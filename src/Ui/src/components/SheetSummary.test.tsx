@@ -71,6 +71,13 @@ function fixtureView(sheetOver: Partial<CharacterSheet> = {}, play?: PlayState, 
 
 const dd = (term: string) => within(screen.getByRole('region', { name: 'Summary' })).getByText(term, { selector: 'dt' }).nextElementSibling!.textContent!.trim();
 
+it('names the Spells tab in the rolling hint only when it is offered', () => {
+  const { rerender } = render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.')).toBeTruthy();
+  rerender(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} spellsTab />);
+  expect(screen.getByText('Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.')).toBeTruthy();
+});
+
 it('lists the core numbers as terms and definitions, with no heading or named region of its own', () => {
   render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
   const summary = screen.getByRole('region', { name: 'Summary' });

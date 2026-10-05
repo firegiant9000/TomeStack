@@ -31,7 +31,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 | Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Attacks and actions, Conditions, Resources, Class columns |
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override |
 | Inventory | Equipment |
-| Features | Features, with "Open page" and "Report a gap" |
+| Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none) |
 | Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap" |
 | Notes | Gap notes |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots |
@@ -48,7 +48,7 @@ Only the information architecture (summary above, pages below) is borrowed. The 
 
 ## Remembered tab and deep links
 
-The sheet reopens on the tab used last for that character. The memory is `tomestack.sheetTab.<characterId>` in the page's own storage (the WebView2 profile in the data folder): kept in this data folder only, in no package, share or backup. "Open <character>" on the Gap notes screen opens Notes instead (and leaves the memory alone). A tab that is not offered (Spells for a character who is no longer a caster) falls back to Play, and the memory is left alone: it changes only when you pick a tab, so a remembered Spells returns if the character becomes a caster again. If the open tab stops being offered while you are on it (the last spell override is removed on a non-caster), the sheet moves to Play and, only if focus would otherwise be lost, puts focus on the Play tab.
+The sheet reopens on the tab used last for that character. The memory is `tomestack.sheetTab.<characterId>` in the page's own storage (the WebView2 profile in the data folder): kept in this data folder only, in no package, share or backup. "Open <character>" on the Gap notes screen opens Notes instead (and leaves the memory alone). A tab that is not offered (Spells for a character who is no longer a caster) falls back to Play, and the memory is left alone: it changes only when you pick a tab, so a remembered Spells returns if the character becomes a caster again. If the open tab stops being offered while you are on it (the last spell override is removed on a non-caster), the sheet moves to Play and, only if focus would otherwise be lost, puts focus on the selected tab (Play, since that is where it falls back to).
 
 ## Reflow
 

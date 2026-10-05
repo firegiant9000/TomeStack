@@ -71,7 +71,7 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
 
-it('offers Spells only to a caster and opens on Play', () => {
+it('offers Spells to a caster, or when a spell field has a value, and opens on Play', () => {
   renderSheet(view());
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
@@ -182,6 +182,26 @@ it('moves focus to Play when the open tab stops being offered', async () => {
   expect(screen.queryByRole('tab', { name: 'Spells' })).toBeNull();
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Play' }));
+});
+
+it('puts lost focus on the selected tab, not always Play, when Spells appears', () => {
+  const { rerender } = renderSheet(view(), 'manage');
+  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+  (document.activeElement as HTMLElement | null)?.blur();
+  expect(document.activeElement).toBe(document.body);
+
+  const fields = view().sheet.fields;
+  rerender(sheetElement(view({ fields: fields.map((f) => (f.field === 'spellAttack' ? { ...f, override: { field: 'spellAttack', value: 3 }, value: 3 } : f)) }), 'manage'));
+  expect(screen.getByRole('tab', { name: 'Spells' })).toBeTruthy();
+  expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
+  expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Manage' }));
+});
+
+it('says so on the Features tab when the character has no features', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('tab', { name: 'Features' }));
+  expect(within(screen.getByRole('tabpanel', { name: 'Features' })).getByText('No features yet.')).toBeTruthy();
 });
 
 it('falls back from a remembered tab that is not offered, without taking focus from the heading or rewriting the memory', () => {
