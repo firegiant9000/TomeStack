@@ -90,6 +90,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .sidebar-toggle { margin-left: auto; }
 /* With the side column at 0 the subgrid gap would leave a strip at the left edge. */
 .app[data-sidebar='collapsed'] .content, .app[data-sidebar='collapsed'] article.sheet { column-gap: 0; }
+/* ...and the main-column items would start at x=0 while the sheet header and summary keep their inset: give them the same one. */
+.app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: var(--space-5); }
 .sidebar-toggle::before { content: ''; display: inline-block; width: 1em; height: 0.75em; margin-right: var(--space-2); vertical-align: -0.05em; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; box-shadow: inset 0 0.3em 0 -0.18em currentColor; }
 /* z-index (F1): main and the sheet article span both columns, so without it they sit over the sidebar and take its clicks
    (verified in headless Edge, 2026-10-05). Grid items honour z-index without position. */
@@ -223,6 +225,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
   .content { padding: var(--space-4); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
+  .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
@@ -243,6 +246,7 @@ dd { margin: 0; }
   .app { display: block; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
+  .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }

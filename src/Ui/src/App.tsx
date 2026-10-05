@@ -63,6 +63,7 @@ export function App() {
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       event.preventDefault();
+      if (event.repeat) return; // holding the keys must not flicker the sidebar
       toggleSidebar();
     }
     document.addEventListener('keydown', onKey);
