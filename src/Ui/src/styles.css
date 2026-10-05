@@ -5,6 +5,8 @@
   --fg: CanvasText;
   --muted: color-mix(in srgb, CanvasText 65%, Canvas);
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
+  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
+  --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
   /* Text contrast on Canvas: light 6.2 / 5.4 / 6.5, dark 8.9 / 10.1 / 7.8 (docs/features/accessibility-checklist.md). */
   --accent: light-dark(#2f5fb3, #8ab4f8);
   --warn: light-dark(#9a5b00, #f0b35a);
@@ -125,6 +127,18 @@ span.warn { color: var(--warn); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; }
 .sheet-summary dt { font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
+button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
+button.roll:hover { background: var(--accent); color: var(--bg); }
+.sheet-summary .roll-mode { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: none; margin: 0; }
+.sheet-summary .roll-mode legend { float: left; padding: 0; margin-right: 0.75rem; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
+.sheet-summary .roll-mode .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); margin-left: -1px; }
+.sheet-summary .roll-mode .choice:first-of-type { border-radius: 4px 0 0 4px; margin-left: 0; }
+.sheet-summary .roll-mode .choice:last-of-type { border-radius: 0 4px 4px 0; }
+.sheet-summary .roll-mode .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+@media (forced-colors: active) {
+  .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
+}
 
 /* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) the sidebar stacks above the content. */
 @media (max-width: 40rem) {

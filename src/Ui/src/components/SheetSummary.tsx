@@ -59,7 +59,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
               <dd>
                 <span className="derived">{score.value}</span>
                 {score.override && <span className="override-label"> (overridden)</span>}{' '}
-                <button type="button" className="link" onClick={() => onRoll(mod.field)}>
+                <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
                   Roll {abilityNames[a]} check ({signed(mod.value)})
                 </button>
                 {mod.override && <span className="override-label"> (modifier overridden)</span>}
