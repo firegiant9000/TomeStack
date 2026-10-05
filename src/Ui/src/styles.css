@@ -106,6 +106,12 @@ span.warn { color: var(--warn); }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
+/* ADR-014: sheet tabs (WAI-ARIA APG tabs). The class sets display, so [hidden] must be restated or a hidden panel shows. */
+.tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); }
+.tabs [role='tab'] { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: inherit; }
+.tabs [role='tab'][aria-selected='true'] { border-color: var(--line); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
+.tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
+.tabpanel[hidden] { display: none; }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
 pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }

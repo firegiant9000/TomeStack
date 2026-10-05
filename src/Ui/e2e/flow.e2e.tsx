@@ -40,6 +40,15 @@ async function expectStatus(text: RegExp): Promise<HTMLElement> {
   return screen.getByRole('status');
 }
 
+/**
+ * Activates one tab of a character sheet (ADR-014). Inactive panels are hidden, so a query finds only the active
+ * tab's sections; a test must open the tab a user would open. A no-op when the tab is already selected.
+ */
+async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElement, name: string): Promise<void> {
+  const tab = within(sheet).getByRole('tab', { name });
+  if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
+}
+
 it('creates a character, shows its traced sheet, overrides, exports and re-imports it', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -72,6 +81,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
+  await openTab(user, sheet, 'Manage');
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(1));
   const [fileName, base64] = vi.mocked(downloadBase64).mock.calls[0]!;
@@ -398,6 +408,7 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   await user.click(screen.getByRole('button', { name: /^E2E Storm/ }));
   sheet = await screen.findByRole('article', { name: 'E2E Storm' });
   expect(within(sheet).getByRole('heading', { name: /^Initiative: \+2/ })).toBeTruthy();
+  await openTab(user, sheet, 'Manage');
   const updates = await within(sheet).findByRole('region', { name: 'Updates available' });
   // The setup pins the M1 SRD Barbarian revision, so the newer bundled revision is offered as well.
   expect(within(updates).getByRole('button', { name: 'Review update: Barbarian' }).closest('li')!.textContent).toMatch(/bundled/);
@@ -408,7 +419,9 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
   expect(values.textContent).toMatch(/Initiative24/);
   await user.click(within(review).getByRole('button', { name: 'Apply update' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Updated E2E Storm: Path of the E2E Storm/));
+  await openTab(user, sheet, 'Sheet');
   expect(await screen.findByRole('heading', { name: /^Initiative: \+4/ })).toBeTruthy();
+  await openTab(user, sheet, 'Manage');
   const remaining = () => within(within(screen.getByRole('article', { name: 'E2E Storm' })).getByRole('region', { name: 'Updates available' }));
   await waitFor(() => expect(remaining().queryByRole('button', { name: 'Review update: Path of the E2E Storm' })).toBeNull());
   expect(remaining().getByRole('button', { name: 'Review update: Barbarian' })).toBeTruthy(); // still only offered
@@ -669,6 +682,7 @@ it('exports a character for Foundry VTT and as sheet JSON after a preview, with 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E VTT Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E VTT Hero' });
+  await openTab(user, sheet, 'Manage');
   const panel = within(sheet).getByRole('region', { name: 'Export for a virtual tabletop' });
   const dataDir = inject('devHost').dataDir.toLowerCase().replaceAll('\\', '/');
 
@@ -1245,6 +1259,7 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
+  await openTab(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Manage');
   const panel = () => screen.getByRole('region', { name: 'Snapshots' });
   await user.type(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('textbox', { name: /^Snapshot name/ }), 'E2E with the feat');
   await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
@@ -1256,6 +1271,7 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
 
+  await openTab(user, await screen.findByRole('article', { name: 'E2E Snapshot Hero' }), 'Manage');
   await user.click(await within(await screen.findByRole('region', { name: 'Snapshots' })).findByRole('button', { name: 'Restore E2E with the feat…' }));
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
@@ -1846,6 +1862,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   const sheet = await screen.findByRole('article', { name: 'E2E Archivist' });
   const characters = screen.getByRole('navigation', { name: 'Characters' });
+  await openTab(user, sheet, 'Manage');
 
   // Preview first: focus moves into it, and Escape (or "Keep it") changes nothing and returns focus.
   await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));

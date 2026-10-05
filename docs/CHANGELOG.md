@@ -17,6 +17,10 @@
   - It reports only numbers and fingerprints, including one for every character's calculated sheet. It never changes the folder.
   - How to run the drill: [features/restore-drill-procedure.md](features/restore-drill-procedure.md).
 
+### Changed
+
+- **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab; the rest of the sheet is under **Sheet**. Open choices and content problems now sit above the tabs, visible whichever tab is open. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-014.
+
 ## 0.4.0 (M2.1, M2.2, M3, M4, M5 and M6 work; the first published release)
 
 The first release published on GitHub, with a downloadable installer. Version 0.4.0 comes after the 0.3.1 test installers that were built locally but never published (ADR-008 "Versioning"). It brings everything built since 0.3.0, listed below. How far each part is proven:

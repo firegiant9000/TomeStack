@@ -25,6 +25,7 @@ import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
 import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
+import { TabList, TabPanel, type TabSpec } from './sheet/TabList';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
@@ -226,6 +227,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [resting, setResting] = useState<RestPeriod>();
   const [printing, setPrinting] = useState(false);
   const [gapAbout, setGapAbout] = useState('');
+  // ADR-014: the sheet is tabbed. Slice 1 has two tabs; slice 3 splits "Sheet".
+  type Tab = 'sheet' | 'manage';
+  const [tab, setTab] = useState<Tab>('sheet');
+  const tabs: readonly TabSpec<Tab>[] = [
+    { id: 'sheet', label: 'Sheet' },
+    { id: 'manage', label: 'Manage' },
+  ];
   const gapText = useRef<HTMLTextAreaElement>(null);
 
   /** M3 C5: "Report a gap" pre-fills the gap note form and moves focus to its text box. */
@@ -323,89 +331,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </section>
       )}
 
-      <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-
-      <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
-
-      <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
-
-      <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
-
-      <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-
-      <HitPointsPanel view={view} act={act} />
-      <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
-      {resting ? (
-        <RestPanel
-          key={resting}
-          characterId={character.id}
-          kind={resting}
-          hitDice={sheet.hitDice ?? []}
-          onError={onError}
-          onCancel={() => setResting(undefined)}
-          onRested={(rested, applied) => {
-            setResting(undefined);
-            onChanged(rested);
-            onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
-          }}
-        />
-      ) : (
-        <div className="actions">
-          <button type="button" onClick={() => setResting('shortRest')}>
-            Short rest…
-          </button>
-          <button type="button" onClick={() => setResting('longRest')}>
-            Long rest…
-          </button>
-        </div>
-      )}
-      <ConditionsPanel view={view} act={act} />
-      <ResourcesPanel view={view} act={act} />
-      <ClassColumnsPanel view={view} />
-      <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
-      <SpellsPanel
-        view={view}
-        act={act}
-        roll={roll}
-        onSave={(changed) =>
-          client
-            .saveCharacter(changed)
-            .then(onChanged)
-            .catch(onError)
-        }
-      />
-      <section aria-labelledby="rolls-heading" className="play-panel">
-        <h3 id="rolls-heading">Rolls</h3>
-        <RollModePicker mode={rollMode} onChange={setRollMode} />
-        <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
-      </section>
-      <ActionsPanel view={view} roll={roll} act={act} />
-      <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
-      <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
-
-      {groups.map((group) => {
-        const caster = (sheet.spellcasting ?? []).length > 0;
-        // Spell fields of a non-caster are all 0; they are shown only for a caster, or when a value or override exists.
-        const fields = sheet.fields.filter((f) => group.match(f.field) && (!isSpellField(f.field) || caster || f.value !== 0 || !!f.override));
-        if (fields.length === 0) return null;
-        return (
-          <section key={group.title} aria-label={group.title} className="field-group">
-            <h3>{group.title}</h3>
-            {fields.map((field) => (
-              <FieldCard
-                key={field.field}
-                value={field}
-                labels={labels}
-                onOverride={changeOverride}
-                onRoll={(f) => roll({ field: f, mode: rollMode })}
-                onReportGap={(f) => reportGap(gapAboutField(f))}
-              />
-            ))}
-          </section>
-        );
-      })}
-
+      {/* Open choices and content problems stay visible whatever tab is open (SPEC C-03). */}
       {sheet.choices?.some((c) => !c.resolved) && (
         <section aria-labelledby="choices-heading">
           <h3 id="choices-heading">Choices to make</h3>
@@ -434,6 +360,91 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           </ul>
         </section>
       )}
+
+      <TabList label="Sheet sections" idPrefix="sheet" tabs={tabs} active={tab} onActivate={setTab} />
+
+      <TabPanel idPrefix="sheet" id="sheet" active={tab === 'sheet'}>
+        <HitPointsPanel view={view} act={act} />
+        <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
+        {resting ? (
+          <RestPanel
+            key={resting}
+            characterId={character.id}
+            kind={resting}
+            hitDice={sheet.hitDice ?? []}
+            onError={onError}
+            onCancel={() => setResting(undefined)}
+            onRested={(rested, applied) => {
+              setResting(undefined);
+              onChanged(rested);
+              onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+            }}
+          />
+        ) : (
+          <div className="actions">
+            <button type="button" onClick={() => setResting('shortRest')}>
+              Short rest…
+            </button>
+            <button type="button" onClick={() => setResting('longRest')}>
+              Long rest…
+            </button>
+          </div>
+        )}
+        <ConditionsPanel view={view} act={act} />
+        <ResourcesPanel view={view} act={act} />
+        <ClassColumnsPanel view={view} />
+        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+        <SpellsPanel
+          view={view}
+          act={act}
+          roll={roll}
+          onSave={(changed) =>
+            client
+              .saveCharacter(changed)
+              .then(onChanged)
+              .catch(onError)
+          }
+        />
+        <section aria-labelledby="rolls-heading" className="play-panel">
+          <h3 id="rolls-heading">Rolls</h3>
+          <RollModePicker mode={rollMode} onChange={setRollMode} />
+          <p className="hint">Rolling never spends anything. Roll a check, save or skill from its field below, or a feature's roll.</p>
+          <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
+        </section>
+        <ActionsPanel view={view} roll={roll} act={act} />
+        <FeaturesPanel view={view} pdfSources={pdfSources} openPage={openPage} reportGap={(id) => reportGap(gapAboutFeature(id))} />
+        <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
+
+        {groups.map((group) => {
+          const caster = (sheet.spellcasting ?? []).length > 0;
+          // Spell fields of a non-caster are all 0; they are shown only for a caster, or when a value or override exists.
+          const fields = sheet.fields.filter((f) => group.match(f.field) && (!isSpellField(f.field) || caster || f.value !== 0 || !!f.override));
+          if (fields.length === 0) return null;
+          return (
+            <section key={group.title} aria-label={group.title} className="field-group">
+              <h3>{group.title}</h3>
+              {fields.map((field) => (
+                <FieldCard
+                  key={field.field}
+                  value={field}
+                  labels={labels}
+                  onOverride={changeOverride}
+                  onRoll={(f) => roll({ field: f, mode: rollMode })}
+                  onReportGap={(f) => reportGap(gapAboutField(f))}
+                />
+              ))}
+            </section>
+          );
+        })}
+      </TabPanel>
+
+      <TabPanel idPrefix="sheet" id="manage" active={tab === 'manage'}>
+        <UpdatesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+        <ExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+        <VttExportPanel characterId={character.id} onError={onError} onStatus={onStatus} />
+        <ArchivePanel character={character} onError={onError} onStatus={onStatus} onChanged={onArchiveChanged} />
+        <SnapshotsPanel character={character} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+      </TabPanel>
     </article>
   );
 }
