@@ -264,3 +264,31 @@ dd { margin: 0; }
 .text-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
 .text-diff .diff-added { color: var(--accent); }
 .text-diff .diff-removed { color: var(--error); text-decoration: line-through; }
+
+/* ADR-015: the dice display. Filled polygons by clip-path; the face by attr(), so the live region's text never changes.
+   Text on a filled shape is --bg (F3): 6.1:1 or better on --accent and --accent-2 in every theme, light and dark. */
+.dice { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-1); }
+.die { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--bg); font-family: var(--font-numbers); font-weight: 700; font-variant-numeric: tabular-nums; animation: tumble 0.6s ease-out; }
+.die::after { content: attr(data-value); }
+.die[data-sides='4'] { clip-path: polygon(50% 0, 100% 100%, 0 100%); place-items: end center; padding-bottom: 0.2rem; }
+.die[data-sides='6'] { border-radius: var(--radius); }
+.die[data-sides='8'] { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.die[data-sides='10'], .die[data-sides='100'] { clip-path: polygon(50% 0, 100% 40%, 80% 100%, 20% 100%, 0 40%); }
+.die[data-sides='12'] { clip-path: polygon(50% 0, 98% 35%, 79% 91%, 21% 91%, 2% 35%); }
+.die[data-sides='20'] { clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 25% 93%, 0 50%); }
+/* Any other size (d2, d3, d1000: legal, Dice.cs:12-13) keeps the round fallback above. */
+.die[data-kept='false'] { opacity: 0.45; }
+.die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: var(--accent-2); color: var(--bg); }
+.die-more { align-self: center; color: var(--muted); }
+.die-more::after { content: '+' attr(data-more); }
+.dice-still .die { animation: none; }
+@keyframes tumble {
+  0% { transform: rotate(-200deg) scale(0.6); }
+  70% { transform: rotate(15deg) scale(1.08); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+/* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
+@media (forced-colors: active) {
+  .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
+  .die[data-kept='false'] { opacity: 1; background: GrayText; }
+}
