@@ -57,7 +57,7 @@ internal sealed class ImportPlanner
         Classes(sheet.Classes);
         Content("species", MatchKind.Species, ContentKind.Species, sheet.Species);
         Content("background", MatchKind.Background, ContentKind.Background, sheet.Background);
-        Subclasses(sheet.Classes);
+        Subclasses(sheet.Classes, sheet.Features);
         for (var i = 0; i < sheet.Feats.Count; i++)
             Content($"feat:{i}", MatchKind.Feat, ContentKind.Feat, sheet.Feats[i]);
         Skills(sheet.SkillProficient);
@@ -94,29 +94,57 @@ internal sealed class ImportPlanner
         _character = _character with { Classes = levels };
     }
 
-    private void Subclasses(Read<IReadOnlyList<ClassText>> read)
+    /// <summary>
+    /// The sheet's subclass, or (D16f) when it names none and the matched class offers its subclass choice at the imported
+    /// level, the choice's options: one whose granted features appear on the sheet is proposed, else the user picks or leaves
+    /// it out. Below the choice level, or with an unmatched class, nothing is offered.
+    /// </summary>
+    private void Subclasses(Read<IReadOnlyList<ClassText>> read, IReadOnlyList<Read<string>> features)
     {
         if (read.Status != ReadStatus.Ok)
             return;
+        var onSheet = features.Where(f => f.Status == ReadStatus.Ok).Select(f => Normalise.Name(f.Value!)).ToHashSet(StringComparer.Ordinal);
         for (var i = 0; i < read.Value!.Count; i++)
         {
-            if (read.Value[i].Subclass is not { } name)
-                continue;
+            var text = read.Value[i];
             var rowId = $"class:{i}:subclass";
-            var options = Lookup(ContentKind.Subclass, name);
             ChoiceStatus? choice = null;
             if (_classes.TryGetValue(i, out var classRef))
                 choice = Calculate().Choices?.FirstOrDefault(c => c.Source == classRef && c.Options.Any(o => _find(o)?.Kind == ContentKind.Subclass));
             MatchCandidate For(ContentOption o) => choice?.Options.FirstOrDefault(x => x.ContentId == o.Reference.ContentId) is { } inChoice
                 ? Candidate(o, new(PlacementKind.Choice, choice.Source, choice.ChoiceId), inChoice)
                 : Candidate(o, new(PlacementKind.Nowhere));
-            var candidates = options.Select(For).ToList();
-            if (choice is null && !LeftOut(rowId))
+
+            if (text.Subclass is { } name)
             {
-                _rows.Add(new(rowId, MatchKind.Subclass, name, MatchStatus.NoPlace, candidates, null, classRef is null ? "class.not-matched" : "choice.not-offered"));
+                var options = Lookup(ContentKind.Subclass, name);
+                var candidates = options.Select(For).ToList();
+                if (choice is null && !LeftOut(rowId))
+                {
+                    _rows.Add(new(rowId, MatchKind.Subclass, name, MatchStatus.NoPlace, candidates, null, classRef is null ? "class.not-matched" : "choice.not-offered"));
+                    continue;
+                }
+                Place(rowId, MatchKind.Subclass, name, ContentKind.Subclass, candidates, For);
                 continue;
             }
-            Place(rowId, MatchKind.Subclass, name, ContentKind.Subclass, candidates, For);
+
+            if (choice is null)
+                continue;
+            var label = $"{text.Name} subclass (not on the sheet)";
+            var offered = choice.Options.Select(o => _byContent.GetValueOrDefault(o.ContentId)).OfType<ContentOption>().Where(o => o.Kind == ContentKind.Subclass).ToList();
+            var detected = offered.Where(o => GrantedNames(o.Reference).Overlaps(onSheet)).ToList();
+            var ordered = detected.Concat(offered.Except(detected)).Select(For).ToList();
+            if (detected.Count == 1 && !_resolutions.ContainsKey(rowId))
+            {
+                var pick = For(detected[0]);
+                var refused = Apply(pick);
+                _rows.Add(refused is null
+                    ? new(rowId, MatchKind.Subclass, label, MatchStatus.Matched, ordered, pick, "subclass.detected-from-features")
+                    : new(rowId, MatchKind.Subclass, label, MatchStatus.NoPlace, ordered, null, refused));
+                continue;
+            }
+            // One option is never taken silently: the sheet did not name it (autoPick: false).
+            Place(rowId, MatchKind.Subclass, label, ContentKind.Subclass, ordered, For, autoPick: false);
         }
     }
 
@@ -367,9 +395,9 @@ internal sealed class ImportPlanner
     }
 
     /// <summary>Decides a content row and applies its placement; a match with nowhere to go, or one the builder refuses, is "No place".</summary>
-    private void Place(string rowId, MatchKind kind, string label, ContentKind contentKind, List<MatchCandidate> candidates, Func<ContentOption, MatchCandidate?> candidateFor)
+    private void Place(string rowId, MatchKind kind, string label, ContentKind contentKind, List<MatchCandidate> candidates, Func<ContentOption, MatchCandidate?> candidateFor, bool autoPick = true)
     {
-        var (status, chosen, note) = Decide(rowId, contentKind, candidates, candidateFor);
+        var (status, chosen, note) = Decide(rowId, contentKind, candidates, candidateFor, autoPick);
         if (status == MatchStatus.Matched && chosen!.Placement.Kind == PlacementKind.Nowhere)
             (status, note) = (MatchStatus.NoPlace, "content.no-open-choice");
         else if (status == MatchStatus.Matched && Apply(chosen!) is { } refused)
@@ -432,6 +460,15 @@ internal sealed class ImportPlanner
         && _find(content)?.Effects.OfType<GrantEffect>().Any(g => g.Id == effect && g.Grant is GrantKind.Proficiency or GrantKind.Expertise && g.Target == field) == true;
 
     /// <summary>The label of a row whose name could not be read: its kind only, never a value, so its gap note says what it was.</summary>
+    /// <summary>The normalised names of the content a revision grants (its features), for D16f detection.</summary>
+    private HashSet<string> GrantedNames(ContentReference reference) =>
+        (_find(reference)?.Effects ?? []).OfType<GrantEffect>()
+            .Where(g => g.Content is not null)
+            .Select(g => _find(g.Content!)?.Name)
+            .OfType<string>()
+            .Select(Normalise.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
     private static string UnreadableLabel(MatchKind kind) => $"Unreadable {kind.ToString().ToLowerInvariant()}";
 
     private static string? CampaignNote(MatchCandidate candidate) => candidate.AllowedInCampaign == false ? "campaign.source-not-allowed" : null;

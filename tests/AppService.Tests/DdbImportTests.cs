@@ -228,6 +228,93 @@ public class DdbImportTests
         Assert.Null(Choice(preview.Character, "barbarian-subclass"));
     }
 
+    // ---- D16f: a 2014 sheet names no subclass ----
+
+    [Fact]
+    public void A_2014_sheet_with_no_subclass_offers_the_class_choice_options_and_blocks_create_until_one_is_picked_or_left_out()
+    {
+        using var h = new DdbHarness();
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchKind.Subclass, MatchStatus.Choose), (row.Kind, row.Status));
+        Assert.Equal($"{h.Name(Barbarian)} subclass (not on the sheet)", row.Label);
+        Assert.Contains(row.Candidates, c => c.Reference.ContentId == Berserker.ContentId && c.Placement.Kind == PlacementKind.Choice);
+        Assert.Null(row.Note);
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_subclass_whose_granted_feature_is_on_the_sheet_is_detected_and_recorded_as_the_choice()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Path Notes", RulesFamilies.Srd521);
+        var sense = Publish(h.Temp, source, ContentKind.Feature, "Fixture Storm Sense", [RulesFamilies.Srd521]);
+        var path = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Storms", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-sense", Grant = GrantKind.Content, Content = sense, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", $"Fixture Storm Sense\n{h.Name(Rage)}"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(path, row.Chosen!.Reference);
+        Assert.Equal(path, Assert.Single(row.Candidates.Take(1)).Reference); // detected first
+        Assert.Equal([path], Choice(preview.Character, "barbarian-subclass")!.Selected);
+        // The subclass's feature is now on the draft, so its sheet row matches instead of becoming a gap note.
+        Assert.Equal(MatchStatus.Matched, preview.Matches.Single(r => r.Kind == MatchKind.Feature && r.Label == "Fixture Storm Sense").Status);
+    }
+
+    [Fact]
+    public void Two_subclasses_whose_granted_features_are_both_on_the_sheet_need_a_choice_with_both_listed_first()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Twin Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Twin Gift", [RulesFamilies.Srd521]);
+        var embers = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Embers", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-embers", Grant = GrantKind.Content, Content = shared, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+        var ash = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Ash", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-ash", Grant = GrantKind.Content, Content = shared, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Twin Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status); // never a silent pick between two detections
+        Assert.Null(row.Chosen);
+        Assert.Equal(
+            new[] { embers, ash }.Select(r => r.ContentId).Order(),
+            row.Candidates.Take(2).Select(c => c.Reference.ContentId).Order());
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_user_pick_for_the_offered_subclass_row_is_recorded_and_counted_as_chosen()
+    {
+        using var h = new DdbHarness();
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
+            resolutions: [new Resolution("class:0:subclass", Berserker, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Matched, row.Status);
+        Assert.Equal([Berserker.ContentId], Choice(preview.Character, "barbarian-subclass")!.Selected.Select(s => s.ContentId));
+        Assert.Equal(1, preview.Report.Chosen);
+        Assert.True(preview.CanApply);
+    }
+
+    [Fact]
+    public void No_subclass_row_is_offered_when_the_sheet_names_none_and_the_class_is_below_its_choice_level_or_unmatched()
+    {
+        using var h = new DdbHarness();
+        var below = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 2"), RulesFamilies.Srd521);
+        Assert.DoesNotContain(below.Matches, r => r.RowId == "class:0:subclass");
+        Assert.True(below.CanApply);
+
+        var unmatched = h.Preview(new SheetBuilder("Fixture Nobody 5"), RulesFamilies.Srd521);
+        Assert.DoesNotContain(unmatched.Matches, r => r.RowId == "class:0:subclass");
+    }
+
     [Fact]
     public void A_proficient_skill_is_matched_by_the_options_grant_target_and_recorded_on_the_first_choice_that_offers_it()
     {
