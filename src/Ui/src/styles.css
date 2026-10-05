@@ -43,7 +43,8 @@ html[data-theme='violet'] {
 }
 /* WCAG 1.4.11 under Windows High Contrast: every token maps to a system colour; borders carry what colour carried. */
 @media (forced-colors: active) {
-  :root {
+  /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */
+  :root, html[data-theme] {
     --surface: Canvas;
     --accent: LinkText;
     --accent-2: Highlight;
@@ -53,7 +54,6 @@ html[data-theme='violet'] {
     --line-strong: CanvasText;
     --muted: CanvasText;
   }
-  .tabs [role='tab'][aria-selected='true'] { border: 2px solid Highlight; }
 }
 /* WCAG 2.3.3: no motion for a user who asked for none. */
 @media (prefers-reduced-motion: reduce) {
@@ -184,6 +184,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 .sheet-summary .roll-mode .choice:has(:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
 .sheet-summary .roll-mode input:focus-visible { outline: none; }
 @media (forced-colors: active) {
+  .tabs [role='tab'][aria-selected='true'] { border: 2px solid Highlight; }
   .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
 }
 
