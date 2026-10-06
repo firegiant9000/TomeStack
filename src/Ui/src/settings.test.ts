@@ -2,11 +2,27 @@
 // Preferences of this app on this machine (theme, dice animation, sidebar) live in the page's own storage; bad or
 // missing storage never breaks the app, and an unknown theme falls back to the default.
 import { afterEach, expect, it, vi } from 'vitest';
-import { applyTheme, diceAnimationOn, setDiceAnimation, setSidebarCollapsed, setTheme, sidebarCollapsed, theme } from './settings';
+import {
+  abilityOrder,
+  appearance,
+  applyPreferences,
+  applyTheme,
+  diceAnimationOn,
+  setAbilityOrder,
+  setAppearance,
+  setDiceAnimation,
+  setSidebarCollapsed,
+  setTextSize,
+  setTheme,
+  sidebarCollapsed,
+  textSize,
+  theme,
+} from './settings';
 
 afterEach(() => {
   localStorage.clear();
   delete document.documentElement.dataset.theme;
+  for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
   vi.restoreAllMocks();
 });
 
@@ -65,4 +81,50 @@ it('treats a throwing storage as empty and swallows write failures', () => {
   expect(() => setTheme('cool')).not.toThrow();
   expect(() => setDiceAnimation(false)).not.toThrow();
   expect(() => setSidebarCollapsed(true)).not.toThrow();
+});
+
+it('defaults appearance to system, text size to 100 and ability boxes to modifier first, with no attribute on html', () => {
+  expect(appearance()).toBe('system');
+  expect(textSize()).toBe('100');
+  expect(abilityOrder()).toBe('modifier');
+  applyPreferences();
+  expect(document.documentElement.dataset.appearance).toBeUndefined();
+  expect(document.documentElement.dataset.textSize).toBeUndefined();
+  expect(document.documentElement.dataset.abilityOrder).toBeUndefined();
+  expect(document.documentElement.dataset.theme).toBe('forest');
+});
+
+it('remembers appearance, text size and ability order under their own keys and applies them as html attributes', () => {
+  setAppearance('dark');
+  setTextSize('150');
+  setAbilityOrder('score');
+  expect(localStorage.getItem('tomestack.appearance')).toBe('dark');
+  expect(localStorage.getItem('tomestack.textSize')).toBe('150');
+  expect(localStorage.getItem('tomestack.abilityOrder')).toBe('score');
+  applyPreferences();
+  expect(document.documentElement.dataset.appearance).toBe('dark');
+  expect(document.documentElement.dataset.textSize).toBe('150');
+  expect(document.documentElement.dataset.abilityOrder).toBe('score');
+  setAppearance('system');
+  setTextSize('100');
+  setAbilityOrder('modifier');
+  expect(localStorage.getItem('tomestack.appearance')).toBeNull();
+  expect(localStorage.getItem('tomestack.textSize')).toBeNull();
+  expect(localStorage.getItem('tomestack.abilityOrder')).toBeNull();
+  applyPreferences();
+  expect(document.documentElement.dataset.appearance).toBeUndefined();
+  expect(document.documentElement.dataset.textSize).toBeUndefined();
+});
+
+it('ignores junk values for every new preference and never applies them', () => {
+  localStorage.setItem('tomestack.appearance', 'sepia');
+  localStorage.setItem('tomestack.textSize', 'huge');
+  localStorage.setItem('tomestack.abilityOrder', 'random');
+  expect(appearance()).toBe('system');
+  expect(textSize()).toBe('100');
+  expect(abilityOrder()).toBe('modifier');
+  applyPreferences();
+  expect(document.documentElement.dataset.appearance).toBeUndefined();
+  expect(document.documentElement.dataset.textSize).toBeUndefined();
+  expect(document.documentElement.dataset.abilityOrder).toBeUndefined();
 });

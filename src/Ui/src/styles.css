@@ -41,10 +41,21 @@ html[data-theme='violet'] {
   --accent: light-dark(#6a33c4, #c9adff);
   --accent-2: light-dark(#0a6b86, #6fd9f0);
 }
+/* Investigation 2026-10-06 (ADR-015 §4 amended): preferences as html[data-*] attributes. Appearance overrides the OS scheme:
+   light-dark() and Canvas/CanvasText resolve against the element's used color-scheme, so every token flips with no JS. */
+html[data-appearance='light'] { color-scheme: light; }
+html[data-appearance='dark'] { color-scheme: dark; }
+/* Text size: everything is rem, so the root font-size scales the whole UI (WCAG 1.4.4). */
+html[data-text-size='90'] { font-size: 90%; }
+html[data-text-size='110'] { font-size: 110%; }
+html[data-text-size='125'] { font-size: 125%; }
+html[data-text-size='150'] { font-size: 150%; }
+html[data-text-size='175'] { font-size: 175%; }
+html[data-text-size='200'] { font-size: 200%; }
 /* WCAG 1.4.11 under Windows High Contrast: every token maps to a system colour; borders carry what colour carried. */
 @media (forced-colors: active) {
   /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */
-  :root, html[data-theme] {
+  :root, html[data-theme], html[data-appearance], html[data-contrast] {
     --surface: Canvas;
     --accent: LinkText;
     --accent-2: Highlight;
@@ -127,6 +138,7 @@ article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right:
 article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; margin-right: var(--space-5); }
 
 .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.settings h3 { margin: var(--space-4) 0 var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-3); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -248,6 +260,15 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
+/* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size. */
+@media (max-width: 60rem) {
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.app, .content, article.sheet) { display: block; }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary) { padding: 0; margin: 0 0 var(--space-3); }
+}
+
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
 pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(--line); padding: 0.25rem 0.75rem; max-height: 20rem; overflow: auto; }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
@@ -261,7 +282,8 @@ dd { margin: 0; }
 .print-feature p { margin: 0.2rem 0; }
 .print-notice { font-size: var(--text-sm); color: var(--muted); }
 @media print {
-  :root { color-scheme: light; }
+  /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified). */
+  :root, html[data-appearance], html[data-text-size] { color-scheme: light; font-size: 100%; }
   .app { display: block; min-height: 0; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }

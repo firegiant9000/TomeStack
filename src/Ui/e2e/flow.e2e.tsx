@@ -25,7 +25,13 @@ vi.mock('../src/files', async (importOriginal) => ({
   downloadBase64: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // One jsdom window serves the whole file: a preference or `html` attribute left by one test would leak into the next.
+  // The per-character tab memory stays (ids are unique per test and the deep-link test relies on it).
+  for (const key of Object.keys(localStorage)) if (key.startsWith('tomestack.') && !key.startsWith('tomestack.sheetTab.')) localStorage.removeItem(key);
+  for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
+});
 
 function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -2049,22 +2055,25 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
 
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
   const user = userEvent.setup();
-  try {
-    const { unmount } = render(<App />);
-    await user.click(await screen.findByRole('button', { name: 'Settings' }));
-    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
-    await user.click(screen.getByRole('radio', { name: 'Violet' }));
-    expect(document.documentElement.dataset.theme).toBe('violet');
-    unmount();
-    delete document.documentElement.dataset.theme; // so the final check proves the mount effect re-applied the saved theme
-    render(<App />);
-    await screen.findByRole('button', { name: 'Settings' });
-    expect(document.documentElement.dataset.theme).toBe('violet');
-  } finally {
-    // Leave the shared jsdom window as it was for the next test.
-    localStorage.removeItem('tomestack.theme');
-    delete document.documentElement.dataset.theme;
-  }
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Violet' }));
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  await user.click(screen.getByRole('radio', { name: 'Dark' }));
+  expect(document.documentElement.dataset.appearance).toBe('dark');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Text size' }), '125');
+  expect(document.documentElement.dataset.textSize).toBe('125');
+  unmount();
+  // so the final check proves the mount effect re-applied the saved preferences
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.appearance;
+  delete document.documentElement.dataset.textSize;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  expect(document.documentElement.dataset.appearance).toBe('dark');
+  expect(document.documentElement.dataset.textSize).toBe('125');
 });
 
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
@@ -2124,6 +2133,4 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   name.focus();
   await user.keyboard('{Control>}b{/Control}');
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
-  localStorage.removeItem('tomestack.theme');
-  delete document.documentElement.dataset.theme;
 });

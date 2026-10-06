@@ -8,7 +8,14 @@ export type ThemeId = (typeof themeIds)[number];
 
 const isThemeId = (value: unknown): value is ThemeId => typeof value === 'string' && (themeIds as readonly string[]).includes(value);
 
-const keys = { theme: 'tomestack.theme', dice: 'tomestack.diceAnimation', sidebar: 'tomestack.sidebar' } as const;
+const keys = {
+  theme: 'tomestack.theme',
+  dice: 'tomestack.diceAnimation',
+  sidebar: 'tomestack.sidebar',
+  appearance: 'tomestack.appearance',
+  textSize: 'tomestack.textSize',
+  abilityOrder: 'tomestack.abilityOrder',
+} as const;
 
 function read(key: string): string | null {
   try {
@@ -55,4 +62,46 @@ export function sidebarCollapsed(): boolean {
 
 export function setSidebarCollapsed(collapsed: boolean): void {
   write(keys.sidebar, collapsed ? 'collapsed' : null);
+}
+
+/**
+ * Investigation 2026-10-06 (items 4, 7, 10; owner answers 3, 8, 9). Each preference is one page-storage key applied as one
+ * `html[data-*]` attribute that plain CSS keys on. The default means "no attribute", so the CSS base rules apply unchanged.
+ */
+function oneOf<T extends string>(ids: readonly T[], stored: string | null, fallback: T): T {
+  return (ids as readonly string[]).includes(stored ?? '') ? (stored as T) : fallback;
+}
+
+function applyAttribute(name: 'appearance' | 'textSize' | 'abilityOrder', value: string | undefined): void {
+  if (value === undefined) delete document.documentElement.dataset[name];
+  else document.documentElement.dataset[name] = value;
+}
+
+/** Colour scheme: `system` follows Windows (no attribute); `light`/`dark` set `color-scheme` on `html`, so `light-dark()` resolves without the OS. */
+export const appearanceIds = ['system', 'light', 'dark'] as const;
+export type AppearanceId = (typeof appearanceIds)[number];
+export const appearance = (): AppearanceId => oneOf(appearanceIds, read(keys.appearance), 'system');
+export const setAppearance = (id: AppearanceId): void => write(keys.appearance, id === 'system' ? null : id);
+export const applyAppearance = (id: AppearanceId): void => applyAttribute('appearance', id === 'system' ? undefined : id);
+
+/** Root font size in percent; everything is rem, so this scales the whole UI (WCAG 1.4.4). Browser zoom multiplies with it. */
+export const textSizeIds = ['90', '100', '110', '125', '150', '175', '200'] as const;
+export type TextSizeId = (typeof textSizeIds)[number];
+export const textSize = (): TextSizeId => oneOf(textSizeIds, read(keys.textSize), '100');
+export const setTextSize = (id: TextSizeId): void => write(keys.textSize, id === '100' ? null : id);
+export const applyTextSize = (id: TextSizeId): void => applyAttribute('textSize', id === '100' ? undefined : id);
+
+/** Which number is large in a summary ability box: the modifier (the paper convention) or the score. One markup; CSS `order`. */
+export const abilityOrderIds = ['modifier', 'score'] as const;
+export type AbilityOrderId = (typeof abilityOrderIds)[number];
+export const abilityOrder = (): AbilityOrderId => oneOf(abilityOrderIds, read(keys.abilityOrder), 'modifier');
+export const setAbilityOrder = (id: AbilityOrderId): void => write(keys.abilityOrder, id === 'modifier' ? null : id);
+export const applyAbilityOrder = (id: AbilityOrderId): void => applyAttribute('abilityOrder', id === 'modifier' ? undefined : id);
+
+/** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
+export function applyPreferences(): void {
+  applyTheme(theme());
+  applyAppearance(appearance());
+  applyTextSize(textSize());
+  applyAbilityOrder(abilityOrder());
 }

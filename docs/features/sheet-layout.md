@@ -59,7 +59,7 @@ Only the information architecture is borrowed. The palette is TomeStack's own (A
 
 ## Settings
 
-A Settings screen holds Theme (forest, cool, violet), "Animate dice" and the app version with the data schema. The choices are kept in the page's storage (`tomestack.theme`, `tomestack.diceAnimation`): on this computer only, in no backup, package or share.
+A Settings screen in three groups. **Appearance:** Colour scheme (System, Light, Dark; `tomestack.appearance`, applied as `html[data-appearance]` so `light-dark()` resolves without the OS; WebView2's own print dialog keeps following Windows), Theme (forest, cool, violet), Text size (90% to 200%; `tomestack.textSize`, the root font size; browser zoom multiplies with it), Ability boxes (Modifier first or Score first; `tomestack.abilityOrder`) and "Animate dice". **Keyboard shortcuts:** a static list. **About:** the version and data schema. Every choice is kept in the page's storage: on this computer only, in no backup, package or share (ADR-015 §4).
 
 ## Remembered tab and deep links
 
@@ -67,4 +67,4 @@ The sheet reopens on the tab used last for that character. The memory is `tomest
 
 ## Reflow
 
-Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column and the sheet's own grid are `minmax(0, 1fr)`, so a wide table or excerpt can no longer widen the window: the app header and the sheet header's buttons stay in view, and only the wide element itself overflows; the app header wraps. The sheet bar spans the window (ADR-015), so the 200% and 400% check also covers it with the sidebar collapsed and expanded.
+Everything is in rem with no fixed widths. Under 40rem the sidebar stacks above the content; the abilities grid (`auto-fit, minmax(7rem, 1fr)`), the sheet header and the tab strip wrap. The owner's 200% and 400% check in WebView2 is pending (accessibility checklist item 6). The main column and the sheet's own grid are `minmax(0, 1fr)`, so a wide table or excerpt can no longer widen the window: the app header and the sheet header's buttons stay in view, and only the wide element itself overflows; the app header wraps. The sheet bar spans the window (ADR-015), so the 200% and 400% check also covers it with the sidebar collapsed and expanded. Text size above 125% moves the one-column breakpoint to 60rem, because a rem media query uses the browser's 16px, not the root override.

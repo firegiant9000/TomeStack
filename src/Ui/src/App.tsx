@@ -14,7 +14,7 @@ import { HomebrewStudio } from './components/HomebrewStudio';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
-import { applyTheme, setSidebarCollapsed, sidebarCollapsed, theme } from './settings';
+import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
 type Screen =
@@ -77,7 +77,7 @@ export function App() {
   const refresh = useCallback(async () => setCharacters(await client.listCharacters()), []);
 
   useEffect(() => {
-    applyTheme(theme()); // ADR-015: the themes are CSS keyed on html[data-theme]
+    applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
