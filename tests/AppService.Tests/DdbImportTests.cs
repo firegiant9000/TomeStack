@@ -981,4 +981,95 @@ public class DdbImportTests
         Assert.Contains(row.Candidates, c => c.Reference.ContentId == Berserker.ContentId);
         Assert.False(preview.CanApply);
     }
+
+    private static ContentReference GiftedPath(DdbHarness h, Guid source, string name, params (ContentReference Feature, int Level)[] grants) =>
+        Publish(h.Temp, source, ContentKind.Subclass, name, [RulesFamilies.Srd521],
+            effects: grants.Select((g, i) => (Effect)new GrantEffect { Id = $"grant-{i}", Grant = GrantKind.Content, Content = g.Feature, Level = g.Level }).ToList(),
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+    [Fact]
+    public void A_feature_name_shared_with_a_subclass_that_grants_more_does_not_apply_it_and_lists_the_overlapping_ones_first()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Shared Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var other = Publish(h.Temp, source, ContentKind.Feature, "Fixture Other Gift", [RulesFamilies.Srd521]);
+        var first = GiftedPath(h, source, "Fixture Path of Sharing", (shared, 3), (unique, 3));
+        var second = GiftedPath(h, source, "Fixture Path of Others", (shared, 3), (other, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status);
+        Assert.Null(row.Chosen);
+        Assert.Equal(
+            new[] { first, second }.Select(r => r.ContentId).Order(),
+            row.Candidates.Take(2).Select(c => c.Reference.ContentId).Order());
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_subclass_whose_every_feature_up_to_the_level_is_on_the_sheet_is_detected_beside_one_that_shares_a_name()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Shared Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var other = Publish(h.Temp, source, ContentKind.Feature, "Fixture Other Gift", [RulesFamilies.Srd521]);
+        var first = GiftedPath(h, source, "Fixture Path of Sharing", (shared, 3), (unique, 3));
+        GiftedPath(h, source, "Fixture Path of Others", (shared, 3), (other, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift\nFixture Unique Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(first, row.Chosen!.Reference);
+    }
+
+    [Fact]
+    public void A_feature_granted_above_the_imported_level_is_not_required_to_detect_a_subclass()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Levels Notes", RulesFamilies.Srd521);
+        var early = Publish(h.Temp, source, ContentKind.Feature, "Fixture Early Gift", [RulesFamilies.Srd521]);
+        var late = Publish(h.Temp, source, ContentKind.Feature, "Fixture Late Gift", [RulesFamilies.Srd521]);
+        var path = GiftedPath(h, source, "Fixture Path of Seasons", (early, 3), (late, 6));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Early Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(path, row.Chosen!.Reference);
+    }
+
+    [Fact]
+    public void A_picked_subclass_with_several_published_revisions_is_accepted_and_listed_once()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Edited Notes", RulesFamilies.Srd521);
+        // The choice offers every published revision ordered by revision id (random ids), and the row builds its candidate
+        // from the first: retry until the older revision sorts first, the case where it differs from the newest one.
+        ContentReference r1, r2;
+        var attempt = 0;
+        do
+        {
+            r1 = GiftedPath(h, source, $"Fixture Path of Edits {attempt++}");
+            var draft = h.Temp.App.SaveDraft(h.Temp.App.Store.FindRevision(r1)! with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Summary = "Fixture edit." });
+            r2 = h.Temp.App.Publish(draft).Published;
+        }
+        while (r1.RevisionId.CompareTo(r2.RevisionId) >= 0 && attempt < 40);
+        Assert.True(r1.RevisionId.CompareTo(r2.RevisionId) < 0);
+
+        var sheet = () => new SheetBuilder($"{h.Name(Barbarian)} 3");
+        var offered = Row(h.Preview(sheet(), RulesFamilies.Srd521), "class:0:subclass");
+        var pick = offered.Candidates.Single(c => c.Reference.ContentId == r1.ContentId).Reference;
+
+        var preview = h.Preview(sheet(), RulesFamilies.Srd521, resolutions: [new Resolution("class:0:subclass", pick, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Matched, row.Status);
+        Assert.True(preview.CanApply);
+        Assert.Single(row.Candidates, c => c.Reference.ContentId == r1.ContentId);
+    }
 }

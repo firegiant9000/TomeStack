@@ -133,9 +133,15 @@ internal sealed class ImportPlanner
             if (choice is null)
                 continue;
             var label = $"{text.Name} subclass (not on the sheet)";
-            var offered = choice.Options.Select(o => _byContent.GetValueOrDefault(o.ContentId)).OfType<ContentOption>().Where(o => o.Kind == ContentKind.Subclass).ToList();
-            var detected = offered.Where(o => GrantedNames(o.Reference).Overlaps(onSheet)).ToList();
-            var ordered = detected.Concat(offered.Except(detected)).Select(For).ToList();
+            // The choice can offer several published revisions of one subclass: one candidate each.
+            var offered = choice.Options.Select(o => _byContent.GetValueOrDefault(o.ContentId)).OfType<ContentOption>().Where(o => o.Kind == ContentKind.Subclass)
+                .DistinctBy(o => o.Reference.ContentId).ToList();
+            // Detected: every feature the subclass grants up to the imported level is on the sheet (a shared generic name is
+            // not enough). Likely: any one of them is.
+            var granted = offered.ToDictionary(o => o.Reference.ContentId, o => GrantedNames(o.Reference, text.Level));
+            var detected = offered.Where(o => granted[o.Reference.ContentId] is { Count: > 0 } names && names.IsSubsetOf(onSheet)).ToList();
+            var likely = offered.Except(detected).Where(o => granted[o.Reference.ContentId].Overlaps(onSheet)).ToList();
+            var ordered = detected.Concat(likely).Concat(offered.Except(detected).Except(likely)).Select(For).ToList();
             if (detected.Count == 1 && !_resolutions.ContainsKey(rowId))
             {
                 var pick = For(detected[0]);
@@ -147,7 +153,7 @@ internal sealed class ImportPlanner
             }
             // A pick that is not one of this choice's options (a stale resolution) would end as "No place" and unblock Create
             // with the choice still open: ask again instead.
-            if (_resolutions.GetValueOrDefault(rowId) is { LeaveOut: false, Chosen: { } picked } && !offered.Any(o => o.Reference == picked))
+            if (_resolutions.GetValueOrDefault(rowId) is { LeaveOut: false, Chosen: { } picked } && !offered.Any(o => o.Reference.ContentId == picked.ContentId))
             {
                 _rows.Add(new(rowId, MatchKind.Subclass, label, MatchStatus.Choose, ordered, null, "resolution.not-found"));
                 continue;
@@ -504,10 +510,13 @@ internal sealed class ImportPlanner
         origin.Content is { } content && origin.EffectId is { } effect
         && _find(content)?.Effects.OfType<GrantEffect>().Any(g => g.Id == effect && g.Grant is GrantKind.Proficiency or GrantKind.Expertise && g.Target == field) == true;
 
-    /// <summary>The normalised names of the content a revision grants (its features), for D16f detection.</summary>
-    private HashSet<string> GrantedNames(ContentReference reference) =>
+    /// <summary>
+    /// The normalised names of the content a revision grants (its features) at or below the class level (a grant with no
+    /// level counts), for D16f detection.
+    /// </summary>
+    private HashSet<string> GrantedNames(ContentReference reference, int classLevel) =>
         (_find(reference)?.Effects ?? []).OfType<GrantEffect>()
-            .Where(g => g.Content is not null)
+            .Where(g => g.Content is not null && (g.Level is not { } level || level <= classLevel))
             .Select(g => _find(g.Content!)?.Name)
             .OfType<string>()
             .Select(Normalise.Name)
