@@ -121,8 +121,6 @@ export function App() {
   return (
     <div className="app" data-sidebar={collapsed ? 'collapsed' : undefined}>
       <header className="app-header">
-        <h1>TomeStack</h1>
-        <span className="tag">Offline</span>
         <button
           type="button"
           className="sidebar-toggle"
@@ -135,6 +133,8 @@ export function App() {
         >
           {collapsed ? 'Show sidebar' : 'Hide sidebar'}
         </button>
+        <h1>TomeStack</h1>
+        <span className="tag">Offline</span>
       </header>
 
       <nav id="sidebar" className="sidebar" aria-label="Characters" ref={sidebar} hidden={collapsed}>

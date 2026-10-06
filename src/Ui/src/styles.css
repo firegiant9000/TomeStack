@@ -54,6 +54,7 @@ html[data-theme='violet'] {
     --line-strong: CanvasText;
     --muted: CanvasText;
   }
+  .app-header { background: Canvas; border-bottom-color: CanvasText; }
 }
 /* WCAG 2.3.3: no motion for a user who asked for none. */
 @media (prefers-reduced-motion: reduce) {
@@ -84,10 +85,14 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   align-items: baseline;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--line);
+  /* Investigation 2026-10-06 item 2 (owner: try both, ship one): a 12% tint of the theme accent on Canvas (CanvasText on it
+     ≥ 15:1, accent text ≥ 5.5:1, --line-strong ≥ 3.27:1 in every theme and scheme) plus a 2px accent edge (≥ 6.6:1 on Canvas). */
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border-bottom: 2px solid var(--accent);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
-.sidebar-toggle { margin-left: auto; }
+/* The toggle is first (the hamburger convention; DOM order = visual order, WCAG 1.3.2). It is still the header's only control. */
+.sidebar-toggle { margin-left: 0; }
 /* With the side column at 0 the subgrid gap would leave a strip at the left edge. */
 .app[data-sidebar='collapsed'] .content, .app[data-sidebar='collapsed'] article.sheet { column-gap: 0; }
 /* ...and the main-column items would start at x=0 while the sheet header and summary keep their inset: give them the same one. */

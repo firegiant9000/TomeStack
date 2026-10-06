@@ -8,7 +8,7 @@ UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/sr
 
 The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
 
-1. The app header: "TomeStack", the "Offline" tag and, at the right, the sidebar toggle ("Hide sidebar"/"Show sidebar").
+1. The app header: the sidebar toggle ("Hide sidebar"/"Show sidebar") at the left, then "TomeStack" and the "Offline" tag. It carries a 12% tint of the theme's accent and a 2px accent bottom edge (ADR-015 §1, amended 2026-10-06).
 2. The sheet header across the window: name, rules family, level, campaign, "Level up", "Print…".
 3. The summary across the window (below).
 4. Messages (status and errors).
