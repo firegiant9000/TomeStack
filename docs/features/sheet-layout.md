@@ -21,7 +21,7 @@ Under 40rem everything flows in DOM order.
 
 ## Sidebar
 
-The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks; the messages have it too, because the article spans their cell.
+The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Inside the sidebar, first a "Close sidebar" button (the same toggle; focus lands on the header's "Show sidebar"), then the heading "Characters" with the list, then "Archived (N)", then the heading "Tools" with the ten action buttons (owner, 2026-10-06: the list comes first because it is what the sidebar is for). The nav takes its name from the "Characters" heading. Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks; the messages have it too, because the article spans their cell.
 
 ## Summary (always visible)
 

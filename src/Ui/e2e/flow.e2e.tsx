@@ -1361,7 +1361,14 @@ it('reaches the primary actions by keyboard alone', async () => {
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's one header control comes first
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New character' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close sidebar' })); // the sidebar's own close control
+  // Owner (2026-10-06): the character list comes before the tools. Earlier tests leave characters behind in the shared
+  // DevHost, so the next stop is the first of them, or "New character" when the list is empty; walk to "New character".
+  await user.tab();
+  const list = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('list', { name: 'Characters' });
+  expect(list.contains(document.activeElement) || document.activeElement === newCharacter).toBe(true);
+  for (let i = 0; i < 200 && document.activeElement !== newCharacter; i++) await user.tab();
+  expect(document.activeElement).toBe(newCharacter);
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import package…' }));
 
@@ -2078,6 +2085,15 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
   fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // The sidebar's own "Close sidebar" hides it and, since focus was inside, lands focus on the header toggle (WCAG 2.4.3).
+  const close = screen.getByRole('button', { name: 'Close sidebar' });
+  close.focus();
+  await user.click(close);
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+  await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
+  expect(within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
 
   // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
   const newCharacter = screen.getByRole<HTMLButtonElement>('button', { name: 'New character' });

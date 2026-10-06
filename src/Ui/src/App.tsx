@@ -137,8 +137,32 @@ export function App() {
         <span className="tag">Offline</span>
       </header>
 
-      <nav id="sidebar" className="sidebar" aria-label="Characters" ref={sidebar} hidden={collapsed}>
-        <div className="actions">
+      <nav id="sidebar" className="sidebar" aria-labelledby="characters-heading" ref={sidebar} hidden={collapsed}>
+        {/* Owner (2026-10-06): a visible close control inside the sidebar. A distinct name from the header's "Hide sidebar"
+            (two buttons with one name would make getByRole throw). Never shown collapsed, so no aria-expanded. */}
+        <button type="button" className="sidebar-close" aria-controls="sidebar" onClick={toggleSidebar}>
+          Close sidebar
+        </button>
+        <h2 id="characters-heading" className="sidebar-heading">
+          Characters
+        </h2>
+        <ul className="character-list" aria-labelledby="characters-heading">
+          {active.map(characterLink)}
+          {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
+        </ul>
+        {/* SPEC C-08: archived characters are kept, listed apart and collapsed. */}
+        {archived.length > 0 && (
+          <details className="archived-characters">
+            <summary>Archived ({archived.length})</summary>
+            <ul className="character-list" aria-label="Archived characters">
+              {archived.map(characterLink)}
+            </ul>
+          </details>
+        )}
+        <h2 id="tools-heading" className="sidebar-heading">
+          Tools
+        </h2>
+        <div className="actions" role="group" aria-labelledby="tools-heading">
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button
             type="button"
@@ -242,19 +266,6 @@ export function App() {
             Settings
           </button>
         </div>
-        <ul className="character-list">
-          {active.map(characterLink)}
-          {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
-        </ul>
-        {/* SPEC C-08: archived characters are kept, listed apart and collapsed. */}
-        {archived.length > 0 && (
-          <details className="archived-characters">
-            <summary>Archived ({archived.length})</summary>
-            <ul className="character-list" aria-label="Archived characters">
-              {archived.map(characterLink)}
-            </ul>
-          </details>
-        )}
       </nav>
 
       <main className="content">

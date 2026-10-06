@@ -102,6 +102,9 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
    (verified in headless Edge, 2026-10-05). Grid items honour z-index without position. */
 .sidebar { grid-column: side; grid-row: messages / -1; z-index: 1; padding: var(--space-4); border-right: 1px solid var(--line); background: var(--surface); }
 .sidebar .actions { flex-direction: column; align-items: stretch; }
+.sidebar-close { align-self: flex-start; }
+.sidebar-heading { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
+.sidebar .character-list { margin-top: 0; }
 .content {
   grid-column: 1 / -1;
   grid-row: head / -1;
