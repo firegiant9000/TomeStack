@@ -8,6 +8,7 @@ import {
   applyPreferences,
   applyTheme,
   diceAnimationOn,
+  forgetSessionChoices,
   setAbilityOrder,
   setAppearance,
   setDiceAnimation,
@@ -21,6 +22,7 @@ import {
 
 afterEach(() => {
   localStorage.clear();
+  forgetSessionChoices();
   delete document.documentElement.dataset.theme;
   for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
   vi.restoreAllMocks();
@@ -127,4 +129,19 @@ it('ignores junk values for every new preference and never applies them', () => 
   expect(document.documentElement.dataset.appearance).toBeUndefined();
   expect(document.documentElement.dataset.textSize).toBeUndefined();
   expect(document.documentElement.dataset.abilityOrder).toBeUndefined();
+});
+
+it('keeps the session\'s pick and applies it when storage is unavailable', () => {
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('blocked');
+  });
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('blocked');
+  });
+  vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+    throw new Error('blocked');
+  });
+  setAppearance('dark');
+  applyPreferences();
+  expect(document.documentElement.dataset.appearance).toBe('dark');
 });

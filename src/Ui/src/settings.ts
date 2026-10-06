@@ -17,15 +17,26 @@ const keys = {
   abilityOrder: 'tomestack.abilityOrder',
 } as const;
 
+/** This session's choices, read only while storage is unavailable, so a pick still applies and lasts until the app closes. */
+const sessionChoices = new Map<string, string | null>();
+
+/** Test-only: forget the session choices so one unit test cannot leak into the next. */
+export function forgetSessionChoices(): void {
+  sessionChoices.clear();
+}
+
 function read(key: string): string | null {
   try {
-    return globalThis.localStorage?.getItem(key) ?? null;
+    const storage = globalThis.localStorage;
+    if (!storage) return sessionChoices.get(key) ?? null;
+    return storage.getItem(key);
   } catch {
-    return null; // storage unavailable: the default
+    return sessionChoices.get(key) ?? null; // storage unavailable: this session's choice, else the default
   }
 }
 
 function write(key: string, value: string | null): void {
+  sessionChoices.set(key, value);
   try {
     if (value === null) globalThis.localStorage?.removeItem(key);
     else globalThis.localStorage?.setItem(key, value);

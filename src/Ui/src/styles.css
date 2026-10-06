@@ -260,8 +260,9 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
-/* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size. */
-@media (max-width: 60rem) {
+/* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size.
+   Screen only: these selectors (0,2,1) would otherwise beat the print rules when the printed page is narrower than 60rem. */
+@media screen and (max-width: 60rem) {
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.app, .content, article.sheet) { display: block; }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
