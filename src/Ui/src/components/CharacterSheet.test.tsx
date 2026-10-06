@@ -179,6 +179,19 @@ it('renders the print preview after the summary and before the body, matching th
   expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
 });
 
+it('moves focus to the print preview heading when the preview opens (investigation 2026-10-06 item 9)', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  const print = screen.getByRole('button', { name: 'Print…' });
+  expect(print.getAttribute('aria-controls')).toBe('print-preview');
+  await user.click(print);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  expect(preview.id).toBe('print-preview');
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })));
+});
+
 it('moves focus to Play when the open tab stops being offered', async () => {
   const user = userEvent.setup();
   const fields = view().sheet.fields;

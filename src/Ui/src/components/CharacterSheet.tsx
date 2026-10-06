@@ -354,7 +354,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
-        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing}>
+        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing} aria-controls="print-preview">
           Print…
         </button>
       </header>

@@ -1569,6 +1569,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
+  expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })); // focus moves to the preview on open
   expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
   expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
   expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
