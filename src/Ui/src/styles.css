@@ -212,7 +212,7 @@ span.warn { color: var(--warn); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 /* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
 .quick-hp { display: inline-flex; gap: var(--space-1); }
-.quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); }
+.quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
 .quick-hp button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
 button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
@@ -230,7 +230,11 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 .sheet-summary .roll-mode input:focus-visible { outline: none; }
 @media (forced-colors: active) {
   .tabs [role='tab'][aria-selected='true'] { border: 2px solid Highlight; }
-  .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
+  /* Investigation 2026-10-06 (question 13, reproduced): `color: var(--bg)` is the system colour Canvas, which forced-colours
+     mode preserves while it forces the background to Canvas, so the checked label vanished. Paint it as a selection instead. */
+  .sheet-summary .roll-mode .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border: 2px solid Highlight; }
+  .sheet-summary .roll-mode .choice:has(:checked) input { accent-color: HighlightText; }
+  button.roll:hover { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
 }
 
 /* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) everything flows in
@@ -288,7 +292,9 @@ dd { margin: 0; }
 .die[data-sides='20'] { clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 25% 93%, 0 50%); }
 /* Any other size (d2, d3, d1000: legal, Dice.cs:12-13) keeps the round fallback above. */
 .die[data-kept='false'] { opacity: 0.45; }
-.die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: var(--accent-2); color: var(--bg); }
+/* Investigation 2026-10-06: only a d20 that beat a dropped one (advantage or disadvantage) and critical dice take --accent-2;
+   a plain d20 stays --accent (verified in headless Edge: the plain die computes to --accent, the kept die to --accent-2). */
+.dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: var(--accent-2); color: var(--bg); }
 .die-more { align-self: center; color: var(--muted); }
 .die-more::after { content: '+' attr(data-more); }
 .dice-still .die { animation: none; }
@@ -300,6 +306,6 @@ dd { margin: 0; }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
-  .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
+  .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
   .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
 }
