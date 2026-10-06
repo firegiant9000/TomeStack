@@ -1010,6 +1010,24 @@ public class DdbImportTests
     }
 
     [Fact]
+    public void A_single_subclass_with_only_one_of_its_features_on_the_sheet_is_listed_first_but_not_applied()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Partial Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var path = GiftedPath(h, source, "Fixture Path of Halves", (shared, 3), (unique, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status);
+        Assert.Null(row.Chosen);
+        Assert.Equal(path, row.Candidates[0].Reference);
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
     public void A_subclass_whose_every_feature_up_to_the_level_is_on_the_sheet_is_detected_beside_one_that_shares_a_name()
     {
         using var h = new DdbHarness();
