@@ -81,6 +81,19 @@ public class RollCommandTests
     }
 
     [Fact]
+    public void An_ability_modifier_is_rolled_as_a_check_named_like_the_summary_button()
+    {
+        // Investigation 2026-10-06 item 7: the summary button says "Roll Strength check (+N)"; the record must say the same.
+        var (temp, id) = Berserker3(seed: 7);
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: FieldIds.Modifier(Ability.Str)));
+
+        Assert.Equal((FieldIds.Modifier(Ability.Str), "Strength check"), (record.Provenance!.RollId, record.Provenance.Label));
+        Assert.Equal("Strength modifier", Assert.Single(record.Modifiers).Label); // the Dice line keeps the modifier's own name
+    }
+
+    [Fact]
     public void Rolling_never_changes_the_character_even_for_a_roll_linked_to_a_resource()
     {
         using var temp = new TempApp();
