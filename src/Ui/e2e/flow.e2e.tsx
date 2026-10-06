@@ -3,7 +3,7 @@
 // bridge, so export takes the download fallback instead of the native Save dialog.
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, inject, it, vi } from 'vitest';
 import { zip } from './zip';
@@ -271,7 +271,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
   await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 25 of 35' })).toBeTruthy());
-  expect(hpPanel().textContent).toMatch(/Hit dice: d12 3 of 3/);
+  expect(hpPanel().textContent).toMatch(/Hit dice: 3 of 3 \(d12\)/);
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   rest = await screen.findByRole('region', { name: 'Short rest' });
   await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Short rest' })));
@@ -283,7 +283,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
   await expectStatus(/Short rest finished: 2 changes applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
-  expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
+  expect(hpPanel().textContent).toMatch(/Hit dice: 2 of 3 \(d12\)/);
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
 
   // Heroic Inspiration (2024) and death saving throws (SPEC C-05): a 20 at the table regains 1 hit point.
@@ -2071,6 +2071,12 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
 
   await user.keyboard('{Control>}b{/Control}');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // Another keyboard layout: Ctrl + the physical B key reports a different character, so the shortcut follows `code`.
+  fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
 
   // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.

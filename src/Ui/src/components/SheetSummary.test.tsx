@@ -143,14 +143,50 @@ it('adjusts hit points by one from the summary without changing the Hit points t
   expect(act).toHaveBeenCalledWith({ action: 'heal', amount: 1 });
 });
 
-it('disables "Lose" at 0 hit points and "Regain" at the maximum', () => {
+const withHp = (current: number, temporary: number): CharacterView => {
   const view = fixtureView();
-  render(<SheetSummary view={{ ...view, sheet: { ...view.sheet, hitPoints: { maximum: 35, current: 0, temporary: 0 } } }} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Lose 1 hit point' }).disabled).toBe(true);
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' }).disabled).toBe(false);
+  return { ...view, sheet: { ...view.sheet, hitPoints: { maximum: 35, current, temporary } } };
+};
+
+it('marks "Lose" at 0 hit points and "Regain" at the maximum aria-disabled, and clicking there does nothing', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<SheetSummary view={withHp(0, 0)} rollMode="normal" onRollMode={() => {}} act={act} onRoll={() => {}} />);
+  const lose = screen.getByRole<HTMLButtonElement>('button', { name: 'Lose 1 hit point' });
+  expect(lose.getAttribute('aria-disabled')).toBe('true');
+  expect(lose.disabled).toBe(false);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' }).getAttribute('aria-disabled')).toBeNull();
+  await user.click(lose);
+  expect(act).not.toHaveBeenCalled();
   cleanup();
-  render(<SheetSummary view={{ ...view, sheet: { ...view.sheet, hitPoints: { maximum: 35, current: 35, temporary: 0 } } }} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' }).disabled).toBe(true);
+  render(<SheetSummary view={withHp(35, 0)} rollMode="normal" onRollMode={() => {}} act={act} onRoll={() => {}} />);
+  const regain = screen.getByRole<HTMLButtonElement>('button', { name: 'Regain 1 hit point' });
+  expect(regain.getAttribute('aria-disabled')).toBe('true');
+  await user.click(regain);
+  expect(act).not.toHaveBeenCalled();
+});
+
+it('keeps "Lose" live at 0 hit points while temporary hit points remain', async () => {
+  const user = userEvent.setup();
+  const act = vi.fn();
+  render(<SheetSummary view={withHp(0, 5)} rollMode="normal" onRollMode={() => {}} act={act} onRoll={() => {}} />);
+  const lose = screen.getByRole('button', { name: 'Lose 1 hit point' });
+  expect(lose.getAttribute('aria-disabled')).toBeNull();
+  await user.click(lose);
+  expect(act).toHaveBeenCalledWith({ action: 'damage', amount: 1 });
+});
+
+it('keeps focus on "Regain" when the click reaches the maximum (WCAG 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const props = { rollMode: 'normal' as const, onRollMode: () => {}, act: () => {}, onRoll: () => {} };
+  const { rerender } = render(<SheetSummary view={withHp(34, 0)} {...props} />);
+  const regain = screen.getByRole('button', { name: 'Regain 1 hit point' });
+  regain.focus();
+  await user.click(regain);
+  rerender(<SheetSummary view={withHp(35, 0)} {...props} />);
+  const after = screen.getByRole('button', { name: 'Regain 1 hit point' });
+  expect(document.activeElement).toBe(after);
+  expect(after.getAttribute('aria-disabled')).toBe('true');
 });
 
 /** The fixture view with one field replaced by an overridden copy. */

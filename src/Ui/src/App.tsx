@@ -59,7 +59,7 @@ export function App() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== 'b') return;
+      if (!event.ctrlKey || event.altKey || event.metaKey || (event.code !== 'KeyB' && event.key.toLowerCase() !== 'b')) return; // physical B too: other layouts give another character
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(TEXTAREA|SELECT)$/.test(target.tagName))) return;
       // Only text-entry inputs keep Ctrl+B; a focused checkbox, radio or button must not block the shortcut (WCAG 2.1.1).

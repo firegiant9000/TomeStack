@@ -1,4 +1,5 @@
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
+import { hitDiceText } from '../format';
 import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -44,7 +45,9 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
   const play = character.play;
   const conditions = play?.conditions ?? [];
   const exhaustion = play?.exhaustion ?? 0;
-  const maximumOverridden = Boolean(field('hitPoints')?.override);
+  const loseAtLimit = hp ? hp.current <= 0 && hp.temporary <= 0 : false;
+  const regainAtLimit = hp ? hp.current >= hp.maximum : false;
+  const maximumOverridden =Boolean(field('hitPoints')?.override);
 
   return (
     <section className="sheet-summary" role="region" aria-label="Summary">
@@ -91,11 +94,29 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
             </dd>
             {/* ADR-015: one-point adjustments, the same confirmed play command as the Hit points panel. A second <dd> so the
                 first keeps only the text (summaryValue reads the first). */}
+            {/* aria-disabled, not disabled: the click that reaches the limit must not drop focus to <body> (WCAG 2.4.3).
+                Damage at 0 still consumes temporary hit points, so "Lose" is at its limit only with none left. */}
             <dd className="quick-hp">
-              <button type="button" aria-label="Lose 1 hit point" disabled={hp.current <= 0} onClick={() => act({ action: 'damage', amount: 1 })}>
+              <button
+                type="button"
+                aria-label="Lose 1 hit point"
+                aria-disabled={loseAtLimit || undefined}
+                onClick={() => {
+                  if (loseAtLimit) return;
+                  act({ action: 'damage', amount: 1 });
+                }}
+              >
                 −
               </button>
-              <button type="button" aria-label="Regain 1 hit point" disabled={hp.current >= hp.maximum} onClick={() => act({ action: 'heal', amount: 1 })}>
+              <button
+                type="button"
+                aria-label="Regain 1 hit point"
+                aria-disabled={regainAtLimit || undefined}
+                onClick={() => {
+                  if (regainAtLimit) return;
+                  act({ action: 'heal', amount: 1 });
+                }}
+              >
                 +
               </button>
             </dd>
@@ -104,7 +125,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
         {(sheet.hitDice ?? []).length > 0 && (
           <div>
             <dt>Hit dice</dt>
-            <dd>{sheet.hitDice!.map((h) => `${h.remaining} of ${h.total} (d${h.die})`).join(', ')}</dd>
+            <dd>{hitDiceText(sheet.hitDice!)}</dd>
           </div>
         )}
         <div>

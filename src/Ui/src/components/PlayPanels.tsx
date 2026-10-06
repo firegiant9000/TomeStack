@@ -12,7 +12,7 @@ import type {
   RollRecord,
   RollTarget,
 } from '../api/types';
-import { rollBonus } from '../format';
+import { hitDiceText, rollBonus } from '../format';
 import { diceAnimationOn } from '../settings';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -88,7 +88,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
       <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
-          Hit dice: {(view.sheet.hitDice ?? []).map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}
+          Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
         </p>
       )}
       <label className="choice">
