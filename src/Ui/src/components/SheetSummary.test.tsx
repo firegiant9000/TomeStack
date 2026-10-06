@@ -155,3 +155,13 @@ it('marks an overridden hit point maximum in text, before the temporary part', (
   render(<SheetSummary view={overridden} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
   expect(dd('Hit points')).toBe('28 of 40 (maximum overridden), 5 temporary');
 });
+
+it('styles the six ability roll buttons as buttons, not as link text (investigation 2026-10-05)', () => {
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  const rolls = screen.getAllByRole('button', { name: /^Roll / });
+  expect(rolls).toHaveLength(6);
+  for (const button of rolls) {
+    expect(button.classList.contains('roll')).toBe(true);
+    expect(button.classList.contains('link')).toBe(false);
+  }
+});

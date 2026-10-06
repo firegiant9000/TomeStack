@@ -5,6 +5,8 @@
   --fg: CanvasText;
   --muted: color-mix(in srgb, CanvasText 65%, Canvas);
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
+  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
+  --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
   /* Text contrast on Canvas: light 6.2 / 5.4 / 6.5, dark 8.9 / 10.1 / 7.8 (docs/features/accessibility-checklist.md). */
   --accent: light-dark(#2f5fb3, #8ab4f8);
   --warn: light-dark(#9a5b00, #f0b35a);
@@ -21,23 +23,27 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 
 .app {
   display: grid;
-  grid-template-columns: minmax(14rem, 18rem) 1fr;
+  /* minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
+     which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-height: 100vh;
 }
 .app-header {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 1rem;
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
 .app-header h1 { margin: 0; font-size: 1.4rem; }
+.app-header .hint { min-width: 0; overflow-wrap: anywhere; }
 .sidebar { padding: 1rem; border-right: 1px solid var(--line); }
 .content { padding: 1rem 1.5rem; max-width: 70rem; }
 
-.panel { display: grid; gap: 1rem; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -70,7 +76,8 @@ button.link[aria-current='page'] { font-weight: 700; }
 
 .sheet-header { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .sheet-header h2 { margin: 0; overflow-wrap: anywhere; }
-.sheet-header button { margin-left: auto; }
+/* Only the first button takes the free space, so "Level up" and "Print…" sit together at the right. */
+.sheet-header button:first-of-type { margin-left: auto; }
 .derived { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
 .field-group h3 { margin: 0.75rem 0 0.25rem; }
 .field-card details { border-bottom: 1px solid var(--line); padding: 0.25rem 0; }
@@ -120,6 +127,21 @@ span.warn { color: var(--warn); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; }
 .sheet-summary dt { font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
+button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
+button.roll:hover { background: var(--accent); color: var(--bg); }
+.sheet-summary .roll-mode { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: none; margin: 0; }
+.sheet-summary .roll-mode legend { float: left; padding: 0; margin-right: 0.75rem; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
+.sheet-summary .roll-mode .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); margin-left: -1px; }
+.sheet-summary .roll-mode .choice:first-of-type { border-radius: 4px 0 0 4px; margin-left: 0; }
+.sheet-summary .roll-mode .choice:last-of-type { border-radius: 0 4px 4px 0; }
+.sheet-summary .roll-mode .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+/* The selected segment is accent-filled, so its focus ring uses --fg on the page background (WCAG 2.4.7). */
+.sheet-summary .roll-mode .choice:has(:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
+.sheet-summary .roll-mode input:focus-visible { outline: none; }
+@media (forced-colors: active) {
+  .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
+}
 
 /* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) the sidebar stacks above the content. */
 @media (max-width: 40rem) {

@@ -41,6 +41,9 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
   // Carried items keep their names from every revision; new items are offered at their newest revision (SPEC I-06).
   const addable = items.filter((o) => o.compatible && !o.superseded && !equipment.some((e) => sameRef(e.item, o.reference)));
 
+  // Investigation 2026-10-05: an imported 2014 sheet creates every item unequipped, and only equipped items apply.
+  const unequipped = equipment.filter((e) => !e.equipped).length;
+
   return (
     <section aria-labelledby="equipment-heading" className="play-panel">
       <h3 id="equipment-heading">Equipment</h3>
@@ -92,6 +95,12 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
           Add
         </button>
       </div>
+      {unequipped > 0 && (
+        <p className="hint">
+          {unequipped === 1 ? '1 carried item is' : `${unequipped} carried items are`} not equipped. Equip a weapon to list its
+          attack on Play, or armor to use it for Armor Class.
+        </p>
+      )}
       <p className="hint">
         Only equipped items apply. Worn armor replaces the unarmored Armor Class, so features such as Unarmored Defense stop applying.
       </p>
