@@ -12,7 +12,8 @@ import type {
   RollRecord,
   RollTarget,
 } from '../api/types';
-import { rollBonus } from '../format';
+import { hitDiceText, rollBonus } from '../format';
+import { diceAnimationOn } from '../settings';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
 export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
@@ -87,7 +88,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
       <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
-          Hit dice: {(view.sheet.hitDice ?? []).map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}
+          Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
         </p>
       )}
       <label className="choice">
@@ -500,6 +501,21 @@ function FeatureItem({
   );
 }
 
+/** ADR-015: at most this many dice are drawn; the record's text always lists every die. */
+const drawnDice = 10;
+
+/**
+ * A key per record object, so an identical second roll (a new object with the same faces) mounts a new dice row and the
+ * CSS tumble runs again. A WeakMap keeps it pure: no state, no effect, and old records are collected.
+ */
+const rollKeys = new WeakMap<RollRecord, number>();
+let nextRollKey = 0;
+function rollKey(record: RollRecord): number {
+  let key = rollKeys.get(record);
+  if (key === undefined) rollKeys.set(record, (key = ++nextRollKey));
+  return key;
+}
+
 /** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
 export function RollResult({
   record,
@@ -532,6 +548,21 @@ export function RollResult({
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
     <div role="region" aria-label="Last roll" aria-live="polite" className="roll-result">
+      {/* ADR-015: the service's dice, drawn. aria-hidden and textless (faces come from CSS attr()), so the text below is
+          the result for everyone and the region announces once. Nothing is rolled here. */}
+      <div key={rollKey(record)} className={diceAnimationOn() ? 'dice' : 'dice dice-still'} aria-hidden="true">
+        {record.dice.slice(0, drawnDice).map((d, i) => (
+          <span
+            key={i}
+            className="die"
+            data-sides={d.sides}
+            data-value={d.value}
+            data-kept={d.kept ? 'true' : 'false'}
+            data-critical={d.fromCritical ? 'true' : 'false'}
+          />
+        ))}
+        {record.dice.length > drawnDice && <span className="die-more" data-more={record.dice.length - drawnDice} />}
+      </div>
       <p>
         <strong>
           {p?.label ?? 'Roll'}: {record.total}

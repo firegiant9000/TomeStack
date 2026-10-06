@@ -16,6 +16,8 @@ vi.mock('../api/client', () => ({
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
     snapshots: vi.fn(),
+    previewExport: vi.fn(),
+    info: vi.fn(),
   },
 }));
 
@@ -167,6 +169,16 @@ it('remembers the tab chosen, so the next opening of the same character starts t
   expect(screen.getByRole('tab', { name: 'Manage' }).getAttribute('aria-selected')).toBe('true');
 });
 
+it('renders the print preview after the summary and before the body, matching the grid order', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Print…' }));
+  const article = document.querySelector('article.sheet') as HTMLElement;
+  expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
+});
+
 it('moves focus to Play when the open tab stops being offered', async () => {
   const user = userEvent.setup();
   const fields = view().sheet.fields;
@@ -210,4 +222,13 @@ it('falls back from a remembered tab that is not offered, without taking focus f
   expect(screen.getByRole('tab', { name: 'Play' }).getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2 }));
   expect(localStorage.getItem('tomestack.sheetTab.fixture-2')).toBe('spells');
+});
+
+it('keeps the header, print preview slot and summary as direct children of the article, with everything else in one body wrapper (ADR-015)', () => {
+  renderSheet(view());
+  const article = screen.getByRole('article');
+  const children = Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
+  expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
+  const body = article.querySelector('.sheet-body')!;
+  expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
 });

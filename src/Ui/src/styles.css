@@ -1,4 +1,5 @@
-/* Plain, system-font styling. No external fonts or assets: the app must render offline. */
+/* Plain, system-font styling. No external fonts or assets: the app must render offline (ADR-006). */
+/* ADR-015: tokens. Three themes on the system-colour base; contrast ratios are in accessibility-checklist.md item 5. */
 :root {
   color-scheme: light dark;
   --bg: Canvas;
@@ -7,13 +8,56 @@
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
   /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
   --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
-  /* Text contrast on Canvas: light 6.2 / 5.4 / 6.5, dark 8.9 / 10.1 / 7.8 (docs/features/accessibility-checklist.md). */
-  --accent: light-dark(#2f5fb3, #8ab4f8);
+  /* Forest is the default theme (owner, 2026-10-05). */
+  --surface: light-dark(#f2f7f2, #161d17);
+  --accent: light-dark(#1e6a3a, #7fd49a);
+  --accent-2: light-dark(#7a5a00, #e2c35b);
   --warn: light-dark(#9a5b00, #f0b35a);
   --error: light-dark(#b3261e, #f28b82);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.4rem;
+  --text-2xl: 1.75rem;
+  --radius: 0.375rem;
+  /* Numbers in the summary and on the dice: Bahnschrift ships with Windows 10 (1709+) and 11; nothing is bundled. */
+  --font-numbers: Bahnschrift, system-ui, sans-serif;
   font-family: system-ui, 'Segoe UI', sans-serif;
   font-size: 100%;
   line-height: 1.45;
+}
+html[data-theme='cool'] {
+  --surface: light-dark(#f2f4fb, #191c26);
+  --accent: light-dark(#3449b8, #9eaaff);
+  --accent-2: light-dark(#0f6e66, #5fe0cf);
+}
+html[data-theme='violet'] {
+  --surface: light-dark(#f7f3fc, #1b1624);
+  --accent: light-dark(#6a33c4, #c9adff);
+  --accent-2: light-dark(#0a6b86, #6fd9f0);
+}
+/* WCAG 1.4.11 under Windows High Contrast: every token maps to a system colour; borders carry what colour carried. */
+@media (forced-colors: active) {
+  /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */
+  :root, html[data-theme] {
+    --surface: Canvas;
+    --accent: LinkText;
+    --accent-2: Highlight;
+    --warn: CanvasText;
+    --error: CanvasText;
+    --line: CanvasText;
+    --line-strong: CanvasText;
+    --muted: CanvasText;
+  }
+}
+/* WCAG 2.3.3: no motion for a user who asked for none. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
 }
 
 * { box-sizing: border-box; }
@@ -21,31 +65,62 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
+/* ADR-015: a named grid. `main` and the sheet article use subgrid, so the sheet's own header and summary land in the
+   shell's rows (across the window) while staying direct children of the article: print and the e2e queries are unchanged.
+   minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
+   which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
 .app {
   display: grid;
-  /* minmax(0, 1fr), not 1fr (= minmax(auto, 1fr)): a wide table or pre in main must not widen the track, or the header,
-     which spans both columns, runs past the window edge (investigation 2026-10-05, owner confirmed the sideways scroll). */
-  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  grid-template-columns: [side] minmax(14rem, 18rem) [main] minmax(0, 1fr);
+  grid-template-rows: [top] auto [head] auto [summary] auto [messages] auto [print] auto [body] 1fr;
   min-height: 100vh;
 }
+.app[data-sidebar='collapsed'] { grid-template-columns: [side] 0 [main] minmax(0, 1fr); }
 .app-header {
   grid-column: 1 / -1;
+  grid-row: top;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--line);
 }
-.app-header h1 { margin: 0; font-size: 1.4rem; }
-.app-header .hint { min-width: 0; overflow-wrap: anywhere; }
-.sidebar { padding: 1rem; border-right: 1px solid var(--line); }
-.content { padding: 1rem 1.5rem; max-width: 70rem; }
+.app-header h1 { margin: 0; font-size: var(--text-xl); }
+.sidebar-toggle { margin-left: auto; }
+/* With the side column at 0 the subgrid gap would leave a strip at the left edge. */
+.app[data-sidebar='collapsed'] .content, .app[data-sidebar='collapsed'] article.sheet { column-gap: 0; }
+/* ...and the main-column items would start at x=0 while the sheet header and summary keep their inset: give them the same one. */
+.app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: var(--space-5); }
+.sidebar-toggle::before { content: ''; display: inline-block; width: 1em; height: 0.75em; margin-right: var(--space-2); vertical-align: -0.05em; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; box-shadow: inset 0 0.3em 0 -0.18em currentColor; }
+/* z-index (F1): main and the sheet article span both columns, so without it they sit over the sidebar and take its clicks
+   (verified in headless Edge, 2026-10-05). Grid items honour z-index without position. */
+.sidebar { grid-column: side; grid-row: messages / -1; z-index: 1; padding: var(--space-4); border-right: 1px solid var(--line); background: var(--surface); }
+.sidebar .actions { flex-direction: column; align-items: stretch; }
+.content {
+  grid-column: 1 / -1;
+  grid-row: head / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+  column-gap: var(--space-5);
+  padding: 0 0 var(--space-4) 0;
+}
+/* The right inset lives on the main-column items, not on .content, so the spanning sheet header and summary
+   (which carry their own --space-5 on both sides) end the same distance from the window edge as the tabs and body. */
+/* z-index: on the sheet screen the spanning article covers the messages cell and would take its pointer events. */
+.content > .messages { grid-column: main; grid-row: messages; z-index: 1; display: grid; gap: var(--space-2); margin-right: var(--space-5); }
+.content > .messages:empty { display: none; }
+.content > :not(.messages, .sheet) { grid-column: main; grid-row: body; align-self: start; margin-right: var(--space-5); }
+article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
+article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
+article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
+article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
+article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; margin-right: var(--space-5); }
 
-.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .field { display: grid; gap: 0.2rem; font-weight: 500; }
 .choice { display: block; padding: 0.15rem 0; }
@@ -53,14 +128,14 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
 input { font: inherit; padding: 0.3rem 0.4rem; }
-button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; }
+button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; border-radius: var(--radius); }
 button.link { background: none; border: none; padding: 0.2rem 0; text-align: left; color: inherit; }
 button.link[aria-current='page'] { font-weight: 700; }
 
 .hint { color: var(--muted); margin: 0.25rem 0; }
 .tag {
   display: inline-block;
-  font-size: 0.8em;
+  font-size: var(--text-sm);
   padding: 0 0.4em;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -72,19 +147,19 @@ button.link[aria-current='page'] { font-weight: 700; }
 .options li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.3rem 0; }
 .options .incompatible { color: var(--muted); }
 .option-name { font-weight: 600; }
-.option-source { display: block; font-size: 0.9em; color: var(--muted); }
+.option-source { display: block; font-size: var(--text-sm); color: var(--muted); }
 
 .sheet-header { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .sheet-header h2 { margin: 0; overflow-wrap: anywhere; }
 /* Only the first button takes the free space, so "Level up" and "Print…" sit together at the right. */
 .sheet-header button:first-of-type { margin-left: auto; }
-.derived { font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.derived { font-family: var(--font-numbers); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
 .field-group h3 { margin: 0.75rem 0 0.25rem; }
 .field-card details { border-bottom: 1px solid var(--line); padding: 0.25rem 0; }
 .field-card summary { cursor: pointer; }
-.field-card summary h4 { display: inline; margin: 0; font-size: 1rem; font-weight: 600; }
-.warning-count { color: var(--warn); font-size: 0.9rem; }
-.override-label { font-size: 0.9rem; color: var(--warn); font-weight: 600; }
+.field-card summary h4 { display: inline; margin: 0; font-size: var(--text-md); font-weight: 600; }
+.warning-count { color: var(--warn); font-size: var(--text-sm); }
+.override-label { font-size: var(--text-sm); color: var(--warn); font-weight: 600; }
 .override { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-top: 0.75rem; }
 
 table { border-collapse: collapse; width: 100%; }
@@ -109,24 +184,28 @@ span.warn { color: var(--warn); }
 .conditions { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
-.resource h4 { margin: 0; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
 /* ADR-014: sheet tabs (WAI-ARIA APG tabs). The class sets display, so [hidden] must be restated or a hidden panel shows. */
 .tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); }
 .tabs [role='tab'] { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: inherit; }
-.tabs [role='tab'][aria-selected='true'] { border-color: var(--line); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
+.tabs [role='tab'][aria-selected='true'] { border-color: var(--line); border-bottom: 2px solid var(--accent); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
 .tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
 .tabpanel[hidden] { display: none; }
 
 /* ADR-014 slice 2: the summary. All rem, no fixed widths: the abilities grid and the lines wrap at 200% and 400% zoom. */
-.sheet-summary { display: grid; gap: 0.5rem; border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
+.sheet-summary { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3) var(--space-4); background: var(--surface); }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0; }
 .sheet-summary dl.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; }
-.sheet-summary dt { font-weight: 600; font-size: 0.9rem; color: var(--muted); }
-.sheet-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+.sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
+.sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+/* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
+.quick-hp { display: inline-flex; gap: var(--space-1); }
+.quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); }
+.quick-hp button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
 button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
 button.roll:hover { background: var(--accent); color: var(--bg); }
@@ -136,17 +215,25 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
 .sheet-summary .roll-mode .choice:first-of-type { border-radius: 4px 0 0 4px; margin-left: 0; }
 .sheet-summary .roll-mode .choice:last-of-type { border-radius: 0 4px 4px 0; }
 .sheet-summary .roll-mode .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+/* The checked radio's dot would otherwise blend into the accent-filled segment. */
+.sheet-summary .roll-mode .choice:has(:checked) input { accent-color: var(--bg); }
 /* The selected segment is accent-filled, so its focus ring uses --fg on the page background (WCAG 2.4.7). */
 .sheet-summary .roll-mode .choice:has(:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
 .sheet-summary .roll-mode input:focus-visible { outline: none; }
 @media (forced-colors: active) {
+  .tabs [role='tab'][aria-selected='true'] { border: 2px solid Highlight; }
   .sheet-summary .roll-mode .choice:has(:checked) { border: 2px solid Highlight; }
 }
 
-/* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) the sidebar stacks above the content. */
+/* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) everything flows in
+   DOM order: header, sidebar, then the sheet's header, summary and body. */
 @media (max-width: 40rem) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; }
+  .app, .content, article.sheet { display: block; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+  .content { padding: var(--space-4); }
+  .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
+  .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
+  article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
@@ -158,16 +245,20 @@ dd { margin: 0; }
 /* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
 .print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
 .print-sheet table { margin: 0.5rem 0; }
-.print-title { font-size: 1.4rem; margin: 0.5rem 0 0; }
+.print-title { font-size: var(--text-xl); margin: var(--space-2) 0 0; }
 .print-feature p { margin: 0.2rem 0; }
-.print-notice { font-size: 0.85em; color: var(--muted); }
+.print-notice { font-size: var(--text-sm); color: var(--muted); }
 @media print {
   :root { color-scheme: light; }
-  .app { display: block; }
+  .app { display: block; min-height: 0; }
+  .content, article.sheet { display: block; }
+  article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
+  .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }
   .print-sheet { border: none; padding: 0; }
+  .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
 }
 
@@ -175,3 +266,32 @@ dd { margin: 0; }
 .text-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
 .text-diff .diff-added { color: var(--accent); }
 .text-diff .diff-removed { color: var(--error); text-decoration: line-through; }
+
+/* ADR-015: the dice display. Filled polygons by clip-path; the face by attr(), so the live region's text never changes.
+   Text on a filled shape is --bg (F3): 6.1:1 or better on --accent and --accent-2 in every theme, light and dark. */
+.dice { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-1); }
+.die { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--bg); font-family: var(--font-numbers); font-weight: 700; font-variant-numeric: tabular-nums; animation: tumble 0.6s ease-out; }
+.die::after { content: attr(data-value); }
+.die[data-sides='4'] { clip-path: polygon(50% 0, 100% 100%, 0 100%); place-items: end center; padding-bottom: 0.2rem; }
+.die[data-sides='6'] { border-radius: var(--radius); }
+.die[data-sides='8'] { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.die[data-sides='10'], .die[data-sides='100'] { clip-path: polygon(50% 0, 100% 40%, 80% 100%, 20% 100%, 0 40%); }
+.die[data-sides='12'] { clip-path: polygon(50% 0, 98% 35%, 79% 91%, 21% 91%, 2% 35%); }
+.die[data-sides='20'] { clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 25% 93%, 0 50%); }
+/* Any other size (d2, d3, d1000: legal, Dice.cs:12-13) keeps the round fallback above. */
+.die[data-kept='false'] { opacity: 0.45; }
+.die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: var(--accent-2); color: var(--bg); }
+.die-more { align-self: center; color: var(--muted); }
+.die-more::after { content: '+' attr(data-more); }
+.dice-still .die { animation: none; }
+@keyframes tumble {
+  0% { transform: rotate(-200deg) scale(0.6); }
+  70% { transform: rotate(15deg) scale(1.08); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+/* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
+@media (forced-colors: active) {
+  .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
+  .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
+  .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
+}

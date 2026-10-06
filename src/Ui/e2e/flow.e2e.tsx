@@ -3,7 +3,7 @@
 // bridge, so export takes the download fallback instead of the native Save dialog.
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, inject, it, vi } from 'vitest';
 import { zip } from './zip';
@@ -271,7 +271,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
   await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 25 of 35' })).toBeTruthy());
-  expect(hpPanel().textContent).toMatch(/Hit dice: d12 3 of 3/);
+  expect(hpPanel().textContent).toMatch(/Hit dice: 3 of 3 \(d12\)/);
   await user.click(screen.getByRole('button', { name: 'Short rest…' }));
   rest = await screen.findByRole('region', { name: 'Short rest' });
   await waitFor(() => expect(document.activeElement).toBe(within(rest).getByRole('heading', { name: 'Short rest' })));
@@ -283,7 +283,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(rest).getByRole('button', { name: 'Finish short rest' }));
   await expectStatus(/Short rest finished: 2 changes applied/);
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 32 of 35' })).toBeTruthy());
-  expect(hpPanel().textContent).toMatch(/Hit dice: d12 2 of 3/);
+  expect(hpPanel().textContent).toMatch(/Hit dice: 2 of 3 \(d12\)/);
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 3 of 3' })).toBeTruthy();
 
   // Heroic Inspiration (2024) and death saving throws (SPEC C-05): a 20 at the table regains 1 hit point.
@@ -1359,6 +1359,8 @@ it('reaches the primary actions by keyboard alone', async () => {
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
 
   await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's one header control comes first
+  await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New character' }));
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import package…' }));
@@ -2035,4 +2037,76 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
   }
 
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
+});
+
+it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
+  const user = userEvent.setup();
+  try {
+    const { unmount } = render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Settings' }));
+    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+    await user.click(screen.getByRole('radio', { name: 'Violet' }));
+    expect(document.documentElement.dataset.theme).toBe('violet');
+    unmount();
+    delete document.documentElement.dataset.theme; // so the final check proves the mount effect re-applied the saved theme
+    render(<App />);
+    await screen.findByRole('button', { name: 'Settings' });
+    expect(document.documentElement.dataset.theme).toBe('violet');
+  } finally {
+    // Leave the shared jsdom window as it was for the next test.
+    localStorage.removeItem('tomestack.theme');
+    delete document.documentElement.dataset.theme;
+  }
+});
+
+it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  const toggle = await screen.findByRole('button', { name: 'Hide sidebar' });
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  await user.click(toggle);
+  expect(screen.getByRole('button', { name: 'Show sidebar' }).getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+
+  await user.keyboard('{Control>}b{/Control}');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // Another keyboard layout: Ctrl + the physical B key reports a different character, so the shortcut follows `code`.
+  fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
+  const newCharacter = screen.getByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  newCharacter.focus();
+  await user.keyboard('{Control>}b{/Control}');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+
+  unmount();
+  render(<App />);
+  expect(await screen.findByRole('button', { name: 'Show sidebar' })).toBeTruthy();
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
+  expect(localStorage.getItem('tomestack.sidebar')).toBeNull();
+
+  // A focused checkbox or radio must not block the shortcut (WCAG 2.1.1); a text field keeps Ctrl+B.
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  for (const control of [screen.getByRole('checkbox', { name: 'Animate dice' }), screen.getByRole('radio', { name: 'Violet' })]) {
+    control.focus();
+    await user.keyboard('{Control>}b{/Control}');
+    expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+    await user.keyboard('{Control>}b{/Control}');
+    expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+  }
+  await user.click(screen.getByRole('button', { name: 'New character' }));
+  const name = await screen.findByRole('textbox', { name: /^Name/ });
+  name.focus();
+  await user.keyboard('{Control>}b{/Control}');
+  expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
+  localStorage.removeItem('tomestack.theme');
+  delete document.documentElement.dataset.theme;
 });

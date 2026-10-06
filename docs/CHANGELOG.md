@@ -4,6 +4,7 @@
 
 ### Added
 
+- **A refreshed look, with three themes (Settings):** forest, cool and violet, each in light and dark with your system. The sheet's header and summary now run across the whole window, with the sidebar and the sheet's pages below; the sidebar can be hidden and shown from the header or with Ctrl+B, and the app remembers your choice. Dice tumble onto the result when you roll (turn it off in Settings; the app also follows your Windows "show animations" setting). The summary gains an Inspiration checkbox and one-point hit-point buttons; hit dice read "4 of 4 (d10)". The version is in Settings. Settings are kept on this computer only, in no backup or package.
 - **Import a character from a D&D Beyond PDF sheet:**
   - "Import from D&D Beyond PDF…" in the Characters list turns an exported D&D Beyond character sheet into a **new** TomeStack character. You review every match and every number first. Nothing is saved until you choose "Create character", and Cancel at any step saves nothing.
   - TomeStack reads the sheet's form fields once and keeps nothing of the PDF. It matches names against the content you have installed, in the rules family you pick; names it cannot match or place are listed and kept as gap notes on the new character. A sheet printed to PDF, without form fields, cannot be read.
