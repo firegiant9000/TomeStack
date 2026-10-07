@@ -241,7 +241,7 @@ span.warn { color: var(--warn); }
   background: var(--surface);
 }
 .sheet-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
-.sheet-summary dl.summary-abilities { grid-area: abilities; display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); }
+.sheet-summary dl.summary-abilities { grid-area: abilities; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
 .sheet-summary dl.summary-line { grid-area: line; }
 .sheet-summary dl.summary-line > div { flex: 1 1 auto; }
 .sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
@@ -254,6 +254,8 @@ span.warn { color: var(--warn); }
 html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); flex-basis: auto; }
 html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-2xl); color: inherit; flex-basis: 100%; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
+html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
+.sheet-summary dd.ability .roll { min-width: 0; overflow-wrap: anywhere; }
 .sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
 .sheet-summary > .hint { grid-area: hint; }
 .sheet-summary > .roll-result { grid-area: result; min-height: 7.5rem; }
