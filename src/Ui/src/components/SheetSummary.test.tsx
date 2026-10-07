@@ -61,6 +61,7 @@ function fixtureView(sheetOver: Partial<CharacterSheet> = {}, play?: PlayState, 
       field('armorClass', 'Armor Class', 16, 'score', { field: 'armorClass', value: 16, reason: 'Table ruling' }),
       field('initiative', 'Initiative', 2, 'modifier'),
       field('hitPoints', 'Hit point maximum', 35, 'score'),
+      field('speed', 'Speed', 30, 'feet'),
     ],
     hitPoints: { maximum: 35, current: 28, temporary: 5 },
     hitDice: [{ die: 12, total: 3, spent: 1, remaining: 2, classes: ['Fixture Brute'] }],
@@ -86,12 +87,14 @@ it('lists the core numbers as terms and definitions, with no heading or named re
   expect(dd('Proficiency bonus')).toBe('+2');
   expect(dd('Armor Class')).toBe('16 (overridden)');
   expect(dd('Initiative')).toBe('+2');
+  expect(dd('Speed')).toBe('30 ft.');
   expect(dd('Hit points')).toBe('28 of 35, 5 temporary');
   expect(dd('Hit dice')).toBe('2 of 3 (d12)');
   expect(within(summary).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(false);
   expect(within(summary).queryByText('Conditions', { selector: 'dt' })).toBeNull();
   expect(within(summary).getByText('Strength', { selector: 'dt' })).toBeTruthy();
-  expect(within(summary).getByText('16', { selector: '.derived' })).toBeTruthy();
+  expect(within(summary).getByText('+3', { selector: '.derived' })).toBeTruthy(); // the modifier is the large number (owner: modifier first by default)
+  expect(within(summary).getByText('16', { selector: '.score' })).toBeTruthy();
 });
 
 it('names inspiration by family and lists conditions and exhaustion when present', () => {
@@ -229,4 +232,12 @@ it('styles the six ability roll buttons as buttons, not as link text (investigat
     expect(button.classList.contains('roll')).toBe(true);
     expect(button.classList.contains('link')).toBe(false);
   }
+});
+
+it('keeps one markup for both ability-box orders: modifier, then score, then the roll button (CSS reorders)', () => {
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  const strength = within(screen.getByRole('region', { name: 'Summary' })).getByText('Strength', { selector: 'dt' }).nextElementSibling as HTMLElement;
+  expect(strength.classList.contains('ability')).toBe(true);
+  expect(Array.from(strength.children).map((c) => c.className || c.tagName.toLowerCase())).toEqual(['derived', 'score', 'roll']);
+  expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });

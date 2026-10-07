@@ -47,6 +47,17 @@ public class ContentValidatorTests
     }
 
     [Fact]
+    public void Content_cannot_target_passives_or_speed_until_a_schema_version_allows_it()
+    {
+        // D24: these are calculated and overridable on the sheet, but no content-schema version carries them as targets.
+        var passive = ContentValidator.Validate(Draft(new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" }), Catalog);
+        Assert.Contains(passive.Errors, e => e.Code == "validate.unknown-target" && e.Message.Contains("cannot be targeted by content yet"));
+        Assert.False(passive.CanPublish);
+        var speed = ContentValidator.Validate(Draft(new RestrictionEffect { Id = "fast", Field = FieldIds.Speed, Minimum = 30 }), Catalog);
+        Assert.Contains(speed.Errors, e => e.Code == "validate.unknown-target" && e.Message.Contains("cannot be targeted by content yet"));
+    }
+
+    [Fact]
     public void Schema_problems_are_reported()
     {
         Assert.Contains("validate.name-required", Errors(Draft() with { Name = " " }));

@@ -1,5 +1,6 @@
 import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
 import { pageText } from './PlayPanels';
+import { Pips } from './Pips';
 import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
@@ -139,6 +140,15 @@ export function SpellsPanel({
                       Cast {spell.name} (spend a slot)
                     </button>
                   )}
+                  {spell.prepared && spell.concentration && (
+                    <button
+                      type="button"
+                      disabled={view.character.play?.concentration?.spell.contentId === spell.spell.contentId}
+                      onClick={() => act({ action: 'startConcentration', contentId: spell.spell.contentId })}
+                    >
+                      Concentrate on {spell.name}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -153,7 +163,7 @@ function SlotItem({ label, slot, spend, regain, act }: { label: string; slot: Sl
   return (
     <li className="resource">
       <h4>
-        {label}: {slot.remaining} of {slot.maximum}
+        {label}: {slot.remaining} of {slot.maximum} <Pips filled={slot.remaining} total={slot.maximum} />
       </h4>
       <div className="actions">
         <button type="button" disabled={slot.remaining === 0} onClick={() => act(spend)}>

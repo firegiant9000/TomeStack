@@ -33,9 +33,11 @@ JSON is indented UTF-8 with camelCase names and string enums, and entries are so
 Every export has a `purpose` (ADR-007, D03), and the UI asks for it:
 
 - **`backup`** (default): characters, every pinned revision and every source, including `redistributable: false` ones, and the characters' gap notes ([gap-notes.md](gap-notes.md)). File name `<name>-personal-backup.tomestack.zip`.
-- **`share`**: revisions from non-redistributable sources, and those sources, are left out and listed in `omitted[]`. Characters keep their pins. Gap notes are never included, and an import refuses a share package that has them (`package.gap-notes-not-allowed`). File name `<name>.tomestack.zip`.
+- **`share`**: revisions from non-redistributable sources, and those sources, are left out and listed in `omitted[]`. Characters keep their pins. Gap notes are never included, and an import refuses a share package that has them (`package.gap-notes-not-allowed`). A character entry in a share carries no `notes` (session notes, D22); currency is kept; importing a share over an existing character keeps that character's session notes, while a backup carries the notes and its import takes the package's. File name `<name>.tomestack.zip`.
 
 `package.exportPreview { characterIds, purpose }` returns `{ purpose, fileName, characters, included[], omitted[], gapNotes }` without writing anything. The UI shows the omitted list before a share export. `package.export` returns the package as base64 (used by browser development). In the desktop app, `package.saveAs` writes it where the user chooses in a native Save dialog, and returns only `{ saved, fileName }`. The UI waits for it without a timeout, because the response only comes once the user closes the dialog. Both take `purpose` (default `backup`).
+
+Every writer applies the import's per-entry limit. A character that would be over 5 MB as JSON (for example one whose session notes are long and in a script the JSON encoder escapes, six bytes a character) is refused when it is saved (`character.too-large`). The character export and "Back up everything" also refuse an entry over 5 MB with `package.entry-too-large` before anything is written, for data an older build stored. So no character the app accepted blocks a backup, and a backup TomeStack makes restores within the per-entry limit.
 
 Every limit and check below has its own test in `tests/AppService.Tests/PackageLimitTests.cs`.
 

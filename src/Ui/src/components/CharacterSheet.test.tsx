@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue } from '../api/types';
+import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry } from '../api/types';
 import { CharacterSheet } from './CharacterSheet';
 
 vi.mock('../api/client', () => ({
@@ -18,6 +18,7 @@ vi.mock('../api/client', () => ({
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     info: vi.fn(),
+    play: vi.fn(),
   },
 }));
 
@@ -30,6 +31,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   localStorage.clear(); // the remembered tab is per character id, and these tests share one
+  delete document.documentElement.dataset.compactPlay;
 });
 
 const field = (id: string, label: string, value: number, units: string): DerivedValue => ({ field: id, label, value, computedValue: value, trace: [], warnings: [], automation: 'automatic', units });
@@ -72,6 +74,192 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+
+function undoHarness() {
+  const v = view();
+  const damaged = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 3, temporary: 0 } } };
+  const onChanged = vi.fn();
+  const element = (shown: CharacterView) => <CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  return { v, damaged, onChanged, element };
+}
+
+it('offers Undo for the last play change and sends the inverse through the play command (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockResolvedValue(v);
+  const { rerender } = render(element(v));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged)); // the app shows the returned view
+  const undo = screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' });
+  expect(undo.disabled).toBe(false);
+  await user.click(undo);
+  await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'setHitPoints', amount: 8 }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
+  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>.
+  expect(document.activeElement?.id).toBe('hp-heading');
+});
+
+it('shows the applied state and keeps focus when a later undo step fails (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged } = undoHarness();
+  const first = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 5, temporary: 0 } } };
+  const onError = vi.fn();
+  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 };
+  const before = { ...v, character: { ...v.character, play: { ...play, concentration: { spell: { contentId: 's', revisionId: 'r' }, name: 'Fixture Ward' } } } };
+  const after = { ...damaged, character: { ...v.character, play } };
+  vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('play.spell-not-prepared'));
+  const shown = (x: CharacterView) => <CharacterSheet view={x} onChanged={onChanged} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  const { rerender } = render(shown(before));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(after));
+  rerender(shown(after));
+  await user.click(screen.getByRole('button', { name: /^Undo last change: damage 1/ }));
+  await waitFor(() => expect(onError).toHaveBeenCalled());
+  expect(onChanged).toHaveBeenLastCalledWith(first);
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement?.id).toBe('hp-heading');
+});
+
+it('offers no Undo for play changes that overlapped, since the stored "before" is not the state they changed (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, onChanged, element } = undoHarness();
+  const hit = (current: number): CharacterView => ({ ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current, temporary: 0 } } });
+  const [first, second] = [hit(7), hit(6)];
+  let settleFirst: (view: CharacterView) => void = noop;
+  let settleSecond: (view: CharacterView) => void = noop;
+  vi.mocked(client.play)
+    .mockReturnValueOnce(new Promise<CharacterView>((resolve) => { settleFirst = resolve; }))
+    .mockReturnValueOnce(new Promise<CharacterView>((resolve) => { settleSecond = resolve; }));
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  settleFirst(first);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(first));
+  settleSecond(second);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(second));
+  rerender(element(second));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
+const pending = () => {
+  let settle: (view: CharacterView) => void = noop;
+  const promise = new Promise<CharacterView>((resolve) => {
+    settle = resolve;
+  });
+  return { promise, settle: (view: CharacterView) => settle(view) };
+};
+
+it('withdraws an offered Undo as soon as another play change starts, so the two cannot interleave (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  const next = pending();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockReturnValueOnce(next.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' }).disabled).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // still in flight
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  next.settle(damaged);
+});
+
+it('offers no Undo for a play change made while an Undo was running (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  const [undoStep, hit] = [pending(), pending()];
+  const seven = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockReturnValueOnce(undoStep.promise).mockReturnValueOnce(hit.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  await user.click(screen.getByRole('button', { name: 'Undo last change: damage 1' }));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // while the undo step is in flight
+  undoStep.settle(v);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(v));
+  hit.settle(seven);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(seven));
+  rerender(element(seven));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
+it('offers no Undo for a play change whose reply came after another view was shown, such as a rest (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, onChanged, element } = undoHarness();
+  const hit = pending();
+  const rested = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 8, temporary: 0 } } };
+  const seven = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  vi.mocked(client.play).mockReturnValueOnce(hit.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  rerender(element(rested)); // a rest's result lands while the damage is in flight
+  hit.settle(seven);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(seven));
+  rerender(element(seven));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
+it('does not offer Undo once another view is shown, such as a rest result (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' }).disabled).toBe(false);
+  rerender(element({ ...v })); // a long rest healed the character: a different view object
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
+it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  const toggle = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Compact view/ });
+  expect(toggle.checked).toBe(false);
+  await user.click(toggle);
+  expect(localStorage.getItem('tomestack.compactPlay')).toBe('on');
+  expect(document.documentElement.dataset.compactPlay).toBe('on');
+});
+
+it('marks proficient and expert fields on Stats and lists passive scores and Speed (D24)', () => {
+  const base = view().sheet.fields;
+  renderSheet(
+    view({
+      fields: [
+        ...base,
+        { ...field('skill.stealth', 'Stealth', 5, 'modifier'), mark: 'expertise' },
+        field('skill.perception', 'Perception', 1, 'modifier'),
+        field('passive.perception', 'Passive Perception', 11, 'score'),
+        field('speed', 'Speed', 30, 'feet'),
+      ],
+    }),
+    'stats',
+  );
+  expect(screen.getByRole('heading', { name: 'Stealth: +5 · expertise' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Perception: +1' })).toBeTruthy(); // no mark when no grant
+  expect(screen.getByRole('heading', { name: /^Passive Perception: 11/ })).toBeTruthy(); // unsigned
+  expect(screen.getByRole('heading', { name: 'Speed: 30 ft.' })).toBeTruthy();
+});
+
+it('groups Features by what granted them, then by kind, and drops none (D25)', () => {
+  const ref = (n: number) => ({ contentId: `00000000-0000-4000-8000-00000000c${n}00`, revisionId: `00000000-0000-4000-8000-00000000d${n}00` });
+  const origin = { kind: 'content' as const, rulesFamily: 'srd-5.1' as const };
+  const entry = (n: number, name: string, kind: FeatureEntry['kind'], grantedByName?: string): FeatureEntry => ({
+    content: ref(n), name, kind, origin, automation: 'reference', effects: [], diagnostics: [], grantedBy: grantedByName ? ref(9) : undefined, grantedByName,
+  });
+  renderSheet(
+    view({
+      features: [entry(1, 'Fixture Fighter', 'class'), entry(2, 'Fixture Rage', 'feature', 'Fixture Fighter'), entry(3, 'Fixture Alert', 'feat', 'Fixture Wayfarer'), entry(4, 'Fixture Torch', 'item')],
+    }),
+    'features',
+  );
+  expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
+  expect(Array.from(document.querySelectorAll('.feature .option-name')).map((n) => n.textContent)).toEqual(['Fixture Fighter', 'Fixture Torch', 'Fixture Rage', 'Fixture Alert']);
+});
 
 it('offers Spells to a caster, or when a spell field has a value, and opens on Play', () => {
   renderSheet(view());
@@ -177,6 +365,19 @@ it('renders the print preview after the summary and before the body, matching th
   await user.click(screen.getByRole('button', { name: 'Print…' }));
   const article = document.querySelector('article.sheet') as HTMLElement;
   expect(Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`)).toEqual(['header.sheet-header', 'section.sheet-summary', 'section.print-sheet', 'div.sheet-body']);
+});
+
+it('moves focus to the print preview heading when the preview opens (investigation 2026-10-06 item 9)', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  const print = screen.getByRole('button', { name: 'Print…' });
+  expect(print.getAttribute('aria-controls')).toBe('print-preview');
+  await user.click(print);
+  const preview = screen.getByRole('region', { name: 'Print preview' });
+  expect(preview.id).toBe('print-preview');
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })));
 });
 
 it('moves focus to Play when the open tab stops being offered', async () => {

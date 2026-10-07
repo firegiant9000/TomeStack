@@ -14,6 +14,7 @@ import type {
 } from '../../api/types';
 import { DdbChooseStep } from './DdbChooseStep';
 import { DdbFamilyStep } from './DdbFamilyStep';
+import type { NumberPreset } from './ddbLabels';
 import { DdbMatchesStep } from './DdbMatchesStep';
 import { DdbNumbersStep } from './DdbNumbersStep';
 import { DdbSummaryStep } from './DdbSummaryStep';
@@ -43,8 +44,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [campaignId, setCampaignId] = useState<string>();
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [numbers, setNumbers] = useState<Record<string, NumberAction>>({});
+  const [numberPreset, setNumberPreset] = useState<NumberPreset>('manual');
   const [answers, setAnswers] = useState<ChoiceSelection[]>([]);
   const [includePlayState, setIncludePlayState] = useState(false);
+  const [equipMatched, setEquipMatched] = useState(true);
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
@@ -74,6 +77,20 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     };
   }, []);
 
+  // D16h: the preset is a default, never a write. `numbers` holds only the user's own row choices; a differing row without one
+  // takes the preset's action. `differs` is computed before overrides, so this set is stable once the first preview is in.
+  const presetAction: NumberAction | undefined = numberPreset === 'sheet' ? 'keepSheet' : numberPreset === 'sources' ? 'useTomeStack' : undefined;
+  const effectiveNumbers: Record<string, NumberAction> = { ...numbers };
+  if (preview) {
+    // Speed is the exception: TomeStack's number is only the placeholder 30 feet until species content carries one, so a
+    // sheet's speed is kept by default whatever the preset, Manual included (a row choice of the user's still wins).
+    for (const row of preview.comparison) {
+      if (!row.differs || row.field in numbers) continue;
+      if (row.field === 'speed') effectiveNumbers[row.field] = 'keepSheet';
+      else if (presetAction) effectiveNumbers[row.field] = presetAction;
+    }
+  }
+
   const request: DdbPreviewRequest | undefined =
     read && family
       ? {
@@ -81,9 +98,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           rulesFamily: family,
           campaignId,
           resolutions: Object.values(resolutions),
-          numberChoices: Object.entries(numbers).map(([field, action]) => ({ field, action })),
+          numberChoices: Object.entries(effectiveNumbers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([field, action]) => ({ field, action })),
           includePlayState,
           answers,
+          equipMatched,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -211,6 +229,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             suggested={read.suggestedFamily}
             family={family}
             campaignId={campaignId}
+            numberPreset={numberPreset}
+            onNumberPreset={setNumberPreset}
             onFamily={(next) => {
               setFamily(next);
               setCampaignId(undefined); // campaigns belong to one family; the select only lists the new family's
@@ -235,13 +255,19 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             resolutions={resolutions}
             answers={answers}
             onResolve={(resolution) => {
-              setResolutions((all) => ({ ...all, [resolution.rowId]: resolution }));
+              // A new class match makes an earlier pick for that class's subclass row stale (its choice may differ).
+              setResolutions((all) => {
+                const next = { ...all, [resolution.rowId]: resolution };
+                if (/^class:\d+$/.test(resolution.rowId)) delete next[`${resolution.rowId}:subclass`];
+                return next;
+              });
               dropAnswersHolding(resolution.rowId);
             }}
             onClear={(rowId) => {
               setResolutions((all) => {
                 const next = { ...all };
                 delete next[rowId];
+                if (/^class:\d+$/.test(rowId)) delete next[`${rowId}:subclass`];
                 return next;
               });
               dropAnswersHolding(rowId);
@@ -250,7 +276,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             onError={onError}
           />
         )}
-        {step === 4 && <DdbNumbersStep preview={preview} numbers={numbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} />}
+        {step === 4 && <DdbNumbersStep preview={preview} numbers={effectiveNumbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} preset={numberPreset} />}
         {step === 5 && (
           <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
         )}

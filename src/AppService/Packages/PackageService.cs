@@ -69,8 +69,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
+        // D22: session notes are the player's journal and leave the machine only in a personal backup (like gap notes).
         foreach (var character in plan.Characters)
-            files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null }));
+            files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null, Notes = purpose == ExportPurpose.Share ? [] : character.Notes }));
         // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text). A share writes it
         // as a campaign pack does, without the pending list or unknown properties (M6 stack review); a backup keeps both.
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())
@@ -81,6 +82,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
             foreach (var note in plan.Characters.SelectMany(c => store.ListGapNotes(c.Id)))
                 files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
         }
+
+        RequireEntriesWithinLimit(files.Select(f => (f.Key, f.Value.Bytes.LongLength)));
 
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
@@ -103,6 +106,21 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 WriteEntry(zip, path, file.Bytes, createdAt);
         }
         return new ExportResult(plan.FileName, buffer.ToArray(), manifest);
+    }
+
+    /// <summary>
+    /// Import refuses an entry over <see cref="MaxEntryBytes"/>, so export refuses to write one (review fix; as for source
+    /// packs): a long journal in a script that the JSON encoder escapes could otherwise make a backup that cannot be imported.
+    /// Checked before anything is written.
+    /// </summary>
+    internal static void RequireEntriesWithinLimit(IEnumerable<(string Path, long Bytes)> entries)
+    {
+        var tooLarge = entries.Where(e => e.Bytes > MaxEntryBytes).Select(e => e.Path).ToList();
+        if (tooLarge.Count > 0)
+        {
+            throw new PackageException(
+                [new("package.entry-too-large", $"'{tooLarge[0]}' is larger than a package entry can be ({MaxEntryBytes / (1024 * 1024)} MB), so a package holding it could not be imported. Nothing was written. For a character, shorten its session notes.")]);
+        }
     }
 
     private static LicenseNotice Notice(SourceRecord s) => new(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution, s.ModificationNotice);
@@ -372,7 +390,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 else replaced++;
                 // SPEC C-08: only a full library restore brings the archive mark back. A character package keeps the local
                 // mark (or none for a new character), so an import never archives or unarchives anything by itself.
-                store.SaveCharacter(library ? character : character with { ArchivedAt = local?.ArchivedAt });
+                // D22: a share carries no session notes, so importing one keeps the local journal; a backup brings its own.
+                store.SaveCharacter(library
+                    ? character
+                    : character with { ArchivedAt = local?.ArchivedAt, Notes = parsed.Manifest.Purpose == ExportPurpose.Share ? local?.Notes ?? [] : character.Notes });
             }
             foreach (var note in parsed.GapNotes)
             {

@@ -101,8 +101,8 @@ internal sealed class DdbHarness : IDisposable
         return Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
     }
 
-    public DdbPreview Preview(SheetBuilder sheet, string family, IReadOnlyList<Resolution>? resolutions = null, IReadOnlyList<NumberChoice>? numbers = null, bool play = false, Guid? campaign = null) =>
-        Temp.App.PreviewDdbImport(new(Read(sheet), family, campaign, resolutions, numbers, play));
+    public DdbPreview Preview(SheetBuilder sheet, string family, IReadOnlyList<Resolution>? resolutions = null, IReadOnlyList<NumberChoice>? numbers = null, bool play = false, Guid? campaign = null, bool equip = false) =>
+        Temp.App.PreviewDdbImport(new(Read(sheet), family, campaign, resolutions, numbers, play, EquipMatched: equip));
 
     /// <summary>The installed name of a revision (so the tests hold ids, not rules text).</summary>
     public string Name(ContentReference reference, string family = RulesFamilies.Srd521) =>
@@ -226,6 +226,93 @@ public class DdbImportTests
         Assert.Equal(MatchStatus.NoPlace, row.Status);
         Assert.Equal("choice.not-offered", row.Note);
         Assert.Null(Choice(preview.Character, "barbarian-subclass"));
+    }
+
+    // ---- D16f: a 2014 sheet names no subclass ----
+
+    [Fact]
+    public void A_2014_sheet_with_no_subclass_offers_the_class_choice_options_and_blocks_create_until_one_is_picked_or_left_out()
+    {
+        using var h = new DdbHarness();
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchKind.Subclass, MatchStatus.Choose), (row.Kind, row.Status));
+        Assert.Equal($"{h.Name(Barbarian)} subclass (not on the sheet)", row.Label);
+        Assert.Contains(row.Candidates, c => c.Reference.ContentId == Berserker.ContentId && c.Placement.Kind == PlacementKind.Choice);
+        Assert.Null(row.Note);
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_subclass_whose_granted_feature_is_on_the_sheet_is_detected_and_recorded_as_the_choice()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Path Notes", RulesFamilies.Srd521);
+        var sense = Publish(h.Temp, source, ContentKind.Feature, "Fixture Storm Sense", [RulesFamilies.Srd521]);
+        var path = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Storms", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-sense", Grant = GrantKind.Content, Content = sense, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", $"Fixture Storm Sense\n{h.Name(Rage)}"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(path, row.Chosen!.Reference);
+        Assert.Equal(path, Assert.Single(row.Candidates.Take(1)).Reference); // detected first
+        Assert.Equal([path], Choice(preview.Character, "barbarian-subclass")!.Selected);
+        // The subclass's feature is now on the draft, so its sheet row matches instead of becoming a gap note.
+        Assert.Equal(MatchStatus.Matched, preview.Matches.Single(r => r.Kind == MatchKind.Feature && r.Label == "Fixture Storm Sense").Status);
+    }
+
+    [Fact]
+    public void Two_subclasses_whose_granted_features_are_both_on_the_sheet_need_a_choice_with_both_listed_first()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Twin Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Twin Gift", [RulesFamilies.Srd521]);
+        var embers = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Embers", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-embers", Grant = GrantKind.Content, Content = shared, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+        var ash = Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Ash", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-ash", Grant = GrantKind.Content, Content = shared, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Twin Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status); // never a silent pick between two detections
+        Assert.Null(row.Chosen);
+        Assert.Equal(
+            new[] { embers, ash }.Select(r => r.ContentId).Order(),
+            row.Candidates.Take(2).Select(c => c.Reference.ContentId).Order());
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_user_pick_for_the_offered_subclass_row_is_recorded_and_counted_as_chosen()
+    {
+        using var h = new DdbHarness();
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
+            resolutions: [new Resolution("class:0:subclass", Berserker, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Matched, row.Status);
+        Assert.Equal([Berserker.ContentId], Choice(preview.Character, "barbarian-subclass")!.Selected.Select(s => s.ContentId));
+        Assert.Equal(1, preview.Report.Chosen);
+        Assert.True(preview.CanApply);
+    }
+
+    [Fact]
+    public void No_subclass_row_is_offered_when_the_sheet_names_none_and_the_class_is_below_its_choice_level_or_unmatched()
+    {
+        using var h = new DdbHarness();
+        var below = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 2"), RulesFamilies.Srd521);
+        Assert.DoesNotContain(below.Matches, r => r.RowId == "class:0:subclass");
+        Assert.True(below.CanApply);
+
+        var unmatched = h.Preview(new SheetBuilder("Fixture Nobody 5"), RulesFamilies.Srd521);
+        Assert.DoesNotContain(unmatched.Matches, r => r.RowId == "class:0:subclass");
     }
 
     [Fact]
@@ -691,8 +778,119 @@ public class DdbImportTests
         Assert.True(preview.Report.FamilyMismatch); // the 2014 layout suggests srd-5.1
         Assert.Contains("currency", preview.Report.NotBroughtOver);
         Assert.Contains("speed", preview.Report.NotBroughtOver);
+        Assert.Contains("passivePerception", preview.Report.NotBroughtOver);
         Assert.NotEqual(Guid.Empty, preview.Character.Id);
         Assert.Equal("Testy McFixture", preview.Character.Name);
+    }
+
+    // D16e amended, D24: a test-only layout with invented field names, parsed to a sheet and proposed directly.
+    private static DdbPreview ProposeFromTestLayout(DdbHarness h, params (string Semantic, string Value)[] reads) =>
+        ProposeFromTestLayout(h, null, reads);
+
+    private static DdbPreview ProposeFromTestLayout(DdbHarness h, IReadOnlyList<NumberChoice>? choices, params (string Semantic, string Value)[] reads)
+    {
+        var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels") };
+        var form = new List<FormField> { new("fixture class", "text", 1, $"{h.Name(Barbarian)} 1") };
+        foreach (var (semantic, value) in reads)
+        {
+            var name = $"fixture {semantic}";
+            fields[name] = new(semantic);
+            form.Add(new(name, "text", 1, value));
+        }
+        var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes", []);
+        Assert.Empty(LayoutMaps.Problems(map));
+        var sheet = DdbParser.Parse(map, form);
+        return h.Temp.App.ProposeDdbCharacter(sheet, new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, choices, false), Guid.NewGuid());
+    }
+
+    [Fact]
+    public void Coins_the_layout_maps_become_the_characters_currency_and_are_no_longer_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h, ("currency.cp", "3"), ("currency.gp", "12"));
+
+        Assert.Equal(new Currency(Cp: 3, Gp: 12), preview.Character.Currency);
+        Assert.DoesNotContain("currency", preview.Report.NotBroughtOver);
+        Assert.Contains("speed", preview.Report.NotBroughtOver); // this layout maps no speed
+    }
+
+    [Fact]
+    public void A_sheet_with_no_coin_fields_leaves_currency_empty_and_lists_it_as_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h);
+
+        Assert.Equal(new Currency(), preview.Character.Currency);
+        Assert.Contains("currency", preview.Report.NotBroughtOver);
+    }
+
+    [Fact]
+    public void A_partly_read_purse_brings_no_coins_over_and_is_listed_not_zeroed_silently()
+    {
+        using var h = new DdbHarness();
+
+        foreach (var bad in new[] { "-4", "abc", "1,250", "1000001" })
+        {
+            var preview = ProposeFromTestLayout(h, ("currency.cp", bad), ("currency.gp", "12"));
+
+            Assert.Equal(new Currency(), preview.Character.Currency);
+            Assert.Contains("currency", preview.Report.NotBroughtOver);
+        }
+    }
+
+    [Fact]
+    public void A_blank_coin_next_to_a_readable_one_stays_zero_and_a_coin_of_250000_reads()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h, ("currency.cp", ""), ("currency.gp", "250000"));
+
+        Assert.Equal(new Currency(Gp: 250_000), preview.Character.Currency);
+        Assert.DoesNotContain("currency", preview.Report.NotBroughtOver);
+    }
+
+    [Fact]
+    public void A_mapped_speed_that_is_blank_or_unreadable_is_listed_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        foreach (var value in new[] { "", "fast" })
+        {
+            var preview = ProposeFromTestLayout(h, ("numbers.speed", value), ("numbers.passive.perception", value));
+
+            Assert.Contains("speed", preview.Report.NotBroughtOver);
+            Assert.Contains("passivePerception", preview.Report.NotBroughtOver);
+            Assert.DoesNotContain(preview.Comparison, n => n.Field is "speed" or "passive.perception");
+        }
+    }
+
+    [Fact]
+    public void A_sheet_speed_differing_from_the_calculated_one_is_compared_and_keeping_it_overrides_speed()
+    {
+        using var h = new DdbHarness();
+
+        var compared = ProposeFromTestLayout(h, ("numbers.speed", "25"), ("numbers.passive.perception", "10"));
+        var speed = Assert.Single(compared.Comparison, n => n.Field == FieldIds.Speed);
+        Assert.Equal((25, 30, true), (speed.Sheet, speed.Calculated, speed.Differs));
+        var passive = Assert.Single(compared.Comparison, n => n.Field == FieldIds.Passive("perception"));
+        Assert.Equal((10, passive.Calculated != 10), (passive.Sheet, passive.Differs));
+        Assert.DoesNotContain(compared.Report.NotBroughtOver, c => c is "speed" or "passivePerception");
+        Assert.Empty(compared.Character.Overrides);
+
+        var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels"), ["fixture speed"] = new("numbers.speed") };
+        var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes", []);
+        var sheet = DdbParser.Parse(map, [new("fixture class", "text", 1, $"{h.Name(Barbarian)} 1"), new("fixture speed", "text", 1, "25")]);
+        var kept = h.Temp.App.ProposeDdbCharacter(sheet,
+            new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, [new(FieldIds.Speed, NumberAction.KeepSheet)], false), Guid.NewGuid());
+
+        var @override = Assert.Single(kept.Character.Overrides);
+        Assert.Equal((FieldIds.Speed, 25), (@override.Field, @override.Value));
+
+        var keptPassive = ProposeFromTestLayout(h, [new(FieldIds.Passive("perception"), NumberAction.KeepSheet)], ("numbers.passive.perception", "99"));
+        var passiveOverride = Assert.Single(keptPassive.Character.Overrides);
+        Assert.Equal((FieldIds.Passive("perception"), 99), (passiveOverride.Field, passiveOverride.Value));
     }
 
     [Fact]
@@ -778,5 +976,238 @@ public class DdbImportTests
 
         Assert.NotEmpty(strings);
         Assert.All(sentinels, s => Assert.DoesNotContain(strings, m => m.Contains(s, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Equip_matched_equips_weapons_and_armour_but_not_other_items_and_is_off_by_default()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Gear Notes", RulesFamilies.Srd521);
+        var rope = Publish(h.Temp, source, ContentKind.Item, "Fixture Rope Coil", [RulesFamilies.Srd521]);
+        var blade = Publish(h.Temp, source, ContentKind.Item, "Fixture Short Blade", [RulesFamilies.Srd521],
+            effects: [new WeaponEffect { Id = "blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "piercing", WeaponKey = "fixture-blade" }]);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Rope Coil", 1).Item("Fixture Short Blade", 1);
+
+        var off = h.Preview(sheet, RulesFamilies.Srd521);
+        Assert.All(off.Character.Equipment, e => Assert.False(e.Equipped));
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+        Assert.Equal([(rope, false), (blade, true)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+    }
+
+    [Fact]
+    public void Equip_matched_wears_only_the_first_body_armour_and_the_first_shield()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Armoury Notes", RulesFamilies.Srd521);
+        ContentReference Armour(string name, ArmorCategory category, int ac) => Publish(h.Temp, source, ContentKind.Item, name, [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = $"armor-{ac}-{category}", Category = category, ArmorClass = ac }]);
+        var mail = Armour("Fixture Mail", ArmorCategory.Heavy, 16);
+        var spare = Armour("Fixture Spare Coat", ArmorCategory.Light, 11);
+        var shield = Armour("Fixture Buckler", ArmorCategory.Shield, 2);
+        var second = Armour("Fixture Second Buckler", ArmorCategory.Shield, 2);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1")
+            .Item("Fixture Mail", 1).Item("Fixture Spare Coat", 1).Item("Fixture Buckler", 1).Item("Fixture Second Buckler", 1);
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+
+        Assert.Equal([(mail, true), (spare, false), (shield, true), (second, false)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+        Assert.DoesNotContain(on.Diagnostics, w => w.Code is "equipment.multiple-armor" or "equipment.multiple-shields");
+    }
+
+    [Fact]
+    public void Equip_matched_does_not_give_the_body_slot_to_armour_the_calculator_ignores()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Odd Armoury Notes", RulesFamilies.Srd521);
+        var coat = Publish(h.Temp, source, ContentKind.Item, "Fixture Assisted Coat", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "assisted-coat", Category = ArmorCategory.Light, ArmorClass = 11, Automation = AutomationStatus.Assisted }]);
+        var cloak = Publish(h.Temp, source, ContentKind.Item, "Fixture Timed Cloak", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "timed-cloak", Category = ArmorCategory.Light, ArmorClass = 12, Timing = EffectTiming.WhileActive }]);
+        var mail = Publish(h.Temp, source, ContentKind.Item, "Fixture Real Mail", [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = "real-mail", Category = ArmorCategory.Heavy, ArmorClass = 16 }]);
+        var sheet = new SheetBuilder($"{h.Name(Barbarian)} 1").Item("Fixture Assisted Coat", 1).Item("Fixture Timed Cloak", 1).Item("Fixture Real Mail", 1);
+
+        var on = h.Preview(sheet, RulesFamilies.Srd521, equip: true);
+
+        Assert.Equal([(coat, false), (cloak, false), (mail, true)], on.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+    }
+
+    [Fact]
+    public void A_sheets_own_equipped_marks_win_and_the_guess_only_fills_items_with_no_mark()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Marked Notes", RulesFamilies.Srd521);
+        ContentReference Armour(string name, ArmorCategory category, int ac) => Publish(h.Temp, source, ContentKind.Item, name, [RulesFamilies.Srd521],
+            effects: [new ArmorEffect { Id = $"armor-{ac}-{category}", Category = category, ArmorClass = ac }]);
+        var weapon = new WeaponEffect { Id = "marked-blade", Category = WeaponCategory.Simple, Attack = WeaponAttack.Melee, Damage = "1d6", DamageType = "piercing", WeaponKey = "fixture-marked-blade" };
+        var spare = Armour("Fixture Spare Coat", ArmorCategory.Light, 11);
+        var mail = Armour("Fixture Marked Mail", ArmorCategory.Heavy, 16);
+        var shield = Armour("Fixture Marked Buckler", ArmorCategory.Shield, 2);
+        var other = Armour("Fixture Other Buckler", ArmorCategory.Shield, 2);
+        var blade = Publish(h.Temp, source, ContentKind.Item, "Fixture Marked Blade", [RulesFamilies.Srd521], effects: [weapon]);
+        var token = h.Read(new SheetBuilder($"{h.Name(Barbarian)} 1")
+            .Item("Fixture Spare Coat", 1).Item("Fixture Marked Mail", 1).Item("Fixture Marked Buckler", 1).Item("Fixture Other Buckler", 1).Item("Fixture Marked Blade", 1));
+        var read = h.Temp.App.DdbSessions.Peek(token)!;
+        // The 2014 layout has no equipped mark, so the marks are set on the read sheet itself (what a layout with a mark would give).
+        bool?[] marks = [null, true, false, null, false];
+        var marked = read with { Items = [.. read.Items.Select((r, i) => Read<ItemText>.Ok(r.Value! with { Equipped = marks[i] }))] };
+
+        var preview = h.Temp.App.ProposeDdbCharacter(marked, new DdbPreviewRequest(token, RulesFamilies.Srd521, null, null, null, false, EquipMatched: true), Guid.NewGuid());
+
+        Assert.Equal(
+            [(spare, false), (mail, true), (shield, false), (other, true), (blade, false)],
+            preview.Character.Equipment.Select(e => (e.Item, e.Equipped)));
+        Assert.DoesNotContain(preview.Diagnostics, w => w.Code is "equipment.multiple-armor" or "equipment.multiple-shields");
+    }
+
+    [Fact]
+    public void A_request_that_omits_equipMatched_equips_by_default_like_the_UI()
+    {
+        // Investigation 2026-10-06 item 6: the C# default was false while the UI sent true; a caller that omitted the field got no equipping.
+        var json = """{"token":"00000000-0000-4000-8000-000000000001","rulesFamily":"srd-5.1","includePlayState":false}""";
+        var request = JsonSerializer.Deserialize<DdbPreviewRequest>(json, RulesJson.Compact)!;
+        Assert.True(request.EquipMatched);
+    }
+
+    [Fact]
+    public void A_detected_subclass_from_a_source_the_campaign_does_not_allow_carries_the_campaign_warning()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Path Notes", RulesFamilies.Srd521);
+        var sense = Publish(h.Temp, source, ContentKind.Feature, "Fixture Storm Sense", [RulesFamilies.Srd521]);
+        Publish(h.Temp, source, ContentKind.Subclass, "Fixture Path of Storms", [RulesFamilies.Srd521],
+            effects: [new GrantEffect { Id = "grant-sense", Grant = GrantKind.Content, Content = sense, Level = 3 }],
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+        var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Fixture Table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [Guid.Parse("52500000-0000-4000-8000-000000000001")], HouseRules = "Fixture notes." });
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Storm Sense"), RulesFamilies.Srd521, campaign: campaign.Id);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "campaign.source-not-allowed"), (row.Status, row.Note));
+    }
+
+    [Fact]
+    public void A_resolution_for_a_subclass_the_class_choice_does_not_offer_asks_again_and_keeps_create_blocked()
+    {
+        using var h = new DdbHarness();
+        var elsewhere = Publish(h.Temp, Source(h.Temp, "Fixture Elsewhere Notes", RulesFamilies.Srd521), ContentKind.Subclass, "Fixture Path of Elsewhere", [RulesFamilies.Srd521]);
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3"), RulesFamilies.Srd521,
+            resolutions: [new Resolution("class:0:subclass", elsewhere, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Choose, "resolution.not-found"), (row.Status, row.Note));
+        Assert.Contains(row.Candidates, c => c.Reference.ContentId == Berserker.ContentId);
+        Assert.False(preview.CanApply);
+    }
+
+    private static ContentReference GiftedPath(DdbHarness h, Guid source, string name, params (ContentReference Feature, int Level)[] grants) =>
+        Publish(h.Temp, source, ContentKind.Subclass, name, [RulesFamilies.Srd521],
+            effects: grants.Select((g, i) => (Effect)new GrantEffect { Id = $"grant-{i}", Grant = GrantKind.Content, Content = g.Feature, Level = g.Level }).ToList(),
+            extendsChoice: new(Barbarian.ContentId, "barbarian-subclass"));
+
+    [Fact]
+    public void A_feature_name_shared_with_a_subclass_that_grants_more_does_not_apply_it_and_lists_the_overlapping_ones_first()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Shared Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var other = Publish(h.Temp, source, ContentKind.Feature, "Fixture Other Gift", [RulesFamilies.Srd521]);
+        var first = GiftedPath(h, source, "Fixture Path of Sharing", (shared, 3), (unique, 3));
+        var second = GiftedPath(h, source, "Fixture Path of Others", (shared, 3), (other, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status);
+        Assert.Null(row.Chosen);
+        Assert.Equal(
+            new[] { first, second }.Select(r => r.ContentId).Order(),
+            row.Candidates.Take(2).Select(c => c.Reference.ContentId).Order());
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_single_subclass_with_only_one_of_its_features_on_the_sheet_is_listed_first_but_not_applied()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Partial Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var path = GiftedPath(h, source, "Fixture Path of Halves", (shared, 3), (unique, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Choose, row.Status);
+        Assert.Null(row.Chosen);
+        Assert.Equal(path, row.Candidates[0].Reference);
+        Assert.False(preview.CanApply);
+    }
+
+    [Fact]
+    public void A_subclass_whose_every_feature_up_to_the_level_is_on_the_sheet_is_detected_beside_one_that_shares_a_name()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Shared Notes", RulesFamilies.Srd521);
+        var shared = Publish(h.Temp, source, ContentKind.Feature, "Fixture Shared Gift", [RulesFamilies.Srd521]);
+        var unique = Publish(h.Temp, source, ContentKind.Feature, "Fixture Unique Gift", [RulesFamilies.Srd521]);
+        var other = Publish(h.Temp, source, ContentKind.Feature, "Fixture Other Gift", [RulesFamilies.Srd521]);
+        var first = GiftedPath(h, source, "Fixture Path of Sharing", (shared, 3), (unique, 3));
+        GiftedPath(h, source, "Fixture Path of Others", (shared, 3), (other, 3));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Shared Gift\nFixture Unique Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(first, row.Chosen!.Reference);
+    }
+
+    [Fact]
+    public void A_feature_granted_above_the_imported_level_is_not_required_to_detect_a_subclass()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Levels Notes", RulesFamilies.Srd521);
+        var early = Publish(h.Temp, source, ContentKind.Feature, "Fixture Early Gift", [RulesFamilies.Srd521]);
+        var late = Publish(h.Temp, source, ContentKind.Feature, "Fixture Late Gift", [RulesFamilies.Srd521]);
+        var path = GiftedPath(h, source, "Fixture Path of Seasons", (early, 3), (late, 6));
+
+        var preview = h.Preview(new SheetBuilder($"{h.Name(Barbarian)} 3").Text("features", "Fixture Early Gift"), RulesFamilies.Srd521);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal((MatchStatus.Matched, "subclass.detected-from-features"), (row.Status, row.Note));
+        Assert.Equal(path, row.Chosen!.Reference);
+    }
+
+    [Fact]
+    public void A_picked_subclass_with_several_published_revisions_is_accepted_and_listed_once()
+    {
+        using var h = new DdbHarness();
+        var source = Source(h.Temp, "Fixture Edited Notes", RulesFamilies.Srd521);
+        // The choice offers every published revision ordered by revision id (random ids), and the row builds its candidate
+        // from the first: retry until the older revision sorts first, the case where it differs from the newest one.
+        ContentReference r1, r2;
+        var attempt = 0;
+        do
+        {
+            r1 = GiftedPath(h, source, $"Fixture Path of Edits {attempt++}");
+            var draft = h.Temp.App.SaveDraft(h.Temp.App.Store.FindRevision(r1)! with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Summary = "Fixture edit." });
+            r2 = h.Temp.App.Publish(draft).Published;
+        }
+        while (r1.RevisionId.CompareTo(r2.RevisionId) >= 0 && attempt < 40);
+        Assert.True(r1.RevisionId.CompareTo(r2.RevisionId) < 0);
+
+        var sheet = () => new SheetBuilder($"{h.Name(Barbarian)} 3");
+        var offered = Row(h.Preview(sheet(), RulesFamilies.Srd521), "class:0:subclass");
+        var pick = offered.Candidates.Single(c => c.Reference.ContentId == r1.ContentId).Reference;
+
+        var preview = h.Preview(sheet(), RulesFamilies.Srd521, resolutions: [new Resolution("class:0:subclass", pick, LeaveOut: false)]);
+
+        var row = Row(preview, "class:0:subclass");
+        Assert.Equal(MatchStatus.Matched, row.Status);
+        Assert.True(preview.CanApply);
+        Assert.Single(row.Candidates, c => c.Reference.ContentId == r1.ContentId);
     }
 }

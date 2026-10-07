@@ -25,7 +25,13 @@ vi.mock('../src/files', async (importOriginal) => ({
   downloadBase64: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // One jsdom window serves the whole file: a preference or `html` attribute left by one test would leak into the next.
+  // The per-character tab memory stays (ids are unique per test and the deep-link test relies on it).
+  for (const key of Object.keys(localStorage)) if (key.startsWith('tomestack.') && !key.startsWith('tomestack.sheetTab.')) localStorage.removeItem(key);
+  for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
+});
 
 function bytesOf(base64: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -87,6 +93,13 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(within(initiative).getByRole('button', { name: 'Apply override' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 
+  // D22: a session note on Notes is the player's journal; the share preview below must not list it.
+  await openTab(user, sheet, 'Notes');
+  const journal = within(sheet).getByRole('form', { name: 'New session note' });
+  await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the share test.');
+  await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
+  await within(sheet).findByText('Private session note for the share test.');
+
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await openTab(user, sheet, 'Manage');
   await user.click(screen.getByRole('button', { name: 'Export package' }));
@@ -98,6 +111,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
   const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
   expect(leftOut.textContent).toMatch(/Nothing is left out/);
+  expect(leftOut.textContent).not.toMatch(/session note/i);
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
@@ -218,6 +232,16 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
 
+  // D23: Undo puts the hit points and the temporary hit points back, then the damage is taken again.
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 12' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35, 5 temporary' })).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
+  const amount = () => within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole<HTMLInputElement>('spinbutton', { name: 'Amount' });
+  await user.clear(amount());
+  await user.type(amount(), '12');
+  await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
+
   await user.click(screen.getByRole('checkbox', { name: 'Poisoned' }));
   await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Poisoned' }).checked).toBe(true));
 
@@ -295,6 +319,17 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   const deathSaves = await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
   await user.click(within(deathSaves).getByRole('button', { name: 'Add a failure (damage at 0)' }));
   await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 1 of 3 failures/ });
+  // D23: healing from 0 clears the death saves, which no command puts back, so it offers no Undo (one that silently wiped
+  // the failure would be worse than none). Then back to 0 hit points for the roll below.
+  await user.clear(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }));
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '1');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  await user.clear(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }));
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '1');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
   await user.type(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('spinbutton', { name: 'd20 rolled at the table' }), '20');
   await user.click(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('button', { name: 'Record this roll' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
@@ -812,7 +847,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
-  await user.click(within(list()).getByRole('button', { name: 'Fixture Ember Lance' }));
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Ember Lance' })); // a slow PDF worker may still be filling the list
   const ember = await detail('Fixture Ember Lance');
   await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
   expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);
@@ -1279,7 +1314,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
       }),
     )
   ).published;
-  const hero = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+  const created = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+  const hero = (await client.saveCharacter({ ...created, currency: { cp: 0, sp: 12, ep: 0, gp: 3, pp: 0 } })).character; // D21: coins the restore puts back
 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
@@ -1289,8 +1325,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
   await expectStatus(/Took a snapshot of E2E Snapshot Hero: E2E with the feat/);
 
-  // The character changes: the feat goes.
-  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [] });
+  // The character changes: the feat goes, and the coins change.
+  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [], currency: { cp: 0, sp: 0, ep: 0, gp: 40, pp: 0 } });
   cleanup();
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
@@ -1301,6 +1337,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
   expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
+  // D22: the restore preview names the coin change, through the service's real field names.
+  expect(preview.textContent).toMatch(/Coins go back to 3 gp, 12 sp \(now 40 gp\)\./);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
 
   // "Keep the current state" closes the preview and returns focus to the button that opened it (accessibility item 23).
@@ -1315,6 +1353,7 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   await user.click(within(again).getByRole('button', { name: 'Restore' }));
   await expectStatus(/Restored the snapshot/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
+  expect((await client.getCharacter(hero.id)).character.currency).toEqual({ cp: 0, sp: 12, ep: 0, gp: 3, pp: 0 });
   expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
 });
 
@@ -1361,7 +1400,16 @@ it('reaches the primary actions by keyboard alone', async () => {
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide sidebar' })); // the shell's one header control comes first
   await user.tab();
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New character' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close sidebar' })); // the sidebar's own close control
+  // Owner (2026-10-06): the character list comes before the tools. Earlier tests leave characters behind in the shared
+  // DevHost, so the next stop is the first of them, or "Characters" (the first tool) when the list is empty; the bounded
+  // loop walks past "Characters" to "New character".
+  await user.tab();
+  const list = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('list', { name: 'Characters' });
+  const charactersTool = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('button', { name: 'Characters' });
+  expect(list.contains(document.activeElement) || document.activeElement === charactersTool).toBe(true);
+  for (let i = 0; i < 200 && document.activeElement !== newCharacter; i++) await user.tab();
+  expect(document.activeElement).toBe(newCharacter);
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import package…' }));
 
@@ -1559,9 +1607,14 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.type(within(form).getByRole('textbox', { name: /^What was missing or wrong/ }), 'Private note for the print test.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await within(gaps).findByText('Private note for the print test.');
+  const journal = within(sheet).getByRole('form', { name: 'New session note' });
+  await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the print test.');
+  await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
+  await within(sheet).findByText('Private session note for the print test.');
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
+  expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })); // focus moves to the preview on open
   expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
   expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
   expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
@@ -1573,6 +1626,10 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(preview.textContent).not.toMatch(/[A-Za-z]:\\|\/Users\/|\\Users\\/);
   await user.click(within(preview).getByRole('checkbox', { name: /^Include gap notes/ }));
   expect(await within(preview).findByText(/Private note for the print test\./)).toBeTruthy();
+  // Session notes are private too: absent until their own box is ticked.
+  expect(preview.textContent).not.toContain('Private session note for the print test.');
+  await user.click(within(preview).getByRole('checkbox', { name: 'Include session notes (private)' }));
+  expect(await within(preview).findByText(/Private session note for the print test\./)).toBeTruthy();
 
   await user.click(within(preview).getByRole('button', { name: 'Print…' }));
   expect(print).toHaveBeenCalledTimes(1);
@@ -1614,6 +1671,8 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy();
   expect(within(sheet).getByRole('heading', { name: /^Spell attack bonus: \+5/ })).toBeTruthy();
 
+  // Concentration (D19) is not driven here: the fixture pack's only concentration spell (Fixture Veil) is level 2, which this
+  // level 1 character cannot prepare. The panel and its service rules are covered by ConcentrationPanel.test.tsx and PlayCommandTests.
   // Casting spends a slot (a confirmed play change); rolling a spell spends nothing.
   await user.click(within(spells()).getByRole('button', { name: 'Cast Fixture Frost Ring (spend a slot)' }));
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy());
@@ -1980,6 +2039,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await user.click(screen.getByRole('button', { name: 'Next: rules' }));
   // The 2014-style layout suggests SRD 5.1; the user could pick the other family.
   expect(screen.getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  await user.click(screen.getByRole('radio', { name: "Use the character sheet's values" })); // D16h preset
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
 
   const matches = await screen.findByRole('region', { name: 'Matches' });
@@ -2001,6 +2061,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   };
   await nextStep('Next: numbers');
   const armorClass = await screen.findByRole('radiogroup', { name: 'Armor Class' });
+  expect(within(screen.getByRole('radiogroup', { name: 'Armor Class' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true); // pre-filled by the preset
   await user.click(within(armorClass).getByRole('radio', { name: "Keep the sheet's number" }));
   await nextStep('Next: summary');
 
@@ -2008,7 +2069,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the D&D Beyond sheet: 1 override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the D&D Beyond sheet: 3 override\(s\), \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   await openTab(user, sheet, 'Stats');
@@ -2041,22 +2102,25 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
 
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
   const user = userEvent.setup();
-  try {
-    const { unmount } = render(<App />);
-    await user.click(await screen.findByRole('button', { name: 'Settings' }));
-    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
-    await user.click(screen.getByRole('radio', { name: 'Violet' }));
-    expect(document.documentElement.dataset.theme).toBe('violet');
-    unmount();
-    delete document.documentElement.dataset.theme; // so the final check proves the mount effect re-applied the saved theme
-    render(<App />);
-    await screen.findByRole('button', { name: 'Settings' });
-    expect(document.documentElement.dataset.theme).toBe('violet');
-  } finally {
-    // Leave the shared jsdom window as it was for the next test.
-    localStorage.removeItem('tomestack.theme');
-    delete document.documentElement.dataset.theme;
-  }
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Violet' }));
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  await user.click(screen.getByRole('radio', { name: 'Dark' }));
+  expect(document.documentElement.dataset.appearance).toBe('dark');
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Text size' }), '125');
+  expect(document.documentElement.dataset.textSize).toBe('125');
+  unmount();
+  // so the final check proves the mount effect re-applied the saved preferences
+  delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.appearance;
+  delete document.documentElement.dataset.textSize;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('violet');
+  expect(document.documentElement.dataset.appearance).toBe('dark');
+  expect(document.documentElement.dataset.textSize).toBe('125');
 });
 
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
@@ -2078,6 +2142,15 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
   fireEvent.keyDown(document, { key: 'и', code: 'KeyB', ctrlKey: true });
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy();
+
+  // The sidebar's own "Close sidebar" hides it and, since focus was inside, lands focus on the header toggle (WCAG 2.4.3).
+  const close = screen.getByRole('button', { name: 'Close sidebar' });
+  close.focus();
+  await user.click(close);
+  expect(screen.queryByRole('navigation', { name: 'Characters' })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+  await user.click(screen.getByRole('button', { name: 'Show sidebar' }));
+  expect(within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
 
   // Focus inside the sidebar, then hide it by the shortcut: focus must land on the toggle, not on <body>.
   const newCharacter = screen.getByRole<HTMLButtonElement>('button', { name: 'New character' });
@@ -2107,6 +2180,22 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   name.focus();
   await user.keyboard('{Control>}b{/Control}');
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
-  localStorage.removeItem('tomestack.theme');
-  delete document.documentElement.dataset.theme;
+});
+
+it('opens the Characters home screen with a card per character and opens one from it (D25)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const home = await screen.findByRole('region', { name: 'Characters' }); // the start screen; the sidebar's heading and list share the name
+  expect(within(home).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
+  const cards = await within(home).findAllByRole('listitem'); // earlier tests created characters
+  expect(cards.length).toBeGreaterThan(0);
+  expect(within(home).getByRole('list', { name: 'Characters' })).toBeTruthy();
+  const first = cards[0]!;
+  const name = within(first).getByRole('button', { name: /^Open / }).textContent!.replace(/^Open /, '');
+  expect(first.textContent).toMatch(/Level \d+/);
+  await user.click(within(first).getByRole('button', { name: `Open ${name}` }));
+  expect(await screen.findByRole('article', { name })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  const back = await screen.findByRole('region', { name: 'Characters' });
+  expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' }));
 });

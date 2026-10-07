@@ -35,6 +35,7 @@ export const noteLabels: Record<string, string> = {
   'campaign.source-not-allowed': 'The campaign does not allow its source; the sheet will warn.',
   'choice.not-offered': 'The class has not reached the level of its subclass choice.',
   'class.not-matched': 'Its class was not matched.',
+  'subclass.detected-from-features': "Proposed from the sheet's features; change it if the sheet meant another subclass.",
   'content.no-open-choice': 'Installed, but no open choice offers it and it cannot be added on its own.',
   'skill.no-open-choice': 'No open choice offers this skill.',
   'spell.no-caster': 'No class or subclass of the character casts spells.',
@@ -58,4 +59,13 @@ export const notBroughtOverLabels: Record<string, string> = {
   backstory: 'Backstory',
   playerName: 'Player name',
   playState: 'Hit points, spent hit dice and slots, death saves and inspiration (the character starts rested)',
+};
+
+/** D16h (owner, 2026-10-06): a preset on step 2 that pre-fills the Numbers step; "manual" is today's behaviour and the default. */
+export type NumberPreset = 'manual' | 'sources' | 'sheet';
+export const numberPresetIds: readonly NumberPreset[] = ['manual', 'sources', 'sheet'];
+export const numberPresetLabels: Record<NumberPreset, string> = {
+  manual: 'Decide each number myself',
+  sources: "Use the installed sources' values",
+  sheet: "Use the character sheet's values",
 };

@@ -21,7 +21,8 @@ JSON Schema (draft 2020-12) for the JSON that TomeStack stores and exchanges. Th
 | `character.v4.schema.json` | Adds `play`: current and temporary hit points, spent resources, conditions, exhaustion (M2 item 2, SPEC C-05), `equipment` (M2 item 4) and `campaignExceptions` (M2 item 7). Read and upcast | `schemaVersion` |
 | `character.v5.schema.json` | Adds `play.hitDiceSpent`, `play.deathSaves` and `play.inspiration` (short rest and hit dice, SPEC C-05; [rests.md](../features/rests.md)). Read and upcast | `schemaVersion` |
 | `character.v6.schema.json` | Adds `spells` (per caster, prepared or not) and `play.spellSlotsSpent` / `play.pactSlotsSpent` (D04; [spellcasting.md](../features/spellcasting.md)). Read and upcast | `schemaVersion` |
-| `character.v7.schema.json` | Adds `play.toggles` (M3 B2; [m3-effects.md](../features/m3-effects.md)). Current | `schemaVersion` |
+| `character.v7.schema.json` | Adds `play.toggles` (M3 B2; [m3-effects.md](../features/m3-effects.md)). Read and upcast | `schemaVersion` |
+| `character.v8.schema.json` | Adds `currency`, `notes` (dated session notes) and `play.concentration` (owner, 2026-10-06; LIVING_SPECS D19, D21, D22; [sheet-play.md](../features/sheet-play.md)). Current | `schemaVersion` |
 | `package-manifest.v1.schema.json` | `manifest.json` of a `*.tomestack.zip` ([package-format.md](../features/package-format.md)). Still importable | `formatVersion` |
 | `package-manifest.v2.schema.json` | Same layout; content entries are content schema v2. Still importable | `formatVersion` |
 | `package-manifest.v3.schema.json` | Adds `purpose` (`backup` / `share`) and `omitted[]` (ADR-007). Still importable | `formatVersion` |

@@ -38,7 +38,7 @@ public class FieldGraphTests
 
         // scores, modifiers, PB, saves, skills, initiative, AC, HP; attacks and critical range (v8); spell attack, save DC,
         // 9 slot levels, pact slots (v5)
-        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 2 + 9 + 1, sheet.Fields.Count);
+        Assert.Equal(6 + 6 + 1 + 6 + 18 + 1 + 1 + 1 + 2 + 2 + 9 + 1 + 3 + 1, sheet.Fields.Count); // + 3 passives + speed (2026-10-06)
         Assert.Equal((1, 20), (sheet.Field(FieldIds.Attacks).Value, sheet.Field(FieldIds.CriticalRange).Value));
         Assert.Equal(
             ["score", "modifier", "bonus", "modifier", "modifier", "modifier", "modifier", "score", "score"],
@@ -79,6 +79,7 @@ public class FieldGraphTests
         var save = sheet.Field(FieldIds.Save(Ability.Dex));
         Assert.Equal(3 + 3, save.Value);
         Assert.Equal(3 + 6, sheet.Field(FieldIds.Skill("stealth")).Value);
+        Assert.Equal((ProficiencyMark.Proficient, ProficiencyMark.Expertise, ProficiencyMark.None), (save.Mark, sheet.Field(FieldIds.Skill("stealth")).Mark, sheet.Field(FieldIds.Save(Ability.Str)).Mark));
         Assert.Equal(0, sheet.Field(FieldIds.Save(Ability.Str)).Value);
         var step = save.Trace[^1];
         Assert.Equal(("add", 3, 6, FieldIds.Save(Ability.Dex)), (step.Operation, step.Amount!.Value, step.Result, step.Field!));
@@ -249,7 +250,7 @@ public class FieldGraphTests
         var classy = Content(
             "Fixture Class Scaling", ContentKind.Feature,
             Bonus("scaling", FieldIds.Initiative, "floor(CLASS_LEVEL / 2)"),
-            Bonus("nowhere", "speed", "1"),
+            Bonus("nowhere", "swimSpeed", "1"),
             new GrantEffect { Id = "bad-grant", Grant = GrantKind.Proficiency, Target = "skill.juggling" });
 
         var sheet = Sheet(Fixtures.Srd51Character(), classy);

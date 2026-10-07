@@ -50,7 +50,12 @@ public static class DdbSemantics
         .. Enum.GetValues<Ability>().Select(FieldIds.Save),
         .. CharacterCalculator.Skills.Select(s => FieldIds.Skill(s.Key)),
         .. Enumerable.Range(1, 9).Select(FieldIds.SpellSlots),
+        // D24: calculated since 2026-10-06 (speed has a rules-policy base; a kept sheet number is a character override, never a content target).
+        FieldIds.Speed, FieldIds.Passive("perception"),
     ];
+
+    /// <summary>The coins of <c>currency.&lt;coin&gt;</c> (D21), in <see cref="Currency"/>'s order.</summary>
+    public static IReadOnlyList<string> Coins { get; } = ["cp", "sp", "ep", "gp", "pp"];
 
     /// <summary>The hit die sizes of <c>play.hitDiceSpent.d&lt;size&gt;</c>.</summary>
     public static IReadOnlyList<int> HitDice { get; } = [6, 8, 10, 12];
@@ -65,6 +70,7 @@ public static class DdbSemantics
         "features[n]", "feats[n]",
         "spells[n].name", "spells[n].prepared", "equipment[n].name", "equipment[n].quantity", "equipment[n].equipped",
         .. NumberIds.Select(id => $"numbers.{id}"),
+        .. Coins.Select(c => $"currency.{c}"),
         "play.currentHitPoints", "play.temporaryHitPoints", "play.deathSuccesses", "play.deathFailures", "play.inspiration",
         .. HitDice.Select(d => $"play.hitDiceSpent.d{d}"),
         .. Enumerable.Range(1, 9).Select(l => $"play.spellSlotsSpent.{l}"),

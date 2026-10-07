@@ -126,7 +126,12 @@ public sealed partial class TomeStackApp
             var value = sheet.Field(field);
             // The modifier cites the step that set the displayed value: the override if there is one, else the last step.
             var origin = value.Trace.Count > 0 ? value.Trace[^1].Origin : null;
-            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, $"{value.Label} (d20 test)"));
+            // Investigation 2026-10-06: an ability modifier field is a check, named as the summary's button names it
+            // ("Strength check"); saves, skills and initiative keep "{label} (d20 test)" (the e2e asserts the save form).
+            var label = field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".mod", StringComparison.Ordinal)
+                ? $"{(value.Label.EndsWith(" modifier", StringComparison.Ordinal) ? value.Label[..^" modifier".Length] : value.Label)} check"
+                : $"{value.Label} (d20 test)";
+            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
         }
         else
         {

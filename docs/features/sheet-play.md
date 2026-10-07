@@ -38,6 +38,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `inspiration` (v5) | Inspiration (2014) or Heroic Inspiration (2024): you have it or not |
 | `toggles[]` (v7) | Active toggles (`{ contentId, toggleId }`; actions `toggleOn`, `toggleOff`; [m3-effects.md](m3-effects.md)) |
 | `spellSlotsSpent[]`, `pactSlotsSpent` (v6) | Spent spell slots per spell level and spent Pact Magic slots ([spellcasting.md](spellcasting.md); actions `spendSlot`, `regainSlot`, `spendPactSlot`, `regainPactSlot`) |
+| `concentration` (v8, D19) | The concentration spell (reference and name) and a pending Constitution save DC |
 
 **Migration on read:** character schema v1–v4 are upcast to v5 with the new state at its default (full hit points, nothing spent, no conditions, no hit dice spent, no death saves, no inspiration), which is exactly their meaning. Characters are stored as JSON and are not hashed, so no database migration is needed. A build before each version refuses its characters (`character.schema-unsupported`, `package.schema-unsupported`) instead of dropping the play state; 0.2.1 refuses v5.
 
@@ -50,7 +51,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `action` | Does | Refused with |
 | --- | --- | --- |
 | `spend` / `regain` | Spends `amount` uses (at most what is left) or regains them (at most what is spent) | `resource.not-found`, `resource.untracked`, `resource.insufficient`, `resource.nothing-spent` |
-| `damage` | Temporary hit points absorb it first; hit points stop at 0 | |
+| `damage` | Temporary hit points absorb it first; hit points stop at 0. While concentrating, sets the pending save DC to max(10, half the damage dealt), capped by the family (`RulesFamilyPolicy.ConcentrationSaveMaximumDc`: 30 under SRD 5.2.1, none under SRD 5.1) and never above 100, which validation accepts; at 0 hit points concentration ends | |
 | `heal` | Up to the maximum | |
 | `setTemporaryHitPoints` | Replaces them (they do not stack) | |
 | `setHitPoints` | 0 to the maximum | `play.hit-points-above-maximum` |
@@ -60,16 +61,24 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `addDeathSaveFailure` | Adds `amount` (1–3) failures, for example damage at 0 hit points (a critical hit is 2) | `play.amount-out-of-range` |
 | `clearDeathSaves` | Resets both to 0 | |
 | `setInspiration` | `amount` 1 gives Inspiration, 0 spends or removes it | `play.amount-out-of-range` |
+| `startConcentration` | Starts concentrating on the concentration spell `contentId` from one of the character's spell lists; the spell must be prepared (a cantrip counts) and the character above 0 hit points | `play.spell-not-found`, `play.spell-not-concentration`, `play.spell-not-prepared`, `play.unconscious` |
+| `endConcentration` | The spell ends | `play.not-concentrating` |
+| `clearConcentrationCheck` | The Constitution save was kept: clears the pending DC | `play.not-concentrating` |
 
 Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clears death saving throws** (SRD): `heal` or `setHitPoints` from 0 to above 0 resets them in the same confirmed change.
 
+## Undo (D23)
+
+"Undo last change" on Play sends the inverse of the last play command (hit points are set back exactly; spends are regained; conditions, slots, toggles and concentration mirror). Turning on a toggle that is backed by a resource is undone by turning it off and giving the use back; turning one off cannot be undone (switching it on again would spend a use you did not spend). Concentrating on another spell replaces the first, and undoing it concentrates on the first again (a save DC that was pending on the earlier spell is not restored). A change that changed nothing (a condition the character already had) has no Undo. A change that overlapped another (quick repeated presses, which the shell runs one at a time), that was made while an Undo was running, or whose reply came after another state was shown (a rest, a snapshot restore or a save landing while it was in flight) has no Undo either, because its "before" is not the state it changed. Starting any play change withdraws the Undo on offer at once, so an Undo can never run between a change and its reply. Damage that raised a Constitution save DC also clears it, and damage to 0 that ended concentration starts it again after the hit points are set back. One level, for this sheet while it is open; nothing is stored. The button is offered only while the sheet still shows the state that change produced: a rest, a save, a level-up or a reload makes it disabled, so Undo cannot overwrite them. Death saves and ending concentration cannot be undone (no exact inverse); snapshots cover the rest. Regaining hit points from 0 clears the death saves, and no command puts them back, so while saves are recorded that change offers no Undo (rather than an Undo that silently wipes them). Damage that raised an already pending concentration DC leaves the raised DC. If a later step fails, the steps already applied are shown and the error is reported. After Undo, focus moves to the hit points heading (hit point changes) or the compact view checkbox.
+
 ## Rolls on the sheet (SPEC C-04)
 
-- Every ability modifier, saving throw, skill and initiative field has a "Roll" button on the Stats tab (a d20 test through the `roll` command), and the summary has a "Roll <Ability> check (+N)" button per ability. The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014 ([sheet-layout.md](sheet-layout.md)), chooses normal, advantage or disadvantage.
-- **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice.
+- Every ability modifier, saving throw, skill and initiative field has a "Roll" button on the Stats tab (a d20 test through the `roll` command), and the summary has a "Roll <Ability> check (+N)" button per ability. The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014 ([sheet-layout.md](sheet-layout.md)), chooses normal, advantage or disadvantage. The result of a summary roll reads "Strength check: 14 (1d20)", the same words as its button (2026-10-06).
+- **Attacks and actions** (M2 item 2, [multiclass-and-attacks.md](multiclass-and-attacks.md)): equipped weapons' attacks (to hit, damage, traced), and feature rolls grouped by action, bonus action, reaction and other. "Critical hit" doubles damage dice. Resources and spell slots show pips beside the text (decoration only; the text is the value).
 - The **Last roll** region (in the summary, visible on every tab; `aria-live="polite"`) shows the total, formula, mode, every die (dropped and critical dice are marked), the modifiers and the provenance (content, source, page). Since ADR-015 the region also draws the dice (hidden from assistive tech; the text is the result): they show the service's values at once and tumble for 0.6 s, unless reduced motion is on or the setting is off. At most ten are drawn; the text lists every die.
 - **Rolling never spends anything.** If the roll names a resource (`linkedResourceId`), the record offers a separate "Spend 1 …" button, which is a confirmed `character.play`.
 - **Death saving throws** (the panel appears at 0 hit points, or while saves are recorded): "Roll death saving throw" rolls a d20 (`roll` with `deathSave: true`), and "Record death saving throw (N)" records it. "d20 rolled at the table" + "Record this roll" records a physical roll. The heading reads "Death saving throws: 1 of 3 successes, 2 of 3 failures".
+- **Concentration** (D19): the Spells tab offers "Concentrate on {spell}" for prepared concentration spells (disabled while concentrating on that spell). The Play tab then shows "Concentration: {spell}" with the Constitution save roll ("Roll Constitution saving throw", which changes nothing) and the two confirmed outcomes, "Kept concentration" and "End concentration". After damage the heading adds ", Constitution saving throw DC {n} pending". A long rest's preview lists the end of concentration (untick it to keep it); damage that drops hit points to 0, or setting hit points to 0, ends it at once. The stored spell name is at most 200 characters (`play.concentration-invalid`; also `maxLength` in the character schema); a longer content name is clipped to 200 when concentration starts, never refused.
 - The hit points panel shows the hit dice left and an "Inspiration" / "Heroic Inspiration" checkbox, and the summary has the same checkbox and one-point hit-point buttons.
 
 ## Not in this slice

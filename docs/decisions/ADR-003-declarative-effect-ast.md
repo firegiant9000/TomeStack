@@ -32,7 +32,7 @@ Every effect has `type` (the discriminator), `id`, `automation` (`automatic` / `
 
 **Unknown types** deserialize to `UnknownEffect`, which keeps the original JSON and writes it back with the same properties, order and values (whitespace and string escaping are normalized), and is always reference-only (`effect.unsupported`). A *known* type with a malformed body, including wrong value kinds such as a numeric `id`, degrades the same way instead of failing the whole revision. Only an effect that is not a JSON object fails its revision.
 
-Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability.<abl>.score`, `ability.<abl>.mod`, `save.<abl>`, `skill.<name>` (all 18 skills; see `features/levels-and-classes.md`), and since content v5 `spellAttack`, `spellSaveDc`, `spellSlots.1`–`spellSlots.9` and `pactSlots`.
+Field ids: `initiative`, `proficiencyBonus`, `armorClass`, `hitPoints`, `ability.<abl>.score`, `ability.<abl>.mod`, `save.<abl>`, `skill.<name>` (all 18 skills; see `features/levels-and-classes.md`), and since content v5 `spellAttack`, `spellSaveDc`, `spellSlots.1`–`spellSlots.9` and `pactSlots`; since 2026-10-06 (D24) also `passive.perception`, `passive.insight`, `passive.investigation` and `speed`: calculated; overridable on Stats; content cannot target them until a content schema version allows it (`validate.unknown-target`).
 
 ### Stacking and order (per field)
 

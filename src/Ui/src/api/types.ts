@@ -24,6 +24,15 @@ export interface FieldOverride {
   reason?: string;
 }
 
+/** Character schema v8 (D21): plain coin counts, never converted. */
+export interface Currency {
+  cp: number;
+  sp: number;
+  ep: number;
+  gp: number;
+  pp: number;
+}
+
 export interface Character {
   id: string;
   schemaVersion: number;
@@ -46,6 +55,10 @@ export interface Character {
   play?: PlayState;
   /** Items carried; only equipped ones apply (M2 item 4). */
   equipment?: EquipmentEntry[];
+  /** Character schema v8 (D21): coins carried. */
+  currency?: Currency;
+  /** Character schema v8 (D22): dated session notes; never in a share package. */
+  notes?: { id: string; date: string; text: string; createdAt: string }[];
   /** Spells known or prepared, per caster (character schema v6, D04). */
   spells?: KnownSpell[];
   updatedAt: string;
@@ -130,7 +143,9 @@ export interface DerivedValue {
   warnings: Diagnostic[];
   automation: AutomationStatus;
   override?: FieldOverride;
-  units: 'score' | 'modifier' | 'bonus' | string;
+  units: 'score' | 'modifier' | 'bonus' | 'feet' | string;
+  /** D24: on saves and skills, from a grant. */
+  mark?: 'none' | 'proficient' | 'expertise';
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -225,6 +240,9 @@ export interface FeatureEntry {
   automation: AutomationStatus;
   effects: FeatureEffect[];
   diagnostics: Diagnostic[];
+  /** D25: the content whose grant or choice brought this one in. */
+  grantedBy?: ContentReference;
+  grantedByName?: string;
 }
 
 export interface HitPointState {
@@ -295,6 +313,8 @@ export interface PlayState {
   hitDiceSpent?: { die: number; spent: number }[];
   deathSaves?: { successes: number; failures: number };
   inspiration?: boolean;
+  /** Character schema v8 (D19): the concentration spell and a pending Constitution save DC after damage. */
+  concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
 }
 
 export type PlayActionKind =
@@ -316,7 +336,10 @@ export type PlayActionKind =
   | 'spendPactSlot'
   | 'regainPactSlot'
   | 'toggleOn'
-  | 'toggleOff';
+  | 'toggleOff'
+  | 'startConcentration'
+  | 'endConcentration'
+  | 'clearConcentrationCheck';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -331,7 +354,7 @@ export interface PlayAction {
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration';
   slotLevel?: number;
   die?: number;
   amount?: number;
@@ -468,6 +491,8 @@ export interface CharacterSummary {
   archivedAt?: string;
   /** The contents this character records a cross-family exception for (ids only). */
   exceptionContentIds?: string[];
+  /** D25: the character's total level. */
+  level: number;
 }
 
 /** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */
@@ -1217,6 +1242,9 @@ export interface RestorePreview {
   exceptionsChange?: boolean;
   /** New campaign warnings: the campaign stays as it is, so the snapshot's content may not be allowed there. */
   campaignWarnings?: Diagnostic[];
+  /** Set only when the restore changes the coins (they roll back with the snapshot): the coins now, and the coins it brings back. */
+  currencyNow?: Currency;
+  currencyAfter?: Currency;
 }
 
 export interface RestoreResult {
@@ -1470,6 +1498,8 @@ export interface DdbPreviewRequest {
   includePlayState: boolean;
   /** Open choices answered in the matches step (a 2024 background's ability scores). */
   answers?: ChoiceSelection[];
+  /** D16g: create matched weapons and armour equipped. */
+  equipMatched?: boolean;
 }
 
 /** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */

@@ -16,8 +16,9 @@ import type {
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
-import { ActionsPanel, ClassColumnsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
-import { EquipmentPanel } from './EquipmentPanel';
+import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
+import { SessionNotesPanel } from './SessionNotesPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
@@ -28,17 +29,20 @@ import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { inverseOf, type UndoEntry } from '../undo';
+import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
-const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
+const display = (value: DerivedValue, n: number) =>
+  value.units === 'modifier' || value.units === 'bonus' ? signed(n) : value.units === 'feet' ? `${n} ft.` : `${n}`;
 
 /** Display groups for the calculated fields on the Stats tab; the rules core decides what exists, this only orders it. */
 const statGroups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Abilities', match: (f) => f.startsWith('ability.') },
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
-  { title: 'Skills', match: (f) => f.startsWith('skill.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
+  { title: 'Skills', match: (f) => f.startsWith('skill.') || f.startsWith('passive.') },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
 ];
 // D04: the caster numbers, with traces and overrides, on the Spells tab (ADR-014). Slots combine on the multiclass table
 // (M3 C3); an override is the manual step only for class revisions that do not say how they combine.
@@ -61,6 +65,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const headingId = `field-${value.field}`;
+  const marked = Boolean(value.mark && value.mark !== 'none');
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,11 +77,17 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
   }
 
   return (
-    <section aria-labelledby={headingId} className="field-card">
+    <section aria-labelledby={headingId} className={`field-card${marked ? ' marked' : ''}`}>
       <details>
         <summary>
           <h4 id={headingId}>
             {value.label}: <span className="derived">{display(value, value.value)}</span>
+            {marked && (
+              <>
+                {' '}
+                <span className="mark">· {value.mark}</span>
+              </>
+            )}
             {value.override && <span className="override-label"> overridden (calculated {display(value, value.computedValue)})</span>}
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
           </h4>
@@ -227,7 +238,10 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
   const [resting, setResting] = useState<RestPeriod>();
+  const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
+  const [undo, setUndo] = useState<UndoEntry>();
+  const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
 
@@ -316,12 +330,67 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
+  // D23: an entry is offered only for a change whose "before" is the state it actually changed. The shell runs commands one at
+  // a time and answers them in order, so quick repeated presses all apply. A change gets no entry when it overlapped another
+  // play change or an Undo (started after it, or still running), or when another view (a rest, a restore, a save) was shown
+  // while it was in flight: its "before" is then not what the service changed.
+  const started = useRef(0);
+  const running = useRef(0);
+  const shownView = useRef(view);
+  useEffect(() => {
+    shownView.current = view;
+  }, [view]);
   async function act(action: PlayAction) {
+    setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
+    const mine = ++started.current;
+    const startedWhileRunning = running.current > 0;
+    running.current += 1;
     try {
-      onChanged(await client.play(character.id, action));
+      const after = await client.play(character.id, action);
+      const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
+      setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
+      onChanged(after);
     } catch (error) {
       onError(error);
+    } finally {
+      running.current -= 1;
     }
+  }
+
+  // D23: the entry is offered only while the sheet still shows the state its change produced. A rest, a save, a level-up
+  // or a reload shows another view, and undoing then would overwrite that change.
+  const undoable = undo && undo.after === view ? undo : undefined;
+
+  async function undoLast() {
+    if (!undoable) return;
+    const steps = undoable.inverse;
+    setUndo(undefined);
+    let current: CharacterView | undefined;
+    // WCAG 2.4.3: the button is disabled now, so focus goes to what changed (hit points, concentration) or the Play tools.
+    const refocus = () => {
+      const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
+      const target =
+        steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
+          ? document.getElementById('hp-heading')
+          : concentrationOnly && current?.character.play?.concentration
+            ? document.getElementById('concentration-heading')
+            : null;
+      (target ?? compactToggle.current)?.focus();
+    };
+    // An Undo in flight counts as a running change, so a play change started meanwhile gets no entry.
+    started.current += 1;
+    running.current += 1;
+    try {
+      for (const step of steps) current = await client.play(character.id, step);
+      if (current) onChanged(current);
+    } catch (error) {
+      // A step that succeeded before the failure has changed the character: show it, so the sheet is not stale.
+      if (current) onChanged(current);
+      onError(error);
+    } finally {
+      running.current -= 1;
+    }
+    refocus();
   }
 
   async function roll(target: RollTarget) {
@@ -354,7 +423,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
-        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing}>
+        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing} aria-controls="print-preview">
           Print…
         </button>
       </header>
@@ -417,36 +486,61 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <TabList label="Sheet sections" idPrefix="sheet" tabs={tabs} active={active} onActivate={setTab} />
 
       <TabPanel idPrefix="sheet" id="play" active={active === 'play'}>
-        <HitPointsPanel view={view} act={act} />
-        <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
-        {resting ? (
-          <RestPanel
-            key={resting}
-            characterId={character.id}
-            kind={resting}
-            hitDice={sheet.hitDice ?? []}
-            onError={onError}
-            onCancel={() => setResting(undefined)}
-            onRested={(rested, applied) => {
-              setResting(undefined);
-              onChanged(rested);
-              onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
-            }}
-          />
-        ) : (
-          <div className="actions">
-            <button type="button" onClick={() => setResting('shortRest')}>
-              Short rest…
-            </button>
-            <button type="button" onClick={() => setResting('longRest')}>
-              Long rest…
-            </button>
-          </div>
-        )}
-        <ActionsPanel view={view} roll={roll} act={act} />
-        <ConditionsPanel view={view} act={act} />
-        <ResourcesPanel view={view} act={act} />
-        <ClassColumnsPanel view={view} />
+        {/* D20 (owner, 2026-10-06): a second layout of the Play tab for combat; CSS hides traces, hints and class columns. */}
+        <div className="play-tools">
+          <label className="choice compact-toggle">
+            <input
+              type="checkbox"
+              ref={compactToggle}
+              checked={compact}
+              onChange={(e) => {
+                setCompactPlay(e.target.checked);
+                setCompact(e.target.checked);
+                applyPreferences();
+              }}
+            />{' '}
+            Compact view: hit points, attacks, conditions and resources only
+          </label>
+          <button type="button" disabled={!undoable} onClick={undoLast}>
+            Undo last change{undoable ? `: ${undoable.label}` : ''}
+          </button>
+        </div>
+        {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
+        <div className="play-column">
+          <HitPointsPanel view={view} act={act} />
+          <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
+          <ConcentrationPanel view={view} act={act} roll={roll} />
+          {resting ? (
+            <RestPanel
+              key={resting}
+              characterId={character.id}
+              kind={resting}
+              hitDice={sheet.hitDice ?? []}
+              onError={onError}
+              onCancel={() => setResting(undefined)}
+              onRested={(rested, applied) => {
+                setResting(undefined);
+                onChanged(rested);
+                onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+              }}
+            />
+          ) : (
+            <div className="actions">
+              <button type="button" onClick={() => setResting('shortRest')}>
+                Short rest…
+              </button>
+              <button type="button" onClick={() => setResting('longRest')}>
+                Long rest…
+              </button>
+            </div>
+          )}
+          <ConditionsPanel view={view} act={act} />
+          <ResourcesPanel view={view} act={act} />
+          <ClassColumnsPanel view={view} />
+        </div>
+        <div className="play-column">
+          <ActionsPanel view={view} roll={roll} act={act} />
+        </div>
       </TabPanel>
 
       {showSpells && (
@@ -468,6 +562,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
         <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
@@ -485,6 +580,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
+        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
       </TabPanel>
 

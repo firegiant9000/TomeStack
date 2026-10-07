@@ -246,7 +246,8 @@ public sealed partial class TomeStackApp : IDisposable
     /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
     /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
-    /// <c>character.unarchive</c> change it.
+    /// <c>character.unarchive</c> change it. Currency and session notes (v8) are ordinary saved fields: the payload wins,
+    /// as for equipment and overrides.
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
@@ -438,7 +439,7 @@ public sealed record ContentOption(
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null);
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

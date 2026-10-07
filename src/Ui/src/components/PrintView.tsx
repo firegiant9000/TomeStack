@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, DerivedValue, GapNote, LicenseNotice, TraceOrigin } from '../api/types';
 
@@ -26,9 +26,20 @@ interface Props {
 export function PrintView({ view, onError, onClose }: Props) {
   const { character, sheet } = view;
   const [includeNotes, setIncludeNotes] = useState(false);
+  const [includeSessionNotes, setIncludeSessionNotes] = useState(false);
   const [notes, setNotes] = useState<GapNote[]>();
   const [notices, setNotices] = useState<LicenseNotice[]>([]);
   const [version, setVersion] = useState('');
+  const section = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  // Investigation 2026-10-06 item 9: the preview opens under the summary, often at or below the fold, and nothing moved. Scroll
+  // the preview's top edge into view, then focus its heading without a second scroll (WCAG 2.4.3). Focus alone does not
+  // scroll when the heading is already just in view (measured at 1280x800). jsdom has no scrollIntoView: optional call.
+  useEffect(() => {
+    section.current?.scrollIntoView?.({ block: 'start' });
+    heading.current?.focus({ preventScroll: true });
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -68,13 +79,17 @@ export function PrintView({ view, onError, onClose }: Props) {
   const caster = (sheet.spellcasting ?? []).length > 0;
 
   return (
-    <section className="print-sheet" role="region" aria-label="Print preview">
+    <section className="print-sheet" role="region" aria-label="Print preview" id="print-preview" ref={section}>
       <div className="print-controls">
-        <h3>Print character</h3>
+        <h3 id="print-heading" tabIndex={-1} ref={heading}>Print character</h3>
         <p className="hint">A printable backup of this sheet. It prints from this computer; nothing is sent anywhere.</p>
         <label>
           <input type="checkbox" checked={includeNotes} onChange={(e) => toggleNotes(e.target.checked)} />
           Include gap notes (private: they may describe your homebrew)
+        </label>
+        <label>
+          <input type="checkbox" checked={includeSessionNotes} onChange={(e) => setIncludeSessionNotes(e.target.checked)} />
+          Include session notes (private)
         </label>
         <div className="actions">
           <button type="button" onClick={() => window.print()}>
@@ -238,6 +253,19 @@ export function PrintView({ view, onError, onClose }: Props) {
             {character.overrides.map((o) => (
               <li key={o.field}>
                 {field(o.field)?.label ?? o.field}: {o.value} (calculated {field(o.field)?.computedValue ?? '?'}){o.reason ? `. ${o.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {includeSessionNotes && (character.notes ?? []).length > 0 && (
+        <div>
+          <h4>Session notes</h4>
+          <ul>
+            {[...character.notes!].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)).map((n) => (
+              <li key={n.id}>
+                {n.date}: {n.text}
               </li>
             ))}
           </ul>

@@ -202,7 +202,7 @@ public class SpellcastingTests
     [Fact]
     public void Rests_restore_slots_long_rest_all_short_rest_pact_only()
     {
-        var play = new PlayState().WithSlotsSpent(1, 2).WithSlotsSpent(2, 1) with { PactSlotsSpent = 1 };
+        var play = new PlayState().WithSlotsSpent(1, 2).WithSlotsSpent(2, 1) with { PactSlotsSpent = 1, Concentration = new(Fixtures.Veil, "Fixture Veil", PendingSaveDc: 10) };
         var character = Caster(RulesFamilies.Srd521, null, play, new ClassLevel(Fixtures.Arcanist, 3), new ClassLevel(Fixtures.Oathbinder, 2));
         var sheet = Sheet(character);
 
@@ -212,10 +212,12 @@ public class SpellcastingTests
             longRest.Changes.Where(c => c.Kind is RestChangeKind.SpellSlots or RestChangeKind.PactSlots).Select(c => (c.Kind, c.From, c.To)));
         var rested = RestPlanner.Apply(play, longRest, new HashSet<string>());
         Assert.Equal((0, 0, 0), (rested.SlotsSpentOf(1), rested.SlotsSpentOf(2), rested.PactSlotsSpent));
+        Assert.Null(rested.Concentration); // a long rest ends concentration
 
         var shortRest = RestPlanner.ShortRest(character, sheet, []);
         var pact = Assert.Single(shortRest.Changes);
         Assert.Equal(RestChangeKind.PactSlots, pact.Kind);
+        Assert.NotNull(RestPlanner.Apply(play, shortRest, new HashSet<string>()).Concentration); // a short rest does not
     }
 
     [Fact]

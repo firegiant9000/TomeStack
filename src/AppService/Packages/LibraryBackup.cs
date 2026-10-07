@@ -136,6 +136,8 @@ public sealed partial class PackageService
         var pdfs =plan.Attachments.Where(a => a.Mode == AttachmentMode.Managed).DistinctBy(a => a.Sha256).OrderBy(a => a.Sha256, StringComparer.Ordinal).ToList();
 
         // The reader's limits, checked before anything is written: a backup that could not be restored is worse than none.
+        // A restore reads every entry with the package entry limit too.
+        RequireEntriesWithinLimit(files.Select(f => (f.Key, f.Value.Bytes.LongLength)));
         var jsonBytes = files.Values.Sum(f => f.Bytes.LongLength);
         if (files.Count + pdfs.Count + 1 > MaxLibraryEntries || jsonBytes > MaxLibraryJsonBytes || pdfs.Count > MaxLibraryPdfs || pdfs.Sum(p => p.ByteLength) > MaxLibraryPdfBytes)
         {

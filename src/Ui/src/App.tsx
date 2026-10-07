@@ -11,14 +11,15 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
+import { HomePanel } from './components/HomePanel';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
-import { applyTheme, setSidebarCollapsed, sidebarCollapsed, theme } from './settings';
+import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './settings';
 import type { SheetTabId } from './sheetTab';
 
 type Screen =
-  | { kind: 'empty' }
+  | { kind: 'home'; focus?: boolean } // focus: false only for the start screen (the first Tab must reach the header)
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio' }
   | { kind: 'sources' }
@@ -41,7 +42,7 @@ function describeError(error: unknown): string {
 export function App() {
   const [info, setInfo] = useState<AppInfo>();
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
-  const [screen, setScreen] = useState<Screen>({ kind: 'empty' });
+  const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
   const [collapsed, setCollapsed] = useState(sidebarCollapsed);
@@ -77,7 +78,7 @@ export function App() {
   const refresh = useCallback(async () => setCharacters(await client.listCharacters()), []);
 
   useEffect(() => {
-    applyTheme(theme()); // ADR-015: the themes are CSS keyed on html[data-theme]
+    applyPreferences(); // ADR-015 §4: every preference is an html[data-*] attribute the CSS keys on
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
@@ -121,8 +122,6 @@ export function App() {
   return (
     <div className="app" data-sidebar={collapsed ? 'collapsed' : undefined}>
       <header className="app-header">
-        <h1>TomeStack</h1>
-        <span className="tag">Offline</span>
         <button
           type="button"
           className="sidebar-toggle"
@@ -135,10 +134,46 @@ export function App() {
         >
           {collapsed ? 'Show sidebar' : 'Hide sidebar'}
         </button>
+        <h1>TomeStack</h1>
+        <span className="tag">Offline</span>
       </header>
 
-      <nav id="sidebar" className="sidebar" aria-label="Characters" ref={sidebar} hidden={collapsed}>
-        <div className="actions">
+      <nav id="sidebar" className="sidebar" aria-labelledby="characters-heading" ref={sidebar} hidden={collapsed}>
+        {/* Owner (2026-10-06): a visible close control inside the sidebar. A distinct name from the header's "Hide sidebar"
+            (two buttons with one name would make getByRole throw). Never shown collapsed, so no aria-expanded. */}
+        <button type="button" className="sidebar-close" aria-controls="sidebar" onClick={toggleSidebar}>
+          Close sidebar
+        </button>
+        <h2 id="characters-heading" className="sidebar-heading">
+          Characters
+        </h2>
+        <ul className="character-list" aria-labelledby="characters-heading">
+          {active.map(characterLink)}
+          {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
+        </ul>
+        {/* SPEC C-08: archived characters are kept, listed apart and collapsed. */}
+        {archived.length > 0 && (
+          <details className="archived-characters">
+            <summary>Archived ({archived.length})</summary>
+            <ul className="character-list" aria-label="Archived characters">
+              {archived.map(characterLink)}
+            </ul>
+          </details>
+        )}
+        <h2 id="tools-heading" className="sidebar-heading">
+          Tools
+        </h2>
+        <div className="actions" role="group" aria-labelledby="tools-heading">
+          <button
+            type="button"
+            aria-current={screen.kind === 'home' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'home', focus: true });
+            }}
+          >
+            Characters
+          </button>
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button
             type="button"
@@ -242,19 +277,6 @@ export function App() {
             Settings
           </button>
         </div>
-        <ul className="character-list">
-          {active.map(characterLink)}
-          {active.length === 0 && <li className="hint">{archived.length === 0 ? 'No characters yet.' : 'No active characters.'}</li>}
-        </ul>
-        {/* SPEC C-08: archived characters are kept, listed apart and collapsed. */}
-        {archived.length > 0 && (
-          <details className="archived-characters">
-            <summary>Archived ({archived.length})</summary>
-            <ul className="character-list" aria-label="Archived characters">
-              {archived.map(characterLink)}
-            </ul>
-          </details>
-        )}
       </nav>
 
       <main className="content">
@@ -270,7 +292,18 @@ export function App() {
             </p>
           )}
         </div>
-        {screen.kind === 'empty' && <p className="hint">Create a character, open one from the list, or pick a theme in Settings.</p>}
+        {screen.kind === 'home' && (
+          <HomePanel
+            characters={characters}
+            onOpen={(id) => void open(id)}
+            onNew={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'builder', mode: { kind: 'create' } });
+            }}
+            canCreate={!!info}
+            focusOnMount={screen.focus !== false}
+          />
+        )}
         {screen.kind === 'builder' && info && (
           <CharacterBuilder
             key={screen.mode.kind === 'create' ? 'create' : `${screen.mode.kind}-${screen.mode.view.character.id}`}
@@ -279,7 +312,7 @@ export function App() {
             onError={onError}
             onCancel={() => {
               const mode = screen.mode;
-              if (mode.kind === 'create') setScreen({ kind: 'empty' });
+              if (mode.kind === 'create') setScreen({ kind: 'home', focus: true });
               else setScreen({ kind: 'sheet', view: mode.view });
               setMessage({ tone: 'status', text: 'Draft discarded. Nothing was changed.' });
             }}
@@ -322,7 +355,7 @@ export function App() {
             rulesFamilies={info.rulesFamilies}
             onError={onError}
             onCancel={() => {
-              setScreen({ kind: 'empty' });
+              setScreen({ kind: 'home', focus: true });
               setMessage({ tone: 'status', text: 'Import cancelled. Nothing was saved.' });
             }}
             onCreated={async (characterId, result) => {
@@ -370,13 +403,13 @@ export function App() {
             key={`${screen.fileName}-${screen.base64.length}`}
             {...screen}
             onError={onError}
-            onCancel={() => setScreen({ kind: 'empty' })}
+            onCancel={() => setScreen({ kind: 'home', focus: true })}
             onApplied={async (result) => {
               await refresh();
               // Open first: open() clears the message, which used to hide this summary and the backup location.
               const first = result.characters[0];
               if (first) await open(first);
-              else setScreen({ kind: 'empty' });
+              else setScreen({ kind: 'home', focus: true });
               setMessage({
                 tone: 'status',
                 text:
