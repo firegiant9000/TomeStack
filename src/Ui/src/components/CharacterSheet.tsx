@@ -29,6 +29,7 @@ import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { inverseOf, type UndoEntry } from '../undo';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -239,6 +240,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
+  const [undo, setUndo] = useState<UndoEntry>();
+  const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
 
@@ -329,7 +332,35 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   async function act(action: PlayAction) {
     try {
-      onChanged(await client.play(character.id, action));
+      const after = await client.play(character.id, action);
+      setUndo(inverseOf(action, view, after)); // D23: one level, session-only
+      onChanged(after);
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  // D23 + R21: the entry is offered only while the sheet still shows the state its change produced. A rest, a save, a level-up
+  // or a reload shows another view, and undoing then would overwrite that change.
+  const undoable = undo && undo.after === view ? undo : undefined;
+
+  async function undoLast() {
+    if (!undoable) return;
+    const steps = undoable.inverse;
+    setUndo(undefined);
+    try {
+      let current: CharacterView | undefined;
+      for (const step of steps) current = await client.play(character.id, step);
+      if (current) onChanged(current);
+      // WCAG 2.4.3: the button is disabled now, so focus goes to what changed (hit points, concentration) or the Play tools.
+      const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
+      const target =
+        steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
+          ? document.getElementById('hp-heading')
+          : concentrationOnly && current?.character.play?.concentration
+            ? document.getElementById('concentration-heading')
+            : null;
+      (target ?? compactToggle.current)?.focus();
     } catch (error) {
       onError(error);
     }
@@ -433,6 +464,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <label className="choice compact-toggle">
             <input
               type="checkbox"
+              ref={compactToggle}
               checked={compact}
               onChange={(e) => {
                 setCompactPlay(e.target.checked);
@@ -442,6 +474,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             />{' '}
             Compact view: hit points, attacks, conditions and resources only
           </label>
+          <button type="button" disabled={!undoable} onClick={undoLast}>
+            Undo last change{undoable ? `: ${undoable.label}` : ''}
+          </button>
         </div>
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">

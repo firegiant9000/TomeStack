@@ -232,6 +232,16 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
 
+  // D23: Undo puts the hit points and the temporary hit points back, then the damage is taken again.
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 12' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35, 5 temporary' })).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
+  const amount = () => within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole<HTMLInputElement>('spinbutton', { name: 'Amount' });
+  await user.clear(amount());
+  await user.type(amount(), '12');
+  await user.click(within(screen.getByRole('region', { name: /^Hit points:/ })).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 28 of 35' })).toBeTruthy());
+
   await user.click(screen.getByRole('checkbox', { name: 'Poisoned' }));
   await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Poisoned' }).checked).toBe(true));
 

@@ -67,6 +67,10 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 
 Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clears death saving throws** (SRD): `heal` or `setHitPoints` from 0 to above 0 resets them in the same confirmed change.
 
+## Undo (D23)
+
+"Undo last change" on Play sends the inverse of the last play command (hit points are set back exactly; spends are regained; conditions, slots, toggles and concentration mirror). Damage that raised a Constitution save DC also clears it, and damage to 0 that ended concentration starts it again after the hit points are set back. One level, for this sheet while it is open; nothing is stored. The button is offered only while the sheet still shows the state that change produced: a rest, a save, a level-up or a reload makes it disabled, so Undo cannot overwrite them. Death saves and ending concentration cannot be undone (no exact inverse); snapshots cover the rest. After Undo, focus moves to the hit points heading (hit point changes) or the compact view checkbox.
+
 ## Rolls on the sheet (SPEC C-04)
 
 - Every ability modifier, saving throw, skill and initiative field has a "Roll" button on the Stats tab (a d20 test through the `roll` command), and the summary has a "Roll <Ability> check (+N)" button per ability. The "d20 rolls" radio group, in the summary at the top of the sheet since ADR-014 ([sheet-layout.md](sheet-layout.md)), chooses normal, advantage or disadvantage. The result of a summary roll reads "Strength check: 14 (1d20)", the same words as its button (2026-10-06).

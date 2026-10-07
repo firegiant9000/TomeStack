@@ -18,6 +18,7 @@ vi.mock('../api/client', () => ({
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     info: vi.fn(),
+    play: vi.fn(),
   },
 }));
 
@@ -73,6 +74,45 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+
+function undoHarness() {
+  const v = view();
+  const damaged = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 3, temporary: 0 } } };
+  const onChanged = vi.fn();
+  const element = (shown: CharacterView) => <CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  return { v, damaged, onChanged, element };
+}
+
+it('offers Undo for the last play change and sends the inverse through the play command (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockResolvedValue(v);
+  const { rerender } = render(element(v));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged)); // the app shows the returned view
+  const undo = screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' });
+  expect(undo.disabled).toBe(false);
+  await user.click(undo);
+  await waitFor(() => expect(client.play).toHaveBeenLastCalledWith('fixture-2', { action: 'setHitPoints', amount: 8 }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true));
+  // WCAG 2.4.3: the button is disabled now, so focus is on the hit points heading, not <body>.
+  expect(document.activeElement?.id).toBe('hp-heading');
+});
+
+it('does not offer Undo once another view is shown, such as a rest result (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' }).disabled).toBe(false);
+  rerender(element({ ...v })); // a long rest healed the character: a different view object
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
 
 it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
   const user = userEvent.setup();
