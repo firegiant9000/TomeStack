@@ -56,6 +56,33 @@ it('keeps focus on the note field while the save runs and after it (WCAG 2.4.3)'
   expect(document.activeElement).toBe(field);
 });
 
+const withNote: CharacterView = { ...fixture, character: { ...character, notes: [{ id: 'note-a', date: '2026-10-01', text: 'Fixture note A.', createdAt: '2026-10-01T20:00:00Z' }] } };
+
+it('keeps focus through the delete steps: on Confirm delete, then back on the note\'s Delete button after Keep it (WCAG 2.4.3)', async () => {
+  const user = userEvent.setup();
+  render(<SessionNotesPanel view={withNote} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+  const list = screen.getByRole('list', { name: 'Session notes' });
+  await user.click(within(list).getByRole('button', { name: 'Delete session note from 2026-10-01' }));
+  expect(document.activeElement).toBe(within(list).getByRole('button', { name: 'Confirm delete' }));
+  await user.click(within(list).getByRole('button', { name: 'Keep it' }));
+  expect(document.activeElement).toBe(within(list).getByRole('button', { name: 'Delete session note from 2026-10-01' }));
+});
+
+it('does not start a delete while another note save is running, so neither save overwrites the other', async () => {
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise(() => {})); // the new note's save never settles in this test
+  const user = userEvent.setup();
+  render(<SessionNotesPanel view={withNote} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+  const form = screen.getByRole('form', { name: 'New session note' });
+  await user.type(within(form).getByRole('textbox', { name: 'Note' }), 'Fixture note B.');
+  await user.click(within(form).getByRole('button', { name: 'Save session note' }));
+  const list = screen.getByRole('list', { name: 'Session notes' });
+  await user.click(within(list).getByRole('button', { name: 'Delete session note from 2026-10-01' }));
+  await user.click(within(list).getByRole('button', { name: 'Confirm delete' }));
+  expect(client.saveCharacter).toHaveBeenCalledTimes(1);
+  expect(within(list).getByRole('button', { name: 'Confirm delete' }).getAttribute('aria-disabled')).toBe('true');
+});
+
 it('adds a dated note and lists it newest first, then deletes it after a confirm click', async () => {
   vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...fixture, character: c }));
   const user = userEvent.setup();

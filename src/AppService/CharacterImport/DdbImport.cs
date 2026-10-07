@@ -102,7 +102,7 @@ public sealed partial class TomeStackApp
         ["notes", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
 
     /// <summary>
-    /// D16e amended (D21, D24, R24): currency is brought over only when a coin was read and none was unreadable (a partly read
+    /// D16e amended (D21, D24): currency is brought over only when a coin was read and none was unreadable (a partly read
     /// purse is never zeroed silently: no coins come over and it is listed); speed and passive Perception are numbers now,
     /// compared when the layout maps them and the value reads, and listed otherwise (unmapped, blank or unreadable).
     /// </summary>

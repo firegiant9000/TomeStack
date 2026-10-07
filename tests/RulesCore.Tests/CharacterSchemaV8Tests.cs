@@ -66,6 +66,16 @@ public class CharacterSchemaV8Tests
     }
 
     [Fact]
+    public void Starting_concentration_on_a_spell_with_a_very_long_name_clips_the_stored_name_rather_than_refusing()
+    {
+        var spell = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var started = Concentration.On(spell, new string('x', PlayState.MaxConcentrationNameLength + 50));
+        Assert.Equal(PlayState.MaxConcentrationNameLength, started.Name.Length);
+        Assert.Empty(new PlayState { Concentration = started }.Validate());
+        Assert.Equal("Fixture Ward", Concentration.On(spell, "Fixture Ward").Name);
+    }
+
+    [Fact]
     public void A_null_note_entry_is_reported_as_an_empty_entry()
     {
         var json = JsonSerializer.Serialize(Fixtures.Srd521Character(), RulesJson.Options)

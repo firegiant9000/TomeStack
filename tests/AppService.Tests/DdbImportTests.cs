@@ -783,7 +783,7 @@ public class DdbImportTests
         Assert.Equal("Testy McFixture", preview.Character.Name);
     }
 
-    // Task 20 (D16e amended, D24): a test-only layout with invented field names, parsed to a sheet and proposed directly.
+    // D16e amended, D24: a test-only layout with invented field names, parsed to a sheet and proposed directly.
     private static DdbPreview ProposeFromTestLayout(DdbHarness h, params (string Semantic, string Value)[] reads) =>
         ProposeFromTestLayout(h, null, reads);
 

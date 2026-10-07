@@ -15,7 +15,8 @@ const hp = (view: CharacterView) => view.sheet.hitPoints;
  * D23 (owner, 2026-10-06): undo is the inverse play command, computed from the view before and after, never a stored
  * history. Hit points are put back with setHitPoints (exact), so an undone damage does not re-absorb temporary hit points.
  * Damage that raised a concentration check clears it, and damage to 0 that ended concentration starts it again.
- * Death saves, ending concentration and clearing its check have no exact inverse and are not undoable. A resource-backed
+ * Death saves, ending concentration and clearing its check have no exact inverse and are not undoable, and neither is
+ * regaining hit points from 0 while death saves are recorded (it resets them). A resource-backed
  * toggle going on is undone with the use given back; going off is not undoable. Concentrating on another spell is undone
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
@@ -33,6 +34,10 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       const was = hp(before);
       const now = hp(after);
       if (!was || !now) return undefined;
+      // Regaining hit points from 0 resets the death saves, and there is no command that puts them back: no entry at all,
+      // rather than an undo that silently clears a dying character's saves.
+      const saves = b?.deathSaves;
+      if (was.current === 0 && now.current > 0 && ((saves?.successes ?? 0) > 0 || (saves?.failures ?? 0) > 0)) return undefined;
       const inverse: PlayAction[] = [{ action: 'setHitPoints', amount: was.current }];
       if (was.temporary !== now.temporary) inverse.push({ action: 'setTemporaryHitPoints', amount: was.temporary });
       const concBefore = b?.concentration;

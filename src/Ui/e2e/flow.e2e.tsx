@@ -319,6 +319,17 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   const deathSaves = await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
   await user.click(within(deathSaves).getByRole('button', { name: 'Add a failure (damage at 0)' }));
   await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 1 of 3 failures/ });
+  // D23: healing from 0 clears the death saves, which no command puts back, so it offers no Undo (one that silently wiped
+  // the failure would be worse than none). Then back to 0 hit points for the roll below.
+  await user.clear(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }));
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '1');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  await user.clear(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }));
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '1');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await screen.findByRole('region', { name: /^Death saving throws: 0 of 3 successes, 0 of 3 failures/ });
   await user.type(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('spinbutton', { name: 'd20 rolled at the table' }), '20');
   await user.click(within(screen.getByRole('region', { name: /^Death saving throws/ })).getByRole('button', { name: 'Record this roll' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 1 of 35' })).toBeTruthy());
@@ -1303,7 +1314,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
       }),
     )
   ).published;
-  const hero = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+  const created = (await client.createCharacter({ name: 'E2E Snapshot Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] })).character;
+  const hero = (await client.saveCharacter({ ...created, currency: { cp: 0, sp: 12, ep: 0, gp: 3, pp: 0 } })).character; // D21: coins the restore puts back
 
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
@@ -1313,8 +1325,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   await user.click(within(panel()).getByRole('button', { name: 'Take snapshot' }));
   await expectStatus(/Took a snapshot of E2E Snapshot Hero: E2E with the feat/);
 
-  // The character changes: the feat goes.
-  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [] });
+  // The character changes: the feat goes, and the coins change.
+  await client.saveCharacter({ ...(await client.getCharacter(hero.id)).character, pins: [], currency: { cp: 0, sp: 0, ep: 0, gp: 40, pp: 0 } });
   cleanup();
   render(<App />);
   await user.click(await screen.findByRole('button', { name: /^E2E Snapshot Hero/ }));
@@ -1325,6 +1337,8 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   const preview = await within(panel()).findByRole('region', { name: 'Restore E2E with the feat?' });
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Restore E2E with the feat?' })));
   expect(within(preview).getByRole('table', { name: 'Calculated values that change' }).textContent).toMatch(/Initiative\s*0\s*3/);
+  // D22: the restore preview names the coin change, through the service's real field names.
+  expect(preview.textContent).toMatch(/Coins go back to 3 gp, 12 sp \(now 40 gp\)\./);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([]); // the preview changed nothing
 
   // "Keep the current state" closes the preview and returns focus to the button that opened it (accessibility item 23).
@@ -1339,6 +1353,7 @@ it('takes a snapshot of a character, previews the restore, restores it and keeps
   await user.click(within(again).getByRole('button', { name: 'Restore' }));
   await expectStatus(/Restored the snapshot/);
   expect((await client.getCharacter(hero.id)).character.pins).toEqual([feat]);
+  expect((await client.getCharacter(hero.id)).character.currency).toEqual({ cp: 0, sp: 12, ep: 0, gp: 3, pp: 0 });
   expect(await within(panel()).findByRole('button', { name: /^Restore Before restoring/ })).toBeTruthy(); // the undo snapshot
 });
 

@@ -148,7 +148,16 @@ public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
 public sealed record ActiveToggle(Guid ContentId, string ToggleId);
 
 /// <summary>Character schema v8 (D19): the spell being concentrated on (an exact pin and its name) and a pending Constitution save DC.</summary>
-public sealed record Concentration(ContentReference Spell, string Name, int? PendingSaveDc = null);
+public sealed record Concentration(ContentReference Spell, string Name, int? PendingSaveDc = null)
+{
+    /// <summary>
+    /// Concentration on <paramref name="spell"/>, named for display. Content names have no length bound, so a longer name is
+    /// clipped to <see cref="PlayState.MaxConcentrationNameLength"/> rather than refusing the change (the pin, not the name,
+    /// identifies the spell).
+    /// </summary>
+    public static Concentration On(ContentReference spell, string name) =>
+        new(spell, name.Length > PlayState.MaxConcentrationNameLength ? name[..PlayState.MaxConcentrationNameLength] : name);
+}
 
 /// <summary>How many spell slots of one spell level are spent.</summary>
 public sealed record SpellSlotUse(int Level, int Spent);

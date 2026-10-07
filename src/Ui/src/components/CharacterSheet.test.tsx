@@ -143,6 +143,65 @@ it('offers no Undo for play changes that overlapped, since the stored "before" i
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
 });
 
+const pending = () => {
+  let settle: (view: CharacterView) => void = noop;
+  const promise = new Promise<CharacterView>((resolve) => {
+    settle = resolve;
+  });
+  return { promise, settle: (view: CharacterView) => settle(view) };
+};
+
+it('withdraws an offered Undo as soon as another play change starts, so the two cannot interleave (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  const next = pending();
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockReturnValueOnce(next.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change: damage 1' }).disabled).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // still in flight
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+  next.settle(damaged);
+});
+
+it('offers no Undo for a play change made while an Undo was running (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged, element } = undoHarness();
+  const [undoStep, hit] = [pending(), pending()];
+  const seven = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  vi.mocked(client.play).mockResolvedValueOnce(damaged).mockReturnValueOnce(undoStep.promise).mockReturnValueOnce(hit.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(damaged));
+  rerender(element(damaged));
+  await user.click(screen.getByRole('button', { name: 'Undo last change: damage 1' }));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // while the undo step is in flight
+  undoStep.settle(v);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(v));
+  hit.settle(seven);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(seven));
+  rerender(element(seven));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
+it('offers no Undo for a play change whose reply came after another view was shown, such as a rest (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, onChanged, element } = undoHarness();
+  const hit = pending();
+  const rested = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 8, temporary: 0 } } };
+  const seven = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } };
+  vi.mocked(client.play).mockReturnValueOnce(hit.promise);
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  rerender(element(rested)); // a rest's result lands while the damage is in flight
+  hit.settle(seven);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(seven));
+  rerender(element(seven));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
 it('does not offer Undo once another view is shown, such as a rest result (D23)', async () => {
   const user = userEvent.setup();
   const { v, damaged, onChanged, element } = undoHarness();

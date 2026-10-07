@@ -331,16 +331,23 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   }
 
   // D23: an entry is offered only for a change whose "before" is the state it actually changed. The shell runs commands one at
-  // a time, so quick repeated presses all apply; a change that overlapped another (started after it, or still running) has no entry.
+  // a time and answers them in order, so quick repeated presses all apply. A change gets no entry when it overlapped another
+  // play change or an Undo (started after it, or still running), or when another view (a rest, a restore, a save) was shown
+  // while it was in flight: its "before" is then not what the service changed.
   const started = useRef(0);
   const running = useRef(0);
+  const shownView = useRef(view);
+  useEffect(() => {
+    shownView.current = view;
+  }, [view]);
   async function act(action: PlayAction) {
+    setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
     const mine = ++started.current;
     const startedWhileRunning = running.current > 0;
     running.current += 1;
     try {
       const after = await client.play(character.id, action);
-      const overlapped = startedWhileRunning || started.current !== mine || running.current > 1;
+      const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
     } catch (error) {
@@ -350,7 +357,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
-  // D23 + R21: the entry is offered only while the sheet still shows the state its change produced. A rest, a save, a level-up
+  // D23: the entry is offered only while the sheet still shows the state its change produced. A rest, a save, a level-up
   // or a reload shows another view, and undoing then would overwrite that change.
   const undoable = undo && undo.after === view ? undo : undefined;
 
@@ -370,6 +377,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             : null;
       (target ?? compactToggle.current)?.focus();
     };
+    // An Undo in flight counts as a running change, so a play change started meanwhile gets no entry.
+    started.current += 1;
+    running.current += 1;
     try {
       for (const step of steps) current = await client.play(character.id, step);
       if (current) onChanged(current);
@@ -377,6 +387,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       // A step that succeeded before the failure has changed the character: show it, so the sheet is not stale.
       if (current) onChanged(current);
       onError(error);
+    } finally {
+      running.current -= 1;
     }
     refocus();
   }

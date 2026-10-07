@@ -138,12 +138,15 @@ export function CurrencyPanel({ view, onChanged, onError }: Props) {
   const seed = (c: typeof stored) => Object.fromEntries(coins.map(([k]) => [k, String(c[k])])) as Record<Coin, string>;
   const [draft, setDraft] = useState<Record<Coin, string>>(() => seed(stored));
   // A save, snapshot restore or import changes the stored coins without a remount (the character id is the same), so the
-  // draft is re-seeded here, not by a key: a remount would drop focus to the page body (WCAG 2.4.3).
+  // draft is re-seeded here, not by a key: a remount would drop focus to the page body (WCAG 2.4.3). Only coins the user
+  // has not edited since the last seed take the new value, so a coin typed while a save runs is kept.
   const storedKey = JSON.stringify(stored);
   const [seeded, setSeeded] = useState(storedKey);
   if (seeded !== storedKey) {
+    const previous = seed(JSON.parse(seeded) as typeof stored);
+    const next = seed(stored);
     setSeeded(storedKey);
-    setDraft(seed(stored));
+    setDraft(Object.fromEntries(coins.map(([k]) => [k, draft[k] === previous[k] ? next[k] : draft[k]])) as Record<Coin, string>);
   }
   const heading = useRef<HTMLHeadingElement>(null);
   const parsed = Object.fromEntries(coins.map(([k]) => [k, Number(draft[k])])) as Record<Coin, number>;

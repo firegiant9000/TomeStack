@@ -1,3 +1,6 @@
+using System.Text;
+using System.Text.Json;
+using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService;
@@ -37,6 +40,11 @@ public sealed partial class TomeStackApp
         var problems = character.Validate().ToList();
         if (problems.Count == 0 && _store.FindCharacter(character.Id) is { } existing && existing.RulesFamily != character.RulesFamily)
             problems.Add(new("character.rules-family-changed", "Changing a saved character's rules family needs a reviewed migration and is not supported yet."));
+        // A character is one package entry in every backup, and import refuses an entry over the limit: refuse it here, so a
+        // character the app accepted can always be backed up and restored (session notes in a script the JSON encoder escapes
+        // and long free-text fields are what can get there).
+        if (problems.Count == 0 && Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(character, RulesJson.Options)) + 1 > PackageService.MaxEntryBytes)
+            problems.Add(new("character.too-large", $"This character would be larger than a backup can hold ({PackageService.MaxEntryBytes / (1024 * 1024)} MB). Shorten its session notes or other long text."));
         if (problems.Count > 0)
             throw new AppValidationException(problems);
         return character;

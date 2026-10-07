@@ -50,7 +50,7 @@ public static class DdbSemantics
         .. Enum.GetValues<Ability>().Select(FieldIds.Save),
         .. CharacterCalculator.Skills.Select(s => FieldIds.Skill(s.Key)),
         .. Enumerable.Range(1, 9).Select(FieldIds.SpellSlots),
-        // D24: calculated since Task 16 (speed has a rules-policy base; a kept sheet number is a character override, never a content target).
+        // D24: calculated since 2026-10-06 (speed has a rules-policy base; a kept sheet number is a character override, never a content target).
         FieldIds.Speed, FieldIds.Passive("perception"),
     ];
 

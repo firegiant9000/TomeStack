@@ -135,7 +135,7 @@ public class PlayCommandTests
     [Fact]
     public void The_save_dc_is_capped_at_30_under_srd_521_and_only_at_the_validation_bound_under_srd_51()
     {
-        // R11: SRD 5.2.1 ("up to a maximum DC of 30") caps it through the family policy; SRD 5.1 has no ceiling, and
+        // D19: SRD 5.2.1 ("up to a maximum DC of 30") caps it through the family policy; SRD 5.1 has no ceiling, and
         // either way the DC stays within what PlayState validation accepts (100) so a huge hit is still applied.
         Assert.Equal(30, RulesFamilies.Get(RulesFamilies.Srd521).ConcentrationSaveMaximumDc);
         Assert.Null(RulesFamilies.Get(RulesFamilies.Srd51).ConcentrationSaveMaximumDc);

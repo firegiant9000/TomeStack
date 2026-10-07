@@ -257,7 +257,7 @@ span.warn { color: var(--warn); }
   #sheet-panel-play .play-tools { grid-column: 1 / -1; }
 }
 /* D20: the compact combat view hides what a turn does not need; nothing is unmounted. Attack summaries (name, to hit, damage)
-   stay; only what their details would open to goes. R18: only explanatory parts are hidden (the HP and Concentration explanations,
+   stay; only what their details would open to goes. Only explanatory parts are hidden (the HP and Concentration explanations,
    Class columns, resource traces, attack detail). Rest, Roll-row hints, spend consequences ("turning it on spends 1 use"),
    recovery text, status and empty states stay. The toggle and Concentration's save controls are not targets. */
 html[data-compact-play='on'] #sheet-panel-play :is(section[aria-labelledby='hp-heading'] > .hint, section[aria-labelledby='concentration-heading'] > .hint, section[aria-labelledby='class-columns-heading'], .resource details, .feature details > :not(summary)) { display: none; }

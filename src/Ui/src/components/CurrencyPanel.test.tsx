@@ -62,6 +62,25 @@ it('re-seeds the inputs when the stored currency changes (a restore keeps the ch
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save currency' }).disabled).toBe(true);
 });
 
+it('keeps a coin typed while a save was running when the saved coins come back', async () => {
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const user = userEvent.setup();
+  const first = { ...fixture, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } };
+  const { rerender } = render(<CurrencyPanel view={first} onChanged={() => {}} onError={() => {}} />);
+  await user.clear(screen.getByRole('spinbutton', { name: 'Gold (gp)' }));
+  await user.type(screen.getByRole('spinbutton', { name: 'Gold (gp)' }), '20');
+  await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  await user.clear(screen.getByRole('spinbutton', { name: 'Platinum (pp)' }));
+  await user.type(screen.getByRole('spinbutton', { name: 'Platinum (pp)' }), '5'); // typed while the save runs
+  const saved = { ...first, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 20, pp: 0 } } };
+  finish(saved);
+  rerender(<CurrencyPanel view={saved} onChanged={() => {}} onError={() => {}} />);
+  expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Platinum (pp)' }).value).toBe('5');
+  expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' }).value).toBe('20');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save currency' }).disabled).toBe(false);
+});
+
 it('refuses a negative or non-integer coin count before saving', async () => {
   const user = userEvent.setup();
   render(<CurrencyPanel view={fixture} onChanged={() => {}} onError={() => {}} />);

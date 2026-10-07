@@ -28,7 +28,7 @@ Other refusals: `snapshot.confirm-required`, `snapshot.not-found` (also for anot
 - **The list** is paged: `character.snapshots { characterId, before? }` returns `{ items, hasMore }`, at most 100 items (`SqliteStore.MaxListedSnapshots`), newest first. `before` is the id of the oldest snapshot already shown (it must be a snapshot of this character, else `snapshot.not-found`), and the page then holds the ones stored before it. The sheet shows **Show older snapshots** while `hasMore` is true. Snapshots are never removed and have no cap, so paging reaches every one. No schema change.
 - **Insert-only:** database migration **v7** adds `character_snapshots`. Triggers refuse any `UPDATE` or `DELETE`, so a snapshot never changes or disappears. The migration is forward-only, and the usual `tomestack.db.v6.bak` is taken first. Older builds refuse a v7 data folder (`NewerDatabaseException`), as for every migration.
 - **Local only:** no character package (backup or share) and no full library backup includes snapshots. There is no package format change. The copy of the database taken before a library restore (package-format rule 10) is a full database copy, so it holds them.
-- **No new character or content schema:** a snapshot stores the character JSON as it is (character schema v7).
+- **No new character or content schema:** a snapshot stores the character JSON as it is (the current character schema, v8 since 2026-10-06), except its session notes: a snapshot keeps none, and a restore keeps the character's current notes (LIVING_SPECS D22).
 
 ## Acceptance
 

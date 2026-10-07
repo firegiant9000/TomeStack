@@ -466,7 +466,7 @@ it('gives the preset to a row that starts differing after the equip toggle', asy
   expect(within(screen.getByRole('radiogroup', { name: 'Initiative' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true);
 });
 
-it('keeps the sheet\'s speed by default even under the "sources" preset, and an explicit row choice still wins (R27)', async () => {
+it('keeps the sheet\'s speed by default even under the "sources" preset, and an explicit row choice still wins', async () => {
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
     const p = preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0'));
     return { ...p, comparison: [...p.comparison, { field: 'speed', label: 'Speed', sheet: 25, calculated: 30, differs: true }] };
@@ -478,6 +478,20 @@ it('keeps the sheet\'s speed by default even under the "sources" preset, and an 
   expect(within(screen.getByRole('radiogroup', { name: 'Speed' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true);
   await user.click(within(screen.getByRole('radiogroup', { name: 'Speed' })).getByRole('radio', { name: 'Note it' }));
   await waitFor(() => expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'useTomeStack' }, { field: 'speed', action: 'note' }]));
+});
+
+it('keeps the sheet\'s speed by default under the "Decide each number myself" preset too, as the step-2 hint says', async () => {
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    const p = preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0'));
+    return { ...p, comparison: [...p.comparison, { field: 'speed', label: 'Speed', sheet: 25, calculated: 30, differs: true }] };
+  });
+  const user = userEvent.setup();
+  renderPanel();
+  await toNumbersWithPreset(user, 'Decide each number myself');
+  await waitFor(() => expect(lastChoices()).toEqual([{ field: 'speed', action: 'keepSheet' }]));
+  expect(within(screen.getByRole('radiogroup', { name: 'Speed' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true);
+  // Manual pre-fills nothing else: Armor Class shows TomeStack's number and sends no choice.
+  expect(within(screen.getByRole('radiogroup', { name: 'Armor Class' })).getByRole<HTMLInputElement>('radio', { name: "Use TomeStack's number" }).checked).toBe(true);
 });
 
 it('discards the token of a read that resolves after Cancel', async () => {

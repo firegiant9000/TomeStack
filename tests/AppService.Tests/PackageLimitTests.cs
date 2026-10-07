@@ -86,16 +86,56 @@ public class PackageLimitTests
     public void Entry_over_the_entry_limit_is_rejected() =>
         AssertRejected(Package([(Path("sources", Guid.NewGuid()), new byte[PackageService.MaxEntryBytes + 1])]), "package.entry-too-large");
 
-    [Fact]
-    public void Export_refuses_an_entry_over_the_entry_limit_before_writing_anything()
+    /// <summary>
+    /// A character whose JSON is over the entry limit, stored directly (as an older build could have): '&lt;' is escaped to six
+    /// bytes, so a million of them make about 6 MB.
+    /// </summary>
+    private static Guid StoreOversizedCharacter(TempApp app)
     {
-        // The limit import enforces is enforced at export too (a long non-Latin journal escapes to six bytes a character).
-        PackageService.RequireEntriesWithinLimit([("characters/a.json", PackageService.MaxEntryBytes), ("sources/b.json", 10)]);
+        var big = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json") with { Name = new string('<', 1_000_000) };
+        app.App.Store.InTransaction(() => app.App.Store.SaveCharacter(big));
+        return big.Id;
+    }
 
-        var problem = Assert.Throws<PackageException>(() =>
-            PackageService.RequireEntriesWithinLimit([("sources/b.json", 10), ("characters/a.json", PackageService.MaxEntryBytes + 1)])).Errors.Single();
+    [Fact]
+    public void Export_refuses_a_character_too_large_for_a_package_entry_before_writing_anything()
+    {
+        // The limit import enforces is enforced at export too, so a backup that cannot be imported is never written.
+        using var app = new TempApp();
+        var id = StoreOversizedCharacter(app);
+
+        var problem = Assert.Throws<PackageException>(() => app.App.ExportCharacters([id])).Errors.Single();
+
         Assert.Equal("package.entry-too-large", problem.Code);
-        Assert.Contains("characters/a.json", problem.Message);
+        Assert.Contains($"characters/{id:D}.json", problem.Message);
+    }
+
+    [Fact]
+    public void A_full_backup_refuses_a_character_too_large_for_a_package_entry_before_writing_anything()
+    {
+        // "Restore full backup" reads entries with the same per-entry limit, so the full backup checks it too.
+        using var app = new TempApp();
+        var id = StoreOversizedCharacter(app);
+        using var output = new MemoryStream();
+
+        var problem = Assert.Throws<PackageException>(() => app.App.WriteLibraryBackup(output)).Errors.Single();
+
+        Assert.Equal("package.entry-too-large", problem.Code);
+        Assert.Contains($"characters/{id:D}.json", problem.Message);
+        Assert.Equal(0, output.Length);
+    }
+
+    [Fact]
+    public void A_save_that_would_make_the_character_too_large_for_a_package_entry_is_refused()
+    {
+        // Refused when it is made, so neither export path is ever blocked by a character the app accepted.
+        using var app = new TempApp();
+        var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+
+        var problems = Assert.Throws<AppValidationException>(() => app.App.SaveCharacter(fixture with { Name = new string('<', 1_000_000) })).Problems;
+
+        Assert.Contains(problems, p => p.Code == "character.too-large");
+        Assert.Null(app.App.Store.FindCharacter(fixture.Id));
     }
 
     [Fact]

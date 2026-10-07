@@ -230,7 +230,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.spell-not-prepared", $"'{spell.Name}' is not prepared.", spell.Spell)]);
         if (sheet.HitPoints is { Current: 0 })
             throw new AppValidationException([new("play.unconscious", "A character at 0 hit points cannot start concentrating.")]);
-        return play with { Concentration = new(spell.Spell, spell.Name) };
+        return play with { Concentration = Concentration.On(spell.Spell, spell.Name) };
     }
 
     private static PlayState ChangeResource(PlayState play, CharacterSheet sheet, PlayCommand command)

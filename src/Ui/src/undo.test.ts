@@ -22,14 +22,23 @@ it('undoes heal by setting hit points back, without a temporary step when nothin
   expect(inverseOf({ action: 'heal', amount: 4 }, view(20, 0), view(24, 0))!.inverse).toEqual([{ action: 'setHitPoints', amount: 20 }]);
 });
 
-it('clears the concentration check that damage raised (R19)', () => {
+it('clears the concentration check that damage raised', () => {
   const entry = inverseOf({ action: 'damage', amount: 12 }, view(35, 0, concentrating()), view(23, 0, concentrating(10)))!;
   expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 35 }, { action: 'clearConcentrationCheck' }]);
 });
 
-it('starts concentration again when damage to 0 ended it, after the hit points are back (R19)', () => {
+it('starts concentration again when damage to 0 ended it, after the hit points are back', () => {
   const entry = inverseOf({ action: 'damage', amount: 40 }, view(10, 0, concentrating()), view(0, 0))!;
   expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 10 }, { action: 'startConcentration', contentId: 'fixture-spell' }]);
+});
+
+it('offers no undo for regaining hit points from 0, which reset death saves that cannot be put back', () => {
+  const dying = { deathSaves: { successes: 1, failures: 2 } };
+  expect(inverseOf({ action: 'heal', amount: 1 }, view(0, 0, dying), view(1, 0))).toBeUndefined();
+  expect(inverseOf({ action: 'setHitPoints', amount: 5 }, view(0, 0, dying), view(5, 0))).toBeUndefined();
+  // With no death saves recorded there is nothing to lose, so the heal is undone as usual.
+  expect(inverseOf({ action: 'heal', amount: 1 }, view(0, 0, { deathSaves: { successes: 0, failures: 0 } }), view(1, 0))!.inverse).toEqual([{ action: 'setHitPoints', amount: 0 }]);
+  expect(inverseOf({ action: 'heal', amount: 1 }, view(0, 0), view(1, 0))!.inverse).toEqual([{ action: 'setHitPoints', amount: 0 }]);
 });
 
 it('names the condition in the label', () => {
@@ -49,22 +58,22 @@ const withToggle = (resourceId?: string): CharacterView => {
   return v;
 };
 
-it('undoes turning on a resource-backed toggle by turning it off and giving the use back (F2)', () => {
+it('undoes turning on a resource-backed toggle by turning it off and giving the use back', () => {
   expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, withToggle('rage'), withToggle('rage'))!.inverse).toEqual([
     { action: 'toggleOff', contentId: 'c', toggleId: 't' },
     { action: 'regain', amount: 1, contentId: 'c', resourceId: 'rage' },
   ]);
 });
 
-it('does not undo turning off a resource-backed toggle, which would spend a use the player did not spend (F2)', () => {
+it('does not undo turning off a resource-backed toggle, which would spend a use the player did not spend', () => {
   expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle('rage'), withToggle('rage'))).toBeUndefined();
 });
 
-it('keeps the plain mirror for a toggle without a resource (F2)', () => {
+it('keeps the plain mirror for a toggle without a resource', () => {
   expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle(), withToggle())!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
 });
 
-it('undoes concentrating on another spell by concentrating on the earlier one again (F3)', () => {
+it('undoes concentrating on another spell by concentrating on the earlier one again', () => {
   expect(inverseOf({ action: 'startConcentration', contentId: 'other-spell' }, view(1, 0, concentrating(10)), view(1, 0))!.inverse).toEqual([{ action: 'startConcentration', contentId: 'fixture-spell' }]);
   expect(inverseOf({ action: 'startConcentration', contentId: 'fixture-spell' }, view(1, 0, concentrating()), view(1, 0))).toBeUndefined();
 });

@@ -81,10 +81,14 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   // takes the preset's action. `differs` is computed before overrides, so this set is stable once the first preview is in.
   const presetAction: NumberAction | undefined = numberPreset === 'sheet' ? 'keepSheet' : numberPreset === 'sources' ? 'useTomeStack' : undefined;
   const effectiveNumbers: Record<string, NumberAction> = { ...numbers };
-  if (presetAction && preview) {
+  if (preview) {
     // Speed is the exception: TomeStack's number is only the placeholder 30 feet until species content carries one, so a
-    // sheet's speed is kept by default whatever the preset (a row choice of the user's still wins).
-    for (const row of preview.comparison) if (row.differs && !(row.field in numbers)) effectiveNumbers[row.field] = row.field === 'speed' ? 'keepSheet' : presetAction;
+    // sheet's speed is kept by default whatever the preset, Manual included (a row choice of the user's still wins).
+    for (const row of preview.comparison) {
+      if (!row.differs || row.field in numbers) continue;
+      if (row.field === 'speed') effectiveNumbers[row.field] = 'keepSheet';
+      else if (presetAction) effectiveNumbers[row.field] = presetAction;
+    }
   }
 
   const request: DdbPreviewRequest | undefined =
