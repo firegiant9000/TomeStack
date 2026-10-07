@@ -3,9 +3,10 @@
 // roll (no state change) and the two confirmed outcomes.
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, PlayState } from '../api/types';
-import { ConcentrationPanel } from './PlayPanels';
+import { ConcentrationPanel, HitPointsPanel } from './PlayPanels';
 
 afterEach(cleanup);
 
@@ -38,6 +39,36 @@ it('names the spell, and after damage offers the save roll and the two confirmed
   expect(act).toHaveBeenCalledWith({ action: 'clearConcentrationCheck' });
   await user.click(screen.getByRole('button', { name: 'End concentration' }));
   expect(act).toHaveBeenCalledWith({ action: 'endConcentration' });
+});
+
+// Focus (WCAG 2.4.3): each confirmed outcome removes the focused button. A stateful harness applies the change like the sheet does,
+// with the Hit points panel beside it as the stable target that survives "End concentration".
+function Harness() {
+  const [play, setPlay] = useState<Partial<PlayState>>({ concentration: { spell, name: 'Fixture Ward', pendingSaveDc: 12 } });
+  const v = view(play);
+  const act = (a: { action: string }) =>
+    setPlay(a.action === 'endConcentration' ? {} : { concentration: { spell, name: 'Fixture Ward' } });
+  return (
+    <>
+      <HitPointsPanel view={v} act={() => {}} />
+      <ConcentrationPanel view={v} act={act} roll={() => {}} />
+    </>
+  );
+}
+
+it('moves focus to the panel heading after "Kept concentration"', async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+  await user.click(screen.getByRole('button', { name: 'Kept concentration' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Concentration: Fixture Ward' }));
+});
+
+it('moves focus to the Hit points heading after "End concentration" removes the panel', async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+  await user.click(screen.getByRole('button', { name: 'End concentration' }));
+  expect(screen.queryByRole('heading', { name: /^Concentration:/ })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: /^Hit points:/ }));
 });
 
 it('offers only End concentration when no save is pending', () => {

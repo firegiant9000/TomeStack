@@ -140,7 +140,7 @@ export function SpellsPanel({
                       Cast {spell.name} (spend a slot)
                     </button>
                   )}
-                  {spell.level > 0 && spell.prepared && spell.concentration && (
+                  {spell.prepared && spell.concentration && (
                     <button
                       type="button"
                       disabled={view.character.play?.concentration?.spell.contentId === spell.spell.contentId}

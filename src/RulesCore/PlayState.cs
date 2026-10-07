@@ -57,7 +57,7 @@ public sealed record PlayState
     /// <summary>
     /// Character schema v8 (D19): the concentration spell, or null. Set by <c>startConcentration</c>, cleared by
     /// <c>endConcentration</c>, by damage that drops hit points to 0, and by a long rest. <see cref="Concentration.PendingSaveDc"/>
-    /// is set by <c>damage</c> (max(10, half the damage)) and cleared by <c>clearConcentrationCheck</c> or <c>endConcentration</c>.
+    /// is set by <c>damage</c> (max(10, half the damage dealt), at most the family's cap: 30 under SRD 5.2.1) and cleared by <c>clearConcentrationCheck</c> or <c>endConcentration</c>.
     /// </summary>
     public Concentration? Concentration { get; init; }
 

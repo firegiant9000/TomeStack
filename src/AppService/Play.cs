@@ -220,10 +220,16 @@ public sealed partial class TomeStackApp
 
     private static PlayState StartConcentration(PlayState play, CharacterSheet sheet, PlayCommand command)
     {
-        var spell = sheet.Spellcasting?.SelectMany(c => c.Spells).FirstOrDefault(s => s.Spell.ContentId == command.ContentId)
+        var matches = sheet.Spellcasting?.SelectMany(c => c.Spells).Where(s => s.Spell.ContentId == command.ContentId).ToList() ?? [];
+        // A spell on two casters' lists counts as prepared if either has it prepared.
+        var spell = matches.FirstOrDefault(s => s.Prepared) ?? matches.FirstOrDefault()
             ?? throw new AppValidationException([new("play.spell-not-found", $"This character has no spell with content id {command.ContentId}.")]);
         if (!spell.Concentration)
             throw new AppValidationException([new("play.spell-not-concentration", $"'{spell.Name}' does not need concentration.", spell.Spell)]);
+        if (!spell.Prepared)
+            throw new AppValidationException([new("play.spell-not-prepared", $"'{spell.Name}' is not prepared.", spell.Spell)]);
+        if (sheet.HitPoints is { Current: 0 })
+            throw new AppValidationException([new("play.unconscious", "A character at 0 hit points cannot start concentrating.")]);
         return play with { Concentration = new(spell.Spell, spell.Name) };
     }
 

@@ -61,7 +61,7 @@ Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and
 | `addDeathSaveFailure` | Adds `amount` (1–3) failures, for example damage at 0 hit points (a critical hit is 2) | `play.amount-out-of-range` |
 | `clearDeathSaves` | Resets both to 0 | |
 | `setInspiration` | `amount` 1 gives Inspiration, 0 spends or removes it | `play.amount-out-of-range` |
-| `startConcentration` | Starts concentrating on the concentration spell `contentId` from one of the character's spell lists | `play.spell-not-found`, `play.spell-not-concentration` |
+| `startConcentration` | Starts concentrating on the concentration spell `contentId` from one of the character's spell lists; the spell must be prepared (a cantrip counts) and the character above 0 hit points | `play.spell-not-found`, `play.spell-not-concentration`, `play.spell-not-prepared`, `play.unconscious` |
 | `endConcentration` | The spell ends | `play.not-concentrating` |
 | `clearConcentrationCheck` | The Constitution save was kept: clears the pending DC | `play.not-concentrating` |
 

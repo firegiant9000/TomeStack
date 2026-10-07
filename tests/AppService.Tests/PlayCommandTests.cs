@@ -97,6 +97,21 @@ public class PlayCommandTests
     }
 
     [Fact]
+    public void Concentration_is_refused_for_an_unprepared_spell_and_at_zero_hit_points()
+    {
+        var (temp, id, veil) = Caster();
+        using var _ = temp;
+        // Un-prepare Fixture Veil (a choice, saved through the character, not play state).
+        var character = temp.App.GetCharacter(id).Character;
+        temp.App.SaveCharacter(character with { Spells = [.. character.Spells!.Select(s => s.Spell == veil ? s with { Prepared = false } : s)] });
+        Assert.Equal("play.spell-not-prepared", Code(Dispatch(temp, new { characterId = id, action = "startConcentration", contentId = veil.ContentId, confirm = true })));
+
+        temp.App.SaveCharacter(temp.App.GetCharacter(id).Character with { Spells = character.Spells });
+        temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: 0));
+        Assert.Equal("play.unconscious", Code(Dispatch(temp, new { characterId = id, action = "startConcentration", contentId = veil.ContentId, confirm = true })));
+    }
+
+    [Fact]
     public void The_save_dc_is_capped_at_30_under_srd_521_and_only_at_the_validation_bound_under_srd_51()
     {
         // R11: SRD 5.2.1 ("up to a maximum DC of 30") caps it through the family policy; SRD 5.1 has no ceiling, and

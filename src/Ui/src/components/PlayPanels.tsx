@@ -1,4 +1,4 @@
-import { useState, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type SubmitEvent } from 'react';
 import type {
   Activation,
   AttackEntry,
@@ -80,7 +80,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
 
   return (
     <section aria-labelledby="hp-heading" className="play-panel">
-      <h3 id="hp-heading">
+      <h3 id="hp-heading" tabIndex={-1}>
         Hit points: {hp.current} of {hp.maximum}
         {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
       </h3>
@@ -191,11 +191,23 @@ export function DeathSavesPanel({
  */
 export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; act: Act; roll: (target: RollTarget) => void }) {
   const con = view.character.play?.concentration;
+  const pending = con?.pendingSaveDc !== undefined;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const wasConcentrating = useRef(false);
+  const wasPending = useRef(false);
+  // WCAG 2.4.3: both confirmed outcomes unmount the focused button. If focus fell to <body>, "Kept concentration" puts it on
+  // this panel's heading and "End concentration" (the whole panel gone) on the Hit points heading, which stays on the tab.
+  useEffect(() => {
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (lost && con && wasPending.current && !pending) heading.current?.focus();
+    if (lost && !con && wasConcentrating.current) document.getElementById('hp-heading')?.focus();
+    wasConcentrating.current = con !== undefined;
+    wasPending.current = pending;
+  }, [con, pending]);
   if (!con) return null;
-  const pending = con.pendingSaveDc !== undefined;
   return (
     <section aria-labelledby="concentration-heading" className="play-panel">
-      <h3 id="concentration-heading">
+      <h3 id="concentration-heading" tabIndex={-1} ref={heading}>
         Concentration: {con.name}
         {pending ? `, Constitution saving throw DC ${con.pendingSaveDc} pending` : ''}
       </h3>
@@ -214,7 +226,10 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
           End concentration
         </button>
       </div>
-      <p className="hint">Taking damage asks for a Constitution save of DC 10 or half the damage, whichever is higher; at 0 hit points the spell ends by itself.</p>
+      <p className="hint">
+        Taking damage asks for a Constitution save of DC 10 or half the damage, whichever is higher (at most 30 under the 2024 rules); at 0
+        hit points the spell ends by itself.
+      </p>
     </section>
   );
 }
