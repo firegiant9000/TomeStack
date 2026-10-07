@@ -8,10 +8,10 @@
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
   /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
   --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
-  /* Forest is the default theme (owner, 2026-10-05). */
-  --surface: light-dark(#f2f7f2, #161d17);
-  --accent: light-dark(#1e6a3a, #7fd49a);
-  --accent-2: light-dark(#7a5a00, #e2c35b);
+  /* Forest is the default theme (owner, 2026-10-05). Dark values lifted "a tiny bit" (owner, 2026-10-06; every pairing ≥ 4.5:1). */
+  --surface: light-dark(#f2f7f2, #1b241c);
+  --accent: light-dark(#1e6a3a, #8fe0a8);
+  --accent-2: light-dark(#7a5a00, #ebd070);
   --warn: light-dark(#9a5b00, #f0b35a);
   --error: light-dark(#b3261e, #f28b82);
   --space-1: 0.25rem;
@@ -32,14 +32,14 @@
   line-height: 1.45;
 }
 html[data-theme='cool'] {
-  --surface: light-dark(#f2f4fb, #191c26);
-  --accent: light-dark(#3449b8, #9eaaff);
-  --accent-2: light-dark(#0f6e66, #5fe0cf);
+  --surface: light-dark(#f2f4fb, #1e2230);
+  --accent: light-dark(#3449b8, #aeb8ff);
+  --accent-2: light-dark(#0f6e66, #73ebdb);
 }
 html[data-theme='violet'] {
-  --surface: light-dark(#f7f3fc, #1b1624);
-  --accent: light-dark(#6a33c4, #c9adff);
-  --accent-2: light-dark(#0a6b86, #6fd9f0);
+  --surface: light-dark(#f7f3fc, #211a2c);
+  --accent: light-dark(#6a33c4, #d6beff);
+  --accent-2: light-dark(#0a6b86, #86e3f5);
 }
 /* Investigation 2026-10-06 (ADR-015 §4 amended): preferences as html[data-*] attributes. Appearance overrides the OS scheme:
    light-dark() and Canvas/CanvasText resolve against the element's used color-scheme, so every token flips with no JS. */
