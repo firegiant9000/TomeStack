@@ -47,6 +47,22 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void Importing_a_share_keeps_the_local_notes_and_importing_a_backup_takes_the_packages()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Notes = [Note("Backup-time note.")] }).Character;
+        var share = temp.App.ExportCharacters([saved.Id], ExportPurpose.Share).Content;
+        var backup = temp.App.ExportCharacters([saved.Id], ExportPurpose.Backup).Content;
+
+        temp.App.SaveCharacter(saved with { Notes = [Note("Local note written later.")] });
+        temp.App.ApplyImport(share);
+        Assert.Equal("Local note written later.", Assert.Single(temp.App.GetCharacter(saved.Id).Character.Notes).Text);
+
+        temp.App.ApplyImport(backup);
+        Assert.Equal("Backup-time note.", Assert.Single(temp.App.GetCharacter(saved.Id).Character.Notes).Text);
+    }
+
+    [Fact]
     public void Restoring_a_snapshot_keeps_the_current_session_notes()
     {
         using var temp = new TempApp();

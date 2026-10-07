@@ -28,6 +28,18 @@ const character: Character = {
 const sheet: CharacterSheet = { characterId: 'fixture-4', rulesFamily: 'srd-5.1', diagnostics: [], fields: [] };
 const fixture: CharacterView = { character, sheet };
 
+it('keeps the typed note and reports the error when the save fails', async () => {
+  vi.mocked(client.saveCharacter).mockRejectedValue(new Error('refused'));
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  render(<SessionNotesPanel view={fixture} onChanged={() => {}} onError={onError} onStatus={() => {}} />);
+  const form = screen.getByRole('form', { name: 'New session note' });
+  await user.type(within(form).getByRole('textbox', { name: 'Note' }), 'Fixture unsaved note.');
+  await user.click(within(form).getByRole('button', { name: 'Save session note' }));
+  expect(onError).toHaveBeenCalled();
+  expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Note' }).value).toBe('Fixture unsaved note.');
+});
+
 it('adds a dated note and lists it newest first, then deletes it after a confirm click', async () => {
   vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...fixture, character: c }));
   const user = userEvent.setup();

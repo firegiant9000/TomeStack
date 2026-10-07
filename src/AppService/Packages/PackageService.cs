@@ -373,7 +373,10 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 else replaced++;
                 // SPEC C-08: only a full library restore brings the archive mark back. A character package keeps the local
                 // mark (or none for a new character), so an import never archives or unarchives anything by itself.
-                store.SaveCharacter(library ? character : character with { ArchivedAt = local?.ArchivedAt });
+                // D22: a share carries no session notes, so importing one keeps the local journal; a backup brings its own.
+                store.SaveCharacter(library
+                    ? character
+                    : character with { ArchivedAt = local?.ArchivedAt, Notes = parsed.Manifest.Purpose == ExportPurpose.Share ? local?.Notes ?? [] : character.Notes });
             }
             foreach (var note in parsed.GapNotes)
             {

@@ -9,7 +9,11 @@ interface Props {
   onStatus: (text: string) => void;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** The local calendar date (a UTC date would be tomorrow's, or yesterday's, around midnight). */
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /**
  * Character schema v8 (D22): the player's dated session notes, saved with the character. A journal, not rules: never
@@ -21,21 +25,26 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
   const [date, setDate] = useState(today());
   const [text, setText] = useState('');
   const [deleting, setDeleting] = useState<string>();
+  const [saving, setSaving] = useState(false);
 
-  async function saveNotes(next: typeof notes, status: string) {
+  async function saveNotes(next: typeof notes, status: string): Promise<boolean> {
     try {
       onChanged(await client.saveCharacter({ ...character, notes: next }));
       onStatus(status);
+      return true;
     } catch (error) {
       onError(error);
+      return false;
     }
   }
 
   async function add(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!text.trim() || !date) return;
-    await saveNotes([...notes, { id: crypto.randomUUID(), date, text: text.trim(), createdAt: new Date().toISOString() }], 'Session note saved.');
-    setText('');
+    if (!text.trim() || !date || saving) return;
+    setSaving(true);
+    const ok = await saveNotes([...notes, { id: crypto.randomUUID(), date, text: text.trim(), createdAt: new Date().toISOString() }], 'Session note saved.');
+    setSaving(false);
+    if (ok) setText(''); // a failed save keeps what was typed
   }
 
   return (
@@ -51,7 +60,7 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
           Note
           <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={3} required />
         </label>
-        <button type="submit" disabled={!text.trim() || !date}>
+        <button type="submit" disabled={!text.trim() || !date || saving}>
           Save session note
         </button>
       </form>

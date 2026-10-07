@@ -132,7 +132,12 @@ type Coin = (typeof coins)[number][0];
 const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
 /** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
-export function CurrencyPanel({ view, onChanged, onError }: Props) {
+export function CurrencyPanel(props: Props) {
+  // Keyed on the stored coins: a snapshot restore or import keeps the character id (no remount), so the draft is re-seeded here.
+  return <CurrencyForm key={JSON.stringify(props.view.character.currency ?? {})} {...props} />;
+}
+
+function CurrencyForm({ view, onChanged, onError }: Props) {
   const { character } = view;
   const stored = character.currency ?? emptyCurrency;
   const [draft, setDraft] = useState<Record<Coin, string>>(() => Object.fromEntries(coins.map(([k]) => [k, String(stored[k])])) as Record<Coin, string>);

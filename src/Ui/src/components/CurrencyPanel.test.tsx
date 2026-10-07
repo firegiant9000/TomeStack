@@ -41,6 +41,13 @@ it('shows the five coin counts and saves the edited currency with the character'
   expect(onChanged).toHaveBeenCalled();
 });
 
+it('re-seeds the inputs when the stored currency changes (a restore keeps the character id)', () => {
+  const { rerender } = render(<CurrencyPanel view={{ ...fixture, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } }} onChanged={() => {}} onError={() => {}} />);
+  rerender(<CurrencyPanel view={{ ...fixture, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 5, pp: 0 } } }} onChanged={() => {}} onError={() => {}} />);
+  expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' }).value).toBe('5');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save currency' }).disabled).toBe(true);
+});
+
 it('refuses a negative or non-integer coin count before saving', async () => {
   const user = userEvent.setup();
   render(<CurrencyPanel view={fixture} onChanged={() => {}} onError={() => {}} />);

@@ -263,7 +263,7 @@ export function PrintView({ view, onError, onClose }: Props) {
         <div>
           <h4>Session notes</h4>
           <ul>
-            {[...character.notes!].sort((a, b) => (a.date < b.date ? -1 : 1)).map((n) => (
+            {[...character.notes!].sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)).map((n) => (
               <li key={n.id}>
                 {n.date}: {n.text}
               </li>
