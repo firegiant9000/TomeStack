@@ -59,7 +59,7 @@ Ctrl+plus, Ctrl+minus and Ctrl+0 zoom the window (the host handles them; WebView
 
 ## No trade dress (P-03)
 
-Only the information architecture is borrowed. The palette is TomeStack's own (ADR-015): three themes on the system colours, no red or parchment. Dice are plain polygons. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04.
+Only the information architecture is borrowed. The palette is TomeStack's own (ADR-015): three themes on the system colours, no red or parchment. Dice are plain polygons. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04. The tab glyphs are plain geometric shapes drawn in CSS (D26): no icon set, nothing from another product.
 
 ## Settings
 

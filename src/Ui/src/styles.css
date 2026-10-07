@@ -231,6 +231,17 @@ span.warn { color: var(--warn); }
 .tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--line); }
 .tabs [role='tab'] { background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; color: inherit; }
 .tabs [role='tab'][aria-selected='true'] { border-color: var(--line); border-bottom: 2px solid var(--accent); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
+/* D26 (owner, 2026-10-06, under SPEC P-03): plain geometric glyphs beside the tab text, never icon-only (1.1.1, 4.1.2). Each is
+   a currentColor shape, no asset, no icon font: a hexagon (Play), a book spine (Spells), a bag (Inventory), a list (Features),
+   two columns (Stats), a pen stroke (Notes), a cog-like ring (Manage). None is another product's mark. */
+.tabs [role='tab']::before { content: ''; display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.4em; vertical-align: -0.1em; border: 2px solid currentColor; box-sizing: border-box; }
+#sheet-tab-play::before { border: none; background: currentColor; clip-path: polygon(25% 7%, 75% 7%, 100% 50%, 75% 93%, 25% 93%, 0 50%); }
+#sheet-tab-spells::before { border-radius: 0 0.2em 0.2em 0; border-left-width: 4px; }
+#sheet-tab-inventory::before { border-radius: 0 0 0.3em 0.3em; border-top-width: 3px; }
+#sheet-tab-features::before { border-left: none; border-right: none; border-top-width: 2px; border-bottom-width: 2px; box-shadow: inset 0 0.25em 0 -0.15em currentColor; }
+#sheet-tab-stats::before { border-top: none; border-bottom: none; border-left-width: 3px; border-right-width: 3px; }
+#sheet-tab-notes::before { border: none; background: currentColor; clip-path: polygon(0 100%, 20% 60%, 80% 0, 100% 20%, 40% 80%); }
+#sheet-tab-manage::before { border-radius: 50%; border-style: dotted; }
 .tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
 .tabpanel[hidden] { display: none; }
 /* Investigation 2026-10-06 item 8: two columns on Play (two .play-column wrappers; Attacks and actions in the second) and Stats at
@@ -403,6 +414,8 @@ dd { margin: 0; }
 }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
+  .tabs [role='tab']::before { forced-color-adjust: none; border-color: CanvasText; }
+  #sheet-tab-play::before, #sheet-tab-notes::before { background: CanvasText; }
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
   .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
