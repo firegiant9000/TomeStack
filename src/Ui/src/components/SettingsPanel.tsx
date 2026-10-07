@@ -5,19 +5,37 @@ import {
   abilityOrderIds,
   appearance,
   appearanceIds,
+  announceRollsOn,
   applyPreferences,
+  contrast,
   diceAnimationOn,
+  focusRing,
+  motion,
+  motionIds,
   setAbilityOrder,
+  setAnnounceRolls,
   setAppearance,
+  setContrast,
   setDiceAnimation,
+  setFocusRing,
+  setMotion,
+  setTargets,
   setTextSize,
   setTheme,
+  setUnderline,
+  targets,
   textSize,
   textSizeIds,
   theme,
   themeIds,
+  underline,
   type AbilityOrderId,
   type AppearanceId,
+  type ContrastId,
+  type FocusRingId,
+  type MotionId,
+  type TargetsId,
+  type UnderlineId,
   type TextSizeId,
   type ThemeId,
 } from '../settings';
@@ -52,6 +70,12 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
   const [size, setSize] = useState<TextSizeId>(textSize());
   const [order, setOrder] = useState<AbilityOrderId>(abilityOrder());
   const [dice, setDice] = useState(diceAnimationOn());
+  const [move, setMove] = useState<MotionId>(motion());
+  const [more, setMore] = useState<ContrastId>(contrast());
+  const [ring, setRing] = useState<FocusRingId>(focusRing());
+  const [big, setBig] = useState<TargetsId>(targets());
+  const [lines, setLines] = useState<UnderlineId>(underline());
+  const [announce, setAnnounce] = useState(announceRollsOn());
   const heading = useRef<HTMLHeadingElement>(null);
 
   // WCAG 2.4.3: like the other screens, opening Settings moves focus to its heading.
@@ -94,6 +118,26 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
       <label className="choice">
         <input type="checkbox" checked={dice} onChange={(e) => toggleDice(e.target.checked)} /> Animate dice
       </label>
+
+      <h3>Accessibility</h3>
+      <Choice legend="Motion" ids={motionIds} labels={{ system: 'Follow Windows', reduce: 'Reduce motion' }} value={move} onPick={pick(setMotion, setMove)} />
+      <p className="hint">Dice stop tumbling; nothing else moves today. &quot;Follow Windows&quot; uses your &quot;Animation effects&quot; setting.</p>
+      <label className="choice">
+        <input type="checkbox" checked={more === 'more'} onChange={(e) => pick(setContrast, setMore)(e.target.checked ? 'more' : 'default')} /> Stronger borders and labels
+      </label>
+      <label className="choice">
+        <input type="checkbox" checked={ring === 'always'} onChange={(e) => pick(setFocusRing, setRing)(e.target.checked ? 'always' : 'auto')} /> Always show the focus outline
+      </label>
+      <label className="choice">
+        <input type="checkbox" checked={big === 'large'} onChange={(e) => pick(setTargets, setBig)(e.target.checked ? 'large' : 'default')} /> Larger buttons
+      </label>
+      <label className="choice">
+        <input type="checkbox" checked={lines === 'on'} onChange={(e) => pick(setUnderline, setLines)(e.target.checked ? 'on' : 'off')} /> Underline links and text buttons
+      </label>
+      <label className="choice">
+        <input type="checkbox" checked={announce} onChange={(e) => { setAnnounceRolls(e.target.checked); setAnnounce(e.target.checked); }} /> Announce each roll to screen readers
+      </label>
+      <p className="hint">Rolls are always shown as text; turning announcements off takes full effect the next time a sheet is opened.</p>
 
       <h3>Keyboard shortcuts</h3>
       <dl className="shortcuts">

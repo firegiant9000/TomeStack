@@ -13,7 +13,7 @@ import type {
   RollTarget,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
-import { diceAnimationOn } from '../settings';
+import { announceRollsOn, diceAnimationOn } from '../settings';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
 export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
@@ -532,7 +532,9 @@ export function RollResult({
   const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
   const amount = typed.record === record ? typed.value : '';
   const setAmount = (value: string) => setTyped({ record, value });
-  if (!record) return <div role="region" aria-label="Last roll" aria-live="polite" />;
+  // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
+  // full effect on the next sheet open, which the Settings hint says.
+  if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
   const p = record.provenance;
   // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
   // resource (content v6) is found through the content that defines it.
@@ -547,7 +549,7 @@ export function RollResult({
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
-    <div role="region" aria-label="Last roll" aria-live="polite" className="roll-result">
+    <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result">
       {/* ADR-015: the service's dice, drawn. aria-hidden and textless (faces come from CSS attr()), so the text below is
           the result for everyone and the region announces once. Nothing is rolled here. */}
       <div key={rollKey(record)} className={diceAnimationOn() ? 'dice' : 'dice dice-still'} aria-hidden="true">

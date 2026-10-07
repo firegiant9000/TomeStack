@@ -4,20 +4,32 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   abilityOrder,
+  announceRollsOn,
   appearance,
   applyPreferences,
   applyTheme,
+  contrast,
   diceAnimationOn,
+  focusRing,
   forgetSessionChoices,
+  motion,
   setAbilityOrder,
+  setAnnounceRolls,
   setAppearance,
+  setContrast,
   setDiceAnimation,
+  setFocusRing,
+  setMotion,
   setSidebarCollapsed,
+  setTargets,
   setTextSize,
   setTheme,
+  setUnderline,
   sidebarCollapsed,
+  targets,
   textSize,
   theme,
+  underline,
 } from './settings';
 
 afterEach(() => {
@@ -144,4 +156,28 @@ it('keeps the session\'s pick and applies it when storage is unavailable', () =>
   setAppearance('dark');
   applyPreferences();
   expect(document.documentElement.dataset.appearance).toBe('dark');
+});
+
+it('defaults the accessibility settings to the OS or off, and remembers each under its own key', () => {
+  expect(motion()).toBe('system');
+  expect(contrast()).toBe('default');
+  expect(focusRing()).toBe('auto');
+  expect(targets()).toBe('default');
+  expect(underline()).toBe('off');
+  expect(announceRollsOn()).toBe(true);
+  setMotion('reduce');
+  setContrast('more');
+  setFocusRing('always');
+  setTargets('large');
+  setUnderline('on');
+  setAnnounceRolls(false);
+  expect(localStorage.getItem('tomestack.motion')).toBe('reduce');
+  expect(localStorage.getItem('tomestack.contrast')).toBe('more');
+  expect(localStorage.getItem('tomestack.focus')).toBe('always');
+  expect(localStorage.getItem('tomestack.targets')).toBe('large');
+  expect(localStorage.getItem('tomestack.underline')).toBe('on');
+  expect(localStorage.getItem('tomestack.announceRolls')).toBe('off');
+  applyPreferences();
+  expect(document.documentElement.dataset).toMatchObject({ motion: 'reduce', contrast: 'more', focus: 'always', targets: 'large', underline: 'on' });
+  expect(document.documentElement.dataset.announceRolls).toBeUndefined(); // read by the component, not the CSS
 });

@@ -78,3 +78,14 @@ it('renders an empty live region with no dice when there is no record', () => {
   render(<RollResult resources={[]} features={[]} act={() => {}} />);
   expect(region().children).toHaveLength(0);
 });
+
+it('drops aria-live from the Last roll region when "Announce each roll" is off, keeping the text (4.1.3 trade, item 11)', () => {
+  localStorage.setItem('tomestack.announceRolls', 'off');
+  render(<RollResult record={record()} resources={[]} features={[]} act={() => {}} />);
+  expect(region().getAttribute('aria-live')).toBeNull();
+  expect(region().textContent).toMatch(/^Fixture damage: 7/);
+  cleanup();
+  localStorage.removeItem('tomestack.announceRolls');
+  render(<RollResult record={record()} resources={[]} features={[]} act={() => {}} />);
+  expect(region().getAttribute('aria-live')).toBe('polite');
+});

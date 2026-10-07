@@ -15,6 +15,12 @@ const keys = {
   appearance: 'tomestack.appearance',
   textSize: 'tomestack.textSize',
   abilityOrder: 'tomestack.abilityOrder',
+  motion: 'tomestack.motion',
+  contrast: 'tomestack.contrast',
+  focus: 'tomestack.focus',
+  targets: 'tomestack.targets',
+  underline: 'tomestack.underline',
+  announceRolls: 'tomestack.announceRolls',
 } as const;
 
 /** This session's choices, read only while storage is unavailable, so a pick still applies and lasts until the app closes. */
@@ -83,7 +89,7 @@ function oneOf<T extends string>(ids: readonly T[], stored: string | null, fallb
   return (ids as readonly string[]).includes(stored ?? '') ? (stored as T) : fallback;
 }
 
-function applyAttribute(name: 'appearance' | 'textSize' | 'abilityOrder', value: string | undefined): void {
+function applyAttribute(name: 'appearance' | 'textSize' | 'abilityOrder' | 'motion' | 'contrast' | 'focus' | 'targets' | 'underline', value: string | undefined): void {
   if (value === undefined) delete document.documentElement.dataset[name];
   else document.documentElement.dataset[name] = value;
 }
@@ -109,10 +115,45 @@ export const abilityOrder = (): AbilityOrderId => oneOf(abilityOrderIds, read(ke
 export const setAbilityOrder = (id: AbilityOrderId): void => write(keys.abilityOrder, id === 'modifier' ? null : id);
 export const applyAbilityOrder = (id: AbilityOrderId): void => applyAttribute('abilityOrder', id === 'modifier' ? undefined : id);
 
+/** Accessibility settings (investigation 2026-10-06 item 11). "System"/default means no attribute: the OS media queries rule. */
+export const motionIds = ['system', 'reduce'] as const;
+export type MotionId = (typeof motionIds)[number];
+export const motion = (): MotionId => oneOf(motionIds, read(keys.motion), 'system');
+export const setMotion = (id: MotionId): void => write(keys.motion, id === 'system' ? null : id);
+
+export const contrastIds = ['default', 'more'] as const;
+export type ContrastId = (typeof contrastIds)[number];
+export const contrast = (): ContrastId => oneOf(contrastIds, read(keys.contrast), 'default');
+export const setContrast = (id: ContrastId): void => write(keys.contrast, id === 'default' ? null : id);
+
+export const focusRingIds = ['auto', 'always'] as const;
+export type FocusRingId = (typeof focusRingIds)[number];
+export const focusRing = (): FocusRingId => oneOf(focusRingIds, read(keys.focus), 'auto');
+export const setFocusRing = (id: FocusRingId): void => write(keys.focus, id === 'auto' ? null : id);
+
+export const targetsIds = ['default', 'large'] as const;
+export type TargetsId = (typeof targetsIds)[number];
+export const targets = (): TargetsId => oneOf(targetsIds, read(keys.targets), 'default');
+export const setTargets = (id: TargetsId): void => write(keys.targets, id === 'default' ? null : id);
+
+export const underlineIds = ['off', 'on'] as const;
+export type UnderlineId = (typeof underlineIds)[number];
+export const underline = (): UnderlineId => oneOf(underlineIds, read(keys.underline), 'off');
+export const setUnderline = (id: UnderlineId): void => write(keys.underline, id === 'off' ? null : id);
+
+/** Off removes `aria-live` from the Last roll region (the text stays): a screen-reader user then reads it on demand (4.1.3). */
+export const announceRollsOn = (): boolean => read(keys.announceRolls) !== 'off';
+export const setAnnounceRolls = (on: boolean): void => write(keys.announceRolls, on ? null : 'off');
+
 /** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
 export function applyPreferences(): void {
   applyTheme(theme());
   applyAppearance(appearance());
   applyTextSize(textSize());
   applyAbilityOrder(abilityOrder());
+  applyAttribute('motion', motion() === 'system' ? undefined : 'reduce');
+  applyAttribute('contrast', contrast() === 'default' ? undefined : 'more');
+  applyAttribute('focus', focusRing() === 'auto' ? undefined : 'always');
+  applyAttribute('targets', targets() === 'default' ? undefined : 'large');
+  applyAttribute('underline', underline() === 'off' ? undefined : 'on');
 }

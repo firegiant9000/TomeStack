@@ -52,6 +52,17 @@ html[data-text-size='125'] { font-size: 125%; }
 html[data-text-size='150'] { font-size: 150%; }
 html[data-text-size='175'] { font-size: 175%; }
 html[data-text-size='200'] { font-size: 200%; }
+/* Accessibility settings (item 11). Motion mirrors the prefers-reduced-motion block; contrast strengthens the mixes
+   (70% CanvasText: 8.45:1 light / 9.44:1 dark on Canvas; 80%: 12.6 / 12.2; both pass on every surface). */
+html[data-motion='reduce'] *, html[data-motion='reduce'] ::before, html[data-motion='reduce'] ::after { animation: none !important; transition: none !important; }
+html[data-contrast='more'] {
+  --line: color-mix(in srgb, CanvasText 50%, Canvas);
+  --line-strong: color-mix(in srgb, CanvasText 70%, Canvas);
+  --muted: color-mix(in srgb, CanvasText 80%, Canvas);
+}
+html[data-focus='always'] :focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+html[data-targets='large'] button { min-height: 2.75rem; min-width: 2.75rem; }
+html[data-underline='on'] :is(button.link, a) { text-decoration: underline; }
 /* WCAG 1.4.11 under Windows High Contrast: every token maps to a system colour; borders carry what colour carried. */
 @media (forced-colors: active) {
   /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */

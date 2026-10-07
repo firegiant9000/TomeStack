@@ -42,9 +42,9 @@ it('switches the dice animation off and on', async () => {
   expect(localStorage.getItem('tomestack.diceAnimation')).toBeNull();
 });
 
-it('groups the screen under Appearance, Keyboard shortcuts and About headings', () => {
+it('groups the screen under Appearance, Accessibility, Keyboard shortcuts and About headings', () => {
   render(<SettingsPanel />);
-  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Appearance', 'Keyboard shortcuts', 'About']);
+  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Appearance', 'Accessibility', 'Keyboard shortcuts', 'About']);
   expect(screen.getByText('Ctrl+B', { selector: 'dt' }).nextElementSibling!.textContent).toContain('sidebar');
 });
 
@@ -80,4 +80,23 @@ it('offers modifier-first or score-first ability boxes (owner, 2026-10-06)', asy
   await user.click(within(group).getByRole('radio', { name: 'Score first' }));
   expect(document.documentElement.dataset.abilityOrder).toBe('score');
   expect(localStorage.getItem('tomestack.abilityOrder')).toBe('score');
+});
+
+it('offers the accessibility settings as labelled controls that apply at once', async () => {
+  const user = userEvent.setup();
+  render(<SettingsPanel />);
+  await user.click(within(screen.getByRole('radiogroup', { name: 'Motion' })).getByRole('radio', { name: 'Reduce motion' }));
+  expect(document.documentElement.dataset.motion).toBe('reduce');
+  await user.click(screen.getByRole('checkbox', { name: 'Stronger borders and labels' }));
+  expect(document.documentElement.dataset.contrast).toBe('more');
+  await user.click(screen.getByRole('checkbox', { name: 'Always show the focus outline' }));
+  expect(document.documentElement.dataset.focus).toBe('always');
+  await user.click(screen.getByRole('checkbox', { name: 'Larger buttons' }));
+  expect(document.documentElement.dataset.targets).toBe('large');
+  await user.click(screen.getByRole('checkbox', { name: 'Underline links and text buttons' }));
+  expect(document.documentElement.dataset.underline).toBe('on');
+  const announce = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Announce each roll to screen readers' });
+  expect(announce.checked).toBe(true);
+  await user.click(announce);
+  expect(localStorage.getItem('tomestack.announceRolls')).toBe('off');
 });
