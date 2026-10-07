@@ -330,13 +330,23 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
+  // D23: an entry is offered only for a change whose "before" is the state it actually changed. The shell runs commands one at
+  // a time, so quick repeated presses all apply; a change that overlapped another (started after it, or still running) has no entry.
+  const started = useRef(0);
+  const running = useRef(0);
   async function act(action: PlayAction) {
+    const mine = ++started.current;
+    const startedWhileRunning = running.current > 0;
+    running.current += 1;
     try {
       const after = await client.play(character.id, action);
-      setUndo(inverseOf(action, view, after)); // D23: one level, session-only
+      const overlapped = startedWhileRunning || started.current !== mine || running.current > 1;
+      setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
     } catch (error) {
       onError(error);
+    } finally {
+      running.current -= 1;
     }
   }
 

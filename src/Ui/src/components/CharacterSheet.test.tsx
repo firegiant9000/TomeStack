@@ -122,6 +122,27 @@ it('shows the applied state and keeps focus when a later undo step fails (D23)',
   expect(document.activeElement?.id).toBe('hp-heading');
 });
 
+it('offers no Undo for play changes that overlapped, since the stored "before" is not the state they changed (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, onChanged, element } = undoHarness();
+  const hit = (current: number): CharacterView => ({ ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current, temporary: 0 } } });
+  const [first, second] = [hit(7), hit(6)];
+  let settleFirst: (view: CharacterView) => void = noop;
+  let settleSecond: (view: CharacterView) => void = noop;
+  vi.mocked(client.play)
+    .mockReturnValueOnce(new Promise<CharacterView>((resolve) => { settleFirst = resolve; }))
+    .mockReturnValueOnce(new Promise<CharacterView>((resolve) => { settleSecond = resolve; }));
+  const { rerender } = render(element(v));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  settleFirst(first);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(first));
+  settleSecond(second);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(second));
+  rerender(element(second));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
+});
+
 it('does not offer Undo once another view is shown, such as a rest result (D23)', async () => {
   const user = userEvent.setup();
   const { v, damaged, onChanged, element } = undoHarness();

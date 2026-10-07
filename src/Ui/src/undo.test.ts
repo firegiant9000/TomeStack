@@ -34,7 +34,39 @@ it('starts concentration again when damage to 0 ended it, after the hit points a
 
 it('names the condition in the label', () => {
   expect(inverseOf({ action: 'addCondition', condition: 'prone' }, view(1, 0), view(1, 0))!.label).toBe('add condition prone');
-  expect(inverseOf({ action: 'removeCondition', condition: 'prone' }, view(1, 0), view(1, 0))!.label).toBe('remove condition prone');
+  expect(inverseOf({ action: 'removeCondition', condition: 'prone' }, view(1, 0, { conditions: ['prone'] }), view(1, 0))!.label).toBe('remove condition prone');
+});
+
+it('has no inverse for a condition change that changed nothing (a stale double click)', () => {
+  expect(inverseOf({ action: 'addCondition', condition: 'prone' }, view(1, 0, { conditions: ['prone'] }), view(1, 0, { conditions: ['prone'] }))).toBeUndefined();
+  expect(inverseOf({ action: 'removeCondition', condition: 'prone' }, view(1, 0), view(1, 0))).toBeUndefined();
+  expect(inverseOf({ action: 'removeCondition', condition: 'prone' }, view(1, 0, { conditions: ['prone'] }), view(1, 0))!.inverse).toEqual([{ action: 'addCondition', condition: 'prone' }]);
+});
+
+const withToggle = (resourceId?: string): CharacterView => {
+  const v = view(1, 0);
+  (v.sheet as unknown as { toggles: unknown[] }).toggles = [{ content: { contentId: 'c' }, toggleId: 't', on: false, resourceId }];
+  return v;
+};
+
+it('undoes turning on a resource-backed toggle by turning it off and giving the use back (F2)', () => {
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, withToggle('rage'), withToggle('rage'))!.inverse).toEqual([
+    { action: 'toggleOff', contentId: 'c', toggleId: 't' },
+    { action: 'regain', amount: 1, contentId: 'c', resourceId: 'rage' },
+  ]);
+});
+
+it('does not undo turning off a resource-backed toggle, which would spend a use the player did not spend (F2)', () => {
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle('rage'), withToggle('rage'))).toBeUndefined();
+});
+
+it('keeps the plain mirror for a toggle without a resource (F2)', () => {
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle(), withToggle())!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
+});
+
+it('undoes concentrating on another spell by concentrating on the earlier one again (F3)', () => {
+  expect(inverseOf({ action: 'startConcentration', contentId: 'other-spell' }, view(1, 0, concentrating(10)), view(1, 0))!.inverse).toEqual([{ action: 'startConcentration', contentId: 'fixture-spell' }]);
+  expect(inverseOf({ action: 'startConcentration', contentId: 'fixture-spell' }, view(1, 0, concentrating()), view(1, 0))).toBeUndefined();
 });
 
 it('mirrors spend and regain, conditions, slots, toggles and concentration', () => {
