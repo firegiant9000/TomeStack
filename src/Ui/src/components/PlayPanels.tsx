@@ -185,6 +185,40 @@ export function DeathSavesPanel({
   );
 }
 
+/**
+ * Character schema v8 (D19): concentration. Rolling the save changes nothing; "Kept concentration" and "End concentration" are
+ * the confirmed changes (SPEC C-05). The DC was set by the service when damage was taken (max(10, half the damage dealt)).
+ */
+export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; act: Act; roll: (target: RollTarget) => void }) {
+  const con = view.character.play?.concentration;
+  if (!con) return null;
+  const pending = con.pendingSaveDc !== undefined;
+  return (
+    <section aria-labelledby="concentration-heading" className="play-panel">
+      <h3 id="concentration-heading">
+        Concentration: {con.name}
+        {pending ? `, Constitution saving throw DC ${con.pendingSaveDc} pending` : ''}
+      </h3>
+      <div className="actions">
+        {pending && (
+          <>
+            <button type="button" onClick={() => roll({ field: 'save.con' })}>
+              Roll Constitution saving throw
+            </button>
+            <button type="button" onClick={() => act({ action: 'clearConcentrationCheck' })}>
+              Kept concentration
+            </button>
+          </>
+        )}
+        <button type="button" onClick={() => act({ action: 'endConcentration' })}>
+          End concentration
+        </button>
+      </div>
+      <p className="hint">Taking damage asks for a Constitution save of DC 10 or half the damage, whichever is higher; at 0 hit points the spell ends by itself.</p>
+    </section>
+  );
+}
+
 export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }) {
   const play = view.character.play;
   const active = play?.conditions ?? [];

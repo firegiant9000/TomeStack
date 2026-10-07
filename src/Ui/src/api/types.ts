@@ -295,6 +295,8 @@ export interface PlayState {
   hitDiceSpent?: { die: number; spent: number }[];
   deathSaves?: { successes: number; failures: number };
   inspiration?: boolean;
+  /** Character schema v8 (D19): the concentration spell and a pending Constitution save DC after damage. */
+  concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
 }
 
 export type PlayActionKind =
@@ -316,7 +318,10 @@ export type PlayActionKind =
   | 'spendPactSlot'
   | 'regainPactSlot'
   | 'toggleOn'
-  | 'toggleOff';
+  | 'toggleOff'
+  | 'startConcentration'
+  | 'endConcentration'
+  | 'clearConcentrationCheck';
 
 export interface PlayAction {
   action: PlayActionKind;

@@ -16,7 +16,7 @@ import type {
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
-import { ActionsPanel, ClassColumnsPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { EquipmentPanel } from './EquipmentPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
@@ -421,6 +421,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <div className="play-column">
           <HitPointsPanel view={view} act={act} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
+          <ConcentrationPanel view={view} act={act} roll={roll} />
           {resting ? (
             <RestPanel
               key={resting}

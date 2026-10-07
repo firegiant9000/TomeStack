@@ -25,6 +25,99 @@ public class PlayCommandTests
     private static string Code(JsonElement response) =>
         response.GetProperty("error").GetProperty("diagnostics").EnumerateArray().First().GetProperty("code").GetString()!;
 
+    // The M2 spell pack (seeded by TempApp): Fixture Arcanist (1), Fixture Spark (11, a cantrip), Fixture Veil (13, concentration).
+    private static ContentReference SpellRef(int n) => new(Guid.Parse($"5f5dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f5de000-0000-4000-8000-{n:D12}"));
+
+    private static (TempApp Temp, Guid Id, ContentReference Veil) Caster(string family = RulesFamilies.Srd521)
+    {
+        var temp = new TempApp();
+        var arcanist = SpellRef(1);
+        var veil = SpellRef(13);
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Test Arcanist",
+            RulesFamily = family,
+            Level = 3,
+            Classes = [new(arcanist, 3)],
+            BaseAbilities = new(8, 14, 12, 16, 10, 10),
+            Spells = [new(arcanist.ContentId, veil), new(arcanist.ContentId, SpellRef(11))],
+        };
+        return (temp, temp.App.SaveCharacter(character).Character.Id, veil);
+    }
+
+    [Fact]
+    public void Concentration_starts_on_a_prepared_concentration_spell_and_damage_sets_the_save_dc()
+    {
+        var (temp, id, veil) = Caster();
+        using var _ = temp;
+
+        var view = temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+        Assert.Equal(("Fixture Veil", (int?)null), (view.Character.Play.Concentration!.Name, view.Character.Play.Concentration.PendingSaveDc));
+
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 100)); // keeps the caster above 0; the DC uses the damage dealt
+        view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 7));
+        Assert.Equal(10, view.Character.Play.Concentration!.PendingSaveDc); // max(10, floor(7 / 2))
+        view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 30));
+        Assert.Equal(15, view.Character.Play.Concentration!.PendingSaveDc);
+
+        view = temp.App.Play(new(id, PlayActionKind.ClearConcentrationCheck, Confirm: true));
+        Assert.Null(view.Character.Play.Concentration!.PendingSaveDc);
+        Assert.Equal("Fixture Veil", view.Character.Play.Concentration.Name);
+
+        view = temp.App.Play(new(id, PlayActionKind.EndConcentration, Confirm: true));
+        Assert.Null(view.Character.Play.Concentration);
+        Assert.Equal("play.not-concentrating", Code(Dispatch(temp, new { characterId = id, action = "clearConcentrationCheck", confirm = true })));
+    }
+
+    [Fact]
+    public void Damage_to_zero_hit_points_ends_concentration_and_temporary_hit_points_do_not_change_the_dc()
+    {
+        var (temp, id, veil) = Caster();
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 5));
+
+        var view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 24)); // 5 absorbed; the DC uses the 24 dealt
+        Assert.Equal(12, view.Character.Play.Concentration!.PendingSaveDc);
+
+        view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 500));
+        Assert.Equal(0, view.Sheet.HitPoints!.Current);
+        Assert.Null(view.Character.Play.Concentration); // SRD: concentration ends at 0 hit points
+    }
+
+    [Fact]
+    public void Concentration_is_refused_for_an_unknown_or_non_concentration_spell()
+    {
+        var (temp, id, _) = Caster();
+        using var _ = temp;
+        Assert.Equal("play.spell-not-found", Code(Dispatch(temp, new { characterId = id, action = "startConcentration", contentId = Guid.NewGuid(), confirm = true })));
+        // Fixture Spark (SpellRef(11)) is a cantrip without concentration in the M2 spell pack.
+        Assert.Equal("play.spell-not-concentration", Code(Dispatch(temp, new { characterId = id, action = "startConcentration", contentId = SpellRef(11).ContentId, confirm = true })));
+    }
+
+    [Fact]
+    public void The_save_dc_is_capped_at_30_under_srd_521_and_only_at_the_validation_bound_under_srd_51()
+    {
+        // R11: SRD 5.2.1 ("up to a maximum DC of 30") caps it through the family policy; SRD 5.1 has no ceiling, and
+        // either way the DC stays within what PlayState validation accepts (100) so a huge hit is still applied.
+        Assert.Equal(30, RulesFamilies.Get(RulesFamilies.Srd521).ConcentrationSaveMaximumDc);
+        Assert.Null(RulesFamilies.Get(RulesFamilies.Srd51).ConcentrationSaveMaximumDc);
+
+        foreach (var (family, damage, expected) in new[] { (RulesFamilies.Srd521, 80, 30), (RulesFamilies.Srd51, 250, 100) })
+        {
+            var (temp, id, veil) = Caster(family);
+            using var _ = temp;
+            temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+            temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 1000)); // keeps the caster above 0
+
+            var view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: damage));
+
+            Assert.Equal(expected, view.Character.Play.Concentration!.PendingSaveDc);
+            Assert.Equal(1000 - damage, view.Character.Play.TemporaryHitPoints);
+        }
+    }
+
     [Fact]
     public void Death_saves_follow_the_srd_and_regaining_hit_points_resets_them()
     {

@@ -61,6 +61,15 @@ public enum PlayActionKind
 
     /// <summary>Switches a toggle off.</summary>
     ToggleOff,
+
+    /// <summary>Character schema v8 (D19): starts concentrating on the spell <c>contentId</c>, which must be a concentration spell in one of the character's spell lists.</summary>
+    StartConcentration,
+
+    /// <summary>Ends concentration (the spell ends).</summary>
+    EndConcentration,
+
+    /// <summary>The Constitution saving throw after damage was made and kept: clears the pending DC.</summary>
+    ClearConcentrationCheck,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -100,7 +109,7 @@ public sealed partial class TomeStackApp
         play = command.Action switch
         {
             PlayActionKind.Spend or PlayActionKind.Regain => ChangeResource(play, sheet, command),
-            PlayActionKind.Damage => Damage(play, hp, command.Amount),
+            PlayActionKind.Damage => Damage(play, hp, command.Amount, RulesFamilies.Get(character.RulesFamily)),
             PlayActionKind.Heal => play with { CurrentHitPoints = AtMaximumIsNull(hp.Current + command.Amount) },
             PlayActionKind.SetTemporaryHitPoints => play with { TemporaryHitPoints = command.Amount },
             PlayActionKind.SetHitPoints => command.Amount <= hp.Maximum
@@ -129,8 +138,17 @@ public sealed partial class TomeStackApp
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
             PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(play, sheet, command),
+            PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
+            PlayActionKind.EndConcentration => play.Concentration is null
+                ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
+                : play with { Concentration = null },
+            PlayActionKind.ClearConcentrationCheck => play.Concentration is { } con
+                ? play with { Concentration = con with { PendingSaveDc = null } }
+                : throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")]),
             _ => throw new AppValidationException([new("play.action-unknown", $"Unknown play action '{command.Action}'.")]),
         };
+        if (command.Action == PlayActionKind.SetHitPoints && command.Amount == 0)
+            play = play with { Concentration = null }; // concentration ends at 0 hit points
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
@@ -187,11 +205,26 @@ public sealed partial class TomeStackApp
             : play with { DeathSaves = play.DeathSaves.After(outcome) };
     }
 
-    private static PlayState Damage(PlayState play, HitPointState hp, int amount)
+    private static PlayState Damage(PlayState play, HitPointState hp, int amount, RulesFamilyPolicy family)
     {
         var absorbed = Math.Min(play.TemporaryHitPoints, amount);
         var current = Math.Max(hp.Current - (amount - absorbed), 0);
-        return play with { TemporaryHitPoints = play.TemporaryHitPoints - absorbed, CurrentHitPoints = current >= hp.Maximum ? null : current };
+        // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11): damage while concentrating asks for a Constitution save, DC 10 or half the
+        // damage dealt (the amount, before temporary hit points), whichever is higher; at 0 hit points the spell simply ends.
+        // The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a huge hit is still applied.
+        var concentration = play.Concentration is { } con && amount > 0
+            ? current == 0 ? null : con with { PendingSaveDc = Math.Min(Math.Max(10, amount / 2), Math.Min(family.ConcentrationSaveMaximumDc ?? int.MaxValue, PlayState.MaxConcentrationSaveDc)) }
+            : play.Concentration;
+        return play with { TemporaryHitPoints = play.TemporaryHitPoints - absorbed, CurrentHitPoints = current >= hp.Maximum ? null : current, Concentration = concentration };
+    }
+
+    private static PlayState StartConcentration(PlayState play, CharacterSheet sheet, PlayCommand command)
+    {
+        var spell = sheet.Spellcasting?.SelectMany(c => c.Spells).FirstOrDefault(s => s.Spell.ContentId == command.ContentId)
+            ?? throw new AppValidationException([new("play.spell-not-found", $"This character has no spell with content id {command.ContentId}.")]);
+        if (!spell.Concentration)
+            throw new AppValidationException([new("play.spell-not-concentration", $"'{spell.Name}' does not need concentration.", spell.Spell)]);
+        return play with { Concentration = new(spell.Spell, spell.Name) };
     }
 
     private static PlayState ChangeResource(PlayState play, CharacterSheet sheet, PlayCommand command)

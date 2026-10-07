@@ -1628,6 +1628,8 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 2 of 2' })).toBeTruthy();
   expect(within(sheet).getByRole('heading', { name: /^Spell attack bonus: \+5/ })).toBeTruthy();
 
+  // Concentration (D19) is not driven here: the fixture pack's only concentration spell (Fixture Veil) is level 2, which this
+  // level 1 character cannot prepare. The panel and its service rules are covered by ConcentrationPanel.test.tsx and PlayCommandTests.
   // Casting spends a slot (a confirmed play change); rolling a spell spends nothing.
   await user.click(within(spells()).getByRole('button', { name: 'Cast Fixture Frost Ring (spend a slot)' }));
   await waitFor(() => expect(within(spells()).getByRole('heading', { name: 'Level 1 slots: 1 of 2' })).toBeTruthy());
