@@ -63,6 +63,14 @@ public static class ContentValidator
     }
 
     /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
+    /// <summary>
+    /// D24 (2026-10-06): the passive scores and speed are calculated and overridable on the sheet, but no content-schema
+    /// version carries them as targets yet, and an older build would read such content as supported and drop its bonus
+    /// silently. Content may not target them until a version allows it; character overrides do not pass through here.
+    /// </summary>
+    private static bool IsCharacterOnlyField(string field) =>
+        field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
+
     private static bool IsSpellField(string field) =>
         field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
 
@@ -139,6 +147,8 @@ public static class ContentValidator
                     spellTargets |= IsSpellField(modifier.Target);
                     if (!CharacterCalculator.IsField(modifier.Target))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
+                    else if (IsCharacterOnlyField(modifier.Target))
+                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs a content schema version).", modifier.Id);
                     // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
                     // bonus (such as -1 for Improved Critical) can lower it.
                     if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -229,6 +239,8 @@ public static class ContentValidator
                         Warn("validate.multiclass-kind", $"A multiclass prerequisite belongs on a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", restriction.Id);
                     if (!CharacterCalculator.IsField(restriction.Field))
                         Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field.", restriction.Id);
+                    else if (IsCharacterOnlyField(restriction.Field))
+                        Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which cannot be targeted by content yet (needs a content schema version).", restriction.Id);
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;

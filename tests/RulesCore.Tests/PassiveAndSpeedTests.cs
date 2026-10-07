@@ -18,7 +18,7 @@ public class PassiveAndSpeedTests
     }
 
     [Fact]
-    public void A_content_bonus_on_a_passive_applies_like_any_field()
+    public void The_calculator_applies_a_bonus_on_a_passive_like_any_field_though_content_validation_refuses_it_for_now()
     {
         var observant = new ContentRevision
         {

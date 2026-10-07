@@ -43,7 +43,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
 | Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
 | Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what granted them ("From Fixture Fighter") or by kind (Classes, Subclasses, Species, Background, Feats, Granted features, Spells, Items) |
-| Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up. Saving throws and Skills show " · proficient" or " · expertise" after the value when a grant applies; Skills also list Passive Perception, Insight and Investigation (10 + the skill, bonuses apply); Combat lists Speed |
+| Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up. Saving throws and Skills show " · proficient" or " · expertise" after the value when a grant applies; Skills also list Passive Perception, Insight and Investigation (10 + the skill; calculated, overridable on Stats; content cannot target them until a content schema version allows it); Combat lists Speed |
 | Notes | Session notes (dated, newest first; D22) above Gap notes |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots, separated by rules |
 
