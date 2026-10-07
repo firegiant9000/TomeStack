@@ -79,7 +79,8 @@ public static partial class DdbParser
                 sheet.Int("play.deathFailures", 0, 3),
                 sheet.Bool("play.inspiration"),
                 [.. slots.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new SlotsSpent(x.Level, x.Read.Value))],
-                hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable)));
+                hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable)),
+            DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins), StringComparer.Ordinal));
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];

@@ -98,8 +98,31 @@ public sealed partial class TomeStackApp
     public const string ImportedOverrideReason = "Imported from D&D Beyond";
 
     /// <summary>What the import leaves out by design (D16d, D16e), listed in every report.</summary>
-    private static readonly string[] NotBroughtOver =
-        ["currency", "notes", "speed", "passivePerception", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
+    private static readonly string[] AlwaysNotBroughtOver =
+        ["notes", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
+
+    /// <summary>
+    /// D16e amended (D21, D24): currency is listed only when the sheet gave no coin (the layout maps none, or none was readable);
+    /// speed and passive Perception are numbers now, compared when the layout maps them, and listed only when it does not
+    /// (the 2014 map until the owner adds their field names).
+    /// </summary>
+    private static IEnumerable<string> NotBroughtOver(DdbSheet sheet)
+    {
+        if (!sheet.Currency.Values.Any(r => r.Status == ReadStatus.Ok))
+            yield return "currency";
+        if (!sheet.Numbers.ContainsKey(FieldIds.Speed))
+            yield return "speed";
+        if (!sheet.Numbers.ContainsKey(FieldIds.Passive("perception")))
+            yield return "passivePerception";
+        foreach (var code in AlwaysNotBroughtOver)
+            yield return code;
+    }
+
+    private static Currency CurrencyFrom(DdbSheet sheet)
+    {
+        int Coin(string key) => sheet.Currency.TryGetValue(key, out var read) && read.Status == ReadStatus.Ok ? read.Value : 0;
+        return new(Coin("cp"), Coin("sp"), Coin("ep"), Coin("gp"), Coin("pp"));
+    }
 
     /// <summary>
     /// <c>ddb.preview</c>: the proposed character for the read sheet under the chosen family and campaign, with every match,
@@ -181,6 +204,7 @@ public sealed partial class TomeStackApp
             RulesFamily = request.RulesFamily,
             BaseAbilities = new(AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase),
             CampaignId = request.CampaignId,
+            Currency = CurrencyFrom(sheet),
         };
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
             (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision, request.EquipMatched);
@@ -252,7 +276,7 @@ public sealed partial class TomeStackApp
             Count(MatchStatus.NoPlace),
             Count(MatchStatus.Unreadable),
             Count(MatchStatus.LeftOut),
-            [.. NotBroughtOver, .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
+            [.. NotBroughtOver(sheet), .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;

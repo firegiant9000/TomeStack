@@ -782,6 +782,79 @@ public class DdbImportTests
         Assert.Equal("Testy McFixture", preview.Character.Name);
     }
 
+    // Task 20 (D16e amended, D24): a test-only layout with invented field names, parsed to a sheet and proposed directly.
+    private static DdbPreview ProposeFromTestLayout(DdbHarness h, params (string Semantic, string Value)[] reads)
+    {
+        var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels") };
+        var form = new List<FormField> { new("fixture class", "text", 1, $"{h.Name(Barbarian)} 1") };
+        foreach (var (semantic, value) in reads)
+        {
+            var name = $"fixture {semantic}";
+            fields[name] = new(semantic);
+            form.Add(new(name, "text", 1, value));
+        }
+        var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes", []);
+        Assert.Empty(LayoutMaps.Problems(map));
+        var sheet = DdbParser.Parse(map, form);
+        return h.Temp.App.ProposeDdbCharacter(sheet, new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, null, false), Guid.NewGuid());
+    }
+
+    [Fact]
+    public void Coins_the_layout_maps_become_the_characters_currency_and_are_no_longer_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h, ("currency.cp", "3"), ("currency.gp", "12"));
+
+        Assert.Equal(new Currency(Cp: 3, Gp: 12), preview.Character.Currency);
+        Assert.DoesNotContain("currency", preview.Report.NotBroughtOver);
+        Assert.Contains("speed", preview.Report.NotBroughtOver); // this layout maps no speed
+    }
+
+    [Fact]
+    public void A_sheet_with_no_coin_fields_leaves_currency_empty_and_lists_it_as_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h);
+
+        Assert.Equal(new Currency(), preview.Character.Currency);
+        Assert.Contains("currency", preview.Report.NotBroughtOver);
+    }
+
+    [Fact]
+    public void An_unreadable_or_negative_coin_is_unreadable_and_does_not_stop_the_others()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h, ("currency.cp", "-4"), ("currency.sp", "abc"), ("currency.pp", "5"));
+
+        Assert.Equal(new Currency(Pp: 5), preview.Character.Currency);
+        Assert.DoesNotContain("currency", preview.Report.NotBroughtOver);
+    }
+
+    [Fact]
+    public void A_sheet_speed_differing_from_the_calculated_one_is_compared_and_keeping_it_overrides_speed()
+    {
+        using var h = new DdbHarness();
+
+        var compared = ProposeFromTestLayout(h, ("numbers.speed", "25"), ("numbers.passive.perception", "10"));
+        var speed = Assert.Single(compared.Comparison, n => n.Field == FieldIds.Speed);
+        Assert.Equal((25, 30, true), (speed.Sheet, speed.Calculated, speed.Differs));
+        Assert.Contains(compared.Comparison, n => n.Field == FieldIds.Passive("perception"));
+        Assert.DoesNotContain(compared.Report.NotBroughtOver, c => c is "speed" or "passivePerception");
+        Assert.Empty(compared.Character.Overrides);
+
+        var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels"), ["fixture speed"] = new("numbers.speed") };
+        var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes", []);
+        var sheet = DdbParser.Parse(map, [new("fixture class", "text", 1, $"{h.Name(Barbarian)} 1"), new("fixture speed", "text", 1, "25")]);
+        var kept = h.Temp.App.ProposeDdbCharacter(sheet,
+            new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, [new(FieldIds.Speed, NumberAction.KeepSheet)], false), Guid.NewGuid());
+
+        var @override = Assert.Single(kept.Character.Overrides);
+        Assert.Equal((FieldIds.Speed, 25), (@override.Field, @override.Value));
+    }
+
     [Fact]
     public void A_preview_with_an_unknown_token_or_family_is_refused()
     {
