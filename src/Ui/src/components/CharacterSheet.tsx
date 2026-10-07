@@ -348,11 +348,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     if (!undoable) return;
     const steps = undoable.inverse;
     setUndo(undefined);
-    try {
-      let current: CharacterView | undefined;
-      for (const step of steps) current = await client.play(character.id, step);
-      if (current) onChanged(current);
-      // WCAG 2.4.3: the button is disabled now, so focus goes to what changed (hit points, concentration) or the Play tools.
+    let current: CharacterView | undefined;
+    // WCAG 2.4.3: the button is disabled now, so focus goes to what changed (hit points, concentration) or the Play tools.
+    const refocus = () => {
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
         steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
@@ -361,9 +359,16 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             ? document.getElementById('concentration-heading')
             : null;
       (target ?? compactToggle.current)?.focus();
+    };
+    try {
+      for (const step of steps) current = await client.play(character.id, step);
+      if (current) onChanged(current);
     } catch (error) {
+      // A step that succeeded before the failure has changed the character: show it, so the sheet is not stale.
+      if (current) onChanged(current);
       onError(error);
     }
+    refocus();
   }
 
   async function roll(target: RollTarget) {

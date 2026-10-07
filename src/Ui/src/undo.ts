@@ -18,7 +18,7 @@ const hp = (view: CharacterView) => view.sheet.hitPoints;
  * Death saves, ending concentration and clearing its check have no exact inverse and are not undoable.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
-  const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}`;
+  const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${action.condition ? ` ${action.condition}` : ''}`;
   const b = before.character.play;
   const entry = (inverse: PlayAction[]): UndoEntry => ({ label, inverse, after });
   switch (action.action) {

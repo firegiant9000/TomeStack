@@ -101,6 +101,27 @@ it('offers Undo for the last play change and sends the inverse through the play 
   expect(document.activeElement?.id).toBe('hp-heading');
 });
 
+it('shows the applied state and keeps focus when a later undo step fails (D23)', async () => {
+  const user = userEvent.setup();
+  const { v, damaged, onChanged } = undoHarness();
+  const first = { ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 5, temporary: 0 } } };
+  const onError = vi.fn();
+  const play = { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 };
+  const before = { ...v, character: { ...v.character, play: { ...play, concentration: { spell: { contentId: 's', revisionId: 'r' }, name: 'Fixture Ward' } } } };
+  const after = { ...damaged, character: { ...v.character, play } };
+  vi.mocked(client.play).mockResolvedValueOnce(after).mockResolvedValueOnce(first).mockRejectedValueOnce(new Error('play.spell-not-prepared'));
+  const shown = (x: CharacterView) => <CharacterSheet view={x} onChanged={onChanged} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  const { rerender } = render(shown(before));
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(after));
+  rerender(shown(after));
+  await user.click(screen.getByRole('button', { name: /^Undo last change: damage 1/ }));
+  await waitFor(() => expect(onError).toHaveBeenCalled());
+  expect(onChanged).toHaveBeenLastCalledWith(first);
+  expect(document.activeElement).not.toBe(document.body);
+  expect(document.activeElement?.id).toBe('hp-heading');
+});
+
 it('does not offer Undo once another view is shown, such as a rest result (D23)', async () => {
   const user = userEvent.setup();
   const { v, damaged, onChanged, element } = undoHarness();

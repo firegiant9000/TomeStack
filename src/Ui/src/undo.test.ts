@@ -32,6 +32,11 @@ it('starts concentration again when damage to 0 ended it, after the hit points a
   expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 10 }, { action: 'startConcentration', contentId: 'fixture-spell' }]);
 });
 
+it('names the condition in the label', () => {
+  expect(inverseOf({ action: 'addCondition', condition: 'prone' }, view(1, 0), view(1, 0))!.label).toBe('add condition prone');
+  expect(inverseOf({ action: 'removeCondition', condition: 'prone' }, view(1, 0), view(1, 0))!.label).toBe('remove condition prone');
+});
+
 it('mirrors spend and regain, conditions, slots, toggles and concentration', () => {
   expect(inverseOf({ action: 'spend', amount: 1, contentId: 'c', resourceId: 'r' }, view(1, 0), view(1, 0))!.inverse).toEqual([{ action: 'regain', amount: 1, contentId: 'c', resourceId: 'r' }]);
   expect(inverseOf({ action: 'addCondition', condition: 'prone' }, view(1, 0), view(1, 0))!.inverse).toEqual([{ action: 'removeCondition', condition: 'prone' }]);
