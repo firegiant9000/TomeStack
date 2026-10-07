@@ -38,7 +38,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
   const show = (id: string): string => {
     const f = field(id);
     if (!f) return '—';
-    const text = f.units === 'score' ? `${f.value}` : signed(f.value);
+    const text = f.units === 'modifier' || f.units === 'bonus' ? signed(f.value) : f.units === 'feet' ? `${f.value} ft.` : `${f.value}`;
     return f.override ? `${text} (overridden)` : text;
   };
   const hp = sheet.hitPoints;
@@ -88,6 +88,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
         <div>
           <dt>Initiative</dt>
           <dd>{show('initiative')}</dd>
+        </div>
+        <div>
+          <dt>Speed</dt>
+          <dd>{show('speed')}</dd>
         </div>
         {hp && (
           <div>

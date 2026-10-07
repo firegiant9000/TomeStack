@@ -46,6 +46,7 @@ public class ArchiveTests
 
         Assert.NotNull(archived.ArchivedAt);
         Assert.Equal(archived.ArchivedAt, Assert.Single(temp.App.ListCharacters(), c => c.Id == id).ArchivedAt);
+        Assert.Equal(before.TotalLevel, Assert.Single(temp.App.ListCharacters(), c => c.Id == id).Level); // D25
         var stored = temp.App.Store.FindCharacter(id)!;
         Assert.Equal(TempApp.Json(before with { ArchivedAt = stored.ArchivedAt }), TempApp.Json(stored)); // play state, choices and UpdatedAt unchanged
         Assert.Single(temp.App.ListGapNotes(id));

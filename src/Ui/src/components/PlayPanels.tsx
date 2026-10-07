@@ -43,7 +43,7 @@ const automationLabels: Record<AutomationStatus, string> = {
   reference: 'reference only: text, not calculated',
 };
 
-/** Investigation 2026-10-06 item 8: Features grouped by what the content is. "Which subclass granted it" needs a data change (D24+). */
+/** Investigation 2026-10-06 item 8: Features grouped by what granted them (D25, "From {name}"), else by what the content is. */
 const featureGroups: { kind: ContentKind; title: string }[] = [
   { kind: 'class', title: 'Classes' },
   { kind: 'subclass', title: 'Subclasses' },
@@ -55,7 +55,25 @@ const featureGroups: { kind: ContentKind; title: string }[] = [
   { kind: 'item', title: 'Items' },
 ];
 
-export const pageText = (page?: PageRef) =>
+/**
+ * The kind groups first (entries with no granter), then one "From {name}" group per granter sorted by name, then "Other".
+ * Every feature lands in exactly one group.
+ */
+function groupFeatures(features: FeatureEntry[]): { title: string; items: FeatureEntry[] }[] {
+  const groupKey = (f: FeatureEntry) =>
+    f.grantedByName ? `From ${f.grantedByName}` : (featureGroups.find((g) => g.kind === f.kind)?.title ?? 'Other');
+  const byKey = new Map<string, FeatureEntry[]>();
+  for (const f of features) {
+    const key = groupKey(f);
+    byKey.set(key, [...(byKey.get(key) ?? []), f]);
+  }
+  const kindTitles = featureGroups.map((g) => g.title);
+  const granted = [...byKey.keys()].filter((k) => k.startsWith('From ')).sort((a, b) => a.localeCompare(b));
+  const ordered = [...kindTitles.filter((t) => byKey.has(t)), ...granted, ...(byKey.has('Other') ? ['Other'] : [])];
+  return ordered.map((title) => ({ title, items: byKey.get(title) ?? [] }));
+}
+
+export const pageText =(page?: PageRef) =>
   page ? (page.end && page.end !== page.start ? `pp. ${page.start}-${page.end}` : `p. ${page.start}`) : '';
 
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
@@ -497,14 +515,12 @@ export function FeaturesPanel({
   return (
     <section aria-labelledby="features-heading" className="play-panel">
       <h3 id="features-heading">Features</h3>
-      {featureGroups.map(({ kind, title }) => {
-        const group = features.filter((f) => f.kind === kind);
-        if (group.length === 0) return null;
+      {groupFeatures(features).map(({ title, items }, index) => {
         return (
-          <section key={kind} aria-labelledby={`features-${kind}`}>
-            <h4 id={`features-${kind}`}>{title}</h4>
+          <section key={title} aria-labelledby={`features-${index}`}>
+            <h4 id={`features-${index}`}>{title}</h4>
             <ul className="features">
-              {group.map((feature) => (
+              {items.map((feature) => (
                 <FeatureItem
                   key={feature.content.revisionId}
                   feature={feature}

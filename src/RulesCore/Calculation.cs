@@ -45,6 +45,9 @@ public sealed record TraceEntry(
     string? Field = null,
     IReadOnlyList<TraceInput>? Inputs = null);
 
+/// <summary>D24: whether a save or skill carries proficiency or expertise (from a grant); None for every other field.</summary>
+public enum ProficiencyMark { None, Proficient, Expertise }
+
 /// <summary>ARCHITECTURE "Rules execution" step 5: value, units, trace, warnings and automation status for one field.</summary>
 public sealed record DerivedValue(
     string Field,
@@ -55,7 +58,8 @@ public sealed record DerivedValue(
     IReadOnlyList<Diagnostic> Warnings,
     AutomationStatus Automation,
     FieldOverride? Override,
-    string Units = "");
+    string Units = "",
+    ProficiencyMark Mark = ProficiencyMark.None);
 
 /// <summary>
 /// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
@@ -148,7 +152,9 @@ public sealed record FeatureEntry(
     TraceOrigin Origin,
     AutomationStatus Automation,
     IReadOnlyList<FeatureEffect> Effects,
-    IReadOnlyList<Diagnostic> Diagnostics);
+    IReadOnlyList<Diagnostic> Diagnostics,
+    ContentReference? GrantedBy = null,
+    string? GrantedByName = null);
 
 /// <summary>One effect of a feature: its text and automation, plus the dice and linked resource of a roll.</summary>
 /// <param name="ResourceContent">Content v6: the content id that defines <paramref name="ResourceId"/> (a shared resource); null for this feature.</param>
@@ -526,7 +532,8 @@ public static class CharacterCalculator
                 [.. order.Where(closure.Contains).SelectMany(id => warnings[id]).Distinct()],
                 closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
-                spec.Units);
+                spec.Units,
+                MarkOf(spec.Id, proficiencies));
         }).ToList();
 
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
@@ -991,7 +998,7 @@ public static class CharacterCalculator
             : item.ChosenFrom is { } chooser ? $"chosen from {chooser.Kind.ToString().ToLowerInvariant()} '{chooser.Name}'"
             : null;
         var origin = new TraceOrigin(TraceOriginKind.Content, family, revision.Reference, revision.Name, null, item.Source.Id, item.Source.Title, revision.Provenance.Page);
-        return new(revision.Reference, revision.Name, revision.Kind, revision.Summary, via, origin, automation, effects, diagnostics);
+        return new(revision.Reference, revision.Name, revision.Kind, revision.Summary, via, origin, automation, effects, diagnostics, (item.GrantedBy ?? item.ChosenFrom)?.Reference, (item.GrantedBy ?? item.ChosenFrom)?.Name);
     }
 
     /// <summary>
@@ -1443,7 +1450,7 @@ public static class CharacterCalculator
         {
             warnings[FieldIds.ArmorClass].Add(new(
                 "equipment.armor-strength",
-                $"'{content.Revision.Name}' needs Strength {needed}; with Strength {strength} the wearer's speed is 10 feet lower. Adjust speed by hand.",
+                $"'{content.Revision.Name}' needs Strength {needed}; with Strength {strength} the wearer's speed is 10 feet lower. Lower Speed on Stats by an override.",
                 content.Revision.Reference,
                 effect.Id));
         }
@@ -2016,6 +2023,24 @@ public static class CharacterCalculator
             specs.Add(Proficient(FieldIds.Save(ability), $"{AbilityNames[ability]} saving throw", ability));
         foreach (var (key, label, ability) in Skills)
             specs.Add(Proficient(FieldIds.Skill(key), label, ability));
+        // D24: passive scores (SRD: 10 + the skill's total). Registered as fields, so content bonuses targeting them apply.
+        foreach (var (key, label, _) in Skills.Where(s => s.Key is "perception" or "insight" or "investigation"))
+        {
+            var skill = FieldIds.Skill(key);
+            specs.Add(new(FieldIds.Passive(key), $"Passive {label}", "score", [skill], (c, steps) =>
+            {
+                var value = 10 + c.Values[skill];
+                steps.Add(new(FieldIds.Passive(key), "base", $"Passive {label} is 10 + {label}", value, value, new(TraceOriginKind.RulesPolicy, c.Family), [new(skill, c.Values[skill])]));
+                return value;
+            }));
+        }
+        // D24: speed. The bundled species carry no speed data yet, so the base is the SRD's common 30 feet by rules policy;
+        // a species with another speed is an override on Stats until content breadth adds it (after T2).
+        specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy: species speed is not in the bundled content yet; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 30;
+        }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {
             var value = c.Values[FieldIds.Modifier(Ability.Dex)];
@@ -2226,6 +2251,11 @@ public static class CharacterCalculator
         steps.Add(new(field, "add", $"Constitution modifier ({(con >= 0 ? "+" : "")}{con}) × {total} character level(s)", con * total, value, policy, [new(FieldIds.Modifier(Ability.Con), con), new(FormulaIdentifiers.Level, total)]));
         return value;
     }
+
+    private static ProficiencyMark MarkOf(string field, IReadOnlyDictionary<string, Proficiency> proficiencies) =>
+        (field.StartsWith("save.", StringComparison.Ordinal) || field.StartsWith("skill.", StringComparison.Ordinal)) && proficiencies.TryGetValue(field, out var p)
+            ? p.Grant == GrantKind.Expertise ? ProficiencyMark.Expertise : ProficiencyMark.Proficient
+            : ProficiencyMark.None;
 
     /// <summary>A saving throw or skill: ability modifier, plus the proficiency bonus (doubled for expertise) if granted.</summary>
     private static FieldSpec Proficient(string id, string label, Ability ability)

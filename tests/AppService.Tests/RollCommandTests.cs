@@ -135,6 +135,8 @@ public class RollCommandTests
         Assert.Equal("roll.content-inactive", Code(new(id, Srd(1), "stonecunning"))); // Dwarf is not pinned
         Assert.Equal("roll.effect-not-found", Code(new(id, Frenzy, "nope")));
         Assert.Equal("roll.field-not-rollable", Code(new(id, Field: FieldIds.HitPoints)));
+        Assert.Equal("roll.field-not-rollable", Code(new(id, Field: FieldIds.Passive("perception"))));
+        Assert.Equal("roll.field-not-rollable", Code(new(id, Field: FieldIds.Speed)));
         Assert.Equal("roll.target-required", Code(new(id)));
         Assert.Equal("roll.ambiguous", Code(new(id, Frenzy, "frenzy-damage", FieldIds.Initiative)));
     }

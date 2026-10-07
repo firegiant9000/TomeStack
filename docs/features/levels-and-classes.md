@@ -44,7 +44,7 @@ The base is 10 + Dexterity modifier. Alternatives such as Unarmored Defense are 
 
 ## Skills
 
-All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields.
+All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill; bonuses apply) and `speed` (feet; 30 by rules policy until species content carries one; override it), and a save or skill carries a proficiency mark (none, proficient, expertise).
 
 ## Not in scope (M2+)
 

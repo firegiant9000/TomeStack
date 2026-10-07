@@ -134,7 +134,9 @@ export interface DerivedValue {
   warnings: Diagnostic[];
   automation: AutomationStatus;
   override?: FieldOverride;
-  units: 'score' | 'modifier' | 'bonus' | string;
+  units: 'score' | 'modifier' | 'bonus' | 'feet' | string;
+  /** D24: on saves and skills, from a grant. */
+  mark?: 'none' | 'proficient' | 'expertise';
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -229,6 +231,9 @@ export interface FeatureEntry {
   automation: AutomationStatus;
   effects: FeatureEffect[];
   diagnostics: Diagnostic[];
+  /** D25: the content whose grant or choice brought this one in. */
+  grantedBy?: ContentReference;
+  grantedByName?: string;
 }
 
 export interface HitPointState {
@@ -477,6 +482,8 @@ export interface CharacterSummary {
   archivedAt?: string;
   /** The contents this character records a cross-family exception for (ids only). */
   exceptionContentIds?: string[];
+  /** D25: the character's total level. */
+  level: number;
 }
 
 /** SPEC C-08: `character.archivePreview`. Nothing is removed by archiving. */

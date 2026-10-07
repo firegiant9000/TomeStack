@@ -28,7 +28,7 @@ The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expa
 A definition list, not headings or named regions, so it never shares a name with a panel. Since 2026-10-06 every item is a box (a 1px `--line-strong` border on the existing `dl > div`, no shadow; the generic paper-sheet convention, SPEC P-03). An ability box shows the modifier large and the score small beneath (or the reverse, Settings "Ability boxes"); the d20 roll mode and the Last roll share one full-width strip under the boxes with a reserved height, so a roll never moves the tabs. It shows:
 
 - each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
-- Proficiency bonus, Armor Class, Initiative; an overridden number reads "16 (overridden)";
+- Proficiency bonus, Armor Class, Initiative, Speed (30 ft. by rules policy until species content carries it; override on Stats); an overridden number reads "16 (overridden)";
 - Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size as "N of M (dX)", Inspiration or Heroic Inspiration (by family) as a checkbox (the confirmed `setInspiration` play action), and one-point hit-point buttons "Lose 1 hit point" and "Regain 1 hit point" (`damage`/`heal`) in a second `<dd>`;
 - Conditions and exhaustion, only when there are any;
 - the d20 roll mode (Normal, Advantage, Disadvantage) as one row of radios with 3:1 boundaries (`--line-strong`) and the "Last roll" live region, moved here from the old "Rolls" section so they are reachable from every tab.
@@ -42,8 +42,8 @@ Traces, overrides and "Report a gap" stay on the field cards.
 | Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips |
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
 | Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
-| Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what the content is (Classes, Subclasses, Species, Background, Feats, Granted features) |
-| Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up |
+| Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what granted them ("From Fixture Fighter") or by kind (Classes, Subclasses, Species, Background, Feats, Granted features, Spells, Items) |
+| Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up. Saving throws and Skills show " · proficient" or " · expertise" after the value when a grant applies; Skills also list Passive Perception, Insight and Investigation (10 + the skill, bonuses apply); Combat lists Speed |
 | Notes | Session notes (dated, newest first; D22) above Gap notes |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots, separated by rules |
 

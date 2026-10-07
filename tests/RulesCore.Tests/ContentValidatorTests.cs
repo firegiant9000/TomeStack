@@ -56,7 +56,7 @@ public class ContentValidatorTests
         Assert.Contains("validate.effect-id", Errors(Draft(
             new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" },
             new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" })));
-        Assert.Contains("validate.unknown-target", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = "speed", Value = "1" })));
+        Assert.Contains("validate.unknown-target", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = "swimSpeed", Value = "1" })));
         Assert.Contains("validate.unknown-target", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Proficiency, Target = FieldIds.Initiative })));
         Assert.Contains("validate.stack-group-missing", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Stacking = StackingRule.HighestInGroup })));
         Assert.Contains("validate.level", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Content, Content = Fixtures.Watchful, Level = 21 })));

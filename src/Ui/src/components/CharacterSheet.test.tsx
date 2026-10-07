@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue } from '../api/types';
+import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry } from '../api/types';
 import { CharacterSheet } from './CharacterSheet';
 
 vi.mock('../api/client', () => ({
@@ -72,6 +72,42 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+
+it('marks proficient and expert fields on Stats and lists passive scores and Speed (D24)', () => {
+  const base = view().sheet.fields;
+  renderSheet(
+    view({
+      fields: [
+        ...base,
+        { ...field('skill.stealth', 'Stealth', 5, 'modifier'), mark: 'expertise' },
+        field('skill.perception', 'Perception', 1, 'modifier'),
+        field('passive.perception', 'Passive Perception', 11, 'score'),
+        field('speed', 'Speed', 30, 'feet'),
+      ],
+    }),
+    'stats',
+  );
+  expect(screen.getByRole('heading', { name: 'Stealth: +5 · expertise' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Perception: +1' })).toBeTruthy(); // no mark when no grant
+  expect(screen.getByRole('heading', { name: /^Passive Perception: 11/ })).toBeTruthy(); // unsigned
+  expect(screen.getByRole('heading', { name: 'Speed: 30 ft.' })).toBeTruthy();
+});
+
+it('groups Features by what granted them, then by kind, and drops none (D25)', () => {
+  const ref = (n: number) => ({ contentId: `00000000-0000-4000-8000-00000000c${n}00`, revisionId: `00000000-0000-4000-8000-00000000d${n}00` });
+  const origin = { kind: 'content' as const, rulesFamily: 'srd-5.1' as const };
+  const entry = (n: number, name: string, kind: FeatureEntry['kind'], grantedByName?: string): FeatureEntry => ({
+    content: ref(n), name, kind, origin, automation: 'reference', effects: [], diagnostics: [], grantedBy: grantedByName ? ref(9) : undefined, grantedByName,
+  });
+  renderSheet(
+    view({
+      features: [entry(1, 'Fixture Fighter', 'class'), entry(2, 'Fixture Rage', 'feature', 'Fixture Fighter'), entry(3, 'Fixture Alert', 'feat', 'Fixture Wayfarer'), entry(4, 'Fixture Torch', 'item')],
+    }),
+    'features',
+  );
+  expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Classes', 'Items', 'From Fixture Fighter', 'From Fixture Wayfarer']);
+  expect(Array.from(document.querySelectorAll('.feature .option-name')).map((n) => n.textContent)).toEqual(['Fixture Fighter', 'Fixture Torch', 'Fixture Rage', 'Fixture Alert']);
+});
 
 it('offers Spells to a caster, or when a spell field has a value, and opens on Play', () => {
   renderSheet(view());

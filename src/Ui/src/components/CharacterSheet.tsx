@@ -31,15 +31,16 @@ import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
-const display = (value: DerivedValue, n: number) => (value.units === 'score' ? `${n}` : signed(n));
+const display = (value: DerivedValue, n: number) =>
+  value.units === 'modifier' || value.units === 'bonus' ? signed(n) : value.units === 'feet' ? `${n} ft.` : `${n}`;
 
 /** Display groups for the calculated fields on the Stats tab; the rules core decides what exists, this only orders it. */
 const statGroups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Abilities', match: (f) => f.startsWith('ability.') },
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
-  { title: 'Skills', match: (f) => f.startsWith('skill.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
+  { title: 'Skills', match: (f) => f.startsWith('skill.') || f.startsWith('passive.') },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
 ];
 // D04: the caster numbers, with traces and overrides, on the Spells tab (ADR-014). Slots combine on the multiclass table
 // (M3 C3); an override is the manual step only for class revisions that do not say how they combine.
@@ -62,6 +63,7 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
   const [overrideValue, setOverrideValue] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
   const headingId = `field-${value.field}`;
+  const marked = Boolean(value.mark && value.mark !== 'none');
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,11 +75,17 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
   }
 
   return (
-    <section aria-labelledby={headingId} className="field-card">
+    <section aria-labelledby={headingId} className={`field-card${marked ? ' marked' : ''}`}>
       <details>
         <summary>
           <h4 id={headingId}>
             {value.label}: <span className="derived">{display(value, value.value)}</span>
+            {marked && (
+              <>
+                {' '}
+                <span className="mark">· {value.mark}</span>
+              </>
+            )}
             {value.override && <span className="override-label"> overridden (calculated {display(value, value.computedValue)})</span>}
             {value.warnings.length > 0 && <span className="warning-count"> · {value.warnings.length} warning{value.warnings.length === 1 ? '' : 's'}</span>}
           </h4>
