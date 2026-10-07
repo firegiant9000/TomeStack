@@ -417,36 +417,41 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <TabList label="Sheet sections" idPrefix="sheet" tabs={tabs} active={active} onActivate={setTab} />
 
       <TabPanel idPrefix="sheet" id="play" active={active === 'play'}>
-        <HitPointsPanel view={view} act={act} />
-        <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
-        {resting ? (
-          <RestPanel
-            key={resting}
-            characterId={character.id}
-            kind={resting}
-            hitDice={sheet.hitDice ?? []}
-            onError={onError}
-            onCancel={() => setResting(undefined)}
-            onRested={(rested, applied) => {
-              setResting(undefined);
-              onChanged(rested);
-              onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
-            }}
-          />
-        ) : (
-          <div className="actions">
-            <button type="button" onClick={() => setResting('shortRest')}>
-              Short rest…
-            </button>
-            <button type="button" onClick={() => setResting('longRest')}>
-              Long rest…
-            </button>
-          </div>
-        )}
-        <ActionsPanel view={view} roll={roll} act={act} />
-        <ConditionsPanel view={view} act={act} />
-        <ResourcesPanel view={view} act={act} />
-        <ClassColumnsPanel view={view} />
+        {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
+        <div className="play-column">
+          <HitPointsPanel view={view} act={act} />
+          <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
+          {resting ? (
+            <RestPanel
+              key={resting}
+              characterId={character.id}
+              kind={resting}
+              hitDice={sheet.hitDice ?? []}
+              onError={onError}
+              onCancel={() => setResting(undefined)}
+              onRested={(rested, applied) => {
+                setResting(undefined);
+                onChanged(rested);
+                onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+              }}
+            />
+          ) : (
+            <div className="actions">
+              <button type="button" onClick={() => setResting('shortRest')}>
+                Short rest…
+              </button>
+              <button type="button" onClick={() => setResting('longRest')}>
+                Long rest…
+              </button>
+            </div>
+          )}
+          <ConditionsPanel view={view} act={act} />
+          <ResourcesPanel view={view} act={act} />
+          <ClassColumnsPanel view={view} />
+        </div>
+        <div className="play-column">
+          <ActionsPanel view={view} roll={roll} act={act} />
+        </div>
       </TabPanel>
 
       {showSpells && (
