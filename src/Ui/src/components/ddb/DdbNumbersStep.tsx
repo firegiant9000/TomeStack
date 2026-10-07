@@ -29,8 +29,8 @@ export function DdbNumbersStep({ preview, numbers, onChange, equipMatched, onEqu
         sits here, before you compare numbers. Check Inventory afterwards.
       </p>
       <p>
-        {differences === 0 ? 'Every number the sheet shows matches TomeStack.' : `${differences} of ${preview.comparison.length} numbers differ.`} Numbers the
-        layout does not map are listed under "Not brought over" on the Create step.
+        {differences === 0 ? 'Every number the sheet shows matches TomeStack.' : `${differences} of ${preview.comparison.length} numbers differ.`} Speed and
+        passive Perception are compared when the layout maps them; otherwise they are listed under "Not brought over" on the Create step.
       </p>
       {preset !== 'manual' && <p className="hint">Pre-filled from your choice on step 2 ("{numberPresetLabels[preset]}"). Change any row below.</p>}
       {preview.abilityPlan.notes.length > 0 && (

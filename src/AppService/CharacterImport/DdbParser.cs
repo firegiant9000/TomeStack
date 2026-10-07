@@ -80,7 +80,7 @@ public static partial class DdbParser
                 sheet.Bool("play.inspiration"),
                 [.. slots.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new SlotsSpent(x.Level, x.Read.Value))],
                 hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable)),
-            DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins), StringComparer.Ordinal));
+            DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins, Coin()), StringComparer.Ordinal));
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];
@@ -92,6 +92,10 @@ public static partial class DdbParser
     /// <summary>A signed whole number: a plus, a hyphen or a minus sign, then at most five digits.</summary>
     [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, 100)]
     private static partial Regex Number();
+
+    /// <summary>A coin count: digits only, at most seven (the character bound is 1,000,000).</summary>
+    [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,7})$", RegexOptions.None, 100)]
+    private static partial Regex Coin();
 
     /// <summary>A map with its patterns compiled and its row-numbered names split around <c>{n}</c>.</summary>
     private sealed class CompiledMap
@@ -166,14 +170,14 @@ public static partial class DdbParser
             }
         }
 
-        public Read<int> Int(string semantic, int min, int max)
+        public Read<int> Int(string semantic, int min, int max, Regex? shape = null)
         {
             var text = Text(semantic);
             if (text.Status != ReadStatus.Ok)
                 return new(default, text.Status);
             try
             {
-                var match = Number().Match(text.Value!);
+                var match = (shape ?? Number()).Match(text.Value!);
                 if (!match.Success)
                     return Read<int>.Unreadable;
                 var number = int.Parse(match.Groups["digits"].Value, NumberStyles.None, CultureInfo.InvariantCulture);

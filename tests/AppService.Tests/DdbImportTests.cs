@@ -778,12 +778,16 @@ public class DdbImportTests
         Assert.True(preview.Report.FamilyMismatch); // the 2014 layout suggests srd-5.1
         Assert.Contains("currency", preview.Report.NotBroughtOver);
         Assert.Contains("speed", preview.Report.NotBroughtOver);
+        Assert.Contains("passivePerception", preview.Report.NotBroughtOver);
         Assert.NotEqual(Guid.Empty, preview.Character.Id);
         Assert.Equal("Testy McFixture", preview.Character.Name);
     }
 
     // Task 20 (D16e amended, D24): a test-only layout with invented field names, parsed to a sheet and proposed directly.
-    private static DdbPreview ProposeFromTestLayout(DdbHarness h, params (string Semantic, string Value)[] reads)
+    private static DdbPreview ProposeFromTestLayout(DdbHarness h, params (string Semantic, string Value)[] reads) =>
+        ProposeFromTestLayout(h, null, reads);
+
+    private static DdbPreview ProposeFromTestLayout(DdbHarness h, IReadOnlyList<NumberChoice>? choices, params (string Semantic, string Value)[] reads)
     {
         var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels") };
         var form = new List<FormField> { new("fixture class", "text", 1, $"{h.Name(Barbarian)} 1") };
@@ -796,7 +800,7 @@ public class DdbImportTests
         var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes", []);
         Assert.Empty(LayoutMaps.Problems(map));
         var sheet = DdbParser.Parse(map, form);
-        return h.Temp.App.ProposeDdbCharacter(sheet, new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, null, false), Guid.NewGuid());
+        return h.Temp.App.ProposeDdbCharacter(sheet, new DdbPreviewRequest(Guid.NewGuid(), RulesFamilies.Srd521, null, null, choices, false), Guid.NewGuid());
     }
 
     [Fact]
@@ -823,14 +827,43 @@ public class DdbImportTests
     }
 
     [Fact]
-    public void An_unreadable_or_negative_coin_is_unreadable_and_does_not_stop_the_others()
+    public void A_partly_read_purse_brings_no_coins_over_and_is_listed_not_zeroed_silently()
     {
         using var h = new DdbHarness();
 
-        var preview = ProposeFromTestLayout(h, ("currency.cp", "-4"), ("currency.sp", "abc"), ("currency.pp", "5"));
+        foreach (var bad in new[] { "-4", "abc", "1,250", "1000001" })
+        {
+            var preview = ProposeFromTestLayout(h, ("currency.cp", bad), ("currency.gp", "12"));
 
-        Assert.Equal(new Currency(Pp: 5), preview.Character.Currency);
+            Assert.Equal(new Currency(), preview.Character.Currency);
+            Assert.Contains("currency", preview.Report.NotBroughtOver);
+        }
+    }
+
+    [Fact]
+    public void A_blank_coin_next_to_a_readable_one_stays_zero_and_a_coin_of_250000_reads()
+    {
+        using var h = new DdbHarness();
+
+        var preview = ProposeFromTestLayout(h, ("currency.cp", ""), ("currency.gp", "250000"));
+
+        Assert.Equal(new Currency(Gp: 250_000), preview.Character.Currency);
         Assert.DoesNotContain("currency", preview.Report.NotBroughtOver);
+    }
+
+    [Fact]
+    public void A_mapped_speed_that_is_blank_or_unreadable_is_listed_not_brought_over()
+    {
+        using var h = new DdbHarness();
+
+        foreach (var value in new[] { "", "fast" })
+        {
+            var preview = ProposeFromTestLayout(h, ("numbers.speed", value), ("numbers.passive.perception", value));
+
+            Assert.Contains("speed", preview.Report.NotBroughtOver);
+            Assert.Contains("passivePerception", preview.Report.NotBroughtOver);
+            Assert.DoesNotContain(preview.Comparison, n => n.Field is "speed" or "passive.perception");
+        }
     }
 
     [Fact]
@@ -841,7 +874,8 @@ public class DdbImportTests
         var compared = ProposeFromTestLayout(h, ("numbers.speed", "25"), ("numbers.passive.perception", "10"));
         var speed = Assert.Single(compared.Comparison, n => n.Field == FieldIds.Speed);
         Assert.Equal((25, 30, true), (speed.Sheet, speed.Calculated, speed.Differs));
-        Assert.Contains(compared.Comparison, n => n.Field == FieldIds.Passive("perception"));
+        var passive = Assert.Single(compared.Comparison, n => n.Field == FieldIds.Passive("perception"));
+        Assert.Equal((10, passive.Calculated != 10), (passive.Sheet, passive.Differs));
         Assert.DoesNotContain(compared.Report.NotBroughtOver, c => c is "speed" or "passivePerception");
         Assert.Empty(compared.Character.Overrides);
 
@@ -853,6 +887,10 @@ public class DdbImportTests
 
         var @override = Assert.Single(kept.Character.Overrides);
         Assert.Equal((FieldIds.Speed, 25), (@override.Field, @override.Value));
+
+        var keptPassive = ProposeFromTestLayout(h, [new(FieldIds.Passive("perception"), NumberAction.KeepSheet)], ("numbers.passive.perception", "99"));
+        var passiveOverride = Assert.Single(keptPassive.Character.Overrides);
+        Assert.Equal((FieldIds.Passive("perception"), 99), (passiveOverride.Field, passiveOverride.Value));
     }
 
     [Fact]

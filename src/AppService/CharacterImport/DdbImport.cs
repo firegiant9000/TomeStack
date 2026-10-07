@@ -102,24 +102,31 @@ public sealed partial class TomeStackApp
         ["notes", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
 
     /// <summary>
-    /// D16e amended (D21, D24): currency is listed only when the sheet gave no coin (the layout maps none, or none was readable);
-    /// speed and passive Perception are numbers now, compared when the layout maps them, and listed only when it does not
-    /// (the 2014 map until the owner adds their field names).
+    /// D16e amended (D21, D24, R24): currency is brought over only when a coin was read and none was unreadable (a partly read
+    /// purse is never zeroed silently: no coins come over and it is listed); speed and passive Perception are numbers now,
+    /// compared when the layout maps them and the value reads, and listed otherwise (unmapped, blank or unreadable).
     /// </summary>
     private static IEnumerable<string> NotBroughtOver(DdbSheet sheet)
     {
-        if (!sheet.Currency.Values.Any(r => r.Status == ReadStatus.Ok))
+        if (!CurrencyBroughtOver(sheet))
             yield return "currency";
-        if (!sheet.Numbers.ContainsKey(FieldIds.Speed))
+        if (!NumberRead(sheet, FieldIds.Speed))
             yield return "speed";
-        if (!sheet.Numbers.ContainsKey(FieldIds.Passive("perception")))
+        if (!NumberRead(sheet, FieldIds.Passive("perception")))
             yield return "passivePerception";
         foreach (var code in AlwaysNotBroughtOver)
             yield return code;
     }
 
+    private static bool NumberRead(DdbSheet sheet, string field) => sheet.Numbers.TryGetValue(field, out var read) && read.Status == ReadStatus.Ok;
+
+    private static bool CurrencyBroughtOver(DdbSheet sheet) =>
+        sheet.Currency.Values.Any(r => r.Status == ReadStatus.Ok) && sheet.Currency.Values.All(r => r.Status != ReadStatus.Unreadable);
+
     private static Currency CurrencyFrom(DdbSheet sheet)
     {
+        if (!CurrencyBroughtOver(sheet))
+            return new();
         int Coin(string key) => sheet.Currency.TryGetValue(key, out var read) && read.Status == ReadStatus.Ok ? read.Value : 0;
         return new(Coin("cp"), Coin("sp"), Coin("ep"), Coin("gp"), Coin("pp"));
     }
