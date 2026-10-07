@@ -338,7 +338,7 @@ it('awaits onCreated and keeps Create disabled for good after a successful apply
   expect(client.ddbApply).toHaveBeenCalledTimes(1);
 });
 
-it('sends equipMatched true by default and false once the summary checkbox is cleared on the numbers step (D16g)', async () => {
+it('sends equipMatched true by default and false once the checkbox on the Numbers step is cleared (D16g)', async () => {
   const user = userEvent.setup();
   render(<DdbImportPanel rulesFamilies={families} onError={vi.fn()} onCancel={vi.fn()} onCreated={vi.fn()} />);
   await toMatches(user);
@@ -355,6 +355,50 @@ it('sends equipMatched true by default and false once the summary checkbox is cl
   await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
   await screen.findByRole('button', { name: 'Create character' });
   expect(screen.queryByRole('checkbox', { name: 'Equip matched weapons and armour' })).toBeNull();
+});
+
+it('pre-fills every differing number from the step-2 preset and still lets the user change a row (D16h)', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  const presets = screen.getByRole('radiogroup', { name: "Numbers that differ from TomeStack's calculation" });
+  expect(within(presets).getByRole<HTMLInputElement>('radio', { name: 'Decide each number myself' }).checked).toBe(true); // owner answer 6
+  await user.click(within(presets).getByRole('radio', { name: "Use the character sheet's values" }));
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await screen.findByRole('heading', { name: 'Numbers' });
+  const armorClass = screen.getByRole('radiogroup', { name: 'Armor Class' });
+  expect(within(armorClass).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true);
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].numberChoices).toEqual([{ field: 'armorClass', action: 'keepSheet' }]));
+  expect(screen.getByText(/Pre-filled from your choice on step 2/)).toBeTruthy();
+  await user.click(within(armorClass).getByRole('radio', { name: 'Note it' }));
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].numberChoices).toEqual([{ field: 'armorClass', action: 'note' }]));
+});
+
+it('sends no number choice for a row that agrees whatever the preset, and Create stays available', async () => {
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    const p = preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0'));
+    return { ...p, comparison: p.comparison.map((row) => ({ ...row, differs: false, sheet: row.calculated })) };
+  });
+  const user = userEvent.setup();
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(screen.getByRole('radio', { name: "Use the installed sources' values" }));
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await screen.findByRole('heading', { name: 'Numbers' });
+  expect(screen.getAllByText('Same')).toHaveLength(2);
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].numberChoices).toEqual([]));
+  await user.click(screen.getByRole('button', { name: 'Next: summary' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
 });
 
 it('discards the token of a read that resolves after Cancel', async () => {

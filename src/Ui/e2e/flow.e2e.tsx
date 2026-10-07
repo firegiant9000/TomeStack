@@ -1994,6 +1994,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await user.click(screen.getByRole('button', { name: 'Next: rules' }));
   // The 2014-style layout suggests SRD 5.1; the user could pick the other family.
   expect(screen.getByRole<HTMLInputElement>('radio', { name: /SRD 5\.1/ }).checked).toBe(true);
+  await user.click(screen.getByRole('radio', { name: "Use the character sheet's values" })); // D16h preset
   await user.click(screen.getByRole('button', { name: 'Next: matches' }));
 
   const matches = await screen.findByRole('region', { name: 'Matches' });
@@ -2015,6 +2016,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   };
   await nextStep('Next: numbers');
   const armorClass = await screen.findByRole('radiogroup', { name: 'Armor Class' });
+  expect(within(screen.getByRole('radiogroup', { name: 'Armor Class' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true); // pre-filled by the preset
   await user.click(within(armorClass).getByRole('radio', { name: "Keep the sheet's number" }));
   await nextStep('Next: summary');
 
@@ -2022,7 +2024,7 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the D&D Beyond sheet: 1 override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the D&D Beyond sheet: 3 override\(s\), \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   await openTab(user, sheet, 'Stats');

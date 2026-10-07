@@ -951,6 +951,15 @@ public class DdbImportTests
     }
 
     [Fact]
+    public void A_request_that_omits_equipMatched_equips_by_default_like_the_UI()
+    {
+        // Investigation 2026-10-06 item 6: the C# default was false while the UI sent true; a caller that omitted the field got no equipping.
+        var json = """{"token":"00000000-0000-4000-8000-000000000001","rulesFamily":"srd-5.1","includePlayState":false}""";
+        var request = JsonSerializer.Deserialize<DdbPreviewRequest>(json, RulesJson.Compact)!;
+        Assert.True(request.EquipMatched);
+    }
+
+    [Fact]
     public void A_detected_subclass_from_a_source_the_campaign_does_not_allow_carries_the_campaign_warning()
     {
         using var h = new DdbHarness();

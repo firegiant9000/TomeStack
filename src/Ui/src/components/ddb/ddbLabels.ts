@@ -60,3 +60,12 @@ export const notBroughtOverLabels: Record<string, string> = {
   playerName: 'Player name',
   playState: 'Hit points, spent hit dice and slots, death saves and inspiration (the character starts rested)',
 };
+
+/** D16h (owner, 2026-10-06): a preset on step 2 that pre-fills the Numbers step; "manual" is today's behaviour and the default. */
+export type NumberPreset = 'manual' | 'sources' | 'sheet';
+export const numberPresetIds: readonly NumberPreset[] = ['manual', 'sources', 'sheet'];
+export const numberPresetLabels: Record<NumberPreset, string> = {
+  manual: 'Decide each number myself',
+  sources: "Use the installed sources' values",
+  sheet: "Use the character sheet's values",
+};

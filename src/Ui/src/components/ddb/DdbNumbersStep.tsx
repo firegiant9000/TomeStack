@@ -1,5 +1,5 @@
 import type { DdbPreview, NumberAction } from '../../api/types';
-import { numberActionLabels } from './ddbLabels';
+import { numberActionLabels, numberPresetLabels, type NumberPreset } from './ddbLabels';
 
 interface Props {
   preview?: DdbPreview;
@@ -7,6 +7,7 @@ interface Props {
   onChange: (field: string, action: NumberAction) => void;
   equipMatched: boolean;
   onEquipMatched: (equip: boolean) => void;
+  preset: NumberPreset;
 }
 
 const actions: NumberAction[] = ['useTomeStack', 'keepSheet', 'note'];
@@ -15,7 +16,7 @@ const actions: NumberAction[] = ['useTomeStack', 'keepSheet', 'note'];
  * Step 4: the sheet's numbers beside TomeStack's, differences first. Per difference: TomeStack's number (the default), the
  * sheet's as an override (the calculated value stays beneath it), or a gap note. There is no "keep all".
  */
-export function DdbNumbersStep({ preview, numbers, onChange, equipMatched, onEquipMatched }: Props) {
+export function DdbNumbersStep({ preview, numbers, onChange, equipMatched, onEquipMatched, preset }: Props) {
   if (!preview) return <p className="hint">Comparing the numbers…</p>;
   const differences = preview.comparison.filter((n) => n.differs).length;
   return (
@@ -31,6 +32,7 @@ export function DdbNumbersStep({ preview, numbers, onChange, equipMatched, onEqu
         {differences === 0 ? 'Every number the sheet shows matches TomeStack.' : `${differences} of ${preview.comparison.length} numbers differ.`} Speed and
         passive Perception are not calculated by TomeStack, so they are not compared.
       </p>
+      {preset !== 'manual' && <p className="hint">Pre-filled from your choice on step 2 ("{numberPresetLabels[preset]}"). Change any row below.</p>}
       {preview.abilityPlan.notes.length > 0 && (
         <ul aria-label="Ability score notes">
           {preview.abilityPlan.notes.map((n) => (
