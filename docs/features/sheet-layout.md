@@ -41,7 +41,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 
 | Tab | Holds |
 | --- | --- |
-| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides traces, hints and class columns for combat (D20) |
+| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides only the explanatory parts (resource and attack traces, the hit point and Concentration explanations, class columns) for combat; rest, spend and recovery text stay (D20) |
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
 | Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
 | Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what granted them ("From Fixture Fighter") or by kind (Classes, Subclasses, Species, Background, Feats, Granted features, Spells, Items) |
