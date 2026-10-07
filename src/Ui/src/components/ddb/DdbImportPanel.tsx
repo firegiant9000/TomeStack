@@ -77,6 +77,14 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     };
   }, []);
 
+  // D16h: the preset is a default, never a write. `numbers` holds only the user's own row choices; a differing row without one
+  // takes the preset's action. `differs` is computed before overrides, so this set is stable once the first preview is in.
+  const presetAction: NumberAction | undefined = numberPreset === 'sheet' ? 'keepSheet' : numberPreset === 'sources' ? 'useTomeStack' : undefined;
+  const effectiveNumbers: Record<string, NumberAction> = { ...numbers };
+  if (presetAction && preview) {
+    for (const row of preview.comparison) if (row.differs && !(row.field in numbers)) effectiveNumbers[row.field] = presetAction;
+  }
+
   const request: DdbPreviewRequest | undefined =
     read && family
       ? {
@@ -84,7 +92,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           rulesFamily: family,
           campaignId,
           resolutions: Object.values(resolutions),
-          numberChoices: Object.entries(numbers).map(([field, action]) => ({ field, action })),
+          numberChoices: Object.entries(effectiveNumbers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([field, action]) => ({ field, action })),
           includePlayState,
           answers,
           equipMatched,
@@ -181,15 +189,6 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     }
   }
 
-  /** Next. Entering Numbers with a preset pre-fills every differing row (owner answer 7: pre-fill only, the step stays). */
-  function next() {
-    if (step === 3 && preview && numberPreset !== 'manual') {
-      const action: NumberAction = numberPreset === 'sheet' ? 'keepSheet' : 'useTomeStack';
-      setNumbers(Object.fromEntries(preview.comparison.filter((row) => row.differs).map((row) => [row.field, action])));
-    }
-    setStep((s) => (s + 1) as Step);
-  }
-
   const back = step > 1 ? () => setStep((s) => (s - 1) as Step) : undefined;
   const headingId = 'ddb-step-heading';
 
@@ -271,7 +270,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             onError={onError}
           />
         )}
-        {step === 4 && <DdbNumbersStep preview={preview} numbers={numbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} preset={numberPreset} />}
+        {step === 4 && <DdbNumbersStep preview={preview} numbers={effectiveNumbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} preset={numberPreset} />}
         {step === 5 && (
           <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
         )}
@@ -286,7 +285,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           </button>
         )}
         {step < 5 && (
-          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || loading)} onClick={next}>
+          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || loading)} onClick={() => setStep((s) => (s + 1) as Step)}>
             {step === 1 ? 'Next: rules' : step === 2 ? 'Next: matches' : step === 3 ? 'Next: numbers' : 'Next: summary'}
           </button>
         )}

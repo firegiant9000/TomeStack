@@ -401,6 +401,71 @@ it('sends no number choice for a row that agrees whatever the preset, and Create
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
 });
 
+async function toNumbersWithPreset(user: ReturnType<typeof userEvent.setup>, preset: string) {
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(screen.getByRole('radio', { name: preset }));
+  await goToNumbers(user);
+}
+
+async function goToNumbers(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await screen.findByRole('heading', { name: 'Numbers' });
+}
+
+const lastChoices = () => vi.mocked(client.ddbPreview).mock.lastCall?.[0].numberChoices;
+
+it('keeps an explicit row choice through Back and Next; the preset is only a default (D16h)', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await toNumbersWithPreset(user, "Use the character sheet's values");
+  await user.click(within(screen.getByRole('radiogroup', { name: 'Armor Class' })).getByRole('radio', { name: 'Note it' }));
+  await waitFor(() => expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'note' }]));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await screen.findByRole('heading', { name: 'Numbers' });
+  expect(within(screen.getByRole('radiogroup', { name: 'Armor Class' })).getByRole<HTMLInputElement>('radio', { name: 'Note it' }).checked).toBe(true);
+  expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'note' }]);
+});
+
+it('switching the preset to manual after visiting Numbers leaves nothing pre-filled, and the preview is not refetched on its own', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await toNumbersWithPreset(user, "Use the character sheet's values");
+  await waitFor(() => expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'keepSheet' }]));
+  const settled = vi.mocked(client.ddbPreview).mock.calls.length;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(settled); // no refetch loop from the derived choices
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await user.click(screen.getByRole('radio', { name: 'Decide each number myself' }));
+  await user.click(screen.getByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await screen.findByRole('heading', { name: 'Numbers' });
+  await waitFor(() => expect(lastChoices()).toEqual([]));
+  expect(screen.queryByText(/Pre-filled from your choice/)).toBeNull();
+});
+
+it('gives the preset to a row that starts differing after the equip toggle', async () => {
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    const p = preview((request.resolutions ?? []).some((r) => r.rowId === 'spell:0'));
+    return { ...p, comparison: p.comparison.map((row) => (row.field === 'initiative' ? { ...row, differs: request.equipMatched === false } : row)) };
+  });
+  const user = userEvent.setup();
+  renderPanel();
+  await toNumbersWithPreset(user, "Use the character sheet's values");
+  await waitFor(() => expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'keepSheet' }]));
+  await user.click(screen.getByRole('checkbox', { name: 'Equip matched weapons and armour' }));
+  await waitFor(() => expect(lastChoices()).toEqual([{ field: 'armorClass', action: 'keepSheet' }, { field: 'initiative', action: 'keepSheet' }]));
+  expect(within(screen.getByRole('radiogroup', { name: 'Initiative' })).getByRole<HTMLInputElement>('radio', { name: "Keep the sheet's number" }).checked).toBe(true);
+});
+
 it('discards the token of a read that resolves after Cancel', async () => {
   const pending = deferred<DdbReadResult>();
   vi.mocked(client.ddbRead).mockReturnValueOnce(pending.promise);
