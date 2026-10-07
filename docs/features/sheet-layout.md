@@ -27,7 +27,7 @@ The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expa
 
 ## Summary (always visible)
 
-A definition list, not headings or named regions, so it never shares a name with a panel. Since 2026-10-06 every item is a box (a 1px `--line-strong` border on the existing `dl > div`, no shadow; the generic paper-sheet convention, SPEC P-03). An ability box shows the modifier large and the score small beneath (or the reverse, Settings "Ability boxes"); the d20 roll mode and the Last roll share one full-width strip under the boxes with a reserved height, so a roll never moves the tabs. It shows:
+A definition list, not headings or named regions, so it never shares a name with a panel. Since 2026-10-06 every item is a box (a 1px `--line-strong` border on the existing `dl > div`, no shadow; the generic paper-sheet convention, SPEC P-03). An ability box shows the modifier large and the score small beneath (or the reverse, Settings "Ability boxes"); the d20 roll mode and the Last roll share one full-width strip under the boxes with a reserved height, so an ordinary roll does not move the tabs (a Spend button or a variable-cost form can still grow the strip). It shows:
 
 - each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
 - Proficiency bonus, Armor Class, Initiative, Speed (30 ft. by rules policy until species content carries it; override on Stats); an overridden number reads "16 (overridden)";
