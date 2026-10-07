@@ -351,6 +351,7 @@ public static class RestPlanner
                     break;
             }
         }
-        return play;
+        // A long rest ends any spell being concentrated on (character schema v8, D19); it is not a proposed change to untick.
+        return plan.Kind == RestPeriod.LongRest ? play with { Concentration = null } : play;
     }
 }

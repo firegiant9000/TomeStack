@@ -10,6 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character : IJsonOnDeserialized
 {
     /// <summary>
+    /// v8 adds <see cref="Currency"/>, <see cref="Notes"/> and <see cref="PlayState.Concentration"/> (owner, 2026-10-06; LIVING_SPECS D19, D21, D22).
     /// v7 adds the active toggles to <see cref="Play"/> (M3 B2).
     /// v6 adds <see cref="Spells"/> and spent spell slots in <see cref="Play"/> (spellcasting, M2, D04).
     /// v5 adds spent hit dice, death saves and inspiration to <see cref="Play"/> (the short rest, M2).
@@ -17,13 +18,16 @@ public sealed record Character : IJsonOnDeserialized
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
 
     /// <summary>A bound on recorded spells (untrusted input, SPEC Q-02); far above any SRD caster's list.</summary>
     public const int MaxSpells = 500;
+
+    /// <summary>A bound on dated session notes (SPEC Q-02).</summary>
+    public const int MaxNotes = 200;
 
     private int _schemaVersion = CurrentSchemaVersion;
 
@@ -97,6 +101,15 @@ public sealed record Character : IJsonOnDeserialized
     /// </summary>
     public IReadOnlyList<EquipmentEntry> Equipment { get; init; } = [];
 
+    /// <summary>Character schema v8 (D21): coins carried. Not derived; edited on Inventory and saved with the character.</summary>
+    public Currency Currency { get; init; } = new();
+
+    /// <summary>
+    /// Character schema v8 (D22): the player's dated session notes. A journal, not rules: never calculated, never in a share
+    /// package (like gap notes), kept across a snapshot restore. Printed only when ticked.
+    /// </summary>
+    public IReadOnlyList<SessionNote> Notes { get; init; } = [];
+
     public DateTimeOffset UpdatedAt { get; init; }
 
     /// <summary>
@@ -127,6 +140,7 @@ public sealed record Character : IJsonOnDeserialized
             Equipment = [.. Equipment.Select(e => e with { Item = Swap(e.Item) })],
             CampaignExceptions = [.. CampaignExceptions.Select(e => e with { Content = Swap(e.Content) })],
             Spells = [.. Spells.Select(s => s with { Spell = Swap(s.Spell) })],
+            Play = Play.Concentration is { } con && con.Spell == from ? Play with { Concentration = con with { Spell = to } } : Play,
         };
     }
 
@@ -178,6 +192,14 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.spell-duplicate", "A spell is recorded more than once for the same caster.", duplicate.First().Spell));
         if (Spells.Count > MaxSpells)
             problems.Add(new("character.spells-too-many", $"At most {MaxSpells} spells can be recorded."));
+        if (!Currency.IsValid)
+            problems.Add(new("character.currency-out-of-range", $"Each coin count must be between 0 and {Currency.MaxCoins}."));
+        if (Notes.Count > MaxNotes)
+            problems.Add(new("character.notes-too-many", $"At most {MaxNotes} session notes can be kept."));
+        foreach (var note in Notes.Where(n => string.IsNullOrWhiteSpace(n.Text) || n.Text.Length > SessionNote.MaxText))
+            problems.Add(new("character.note-text-invalid", $"A session note needs 1 to {SessionNote.MaxText} characters."));
+        foreach (var note in Notes.Where(n => n.Date.Year is < 1900 or > 2200))
+            problems.Add(new("character.note-date-invalid", "A session note's date must be between 1900 and 2200."));
         return problems;
     }
 
@@ -197,16 +219,19 @@ public sealed record Character : IJsonOnDeserialized
         Check("equipment", Equipment is null || Equipment.Any(e => e?.Item is null));
         Check("campaign exceptions", CampaignExceptions is null || CampaignExceptions.Any(e => e?.Content is null));
         Check("spells", Spells is null || Spells.Any(s => s?.Spell is null));
+        Check("notes", Notes is null || Notes.Any(n => n is null || n.Text is null));
+        Check("currency", Currency is null);
         Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null)
             || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null
             || Play.SpellSlotsSpent is null || Play.SpellSlotsSpent.Any(s => s is null)
-            || Play.Toggles is null || Play.Toggles.Any(t => t?.ToggleId is null));
+            || Play.Toggles is null || Play.Toggles.Any(t => t?.ToggleId is null)
+            || (Play.Concentration is { } con && (con.Spell is null || con.Name is null)));
         return problems;
     }
 
     /// <summary>
     /// v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, v5 no spells or spell
-    /// slots, and v6 no toggles; the defaults (level 1, none, full, nothing spent, all off) are exactly their meaning.
+    /// slots, v6 no toggles, and v7 no currency, notes or concentration; the defaults (level 1, none, full, nothing spent, all off) are exactly their meaning.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
@@ -253,6 +278,21 @@ public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false
 /// spellbook holds unprepared spells); a known caster's spells are always ready.
 /// </summary>
 public sealed record KnownSpell(Guid Caster, ContentReference Spell, bool Prepared = true);
+
+/// <summary>Character schema v8 (D21): coins. Plain counts; TomeStack never converts between them.</summary>
+public sealed record Currency(int Cp = 0, int Sp = 0, int Ep = 0, int Gp = 0, int Pp = 0)
+{
+    public const int MaxCoins = 1_000_000;
+
+    [JsonIgnore]
+    public bool IsValid => new[] { Cp, Sp, Ep, Gp, Pp }.All(c => c is >= 0 and <= MaxCoins);
+}
+
+/// <summary>Character schema v8 (D22): one dated session note. <see cref="Date"/> is the session's day; <see cref="CreatedAt"/> when it was written.</summary>
+public sealed record SessionNote(Guid Id, DateOnly Date, string Text, DateTimeOffset CreatedAt)
+{
+    public const int MaxText = 4_000;
+}
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);
