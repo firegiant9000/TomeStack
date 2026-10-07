@@ -91,7 +91,8 @@ it('lists the core numbers as terms and definitions, with no heading or named re
   expect(within(summary).getByRole<HTMLInputElement>('checkbox', { name: 'Heroic Inspiration' }).checked).toBe(false);
   expect(within(summary).queryByText('Conditions', { selector: 'dt' })).toBeNull();
   expect(within(summary).getByText('Strength', { selector: 'dt' })).toBeTruthy();
-  expect(within(summary).getByText('16', { selector: '.derived' })).toBeTruthy();
+  expect(within(summary).getByText('+3', { selector: '.derived' })).toBeTruthy(); // the modifier is the large number (owner: modifier first by default)
+  expect(within(summary).getByText('16', { selector: '.score' })).toBeTruthy();
 });
 
 it('names inspiration by family and lists conditions and exhaustion when present', () => {
@@ -229,4 +230,12 @@ it('styles the six ability roll buttons as buttons, not as link text (investigat
     expect(button.classList.contains('roll')).toBe(true);
     expect(button.classList.contains('link')).toBe(false);
   }
+});
+
+it('keeps one markup for both ability-box orders: modifier, then score, then the roll button (CSS reorders)', () => {
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  const strength = within(screen.getByRole('region', { name: 'Summary' })).getByText('Strength', { selector: 'dt' }).nextElementSibling as HTMLElement;
+  expect(strength.classList.contains('ability')).toBe(true);
+  expect(Array.from(strength.children).map((c) => c.className || c.tagName.toLowerCase())).toEqual(['derived', 'score', 'roll']);
+  expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });

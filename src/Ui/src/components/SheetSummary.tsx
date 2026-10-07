@@ -59,9 +59,14 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
           return (
             <div key={a}>
               <dt>{abilityNames[a]}</dt>
-              <dd>
-                <span className="derived">{score.value}</span>
-                {score.override && <span className="override-label"> (overridden)</span>}{' '}
+              {/* Owner (2026-10-06): modifier first by default, score first by the "Ability boxes" setting; one markup, CSS `order`.
+                  The modifier is what the roll button adds, so it is the large number. DOM (and screen-reader) order stays modifier, score. */}
+              <dd className="ability">
+                <span className="derived">{signed(mod.value)}</span>{' '}
+                <span className="score">
+                  {score.value}
+                  {score.override && <span className="override-label"> (overridden)</span>}
+                </span>{' '}
                 <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
                   Roll {abilityNames[a]} check ({signed(mod.value)})
                 </button>

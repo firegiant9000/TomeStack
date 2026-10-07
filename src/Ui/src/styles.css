@@ -226,13 +226,37 @@ span.warn { color: var(--warn); }
 .tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
 .tabpanel[hidden] { display: none; }
 
-/* ADR-014 slice 2: the summary. All rem, no fixed widths: the abilities grid and the lines wrap at 200% and 400% zoom. */
-.sheet-summary { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3) var(--space-4); background: var(--surface); }
-.sheet-summary dl { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0; }
-.sheet-summary dl.summary-abilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
-.sheet-summary dl > div { display: grid; gap: 0.1rem; }
+/* ADR-014 slice 2 + investigation 2026-10-06 item 7: boxes. Every box is the existing `dl > div`, bordered with --line-strong
+   (3.6:1 light / 4.8:1 dark on every surface), no shadow, the summary's radius. The section places its five children by
+   grid areas: abilities, the line, then one full-width strip with the d20 mode at the left and the result beside it, with a
+   reserved height so a roll never pushes the tabs down (owner answer 4). All rem: wraps at 200% and 400%. */
+.sheet-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'abilities abilities' 'line line' 'mode result' 'hint hint';
+  gap: var(--space-2) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
+.sheet-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; }
+.sheet-summary dl.summary-abilities { grid-area: abilities; display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); }
+.sheet-summary dl.summary-line { grid-area: line; }
+.sheet-summary dl.summary-line > div { flex: 1 1 auto; }
+.sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+/* The ability box: modifier large, score small beneath; the "Ability boxes: Score first" setting swaps both by CSS order. */
+.sheet-summary dd.ability { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
+.sheet-summary dd.ability .derived { font-size: var(--text-2xl); flex-basis: 100%; }
+.sheet-summary dd.ability .score { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-numbers); }
+html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); flex-basis: auto; }
+html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-2xl); color: inherit; flex-basis: 100%; }
+html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
+.sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
+.sheet-summary > .hint { grid-area: hint; }
+.sheet-summary > .roll-result { grid-area: result; min-height: 7.5rem; }
 /* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
 .quick-hp { display: inline-flex; gap: var(--space-1); }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
@@ -269,6 +293,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
+  .sheet-summary { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'abilities' 'line' 'mode' 'result' 'hint'; }
 }
 
 /* At 150% text or more the content needs about 960px before it must stack; rem in a media query ignores the root font-size.
@@ -305,6 +330,8 @@ dd { margin: 0; }
   .content { max-width: none; padding: 0; }
   .print-sheet { border: none; padding: 0; }
   .panel, .sheet-summary { background: none; border-radius: 0; padding: 0; }
+  .sheet-summary { display: block; }
+  .sheet-summary dl > div { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
 }
 
