@@ -11,6 +11,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { CharacterBuilder, type BuilderMode } from './components/CharacterBuilder';
 import { CharacterSheet } from './components/CharacterSheet';
 import { HomebrewStudio } from './components/HomebrewStudio';
+import { HomePanel } from './components/HomePanel';
 import { ImportPreview } from './components/ImportPreview';
 import { SourcesPanel } from './components/SourcesPanel';
 import { readFileAsBase64 } from './files';
@@ -18,7 +19,7 @@ import { applyPreferences, setSidebarCollapsed, sidebarCollapsed } from './setti
 import type { SheetTabId } from './sheetTab';
 
 type Screen =
-  | { kind: 'empty' }
+  | { kind: 'home'; focus?: boolean } // focus: false only for the start screen (the first Tab must reach the header)
   | { kind: 'builder'; mode: BuilderMode }
   | { kind: 'studio' }
   | { kind: 'sources' }
@@ -41,7 +42,7 @@ function describeError(error: unknown): string {
 export function App() {
   const [info, setInfo] = useState<AppInfo>();
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
-  const [screen, setScreen] = useState<Screen>({ kind: 'empty' });
+  const [screen, setScreen] = useState<Screen>({ kind: 'home', focus: false });
   const [message, setMessage] = useState<{ tone: 'error' | 'status'; text: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
   const [collapsed, setCollapsed] = useState(sidebarCollapsed);
@@ -163,6 +164,16 @@ export function App() {
           Tools
         </h2>
         <div className="actions" role="group" aria-labelledby="tools-heading">
+          <button
+            type="button"
+            aria-current={screen.kind === 'home' ? 'page' : undefined}
+            onClick={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'home', focus: true });
+            }}
+          >
+            Characters
+          </button>
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button
             type="button"
@@ -281,7 +292,18 @@ export function App() {
             </p>
           )}
         </div>
-        {screen.kind === 'empty' && <p className="hint">Create a character, open one from the list, or pick a theme in Settings.</p>}
+        {screen.kind === 'home' && (
+          <HomePanel
+            characters={characters}
+            onOpen={(id) => void open(id)}
+            onNew={() => {
+              setMessage(undefined);
+              setScreen({ kind: 'builder', mode: { kind: 'create' } });
+            }}
+            canCreate={!!info}
+            focusOnMount={screen.focus !== false}
+          />
+        )}
         {screen.kind === 'builder' && info && (
           <CharacterBuilder
             key={screen.mode.kind === 'create' ? 'create' : `${screen.mode.kind}-${screen.mode.view.character.id}`}
@@ -290,7 +312,7 @@ export function App() {
             onError={onError}
             onCancel={() => {
               const mode = screen.mode;
-              if (mode.kind === 'create') setScreen({ kind: 'empty' });
+              if (mode.kind === 'create') setScreen({ kind: 'home', focus: true });
               else setScreen({ kind: 'sheet', view: mode.view });
               setMessage({ tone: 'status', text: 'Draft discarded. Nothing was changed.' });
             }}
@@ -333,7 +355,7 @@ export function App() {
             rulesFamilies={info.rulesFamilies}
             onError={onError}
             onCancel={() => {
-              setScreen({ kind: 'empty' });
+              setScreen({ kind: 'home', focus: true });
               setMessage({ tone: 'status', text: 'Import cancelled. Nothing was saved.' });
             }}
             onCreated={async (characterId, result) => {
@@ -381,13 +403,13 @@ export function App() {
             key={`${screen.fileName}-${screen.base64.length}`}
             {...screen}
             onError={onError}
-            onCancel={() => setScreen({ kind: 'empty' })}
+            onCancel={() => setScreen({ kind: 'home', focus: true })}
             onApplied={async (result) => {
               await refresh();
               // Open first: open() clears the message, which used to hide this summary and the backup location.
               const first = result.characters[0];
               if (first) await open(first);
-              else setScreen({ kind: 'empty' });
+              else setScreen({ kind: 'home', focus: true });
               setMessage({
                 tone: 'status',
                 text:

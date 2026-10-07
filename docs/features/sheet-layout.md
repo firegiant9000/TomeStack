@@ -15,13 +15,15 @@ The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
 5. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
 6. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
 
+The main column starts on the Characters home screen: a card per active character (name, family, level, last change) with "Open {name}"; "Characters" in the sidebar's Tools returns to it. Archived characters stay in the sidebar's collapsed list (SPEC C-08). The home heading takes focus when the user navigates to it, but not at app start (the first Tab must reach the header's "Hide sidebar").
+
 The sidebar sits on the left from the messages row down, so an open print preview or a long list of messages does not push it down.
 
 Under 40rem everything flows in DOM order.
 
 ## Sidebar
 
-The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Inside the sidebar, first a "Close sidebar" button (the same toggle; focus lands on the header's "Show sidebar"), then the heading "Characters" with the list, then "Archived (N)", then the heading "Tools" with the ten action buttons (owner, 2026-10-06: the list comes first because it is what the sidebar is for). The nav takes its name from the "Characters" heading. Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks; the messages have it too, because the article spans their cell.
+The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expanded`, `aria-controls`, `aria-keyshortcuts="Control+B"`). Inside the sidebar, first a "Close sidebar" button (the same toggle; focus lands on the header's "Show sidebar"), then the heading "Characters" with the list, then "Archived (N)", then the heading "Tools" with the eleven action buttons ("Characters" first) (owner, 2026-10-06: the list comes first because it is what the sidebar is for). The nav takes its name from the "Characters" heading. Ctrl+B does the same (key auto-repeat is ignored). When the hidden sidebar held focus, focus moves to the toggle. The choice is remembered in the page's storage (`tomestack.sidebar`); collapsed, the main column keeps its left inset. The sidebar has `z-index: 1`, because the main column and the sheet article span its column and would otherwise take its clicks; the messages have it too, because the article spans their cell.
 
 ## Summary (always visible)
 

@@ -1377,10 +1377,12 @@ it('reaches the primary actions by keyboard alone', async () => {
   await user.tab();
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close sidebar' })); // the sidebar's own close control
   // Owner (2026-10-06): the character list comes before the tools. Earlier tests leave characters behind in the shared
-  // DevHost, so the next stop is the first of them, or "New character" when the list is empty; walk to "New character".
+  // DevHost, so the next stop is the first of them, or "Characters" (the first tool) when the list is empty; the bounded
+  // loop walks past "Characters" to "New character".
   await user.tab();
   const list = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('list', { name: 'Characters' });
-  expect(list.contains(document.activeElement) || document.activeElement === newCharacter).toBe(true);
+  const charactersTool = within(screen.getByRole('navigation', { name: 'Characters' })).getByRole('button', { name: 'Characters' });
+  expect(list.contains(document.activeElement) || document.activeElement === charactersTool).toBe(true);
   for (let i = 0; i < 200 && document.activeElement !== newCharacter; i++) await user.tab();
   expect(document.activeElement).toBe(newCharacter);
   await user.tab();
@@ -2153,4 +2155,22 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   name.focus();
   await user.keyboard('{Control>}b{/Control}');
   expect(screen.getByRole('navigation', { name: 'Characters' })).toBeTruthy(); // ignored in a text field
+});
+
+it('opens the Characters home screen with a card per character and opens one from it (D25)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const home = await screen.findByRole('region', { name: 'Characters' }); // the start screen; the sidebar's heading and list share the name
+  expect(within(home).getByRole('heading', { level: 2, name: 'Characters' })).toBeTruthy();
+  const cards = await within(home).findAllByRole('listitem'); // earlier tests created characters
+  expect(cards.length).toBeGreaterThan(0);
+  expect(within(home).getByRole('list', { name: 'Characters' })).toBeTruthy();
+  const first = cards[0]!;
+  const name = within(first).getByRole('button', { name: /^Open / }).textContent!.replace(/^Open /, '');
+  expect(first.textContent).toMatch(/Level \d+/);
+  await user.click(within(first).getByRole('button', { name: `Open ${name}` }));
+  expect(await screen.findByRole('article', { name })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  const back = await screen.findByRole('region', { name: 'Characters' });
+  expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' }));
 });
