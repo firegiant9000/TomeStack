@@ -29,6 +29,7 @@ import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
+import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) =>
@@ -236,6 +237,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
   const [resting, setResting] = useState<RestPeriod>();
+  const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -426,6 +428,21 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       <TabList label="Sheet sections" idPrefix="sheet" tabs={tabs} active={active} onActivate={setTab} />
 
       <TabPanel idPrefix="sheet" id="play" active={active === 'play'}>
+        {/* D20 (owner, 2026-10-06): a second layout of the Play tab for combat; CSS hides traces, hints and class columns. */}
+        <div className="play-tools">
+          <label className="choice compact-toggle">
+            <input
+              type="checkbox"
+              checked={compact}
+              onChange={(e) => {
+                setCompactPlay(e.target.checked);
+                setCompact(e.target.checked);
+                applyPreferences();
+              }}
+            />{' '}
+            Compact view: hit points, attacks, conditions and resources only
+          </label>
+        </div>
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
           <HitPointsPanel view={view} act={act} />

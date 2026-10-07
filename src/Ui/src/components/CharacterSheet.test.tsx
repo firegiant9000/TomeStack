@@ -30,6 +30,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   localStorage.clear(); // the remembered tab is per character id, and these tests share one
+  delete document.documentElement.dataset.compactPlay;
 });
 
 const field = (id: string, label: string, value: number, units: string): DerivedValue => ({ field: id, label, value, computedValue: value, trace: [], warnings: [], automation: 'automatic', units });
@@ -72,6 +73,16 @@ const sheetElement = (v: CharacterView, initialTab?: Parameters<typeof Character
   <CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab={initialTab} />
 );
 const renderSheet = (v: CharacterView, initialTab?: Parameters<typeof CharacterSheet>[0]['initialTab']) => render(sheetElement(v, initialTab));
+
+it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  const toggle = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Compact view/ });
+  expect(toggle.checked).toBe(false);
+  await user.click(toggle);
+  expect(localStorage.getItem('tomestack.compactPlay')).toBe('on');
+  expect(document.documentElement.dataset.compactPlay).toBe('on');
+});
 
 it('marks proficient and expert fields on Stats and lists passive scores and Speed (D24)', () => {
   const base = view().sheet.fields;

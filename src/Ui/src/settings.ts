@@ -21,6 +21,7 @@ const keys = {
   targets: 'tomestack.targets',
   underline: 'tomestack.underline',
   announceRolls: 'tomestack.announceRolls',
+  compactPlay: 'tomestack.compactPlay',
 } as const;
 
 /** This session's choices, read only while storage is unavailable, so a pick still applies and lasts until the app closes. */
@@ -89,7 +90,7 @@ function oneOf<T extends string>(ids: readonly T[], stored: string | null, fallb
   return (ids as readonly string[]).includes(stored ?? '') ? (stored as T) : fallback;
 }
 
-function applyAttribute(name: 'appearance' | 'textSize' | 'abilityOrder' | 'motion' | 'contrast' | 'focus' | 'targets' | 'underline', value: string | undefined): void {
+function applyAttribute(name: 'appearance' | 'textSize' | 'abilityOrder' | 'motion' | 'contrast' | 'focus' | 'targets' | 'underline' | 'compactPlay', value: string | undefined): void {
   if (value === undefined) delete document.documentElement.dataset[name];
   else document.documentElement.dataset[name] = value;
 }
@@ -145,6 +146,10 @@ export const setUnderline = (id: UnderlineId): void => write(keys.underline, id 
 export const announceRollsOn = (): boolean => read(keys.announceRolls) !== 'off';
 export const setAnnounceRolls = (on: boolean): void => write(keys.announceRolls, on ? null : 'off');
 
+/** D20: the compact combat layout of the Play tab (CSS hides traces, hints and class columns). Off is the default: no attribute. */
+export const compactPlay = (): boolean => read(keys.compactPlay) === 'on';
+export const setCompactPlay = (on: boolean): void => write(keys.compactPlay, on ? 'on' : null);
+
 /** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
 export function applyPreferences(): void {
   applyTheme(theme());
@@ -156,4 +161,5 @@ export function applyPreferences(): void {
   applyAttribute('focus', focusRing() === 'auto' ? undefined : 'always');
   applyAttribute('targets', targets() === 'default' ? undefined : 'large');
   applyAttribute('underline', underline() === 'off' ? undefined : 'on');
+  applyAttribute('compactPlay', compactPlay() ? 'on' : undefined);
 }

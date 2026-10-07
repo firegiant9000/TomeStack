@@ -240,6 +240,15 @@ span.warn { color: var(--warn); }
   #sheet-panel-play:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   #sheet-panel-stats:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
+/* Task 18 (R17): the Play tools row (compact toggle; Undo joins it later) spans both grid columns. */
+.play-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+@media (min-width: 60rem) {
+  #sheet-panel-play .play-tools { grid-column: 1 / -1; }
+}
+/* D20: the compact combat view hides what a turn does not need; nothing is unmounted. Attack summaries (name, to hit, damage)
+   stay; only what their details would open to goes. The new toggle and Concentration's save controls are not targets. */
+html[data-compact-play='on'] #sheet-panel-play :is(.play-panel .hint, section[aria-labelledby='class-columns-heading'], .play-panel fieldset .option-source, .resource details, .feature details > :not(summary)) { display: none; }
+html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--space-1); }
 #sheet-panel-manage > section + section { border-top: 1px solid var(--line); padding-top: var(--space-2); }
 .equipment-group h4, .play-panel > section > h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-md); }
 /* Pips (slots, resources): decoration beside the text; a border so they survive forced colours. */

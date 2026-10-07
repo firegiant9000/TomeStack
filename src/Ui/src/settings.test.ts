@@ -8,6 +8,7 @@ import {
   appearance,
   applyPreferences,
   applyTheme,
+  compactPlay,
   contrast,
   diceAnimationOn,
   focusRing,
@@ -16,6 +17,7 @@ import {
   setAbilityOrder,
   setAnnounceRolls,
   setAppearance,
+  setCompactPlay,
   setContrast,
   setDiceAnimation,
   setFocusRing,
@@ -180,4 +182,12 @@ it('defaults the accessibility settings to the OS or off, and remembers each und
   applyPreferences();
   expect(document.documentElement.dataset).toMatchObject({ motion: 'reduce', contrast: 'more', focus: 'always', targets: 'large', underline: 'on' });
   expect(document.documentElement.dataset.announceRolls).toBeUndefined(); // read by the component, not the CSS
+  expect(compactPlay()).toBe(false);
+  setCompactPlay(true);
+  expect(localStorage.getItem('tomestack.compactPlay')).toBe('on');
+  applyPreferences();
+  expect(document.documentElement.dataset.compactPlay).toBe('on');
+  setCompactPlay(false);
+  applyPreferences();
+  expect(document.documentElement.dataset.compactPlay).toBeUndefined();
 });

@@ -65,6 +65,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 37 | Currency (D21) | 1.3.1, 3.3.2 | 🔧 Vitest-verified: five labelled spinbuttons, Save disabled until valid and changed |
 | 38 | Session notes (D22) | 1.3.1, 3.3.2, 4.1.2 | 🔧 Vitest-verified: a named form, a named list, delete behind a confirm click; e2e: printed only when ticked, never in a share |
 | 39 | Characters home screen (D25) | 1.3.1, 2.4.3, 4.1.2 | 🔧 Vitest and e2e: a named list of cards, "Open {name}" buttons, focus on the heading when it opens (not at app start); "Create a character" when empty |
+| 40 | Compact combat view (D20) | 1.3.1, 4.1.2 | 🔧 Vitest-verified: a labelled checkbox, remembered; CSS-only hiding of explanatory parts, nothing unmounted |
 
 ## Manual keyboard walkthrough
 
