@@ -75,4 +75,37 @@ public class CurrencyAndNotesTests
 
         Assert.Equal("Written after the snapshot.", Assert.Single(restored.Notes).Text);
     }
+
+    [Fact]
+    public void A_snapshot_keeps_no_session_notes_and_a_restore_still_keeps_the_current_ones()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Notes = [Note("Private fixture note.")] }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "with notes"));
+
+        Assert.Empty(temp.App.Store.FindSnapshot(snapshot.Id)!.Character.Notes); // the journal is never copied into a snapshot
+
+        var preview = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        var result = temp.App.RestoreSnapshot(new(preview.Token, Confirm: true));
+        Assert.Equal("Private fixture note.", Assert.Single(result.View.Character.Notes).Text);
+        Assert.Empty(temp.App.Store.FindSnapshot(result.Undo.Id)!.Character.Notes); // nor into the undo snapshot a restore takes
+    }
+
+    [Fact]
+    public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Currency = new(Sp: 12, Gp: 3) }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "three gold"));
+
+        var same = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Null(same.CurrencyAfter);
+        Assert.Null(same.CurrencyNow);
+
+        temp.App.SaveCharacter(saved with { Currency = new(Gp: 40) });
+        var changed = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Equal(new Currency(Sp: 12, Gp: 3), changed.CurrencyAfter);
+        Assert.Equal(new Currency(Gp: 40), changed.CurrencyNow);
+        Assert.Equal(new Currency(Sp: 12, Gp: 3), temp.App.RestoreSnapshot(new(changed.Token, Confirm: true)).View.Character.Currency); // semantics unchanged: coins roll back
+    }
 }

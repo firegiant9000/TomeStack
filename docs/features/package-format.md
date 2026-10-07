@@ -37,6 +37,8 @@ Every export has a `purpose` (ADR-007, D03), and the UI asks for it:
 
 `package.exportPreview { characterIds, purpose }` returns `{ purpose, fileName, characters, included[], omitted[], gapNotes }` without writing anything. The UI shows the omitted list before a share export. `package.export` returns the package as base64 (used by browser development). In the desktop app, `package.saveAs` writes it where the user chooses in a native Save dialog, and returns only `{ saved, fileName }`. The UI waits for it without a timeout, because the response only comes once the user closes the dialog. Both take `purpose` (default `backup`).
 
+Export applies the import's per-entry limit: an entry over 5 MB (for example a character whose session notes are long and in a script the JSON encoder escapes, six bytes a character) is refused with `package.entry-too-large` before anything is written, so a package TomeStack makes can always be imported again.
+
 Every limit and check below has its own test in `tests/AppService.Tests/PackageLimitTests.cs`.
 
 ## Import rules (untrusted input, SPEC Q-02)

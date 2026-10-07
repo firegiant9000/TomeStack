@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { Character, CharacterView, RestorePreview, SnapshotSummary } from '../api/types';
+import type { Character, CharacterView, Currency, RestorePreview, SnapshotSummary } from '../api/types';
 
 interface Props {
   character: Character;
@@ -10,6 +10,12 @@ interface Props {
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString();
+
+/** "3 gp, 12 sp": the coins held, largest first; none at all reads "no coins". */
+const coinsText = (c: Currency) => {
+  const held = (['pp', 'gp', 'ep', 'sp', 'cp'] as const).filter((k) => c[k] > 0).map((k) => `${c[k].toLocaleString('en-US')} ${k}`);
+  return held.length > 0 ? held.join(', ') : 'no coins';
+};
 
 /**
  * M5 slice 8 (B08; owner decision LIVING_SPECS D14): snapshots of this character, taken by hand. A restore shows what
@@ -96,7 +102,7 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
       <h3 id="snapshots-heading" tabIndex={-1} ref={heading}>
         Snapshots
       </h3>
-      <p className="hint">A copy of this character to come back to. Snapshots stay on this computer; exports and full backups leave them out.</p>
+      <p className="hint">A copy of this character to come back to. Snapshots stay on this computer; exports and full backups leave them out. Session notes are not copied into a snapshot, and a restore keeps the notes you have.</p>
       <div className="inline-form">
         <label className="field">
           Snapshot name (optional)
@@ -165,7 +171,8 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
               : `${preview.added.length} content reference(s) come back and ${preview.removed.length} go.`}{' '}
             {preview.playChanges ? 'Hit points, spent uses and conditions go back to the snapshot too.' : 'Play state is the same.'}
             {preview.nameAfter ? ` The name goes back to ${preview.nameAfter}.` : ''}
-            {preview.exceptionsChange ? ' Recorded cross-family exceptions go back to the snapshot too.' : ''} Its campaign stays as it is now.
+            {preview.exceptionsChange ? ' Recorded cross-family exceptions go back to the snapshot too.' : ''}
+            {preview.currencyAfter && preview.currencyNow ? ` Coins go back to ${coinsText(preview.currencyAfter)} (now ${coinsText(preview.currencyNow)}).` : ''} Its campaign stays as it is now.
           </p>
           {(preview.campaignWarnings ?? []).length > 0 && (
             <ul className="warnings" aria-label="Campaign warnings after the restore">

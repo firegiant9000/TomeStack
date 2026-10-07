@@ -42,6 +42,8 @@ public sealed record RestoreSnapshotRequest(Guid Token, bool Confirm = false);
 /// <param name="NameAfter">The name the restore brings back, when it differs from the current one.</param>
 /// <param name="ExceptionsChange">Whether the recorded cross-family exceptions differ.</param>
 /// <param name="CampaignWarnings">Campaign warnings the restored character would have that it does not have now (its campaign stays as it is).</param>
+/// <param name="CurrencyNow">The coins now, set only when the restore changes them (coins roll back with the snapshot; D21).</param>
+/// <param name="CurrencyAfter">The coins the restore brings back, set only when they differ from the current ones.</param>
 public sealed record RestorePreview(
     Guid Token,
     SnapshotSummary Snapshot,
@@ -52,7 +54,9 @@ public sealed record RestorePreview(
     bool PlayChanges,
     string? NameAfter = null,
     bool ExceptionsChange = false,
-    IReadOnlyList<Diagnostic>? CampaignWarnings = null);
+    IReadOnlyList<Diagnostic>? CampaignWarnings = null,
+    Currency? CurrencyNow = null,
+    Currency? CurrencyAfter = null);
 
 /// <param name="Undo">The snapshot of the character as it was just before, taken in the same transaction.</param>
 public sealed record RestoreResult(CharacterView View, SnapshotSummary Undo);
@@ -123,7 +127,9 @@ public sealed partial class TomeStackApp
             TempJson(current.Play) != TempJson(restored.Play),
             restored.Name != current.Name ? restored.Name : null,
             TempJson(current.CrossFamilyExceptions) != TempJson(restored.CrossFamilyExceptions),
-            [.. warningsThen.Where(w => !warningsNow.Any(n => n.Code == w.Code && n.Content == w.Content))]);
+            [.. warningsThen.Where(w => !warningsNow.Any(n => n.Code == w.Code && n.Content == w.Content))],
+            restored.Currency != current.Currency ? current.Currency : null,
+            restored.Currency != current.Currency ? restored.Currency : null);
     }
 
     /// <summary>
@@ -170,7 +176,7 @@ public sealed partial class TomeStackApp
         };
 
     private CharacterSnapshot NewSnapshot(Character character, SnapshotReason reason, string? label) =>
-        new(Guid.NewGuid(), character.Id, _time.GetUtcNow(), reason, label, character with { ArchivedAt = null });
+        new(Guid.NewGuid(), character.Id, _time.GetUtcNow(), reason, label, character with { ArchivedAt = null, Notes = [] }); // D22: the session journal is never copied into a snapshot (a restore keeps the current notes)
 
     private static SnapshotSummary Summarize(CharacterSnapshot s) =>
         new(s.Id, s.CharacterId, s.CreatedAt, s.Reason, s.Label, s.Character.Name, s.Character.TotalLevel);

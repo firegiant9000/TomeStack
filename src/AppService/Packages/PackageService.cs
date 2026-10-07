@@ -83,6 +83,8 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 files[$"gaps/{note.Id:D}.json"] = ("gapNote", Json(note));
         }
 
+        RequireEntriesWithinLimit(files.Select(f => (f.Key, f.Value.Bytes.LongLength)));
+
         var createdAt = time.GetUtcNow();
         var manifest = new PackageManifest
         {
@@ -104,6 +106,21 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
                 WriteEntry(zip, path, file.Bytes, createdAt);
         }
         return new ExportResult(plan.FileName, buffer.ToArray(), manifest);
+    }
+
+    /// <summary>
+    /// Import refuses an entry over <see cref="MaxEntryBytes"/>, so export refuses to write one (review fix; as for source
+    /// packs): a long journal in a script that the JSON encoder escapes could otherwise make a backup that cannot be imported.
+    /// Checked before anything is written.
+    /// </summary>
+    internal static void RequireEntriesWithinLimit(IEnumerable<(string Path, long Bytes)> entries)
+    {
+        var tooLarge = entries.Where(e => e.Bytes > MaxEntryBytes).Select(e => e.Path).ToList();
+        if (tooLarge.Count > 0)
+        {
+            throw new PackageException(
+                [new("package.entry-too-large", $"'{tooLarge[0]}' is larger than a package entry can be ({MaxEntryBytes / (1024 * 1024)} MB), so a package holding it could not be imported. Nothing was written. For a character, shorten its session notes.")]);
+        }
     }
 
     private static LicenseNotice Notice(SourceRecord s) => new(s.Id, s.Title, s.Publisher, s.License, s.Redistributable, s.Attribution, s.ModificationNotice);

@@ -24,6 +24,15 @@ export interface FieldOverride {
   reason?: string;
 }
 
+/** Character schema v8 (D21): plain coin counts, never converted. */
+export interface Currency {
+  cp: number;
+  sp: number;
+  ep: number;
+  gp: number;
+  pp: number;
+}
+
 export interface Character {
   id: string;
   schemaVersion: number;
@@ -47,7 +56,7 @@ export interface Character {
   /** Items carried; only equipped ones apply (M2 item 4). */
   equipment?: EquipmentEntry[];
   /** Character schema v8 (D21): coins carried. */
-  currency?: { cp: number; sp: number; ep: number; gp: number; pp: number };
+  currency?: Currency;
   /** Character schema v8 (D22): dated session notes; never in a share package. */
   notes?: { id: string; date: string; text: string; createdAt: string }[];
   /** Spells known or prepared, per caster (character schema v6, D04). */
@@ -1233,6 +1242,9 @@ export interface RestorePreview {
   exceptionsChange?: boolean;
   /** New campaign warnings: the campaign stays as it is, so the snapshot's content may not be allowed there. */
   campaignWarnings?: Diagnostic[];
+  /** Set only when the restore changes the coins (they roll back with the snapshot): the coins now, and the coins it brings back. */
+  currencyNow?: Currency;
+  currencyAfter?: Currency;
 }
 
 export interface RestoreResult {

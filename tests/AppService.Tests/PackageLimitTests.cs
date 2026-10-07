@@ -87,6 +87,18 @@ public class PackageLimitTests
         AssertRejected(Package([(Path("sources", Guid.NewGuid()), new byte[PackageService.MaxEntryBytes + 1])]), "package.entry-too-large");
 
     [Fact]
+    public void Export_refuses_an_entry_over_the_entry_limit_before_writing_anything()
+    {
+        // The limit import enforces is enforced at export too (a long non-Latin journal escapes to six bytes a character).
+        PackageService.RequireEntriesWithinLimit([("characters/a.json", PackageService.MaxEntryBytes), ("sources/b.json", 10)]);
+
+        var problem = Assert.Throws<PackageException>(() =>
+            PackageService.RequireEntriesWithinLimit([("sources/b.json", 10), ("characters/a.json", PackageService.MaxEntryBytes + 1)])).Errors.Single();
+        Assert.Equal("package.entry-too-large", problem.Code);
+        Assert.Contains("characters/a.json", problem.Message);
+    }
+
+    [Fact]
     public void Entries_that_together_unpack_beyond_the_total_limit_are_rejected()
     {
         // Each entry is within the per-entry limit and compresses to a few KB: a zip bomb in miniature.
