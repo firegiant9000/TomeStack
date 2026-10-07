@@ -58,6 +58,14 @@ public class CharacterSchemaV8Tests
     }
 
     [Fact]
+    public void A_concentration_name_has_a_length_bound()
+    {
+        PlayState Concentrating(string name) => new() { Concentration = new(new(Guid.NewGuid(), Guid.NewGuid()), name) };
+        Assert.Empty(Concentrating(new string('x', PlayState.MaxConcentrationNameLength)).Validate());
+        Assert.Contains("play.concentration-invalid", Concentrating(new string('x', PlayState.MaxConcentrationNameLength + 1)).Validate().Select(d => d.Code));
+    }
+
+    [Fact]
     public void A_null_note_entry_is_reported_as_an_empty_entry()
     {
         var json = JsonSerializer.Serialize(Fixtures.Srd521Character(), RulesJson.Options)

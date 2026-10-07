@@ -42,6 +42,8 @@ The plan is calculated from the sheet (both SRDs):
 
 **Toggles (content v6, [m3-effects.md](m3-effects.md)):** a long rest proposes switching every active toggle off (`toggle:<content>:<id>`); untick it to keep one on.
 
+**Concentration (character schema v8, D19):** a long rest of a character who is concentrating proposes ending it (`concentration`, "Concentration", 1 → 0, naming the spell), so the end is seen before it happens; untick it to keep concentrating, as with a toggle. A short rest does not list it.
+
 **Spell slots ([spellcasting.md](spellcasting.md)):** a long rest proposes every spent slot back (`spellSlots:<level>`), and both rests propose spent Pact Magic slots back (`pactSlots`). Each is ticked and can be unticked like any change.
 
 ## Commands

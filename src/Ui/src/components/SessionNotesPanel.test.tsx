@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Session notes (D22): a dated journal saved with the character; delete behind one confirm click. Values are invented.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -38,6 +38,22 @@ it('keeps the typed note and reports the error when the save fails', async () =>
   await user.click(within(form).getByRole('button', { name: 'Save session note' }));
   expect(onError).toHaveBeenCalled();
   expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Note' }).value).toBe('Fixture unsaved note.');
+});
+
+it('keeps focus on the note field while the save runs and after it (WCAG 2.4.3)', async () => {
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise((resolve) => { finish = (v) => resolve(v); }));
+  const user = userEvent.setup();
+  render(<SessionNotesPanel view={fixture} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+  const form = screen.getByRole('form', { name: 'New session note' });
+  const field = within(form).getByRole('textbox', { name: 'Note' });
+  await user.type(field, 'Fixture focus note.');
+  await user.click(within(form).getByRole('button', { name: 'Save session note' }));
+  expect(within(form).getByRole<HTMLButtonElement>('button', { name: 'Save session note' }).disabled).toBe(true);
+  expect(document.activeElement).toBe(field); // the button is disabled mid-save
+  finish(fixture);
+  await waitFor(() => expect((field as HTMLTextAreaElement).value).toBe(''));
+  expect(document.activeElement).toBe(field);
 });
 
 it('adds a dated note and lists it newest first, then deletes it after a confirm click', async () => {

@@ -268,7 +268,7 @@
           "additionalProperties": false,
           "properties": {
             "spell": { "$ref": "#/$defs/contentReference" },
-            "name": { "type": "string", "minLength": 1 },
+            "name": { "type": "string", "minLength": 1, "maxLength": 200 },
             "pendingSaveDc": { "type": "integer", "minimum": 10, "maximum": 100 }
           }
         }

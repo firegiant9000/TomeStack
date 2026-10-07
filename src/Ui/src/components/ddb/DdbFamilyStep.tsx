@@ -61,7 +61,7 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
             <input type="radio" name="ddb-number-preset" checked={numberPreset === preset} onChange={() => onNumberPreset(preset)} /> {numberPresetLabels[preset]}
           </label>
         ))}
-        <p className="hint">Pre-fills the Numbers step; you can still change any row there. The sheet's values become overrides that say "Imported from D&amp;D Beyond".</p>
+        <p className="hint">Pre-fills the Numbers step; you can still change any row there. The sheet's values become overrides that say "Imported from D&amp;D Beyond". Speed starts as the sheet's number either way, because TomeStack's is only a 30-foot placeholder until species speeds are in the content.</p>
       </fieldset>
     </>
   );

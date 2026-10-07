@@ -836,7 +836,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   // A clean spell: excerpt, page, what was read; the check passes; accepting makes a draft.
   await user.selectOptions(kind, 'spell');
   await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(2));
-  await user.click(within(list()).getByRole('button', { name: 'Fixture Ember Lance' }));
+  await user.click(await within(list()).findByRole('button', { name: 'Fixture Ember Lance' })); // a slow PDF worker may still be filling the list
   const ember = await detail('Fixture Ember Lance');
   await waitFor(() => expect(document.activeElement).toBe(within(ember).getByRole('heading', { name: 'Candidate: Fixture Ember Lance' })));
   expect(within(ember).getByRole('figure').textContent).toMatch(/Excerpt from p\. 2.*Fixture Ember Lance.*3d6 Fire/s);

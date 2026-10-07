@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, ContentOption, EquipmentEntry } from '../api/types';
 
@@ -132,15 +132,20 @@ type Coin = (typeof coins)[number][0];
 const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
 /** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
-export function CurrencyPanel(props: Props) {
-  // Keyed on the stored coins: a snapshot restore or import keeps the character id (no remount), so the draft is re-seeded here.
-  return <CurrencyForm key={JSON.stringify(props.view.character.currency ?? {})} {...props} />;
-}
-
-function CurrencyForm({ view, onChanged, onError }: Props) {
+export function CurrencyPanel({ view, onChanged, onError }: Props) {
   const { character } = view;
   const stored = character.currency ?? emptyCurrency;
-  const [draft, setDraft] = useState<Record<Coin, string>>(() => Object.fromEntries(coins.map(([k]) => [k, String(stored[k])])) as Record<Coin, string>);
+  const seed = (c: typeof stored) => Object.fromEntries(coins.map(([k]) => [k, String(c[k])])) as Record<Coin, string>;
+  const [draft, setDraft] = useState<Record<Coin, string>>(() => seed(stored));
+  // A save, snapshot restore or import changes the stored coins without a remount (the character id is the same), so the
+  // draft is re-seeded here, not by a key: a remount would drop focus to the page body (WCAG 2.4.3).
+  const storedKey = JSON.stringify(stored);
+  const [seeded, setSeeded] = useState(storedKey);
+  if (seeded !== storedKey) {
+    setSeeded(storedKey);
+    setDraft(seed(stored));
+  }
+  const heading = useRef<HTMLHeadingElement>(null);
   const parsed = Object.fromEntries(coins.map(([k]) => [k, Number(draft[k])])) as Record<Coin, number>;
   const valid = coins.every(([k]) => draft[k] !== '' && Number.isInteger(parsed[k]) && parsed[k] >= 0 && parsed[k] <= 1_000_000);
   const changed = coins.some(([k]) => parsed[k] !== stored[k]);
@@ -149,6 +154,7 @@ function CurrencyForm({ view, onChanged, onError }: Props) {
     if (!valid) return;
     try {
       onChanged(await client.saveCharacter({ ...character, currency: parsed }));
+      heading.current?.focus(); // "Save currency" is disabled now that nothing differs: focus goes to the section
     } catch (error) {
       onError(error);
     }
@@ -156,7 +162,9 @@ function CurrencyForm({ view, onChanged, onError }: Props) {
 
   return (
     <section aria-labelledby="currency-heading" className="play-panel">
-      <h3 id="currency-heading">Currency</h3>
+      <h3 id="currency-heading" tabIndex={-1} ref={heading}>
+        Currency
+      </h3>
       <div className="inline-form">
         {coins.map(([key, label]) => (
           <label key={key} className="field">

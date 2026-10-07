@@ -354,7 +354,7 @@ export interface PlayAction {
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration';
   slotLevel?: number;
   die?: number;
   amount?: number;

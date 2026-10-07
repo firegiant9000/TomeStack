@@ -39,6 +39,20 @@ it('shows the five coin counts and saves the edited currency with the character'
   await user.click(screen.getByRole('button', { name: 'Save currency' }));
   expect(vi.mocked(client.saveCharacter).mock.lastCall![0].currency).toEqual({ cp: 3, sp: 0, ep: 0, gp: 20, pp: 0 });
   expect(onChanged).toHaveBeenCalled();
+  expect(document.activeElement?.id).toBe('currency-heading'); // WCAG 2.4.3: "Save currency" is disabled once saved; focus is not dropped
+});
+
+it('keeps the same form (no remount) when the stored coins change after a save', async () => {
+  const user = userEvent.setup();
+  const first = { ...fixture, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 12, pp: 0 } } };
+  const { rerender } = render(<CurrencyPanel view={first} onChanged={() => {}} onError={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
+  await user.clear(box);
+  await user.type(box, '20');
+  rerender(<CurrencyPanel view={{ ...first, character: { ...character, currency: { cp: 0, sp: 0, ep: 0, gp: 20, pp: 0 } } }} onChanged={() => {}} onError={() => {}} />);
+  expect(screen.getByRole('spinbutton', { name: 'Gold (gp)' })).toBe(box);
+  expect((box as HTMLInputElement).value).toBe('20');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save currency' }).disabled).toBe(true);
 });
 
 it('re-seeds the inputs when the stored currency changes (a restore keeps the character id)', () => {

@@ -16,6 +16,9 @@ public sealed record PlayState
     /// <summary>The highest pending concentration save DC validation accepts (the damage command clamps to it).</summary>
     public const int MaxConcentrationSaveDc = 100;
 
+    /// <summary>The longest spell name a concentration records (a name the player's own content gave it; the same bound as a snapshot label).</summary>
+    public const int MaxConcentrationNameLength = 200;
+
     /// <summary>A bound on spent slots of one level (untrusted input); overrides can raise a maximum, never past this.</summary>
     public const int MaxSlots = 100;
 
@@ -133,8 +136,8 @@ public sealed record PlayState
             yield return new("play.spell-slots-invalid", $"Spent Pact Magic slots must be between 0 and {MaxSlots}.");
         if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
             yield return new("play.death-saves-out-of-range", $"Death saving throw successes and failures must each be between 0 and {DeathSaves.Maximum}.");
-        if (Concentration is { } con && (string.IsNullOrWhiteSpace(con.Name) || con.PendingSaveDc is < 10 or > MaxConcentrationSaveDc))
-            yield return new("play.concentration-invalid", "Concentration needs the spell's name, and a pending save DC between 10 and 100.");
+        if (Concentration is { } con && (string.IsNullOrWhiteSpace(con.Name) || con.Name.Length > MaxConcentrationNameLength || con.PendingSaveDc is < 10 or > MaxConcentrationSaveDc))
+            yield return new("play.concentration-invalid", $"Concentration needs the spell's name (at most {MaxConcentrationNameLength} characters), and a pending save DC between 10 and 100.");
     }
 }
 

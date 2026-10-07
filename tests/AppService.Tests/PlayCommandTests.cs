@@ -87,6 +87,27 @@ public class PlayCommandTests
     }
 
     [Fact]
+    public void A_long_rest_preview_lists_the_end_of_concentration_and_a_short_rest_does_not()
+    {
+        var (temp, id, veil) = Caster();
+        using var _ = temp;
+        Assert.DoesNotContain(temp.App.PreviewRest(id, RestPeriod.LongRest).Changes, c => c.Kind == RestChangeKind.Concentration); // nothing to end
+
+        temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+        Assert.DoesNotContain(temp.App.PreviewRest(id, RestPeriod.ShortRest).Changes, c => c.Kind == RestChangeKind.Concentration);
+
+        var preview = temp.App.PreviewRest(id, RestPeriod.LongRest);
+        var change = Assert.Single(preview.Changes, c => c.Kind == RestChangeKind.Concentration);
+        Assert.Contains("Fixture Veil", change.Reason);
+
+        // Unticked, it is kept (the same way a toggle is kept); ticked, the long rest ends it.
+        var kept = temp.App.Rest(new(id, RestPeriod.LongRest, Confirm: true, Basis: preview.Basis, Skip: [change.Id]));
+        Assert.NotNull(kept.Character.Play.Concentration);
+        var ended = temp.App.Rest(new(id, RestPeriod.LongRest, Confirm: true, Basis: temp.App.PreviewRest(id, RestPeriod.LongRest).Basis));
+        Assert.Null(ended.Character.Play.Concentration);
+    }
+
+    [Fact]
     public void Concentration_is_refused_for_an_unknown_or_non_concentration_spell()
     {
         var (temp, id, _) = Caster();

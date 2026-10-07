@@ -1,4 +1,4 @@
-import { useState, type SubmitEvent } from 'react';
+import { useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type { CharacterView } from '../api/types';
 
@@ -26,6 +26,8 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
   const [text, setText] = useState('');
   const [deleting, setDeleting] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const noteField = useRef<HTMLTextAreaElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
   async function saveNotes(next: typeof notes, status: string): Promise<boolean> {
     try {
@@ -41,6 +43,7 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
   async function add(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!text.trim() || !date || saving) return;
+    noteField.current?.focus(); // WCAG 2.4.3: the submit button is disabled while saving; focus stays on the note
     setSaving(true);
     const ok = await saveNotes([...notes, { id: crypto.randomUUID(), date, text: text.trim(), createdAt: new Date().toISOString() }], 'Session note saved.');
     setSaving(false);
@@ -49,7 +52,9 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
 
   return (
     <section aria-labelledby="session-notes-heading" className="play-panel">
-      <h3 id="session-notes-heading">Session notes</h3>
+      <h3 id="session-notes-heading" tabIndex={-1} ref={heading}>
+        Session notes
+      </h3>
       <p className="hint">Your own notes per session. They stay on this computer and in your personal backups; a share package never carries them.</p>
       <form onSubmit={add} aria-label="New session note" className="inline-form">
         <label className="field">
@@ -58,7 +63,7 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
         </label>
         <label className="field">
           Note
-          <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={3} required />
+          <textarea ref={noteField} value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} rows={3} required />
         </label>
         <button type="submit" disabled={!text.trim() || !date || saving}>
           Save session note
@@ -73,7 +78,15 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
               <p>{note.text}</p>
               {deleting === note.id ? (
                 <div className="actions">
-                  <button type="button" onClick={() => void saveNotes(notes.filter((n) => n.id !== note.id), 'Session note deleted.')}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void saveNotes(
+                        notes.filter((n) => n.id !== note.id),
+                        'Session note deleted.',
+                      ).then((ok) => ok && heading.current?.focus())
+                    }
+                  >
                     Confirm delete
                   </button>
                   <button type="button" onClick={() => setDeleting(undefined)}>

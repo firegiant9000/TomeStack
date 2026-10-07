@@ -251,7 +251,7 @@ span.warn { color: var(--warn); }
   #sheet-panel-play:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   #sheet-panel-stats:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
-/* Task 18 (R17): the Play tools row (compact toggle; Undo joins it later) spans both grid columns. */
+/* The Play tools row (the compact toggle and Undo) spans both grid columns. */
 .play-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 @media (min-width: 60rem) {
   #sheet-panel-play .play-tools { grid-column: 1 / -1; }
@@ -273,7 +273,7 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
 /* ADR-014 slice 2 + investigation 2026-10-06 item 7: boxes. Every box is the existing `dl > div`, bordered with --line-strong
    (3.6:1 light / 4.8:1 dark on every surface), no shadow, the summary's radius. The section places its five children by
    grid areas: abilities, the line, then one full-width strip with the d20 mode at the left and the result beside it, with a
-   reserved height so a roll never pushes the tabs down (owner answer 4). All rem: wraps at 200% and 400%. */
+   reserved height so an ordinary roll does not push the tabs down (owner answer 4; a very long result may wrap and grow the strip). All rem: wraps at 200% and 400%. */
 .sheet-summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
