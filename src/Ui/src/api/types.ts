@@ -46,6 +46,10 @@ export interface Character {
   play?: PlayState;
   /** Items carried; only equipped ones apply (M2 item 4). */
   equipment?: EquipmentEntry[];
+  /** Character schema v8 (D21): coins carried. */
+  currency?: { cp: number; sp: number; ep: number; gp: number; pp: number };
+  /** Character schema v8 (D22): dated session notes; never in a share package. */
+  notes?: { id: string; date: string; text: string; createdAt: string }[];
   /** Spells known or prepared, per caster (character schema v6, D04). */
   spells?: KnownSpell[];
   updatedAt: string;

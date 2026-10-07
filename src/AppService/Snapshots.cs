@@ -166,6 +166,7 @@ public sealed partial class TomeStackApp
             ArchivedAt = current.ArchivedAt,
             CampaignId = current.CampaignId,
             CampaignExceptions = current.CampaignExceptions,
+            Notes = current.Notes, // D22: a journal, kept like the archive mark; coins and play state roll back with the rest
         };
 
     private CharacterSnapshot NewSnapshot(Character character, SnapshotReason reason, string? label) =>

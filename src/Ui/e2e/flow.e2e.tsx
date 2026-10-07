@@ -93,6 +93,13 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(within(initiative).getByRole('button', { name: 'Apply override' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: /^Initiative:/ }).textContent).toContain('overridden (calculated +3)'));
 
+  // D22: a session note on Notes is the player's journal; the share preview below must not list it.
+  await openTab(user, sheet, 'Notes');
+  const journal = within(sheet).getByRole('form', { name: 'New session note' });
+  await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the share test.');
+  await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
+  await within(sheet).findByText('Private session note for the share test.');
+
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await openTab(user, sheet, 'Manage');
   await user.click(screen.getByRole('button', { name: 'Export package' }));
@@ -104,6 +111,7 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(screen.getByRole('radio', { name: /Share with someone/ }));
   const leftOut = await screen.findByRole('region', { name: 'Left out of the shared package' });
   expect(leftOut.textContent).toMatch(/Nothing is left out/);
+  expect(leftOut.textContent).not.toMatch(/session note/i);
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
@@ -1572,6 +1580,10 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.type(within(form).getByRole('textbox', { name: /^What was missing or wrong/ }), 'Private note for the print test.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
   await within(gaps).findByText('Private note for the print test.');
+  const journal = within(sheet).getByRole('form', { name: 'New session note' });
+  await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the print test.');
+  await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
+  await within(sheet).findByText('Private session note for the print test.');
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
@@ -1587,6 +1599,10 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(preview.textContent).not.toMatch(/[A-Za-z]:\\|\/Users\/|\\Users\\/);
   await user.click(within(preview).getByRole('checkbox', { name: /^Include gap notes/ }));
   expect(await within(preview).findByText(/Private note for the print test\./)).toBeTruthy();
+  // Session notes are private too: absent until their own box is ticked.
+  expect(preview.textContent).not.toContain('Private session note for the print test.');
+  await user.click(within(preview).getByRole('checkbox', { name: 'Include session notes (private)' }));
+  expect(await within(preview).findByText(/Private session note for the print test\./)).toBeTruthy();
 
   await user.click(within(preview).getByRole('button', { name: 'Print…' }));
   expect(print).toHaveBeenCalledTimes(1);

@@ -18,6 +18,7 @@ Notes can describe private homebrew, so:
   - An import refuses a share package, or a pre-v5 package, that carries them (`package.gap-notes-not-allowed`).
   - An import refuses a note whose character is not in the package (`package.gap-note-orphan`).
   - The export radios say so.
+- Session notes (character schema v8, D22) follow the same rule: in a personal backup, never in a share.
 - **No error message or log quotes a note's text.** Errors name the note's id and a count. The error log records only unexpected exceptions, and the note commands raise none that carry the text.
 
 ## A note

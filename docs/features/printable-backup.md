@@ -11,7 +11,7 @@ A paper (or "Microsoft Print to PDF") copy of the character to play from if the 
 ## Flow
 
 1. **Print…** in the sheet header opens the "Print preview" region after the summary, in the main column (ADR-015). The preview scrolls to the top of the window and focus moves to its "Print character" heading; focus returns to the button when it closes.
-2. **Include gap notes** is off by default, because notes may describe private homebrew (`gap-notes.md`).
+2. **Include gap notes** is off by default, because notes may describe private homebrew (`gap-notes.md`). **Include session notes (private)** is off by default too (D22).
 3. **Print…** in the preview calls `window.print()`. WebView2 shows its print dialog, and the printed page contains only the preview, because the print CSS hides the rest of the app.
 
 ## Contents
@@ -24,6 +24,7 @@ A paper (or "Microsoft Print to PDF") copy of the character to play from if the 
 - Every feature: its name, source and page, automation status and text. Each non-automatic effect's text is printed as "By hand:" (the manual step).
 - Overrides, with the calculated value and the reason.
 - Gap notes, only when ticked.
+- Session notes, only when ticked (D22).
 - A footer: the TomeStack version, the date, and each source's license, attribution and modification notice. It comes from `package.exportPreview` (backup), which writes nothing, so CC-BY attribution travels with printed SRD text.
 
 ## Privacy and offline

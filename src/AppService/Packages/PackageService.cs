@@ -69,8 +69,9 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         foreach (var revision in plan.Revisions)
             files[$"content/{revision.RevisionId:D}.json"] = ("contentRevision", Json(revision));
         // SPEC C-08: the archive mark is local library organisation; a character package (backup or share) never carries it.
+        // D22: session notes are the player's journal and leave the machine only in a personal backup (like gap notes).
         foreach (var character in plan.Characters)
-            files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null }));
+            files[$"characters/{character.Id:D}.json"] = ("character", Json(character with { ArchivedAt = null, Notes = purpose == ExportPurpose.Share ? [] : character.Notes }));
         // SPEC P-01, MVP DoD 5: the campaign profile travels with its characters (it holds no rules text). A share writes it
         // as a campaign pack does, without the pending list or unknown properties (M6 stack review); a backup keeps both.
         foreach (var campaign in plan.Characters.Select(c => c.CampaignId).OfType<Guid>().Distinct().Select(store.FindCampaign).OfType<Campaign>())

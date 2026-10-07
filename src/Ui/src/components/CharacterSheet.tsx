@@ -17,7 +17,8 @@ import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
-import { EquipmentPanel } from './EquipmentPanel';
+import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
+import { SessionNotesPanel } from './SessionNotesPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
@@ -474,6 +475,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
         <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
@@ -491,6 +493,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
+        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
       </TabPanel>
 

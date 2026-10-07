@@ -62,6 +62,8 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 34 | The print preview opens into view (investigation 2026-10-06) | 2.4.3 | 🔧 Vitest-verified (`CharacterSheet.test.tsx`) and e2e: focus moves to the preview heading on open and back to "Print…" on close; the preview's top edge is scrolled into view (headless Edge: heading at y 31, its Print button at y 127 at 1280×800). **Owner check:** at 200% the preview sits below the sidebar; one press of "Print…" should show the preview controls |
 | 35 | Accessibility settings (investigation 2026-10-06 item 11) | 1.4.3, 1.4.11, 2.3.3, 2.4.7, 2.5.5, 4.1.3 | 🔧 Vitest-verified: each setting is a labelled control, stored under its own key, applied as an `html` attribute; junk storage falls back; "Announce each roll" off removes `aria-live` and keeps the text. Contrast: 70% CanvasText 8.45/9.44 on Canvas, 80% 12.6/12.2 (computed). **Owner check:** each setting under a Windows contrast theme (forced colours must win) |
 | 36 | Concentration (D19) | 1.3.1, 4.1.2 | 🔧 Vitest-verified: a named section only while concentrating, the pending DC in the heading text, buttons named by outcome. **Owner check:** Narrator reads the heading after damage |
+| 37 | Currency (D21) | 1.3.1, 3.3.2 | 🔧 Vitest-verified: five labelled spinbuttons, Save disabled until valid and changed |
+| 38 | Session notes (D22) | 1.3.1, 3.3.2, 4.1.2 | 🔧 Vitest-verified: a named form, a named list, delete behind a confirm click; e2e: printed only when ticked, never in a share |
 
 ## Manual keyboard walkthrough
 

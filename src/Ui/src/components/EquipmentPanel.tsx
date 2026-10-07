@@ -120,3 +120,49 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
     </section>
   );
 }
+
+const coins = [
+  ['cp', 'Copper (cp)'],
+  ['sp', 'Silver (sp)'],
+  ['ep', 'Electrum (ep)'],
+  ['gp', 'Gold (gp)'],
+  ['pp', 'Platinum (pp)'],
+] as const;
+type Coin = (typeof coins)[number][0];
+const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+
+/** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
+export function CurrencyPanel({ view, onChanged, onError }: Props) {
+  const { character } = view;
+  const stored = character.currency ?? emptyCurrency;
+  const [draft, setDraft] = useState<Record<Coin, string>>(() => Object.fromEntries(coins.map(([k]) => [k, String(stored[k])])) as Record<Coin, string>);
+  const parsed = Object.fromEntries(coins.map(([k]) => [k, Number(draft[k])])) as Record<Coin, number>;
+  const valid = coins.every(([k]) => draft[k] !== '' && Number.isInteger(parsed[k]) && parsed[k] >= 0 && parsed[k] <= 1_000_000);
+  const changed = coins.some(([k]) => parsed[k] !== stored[k]);
+
+  async function save() {
+    if (!valid) return;
+    try {
+      onChanged(await client.saveCharacter({ ...character, currency: parsed }));
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  return (
+    <section aria-labelledby="currency-heading" className="play-panel">
+      <h3 id="currency-heading">Currency</h3>
+      <div className="inline-form">
+        {coins.map(([key, label]) => (
+          <label key={key} className="field">
+            {label}
+            <input type="number" min={0} max={1_000_000} step={1} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
+          </label>
+        ))}
+        <button type="button" disabled={!valid || !changed} onClick={save}>
+          Save currency
+        </button>
+      </div>
+    </section>
+  );
+}

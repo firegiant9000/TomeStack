@@ -26,6 +26,7 @@ interface Props {
 export function PrintView({ view, onError, onClose }: Props) {
   const { character, sheet } = view;
   const [includeNotes, setIncludeNotes] = useState(false);
+  const [includeSessionNotes, setIncludeSessionNotes] = useState(false);
   const [notes, setNotes] = useState<GapNote[]>();
   const [notices, setNotices] = useState<LicenseNotice[]>([]);
   const [version, setVersion] = useState('');
@@ -85,6 +86,10 @@ export function PrintView({ view, onError, onClose }: Props) {
         <label>
           <input type="checkbox" checked={includeNotes} onChange={(e) => toggleNotes(e.target.checked)} />
           Include gap notes (private: they may describe your homebrew)
+        </label>
+        <label>
+          <input type="checkbox" checked={includeSessionNotes} onChange={(e) => setIncludeSessionNotes(e.target.checked)} />
+          Include session notes (private)
         </label>
         <div className="actions">
           <button type="button" onClick={() => window.print()}>
@@ -248,6 +253,19 @@ export function PrintView({ view, onError, onClose }: Props) {
             {character.overrides.map((o) => (
               <li key={o.field}>
                 {field(o.field)?.label ?? o.field}: {o.value} (calculated {field(o.field)?.computedValue ?? '?'}){o.reason ? `. ${o.reason}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {includeSessionNotes && (character.notes ?? []).length > 0 && (
+        <div>
+          <h4>Session notes</h4>
+          <ul>
+            {[...character.notes!].sort((a, b) => (a.date < b.date ? -1 : 1)).map((n) => (
+              <li key={n.id}>
+                {n.date}: {n.text}
               </li>
             ))}
           </ul>

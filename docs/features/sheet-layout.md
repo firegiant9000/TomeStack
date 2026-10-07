@@ -41,10 +41,10 @@ Traces, overrides and "Report a gap" stay on the field cards.
 | --- | --- |
 | Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips |
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
-| Inventory | Equipment, listed as Equipped and Carried |
+| Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
 | Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what the content is (Classes, Subclasses, Species, Background, Feats, Granted features) |
 | Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up |
-| Notes | Gap notes |
+| Notes | Session notes (dated, newest first; D22) above Gap notes |
 | Manage | Updates available, Export, Export for a virtual tabletop, Archive, Snapshots, separated by rules |
 
 "Report a gap" on a feature or a field opens Notes, pre-fills "About" and moves focus to the note text (WCAG 2.4.3). Open choices and content problems stay above the tabs on every page (SPEC C-03).
