@@ -309,6 +309,16 @@ public static class CharacterCalculator
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
     /// <summary>
+    /// D24 (2026-10-06): speed and the passive scores are calculated and overridable on the sheet, but no content-schema
+    /// version carries them as targets yet, and an older build would read such content as supported and drop its bonus
+    /// silently. Content may not target them until a version allows it: the validator refuses it, and the calculator
+    /// ignores such modifiers and restrictions with a diagnostic whatever the revision's schema version. Character
+    /// overrides do not pass through either.
+    /// </summary>
+    public static bool IsCharacterOnlyField(string field) =>
+        field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
+
+    /// <summary>
     /// Content validation (M1 item 3): the dependency cycles this revision's own modifiers would create with the base
     /// field graph, as <c>effect.dependency-cycle</c> diagnostics. Effects that do not parse or target no field are
     /// reported by <see cref="ContentValidator"/> instead, and are skipped here.
@@ -325,7 +335,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -397,6 +407,15 @@ public static class CharacterCalculator
                     yield return new(
                         "effect.unknown-target",
                         $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field; the content is not applied.",
+                        revision.Reference, restriction.Id);
+                    continue;
+                }
+                if (IsCharacterOnlyField(restriction.Field))
+                {
+                    // As in an older build, where the field is not a content target: the content is not applied.
+                    yield return new(
+                        "effect.character-only-field",
+                        $"'{revision.Name}' restriction '{restriction.Id}' checks '{restriction.Field}', which content may not target yet; the content is not applied.",
                         revision.Reference, restriction.Id);
                     continue;
                 }
@@ -1500,6 +1519,11 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
+                if (IsCharacterOnlyField(effect.Target))
+                {
+                    diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
+                    continue;
+                }
                 if (IsV8Field(effect.Target) && IgnoresV8(revision))
                 {
                     diagnostics.Add(V8FieldIgnored(revision, effect, $"the {effect.Target} field"));
@@ -2023,7 +2047,8 @@ public static class CharacterCalculator
             specs.Add(Proficient(FieldIds.Save(ability), $"{AbilityNames[ability]} saving throw", ability));
         foreach (var (key, label, ability) in Skills)
             specs.Add(Proficient(FieldIds.Skill(key), label, ability));
-        // D24: passive scores (SRD: 10 + the skill's total). Registered as fields, so content bonuses targeting them apply.
+        // D24: passive scores (SRD: 10 + the skill's total). Content may not target them until a content-schema
+        // version allows it; the calculator ignores such modifiers and restrictions with a diagnostic (IsCharacterOnlyField).
         foreach (var (key, label, _) in Skills.Where(s => s.Key is "perception" or "insight" or "investigation"))
         {
             var skill = FieldIds.Skill(key);

@@ -62,15 +62,9 @@ public static class ContentValidator
         return null;
     }
 
-    /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
-    /// <summary>
-    /// D24 (2026-10-06): the passive scores and speed are calculated and overridable on the sheet, but no content-schema
-    /// version carries them as targets yet, and an older build would read such content as supported and drop its bonus
-    /// silently. Content may not target them until a version allows it; character overrides do not pass through here.
-    /// </summary>
-    private static bool IsCharacterOnlyField(string field) =>
-        field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
+    private static bool IsCharacterOnlyField(string field) => CharacterCalculator.IsCharacterOnlyField(field);
 
+    /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
     private static bool IsSpellField(string field) =>
         field is FieldIds.SpellAttack or FieldIds.SpellSaveDc or FieldIds.PactSlots || field.StartsWith("spellSlots.", StringComparison.Ordinal);
 

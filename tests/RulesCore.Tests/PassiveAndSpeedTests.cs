@@ -17,21 +17,54 @@ public class PassiveAndSpeedTests
         }
     }
 
-    [Fact]
-    public void The_calculator_applies_a_bonus_on_a_passive_like_any_field_though_content_validation_refuses_it_for_now()
+    private static ContentRevision Feat(int n, string name, int schemaVersion, params Effect[] effects) => new()
     {
-        var observant = new ContentRevision
-        {
-            ContentId = Guid.Parse("a1000000-0000-4000-8000-000000000001"), RevisionId = Guid.Parse("b1000000-0000-4000-8000-000000000001"),
-            Kind = ContentKind.Feat, Name = "Fixture Watchfulness", RulesFamilies = [RulesFamilies.Srd51], Provenance = new(Fixtures.SourceShared, new PageRef(31)),
-            Status = RevisionStatus.Published,
-            Effects = [new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" }],
-        };
+        ContentId = Guid.Parse($"a1000000-0000-4000-8000-00000000010{n}"), RevisionId = Guid.Parse($"b1000000-0000-4000-8000-00000000010{n}"),
+        Kind = ContentKind.Feat, Name = name, RulesFamilies = [RulesFamilies.Srd51], Provenance = new(Fixtures.SourceShared, new PageRef(31)),
+        Status = RevisionStatus.Published, SchemaVersion = schemaVersion, Effects = effects,
+    };
+
+    private static CharacterSheet Calc(Character character, params ContentRevision[] extra)
+    {
         var pack = Fixtures.Pack();
-        var catalog = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, observant]);
-        var character = Fixtures.Srd51Character();
-        var sheet = CharacterCalculator.Calculate(character with { Pins = [.. character.Pins, observant.Reference] }, catalog);
-        Assert.Equal(15 + sheet.Field(FieldIds.Skill("perception")).Value, sheet.Field(FieldIds.Passive("perception")).Value);
+        var catalog = new InMemoryContentCatalog(pack.Sources, [.. pack.Revisions, .. extra]);
+        return CharacterCalculator.Calculate(character with { Pins = [.. character.Pins, .. extra.Select(e => e.Reference)] }, catalog);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(9)]
+    public void The_calculator_ignores_a_content_modifier_on_speed_or_a_passive_whatever_the_schema_version(int schemaVersion)
+    {
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var quick = Feat(1, "Fixture Quickness", schemaVersion,
+            new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" },
+            new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" });
+        var sheet = Calc(Fixtures.Srd51Character(), quick);
+        Assert.Equal(30, sheet.Field(FieldIds.Speed).Value);
+        Assert.Equal(plain.Field(FieldIds.Passive("perception")).Value, sheet.Field(FieldIds.Passive("perception")).Value);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.character-only-field" && d.Content == quick.Reference && d.EffectId == "fast");
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.character-only-field" && d.EffectId == "pp");
+    }
+
+    [Fact]
+    public void The_calculator_ignores_a_restriction_on_a_passive_and_does_not_apply_the_content()
+    {
+        var gated = Feat(2, "Fixture Gated Watchfulness", 2,
+            new RestrictionEffect { Id = "needs-pp", Field = FieldIds.Passive("perception"), Minimum = 1 },
+            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "5" });
+        var sheet = Calc(Fixtures.Srd51Character(), gated);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.character-only-field" && d.Content == gated.Reference && d.EffectId == "needs-pp");
+        Assert.DoesNotContain(gated.Reference, sheet.Active!);
+    }
+
+    [Fact]
+    public void A_character_override_on_speed_still_applies_beside_content_that_targets_it()
+    {
+        var quick = Feat(3, "Fixture Quickness", 2, new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" });
+        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Dwarf")] }, quick);
+        Assert.Equal((25, 30), (sheet.Field(FieldIds.Speed).Value, sheet.Field(FieldIds.Speed).ComputedValue));
     }
 
     [Fact]
