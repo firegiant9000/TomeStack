@@ -4,6 +4,7 @@ import type {
   AttackEntry,
   AutomationStatus,
   CharacterView,
+  ContentKind,
   FeatureEntry,
   PageRef,
   PlayAction,
@@ -14,6 +15,7 @@ import type {
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
 import { announceRollsOn, diceAnimationOn } from '../settings';
+import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
 export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
@@ -40,6 +42,18 @@ const automationLabels: Record<AutomationStatus, string> = {
   assisted: 'assisted: you apply it',
   reference: 'reference only: text, not calculated',
 };
+
+/** Investigation 2026-10-06 item 8: Features grouped by what the content is. "Which subclass granted it" needs a data change (D24+). */
+const featureGroups: { kind: ContentKind; title: string }[] = [
+  { kind: 'class', title: 'Classes' },
+  { kind: 'subclass', title: 'Subclasses' },
+  { kind: 'species', title: 'Species' },
+  { kind: 'background', title: 'Background' },
+  { kind: 'feat', title: 'Feats' },
+  { kind: 'feature', title: 'Granted features' },
+  { kind: 'spell', title: 'Spells' },
+  { kind: 'item', title: 'Items' },
+];
 
 export const pageText = (page?: PageRef) =>
   page ? (page.end && page.end !== page.start ? `pp. ${page.start}-${page.end}` : `p. ${page.start}`) : '';
@@ -212,6 +226,7 @@ function ResourceCard({ resource, act }: { resource: ResourceValue; act: Act }) 
     <li className="resource">
       <h4 id={headingId}>
         {resource.label}: {tracked ? `${resource.current} of ${resource.maximum}` : 'tracked by hand'}
+        {tracked && <Pips filled={resource.current!} total={resource.maximum!} />}
       </h4>
       <p className="hint">
         From {resource.contentName} · {automationLabels[resource.automation]}
@@ -433,16 +448,25 @@ export function FeaturesPanel({
   return (
     <section aria-labelledby="features-heading" className="play-panel">
       <h3 id="features-heading">Features</h3>
-      <ul className="features">
-        {features.map((feature) => (
-          <FeatureItem
-            key={feature.content.revisionId}
-            feature={feature}
-            openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
-            reportGap={reportGap}
-          />
-        ))}
-      </ul>
+      {featureGroups.map(({ kind, title }) => {
+        const group = features.filter((f) => f.kind === kind);
+        if (group.length === 0) return null;
+        return (
+          <section key={kind} aria-labelledby={`features-${kind}`}>
+            <h4 id={`features-${kind}`}>{title}</h4>
+            <ul className="features">
+              {group.map((feature) => (
+                <FeatureItem
+                  key={feature.content.revisionId}
+                  feature={feature}
+                  openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
+                  reportGap={reportGap}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </section>
   );
 }

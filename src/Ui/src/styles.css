@@ -212,7 +212,11 @@ span.warn { color: var(--warn); }
 .play-panel { border-top: 1px solid var(--line); padding-top: 0.5rem; }
 .play-panel h3 { margin: 0.25rem 0; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
-.conditions { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+/* Conditions as outlined chips (still native checkboxes); the checked chip is accent-filled like the d20 segment. */
+.conditions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.conditions .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 1rem; }
+.conditions .choice:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+.conditions .choice:has(:checked) input { accent-color: var(--bg); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
 .resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
@@ -225,6 +229,20 @@ span.warn { color: var(--warn); }
 .tabs [role='tab'][aria-selected='true'] { border-color: var(--line); border-bottom: 2px solid var(--accent); font-weight: 700; margin-bottom: -1px; background: var(--bg); }
 .tabpanel { display: grid; gap: 1rem; padding-top: 0.5rem; }
 .tabpanel[hidden] { display: none; }
+/* Investigation 2026-10-06 item 8: two columns on Play (Attacks and actions on the right) and Stats at 60rem and up; one column
+   below that and under 40rem (DOM order). The panels are the same elements; this only places them. */
+@media (min-width: 60rem) {
+  #sheet-panel-play:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: dense; align-items: start; }
+  #sheet-panel-play > section[aria-labelledby='actions-heading'] { grid-column: 2; grid-row: 1 / span 8; }
+  #sheet-panel-stats:not([hidden]) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+#sheet-panel-manage > section + section { border-top: 1px solid var(--line); padding-top: var(--space-2); }
+.equipment-group h4, .play-panel > section > h4 { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-md); }
+/* Pips (slots, resources): decoration beside the text; a border so they survive forced colours. */
+.pips { display: inline-flex; gap: 0.2rem; margin-left: var(--space-2); vertical-align: middle; }
+.pip { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; border: 1px solid var(--line-strong); }
+.pip[data-filled='true'] { background: var(--accent); border-color: var(--accent); }
+.pip-more::after { content: '+' attr(data-more); font-size: var(--text-sm); color: var(--muted); }
 
 /* ADR-014 slice 2 + investigation 2026-10-06 item 7: boxes. Every box is the existing `dl > div`, bordered with --line-strong
    (3.6:1 light / 4.8:1 dark on every surface), no shadow, the summary's radius. The section places its five children by
@@ -284,6 +302,8 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .sheet-summary .roll-mode .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border: 2px solid Highlight; }
   .sheet-summary .roll-mode .choice:has(:checked) input { accent-color: HighlightText; }
   button.roll:hover { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
+  .conditions .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
+  .pip[data-filled='true'] { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
 }
 
 /* Accessibility checklist item 6 (1.4.10 reflow): under 40rem (a 1280px window at 200% zoom and above) everything flows in

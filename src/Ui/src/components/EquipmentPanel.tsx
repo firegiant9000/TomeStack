@@ -50,24 +50,37 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
       {equipment.length === 0 ? (
         <p className="hint">Nothing carried.</p>
       ) : (
-        <ul className="resources">
-          {equipment.map((entry) => (
-            <li key={entry.item.revisionId} className="resource">
-              <label className="choice">
-                <input
-                  type="checkbox"
-                  checked={entry.equipped}
-                  onChange={() => save(equipment.map((e) => (e === entry ? { ...e, equipped: !e.equipped } : e)))}
-                />
-                Equip {nameOf(entry)}
-                {entry.quantity > 1 ? ` (${entry.quantity})` : ''}
-              </label>
-              <button type="button" onClick={() => save(equipment.filter((e) => e !== entry))}>
-                Remove {nameOf(entry)}
-              </button>
-            </li>
-          ))}
-        </ul>
+        // Investigation 2026-10-06 item 8: equipped and carried apart, as a paper sheet lists them. Names are unchanged.
+        (
+          [
+            ['Equipped', equipment.filter((e) => e.equipped)],
+            ['Carried', equipment.filter((e) => !e.equipped)],
+          ] as const
+        ).map(([title, group]) =>
+          group.length === 0 ? null : (
+            <section key={title} className="equipment-group" aria-labelledby={`equipment-${title.toLowerCase()}`}>
+              <h4 id={`equipment-${title.toLowerCase()}`}>{title}</h4>
+              <ul className="resources">
+                {group.map((entry) => (
+                  <li key={entry.item.revisionId} className="resource">
+                    <label className="choice">
+                      <input
+                        type="checkbox"
+                        checked={entry.equipped}
+                        onChange={() => save(equipment.map((e) => (e === entry ? { ...e, equipped: !e.equipped } : e)))}
+                      />
+                      Equip {nameOf(entry)}
+                      {entry.quantity > 1 ? ` (${entry.quantity})` : ''}
+                    </label>
+                    <button type="button" onClick={() => save(equipment.filter((e) => e !== entry))}>
+                      Remove {nameOf(entry)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ),
+        )
       )}
       <div className="inline-form">
         <label className="field">
