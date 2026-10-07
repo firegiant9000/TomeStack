@@ -53,6 +53,8 @@ Traces, overrides and "Report a gap" stay on the field cards.
 
 One tab stop on the strip. Left and Right move (and wrap), Home and End jump, and moving selects (automatic activation). Focus stays on the tab; the panel's controls follow in the tab order.
 
+Ctrl+plus, Ctrl+minus and Ctrl+0 zoom the window (the host handles them; WebView2's other browser shortcuts are off, ADR-006). Settings lists every shortcut.
+
 ## No trade dress (P-03)
 
 Only the information architecture is borrowed. The palette is TomeStack's own (ADR-015): three themes on the system colours, no red or parchment. Dice are plain polygons. The labels are plain words; some also appear in other digital sheets, which the owner accepted on 2026-10-04.
