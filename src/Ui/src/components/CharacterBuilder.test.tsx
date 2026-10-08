@@ -407,11 +407,104 @@ it('a new roll clears the rolled assignment; switching methods drops an assignme
   await toScores(user);
   await assignArray(user);
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
-  // The array's 15 is not in the rolled pool (or the roll is not made yet): nothing carries over.
+  // Nothing is rolled yet, so the empty pool cannot hold the array assignment: the switch itself clears it.
+  expect(nextSpecies().disabled).toBe(true);
+  await user.click(screen.getByRole('radio', { name: 'Standard array' }));
+  expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(true);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
   await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
   await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)');
   expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
   expect(nextSpecies().disabled).toBe(true);
+});
+
+// Six sets whose totals are the standard array (15, 14, 13, 12, 10, 8): 4d6 drop lowest, the dropped die is a 1.
+const arrayTotals = () => [rollSet([6, 5, 4, 1], 3), rollSet([6, 5, 3, 1], 3), rollSet([5, 5, 3, 1], 3), rollSet([5, 4, 3, 1], 3), rollSet([4, 3, 3, 1], 3), rollSet([4, 2, 2, 1], 3)];
+
+it('keeps a complete rolled assignment across a switch to the array and back, and applies it', async () => {
+  const user = userEvent.setup();
+  queueSets(arrayTotals());
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  const group = await screen.findByRole('group', { name: 'Assign the rolled scores' });
+  for (const [label, value] of [['Strength', '8'], ['Dexterity', '10'], ['Constitution', '12'], ['Intelligence', '13'], ['Wisdom', '14'], ['Charisma', '15']] as const)
+    await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
+  expect(nextSpecies().disabled).toBe(false);
+  await user.click(screen.getByRole('radio', { name: 'Standard array' }));
+  expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  expect(screen.getByText(/Base scores: Str 8, Dex 10, Con 12, Int 13, Wis 14, Cha 15/)).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(false);
+  expect(screen.getByText(/Base scores: Str 8, Dex 10, Con 12, Int 13, Wis 14, Cha 15/)).toBeTruthy();
+});
+
+it('lets a duplicated rolled total be assigned as often as it was rolled, and no more', async () => {
+  const user = userEvent.setup();
+  queueSets([rollSet([4, 4, 4, 1], 3), rollSet([4, 4, 4, 1], 3), rollSet([6, 6, 6, 6], 0), rollSet([2, 2, 2, 2], 0), rollSet([5, 4, 2, 1], 3), rollSet([3, 3, 3, 1], 3)]);
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  const group = await screen.findByRole('group', { name: 'Assign the rolled scores' });
+  const select = (label: string) => within(group).getByRole('combobox', { name: label }) as HTMLSelectElement;
+  await user.selectOptions(select('Strength'), '12');
+  await user.selectOptions(select('Dexterity'), '12');
+  expect(select('Strength').value).toBe('12');
+  expect(select('Dexterity').value).toBe('12');
+  expect(screen.getByText('Assigned: 2 of 6')).toBeTruthy();
+  fireEvent.change(select('Constitution'), { target: { value: '12' } });
+  expect(select('Constitution').value).toBe('');
+  expect(screen.getByText('Assigned: 2 of 6')).toBeTruthy();
+});
+
+it('keeps an assignment made in the array when a roll arrives late', async () => {
+  const user = userEvent.setup();
+  const pending: Array<(value: never) => void> = [];
+  vi.mocked(client.rollDice).mockImplementation(() => new Promise((resolve) => pending.push(resolve as never)));
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  await user.click(screen.getByRole('radio', { name: 'Standard array' }));
+  await assignArray(user);
+  for (const s of sixSets()) {
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    pending.shift()!(s as never);
+  }
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(false);
+  expect(screen.getByText(/Base scores: Str 15, Dex 14/)).toBeTruthy();
+});
+
+it('shows no points figure while a point buy score is out of range', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Point buy' }));
+  const str = within(screen.getByRole('group', { name: 'Point buy' })).getByRole('spinbutton', { name: 'Strength' });
+  await user.clear(str);
+  await user.type(str, '16');
+  expect(screen.queryByText(/Points left/)).toBeNull();
+  expect(screen.queryByText(/You can still spend/)).toBeNull();
+  expect(screen.getByText('Keep every score between 8 and 15 to continue.')).toBeTruthy();
+  await user.clear(str);
+  await user.type(str, '9');
+  expect(screen.getByText('Points left: 26 of 27')).toBeTruthy();
+});
+
+it('does not report a roll error after the step has gone', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  let fail: (error: unknown) => void = () => {};
+  vi.mocked(client.rollDice).mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+  await toScores(user, onError);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  fail(new Error('fixture failure'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onError).not.toHaveBeenCalled();
 });
 
 it('shows the few-options hint only once the listing has loaded (Task 11 review)', async () => {

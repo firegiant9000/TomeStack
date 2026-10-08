@@ -328,6 +328,14 @@ function ScoresStep(props: {
   const [rolling, setRolling] = useState(false);
   const rollingNow = useRef(false);
   const [rollNote, setRollNote] = useState('');
+  // A roll can finish after the step is gone (Back, Cancel): it then reports nothing.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function chooseMethod(next: ScoreMethod) {
     onChange((b) => {
@@ -352,10 +360,11 @@ function ScoresStep(props: {
       const rolled: RollRecord[] = [];
       for (let i = 1; i <= 6; i++) rolled.push(await client.rollDice('4d6', 3, `Ability score roll ${i}`));
       // Only a complete set replaces the old one; an error part-way leaves what was there.
-      onChange((b) => ({ ...b, rolled, assignment: {} }));
+      // The assignment is cleared only while the method is still Roll: one made in the array meanwhile is not the rolled pool's.
+      onChange((b) => ({ ...b, rolled, assignment: b.scoreMethod === 'roll' ? {} : b.assignment }));
       setRollNote('Six scores rolled.');
     } catch (error) {
-      props.onError(error);
+      if (mounted.current) props.onError(error);
     } finally {
       rollingNow.current = false;
       setRolling(false);
@@ -392,7 +401,7 @@ function ScoresStep(props: {
           ))}
         </fieldset>
       )}
-      {method === 'pointBuy' && (
+      {method === 'pointBuy' && inRange && (
         <>
           <p className={spent > pointBuyBudget ? 'warn' : 'hint'}>
             Points left: {pointBuyBudget - spent} of {pointBuyBudget}
