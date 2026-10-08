@@ -63,7 +63,11 @@ function blockAfter(source: string, opener: string): string {
 function tokenPairs(block: string): Record<string, [string, string]> {
   const out: Record<string, [string, string]> = {};
   for (const m of block.matchAll(/(--[\w-]+)\s*:\s*(light-dark\([^;]*\))\s*;/g)) {
-    out[m[1]] = lightDarkPairs(m[2])[0];
+    const [, name, value] = m;
+    if (name === undefined || value === undefined) throw new Error('token declaration did not match');
+    const pair = lightDarkPairs(value)[0];
+    if (pair === undefined) throw new Error(`${name} has no light-dark() pair`);
+    out[name] = pair;
   }
   return out;
 }
