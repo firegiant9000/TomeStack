@@ -2,18 +2,23 @@
 /* ADR-015: tokens. Three themes on the system-colour base; contrast ratios are in accessibility-checklist.md item 5. */
 :root {
   color-scheme: light dark;
-  --bg: Canvas;
+  /* D27 (owner, 2026-10-07): light mode gets its own tinted layer; every light-dark() second argument is the 2026-10-06
+     dark value, pinned by styles.test.ts. Light ratios are in accessibility-checklist.md item 5. */
+  --bg: light-dark(#eef8f0, Canvas);
   --fg: CanvasText;
   --muted: color-mix(in srgb, CanvasText 65%, Canvas);
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
-  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
-  --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
+  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. Light: 55% (3.39:1 on the violet surface,
+     the tightest); dark: 50% as before (5.28:1 on Canvas). */
+  --line-strong: light-dark(color-mix(in srgb, CanvasText 55%, Canvas), color-mix(in srgb, CanvasText 50%, Canvas));
   /* Forest is the default theme (owner, 2026-10-05). Dark values lifted "a tiny bit" (owner, 2026-10-06; every pairing ≥ 4.5:1). */
-  --surface: light-dark(#f2f7f2, #1b241c);
+  --surface: light-dark(#cfe9d7, #1b241c);
   --accent: light-dark(#1e6a3a, #8fe0a8);
   --accent-2: light-dark(#7a5a00, #ebd070);
-  --warn: light-dark(#9a5b00, #f0b35a);
+  --warn: light-dark(#855000, #f0b35a);
   --error: light-dark(#b3261e, #f28b82);
+  /* The app header: a 30% accent tint in light (CanvasText ≥ 11.8:1, the accent edge ≥ 3.9:1), 12% in dark as before. */
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -24,6 +29,7 @@
   --text-lg: 1.125rem;
   --text-xl: 1.4rem;
   --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
   --radius: 0.375rem;
   /* Numbers in the summary and on the dice: Bahnschrift ships with Windows 10 (1709+) and 11; nothing is bundled. */
   --font-numbers: Bahnschrift, system-ui, sans-serif;
@@ -32,14 +38,18 @@
   line-height: 1.45;
 }
 html[data-theme='cool'] {
-  --surface: light-dark(#f2f4fb, #1e2230);
+  --bg: light-dark(#eef3fe, Canvas);
+  --surface: light-dark(#d3ddf8, #1e2230);
   --accent: light-dark(#3449b8, #aeb8ff);
-  --accent-2: light-dark(#0f6e66, #73ebdb);
+  --accent-2: light-dark(#0b625b, #73ebdb);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
 html[data-theme='violet'] {
-  --surface: light-dark(#f7f3fc, #211a2c);
+  --bg: light-dark(#f6f1fe, Canvas);
+  --surface: light-dark(#e2d4f7, #211a2c);
   --accent: light-dark(#6a33c4, #d6beff);
-  --accent-2: light-dark(#0a6b86, #86e3f5);
+  --accent-2: light-dark(#075f78, #86e3f5);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
 /* Investigation 2026-10-06 (ADR-015 §4 amended): preferences as html[data-*] attributes. Appearance overrides the OS scheme:
    light-dark() and Canvas/CanvasText resolve against the element's used color-scheme, so every token flips with no JS. */
@@ -67,6 +77,8 @@ html[data-underline='on'] :is(button.link, a) { text-decoration: underline; }
 @media (forced-colors: active) {
   /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */
   :root, html[data-theme], html[data-appearance], html[data-contrast] {
+    --bg: Canvas;
+    --header-bg: Canvas;
     --surface: Canvas;
     --accent: LinkText;
     --accent-2: Highlight;
@@ -107,9 +119,9 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   align-items: baseline;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
-  /* Investigation 2026-10-06 item 2 (owner: try both, ship one): a 12% tint of the theme accent on Canvas (CanvasText on it
-     ≥ 15:1, accent text ≥ 5.5:1, --line-strong ≥ 3.27:1 in every theme and scheme) plus a 2px accent edge (≥ 6.6:1 on Canvas). */
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  /* Investigation 2026-10-06 item 2 (owner: try both, ship one): a tint of the theme accent plus a 2px accent edge.
+     D27: the tint is the --header-bg token (30% light, 12% dark). */
+  background: var(--header-bg);
   border-bottom: 2px solid var(--accent);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
@@ -367,8 +379,9 @@ dd { margin: 0; }
 .print-feature p { margin: 0.2rem 0; }
 .print-notice { font-size: var(--text-sm); color: var(--muted); }
 @media print {
-  /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified). */
-  :root, html[data-appearance], html[data-text-size] { color-scheme: light; font-size: 100%; }
+  /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified).
+     Canvas for --bg, --surface and --header-bg: the tinted light tokens would print a tinted page (D27). */
+  :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: 100%; --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
   .app { display: block; min-height: 0; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
