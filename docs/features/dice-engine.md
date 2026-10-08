@@ -14,6 +14,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 - **Advantage / disadvantage:** only for a single `1d20` (a d20 test). Both dice are recorded, with `kept` on one.
 - **Critical:** every die term is rolled twice as many times, and the extra dice are marked `fromCritical`. Constants and modifiers are not doubled. Critical doubling belongs to a damage roll and advantage to a d20 test, so a request with both is refused (`dice.critical-with-advantage`).
+- **Keep highest** (`KeepHighest`, D32): for one plain die term, the lowest dice are dropped and recorded with `kept: false` (the display greys them); refused with advantage, critical or several terms.
 - **Randomness:** `IRandomSource`. `SystemRandomSource` uses the OS CSPRNG for play. `SeededRandomSource` (SplitMix64 with rejection sampling) gives reproducible tests and examples. Its sequence is pinned by a test against values computed outside .NET.
 
 ## Roll record
