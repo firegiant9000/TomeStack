@@ -277,6 +277,28 @@ it('uses the assigned scores for the draft, not the legacy defaults', async () =
   expect(vi.mocked(client.preview).mock.calls[0]![0].baseAbilities).toEqual({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 });
 });
 
+it('lists a review of the draft above the choices (D32)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  await toScores(user);
+  await assignArray(user);
+  await user.click(nextSpecies());
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(screen.getByRole('radio', { name: /^Fixture Warden/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  const review = await screen.findByRole('region', { name: 'Review' });
+  expect(review.textContent).toMatch(/Name: Fixture New/);
+  expect(review.textContent).toMatch(/Rules: .+/);
+  expect(review.textContent).toMatch(/Campaign: none/);
+  expect(review.textContent).toMatch(/Scores: Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8 \(standard array\)/);
+  expect(review.textContent).toMatch(/Species: Fixture Hillfolk/);
+  expect(review.textContent).toMatch(/Class: Fixture Warden/);
+  expect(review.textContent).toMatch(/Background: none/);
+});
+
 it('counts point buy against 27 and blocks Next when over budget', async () => {
   const user = userEvent.setup();
   await toScores(user);

@@ -782,12 +782,37 @@ function ChoicesStep(props: {
   onCommit: () => void;
   onCancel: () => void;
   busy: boolean;
+  review?: { name: string; family: string; campaign?: string; scores: AbilityScores; method: string; species?: string; cls?: string; background?: string };
 }) {
   const choices = props.view.sheet.choices ?? [];
   const open = choices.filter((c) => !c.resolved);
   const casters = props.view.sheet.spellcasting ?? [];
+  const review = props.review;
+  const rows: [string, string][] = review
+    ? [
+        ['Name', review.name],
+        ['Rules', review.family],
+        ['Campaign', review.campaign ?? 'none'],
+        ['Scores', `${abilities.map(({ key, label }) => `${label.slice(0, 3)} ${review.scores[key]}`).join(', ')} (${review.method})`],
+        ['Species', review.species ?? 'none'],
+        ['Class', review.cls ?? 'none'],
+        ['Background', review.background ?? 'none'],
+      ]
+    : [];
   return (
     <div role="group" aria-label="Choices">
+      {review && (
+        <section aria-labelledby="review-heading">
+          <h4 id="review-heading">Review</h4>
+          <dl className="review-list">
+            {rows.map(([term, value]) => (
+              <div key={term}>
+                <dt>{term}:</dt> <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
       {choices.length === 0 ? (
         <p>Nothing to choose at this level.</p>
       ) : (
@@ -1086,6 +1111,20 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           onCommit={commit}
           onCancel={onCancel}
           busy={busy}
+          review={
+            mode.kind === 'create'
+              ? {
+                  name: basics.name.trim(),
+                  family: policy?.displayName ?? basics.rulesFamily,
+                  campaign: campaign?.name,
+                  scores: basics.scores,
+                  method: scoreMethods.find((m) => m.id === basics.scoreMethod)!.label.toLowerCase(),
+                  species: basics.species && nameOf(basics.species),
+                  cls: basics.startingClass && nameOf(basics.startingClass),
+                  background: basics.background && nameOf(basics.background),
+                }
+              : undefined
+          }
         />
       )}
     </section>

@@ -4,6 +4,7 @@
 
 ### Added
 
+- **A guided character builder (D32):** six steps (rules, ability scores, species, class, background, choices), with standard array, point buy, rolled (4d6 drop lowest) or hand-entered scores, and a review of the character before "Create and save".
 - **`dice.roll` (D32):** a roll with no character, for the builder's ability scores (a formula, an optional `keepHighest`, an optional label of at most 80 characters shown with the roll). It writes nothing and stores nothing.
 - **Search spells by name (D30):** in the builder's spell pickers and on the Spells tab; accents and case do not matter.
 - **Previous rolls (D28):** the summary keeps the last ten rolls of the session under Last roll.

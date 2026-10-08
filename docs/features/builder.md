@@ -29,9 +29,39 @@ The choices step lists every choice the draft offers now, from `sheet.choices`: 
 
 **Unresolved choices are flagged, not blocking.** The step says how many are left, and saving is allowed. The sheet then lists them under "Choices to make" (`choice.unresolved`).
 
+## The new-character steps (D32)
+
+1. **Rules:** the name, the campaign (if any) and the rules family. The other family's content is never offered afterwards (D31).
+2. **Ability scores:** one of four methods, standard array first (owner answer 8).
+3. **Species**, 4. **Class** and 5. **Background:** radio groups, each with "None"; Background also holds the other content.
+6. **Choices and create:** a read-only **Review** (a `section` named "Review" holding a `dl`: name, rules family, campaign, scores with the method's name, species, class, background; "none" where nothing is picked), then the choice and spell pickers, then "Create and save", Back and Cancel. The review appears only when creating, not for a level-up or "Make choices".
+
+### The four score methods
+
+| Method | How it works |
+| --- | --- |
+| Standard array | Hand out 15, 14, 13, 12, 10 and 8, one each, to the six abilities. A value already given shows "(used)" and cannot be picked twice (a stale select that sends a used value is reset). "Assigned: N of 6" counts; Next waits for all six |
+| Point buy | Every score starts at 8 and can be set from 8 to 15. You have 27 points. A score costs, from 8 up: 8 costs 0, 9 costs 1, 10 costs 2, 11 costs 3, 12 costs 4, 13 costs 5, 14 costs 7 and 15 costs 9. "Points left: N of 27" counts; going over 27 blocks Next with the reason linked to the button |
+| Roll | "Roll six scores (4d6, drop the lowest)" (then "Roll again") asks the service for six rolls of four six-sided dice and keeps the three highest of each (the lowest die is dropped). The six totals are then assigned to the abilities, once each. A polite "Six scores rolled." follows. A failed roll is reported as an error and the builder stays open |
+| Enter by hand | Six number fields ("Base ability scores"), for scores worked out elsewhere |
+
+Owner check: the SRD 5.2.1 describes these methods; page reference to be confirmed by the owner. The rules above are written in this project's own words and add no SRD text.
+
+### The dice command and what is recorded
+
+Rolling uses `dice.roll` (`4d6`, `keepHighest` 3, label "Ability score roll N"; see [dice-engine.md](dice-engine.md)). It needs no character and writes nothing. The score method and the rolled dice are **not stored** (owner answer 7, no schema change): the character records only its six base scores, like any other, and the Roll method's dice are gone when the builder closes.
+
+### Spell search (D30)
+
+In the choices step each caster's picker has a search by name ([spellcasting.md](spellcasting.md)). A blank or accent-marks-only query shows every spell and announces nothing; while a query filters, the polite status says "N of M spells shown", and adds ", N chosen hidden by the search" when the search hides spells already picked (owner addendum A3).
+
+### Tests
+
+Vitest: `CharacterBuilder.test.tsx` (steps, methods, review). e2e: the `createCharacter(user, { name, family?, scores?, species?, cls?, background?, other? })` helper in `src/Ui/e2e/flow.e2e.tsx` walks the six steps. With `scores` it uses "Enter by hand"; without, it assigns the standard array in order.
+
 ## Accessibility (WCAG 2.2 AA, D05)
 
-Radio groups and choice groups are `fieldset`/`legend`. Each step change moves focus to the builder heading (2.4.3). The e2e test drives the whole flow by role and accessible name only.
+Radio groups and choice groups are `fieldset`/`legend`. Each step change moves focus to the builder heading (2.4.3). Each step is a named form, the selects and spinbuttons are labelled, Next is `aria-describedby` its reason when disabled, and the roll is announced politely (checklist row 45). The review list is a labelled region whose values wrap, so it reflows at 400% (1.4.10). The e2e test drives the whole flow by role and accessible name only.
 
 ## Not in this slice
 

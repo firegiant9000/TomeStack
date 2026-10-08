@@ -393,6 +393,10 @@ pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(-
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
 dt { font-weight: 600; }
 dd { margin: 0; }
+/* D32: the builder's review list. Each term/value pair is one row; values wrap so the list reflows at 400%. */
+dl.review-list { display: block; }
+dl.review-list > div { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.2rem 0.75rem; margin-bottom: 0.2rem; }
+dl.review-list dd { overflow-wrap: anywhere; }
 
 /* D30: the spell search box (builder and Spells tab); it is a screen control, so the print block below hides it. */
 .spell-search { display: grid; gap: var(--space-1); max-width: 24rem; }

@@ -14,6 +14,8 @@ _**2026-10-05 (LIVING_SPECS D18, ADR-015):** the visual refresh (themes, shell l
 
 _**2026-10-06 (LIVING_SPECS D19–D26):** the owner's UI follow-ups (concentration, compact view, currency, session notes, undo, calculated marks/passives/speed, the Characters home screen, tab glyphs) are owner-use polish done during T2, like D17 and D18, with character schema v8 approved by the owner. They are player-sheet features, not R4's DM or combat tools or content breadth, and do not wait for the T2 gap report._
 
+_**2026-10-07 (LIVING_SPECS D27–D32):** the owner's feedback round (light palette, summary and roll log, rests in the header, spell search, family filtering, the guided builder) is owner-use polish during T2 like D17–D26; it adds no content, no schema and does not wait for the T2 gap report._
+
 ### R1. Decision
 
 The next thing TomeStack needs is not a feature. It is a **played session**. M5 (eight studio slices) and M6 slice 1 were built in three days and are all fixture-verified and unreleased (merged to `main` on 2026-09-30 via #46), while the M3 played session, the M4 third-party PDF run, the second-machine restore and the first installer are still owner checks. By owner direction, M6 slices 2 to 6 were then built in the same days (D15). Until the M3 gate produces a gap report, no further studio, DM, combat, extension, cloud or content-breadth work starts. After it, the repository specialises in what it already does best: .NET architecture, local-first desktop engineering, correctness (FsCheck), performance (BenchmarkDotNet), desktop release engineering (Velopack) and recovery evidence (a real restore drill). This repository owns those four kinds of evidence for the whole portfolio.
