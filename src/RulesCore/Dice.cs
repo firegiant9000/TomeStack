@@ -201,7 +201,7 @@ public sealed record RollRequest(
     int? KeepHighest = null);
 
 /// <param name="Term">Index of the expression term the die belongs to.</param>
-/// <param name="Kept">False for the die dropped by advantage or disadvantage.</param>
+/// <param name="Kept">False for a die that does not count: dropped by advantage/disadvantage or by KeepHighest.</param>
 public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool FromCritical = false);
 
 /// <summary>
@@ -256,7 +256,9 @@ public static class DiceRoller
             }
             if (keep < 1 || keep >= diceTerms[0].Count)
             {
-                error = new("dice.keep-out-of-range", $"Keep between 1 and {diceTerms[0].Count - 1} dice of '{request.Formula}'.");
+                error = new("dice.keep-out-of-range", diceTerms[0].Count == 1
+                    ? $"Keeping the highest dice needs more than one die in '{request.Formula}'."
+                    : $"Keep between 1 and {diceTerms[0].Count - 1} dice of '{request.Formula}'.");
                 return false;
             }
         }

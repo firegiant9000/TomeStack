@@ -86,6 +86,14 @@ public class DiceTests
     }
 
     [Fact]
+    public void Keep_highest_on_a_single_die_is_refused_with_a_sensible_message()
+    {
+        Assert.False(DiceRoller.TryRoll(new RollRequest("1d6", KeepHighest: 1), new ScriptedRandom(1), out _, out var error));
+        Assert.Equal("dice.keep-out-of-range", error!.Code);
+        Assert.DoesNotContain("between 1 and 0", error.Message);
+    }
+
+    [Fact]
     public void Keep_highest_is_refused_with_advantage_or_critical()
     {
         Assert.False(DiceRoller.TryRoll(new RollRequest("1d20", RollMode.Advantage, KeepHighest: 1), new ScriptedRandom(1, 1), out _, out var a));
