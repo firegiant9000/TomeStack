@@ -427,11 +427,26 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
-  /** D29: closing a rest returns focus to the button that opened it (WCAG 2.4.3). */
-  function closeRest() {
-    const opener = resting === 'shortRest' ? shortRestButton : longRestButton;
-    setResting(undefined);
-    opener.current?.focus();
+  /** The rest that is open right now, readable from a callback that outlives its render (a finish still in flight). */
+  const openRest = useRef<RestPeriod>(undefined);
+  function showRest(kind: RestPeriod | undefined) {
+    openRest.current = kind;
+    setResting(kind);
+  }
+
+  /** The opener button toggles its own panel; the other one switches kind. Focus stays on the pressed button. */
+  function toggleRest(kind: RestPeriod) {
+    showRest(openRest.current === kind ? undefined : kind);
+  }
+
+  /**
+   * D29: closing a rest returns focus to the button that opened it (WCAG 2.4.3), but only when `kind` is still the open
+   * one. A finish that lands after the player cancelled or switched kind must not close the newer panel or take focus.
+   */
+  function closeRest(kind: RestPeriod) {
+    if (openRest.current !== kind) return;
+    showRest(undefined);
+    (kind === 'shortRest' ? shortRestButton : longRestButton).current?.focus();
   }
 
   const fieldGroup = (title: string, fields: DerivedValue[]) =>
@@ -454,16 +469,16 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
         {/* D29 (owner, 2026-10-07): rests at the top of the sheet, not in Play. */}
-        <button type="button" ref={shortRestButton} onClick={() => setResting('shortRest')} aria-expanded={resting === 'shortRest'} aria-controls="rest-panel">
+        <button type="button" ref={shortRestButton} onClick={() => toggleRest('shortRest')} aria-expanded={resting === 'shortRest'} aria-controls={resting ? 'rest-panel' : undefined}>
           Short rest…
         </button>
-        <button type="button" ref={longRestButton} onClick={() => setResting('longRest')} aria-expanded={resting === 'longRest'} aria-controls="rest-panel">
+        <button type="button" ref={longRestButton} onClick={() => toggleRest('longRest')} aria-expanded={resting === 'longRest'} aria-controls={resting ? 'rest-panel' : undefined}>
           Long rest…
         </button>
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
-        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing} aria-controls="print-preview">
+        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>
       </header>
@@ -477,12 +492,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             characterId={character.id}
             kind={resting}
             hitDice={sheet.hitDice ?? []}
+            version={view}
             onError={onError}
             onRoll={logRoll}
-            onCancel={closeRest}
+            onCancel={() => closeRest(resting)}
             onRested={(rested, applied) => {
               const kind = resting;
-              closeRest();
+              closeRest(kind);
               onChanged(rested);
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
             }}

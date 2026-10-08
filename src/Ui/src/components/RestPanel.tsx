@@ -7,6 +7,8 @@ interface Props {
   kind: RestPeriod;
   /** The character's hit dice pools; a short rest spends from them. */
   hitDice: HitDiceValue[];
+  /** Identity of the character view the proposal is for; a new one (any change to the character) fetches the proposal again. */
+  version: unknown;
   onRested: (view: CharacterView, applied: number) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
@@ -19,8 +21,11 @@ interface Props {
  * no food and drink) and confirms; nothing changes before "Finish … rest". A short rest first asks which hit dice to
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
-export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onError, onRoll }: Props) {
-  const [preview, setPreview] = useState<RestPreview>();
+export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll }: Props) {
+  // The proposal belongs to the view it was worked out for: after any other change (for example "Lose 1 hit point" in the
+  // summary) it is stale, "Finish" waits, and it is fetched again for the new view.
+  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown }>();
+  const preview = fetched && fetched.version === version ? fetched.preview : undefined;
   const [skipped, setSkipped] = useState<string[]>([]);
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
   const [busy, setBusy] = useState(false);
@@ -32,20 +37,20 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
     client
       .restPreview(characterId, kind, rolls)
       .then((next) => {
-        if (current) setPreview(next);
+        if (current) setFetched({ preview: next, version });
       })
       .catch(onError);
     return () => {
       current = false;
     };
-  }, [characterId, kind, rolls, onError]);
+  }, [characterId, kind, rolls, version, onError]);
 
   // WCAG 2.4.3: the panel opens with focus on its heading.
   useEffect(() => heading.current?.focus(), []);
 
   // A new set of dice is a new proposal: the old one is cleared, so "Finish" waits for the one the player will see.
   function changeRolls(change: (current: HitDieRoll[]) => HitDieRoll[]) {
-    setPreview(undefined);
+    setFetched(undefined);
     setRolls(change);
   }
 
