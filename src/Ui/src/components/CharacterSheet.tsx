@@ -22,6 +22,7 @@ import { SessionNotesPanel } from './SessionNotesPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
+import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
@@ -237,6 +238,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
+  // D28: the previous rolls of this session. The sheet is keyed by character id, so a switch remounts and clears both.
+  const [rollLog, setRollLog] = useState<LoggedRoll[]>([]);
+  const lastLogged = useRef<LoggedRoll | undefined>(undefined);
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
@@ -393,9 +397,29 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     refocus();
   }
 
+  /** A roll shown in Last roll; the one it replaces moves into the log, in `at` order (newest first), so a hit die logged since stays above it. */
+  function showRoll(record: RollRecord) {
+    const replaced = lastLogged.current;
+    if (replaced) {
+      setRollLog((log) => {
+        const at = log.findIndex((entry) => entry.at < replaced.at);
+        const next = at < 0 ? [...log, replaced] : [...log.slice(0, at), replaced, ...log.slice(at)];
+        return next.slice(0, rollLogLimit);
+      });
+    }
+    lastLogged.current = logged(record);
+    setLastRoll(record);
+  }
+
+  /** A roll the strip does not show (hit dice in a rest, dice-engine.md "Display"): logged only. */
+  function logRoll(record: RollRecord) {
+    const entry = logged(record);
+    setRollLog((log) => [entry, ...log].slice(0, rollLogLimit));
+  }
+
   async function roll(target: RollTarget) {
     try {
-      setLastRoll(await client.roll(character.id, target));
+      showRoll(await client.roll(character.id, target));
     } catch (error) {
       onError(error);
     }
@@ -428,7 +452,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
 
       {printing && (
         <PrintView
@@ -517,6 +541,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
               kind={resting}
               hitDice={sheet.hitDice ?? []}
               onError={onError}
+              onRoll={logRoll}
               onCancel={() => setResting(undefined)}
               onRested={(rested, applied) => {
                 setResting(undefined);

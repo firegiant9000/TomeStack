@@ -14,6 +14,7 @@ import type {
   RollTarget,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
+import { diceLine } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { Pips } from './Pips';
 
@@ -663,12 +664,7 @@ export function RollResult({
         {record.critical ? ', critical' : ''})
       </p>
       <p className="hint">
-        Dice:{' '}
-        {record.dice
-          .map((d) => `d${d.sides} ${d.value}${d.kept ? '' : ' (dropped)'}${d.fromCritical ? ' (critical)' : ''}`)
-          .join(', ')}
-        {record.expressionConstant !== 0 ? ` · constant ${record.expressionConstant}` : ''}
-        {record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('')}
+        {diceLine(record)}
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
       {linked && linked.current !== undefined && !effect?.variableCost && (

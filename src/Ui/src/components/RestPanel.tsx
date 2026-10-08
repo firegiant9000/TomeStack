@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, HitDiceValue, HitDieRoll, RestPeriod, RestPreview } from '../api/types';
+import type { CharacterView, HitDiceValue, HitDieRoll, RestPeriod, RestPreview, RollRecord } from '../api/types';
 
 interface Props {
   characterId: string;
@@ -10,6 +10,8 @@ interface Props {
   onRested: (view: CharacterView, applied: number) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
+  /** Every hit-die roll, so the sheet can log it (D28); a rest never shows it as the Last roll. */
+  onRoll?: (record: RollRecord) => void;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * no food and drink) and confirms; nothing changes before "Finish … rest". A short rest first asks which hit dice to
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
-export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onError }: Props) {
+export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onError, onRoll }: Props) {
   const [preview, setPreview] = useState<RestPreview>();
   const [skipped, setSkipped] = useState<string[]>([]);
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
@@ -50,6 +52,7 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
   async function roll(die: number) {
     try {
       const record = await client.roll(characterId, { hitDie: die });
+      onRoll?.(record);
       changeRolls((r) => [...r, { die, roll: record.dice[0]!.value }]);
     } catch (error) {
       onError(error);

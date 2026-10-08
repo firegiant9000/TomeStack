@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry } from '../api/types';
+import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { CharacterSheet } from './CharacterSheet';
 
 vi.mock('../api/client', () => ({
@@ -19,6 +19,8 @@ vi.mock('../api/client', () => ({
     previewExport: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
+    roll: vi.fn(),
+    restPreview: vi.fn(),
   },
 }));
 
@@ -432,4 +434,49 @@ it('keeps the header, print preview slot and summary as direct children of the a
   expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
+});
+
+const rollRecord = (label: string, total: number, sides = 20): RollRecord => ({
+  formula: `1d${sides}`, mode: 'normal', critical: false, dice: [{ term: 0, sides, value: total, kept: true, fromCritical: false }],
+  diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: { rollId: 'fixture', label },
+});
+
+it('moves the replaced Last roll into Previous rolls (D28)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9)).mockResolvedValueOnce(rollRecord('Dexterity check', 15));
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  const log = await screen.findByText('Previous rolls (1)');
+  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
+  expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
+});
+
+it('logs a rest hit die without showing it, and keeps the log newest first by time when the Last roll is replaced (D28)', async () => {
+  const user = userEvent.setup();
+  let clock = 1_760_000_000_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => (clock += 60_000));
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll)
+    .mockResolvedValueOnce(rollRecord('Roll A', 9))
+    .mockResolvedValueOnce(rollRecord('Hit die H', 5, 8))
+    .mockResolvedValueOnce(rollRecord('Roll B', 15));
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] }));
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(await screen.findByRole('button', { name: 'Roll a d8' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  expect(within(lastRoll).getByText(/Roll A: 9/)).toBeTruthy();
+  expect(within(lastRoll).queryByText(/Hit die H/)).toBeNull();
+  expect((await screen.findByText('Previous rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  const log = (await screen.findByText('Previous rolls (2)')).closest('details')!;
+  expect(within(lastRoll).getByText(/Roll B: 15/)).toBeTruthy();
+  const items = within(log).getAllByRole('listitem').map((li) => li.textContent ?? '');
+  expect(items[0]).toMatch(/Hit die H: 5/);
+  expect(items[1]).toMatch(/Roll A: 9/);
+  vi.mocked(Date.now).mockRestore();
 });

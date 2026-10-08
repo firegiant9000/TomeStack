@@ -263,6 +263,10 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await waitFor(() => expect(lastRoll.textContent).toMatch(/Strength saving throw \(d20 test\): \d+ \(1d20, advantage\)/));
   expect(lastRoll.textContent).toMatch(/\(dropped\)/);
   expect(lastRoll.textContent).toMatch(/Strength saving throw \+5/);
+  // D28: the roll before it is in Previous rolls, outside the live region.
+  await user.click(within(sheet).getByText('Previous rolls (1)'));
+  expect(within(sheet).getByText('Previous rolls (1)').closest('details')!.textContent).toMatch(/Frenzy extra damage.*: \d+ \(2d6, critical\)/);
+  expect(lastRoll.textContent).not.toMatch(/Previous rolls/);
   await openTab(user, sheet, 'Play');
   expect(within(screen.getByRole('region', { name: 'Resources' })).getByRole('heading', { name: 'Rages: 2 of 3' })).toBeTruthy();
 

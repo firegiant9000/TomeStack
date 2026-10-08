@@ -67,6 +67,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 39 | Characters home screen (D25) | 1.3.1, 2.4.3, 4.1.2 | 🔧 Vitest and e2e: a named list of cards, "Open {name}" buttons, focus on the heading when it opens (not at app start); "Create a character" when empty |
 | 40 | Compact combat view (D20) | 1.3.1, 4.1.2 | 🔧 Vitest-verified: a labelled checkbox, remembered; CSS-only hiding of explanatory parts only (traces, HP and Concentration explanations, class columns; consequence and rest text stay), nothing unmounted |
 | 41 | Undo last change (D23) | 4.1.2, 2.4.3 | 🔧 Vitest-verified: the button names what it undoes and is disabled when nothing can be undone (and as soon as another play change starts); focus moves to the hit points heading afterwards |
+| 42 | Roll log (D28) | 4.1.3, 1.3.1 | 🔧 Vitest-verified: a `details` disclosure outside the live region, an ordered list, no heading; **Owner check:** Narrator reads the summary count and the entries |
 
 ## Manual keyboard walkthrough
 

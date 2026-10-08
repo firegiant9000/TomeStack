@@ -1,6 +1,7 @@
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
 import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
+import { RollLog, type LoggedRoll } from './RollLog';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const abilityNames: Record<(typeof abilities)[number], string> = {
@@ -19,6 +20,8 @@ interface Props {
   rollMode: RollMode;
   onRollMode: (mode: RollMode) => void;
   lastRoll?: RollRecord;
+  /** D28: the previous rolls of this sheet session, newest first. */
+  rollLog: LoggedRoll[];
   act: (action: PlayAction) => void;
   /** Rolls a d20 test for a field id (for example `ability.str.mod`) in the current mode. */
   onRoll: (field: string) => void;
@@ -32,7 +35,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll, spellsTab = false }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onRoll, spellsTab = false }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -165,7 +168,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
           ? 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'
           : 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
       </p>
-      <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
+      <div className="roll-strip">
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
+        <RollLog rolls={rollLog} />
+      </div>
     </section>
   );
 }
