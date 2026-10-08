@@ -11,6 +11,6 @@ it('matches case- and accent-insensitively, both ways', () => {
 it('a blank or marks-only query matches everything (Review Focus 4)', () => {
   expect(matchesSpell('Fixture Spark', '')).toBe(true);
   expect(matchesSpell('Fixture Spark', '   ')).toBe(true);
-  expect(matchesSpell('Fixture Spark', '́̈')).toBe(true);
+  expect(matchesSpell('Fixture Spark', '\u0301\u0308')).toBe(true);
   expect(foldName('  Émber ')).toBe('ember');
 });

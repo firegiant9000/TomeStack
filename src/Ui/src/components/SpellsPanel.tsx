@@ -3,7 +3,7 @@ import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotVal
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
-import { matchesSpell } from '../spellSearch';
+import { foldName, matchesSpell } from '../spellSearch';
 import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
@@ -173,7 +173,7 @@ export function SpellsPanel({
             </ul>
             )
           )}
-          {shown.length === 0 && query.trim() !== '' && (
+          {shown.length === 0 && foldName(query) !== '' && (
             <p className="hint">No spells match “{query}”. Clear the search to see all {entry.spells.length}.</p>
           )}
         </section>

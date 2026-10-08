@@ -1670,6 +1670,16 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   await user.clear(search);
   await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ }));
   picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips/ });
+  // R23: a chosen spell the search hides is named in the status, and the legend's count still includes it.
+  const search2 = within(picker).getByRole('searchbox', { name: 'Search Fixture Arcanist spells by name' });
+  await user.type(search2, 'frost');
+  expect(within(picker).getByText(/^1 of \d+ spells shown, 1 chosen hidden by the search$/)).toBeTruthy();
+  expect(within(picker).queryByRole('checkbox', { name: /^Fixture Spark/ })).toBeNull();
+  await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips/ });
+  await user.type(search2, 'zz');
+  expect(within(picker).getByText(/No spells match “frostzz”/)).toBeTruthy();
+  await user.clear(search2);
+  expect(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ })).toBeTruthy();
   await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Frost Ring/ }));
   await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips, 1 of 4 prepared spells\)/ });
   await user.click(screen.getByRole('button', { name: 'Create and save' }));

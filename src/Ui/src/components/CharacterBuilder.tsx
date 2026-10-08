@@ -402,6 +402,8 @@ function SpellPicker(props: {
   const levels = [...new Set(shown.map((o) => o.spell!.level))].sort((a, b) => a - b);
   const mine = props.recorded.filter((s) => s.caster === entry.content.contentId);
   const cantrips = mine.filter((s) => props.spells.find((o) => sameRef(o.reference, s.spell))?.spell?.level === 0).length;
+  // R23: a chosen spell the search hides would otherwise give no cue; the status names how many.
+  const hiddenChosen = options.filter((o) => !shown.includes(o) && mine.some((s) => sameRef(s.spell, o.reference))).length;
   const counts = [
     entry.cantripsAllowed !== undefined ? `${cantrips} of ${entry.cantripsAllowed} cantrips` : undefined,
     entry.spellsAllowed !== undefined ? `${mine.length - cantrips} of ${entry.spellsAllowed} ${entry.preparation === 'known' ? 'known' : 'prepared'} spells` : undefined,
@@ -417,7 +419,7 @@ function SpellPicker(props: {
         {entry.name} spells{counts.length > 0 ? ` (${counts.join(', ')})` : ''}
       </legend>
       {options.length > 0 && (
-        <SpellSearch id={`spell-search-${entry.content.contentId}`} label={`Search ${entry.name} spells by name`} value={query} onChange={setQuery} shown={shown.length} total={options.length} />
+        <SpellSearch id={`spell-search-${entry.content.contentId}`} label={`Search ${entry.name} spells by name`} value={query} onChange={setQuery} shown={shown.length} total={options.length} hiddenChosen={hiddenChosen} />
       )}
       {options.length === 0 && <p className="hint">No spells on the {entry.spellList} list are installed for this level.</p>}
       {options.length > 0 && shown.length === 0 && <p className="hint">No spells match “{query}”.</p>}

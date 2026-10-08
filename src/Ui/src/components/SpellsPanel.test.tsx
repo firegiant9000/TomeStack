@@ -73,3 +73,11 @@ it('filters a caster’s spells by name, keeps the Prepared and Concentrate name
   expect(screen.queryByText(/spells shown/)).toBeNull();
   expect(document.activeElement).toBe(search);
 });
+
+it('a marks-only query filters nothing and announces nothing (D30)', async () => {
+  const user = userEvent.setup();
+  panel(view());
+  await user.type(screen.getByRole('searchbox', { name: /^Search .* spells by name$/ }), '\u0301');
+  expect(screen.queryByText(/spells shown/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Concentrate on Fixture Hush' })).toBeTruthy();
+});
