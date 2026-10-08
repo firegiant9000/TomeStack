@@ -663,6 +663,97 @@ it('keeps a focused checkbox mounted and focused when a die is added (D29, 2.4.3
   expect(document.activeElement).toBe(box);
 });
 
+const twoDice = (dice: { die: number; roll: number }[]) =>
+  dice.map((d, i) => ({ id: `hitDie:${i}`, kind: 'hitDie', label: 'Spend a d8', from: 3, to: 3 + d.roll, reason: `Fixture roll ${d.roll}`, die: 8, amount: d.roll }));
+const previewByDice = (_id: string, kind: 'shortRest' | 'longRest', dice: { die: number; roll: number }[] = []) =>
+  Promise.resolve({ kind, changes: twoDice(dice), manual: [], basis: `dice-${dice.length}` } as unknown as Awaited<ReturnType<typeof client.restPreview>>);
+
+it('keeps focus on the Add button after a die is added, and Add does nothing while it has no valid number (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const add = await screen.findByRole('button', { name: 'Add d8' });
+  expect(add.getAttribute('aria-disabled')).toBe('true');
+  await user.click(add);
+  expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(add);
+  expect(document.activeElement).toBe(add);
+  expect(add.getAttribute('aria-disabled')).toBe('true');
+  expect(await screen.findByRole('button', { name: 'Remove d8 (5)' })).toBeTruthy();
+  expect(document.activeElement).toBe(add);
+});
+
+it('keeps focus on Roll after the last die of the pool is rolled, and neither button acts with no dice left (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(rollRecord('Hit die', 4, 8));
+  renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 1, classes: ['Fixture'] }] }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const roll = await screen.findByRole('button', { name: 'Roll a d8' });
+  await user.click(roll);
+  await screen.findByRole('button', { name: 'Remove d8 (4)' });
+  expect(roll.getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(roll);
+  await user.click(roll);
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(client.roll).toHaveBeenCalledTimes(1);
+  expect(screen.getAllByRole('button', { name: /^Remove/ })).toHaveLength(1);
+});
+
+it('names each stale row\'s Remove button from the proposal that row belongs to (D29, 4.1.2)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const input = await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' });
+  await user.type(input, '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (5)' });
+  await user.type(input, '3');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (3)' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  vi.mocked(client.restPreview).mockReturnValue(new Promise(() => {}));
+  await user.click(screen.getByRole('button', { name: 'Remove d8 (5)' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  const rows = within(screen.getByRole('list', { name: 'Hit dice to spend' })).getAllByRole('listitem');
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    const rolled = /Fixture roll (\d)/.exec(row.textContent ?? '')![1];
+    const remove = within(row).getByRole('button');
+    expect(remove.textContent).toBe(`Remove d8 (${rolled})`);
+    expect(remove.textContent).not.toContain('undefined');
+  }
+});
+
+it('does nothing when Finish or a stale Remove is pressed while the proposal is being updated (D29)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (5)' });
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '3');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  vi.mocked(client.restPreview).mockReturnValue(new Promise(() => {}));
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  const calls = vi.mocked(client.restPreview).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: 'Finish short rest' }));
+  expect(client.rest).not.toHaveBeenCalled();
+  const remove = screen.getByRole('button', { name: 'Remove d8 (5)' });
+  expect(remove.getAttribute('aria-disabled')).toBe('true');
+  await user.click(remove);
+  expect(screen.getAllByRole('button', { name: /^Remove/ })).toHaveLength(1);
+  expect(vi.mocked(client.restPreview).mock.calls.length).toBe(calls);
+});
+
 it('closes the print preview from its own button and keeps focus there (4.1.2)', async () => {
   vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
   vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);

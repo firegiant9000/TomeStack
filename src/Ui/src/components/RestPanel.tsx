@@ -117,8 +117,8 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
               {spent.map((change, index) => (
                 <li key={change.id}>
                   {change.label}: {change.reason}. Hit points {change.from} → {change.to}{' '}
-                  <button type="button" onClick={() => remove(index)}>
-                    Remove {change.label.replace('Spend a ', '')} ({rolls[index]?.roll})
+                  <button type="button" onClick={() => remove(index)} aria-disabled={!ready}>
+                    Remove {change.label.replace('Spend a ', '')} ({fetched?.rolls[index]?.roll})
                   </button>
                 </li>
               ))}
@@ -188,7 +188,7 @@ function HitDiePicker({ pool, left, onRoll, onAdd }: { pool: HitDiceValue; left:
       <span>
         d{pool.die}: {left} of {pool.total} left ({pool.classes.join(', ')})
       </span>
-      <button type="button" disabled={left <= 0} onClick={onRoll}>
+      <button type="button" aria-disabled={left <= 0} onClick={() => left > 0 && onRoll()}>
         Roll a d{pool.die}
       </button>
       <label className="field">
@@ -197,8 +197,9 @@ function HitDiePicker({ pool, left, onRoll, onAdd }: { pool: HitDiceValue; left:
       </label>
       <button
         type="button"
-        disabled={left <= 0 || !valid}
+        aria-disabled={left <= 0 || !valid}
         onClick={() => {
+          if (left <= 0 || !valid) return;
           onAdd(value);
           setEntered('');
         }}
