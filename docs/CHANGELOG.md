@@ -29,6 +29,7 @@
 
 ### Changed
 
+- **Bigger ability numbers, smaller Roll buttons (D28):** the modifier is larger and the roll control is a compact 'Roll' button with the same spoken name.
 - **Light mode is tinted and brighter (D27):** each theme colours the page, the sidebar, the summary and the header in light mode; dark mode is unchanged.
 - **The character sheet has tabs.** Export, Export for a virtual tabletop, Archive, Snapshots and Updates available moved from the top of the sheet to a **Manage** tab. Open choices and content problems now sit above the tabs, visible whichever tab is open. The strip works from the keyboard (arrow keys, Home, End). [features/sheet-layout.md](features/sheet-layout.md), ADR-014.
 - **A summary at the top of the sheet:** abilities with a roll button each, proficiency bonus, Armor Class, initiative, hit points, hit dice, inspiration and active conditions, with the d20 roll mode and the last roll. An overridden number says "(overridden)". The old "Rolls" section is gone.
@@ -36,7 +37,7 @@
 - The sheet reopens on the page you used last for that character (remembered in this data folder only, in no package, share or backup). "Open <character>" from Gap notes opens the Notes page. At 400% zoom or in a narrow window the character list stacks above the sheet instead of squeezing it.
 - **Small layout fixes:** the app header no longer runs off the window when a screen holds a wide table; "Level up" and "Print…" sit together; the summary's roll buttons look like buttons; the d20 roll mode is one compact row. Inventory says how many carried items are not equipped (only equipped items apply).
 - **The shell:** the sidebar toggle sits at the top left and the header carries the theme's tint; the sidebar lists your characters first under a "Characters" heading, then the tools, and has its own "Close sidebar" button. The print preview scrolls into view and takes focus when it opens. In the installed app, F5, Ctrl+P and the other browser shortcuts no longer act (Ctrl+plus/minus/0 still zoom).
-- **The summary is boxes:** one per ability (modifier large, score small), one per combat number, and a fixed-height strip for the d20 mode and the last roll, so an ordinary roll never moves the tabs. An ability roll's result now says "Strength check", like its button. Only an advantage or disadvantage d20 is drawn in the second accent; a plain d20 uses the theme accent. The checked d20 segment is readable under Windows contrast themes.
+- **The summary is boxes:** one per ability (modifier large, score beside it), one per combat number, and a fixed-height strip for the d20 mode and the last roll, so an ordinary roll never moves the tabs. An ability roll's result now says "Strength check", like its button. Only an advantage or disadvantage d20 is drawn in the second accent; a plain d20 uses the theme accent. The checked d20 segment is readable under Windows contrast themes.
 - **The pages:** Play shows Attacks and actions beside Hit points, Conditions and Resources on a wide window; Stats is two columns; Inventory lists Equipped and Carried apart; Features are grouped by what granted them; spell slots and resources show pips; conditions are chips; the tab strip has small glyphs beside its words. The dark themes are a little brighter.
 
 ### Migration

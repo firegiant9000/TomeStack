@@ -67,8 +67,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, act, onRoll
                   {score.value}
                   {score.override && <span className="override-label"> (overridden)</span>}
                 </span>{' '}
+                {/* D28 (owner, 2026-10-07): a compact control. The visible word starts the accessible name (WCAG 2.5.3). */}
                 <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
-                  Roll {abilityNames[a]} check ({signed(mod.value)})
+                  Roll{' '}
+                  <span className="visually-hidden"> {abilityNames[a]} check ({signed(mod.value)})</span>
                 </button>
                 {mod.override && <span className="override-label"> (modifier overridden)</span>}
               </dd>

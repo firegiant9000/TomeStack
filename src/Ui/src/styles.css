@@ -303,15 +303,17 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
 .sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
-/* The ability box: modifier large, score small beneath; the "Ability boxes: Score first" setting swaps both by CSS order. */
-.sheet-summary dd.ability { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
-.sheet-summary dd.ability .derived { font-size: var(--text-2xl); flex-basis: 100%; }
+/* D28: the ability box. The modifier is the large number (what the roll adds), the score sits beside it on the baseline, the
+   compact Roll control beneath; the "Ability boxes: Score first" setting swaps the two numbers by CSS order. */
+.sheet-summary dd.ability { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: var(--space-2); }
+.sheet-summary dd.ability .derived { font-size: var(--text-3xl); line-height: 1.1; }
 .sheet-summary dd.ability .score { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-numbers); }
-html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); flex-basis: auto; }
-html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-2xl); color: inherit; flex-basis: 100%; }
+.sheet-summary dd.ability .roll { grid-column: 1 / -1; justify-self: start; margin-top: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.sheet-summary dd.ability > .override-label { grid-column: 1 / -1; }
+html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); }
+html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
-.sheet-summary dd.ability .roll { min-width: 0; overflow-wrap: anywhere; }
 .sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
 .sheet-summary > .hint { grid-area: hint; }
 .sheet-summary > .roll-result { grid-area: result; min-height: 7.5rem; }
@@ -319,9 +321,11 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .quick-hp { display: inline-flex; gap: var(--space-1); }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
 .quick-hp button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
-/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
-button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
+/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8). D28: compact, with a plain hexagon in currentColor
+   beside the word (never icon-only, D26). */
+button.roll { display: inline-flex; align-items: center; gap: 0.35em; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.5rem; min-height: 1.5rem; font-size: var(--text-sm); }
 button.roll:hover { background: var(--accent); color: var(--bg); }
+.sheet-summary button.roll::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; background: currentColor; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
 .sheet-summary .roll-mode { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: none; margin: 0; }
 .sheet-summary .roll-mode legend { float: left; padding: 0; margin-right: 0.75rem; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary .roll-mode .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); margin-left: -1px; }
@@ -428,6 +432,7 @@ dd { margin: 0; }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
   .tabs [role='tab']::before { forced-color-adjust: none; border-color: CanvasText; }
+  .sheet-summary button.roll::before { forced-color-adjust: none; background: CanvasText; }
   #sheet-tab-play::before, #sheet-tab-notes::before { background: CanvasText; }
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }

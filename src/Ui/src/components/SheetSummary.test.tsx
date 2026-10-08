@@ -127,6 +127,15 @@ it('rolls an ability check from its button, named apart from the field card\'s "
   expect(screen.getByRole('radio', { name: 'Advantage' })).toBeTruthy(); // the roll-mode picker lives here now
 });
 
+it('shows "Roll" on the button and keeps the full accessible name (2.5.3 label in name; D28)', () => {
+  render(<SheetSummary view={fixtureView()} rollMode="normal" onRollMode={() => {}} act={() => {}} onRoll={() => {}} />);
+  const button = screen.getByRole('button', { name: 'Roll Strength check (+3)' });
+  const visible = Array.from(button.childNodes).filter((n) => !(n instanceof HTMLElement && n.classList.contains('visually-hidden'))).map((n) => n.textContent).join('').trim();
+  expect(visible).toBe('Roll');
+  expect(button.querySelector('.visually-hidden')?.textContent).toBe(' Strength check (+3)');
+  expect(button.className).toBe('roll');
+});
+
 it('toggles inspiration from the summary through the play command', async () => {
   const user = userEvent.setup();
   const act = vi.fn();
