@@ -23,11 +23,15 @@ interface Props {
  */
 export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll }: Props) {
   // The proposal belongs to the view it was worked out for: after any other change (for example "Lose 1 hit point" in the
-  // summary) it is stale, "Finish" waits, and it is fetched again for the new view.
+  // summary) it is stale and fetched again for the new view. The last proposal stays on screen meanwhile (so a focused
+  // control is not unmounted) but "Finish" waits for the one for the current view.
   const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown }>();
-  const preview = fetched && fetched.version === version ? fetched.preview : undefined;
-  const [skipped, setSkipped] = useState<string[]>([]);
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
+  const [failure, setFailure] = useState<{ version: unknown; rolls: HitDieRoll[] }>();
+  const preview = fetched?.preview;
+  const ready = fetched !== undefined && fetched.version === version;
+  const failed = failure !== undefined && failure.version === version && failure.rolls === rolls;
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const name = kind === 'shortRest' ? 'Short rest' : 'Long rest';
@@ -39,7 +43,11 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
       .then((next) => {
         if (current) setFetched({ preview: next, version });
       })
-      .catch(onError);
+      .catch((error) => {
+        if (!current) return;
+        setFailure({ version, rolls });
+        onError(error);
+      });
     return () => {
       current = false;
     };
@@ -69,7 +77,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   }
 
   async function finish() {
-    if (!preview) return;
+    if (!preview || !ready) return;
     setBusy(true);
     try {
       const applied = preview.changes.filter((c) => !skipped.includes(c.id)).length;
@@ -116,10 +124,12 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
           )}
         </fieldset>
       )}
+      {failed && <p className="error">Could not work out this rest. Cancel and try again.</p>}
       {!preview ? (
-        <p className="hint">Working out what a {name.toLowerCase()} recovers…</p>
+        !failed && <p className="hint">Working out what a {name.toLowerCase()} recovers…</p>
       ) : (
         <>
+          {!ready && !failed && <p className="hint">Updating the proposal…</p>}
           {toggles.length === 0 && spent.length === 0 ? (
             <p>A {name.toLowerCase()} would change nothing{kind === 'shortRest' ? ' yet' : ''}.</p>
           ) : (
@@ -156,7 +166,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         </>
       )}
       <div className="actions">
-        <button type="button" onClick={finish} disabled={!preview || busy}>
+        <button type="button" onClick={finish} disabled={!ready || failed || busy}>
           {busy ? 'Resting…' : `Finish ${name.toLowerCase()}`}
         </button>
         <button type="button" onClick={onCancel}>

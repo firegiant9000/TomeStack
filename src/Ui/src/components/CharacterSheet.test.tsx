@@ -551,6 +551,75 @@ it('fetches the rest proposal again when the character changes under an open res
   await waitFor(() => expect(client.restPreview).toHaveBeenCalledTimes(1));
 });
 
+type Changes = Awaited<ReturnType<typeof client.restPreview>>['changes'];
+const tickable = [{ id: 'r1', kind: 'resource', label: 'Fixture charges', from: 1, to: 2, reason: 'Fixture reason' }] as unknown as Changes;
+const changedView = (v: CharacterView): CharacterView => ({ ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } });
+
+it('keeps the proposal, and a focused control in it, while it is worked out again, and Finish waits (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'longRest', changes: tickable, manual: [], basis: 'one' });
+  const { rerender } = renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const box = await screen.findByRole('checkbox', { name: /^Fixture charges/ });
+  box.focus();
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  rerender(sheetElement(changedView(v)));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  expect(document.body.contains(box)).toBe(true);
+  expect(document.activeElement).toBe(box);
+  expect((screen.getByRole('button', { name: 'Finish long rest' }) as HTMLButtonElement).disabled).toBe(true);
+  resolveNext({ kind: 'longRest', changes: tickable, manual: [], basis: 'two' });
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Finish long rest' }) as HTMLButtonElement).disabled).toBe(false));
+  expect(screen.queryByText('Updating the proposal…')).toBeNull();
+});
+
+it('keeps the last proposal, including a picked die, when working it out again fails; Finish stays off (D29)', async () => {
+  const user = userEvent.setup();
+  const v = view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] });
+  const picked = { kind: 'shortRest' as const, basis: 'with-die', manual: [], changes: [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes };
+  const { rerender } = renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  vi.mocked(client.restPreview).mockImplementation(async (_id, kind, dice = []) => (dice.length > 0 ? picked : { kind, changes: [], manual: [], basis: 'fixture' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: /^Remove/ });
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Finish short rest' }) as HTMLButtonElement).disabled).toBe(false));
+  vi.mocked(client.restPreview).mockRejectedValue(new Error('rest.needs-hit-points'));
+  rerender(sheetElement(changedView(v)));
+  expect(await screen.findByText('Could not work out this rest. Cancel and try again.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Remove/ })).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Finish short rest' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('does not report a preview that fails after the rest was cancelled (D29)', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  let rejectPreview: (e: unknown) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((_, rej) => (rejectPreview = rej)));
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(screen.getByRole('button', { name: 'Cancel rest' }));
+  rejectPreview(new Error('late'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onError).not.toHaveBeenCalled();
+});
+
+it('closes the print preview from its own button and keeps focus there (4.1.2)', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  const print = screen.getByRole('button', { name: 'Print…' });
+  await user.click(print);
+  expect(screen.getByRole('region', { name: 'Print preview' })).toBeTruthy();
+  await user.click(print);
+  expect(screen.queryByRole('region', { name: 'Print preview' })).toBeNull();
+  expect(print.getAttribute('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(print);
+});
+
 it('returns focus to the opener and reports the result when a rest finishes (D29, 2.4.3)', async () => {
   const user = userEvent.setup();
   const v = view();
