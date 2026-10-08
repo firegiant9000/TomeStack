@@ -65,9 +65,10 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 37 | Currency (D21) | 1.3.1, 3.3.2 | 🔧 Vitest-verified: five labelled spinbuttons, Save disabled until valid and changed |
 | 38 | Session notes (D22) | 1.3.1, 2.4.3, 3.3.2, 4.1.2 | 🔧 Vitest-verified: a named form, a named list, delete behind a confirm click; focus moves to "Confirm delete" when a delete starts and back to the note's "Delete" button after "Keep it" (never to the page body); a delete waits while another note save runs ("Confirm delete" is `aria-disabled`, still focusable); e2e: printed only when ticked; "a share carries no session notes" is covered by the .NET `CurrencyAndNotesTests` (the e2e assertion on it cannot fail) |
 | 39 | Characters home screen (D25) | 1.3.1, 2.4.3, 4.1.2 | 🔧 Vitest and e2e: a named list of cards, "Open {name}" buttons, focus on the heading when it opens (not at app start); "Create a character" when empty |
-| 40 | Compact combat view (D20) | 1.3.1, 4.1.2 | 🔧 Vitest-verified: a labelled checkbox, remembered; CSS-only hiding of explanatory parts only (traces, HP and Concentration explanations, class columns; consequence and rest text stay), nothing unmounted |
+| 40 | Compact combat view (D20) | 1.3.1, 4.1.2 | 🔧 Vitest-verified: a labelled checkbox, remembered; CSS-only hiding of explanatory parts only (traces, HP and Concentration explanations, class columns; consequence and recovery text stay), nothing unmounted |
 | 41 | Undo last change (D23) | 4.1.2, 2.4.3 | 🔧 Vitest-verified: the button names what it undoes and is disabled when nothing can be undone (and as soon as another play change starts); focus moves to the hit points heading afterwards |
 | 42 | Roll log (D28) | 4.1.3, 1.3.1 | 🔧 Vitest-verified: a `details` disclosure outside the live region, an ordered list, no heading; **Owner check:** Narrator reads the summary count and the entries |
+| 43 | Rests in the header (D29) | 2.4.3, 4.1.2 | 🔧 Vitest-verified: `aria-expanded`/`aria-controls`, focus to the heading on open and back to the opener on cancel or finish. **Owner check:** Narrator on open and close; 200% header wrap |
 
 ## Manual keyboard walkthrough
 

@@ -231,6 +231,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
   const printButton = useRef<HTMLButtonElement>(null);
+  const shortRestButton = useRef<HTMLButtonElement>(null);
+  const longRestButton = useRef<HTMLButtonElement>(null);
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -425,6 +427,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
+  /** D29: closing a rest returns focus to the button that opened it (WCAG 2.4.3). */
+  function closeRest() {
+    const opener = resting === 'shortRest' ? shortRestButton : longRestButton;
+    setResting(undefined);
+    opener.current?.focus();
+  }
+
   const fieldGroup = (title: string, fields: DerivedValue[]) =>
     fields.length === 0 ? null : (
       <section key={title} aria-label={title} className="field-group">
@@ -444,6 +453,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <span className="tag">{character.rulesFamily}</span>
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
+        {/* D29 (owner, 2026-10-07): rests at the top of the sheet, not in Play. */}
+        <button type="button" ref={shortRestButton} onClick={() => setResting('shortRest')} aria-expanded={resting === 'shortRest'} aria-controls="rest-panel">
+          Short rest…
+        </button>
+        <button type="button" ref={longRestButton} onClick={() => setResting('longRest')} aria-expanded={resting === 'longRest'} aria-controls="rest-panel">
+          Long rest…
+        </button>
         <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
           Level up
         </button>
@@ -453,6 +469,26 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </header>
 
       <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+
+      {resting && (
+        <div className="rest-sheet" id="rest-panel">
+          <RestPanel
+            key={resting}
+            characterId={character.id}
+            kind={resting}
+            hitDice={sheet.hitDice ?? []}
+            onError={onError}
+            onRoll={logRoll}
+            onCancel={closeRest}
+            onRested={(rested, applied) => {
+              const kind = resting;
+              closeRest();
+              onChanged(rested);
+              onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+            }}
+          />
+        </div>
+      )}
 
       {printing && (
         <PrintView
@@ -534,31 +570,6 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <HitPointsPanel view={view} act={act} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
-          {resting ? (
-            <RestPanel
-              key={resting}
-              characterId={character.id}
-              kind={resting}
-              hitDice={sheet.hitDice ?? []}
-              onError={onError}
-              onRoll={logRoll}
-              onCancel={() => setResting(undefined)}
-              onRested={(rested, applied) => {
-                setResting(undefined);
-                onChanged(rested);
-                onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
-              }}
-            />
-          ) : (
-            <div className="actions">
-              <button type="button" onClick={() => setResting('shortRest')}>
-                Short rest…
-              </button>
-              <button type="button" onClick={() => setResting('longRest')}>
-                Long rest…
-              </button>
-            </div>
-          )}
           <ConditionsPanel view={view} act={act} />
           <ResourcesPanel view={view} act={act} />
           <ClassColumnsPanel view={view} />

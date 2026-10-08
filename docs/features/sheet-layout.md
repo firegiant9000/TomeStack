@@ -9,11 +9,12 @@ UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/sr
 The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
 
 1. The app header: the sidebar toggle ("Hide sidebar"/"Show sidebar") at the left, then "TomeStack" and the "Offline" tag. It carries the `--header-bg` tint of the theme's accent (30% in light, 12% in dark) and a 2px accent bottom edge (ADR-015 §1, amended 2026-10-06 and 2026-10-07).
-2. The sheet header across the window: name, rules family, level, campaign, "Level up", "Print…".
+2. The sheet header across the window: name, rules family, level, campaign, "Short rest…", "Long rest…", "Level up", "Print…" (rests moved here from Play, D29).
 3. The summary across the window (below).
-4. Messages (status and errors).
-5. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
-6. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+4. The rest proposal, when open (`rest` row, D29): across the window under the summary, a direct child of the article in DOM order too ([rests.md](rests.md)).
+5. Messages (status and errors).
+6. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
+7. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
 
 The main column starts on the Characters home screen: a card per active character (name, family, level, last change) with "Open {name}"; "Characters" in the sidebar's Tools returns to it. Archived characters stay in the sidebar's collapsed list (SPEC C-08). The home heading takes focus when the user navigates to it, but not at app start (the first Tab must reach the header's "Hide sidebar").
 
@@ -41,7 +42,7 @@ Traces, overrides and "Report a gap" stay on the field cards.
 
 | Tab | Holds |
 | --- | --- |
-| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides only the explanatory parts (resource and attack traces, the hit point and Concentration explanations, class columns) for combat; rest, spend and recovery text stay (D20) |
+| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides only the explanatory parts (resource and attack traces, the hit point and Concentration explanations, class columns) for combat; spend and recovery text stay (rests moved to the sheet header, D29) (D20) |
 | Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
 | Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
 | Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what granted them ("From Fixture Fighter") or by kind (Classes, Subclasses, Species, Background, Feats, Granted features, Spells, Items) |

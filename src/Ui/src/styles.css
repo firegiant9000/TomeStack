@@ -107,7 +107,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .app {
   display: grid;
   grid-template-columns: [side] minmax(14rem, 18rem) [main] minmax(0, 1fr);
-  grid-template-rows: [top] auto [head] auto [summary] auto [messages] auto [print] auto [body] 1fr;
+  grid-template-rows: [top] auto [head] auto [summary] auto [rest] auto [messages] auto [print] auto [body] 1fr;
   min-height: 100vh;
 }
 .app[data-sidebar='collapsed'] { grid-template-columns: [side] 0 [main] minmax(0, 1fr); }
@@ -157,6 +157,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
 article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
+/* D29: a rest opened from the header gets its own full-width row under the summary. */
+article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
 article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; margin-right: var(--space-5); }
 
@@ -359,7 +361,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .content { padding: var(--space-4); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
-  article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
+  article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
   .sheet-summary { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'abilities' 'line' 'mode' 'result' 'hint'; }
 }
 
@@ -370,7 +372,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
-  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary) { padding: 0; margin: 0 0 var(--space-3); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet) { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */

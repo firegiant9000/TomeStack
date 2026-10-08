@@ -21,10 +21,13 @@ vi.mock('../api/client', () => ({
     play: vi.fn(),
     roll: vi.fn(),
     restPreview: vi.fn(),
+    rest: vi.fn(),
   },
 }));
 
 beforeEach(() => {
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  vi.mocked(client.rest).mockReset();
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue([]);
@@ -434,6 +437,63 @@ it('keeps the header, print preview slot and summary as direct children of the a
   expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
+});
+
+const childShape = (article: HTMLElement) => Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
+
+it('opens a rest from the header above the body, focuses its heading, and returns focus to the opener on cancel (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  const short = screen.getByRole('button', { name: 'Short rest…' });
+  expect(short.getAttribute('aria-controls')).toBe('rest-panel');
+  expect(short.getAttribute('aria-expanded')).toBe('false');
+  expect(within(screen.getByRole('tabpanel', { name: 'Play' })).queryByRole('button', { name: /rest…$/ })).toBeNull();
+  await user.click(short);
+  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.rest-sheet', 'div.sheet-body']);
+  const panel = screen.getByRole('region', { name: 'Short rest' });
+  expect(panel.parentElement!.id).toBe('rest-panel');
+  await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('heading', { name: 'Short rest' })));
+  expect(short.getAttribute('aria-expanded')).toBe('true');
+  await user.click(within(panel).getByRole('button', { name: 'Cancel rest' }));
+  expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull();
+  expect(document.activeElement).toBe(short);
+  expect(short.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('switches from a short rest to a long rest without writing (Review Focus 3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const panel = screen.getByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('heading', { name: 'Long rest' })));
+  expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull();
+  expect(client.rest).not.toHaveBeenCalled();
+});
+
+it('returns focus to the opener and reports the result when a rest finishes (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const onChanged = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.restPreview).mockResolvedValue({
+    kind: 'longRest',
+    changes: [{ id: 'hp', kind: 'hitPoints', label: 'Hit points', from: 3, to: 8, reason: 'Fixture reason' }] as unknown as Awaited<ReturnType<typeof client.restPreview>>['changes'],
+    manual: [],
+    basis: 'fixture',
+  });
+  vi.mocked(client.rest).mockResolvedValue(v);
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const long = screen.getByRole('button', { name: 'Long rest…' });
+  await user.click(long);
+  const finish = await screen.findByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect((finish as HTMLButtonElement).disabled).toBe(false));
+  await user.click(finish);
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Long rest finished: 1 change applied.'));
+  expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'fixture', [], []);
+  expect(onChanged).toHaveBeenCalledWith(v);
+  expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull();
+  expect(document.activeElement).toBe(long);
 });
 
 const rollRecord = (label: string, total: number, sides = 20): RollRecord => ({

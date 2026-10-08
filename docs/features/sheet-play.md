@@ -1,6 +1,6 @@
 # Sheet for play: features, resources, rolls and play state
 
-SPEC C-03, C-04, C-05, I-05 · MVP "Sheet" · status: implemented (M2 item 2). Rests: [rests.md](rests.md) (M2 item 3).
+SPEC C-03, C-04, C-05, I-05 · MVP "Sheet" · status: implemented (M2 item 2). Rests: [rests.md](rests.md) (M2 item 3). Rests are no longer on the Play tab: "Short rest…" and "Long rest…" are in the sheet header and their proposal opens under the summary (D29).
 
 Rules core: `src/RulesCore/Calculation.cs` (resources, features, hit points) and `src/RulesCore/PlayState.cs`. Service: `src/AppService/Play.cs`. UI: `src/Ui/src/components/PlayPanels.tsx`. Acceptance: `tests/RulesCore.Tests/ResourceAndFeatureTests.cs`, `tests/AppService.Tests/PlayCommandTests.cs`, and the play part of the e2e test "builds an SRD 5.2.1 Barbarian as drafts".
 
