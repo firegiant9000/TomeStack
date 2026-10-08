@@ -384,6 +384,9 @@ dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem;
 dt { font-weight: 600; }
 dd { margin: 0; }
 
+/* D30: the spell search box (builder and Spells tab); it is a screen control, so the print block below hides it. */
+.spell-search { display: grid; gap: var(--space-1); max-width: 24rem; }
+
 /* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
 .print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
 .print-sheet table { margin: 0.5rem 0; }
@@ -399,7 +402,7 @@ dd { margin: 0; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
-  .roll-log { display: none !important; }
+  .roll-log, .spell-search { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }
   .print-sheet { border: none; padding: 0; }

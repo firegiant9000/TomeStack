@@ -1662,6 +1662,12 @@ it('builds a spellcaster: picks spells in the builder, casts one, rolls a spell 
   let picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(0 of 3 cantrips, 0 of 4 prepared spells\)/ });
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Mending Word/ })).toBeNull(); // another list
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Ember Wave/ })).toBeNull(); // level 3: no slot yet
+  // D30: the search hides what does not match and says how many are shown; clearing it brings everything back.
+  const search = within(picker).getByRole('searchbox', { name: 'Search Fixture Arcanist spells by name' });
+  await user.type(search, 'frost');
+  expect(within(picker).getByText(/^1 of \d+ spells shown$/)).toBeTruthy();
+  expect(within(picker).queryByRole('checkbox', { name: /^Fixture Spark/ })).toBeNull();
+  await user.clear(search);
   await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Spark/ }));
   picker = await screen.findByRole('group', { name: /^Fixture Arcanist spells \(1 of 3 cantrips/ });
   await user.click(within(picker).getByRole('checkbox', { name: /^Fixture Frost Ring/ }));

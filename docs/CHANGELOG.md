@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Search spells by name (D30):** in the builder's spell pickers and on the Spells tab; accents and case do not matter.
 - **Previous rolls (D28):** the summary keeps the last ten rolls of the session under Last roll.
 - **Settings grew (owner follow-ups, 2026-10-06):** Appearance (System, Light, Dark: pick a colour scheme without changing Windows), Text size (90% to 200%), Ability boxes (modifier first or score first), and an Accessibility group: reduce motion, stronger borders and labels, an always-visible focus outline, larger buttons, underlined text buttons, and whether rolls are announced to screen readers. A list of the keyboard shortcuts. All kept on this computer only.
 - **Concentration (character schema v8):** "Concentrate on {spell}" on Spells (a prepared concentration spell; a cantrip counts); Play shows the spell, and after damage the Constitution saving throw to keep it (DC 10 or half the damage), with the roll and the two outcomes as confirmed changes. At 0 hit points it ends by itself, and a long rest's preview lists ending it (untick to keep it). A spell with a very long name is concentrated on with its name clipped, never refused.

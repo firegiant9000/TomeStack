@@ -17,6 +17,8 @@ import type {
   RulesFamilyPolicy,
   SpellcastingEntry,
 } from '../api/types';
+import { matchesSpell } from '../spellSearch';
+import { SpellSearch } from './sheet/SpellSearch';
 
 const abilities: { key: Ability; label: string }[] = [
   { key: 'str', label: 'Strength' },
@@ -394,7 +396,10 @@ function SpellPicker(props: {
   const { entry } = props;
   const highest = entry.slots.reduce((top, count, i) => (count > 0 ? i + 1 : top), 0);
   const options = props.spells.filter((o) => o.compatible && o.spell && o.spell.lists.includes(entry.spellList) && o.spell.level <= highest);
-  const levels = [...new Set(options.map((o) => o.spell!.level))].sort((a, b) => a - b);
+  // D30: a search by name; the legend's counts below still count what is recorded, not what is shown.
+  const [query, setQuery] = useState('');
+  const shown = options.filter((o) => matchesSpell(o.name, query));
+  const levels = [...new Set(shown.map((o) => o.spell!.level))].sort((a, b) => a - b);
   const mine = props.recorded.filter((s) => s.caster === entry.content.contentId);
   const cantrips = mine.filter((s) => props.spells.find((o) => sameRef(o.reference, s.spell))?.spell?.level === 0).length;
   const counts = [
@@ -411,12 +416,16 @@ function SpellPicker(props: {
       <legend>
         {entry.name} spells{counts.length > 0 ? ` (${counts.join(', ')})` : ''}
       </legend>
+      {options.length > 0 && (
+        <SpellSearch id={`spell-search-${entry.content.contentId}`} label={`Search ${entry.name} spells by name`} value={query} onChange={setQuery} shown={shown.length} total={options.length} />
+      )}
       {options.length === 0 && <p className="hint">No spells on the {entry.spellList} list are installed for this level.</p>}
+      {options.length > 0 && shown.length === 0 && <p className="hint">No spells match “{query}”.</p>}
       {levels.map((level) => (
         <fieldset key={level}>
           <legend>{levelName(level)}</legend>
           <ul className="options">
-            {options
+            {shown
               .filter((o) => o.spell!.level === level)
               .map((option) => {
                 const id = `spell-${entry.content.contentId}-${option.reference.revisionId}`;

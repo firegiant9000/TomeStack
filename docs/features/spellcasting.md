@@ -77,6 +77,10 @@ Play state adds `spellSlotsSpent: [{ level, spent }]` and `pactSlotsSpent`. v1â€
 
 The choices step (create, level-up and "Make choices") has a picker per caster. It lists the spells on the caster's list up to its highest slot level, grouped by level, and shows the counts ("0 of 3 cantrips, 0 of 4 prepared spells"). Picks are previewed on the draft like choices, and going over a count is flagged on the sheet, not blocked.
 
+## Search (D30)
+
+Each caster has a search box, "Search {caster} spells by name", in two places: in the builder's picker (right after its legend) and at the top of the caster's list on the Spells tab. It matches a part of the name, ignoring case and accents ("EMBER" finds "Ã‰mber"), and the picker's or list's rows that do not match are removed. A blank query, or one of only spaces or accent marks, shows everything. While a query is typed, a polite status says "N of M spells shown", and when none match the list says so and how to clear the search. The builder's counts still count the spells picked, not the spells shown. The search text is kept per caster while the sheet is open, is never saved and is not printed.
+
 ## Not yet
 
 - Always-prepared subclass spells (domain, oath, patron and circle spells) are text only. The player records them, and the sheet may flag them "not on the list".

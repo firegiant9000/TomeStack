@@ -56,3 +56,20 @@ it('disables the button for the spell being concentrated on and sends startConce
   await user.click(screen.getByRole('button', { name: 'Concentrate on Fixture Veil' }));
   expect(act).toHaveBeenCalledWith({ action: 'startConcentration', contentId: ref(11).contentId });
 });
+
+it('filters a caster’s spells by name, keeps the Prepared and Concentrate names of the rows shown, and says how many (D30)', async () => {
+  const user = userEvent.setup();
+  panel(view());
+  const search = screen.getByRole('searchbox', { name: /^Search .* spells by name$/ });
+  await user.type(search, 'VEIL');
+  expect(screen.getByText('1 of 4 spells shown')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Concentrate on Fixture Veil' })).toBeTruthy();
+  expect(screen.getByRole('checkbox', { name: 'Prepared: Fixture Veil' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Concentrate on Fixture Hush' })).toBeNull();
+  await user.type(search, 'zz');
+  expect(screen.getByText(/No spells match “VEILzz”/)).toBeTruthy();
+  await user.clear(search);
+  expect(screen.getByRole('button', { name: 'Concentrate on Fixture Hush' })).toBeTruthy();
+  expect(screen.queryByText(/spells shown/)).toBeNull();
+  expect(document.activeElement).toBe(search);
+});
