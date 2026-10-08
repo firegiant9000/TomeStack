@@ -13,7 +13,7 @@ export const rollLogLimit = 10;
 /** A record stamped with the client clock now; called from event handlers only. */
 export const logged = (record: RollRecord): LoggedRoll => ({ at: Date.now(), record });
 
-const time =(at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /**
  * A collapsed disclosure under the Last roll region: a `details` is a group, not a heading or a named region, so the

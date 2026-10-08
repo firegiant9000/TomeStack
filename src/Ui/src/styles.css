@@ -316,7 +316,7 @@ html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
 .sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
 .sheet-summary > .hint { grid-area: hint; }
-.sheet-summary > .roll-strip { grid-area: result; min-height: 7.5rem; }
+.sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
 .roll-log { margin-top: var(--space-2); }
 .roll-log ol { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-time { color: var(--muted); font-variant-numeric: tabular-nums; }

@@ -52,8 +52,8 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
   async function roll(die: number) {
     try {
       const record = await client.roll(characterId, { hitDie: die });
-      onRoll?.(record);
       changeRolls((r) => [...r, { die, roll: record.dice[0]!.value }]);
+      onRoll?.(record);
     } catch (error) {
       onError(error);
     }
