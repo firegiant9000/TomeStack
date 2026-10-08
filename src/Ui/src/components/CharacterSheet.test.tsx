@@ -2,7 +2,7 @@
 // The sheet's tabs (ADR-014): Spells only when there is something to show, a tab that is not offered falls back to Play,
 // "Report a gap" switches to Notes and focuses the note text every time it is pressed, and choosing Notes by hand keeps
 // focus on the tab. The client is mocked; values are invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -509,7 +509,7 @@ async function startFinish(user: ReturnType<typeof userEvent.setup>, onStatus: (
   const short = screen.getByRole('button', { name: 'Short rest…' });
   await user.click(short);
   const finish = await screen.findByRole('button', { name: 'Finish short rest' });
-  await waitFor(() => expect((finish as HTMLButtonElement).disabled).toBe(false));
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   return { short, resolve: () => resolveRest(v) };
 }
@@ -569,9 +569,9 @@ it('keeps the proposal, and a focused control in it, while it is worked out agai
   expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
   expect(document.body.contains(box)).toBe(true);
   expect(document.activeElement).toBe(box);
-  expect((screen.getByRole('button', { name: 'Finish long rest' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole('button', { name: 'Finish long rest' }).getAttribute('aria-disabled')).toBe('true');
   resolveNext({ kind: 'longRest', changes: tickable, manual: [], basis: 'two' });
-  await waitFor(() => expect((screen.getByRole('button', { name: 'Finish long rest' }) as HTMLButtonElement).disabled).toBe(false));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish long rest' }).getAttribute('aria-disabled')).toBe('false'));
   expect(screen.queryByText('Updating the proposal…')).toBeNull();
 });
 
@@ -585,12 +585,12 @@ it('keeps the last proposal, including a picked die, when working it out again f
   await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
   await user.click(screen.getByRole('button', { name: 'Add d8' }));
   await screen.findByRole('button', { name: /^Remove/ });
-  await waitFor(() => expect((screen.getByRole('button', { name: 'Finish short rest' }) as HTMLButtonElement).disabled).toBe(false));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
   vi.mocked(client.restPreview).mockRejectedValue(new Error('rest.needs-hit-points'));
   rerender(sheetElement(changedView(v)));
   expect(await screen.findByText('Could not work out this rest. Cancel and try again.')).toBeTruthy();
   expect(screen.getByRole('button', { name: /^Remove/ })).toBeTruthy();
-  expect((screen.getByRole('button', { name: 'Finish short rest' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('true');
 });
 
 it('does not report a preview that fails after the rest was cancelled (D29)', async () => {
@@ -604,6 +604,63 @@ it('does not report a preview that fails after the rest was cancelled (D29)', as
   rejectPreview(new Error('late'));
   await new Promise((r) => setTimeout(r, 20));
   expect(onError).not.toHaveBeenCalled();
+});
+
+it('does not report a print preview lookup that fails after the preview was closed', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  let rejectExport: (e: unknown) => void = () => {};
+  vi.mocked(client.previewExport).mockReturnValue(new Promise((_, rej) => (rejectExport = rej)));
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const print = screen.getByRole('button', { name: 'Print…' });
+  await user.click(print);
+  await user.click(print);
+  rejectExport(new Error('late'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onError).not.toHaveBeenCalled();
+});
+
+const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
+const d8Pool = [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }];
+
+it('keeps focus when a picked die is removed, before and after the new proposal arrives (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  vi.mocked(client.restPreview).mockImplementation(async (_id, kind, dice = []) => ({ kind, changes: dice.length > 0 ? dieChange : [], manual: [], basis: dice.length > 0 ? 'die' : 'none' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  const remove = await screen.findByRole('button', { name: /^Remove/ });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  await user.click(remove);
+  const heading = screen.getByRole('heading', { name: 'Short rest' });
+  expect(document.activeElement).toBe(heading);
+  expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('true');
+  resolveNext({ kind: 'shortRest', changes: [], manual: [], basis: 'none' });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull());
+  expect(document.activeElement).toBe(heading);
+});
+
+it('keeps a focused checkbox mounted and focused when a die is added (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: tickable, manual: [], basis: 'base' });
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const box = await screen.findByRole('checkbox', { name: /^Fixture charges/ });
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  box.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Add d8' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  expect(document.body.contains(box)).toBe(true);
+  expect(document.activeElement).toBe(box);
+  resolveNext({ kind: 'shortRest', changes: [...tickable, ...dieChange], manual: [], basis: 'two' });
+  await waitFor(() => expect(screen.queryByText('Updating the proposal…')).toBeNull());
+  expect(document.activeElement).toBe(box);
 });
 
 it('closes the print preview from its own button and keeps focus there (4.1.2)', async () => {
@@ -636,7 +693,7 @@ it('returns focus to the opener and reports the result when a rest finishes (D29
   const long = screen.getByRole('button', { name: 'Long rest…' });
   await user.click(long);
   const finish = await screen.findByRole('button', { name: 'Finish long rest' });
-  await waitFor(() => expect((finish as HTMLButtonElement).disabled).toBe(false));
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Long rest finished: 1 change applied.'));
   expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'fixture', [], []);

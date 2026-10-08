@@ -312,7 +312,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       .then((found) => {
         if (current) setPdfSources(new Set(found.filter(([, a]) => a?.status === 'available' || a?.status === 'changed').map(([id]) => id)));
       })
-      .catch(onError);
+      .catch((error) => {
+        if (current) onError(error);
+      });
     return () => {
       current = false;
     };

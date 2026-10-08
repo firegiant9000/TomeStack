@@ -325,7 +325,8 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 /* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
 .quick-hp { display: inline-flex; gap: var(--space-1); }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
-.quick-hp button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
+.quick-hp button[aria-disabled='true'],
+.play-panel .actions button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8). D28: compact, with a plain hexagon in currentColor
    beside the word (never icon-only, D26). */
 button.roll { display: inline-flex; align-items: center; gap: 0.35em; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.5rem; min-height: 1.5rem; font-size: var(--text-sm); }

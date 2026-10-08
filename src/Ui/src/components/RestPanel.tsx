@@ -22,14 +22,14 @@ interface Props {
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
 export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll }: Props) {
-  // The proposal belongs to the view it was worked out for: after any other change (for example "Lose 1 hit point" in the
-  // summary) it is stale and fetched again for the new view. The last proposal stays on screen meanwhile (so a focused
-  // control is not unmounted) but "Finish" waits for the one for the current view.
-  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown }>();
+  // The proposal belongs to the view and the hit dice it was worked out for: after any other change (for example "Lose 1 hit
+  // point" in the summary, or a die added or removed) it is stale and fetched again. The last proposal stays on screen
+  // meanwhile (so a focused control is not unmounted) but "Finish" waits for the one for the current view and dice.
+  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown; rolls: HitDieRoll[] }>();
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
   const [failure, setFailure] = useState<{ version: unknown; rolls: HitDieRoll[] }>();
   const preview = fetched?.preview;
-  const ready = fetched !== undefined && fetched.version === version;
+  const ready = fetched !== undefined && fetched.version === version && fetched.rolls === rolls;
   const failed = failure !== undefined && failure.version === version && failure.rolls === rolls;
   const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     client
       .restPreview(characterId, kind, rolls)
       .then((next) => {
-        if (current) setFetched({ preview: next, version });
+        if (current) setFetched({ preview: next, version, rolls });
       })
       .catch((error) => {
         if (!current) return;
@@ -56,9 +56,8 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   // WCAG 2.4.3: the panel opens with focus on its heading.
   useEffect(() => heading.current?.focus(), []);
 
-  // A new set of dice is a new proposal: the old one is cleared, so "Finish" waits for the one the player will see.
+  // A new set of dice is a new proposal: the old one stays until it arrives, and "Finish" waits for the one the player will see.
   function changeRolls(change: (current: HitDieRoll[]) => HitDieRoll[]) {
-    setFetched(undefined);
     setRolls(change);
   }
 
@@ -73,11 +72,14 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   }
 
   function remove(index: number) {
+    if (!ready) return; // the list shown may be for other dice than the current ones
+    // The removed die's row goes when the new proposal arrives, so focus moves to the heading now (WCAG 2.4.3).
+    heading.current?.focus();
     changeRolls((r) => r.filter((_, i) => i !== index));
   }
 
   async function finish() {
-    if (!preview || !ready) return;
+    if (!preview || !ready || failed || busy) return;
     setBusy(true);
     try {
       const applied = preview.changes.filter((c) => !skipped.includes(c.id)).length;
@@ -166,7 +168,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         </>
       )}
       <div className="actions">
-        <button type="button" onClick={finish} disabled={!ready || failed || busy}>
+        <button type="button" onClick={finish} aria-disabled={!ready || failed || busy}>
           {busy ? 'Resting…' : `Finish ${name.toLowerCase()}`}
         </button>
         <button type="button" onClick={onCancel}>
