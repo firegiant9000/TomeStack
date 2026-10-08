@@ -110,11 +110,14 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
     content(6, 'feat', 'Fixture Other Feat', 'srd-5.2.1'),
   ]);
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
   expect(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ })).toBeTruthy();
-  await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ })).toBeTruthy());
   expect(screen.queryByRole('radio', { name: /^Fixture Dunefolk/ })).toBeNull();
-  expect(screen.queryByText(/Fixture Other Feat/)).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ })).toBeTruthy());
   const outsider = screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement;
   expect(outsider.disabled).toBe(true);
   expect(outsider.closest('label')!.textContent).toMatch(/not allowed in this campaign/);
@@ -123,6 +126,8 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   expect(outlander.disabled).toBe(true);
   expect(outlander.closest('label')!.textContent).toMatch(/not allowed in this campaign/);
   expect(screen.queryByText(/Options for the other family cannot be selected/)).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  expect(screen.queryByText(/Fixture Other Feat/)).toBeNull();
 });
 
 it('keeps a checked option of the other family in a choice, and omits an unchecked one (D31)', async () => {
@@ -141,4 +146,68 @@ it('keeps a checked option of the other family in a choice, and omits an uncheck
   const kept = within(picker).getByRole('checkbox', { name: /Fixture Imported/ }) as HTMLInputElement;
   expect(kept.checked).toBe(true);
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Absent/ })).toBeNull();
+});
+
+// D32: the create flow in six steps.
+const draftView = (): CharacterView =>
+  ({
+    character: { id: 'd', schemaVersion: 8, name: 'Fixture New', rulesFamily: 'srd-5.1', level: 1, classes: [], choices: [], crossFamilyExceptions: [], baseAbilities: { str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 }, pins: [], overrides: [], updatedAt: '2026-10-07T00:00:00Z' },
+    sheet: { characterId: 'd', rulesFamily: 'srd-5.1', diagnostics: [], fields: [], choices: [] },
+  }) as never;
+const stepContent = () => [content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(3, 'class', 'Fixture Warden', 'srd-5.1')];
+const renderCreate = () => render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+
+it('walks six steps with the heading focused on each, and reaches the choices (D32)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  renderCreate();
+  expect(screen.getByText('Step 1 of 6. Nothing is saved until you press Create and save.')).toBeTruthy();
+  expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'New character' })); // never on first mount
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
+  expect(screen.getByRole('form', { name: 'Ability scores' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Ability scores' })).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  expect(screen.getByRole('group', { name: 'Base ability scores' })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(screen.getByRole('radio', { name: /^Fixture Warden/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(await screen.findByRole('group', { name: 'Choices' })).toBeTruthy();
+  expect(screen.getByText('Step 6 of 6. Nothing is saved until you press Create and save.')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('heading', { name: 'Background' })).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
+});
+
+it('moves focus to the heading when Back returns to the Rules step (R5, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  renderCreate();
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.getByRole('form', { name: 'Rules' })).toBeTruthy();
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('Fixture New');
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'New character' }));
+});
+
+it('keeps the species and class picks across Back and forth', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  renderCreate();
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(screen.getByRole('radio', { name: /^Fixture Warden/ }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect((screen.getByRole('radio', { name: /^Fixture Hillfolk/ }) as HTMLInputElement).checked).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  expect((screen.getByRole('radio', { name: /^Fixture Warden/ }) as HTMLInputElement).checked).toBe(true);
 });

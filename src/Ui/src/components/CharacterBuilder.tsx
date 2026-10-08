@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type {
   Ability,
@@ -14,9 +14,11 @@ import type {
   ContentReference,
   KnownSpell,
   RulesFamilyId,
+  RollRecord,
   RulesFamilyPolicy,
   SpellcastingEntry,
 } from '../api/types';
+import { scoreMethods, type Assignment, type ScoreMethod } from '../abilityScores';
 import { matchesSpell } from '../spellSearch';
 import { SpellSearch } from './sheet/SpellSearch';
 
@@ -42,12 +44,28 @@ export type BuilderMode =
   | { kind: 'levelUp'; view: CharacterView }
   | { kind: 'choices'; view: CharacterView };
 
-type Step = 'basics' | 'level' | 'choices';
+type Step = 'rules' | 'scores' | 'species' | 'class' | 'background' | 'choices' | 'level';
+
+/** D32: a new character is built in these six steps; level-up and answering choices use `level` and `choices` alone. */
+const createSteps: Step[] = ['rules', 'scores', 'species', 'class', 'background', 'choices'];
+const stepTitles: Record<Step, string> = {
+  rules: 'Rules',
+  scores: 'Ability scores',
+  species: 'Species',
+  class: 'Class',
+  background: 'Background',
+  choices: 'Choices and create',
+  level: 'Level',
+};
 
 interface Basics {
   name: string;
   rulesFamily: RulesFamilyId;
   scores: AbilityScores;
+  scoreMethod: ScoreMethod;
+  /** The standard array or point buy as the player has set it so far (used by the methods that arrive next). */
+  assignment: Assignment;
+  rolled: RollRecord[];
   species?: ContentReference;
   background?: ContentReference;
   startingClass?: ContentReference;
@@ -110,37 +128,59 @@ function SinglePick(props: {
   );
 }
 
-function BasicsStep(props: {
+/** D32: one named form per create step, so a screen reader announces where the player is. The hint, when shown, describes Next. */
+function StepForm(props: {
+  label: string;
+  next: string;
+  nextDisabled?: boolean;
+  nextHint?: string;
+  onNext: () => void;
+  onBack?: () => void;
+  onCancel: () => void;
+  children: ReactNode;
+}) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!props.nextDisabled) props.onNext();
+  }
+  return (
+    <form onSubmit={submit} aria-label={props.label}>
+      {props.children}
+      <div className="actions">
+        {props.onBack && (
+          <button type="button" onClick={props.onBack}>
+            Back
+          </button>
+        )}
+        <button type="submit" disabled={props.nextDisabled} aria-describedby={props.nextHint ? 'next-hint' : undefined}>
+          {props.next}
+        </button>
+        <button type="button" onClick={props.onCancel}>
+          Cancel
+        </button>
+      </div>
+      {props.nextHint && (
+        <p id="next-hint" className="hint">
+          {props.nextHint}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function RulesStep(props: {
   basics: Basics;
   rulesFamilies: RulesFamilyPolicy[];
   campaigns: Campaign[];
-  options: Shown[];
   onChange: (basics: Basics) => void;
   onNext: () => void;
   onCancel: () => void;
 }) {
-  const { basics, options, onChange } = props;
+  const { basics, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
-  const ofKind = (kind: ContentKind) => options.filter((o) => o.kind === kind && visible(o));
-  // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
-  // offers (class features, skill options) arrives through it, so only standalone content is listed here.
-  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false && visible(o));
-
-  function submit(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    props.onNext();
-  }
-
-  function toggleOther(option: ContentOption) {
-    const selected = basics.other.some((p) => sameRef(p, option.reference));
-    onChange({
-      ...basics,
-      other: selected ? basics.other.filter((p) => !sameRef(p, option.reference)) : [...basics.other, option.reference],
-    });
-  }
 
   return (
-    <form onSubmit={submit} aria-label="Basics">
+    <StepForm label="Rules" next="Next: ability scores" onNext={props.onNext} onCancel={props.onCancel}>
       <label className="field">
         Name
         <input required value={basics.name} onChange={(e) => onChange({ ...basics, name: e.target.value })} autoFocus />
@@ -189,39 +229,137 @@ function BasicsStep(props: {
         )}
       </fieldset>
 
-      <fieldset className="abilities">
-        <legend>Base ability scores</legend>
-        {abilities.map(({ key, label }) => (
-          <label key={key} className="field">
-            {label}
-            <input
-              type="number"
-              min={1}
-              max={30}
-              required
-              value={basics.scores[key]}
-              onChange={(e) => onChange({ ...basics, scores: { ...basics.scores, [key]: Number(e.target.value) } })}
-            />
+    </StepForm>
+  );
+}
+
+/** D32: how the base scores are set. This step offers "Enter by hand"; the other methods follow in the next change. */
+function ScoresStep(props: {
+  basics: Basics;
+  policy?: RulesFamilyPolicy;
+  onChange: (basics: Basics) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onCancel: () => void;
+  onError: (error: unknown) => void;
+}) {
+  const { basics, onChange } = props;
+  return (
+    <StepForm label="Ability scores" next="Next: species" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <fieldset>
+        <legend>How are the scores determined?</legend>
+        {scoreMethods.map((m) => (
+          <label key={m.id} className="choice">
+            <input type="radio" name="scoreMethod" checked={basics.scoreMethod === m.id} onChange={() => onChange({ ...basics, scoreMethod: m.id })} />
+            {m.label}
           </label>
         ))}
       </fieldset>
+      {basics.scoreMethod === 'manual' && (
+        <fieldset className="abilities">
+          <legend>Base ability scores</legend>
+          {abilities.map(({ key, label }) => (
+            <label key={key} className="field">
+              {label}
+              <input
+                type="number"
+                min={1}
+                max={30}
+                required
+                value={basics.scores[key]}
+                onChange={(e) => onChange({ ...basics, scores: { ...basics.scores, [key]: Number(e.target.value) } })}
+              />
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <p className="hint">Base scores: {abilities.map(({ key, label }) => `${label.slice(0, 3)} ${basics.scores[key]}`).join(', ')}.</p>
+      {props.policy && (
+        <p className="hint">
+          Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({props.policy.displayName}).
+        </p>
+      )}
+    </StepForm>
+  );
+}
 
+/** The options of one kind the character's rules family can use (D31); what a campaign disallows stays listed, disabled (P-01). */
+const ofKind = (options: Shown[], kind: ContentKind) => options.filter((o) => o.kind === kind && visible(o));
+
+/** With one option or none installed, say where more come from, so a short list does not look like a fault. */
+function fewHint(count: number, one: string, many: string, policy?: RulesFamilyPolicy) {
+  if (count > 1 || !policy) return null;
+  return (
+    <p className="hint">
+      {count} {count === 1 ? one : many} {count === 1 ? 'is' : 'are'} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
+    </p>
+  );
+}
+
+interface PickStepProps {
+  basics: Basics;
+  policy?: RulesFamilyPolicy;
+  options: Shown[];
+  onChange: (basics: Basics) => void;
+  onNext: () => void;
+  onBack: () => void;
+  onCancel: () => void;
+}
+
+function SpeciesStep(props: PickStepProps) {
+  const { basics, options, onChange } = props;
+  const list = ofKind(options, 'species');
+  return (
+    <StepForm label="Species" next="Next: class" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
-      <SinglePick legend="Species" name="species" options={ofKind('species')} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
-      <SinglePick
-        legend="Background"
-        name="background"
-        options={ofKind('background')}
-        value={basics.background}
-        onChange={(background) => onChange({ ...basics, background })}
-      />
+      <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
+      {fewHint(list.length, 'species', 'species', props.policy)}
+    </StepForm>
+  );
+}
+
+function ClassStep(props: PickStepProps) {
+  const { basics, options, onChange } = props;
+  return (
+    <StepForm label="Class" next="Next: background" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick
         legend="Class (level 1)"
         name="startingClass"
-        options={ofKind('class')}
+        options={ofKind(options, 'class')}
         value={basics.startingClass}
         onChange={(startingClass) => onChange({ ...basics, startingClass })}
       />
+    </StepForm>
+  );
+}
+
+function BackgroundStep(props: PickStepProps) {
+  const { basics, options, onChange } = props;
+  const list = ofKind(options, 'background');
+  // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
+  // offers (class features, skill options) arrives through it, so only standalone content is listed here.
+  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false && visible(o));
+
+  function toggleOther(option: ContentOption) {
+    const selected = basics.other.some((p) => sameRef(p, option.reference));
+    onChange({
+      ...basics,
+      other: selected ? basics.other.filter((p) => !sameRef(p, option.reference)) : [...basics.other, option.reference],
+    });
+  }
+
+  return (
+    <StepForm label="Background" next="Next: choices" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+      <p className="hint">Every option shows its source and rules family.</p>
+      <SinglePick
+        legend="Background"
+        name="background"
+        options={list}
+        value={basics.background}
+        onChange={(background) => onChange({ ...basics, background })}
+      />
+      {fewHint(list.length, 'background', 'backgrounds', props.policy)}
 
       <details>
         <summary>Other content ({basics.other.length} selected)</summary>
@@ -248,14 +386,7 @@ function BasicsStep(props: {
           </ul>
         </fieldset>
       </details>
-
-      <div className="actions">
-        <button type="submit">Next: choices</button>
-        <button type="button" onClick={props.onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+    </StepForm>
   );
 }
 
@@ -517,7 +648,7 @@ function ChoicesStep(props: {
 function draftOf(basics: Basics, id: string, previous?: Character): Character {
   return {
     id,
-    schemaVersion: 6,
+    schemaVersion: 8,
     name: basics.name.trim(),
     rulesFamily: basics.rulesFamily,
     level: 1,
@@ -536,11 +667,14 @@ function draftOf(basics: Basics, id: string, previous?: Character): Character {
 }
 
 export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, onError }: Props) {
-  const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'basics' : mode.kind === 'levelUp' ? 'level' : 'choices');
+  const [step, setStep] = useState<Step>(mode.kind === 'create' ? 'rules' : mode.kind === 'levelUp' ? 'level' : 'choices');
   const [basics, setBasics] = useState<Basics>({
     name: '',
     rulesFamily: 'srd-5.1',
     scores: { str: 10, dex: 14, con: 12, int: 10, wis: 13, cha: 8 },
+    scoreMethod: 'array',
+    assignment: {},
+    rolled: [],
     other: [],
   });
   const [draftId] = useState(() => crypto.randomUUID());
@@ -603,9 +737,13 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     return { ...draft, campaignExceptions: [...known, ...added] };
   }
 
-  // WCAG 2.4.3: each step change moves focus to the builder heading, so keyboard and screen reader users start at the top.
+  // WCAG 2.4.3: each step change moves focus to the builder heading, so keyboard and screen reader users start at the top
+  // (the focused Back or Next button is gone by then). A new character's first step keeps the Name field's focus.
+  const focusedFor = useRef<Step | undefined>(mode.kind === 'create' ? 'rules' : undefined);
   useEffect(() => {
-    if (step !== 'basics') heading.current?.focus();
+    if (focusedFor.current === step) return;
+    focusedFor.current = step;
+    heading.current?.focus();
   }, [step]);
 
   // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
@@ -689,6 +827,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     }
   }
 
+  const at = createSteps.indexOf(step);
+  const back = () => setStep(createSteps[Math.max(at - 1, 0)]!);
+  const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
+  const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
+  const pickProps = { basics, policy, options: pickable, onChange: setBasics, onBack: back, onCancel };
+
   const title =
     mode.kind === 'create' ? 'New character' : mode.kind === 'levelUp' ? `Level up ${mode.view.character.name}` : `Choices for ${mode.view.character.name}`;
 
@@ -697,7 +841,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       <h2 id="builder-heading" tabIndex={-1} ref={heading}>
         {title}
       </h2>
-      <p className="hint">Nothing is saved until you press the last button. Cancel discards this draft.</p>
+      <p className="hint">
+        {mode.kind === 'create'
+          ? `Step ${at + 1} of ${createSteps.length}. Nothing is saved until you press Create and save.`
+          : 'Nothing is saved until you press the last button. Cancel discards this draft.'}
+      </p>
+      {mode.kind === 'create' && <h3 id="builder-step-heading">{stepTitles[step]}</h3>}
 
       {campaign && (
         <fieldset aria-label="Campaign sources">
@@ -716,16 +865,16 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         </fieldset>
       )}
 
-      {step === 'basics' && (
-        <BasicsStep
-          basics={basics}
-          rulesFamilies={rulesFamilies}
-          campaigns={campaigns}
-          options={pickable}
-          onChange={setBasics}
-          onNext={() => preview(draftOf(basics, draftId, view?.character))}
-          onCancel={onCancel}
-        />
+      {mode.kind === 'create' && step === 'rules' && (
+        <RulesStep basics={basics} rulesFamilies={rulesFamilies} campaigns={campaigns} onChange={setBasics} onNext={next} onCancel={onCancel} />
+      )}
+      {mode.kind === 'create' && step === 'scores' && (
+        <ScoresStep basics={basics} policy={policy} onChange={setBasics} onNext={next} onBack={back} onCancel={onCancel} onError={onError} />
+      )}
+      {mode.kind === 'create' && step === 'species' && <SpeciesStep {...pickProps} onNext={next} />}
+      {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
+      {mode.kind === 'create' && step === 'background' && (
+        <BackgroundStep {...pickProps} onNext={() => preview(draftOf(basics, draftId, view?.character))} />
       )}
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
@@ -745,7 +894,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={toggleSpell}
-          onBack={mode.kind === 'create' ? () => setStep('basics') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
+          onBack={mode.kind === 'create' ? () => setStep('background') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
           onCancel={onCancel}
           busy={busy}
