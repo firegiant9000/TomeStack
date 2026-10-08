@@ -45,9 +45,69 @@ it('keeps every dark value exactly as the owner set it on 2026-10-06 (D27: light
   );
 });
 
-it('declares the light values the spec computed (section 3 of the 2026-10-07 spec)', () => {
-  const light = lightDarkPairs(css).map(([a]) => a);
-  for (const value of ['#eef8f0', '#cfe9d7', '#1e6a3a', '#7a5a00', '#855000', '#eef3fe', '#d3ddf8', '#3449b8', '#0b625b', '#f6f1fe', '#e2d4f7', '#6a33c4', '#075f78']) {
-    expect(light).toContain(value);
+/** The text between the braces that follow `opener` (nested braces kept whole). */
+function blockAfter(source: string, opener: string): string {
+  const start = source.indexOf(opener);
+  expect(start, `${opener} is in the stylesheet`).toBeGreaterThanOrEqual(0);
+  let depth = 1;
+  let i = start + opener.length;
+  const from = i;
+  for (; i < source.length && depth > 0; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') depth--;
   }
+  return source.slice(from, i - 1);
+}
+
+/** `--token` -> [light, dark] for every light-dark() declaration in a block. */
+function tokenPairs(block: string): Record<string, [string, string]> {
+  const out: Record<string, [string, string]> = {};
+  for (const m of block.matchAll(/(--[\w-]+)\s*:\s*(light-dark\([^;]*\))\s*;/g)) {
+    out[m[1]] = lightDarkPairs(m[2])[0];
+  }
+  return out;
+}
+
+const headerLight = 'color-mix(in srgb, var(--accent) 30%, var(--bg))';
+const headerDark = 'color-mix(in srgb, var(--accent) 12%, var(--bg))';
+
+it('maps each token to the light value the spec computed, per theme block (section 3 of the 2026-10-07 spec)', () => {
+  expect(tokenPairs(blockAfter(css, ':root {'))).toEqual({
+    '--bg': ['#eef8f0', 'Canvas'],
+    '--line-strong': ['color-mix(in srgb, CanvasText 55%, Canvas)', 'color-mix(in srgb, CanvasText 50%, Canvas)'],
+    '--surface': ['#cfe9d7', '#1b241c'],
+    '--accent': ['#1e6a3a', '#8fe0a8'],
+    '--accent-2': ['#7a5a00', '#ebd070'],
+    '--warn': ['#855000', '#f0b35a'],
+    '--error': ['#b3261e', '#f28b82'],
+    '--header-bg': [headerLight, headerDark],
+  });
+  expect(tokenPairs(blockAfter(css, "html[data-theme='cool'] {"))).toEqual({
+    '--bg': ['#eef3fe', 'Canvas'],
+    '--surface': ['#d3ddf8', '#1e2230'],
+    '--accent': ['#3449b8', '#aeb8ff'],
+    '--accent-2': ['#0b625b', '#73ebdb'],
+    '--header-bg': [headerLight, headerDark],
+  });
+  expect(tokenPairs(blockAfter(css, "html[data-theme='violet'] {"))).toEqual({
+    '--bg': ['#f6f1fe', 'Canvas'],
+    '--surface': ['#e2d4f7', '#211a2c'],
+    '--accent': ['#6a33c4', '#d6beff'],
+    '--accent-2': ['#075f78', '#86e3f5'],
+    '--header-bg': [headerLight, headerDark],
+  });
+});
+
+it('forced colours and print both reset --bg and --header-bg, and reach themed pages (html[data-theme])', () => {
+  // The theme blocks have specificity (0,1,1): a bare :root list would leave the tinted hex values in force.
+  const forced = blockAfter(css, '@media (forced-colors: active) {');
+  expect(forced).toMatch(/html\[data-theme\]/);
+  expect(forced).toMatch(/--bg:\s*Canvas;/);
+  expect(forced).toMatch(/--header-bg:\s*Canvas;/);
+  const print = blockAfter(css, '@media print {');
+  const rule = print.slice(0, print.indexOf('}'));
+  expect(rule).toMatch(/html\[data-theme\]/);
+  expect(rule).toMatch(/--bg:\s*Canvas;/);
+  expect(rule).toMatch(/--surface:\s*Canvas;/);
+  expect(rule).toMatch(/--header-bg:\s*Canvas;/);
 });
