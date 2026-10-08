@@ -432,7 +432,8 @@ dd { margin: 0; }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
   .tabs [role='tab']::before { forced-color-adjust: none; border-color: CanvasText; }
-  .sheet-summary button.roll::before { forced-color-adjust: none; background: CanvasText; }
+  /* currentColor tracks ButtonText, and HighlightText on hover (a CanvasText glyph nearly vanishes on Highlight). */
+  .sheet-summary button.roll::before { forced-color-adjust: none; background: currentColor; }
   #sheet-tab-play::before, #sheet-tab-notes::before { background: CanvasText; }
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
