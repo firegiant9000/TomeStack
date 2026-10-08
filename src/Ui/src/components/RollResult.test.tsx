@@ -3,8 +3,8 @@
 // is unchanged, so what a screen reader hears and what the e2e asserts stay the same. Nothing is rolled in the UI.
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import type { DieResult, RollRecord } from '../api/types';
-import { RollResult } from './PlayPanels';
+import type { CharacterView, DieResult, RollRecord } from '../api/types';
+import { ActionsPanel, RollResult } from './PlayPanels';
 
 const die = (sides: number, value: number, over: Partial<DieResult> = {}): DieResult => ({ term: 0, sides, value, kept: true, fromCritical: false, ...over });
 
@@ -28,6 +28,28 @@ afterEach(() => {
 
 const region = () => screen.getByRole('region', { name: 'Last roll' });
 const dice = () => Array.from(region().querySelectorAll<HTMLElement>('.die'));
+
+it('heads a record whose label is an empty string with "Roll" (Review Focus 2)', () => {
+  render(<RollResult record={record({ provenance: { rollId: 'fixture-roll', label: '' } })} resources={[]} features={[]} act={() => {}} />);
+  expect(region().textContent).toMatch(/^Roll: 7 \(2d6\)/);
+});
+
+it('names a roll button by the effect id when its label is an empty string', () => {
+  const view = {
+    character: {},
+    sheet: {
+      features: [
+        {
+          content: { contentId: 'fixture-feature', revisionId: 'r1' },
+          name: 'Fixture feature',
+          effects: [{ id: 'fixture-effect', type: 'roll', automation: 'automatic', label: '', dice: '1d6' }],
+        },
+      ],
+    },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={view} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll fixture-effect (1d6)' })).toBeTruthy();
+});
 
 it('draws one die per record die with the service values at once, hidden from assistive tech, text unchanged', () => {
   render(<RollResult record={record()} resources={[]} features={[]} act={() => {}} />);

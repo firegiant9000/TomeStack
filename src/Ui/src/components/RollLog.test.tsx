@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 const record = (label: string | undefined, total: number): RollRecord => ({
   formula: '1d20', mode: 'normal', critical: false, dice: [{ term: 0, sides: 20, value: total, kept: true, fromCritical: false }],
-  diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: label ? { rollId: 'fixture', label } : undefined,
+  diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: label === undefined ? undefined : { rollId: 'fixture', label },
 });
 const logged = (label: string | undefined, total: number, at = 1_760_000_000_000): LoggedRoll => ({ at, record: record(label, total) });
 
@@ -32,6 +32,11 @@ it('is a collapsed disclosure named by its count, with the entries newest first 
 
 it('falls back to "Roll" when the record has no label (Review Focus 2)', () => {
   render(<RollLog rolls={[logged(undefined, 4)]} />);
+  expect(screen.getByRole('listitem').textContent).toMatch(/Roll: 4 \(1d20\)/);
+});
+
+it('falls back to "Roll" when the label is an empty string (Review Focus 2)', () => {
+  render(<RollLog rolls={[logged('', 4)]} />);
   expect(screen.getByRole('listitem').textContent).toMatch(/Roll: 4 \(1d20\)/);
 });
 

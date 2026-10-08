@@ -342,6 +342,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   // a time and answers them in order, so quick repeated presses all apply. A change gets no entry when it overlapped another
   // play change or an Undo (started after it, or still running), or when another view (a rest, a restore, a save) was shown
   // while it was in flight: its "before" is then not what the service changed.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const started = useRef(0);
   const running = useRef(0);
   const shownView = useRef(view);
@@ -502,6 +509,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
               const kind = resting;
               closeRest(kind);
               onChanged(rested);
+              // A reply that lands after this sheet is gone (another character opened, Level up pressed) says nothing: its
+              // rest is saved, but the status would describe a screen the user has left.
+              if (!mounted.current) return;
               onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
             }}
           />

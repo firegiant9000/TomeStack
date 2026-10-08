@@ -436,7 +436,7 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
               {groupRolls.map(({ feature, effect }) => (
                 <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
                   <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-                    Roll {effect.label ?? effect.id} ({effect.dice}
+                    Roll {effect.label || effect.id} ({effect.dice}
                     {rollBonus(effect.bonus)})
                   </button>{' '}
                   <span className="hint">
@@ -657,7 +657,7 @@ export function RollResult({
       </div>
       <p>
         <strong>
-          {p?.label ?? 'Roll'}: {record.total}
+          {p?.label || 'Roll'}: {record.total}
         </strong>{' '}
         ({record.formula}
         {record.mode !== 'normal' ? `, ${record.mode}` : ''}

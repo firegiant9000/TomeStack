@@ -386,7 +386,8 @@ export function App() {
             }}
             onStatus={(text) => setMessage({ tone: 'status', text })}
             onChanged={async (view) => {
-              setScreen({ kind: 'sheet', view });
+              // A late reply (a rest, a save) must not pull the user back from another screen or another character.
+              setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
               await refresh();
             }}
             onArchiveChanged={async () => {

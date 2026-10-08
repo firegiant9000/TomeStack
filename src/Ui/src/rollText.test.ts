@@ -13,6 +13,7 @@ it('writes the headline as the Last roll region does', () => {
   expect(rollHeadline(record())).toBe('Strength check: 17 (1d20+3, advantage)');
   expect(rollHeadline(record({ mode: 'normal', critical: true, formula: '2d6' }))).toBe('Strength check: 17 (2d6, critical)');
   expect(rollHeadline(record({ provenance: undefined }))).toBe('Roll: 17 (1d20+3, advantage)');
+  expect(rollHeadline(record({ provenance: { rollId: 'fixture', label: '' } }))).toBe('Roll: 17 (1d20+3, advantage)');
 });
 
 it('lists every die, the constant and the modifiers', () => {

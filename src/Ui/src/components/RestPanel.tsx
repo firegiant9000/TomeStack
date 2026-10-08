@@ -61,13 +61,21 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     setRolls(change);
   }
 
+  // A roll in flight already counts against the dice left (the service checks only the die size), so a second press of Roll or
+  // Add cannot spend a die that is not there.
+  const [pending, setPending] = useState<Record<number, number>>({});
+  const bump = (die: number, by: number) => setPending((p) => ({ ...p, [die]: (p[die] ?? 0) + by }));
+
   async function roll(die: number) {
+    bump(die, 1);
     try {
       const record = await client.roll(characterId, { hitDie: die });
       changeRolls((r) => [...r, { die, roll: record.dice[0]!.value }]);
       onRoll?.(record);
     } catch (error) {
       onError(error);
+    } finally {
+      bump(die, -1);
     }
   }
 
@@ -107,7 +115,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
             <HitDiePicker
               key={pool.die}
               pool={pool}
-              left={pool.remaining - rolls.filter((r) => r.die === pool.die).length}
+              left={pool.remaining - rolls.filter((r) => r.die === pool.die).length - (pending[pool.die] ?? 0)}
               onRoll={() => roll(pool.die)}
               onAdd={(value) => changeRolls((r) => [...r, { die: pool.die, roll: value }])}
             />
@@ -171,7 +179,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         <button type="button" onClick={finish} aria-disabled={!ready || failed || busy}>
           {busy ? 'Resting…' : `Finish ${name.toLowerCase()}`}
         </button>
-        <button type="button" onClick={onCancel}>
+        <button type="button" onClick={() => !busy && onCancel()} aria-disabled={busy}>
           Cancel rest
         </button>
       </div>

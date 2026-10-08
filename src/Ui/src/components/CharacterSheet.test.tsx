@@ -4,6 +4,7 @@
 // focus on the tab. The client is mocked; values are invented.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
@@ -527,11 +528,52 @@ it('a late finish of a closed rest neither closes the open rest nor moves focus 
   expect(document.activeElement).not.toBe(short);
 });
 
-it('a late finish after Cancel does not steal focus (D29, 2.4.3)', async () => {
+it('a late finish after the sheet is gone shows no rest-finished status', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const onChanged = vi.fn();
+  const v = view();
+  let resolveRest: (value: CharacterView) => void = () => {};
+  vi.mocked(client.rest).mockReturnValue(new Promise<CharacterView>((r) => (resolveRest = r)));
+  const { unmount } = render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  unmount(); // the user opened another character, or pressed Level up
+  resolveRest(v);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1)); // the App decides whether the view still applies
+  expect(onStatus).not.toHaveBeenCalled();
+});
+
+it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const rested = changedView(v);
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 7)).mockResolvedValueOnce(rollRecord('Dexterity check', 12));
+  vi.mocked(client.rest).mockResolvedValue(rested);
+  function Host() {
+    const [shown, setShown] = useState(v);
+    return <CharacterSheet view={shown} onChanged={setShown} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  }
+  render(<Host />);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await screen.findByText('Previous rolls (1)');
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
+  expect(screen.getByText('Previous rolls (1)')).toBeTruthy();
+});
+
+it('a late finish after the opener closed the rest does not steal focus (D29, 2.4.3)', async () => {
   const user = userEvent.setup();
   const onStatus = vi.fn();
   const { short, resolve } = await startFinish(user, onStatus);
-  await user.click(screen.getByRole('button', { name: 'Cancel rest' }));
+  await user.click(short); // Cancel rest is inert while a Finish is in flight, so the panel is closed from its opener
   expect(document.activeElement).toBe(short);
   const long = screen.getByRole('button', { name: 'Long rest…' });
   long.focus();
