@@ -4,6 +4,7 @@
 
 ### Added
 
+- **`dice.roll` (D32):** a roll with no character, for the builder's ability scores (a formula, an optional `keepHighest`, an optional label of at most 80 characters shown with the roll). It writes nothing and stores nothing.
 - **Search spells by name (D30):** in the builder's spell pickers and on the Spells tab; accents and case do not matter.
 - **Previous rolls (D28):** the summary keeps the last ten rolls of the session under Last roll.
 - **Settings grew (owner follow-ups, 2026-10-06):** Appearance (System, Light, Dark: pick a colour scheme without changing Windows), Text size (90% to 200%), Ability boxes (modifier first or score first), and an Accessibility group: reduce motion, stronger borders and labels, an always-visible focus outline, larger buttons, underlined text buttons, and whether rolls are announced to screen readers. A list of the keyboard shortcuts. All kept on this computer only.

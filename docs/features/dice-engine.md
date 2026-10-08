@@ -34,3 +34,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 - Advantage and disadvantage apply only to a d20 test, and critical doubling only to damage dice. Dice errors come back with their `dice.*` code.
 - **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
 - Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.
+
+## The `dice.roll` command (D32)
+
+`dice.roll { formula, keepHighest?, label? }` rolls a formula with no character, for the builder's ability scores (`4d6` keeping the highest 3), and returns a roll record (`src/AppService/DiceCommands.cs`, `tests/AppService.Tests/DiceCommandTests.cs`; UI: `client.rollDice`). The formula obeys the dice limits (SPEC Q-02) and `keepHighest` the rules above; a missing or blank formula is `dice.empty`, and every dice error comes back with its `dice.*` code. The payload carries no modifiers. The `label` (trimmed, at most 80 characters, else `dice.label-too-long`; default the trimmed formula) is display text in the record's provenance (`rollId: "dice"`): it is not stored or logged. The command needs no character and writes nothing. It is on the bridge allowlist (`CommandDispatcher.Commands`), which DevHost shares.

@@ -192,6 +192,8 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, confirm: true }),
     /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
+    /** D32: a labelled roll with no character (the builder's scores); writes nothing. */
+    rollDice: (formula: string, keepHighest?: number, label?: string) => call<RollRecord>('dice.roll', { formula, keepHighest, label }),
     /** The character's gap notes, open first (M3 B3). Stored locally; never sent anywhere. */
     listGapNotes: (characterId: string) => call<GapNote[]>('gap.list', { characterId }),
     /** Every character's notes with the character's name, open first (M3 C5). Writes nothing. */
