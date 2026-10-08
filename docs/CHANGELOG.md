@@ -31,6 +31,7 @@
 
 ### Changed
 
+- **Only your rules family is offered in the builder (D31):** species, backgrounds, classes and choice options of the other family are no longer listed; the studio and Sources still show every family.
 - **Short and long rests at the top of the sheet (D29):** the two buttons are in the sheet header and the preview opens under the summary; they are no longer on Play. A hit die being rolled counts against the dice left, "Cancel rest" waits while a finish is being saved, and a late reply never switches the screen to another character. A button that cannot act yet is shown with a dimmed label rather than faded, so its focus ring stays clear.
 - **Bigger ability numbers, smaller Roll buttons (D28):** the modifier is larger and the roll control is a compact 'Roll' button with the same spoken name.
 - **Light mode is tinted and brighter (D27):** each theme colours the page, the sidebar, the summary and the header in light mode; dark mode is unchanged.

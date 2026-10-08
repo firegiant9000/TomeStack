@@ -76,6 +76,9 @@ function sourceLine(option: Shown) {
   );
 }
 
+/** D31 (owner, 2026-10-07): content of the other rules family is never offered; only campaign-outside content is shown disabled (P-01). */
+const visible = (option: Shown) => option.compatible || option.outsideCampaign === true;
+
 /** One origin or class pick: a radio group with "None", so the choice is explicit and keyboard-operable. */
 function SinglePick(props: {
   legend: string;
@@ -111,17 +114,17 @@ function BasicsStep(props: {
   basics: Basics;
   rulesFamilies: RulesFamilyPolicy[];
   campaigns: Campaign[];
-  options: ContentOption[];
+  options: Shown[];
   onChange: (basics: Basics) => void;
   onNext: () => void;
   onCancel: () => void;
 }) {
   const { basics, options, onChange } = props;
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
-  const ofKind = (kind: ContentKind) => options.filter((o) => o.kind === kind);
+  const ofKind = (kind: ContentKind) => options.filter((o) => o.kind === kind && visible(o));
   // Spells are picked per caster in the choices step, never pinned as content. Content another revision grants or
   // offers (class features, skill options) arrives through it, so only standalone content is listed here.
-  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false);
+  const other = options.filter((o) => !['species', 'background', 'class', 'subclass', 'spell'].includes(o.kind) && o.standalone !== false && visible(o));
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -203,7 +206,7 @@ function BasicsStep(props: {
         ))}
       </fieldset>
 
-      <p className="hint">Every option shows its source and rules family. Options for the other family cannot be selected.</p>
+      <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick legend="Species" name="species" options={ofKind('species')} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       <SinglePick
         legend="Background"
@@ -259,7 +262,7 @@ function BasicsStep(props: {
 /** Level-up: which class gains the level, an existing one or a new one (multiclass). */
 function LevelStep(props: {
   character: Character;
-  options: ContentOption[];
+  options: Shown[];
   nameOf: (ref: ContentReference) => string;
   onNext: (classes: ClassLevel[]) => void;
   onCancel: () => void;
@@ -267,7 +270,7 @@ function LevelStep(props: {
   const { character } = props;
   const [target, setTarget] = useState<ContentReference | undefined>(character.classes[0]?.class);
   const atMaximum = character.level >= maxLevel;
-  const newClasses = props.options.filter((o) => o.kind === 'class' && !character.classes.some((c) => c.class.contentId === o.reference.contentId));
+  const newClasses = props.options.filter((o) => o.kind === 'class' && visible(o) && !character.classes.some((c) => c.class.contentId === o.reference.contentId));
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -328,7 +331,7 @@ function LevelStep(props: {
 /** Every choice the draft offers now, answered through `character.previewChoice`. */
 function ChoicePicker(props: {
   choice: ChoiceStatus;
-  optionOf: (ref: ContentReference) => ContentOption | undefined;
+  optionOf: (ref: ContentReference) => Shown | undefined;
   /** False until `content.list` answers: options are then "loading", not "missing". */
   optionsLoaded: boolean;
   /** Ticks (`add`) or unticks one option; the builder applies it to the latest draft. */
@@ -359,6 +362,8 @@ function ChoicePicker(props: {
           const checked = choice.selected.some((s) => sameRef(s, ref));
           const id = `choice-${choice.source.revisionId}-${choice.choiceId}-${ref.revisionId}`;
           const unavailable = !option || !option.compatible;
+          // D31: an option of the other family is not offered, unless it is already chosen (an imported character), so it can be unticked.
+          if (option && !visible(option) && !checked) return null;
           return (
             <li key={ref.revisionId} className={unavailable ? 'incompatible' : ''}>
               <input

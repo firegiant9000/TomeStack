@@ -12,7 +12,7 @@ Service: `src/AppService/Campaigns.cs`, database migration v4, `campaigns/` pack
 
 **Never the calculation.** It changes what the builder offers, and it warns:
 
-- `content.list { rulesFamily, campaignId }` marks each option `allowedInCampaign`. The builder lists options from other sources as "not allowed in this campaign" and disables them (SPEC S-02: the picker still shows them), so two profiles show different allowed content.
+- `content.list { rulesFamily, campaignId }` marks each option `allowedInCampaign`. The builder lists options from other sources as "not allowed in this campaign" and disables them (P-01: they stay listed, even when they are also of the other rules family; D31), so two profiles show different allowed content.
 - **A deliberate exception (SPEC P-01):** "Use content from outside the campaign" plus a reason enables those options. On save, each picked revision the campaign does not allow gets a `campaignExceptions` entry with the reason and the time (character schema v4). An exception without a reason is refused (`character.exception-reason-required`).
 - **Warnings on the character** (`CharacterView.campaign`): each active pin, class, chosen option or equipped item from a source the campaign does not allow gets `campaign.source-not-allowed`, or `campaign.exception` with the reason when one is recorded. Granted content follows what grants it, like the rules-family policy. A rules family other than the campaign's gets `campaign.rules-family-mismatch`, and a campaign that is not on this machine gets `campaign.missing`.
 - Choosing a campaign in the builder sets the character's rules family to the campaign's.

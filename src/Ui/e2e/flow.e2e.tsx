@@ -152,7 +152,7 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
     await user.clear(input);
     await user.type(input, String(value));
   }
-  // Both families' options are listed (SPEC S-02); the SRD 5.1 ones are disabled here.
+  // D31: only the character's family is listed; `enabledRadio` keeps working with one match.
   const enabledRadio = (name: RegExp) => screen.getAllByRole<HTMLInputElement>('radio', { name }).find((r) => !r.disabled)!;
   await screen.findByRole('radio', { name: /^Dwarf/ });
   await user.click(enabledRadio(/^Dwarf/));
@@ -1367,7 +1367,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
 
-  // Builder: an SRD 5.1 species, then SRD 5.2.1. The 5.1 pick is cleared instead of staying checked but disabled.
+  // Builder: an SRD 5.1 species, then SRD 5.2.1. The 5.1 pick is cleared and no longer listed.
   await user.click(newCharacter);
   await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
   const species = screen.getByRole('group', { name: 'Species' });
@@ -1376,8 +1376,8 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.click(halfOrc());
   expect(halfOrc().checked).toBe(true);
   await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
-  await waitFor(() => expect(halfOrc().disabled).toBe(true));
-  expect(halfOrc().checked).toBe(false);
+  // D31: the 5.1 species leaves the list altogether (the pick is cleared, the focus stays on the family radio).
+  await waitFor(() => expect(within(species).queryByRole('radio', { name: /^Half-Orc/ })).toBeNull());
   expect(within(species).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
