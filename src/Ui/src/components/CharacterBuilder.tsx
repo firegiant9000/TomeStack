@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type {
   Ability,
@@ -18,7 +18,19 @@ import type {
   RulesFamilyPolicy,
   SpellcastingEntry,
 } from '../api/types';
-import { scoreMethods, type Assignment, type ScoreMethod } from '../abilityScores';
+import {
+  abilityKeys,
+  assignmentComplete,
+  assignmentValid,
+  pointBuyBudget,
+  pointBuyCost,
+  pointBuyRange,
+  scoreMethods,
+  scoresFrom,
+  standardArray,
+  type Assignment,
+  type ScoreMethod,
+} from '../abilityScores';
 import { matchesSpell } from '../spellSearch';
 import { SpellSearch } from './sheet/SpellSearch';
 
@@ -63,7 +75,7 @@ interface Basics {
   rulesFamily: RulesFamilyId;
   scores: AbilityScores;
   scoreMethod: ScoreMethod;
-  /** The standard array or point buy as the player has set it so far (used by the methods that arrive next). */
+  /** The standard array or rolled scores as the player has assigned them so far (ability to value; a partial assignment is allowed). */
   assignment: Assignment;
   rolled: RollRecord[];
   species?: ContentReference;
@@ -233,29 +245,192 @@ function RulesStep(props: {
   );
 }
 
-/** D32: how the base scores are set. This step offers "Enter by hand"; the other methods follow in the next change. */
+/** The values a pool method hands out: the standard array, or the totals of the rolled sets. */
+function poolOf(basics: Basics, method: ScoreMethod): readonly number[] | undefined {
+  return method === 'array' ? standardArray : method === 'roll' ? basics.rolled.map((r) => r.total) : undefined;
+}
+
+/** Each pool value goes to one ability: a value already used is shown "(used)" and cannot be picked again. */
+function AssignPool(props: { legend: string; pool: readonly number[]; assignment: Assignment; onChange: (a: Assignment) => void }) {
+  const { pool, assignment } = props;
+  const usedCount = (v: number) => abilityKeys.filter((k) => assignment[k] === v).length;
+  const poolCount = (v: number) => pool.filter((p) => p === v).length;
+  const values = [...new Set(pool)].sort((a, b) => b - a);
+  return (
+    <fieldset>
+      <legend>{props.legend}</legend>
+      <div className="assign-grid">
+        {abilities.map(({ key, label }) => (
+          <label key={key} className="field">
+            {label}
+            <select
+              value={assignment[key] ?? ''}
+              onChange={(e) => {
+                const v = e.target.value === '' ? undefined : Number(e.target.value);
+                const next = { ...assignment, [key]: v };
+                // A value that is already used (a stale select) resets this one to "Choose" and assigns nothing twice.
+                props.onChange(assignmentValid(next, pool) ? next : { ...assignment, [key]: undefined });
+              }}
+            >
+              <option value="">Choose</option>
+              {values.map((v) => {
+                const free = poolCount(v) - usedCount(v) + (assignment[key] === v ? 1 : 0);
+                return (
+                  <option key={v} value={v} disabled={free <= 0}>
+                    {free <= 0 ? `${v} (used)` : v}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        ))}
+      </div>
+      <p className="hint">Assigned: {abilityKeys.filter((k) => assignment[k] !== undefined).length} of 6</p>
+    </fieldset>
+  );
+}
+
+const allEights: AbilityScores = { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 };
+const pointBuyCostOrZero = (score: number) => (Number.isFinite(pointBuyCost(score)) ? pointBuyCost(score) : 0);
+
+/**
+ * D32: how the base scores are set. `basics.scores` always holds the scores the draft will use: Enter by hand and point buy
+ * edit it directly, the array and the rolled sets write it once all six are assigned. Switching method: point buy starts at
+ * all 8; the array and roll keep the assignment if the new pool can still hold it (else it is cleared) and apply it when
+ * complete; Enter by hand keeps the last scores. Next stays disabled until the chosen method gives valid scores.
+ */
 function ScoresStep(props: {
   basics: Basics;
   policy?: RulesFamilyPolicy;
-  onChange: (basics: Basics) => void;
+  onChange: Dispatch<SetStateAction<Basics>>;
   onNext: () => void;
   onBack: () => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
 }) {
   const { basics, onChange } = props;
+  const method = basics.scoreMethod;
+  const pool = poolOf(basics, method);
+  const spent = abilityKeys.reduce((sum, k) => sum + pointBuyCostOrZero(basics.scores[k]), 0);
+  const inRange = abilityKeys.every((k) => Number.isFinite(pointBuyCost(basics.scores[k])));
+  const assigned = !!pool && assignmentComplete(basics.assignment) && assignmentValid(basics.assignment, pool);
+  const complete = method === 'manual' || (method === 'pointBuy' ? inRange && spent <= pointBuyBudget : assigned);
+  const nextHint = complete
+    ? undefined
+    : method === 'pointBuy'
+      ? inRange
+        ? 'Spend at most 27 points to continue.'
+        : `Keep every score between ${pointBuyRange.min} and ${pointBuyRange.max} to continue.`
+      : method === 'roll' && basics.rolled.length === 0
+        ? 'Roll the scores to continue.'
+        : 'Assign all six scores to continue.';
+
+  const [rolling, setRolling] = useState(false);
+  const rollingNow = useRef(false);
+  const [rollNote, setRollNote] = useState('');
+
+  function chooseMethod(next: ScoreMethod) {
+    onChange((b) => {
+      const nextPool = poolOf(b, next);
+      const keep = nextPool && assignmentValid(b.assignment, nextPool);
+      const assignment = nextPool ? (keep ? b.assignment : {}) : b.assignment;
+      const scores = next === 'pointBuy' ? allEights : nextPool && assignmentComplete(assignment) && keep ? scoresFrom(assignment) : b.scores;
+      return { ...b, scoreMethod: next, assignment, scores };
+    });
+  }
+
+  function assign(assignment: Assignment) {
+    onChange((b) => ({ ...b, assignment, scores: assignmentComplete(assignment) ? scoresFrom(assignment) : b.scores }));
+  }
+
+  async function rollAll() {
+    if (rollingNow.current) return; // aria-disabled, not disabled: focus stays on the button, so the press is ignored here
+    rollingNow.current = true;
+    setRolling(true);
+    setRollNote('');
+    try {
+      const rolled: RollRecord[] = [];
+      for (let i = 1; i <= 6; i++) rolled.push(await client.rollDice('4d6', 3, `Ability score roll ${i}`));
+      // Only a complete set replaces the old one; an error part-way leaves what was there.
+      onChange((b) => ({ ...b, rolled, assignment: {} }));
+      setRollNote('Six scores rolled.');
+    } catch (error) {
+      props.onError(error);
+    } finally {
+      rollingNow.current = false;
+      setRolling(false);
+    }
+  }
+
+  const shown = (key: Ability) => (pool ? (basics.assignment[key] ?? '–') : basics.scores[key]);
   return (
-    <StepForm label="Ability scores" next="Next: species" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Ability scores" next="Next: species" nextDisabled={!complete} nextHint={nextHint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <fieldset>
         <legend>How are the scores determined?</legend>
         {scoreMethods.map((m) => (
           <label key={m.id} className="choice">
-            <input type="radio" name="scoreMethod" checked={basics.scoreMethod === m.id} onChange={() => onChange({ ...basics, scoreMethod: m.id })} />
+            <input type="radio" name="scoreMethod" checked={method === m.id} onChange={() => chooseMethod(m.id)} />
             {m.label}
           </label>
         ))}
       </fieldset>
-      {basics.scoreMethod === 'manual' && (
+      {method === 'array' && <AssignPool legend="Assign the standard array" pool={standardArray} assignment={basics.assignment} onChange={assign} />}
+      {method === 'pointBuy' && (
+        <fieldset className="abilities">
+          <legend>Point buy</legend>
+          {abilities.map(({ key, label }) => (
+            <label key={key} className="field">
+              {label}
+              <input
+                type="number"
+                min={pointBuyRange.min}
+                max={pointBuyRange.max}
+                value={basics.scores[key]}
+                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
+              />
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {method === 'pointBuy' && (
+        <>
+          <p className={spent > pointBuyBudget ? 'warn' : 'hint'}>
+            Points left: {pointBuyBudget - spent} of {pointBuyBudget}
+          </p>
+          {spent < pointBuyBudget && <p className="hint">You can still spend {pointBuyBudget - spent} points.</p>}
+        </>
+      )}
+      {method === 'roll' && (
+        <>
+          <div className="actions">
+            <button type="button" onClick={rollAll} aria-disabled={rolling || undefined}>
+              {basics.rolled.length ? 'Roll again' : 'Roll six scores (4d6, drop the lowest)'}
+            </button>
+          </div>
+          {/* Present before it has text, so the announcement is made when the text arrives. */}
+          <p role="status" className="hint">
+            {rollNote}
+          </p>
+          {basics.rolled.length > 0 && (
+            <>
+              <ul aria-label="Rolled sets" className="rolled-sets">
+                {basics.rolled.map((r, i) => (
+                  <li key={i}>
+                    <div className="dice dice-still" aria-hidden="true">
+                      {r.dice.map((d, j) => (
+                        <span key={j} className="die" data-sides={d.sides} data-value={d.value} data-kept={d.kept ? 'true' : 'false'} />
+                      ))}
+                    </div>
+                    {`Roll ${i + 1}: ${r.total} (${r.dice.filter((d) => d.kept).map((d) => d.value).join(', ')}, dropped ${r.dice.filter((d) => !d.kept).map((d) => d.value).join(', ')})`}
+                  </li>
+                ))}
+              </ul>
+              <AssignPool legend="Assign the rolled scores" pool={pool!} assignment={basics.assignment} onChange={assign} />
+            </>
+          )}
+        </>
+      )}
+      {method === 'manual' && (
         <fieldset className="abilities">
           <legend>Base ability scores</legend>
           {abilities.map(({ key, label }) => (
@@ -267,13 +442,13 @@ function ScoresStep(props: {
                 max={30}
                 required
                 value={basics.scores[key]}
-                onChange={(e) => onChange({ ...basics, scores: { ...basics.scores, [key]: Number(e.target.value) } })}
+                onChange={(e) => onChange((b) => ({ ...b, scores: { ...b.scores, [key]: Number(e.target.value) } }))}
               />
             </label>
           ))}
         </fieldset>
       )}
-      <p className="hint">Base scores: {abilities.map(({ key, label }) => `${label.slice(0, 3)} ${basics.scores[key]}`).join(', ')}.</p>
+      <p className="hint">Base scores: {abilities.map(({ key, label }) => `${label.slice(0, 3)} ${shown(key)}`).join(', ')}.</p>
       {props.policy && (
         <p className="hint">
           Increases from your {props.policy.abilityIncreaseSource} are applied on the sheet ({props.policy.displayName}).
@@ -287,8 +462,9 @@ function ScoresStep(props: {
 const ofKind = (options: Shown[], kind: ContentKind) => options.filter((o) => o.kind === kind && visible(o));
 
 /** With one option or none installed, say where more come from, so a short list does not look like a fault. */
-function fewHint(count: number, one: string, many: string, policy?: RulesFamilyPolicy) {
-  if (count > 1 || !policy) return null;
+function fewHint(count: number, one: string, many: string, loaded: boolean, policy?: RulesFamilyPolicy) {
+  // Not while the listing is loading or after it failed: "0 species are installed" would be false then.
+  if (count > 1 || !policy || !loaded) return null;
   return (
     <p className="hint">
       {count} {count === 1 ? one : many} {count === 1 ? 'is' : 'are'} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
@@ -300,6 +476,8 @@ interface PickStepProps {
   basics: Basics;
   policy?: RulesFamilyPolicy;
   options: Shown[];
+  /** The listing for the current rules family and campaign has arrived. */
+  loaded: boolean;
   onChange: (basics: Basics) => void;
   onNext: () => void;
   onBack: () => void;
@@ -313,7 +491,7 @@ function SpeciesStep(props: PickStepProps) {
     <StepForm label="Species" next="Next: class" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
-      {fewHint(list.length, 'species', 'species', props.policy)}
+      {fewHint(list.length, 'species', 'species', props.loaded, props.policy)}
     </StepForm>
   );
 }
@@ -359,7 +537,7 @@ function BackgroundStep(props: PickStepProps) {
         value={basics.background}
         onChange={(background) => onChange({ ...basics, background })}
       />
-      {fewHint(list.length, 'background', 'backgrounds', props.policy)}
+      {fewHint(list.length, 'background', 'backgrounds', props.loaded, props.policy)}
 
       <details>
         <summary>Other content ({basics.other.length} selected)</summary>
@@ -831,7 +1009,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const back = () => setStep(createSteps[Math.max(at - 1, 0)]!);
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
-  const pickProps = { basics, policy, options: pickable, onChange: setBasics, onBack: back, onCancel };
+  const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, onChange: setBasics, onBack: back, onCancel };
 
   const title =
     mode.kind === 'create' ? 'New character' : mode.kind === 'levelUp' ? `Level up ${mode.view.character.name}` : `Choices for ${mode.view.character.name}`;
@@ -890,7 +1069,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           view={view}
           commitLabel={mode.kind === 'create' ? 'Create and save' : mode.kind === 'levelUp' ? 'Save level-up' : 'Save choices'}
           optionOf={optionOf}
-          optionsLoaded={listedFor === `${family}|${campaignId ?? ''}`}
+          optionsLoaded={optionsLoaded}
           spellOptions={pickable.filter((o) => o.kind === 'spell')}
           onChoose={choose}
           onSpells={toggleSpell}

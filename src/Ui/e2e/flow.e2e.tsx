@@ -966,7 +966,9 @@ it('shows different allowed content for two campaign profiles, and records a rea
   const courier = () => screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Courier/ });
   const soldier = () => screen.getAllByRole<HTMLInputElement>('radio', { name: /^Soldier/ }).find((r) => !r.disabled);
   const toBackground = async () => {
-    for (const next of ['Next: ability scores', 'Next: species', 'Next: class', 'Next: background']) await user.click(screen.getByRole('button', { name: next }));
+    await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+    await user.click(screen.getByRole('radio', { name: 'Enter by hand' })); // the default method needs all six scores assigned
+    for (const next of ['Next: species', 'Next: class', 'Next: background']) await user.click(screen.getByRole('button', { name: next }));
   };
   const toRules = async () => {
     for (let i = 0; i < 4; i++) await user.click(screen.getByRole('button', { name: 'Back' }));
@@ -1414,6 +1416,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Switcher'); // the name is required to leave the Rules step
   await user.click(screen.getByRole('radio', { name: /SRD 5\.1/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   const species = screen.getByRole('group', { name: 'Species' });
   const halfOrc = () => within(species).getByRole<HTMLInputElement>('radio', { name: /^Half-Orc/ });
@@ -2215,4 +2218,39 @@ it('opens the Characters home screen with a card per character and opens one fro
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   const back = await screen.findByRole('region', { name: 'Characters' });
   expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' }));
+});
+
+it('creates a character with the standard array (D32)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await createCharacter(user, { name: 'E2E Array', family: 'srd-5.2.1', cls: /^Barbarian/ });
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Array' });
+  await openTab(user, sheet, 'Stats');
+  expect(within(sheet).getByRole('heading', { name: /^Strength score: 15/ })).toBeTruthy();
+  expect(within(sheet).getByRole('heading', { name: /^Charisma score: 8/ })).toBeTruthy();
+});
+
+it('rolls ability scores through the dice engine and assigns them (D32)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const newCharacter = await screen.findByRole<HTMLButtonElement>('button', { name: 'New character' });
+  await waitFor(() => expect(newCharacter.disabled).toBe(false));
+  await user.click(newCharacter);
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Rolled');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  const sets = await screen.findByRole('list', { name: 'Rolled sets' });
+  const lines = within(sets).getAllByRole('listitem').map((li) => li.textContent!);
+  expect(lines).toHaveLength(6);
+  for (const line of lines) expect(line).toMatch(/^Roll \d: (\d+) \((\d), (\d), (\d), dropped (\d)\)$/);
+  const group = screen.getByRole('group', { name: 'Assign the rolled scores' });
+  for (const label of ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'] as const) {
+    const select = within(group).getByRole('combobox', { name: label });
+    const free = within(select).getAllByRole('option').find((o) => !(o as HTMLOptionElement).disabled && o.textContent !== 'Choose')!;
+    await user.selectOptions(select, (free as HTMLOptionElement).value);
+  }
+  expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
 });

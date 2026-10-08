@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The builder's spell picker (D30): the legend's counts say what is recorded, not what the search shows. The client is mocked;
 // names and values are invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -61,6 +61,7 @@ function viewWith(recorded: Character['spells']): CharacterView {
 }
 
 beforeEach(() => {
+  vi.mocked(client.rollDice).mockReset();
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue(spells);
   vi.mocked(client.preview).mockImplementation(async (draft) => viewWith(draft.spells));
@@ -113,6 +114,7 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   expect(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ })).toBeTruthy();
   expect(screen.queryByRole('radio', { name: /^Fixture Dunefolk/ })).toBeNull();
@@ -202,6 +204,7 @@ it('keeps the species and class picks across Back and forth', async () => {
   renderCreate();
   await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
   await user.click(screen.getByRole('button', { name: 'Next: class' }));
@@ -210,4 +213,227 @@ it('keeps the species and class picks across Back and forth', async () => {
   expect((screen.getByRole('radio', { name: /^Fixture Hillfolk/ }) as HTMLInputElement).checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Next: class' }));
   expect((screen.getByRole('radio', { name: /^Fixture Warden/ }) as HTMLInputElement).checked).toBe(true);
+});
+
+// D32: standard array, point buy and rolled scores.
+async function toScores(user: ReturnType<typeof userEvent.setup>, onError: (error: unknown) => void = () => {}) {
+  render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={onError} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+}
+const nextSpecies = () => screen.getByRole('button', { name: 'Next: species' }) as HTMLButtonElement;
+const arrayOrder = [['Strength', '15'], ['Dexterity', '14'], ['Constitution', '13'], ['Intelligence', '12'], ['Wisdom', '10'], ['Charisma', '8']] as const;
+async function assignArray(user: ReturnType<typeof userEvent.setup>) {
+  const group = screen.getByRole('group', { name: 'Assign the standard array' });
+  for (const [label, value] of arrayOrder) await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
+}
+const rollSet = (values: number[], dropped: number) => ({
+  formula: '4d6',
+  mode: 'normal',
+  critical: false,
+  dice: values.map((v, i) => ({ term: 0, sides: 6, value: v, kept: i !== dropped, fromCritical: false })),
+  diceTotal: 0,
+  expressionConstant: 0,
+  modifiers: [],
+  total: values.reduce((a, b) => a + b, 0) - values[dropped]!,
+  provenance: { rollId: 'dice', label: 'Ability score roll' },
+});
+const sixSets = () => [rollSet([6, 5, 3, 2], 3), rollSet([4, 4, 4, 1], 3), rollSet([6, 6, 6, 6], 0), rollSet([2, 2, 2, 2], 0), rollSet([5, 4, 3, 2], 3), rollSet([3, 3, 3, 1], 3)];
+const queueSets = (sets: ReturnType<typeof sixSets>) => {
+  for (const s of sets) vi.mocked(client.rollDice).mockResolvedValueOnce(s as never);
+};
+
+it('assigns the standard array once each and refuses a duplicate value (Review Focus 6)', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  const group = screen.getByRole('group', { name: 'Assign the standard array' });
+  expect(nextSpecies().disabled).toBe(true);
+  expect(screen.getByText('Assign all six scores to continue.')).toBeTruthy();
+  expect(nextSpecies().getAttribute('aria-describedby')).toBe('next-hint');
+  expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
+  await user.selectOptions(within(group).getByRole('combobox', { name: 'Strength' }), '15');
+  expect((within(within(group).getByRole('combobox', { name: 'Dexterity' })).getByRole('option', { name: '15 (used)' }) as HTMLOptionElement).disabled).toBe(true);
+  // A stale select can still send a used value: the second select is reset and nothing is assigned twice.
+  const dex = within(group).getByRole('combobox', { name: 'Dexterity' }) as HTMLSelectElement;
+  fireEvent.change(dex, { target: { value: '15' } });
+  expect(dex.value).toBe('');
+  expect(within(dex).getByRole('option', { name: 'Choose' }).textContent).toBe('Choose');
+  expect(screen.getByText('Assigned: 1 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(true);
+  for (const [label, value] of arrayOrder.slice(1)) await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
+  expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(false);
+  expect(screen.queryByText('Assign all six scores to continue.')).toBeNull();
+  expect(screen.getByText(/Base scores: Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8/)).toBeTruthy();
+});
+
+it('uses the assigned scores for the draft, not the legacy defaults', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  await toScores(user);
+  await assignArray(user);
+  for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
+  expect(vi.mocked(client.preview).mock.calls[0]![0].baseAbilities).toEqual({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 });
+});
+
+it('counts point buy against 27 and blocks Next when over budget', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Point buy' }));
+  const group = screen.getByRole('group', { name: 'Point buy' });
+  expect(screen.getByText('Points left: 27 of 27')).toBeTruthy();
+  expect(screen.getByText('You can still spend 27 points.')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(false);
+  for (const label of ['Strength', 'Dexterity', 'Constitution'] as const) {
+    const input = within(group).getByRole('spinbutton', { name: label });
+    await user.clear(input);
+    await user.type(input, '15');
+  }
+  expect(screen.getByText('Points left: 0 of 27')).toBeTruthy();
+  expect(screen.queryByText(/You can still spend/)).toBeNull();
+  const wis = within(group).getByRole('spinbutton', { name: 'Wisdom' });
+  await user.clear(wis);
+  await user.type(wis, '9');
+  expect(screen.getByText('Points left: -1 of 27')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(true);
+  expect(screen.getByText('Spend at most 27 points to continue.')).toBeTruthy();
+});
+
+it('blocks Next for a point buy score outside 8 to 15', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Point buy' }));
+  const str = within(screen.getByRole('group', { name: 'Point buy' })).getByRole('spinbutton', { name: 'Strength' });
+  await user.clear(str);
+  await user.type(str, '16');
+  expect(nextSpecies().disabled).toBe(true);
+});
+
+it('keeps focus on the method radios, resets point buy to all 8, and keeps the last scores when going to Enter by hand', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await assignArray(user);
+  const pointBuy = screen.getByRole('radio', { name: 'Point buy' });
+  await user.click(pointBuy);
+  expect(document.activeElement).toBe(pointBuy);
+  expect(screen.getByText(/Base scores: Str 8, Dex 8, Con 8, Int 8, Wis 8, Cha 8/)).toBeTruthy();
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  expect((within(screen.getByRole('group', { name: 'Base ability scores' })).getByRole('spinbutton', { name: 'Strength' }) as HTMLInputElement).value).toBe('8');
+  // Back to the array: the assignment made earlier is still there and gives the scores again.
+  await user.click(screen.getByRole('radio', { name: 'Standard array' }));
+  expect((within(screen.getByRole('group', { name: 'Assign the standard array' })).getByRole('combobox', { name: 'Strength' }) as HTMLSelectElement).value).toBe('15');
+  expect(nextSpecies().disabled).toBe(false);
+  expect(screen.getByText(/Base scores: Str 15, Dex 14/)).toBeTruthy();
+});
+
+it('rolls six sets through dice.roll with keepHighest 3 and assigns them', async () => {
+  const user = userEvent.setup();
+  queueSets(sixSets());
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  expect(screen.getByText('Roll the scores to continue.')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(true);
+  const status = screen.getByRole('status');
+  expect(status.textContent).toBe('');
+  const button = screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' });
+  await user.click(button);
+  expect(vi.mocked(client.rollDice)).toHaveBeenCalledTimes(6);
+  expect(vi.mocked(client.rollDice).mock.calls[0]).toEqual(['4d6', 3, 'Ability score roll 1']);
+  expect(vi.mocked(client.rollDice).mock.calls[5]).toEqual(['4d6', 3, 'Ability score roll 6']);
+  expect(await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)')).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Six scores rolled.');
+  expect(document.activeElement).toBe(button);
+  expect(button.textContent).toBe('Roll again');
+  const dice = within(screen.getByRole('list', { name: 'Rolled sets' })).getAllByRole('listitem')[0]!.querySelectorAll('.dice.dice-still[aria-hidden="true"] .die[data-sides="6"]');
+  expect([...dice].map((d) => [d.getAttribute('data-value'), d.getAttribute('data-kept')])).toEqual([['6', 'true'], ['5', 'true'], ['3', 'true'], ['2', 'false']]);
+  const group = screen.getByRole('group', { name: 'Assign the rolled scores' });
+  await user.selectOptions(within(group).getByRole('combobox', { name: 'Strength' }), '18');
+  expect(screen.getByText(/Base scores: Str 18/)).toBeTruthy();
+  expect(screen.getByText('Assigned: 1 of 6')).toBeTruthy();
+});
+
+it('ignores a second press while rolling', async () => {
+  const user = userEvent.setup();
+  const pending: Array<(value: never) => void> = [];
+  vi.mocked(client.rollDice).mockImplementation(() => new Promise((resolve) => pending.push(resolve as never)));
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  const button = screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' });
+  await user.click(button);
+  expect(button.getAttribute('aria-disabled')).toBe('true');
+  expect(button.hasAttribute('disabled')).toBe(false);
+  await user.click(button);
+  expect(vi.mocked(client.rollDice)).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(button);
+  for (const s of sixSets()) {
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    pending.shift()!(s as never);
+  }
+  expect(await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)')).toBeTruthy();
+  expect(button.getAttribute('aria-disabled')).toBeNull();
+});
+
+it('reports a roll error and never leaves a partial pool assignable; a failed re-roll keeps the earlier set', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  vi.mocked(client.rollDice).mockResolvedValueOnce(rollSet([6, 5, 3, 2], 3) as never).mockResolvedValueOnce(rollSet([4, 4, 4, 1], 3) as never).mockRejectedValueOnce(new Error('fixture failure'));
+  await toScores(user, onError);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  const button = screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' });
+  await user.click(button);
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole('list', { name: 'Rolled sets' })).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Assign the rolled scores' })).toBeNull();
+  expect(screen.getByRole('status').textContent).toBe('');
+  expect(nextSpecies().disabled).toBe(true);
+  expect(document.activeElement).toBe(button);
+  // A full roll, then a failure part-way: the complete set stays, with its assignment.
+  queueSets(sixSets());
+  await user.click(button);
+  await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)');
+  await user.selectOptions(within(screen.getByRole('group', { name: 'Assign the rolled scores' })).getByRole('combobox', { name: 'Strength' }), '18');
+  vi.mocked(client.rollDice).mockResolvedValueOnce(rollSet([1, 1, 1, 1], 0) as never).mockRejectedValueOnce(new Error('fixture failure'));
+  await user.click(screen.getByRole('button', { name: 'Roll again' }));
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+  expect(screen.getByText('Roll 1: 14 (6, 5, 3, dropped 2)')).toBeTruthy();
+  expect(screen.getAllByRole('listitem')).toHaveLength(6);
+  expect((within(screen.getByRole('group', { name: 'Assign the rolled scores' })).getByRole('combobox', { name: 'Strength' }) as HTMLSelectElement).value).toBe('18');
+});
+
+it('a new roll clears the rolled assignment; switching methods drops an assignment the new pool cannot hold', async () => {
+  const user = userEvent.setup();
+  queueSets(sixSets());
+  await toScores(user);
+  await assignArray(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  // The array's 15 is not in the rolled pool (or the roll is not made yet): nothing carries over.
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)');
+  expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
+  expect(nextSpecies().disabled).toBe(true);
+});
+
+it('shows the few-options hint only once the listing has loaded (Task 11 review)', async () => {
+  const user = userEvent.setup();
+  let release: (options: ContentOption[]) => void = () => {};
+  vi.mocked(client.listContent).mockImplementation(() => new Promise((resolve) => (release = resolve)));
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(nextSpecies());
+  expect(screen.getByRole('form', { name: 'Species' })).toBeTruthy();
+  expect(screen.queryByText(/installed for/)).toBeNull();
+  release([content(1, 'species', 'Fixture Hillfolk', 'srd-5.1')]);
+  expect(await screen.findByText(/1 species is installed for SRD 5\.1/)).toBeTruthy();
+});
+
+it('shows no few-options hint after a failed listing', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockRejectedValue(new Error('fixture failure'));
+  const onError = vi.fn();
+  await toScores(user, onError);
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(nextSpecies());
+  await waitFor(() => expect(onError).toHaveBeenCalled());
+  expect(screen.queryByText(/installed for/)).toBeNull();
 });
