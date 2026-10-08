@@ -18,8 +18,10 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(command);
         var formula = command.Formula?.Trim() ?? "";
-        var label = string.IsNullOrWhiteSpace(command.Label) ? formula : command.Label.Trim();
-        if (label.Length > RollDiceCommand.MaxLabelLength)
+        var explicitLabel = !string.IsNullOrWhiteSpace(command.Label);
+        var label = explicitLabel ? command.Label!.Trim() : formula;
+        // Only an explicit label is bounded here; a long formula with no label reports its own dice error.
+        if (explicitLabel && label.Length > RollDiceCommand.MaxLabelLength)
             throw new AppValidationException([new("dice.label-too-long", $"A roll label is at most {RollDiceCommand.MaxLabelLength} characters.")]);
         var request = new RollRequest(formula, Provenance: new RollProvenance("dice", label), KeepHighest: command.KeepHighest);
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))

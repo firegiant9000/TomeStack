@@ -29,6 +29,10 @@ public class DiceCommandTests
         Assert.Equal("2d6", temp.App.RollDice(new RollDiceCommand(" 2d6 ")).Provenance!.Label);
         Assert.Equal("2d6", temp.App.RollDice(new RollDiceCommand("2d6", Label: "   ")).Provenance!.Label);
         Assert.Equal(new string('x', 80), temp.App.RollDice(new RollDiceCommand("1d4", Label: new string('x', 80))).Provenance!.Label);
+        // A long formula with no label reports the formula's own dice error, not the label length.
+        var longFormula = Assert.Throws<AppValidationException>(() => temp.App.RollDice(new RollDiceCommand("1d6+" + new string('1', 90))));
+        Assert.StartsWith("dice.", Assert.Single(longFormula.Problems).Code);
+        Assert.NotEqual("dice.label-too-long", longFormula.Problems[0].Code);
         var tooLong = Assert.Throws<AppValidationException>(() => temp.App.RollDice(new RollDiceCommand("1d4", Label: new string('x', 81))));
         Assert.Equal("dice.label-too-long", Assert.Single(tooLong.Problems).Code);
     }
@@ -64,9 +68,13 @@ public class DiceCommandTests
     {
         using var temp = new TempApp();
         Assert.Contains("dice.roll", CommandDispatcher.Commands);
-        var before = temp.App.ListCharacters().Count;
+        // Same pattern as RollCommandTests: the stored character as JSON before and after (plus the list count).
+        var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [] }).Character.Id;
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+        var count = temp.App.ListCharacters().Count;
         temp.App.RollDice(new RollDiceCommand("1d20"));
-        Assert.Equal(before, temp.App.ListCharacters().Count);
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id)));
+        Assert.Equal(count, temp.App.ListCharacters().Count);
 
         var dispatcher = new CommandDispatcher(temp.App);
         using var response = JsonDocument.Parse(dispatcher.Dispatch("""{"id":"2","command":"dice.roll","payload":{"formula":"4d6","keepHighest":3,"label":"Ability score roll 2"}}"""));
