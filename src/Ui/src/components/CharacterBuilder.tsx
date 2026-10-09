@@ -630,11 +630,18 @@ function LevelStep(props: {
 
   // The picked new class can become inert after it was picked (its campaign reason was cleared): Next then says why it waits.
   const needsReason = !!target && newClasses.some((o) => !o.compatible && sameRef(o.reference, target));
+  // R43: Next is never natively `disabled` and always says why it waits (3.3.2, 4.1.2).
+  const blocked = atMaximum
+    ? `Already at level ${maxLevel}, the highest level.`
+    : !target
+      ? 'Choose a class to continue.'
+      : needsReason
+        ? 'This class needs a campaign exception reason.'
+        : undefined;
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!target) return;
-    if (needsReason) return; // aria-disabled with its reason shown, so this press is refused openly
+    if (blocked || !target) return; // aria-disabled with its reason shown, so this press is refused openly
     const existing = character.classes.find((c) => sameRef(c.class, target));
     props.onNext(
       existing
@@ -648,9 +655,7 @@ function LevelStep(props: {
       <p>
         Level {character.level} → {character.level + 1}
       </p>
-      {atMaximum ? (
-        <p className="warn">This character is level {maxLevel}, the maximum.</p>
-      ) : (
+      {atMaximum ? null : (
         <fieldset>
           <legend>Class to gain a level in</legend>
           {character.classes.map((c) => (
@@ -679,16 +684,16 @@ function LevelStep(props: {
         Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
       </p>
       <div className="actions">
-        <button type="submit" disabled={atMaximum || !target} aria-disabled={needsReason || undefined} aria-describedby={needsReason ? 'next-hint' : undefined}>
+        <button type="submit" aria-disabled={!!blocked || undefined} aria-describedby={blocked ? 'next-hint' : undefined}>
           Next: choices
         </button>
         <button type="button" onClick={props.onCancel}>
           Cancel
         </button>
       </div>
-      {needsReason && (
+      {blocked && (
         <p id="next-hint" className="hint">
-          This class needs a campaign exception reason.
+          {blocked}
         </p>
       )}
     </form>

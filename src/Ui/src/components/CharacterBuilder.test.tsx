@@ -1221,3 +1221,44 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
   });
 });
+
+// R43 (follow-up F3): level-up Next says why it waits (3.3.2, 4.1.2) and is never natively disabled.
+describe('level-up Next states its reason (R43)', () => {
+  beforeEach(() => {
+    vi.mocked(client.listCampaigns).mockResolvedValue([]);
+    vi.mocked(client.preview).mockClear();
+  });
+
+  it('at level 20 is aria-disabled with the reason linked, refuses the press and keeps the focus', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([]);
+    const view = levelView();
+    view.character = { ...view.character, level: 20, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 20 }] };
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const next = screen.getByRole('button', { name: 'Next: choices' });
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.hasAttribute('disabled')).toBe(false);
+    expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+    expect(document.getElementById('next-hint')!.textContent).toBe('Already at level 20, the highest level.');
+    await user.click(next);
+    expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(next);
+  });
+
+  it('with no class to gain a level in says "Choose a class to continue." until one is picked', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([content(3, 'class', 'Fixture Warden', 'srd-5.1')]);
+    render(<CharacterBuilder mode={{ kind: 'levelUp', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const next = screen.getByRole('button', { name: 'Next: choices' });
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.hasAttribute('disabled')).toBe(false);
+    expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+    expect(document.getElementById('next-hint')!.textContent).toBe('Choose a class to continue.');
+    await user.click(next);
+    expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Warden/ }));
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    expect(next.hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.queryByText('Choose a class to continue.')).toBeNull();
+  });
+});
