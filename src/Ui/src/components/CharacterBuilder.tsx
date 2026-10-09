@@ -149,6 +149,15 @@ function SinglePick(props: {
   );
 }
 
+/**
+ * R41: a pick that needs a campaign exception reason keeps its place when the reason goes; progress waits instead, with this
+ * sentence linked to the button, until the player gives a reason again or unpicks it.
+ */
+function reasonHint(names: string[]): string | undefined {
+  if (names.length === 0) return undefined;
+  return names.length === 1 ? `${names[0]} needs a campaign exception reason.` : `${names.join(', ')} need a campaign exception reason.`;
+}
+
 /** D32: one named form per create step, so a screen reader announces where the player is. The hint, when shown, describes Next. */
 function StepForm(props: {
   label: string;
@@ -508,6 +517,8 @@ interface PickStepProps {
   options: Shown[];
   /** The listing for the current rules family and campaign has arrived. */
   loaded: boolean;
+  /** R41: the names among these picks that need a campaign exception reason which is not given (now). */
+  reasonNames: (refs: (ContentReference | undefined)[]) => string[];
   onChange: (basics: Basics) => void;
   onNext: () => void;
   onBack: () => void;
@@ -517,8 +528,9 @@ interface PickStepProps {
 function SpeciesStep(props: PickStepProps) {
   const { basics, options, onChange } = props;
   const list = ofKind(options, 'species');
+  const hint = reasonHint(props.reasonNames([basics.species]));
   return (
-    <StepForm label="Species" next="Next: class" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
       {fewHint(list.length, 'species', 'species', props.loaded, props.policy)}
@@ -528,8 +540,9 @@ function SpeciesStep(props: PickStepProps) {
 
 function ClassStep(props: PickStepProps) {
   const { basics, options, onChange } = props;
+  const hint = reasonHint(props.reasonNames([basics.startingClass]));
   return (
-    <StepForm label="Class" next="Next: background" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick
         legend="Class (level 1)"
@@ -557,8 +570,9 @@ function BackgroundStep(props: PickStepProps) {
     });
   }
 
+  const hint = reasonHint(props.reasonNames([basics.background, ...basics.other]));
   return (
-    <StepForm label="Background" next="Next: choices" onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Background" next="Next: choices" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick
         legend="Background"
@@ -829,6 +843,8 @@ function ChoicesStep(props: {
   onCommit: () => void;
   onCancel: () => void;
   busy: boolean;
+  /** R41: set while a pick in the draft needs a campaign exception reason that is not given; the commit button waits. */
+  reasonHint?: string;
   review?: { name: string; family: string; campaign?: string; scores: AbilityScores; method: string; species?: string; cls?: string; background?: string };
 }) {
   const choices = props.view.sheet.choices ?? [];
@@ -889,7 +905,7 @@ function ChoicesStep(props: {
       ))}
       <div className="actions">
         {/* aria-disabled, not disabled: a failed save leaves the focus on the button (2.4.3); the guards are in commit() and Cancel. */}
-        <button type="button" onClick={props.onCommit} aria-disabled={props.busy || undefined}>
+        <button type="button" onClick={props.onCommit} aria-disabled={props.busy || !!props.reasonHint || undefined} aria-describedby={props.reasonHint ? 'commit-hint' : undefined}>
           {props.busy ? 'Saving…' : props.commitLabel}
         </button>
         {props.onBack && (
@@ -901,6 +917,11 @@ function ChoicesStep(props: {
           Cancel
         </button>
       </div>
+      {props.reasonHint && (
+        <p id="commit-hint" className="hint">
+          {props.reasonHint}
+        </p>
+      )}
     </div>
   );
 }
@@ -1060,6 +1081,22 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const optionOf = (ref: ContentReference) => byRevision.get(ref.revisionId);
   const nameOf = (ref: ContentReference) => optionOf(ref)?.name ?? ref.revisionId;
 
+  // R41: a pick made in this builder (not one the saved character already holds, nor one with a recorded exception) of content
+  // the campaign does not allow needs a reason now; the names of those that lack it block the step's Next or the save.
+  const original = mode.kind === 'create' ? undefined : mode.view.character;
+  const held = original ? [...original.pins, ...original.classes.map((c) => c.class), ...original.choices.flatMap((c) => c.selected), ...(original.spells ?? []).map((s) => s.spell)] : [];
+  function reasonNames(refs: (ContentReference | undefined)[]): string[] {
+    if (outsideAllowed) return [];
+    const names = refs
+      .filter((r): r is ContentReference => !!r)
+      .filter((r) => listed.find((o) => sameRef(o.reference, r))?.allowedInCampaign === false)
+      .filter((r) => !held.some((h) => sameRef(h, r)) && !(original?.campaignExceptions ?? []).some((e) => sameRef(e.content, r)))
+      .map(nameOf);
+    return [...new Set(names)];
+  }
+  const draftRefs = (c: Character) => [...c.pins, ...c.classes.map((k) => k.class), ...c.choices.flatMap((k) => k.selected), ...(c.spells ?? []).map((s) => s.spell)];
+  const commitHint = view ? reasonHint(reasonNames(draftRefs(view.character))) : undefined;
+
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
    * on the step that asked: Back while it is pending cancels the jump, so a late reply never carries an old class forward.
@@ -1120,6 +1157,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
 
   async function commit() {
     if (!view || committing.current) return; // aria-disabled while busy, so the press arrives here and is ignored
+    if (commitHint) return; // R41: aria-disabled with its reason shown; nothing is saved without the exception it needs
     committing.current = true;
     setBusy(true);
     try {
@@ -1154,7 +1192,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, onChange: setBasics, onBack: back, onCancel };
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, reasonNames, onChange: setBasics, onBack: back, onCancel };
 
   const title =
     mode.kind === 'create' ? 'New character' : mode.kind === 'levelUp' ? `Level up ${mode.view.character.name}` : `Choices for ${mode.view.character.name}`;
@@ -1223,6 +1261,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
           }}
           busy={busy}
+          reasonHint={commitHint}
           review={
             mode.kind === 'create'
               ? {

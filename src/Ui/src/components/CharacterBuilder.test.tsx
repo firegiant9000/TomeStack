@@ -999,3 +999,202 @@ it('says why Next: choices waits when the picked new class needs a campaign reas
   await user.click(next);
   expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
 });
+
+// R41 (follow-up F1): a pick that needs a campaign exception reason is never dropped when the reason goes. Progress waits,
+// with the reason shown and linked; the player resolves it by giving a reason again or by unpicking.
+const fixtureCampaign = { id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1' as const, allowedSources: ['fixture-source'] };
+const reasonField = () => screen.getByRole('textbox', { name: /Reason/ });
+async function allowOutside(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
+  await user.type(reasonField(), 'DM approved');
+}
+async function toSpeciesInCampaign(user: ReturnType<typeof userEvent.setup>) {
+  render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+}
+
+describe('a pick that needs a campaign exception reason after the reason is cleared (R41)', () => {
+  beforeEach(() => {
+    vi.mocked(client.listCampaigns).mockResolvedValue([fixtureCampaign]);
+    vi.mocked(client.preview).mockClear();
+    vi.mocked(client.createCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockReset();
+  });
+
+  it('holds the Species step, keeps the pick and the focus, and proceeds once a reason is given again', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(2, 'species', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false })]);
+    await toSpeciesInCampaign(user);
+    await allowOutside(user);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Outsider/ }));
+    const next = screen.getByRole('button', { name: 'Next: class' });
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    await user.clear(reasonField());
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.hasAttribute('disabled')).toBe(false);
+    expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+    expect(screen.getByText('Fixture Outsider needs a campaign exception reason.')).toBeTruthy();
+    expect((screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement).checked).toBe(true); // the pick is kept
+    await user.click(next);
+    expect(screen.getByRole('form', { name: 'Species' })).toBeTruthy();
+    expect(document.activeElement).toBe(next);
+    await user.type(reasonField(), 'DM approved');
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText(/needs a campaign exception reason/)).toBeNull();
+    await user.click(next);
+    expect(screen.getByRole('form', { name: 'Class' })).toBeTruthy();
+  });
+
+  it('lets the player unpick the species instead, and never blocks a pick the campaign allows', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(2, 'species', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false })]);
+    await toSpeciesInCampaign(user);
+    await allowOutside(user);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Outsider/ }));
+    await user.clear(reasonField());
+    const next = screen.getByRole('button', { name: 'Next: class' });
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    await user.click(screen.getByRole('radio', { name: 'None' }));
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    await user.click(screen.getByRole('radio', { name: /^Fixture Hillfolk/ }));
+    expect(next.getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText(/needs a campaign exception reason/)).toBeNull();
+  });
+
+  it('holds the Background step for an Other content pick, and the preview is not asked for', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue([...stepContent(), content(5, 'feat', 'Fixture Outside Feat', 'srd-5.1', { allowedInCampaign: false })]);
+    vi.mocked(client.preview).mockResolvedValue(draftView());
+    await toSpeciesInCampaign(user);
+    await allowOutside(user);
+    await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: class' }));
+    await user.click(screen.getByRole('radio', { name: /^Fixture Warden/ }));
+    await user.click(screen.getByRole('button', { name: 'Next: background' }));
+    await user.click(await screen.findByRole('checkbox', { name: /Fixture Outside Feat/ }));
+    const next = screen.getByRole('button', { name: 'Next: choices' });
+    await user.clear(reasonField());
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+    expect(screen.getByText('Fixture Outside Feat needs a campaign exception reason.')).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: /Fixture Outside Feat/ }) as HTMLInputElement).checked).toBe(true);
+    await user.click(next);
+    expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(next);
+    await user.type(reasonField(), 'DM approved');
+    await user.click(next);
+    await waitFor(() => expect(vi.mocked(client.preview)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.preview).mock.calls[0]![0].pins.map((p) => p.contentId)).toContain('fixture-c5');
+  });
+
+  it('holds Create and save for a choice option, keeps the focus, and records the exception once a reason is given again', async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+    const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+    vi.mocked(client.listContent).mockResolvedValue([mine, outsider]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [mine, outsider], 'fixture-camp');
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    vi.mocked(client.previewChoice).mockImplementation(async (_c, _s, _id, selected) => answer([mine, outsider].filter((o) => selected.some((s) => s.revisionId === o.reference.revisionId))));
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
+    await allowOutside(user);
+    const box = within(picker).getByRole('checkbox', { name: /Fixture Outsider/ }) as HTMLInputElement;
+    await user.click(box);
+    await waitFor(() => expect(box.checked).toBe(true));
+    const save = screen.getByRole('button', { name: 'Save choices' });
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+    await user.clear(reasonField());
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.hasAttribute('disabled')).toBe(false);
+    expect(save.getAttribute('aria-describedby')).toBe('commit-hint');
+    expect(screen.getByText('Fixture Outsider needs a campaign exception reason.')).toBeTruthy();
+    await user.click(save);
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(save);
+    expect(box.checked).toBe(true); // never dropped
+    await user.type(reasonField(), 'DM approved again');
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+    await user.click(save);
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([expect.objectContaining({ content: outsider.reference, reason: 'DM approved again' })]);
+  });
+
+  it('lets the player unpick the choice option to proceed', async () => {
+    const user = userEvent.setup();
+    const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+    const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+    vi.mocked(client.listContent).mockResolvedValue([outsider]);
+    const answer = (selected: ContentOption[]) => {
+      const v = choiceView(selected, [outsider], 'fixture-camp');
+      v.character = { ...v.character, choices: [{ source, choiceId: 'pick', selected: selected.map((o) => o.reference) }] };
+      return v;
+    };
+    vi.mocked(client.previewChoice).mockImplementation(async (_c, _s, _id, selected) => answer(selected.length ? [outsider] : []));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: answer([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+    await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
+    await allowOutside(user);
+    const box = within(picker).getByRole('checkbox', { name: /Fixture Outsider/ }) as HTMLInputElement;
+    await user.click(box);
+    await waitFor(() => expect(box.checked).toBe(true));
+    await user.clear(reasonField());
+    const save = screen.getByRole('button', { name: 'Save choices' });
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    await user.click(box); // unticking always works
+    await waitFor(() => expect(box.checked).toBe(false));
+    expect(within(picker).getByRole('checkbox', { name: /Fixture Outsider/ })).toBe(box);
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('holds Save for a spell, keeps it ticked and focused, and records the exception once a reason is given again', async () => {
+    const user = userEvent.setup();
+    const outsideSpell = { ...spell('fixture-hex', 'Fixture Hex', 1), allowedInCampaign: false };
+    vi.mocked(client.listContent).mockResolvedValue([...spells, outsideSpell]);
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({ ...viewWith(draft.spells), character: draft }));
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    const start = viewWith([]);
+    start.character = { ...start.character, campaignId: 'fixture-camp' };
+    render(<CharacterBuilder mode={{ kind: 'choices', view: start }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture caster spells/ });
+    const hex = (await within(picker).findByRole('checkbox', { name: /Fixture Hex/ })) as HTMLInputElement;
+    await allowOutside(user);
+    await user.click(hex);
+    await waitFor(() => expect(hex.checked).toBe(true));
+    await user.clear(reasonField());
+    const save = screen.getByRole('button', { name: 'Save choices' });
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText('Fixture Hex needs a campaign exception reason.')).toBeTruthy();
+    await user.click(save);
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(save);
+    expect(hex.checked).toBe(true);
+    await user.type(reasonField(), 'DM approved');
+    await user.click(save);
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([expect.objectContaining({ content: outsideSpell.reference, reason: 'DM approved' })]);
+  });
+
+  it('does not ask for a reason for content the saved character already holds', async () => {
+    const user = userEvent.setup();
+    const outsideSpell = { ...spell('fixture-hex', 'Fixture Hex', 1), allowedInCampaign: false };
+    vi.mocked(client.listContent).mockResolvedValue([...spells, outsideSpell]);
+    const start = viewWith([{ caster: caster.contentId, spell: outsideSpell.reference, prepared: true }]);
+    start.character = { ...start.character, campaignId: 'fixture-camp' };
+    render(<CharacterBuilder mode={{ kind: 'choices', view: start }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    await screen.findByRole('checkbox', { name: /Fixture Hex/ });
+    expect(screen.getByRole('button', { name: 'Save choices' }).getAttribute('aria-disabled')).toBeNull();
+    expect(screen.queryByText(/needs a campaign exception reason/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // nothing new to explain
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+  });
+});
