@@ -18,6 +18,8 @@ vi.mock('./api/client', () => ({
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
     listCampaigns: vi.fn(),
+    preview: vi.fn(),
+    createCharacter: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     play: vi.fn(),
@@ -91,6 +93,49 @@ it('two quick opens: only the latest reply is shown (carry 4)', async () => {
   await new Promise((r) => setTimeout(r, 20));
   expect(within(list).getByRole('button', { name: /Fixture Blake/ }).getAttribute('aria-current')).toBe('page');
   expect(within(list).getByRole('button', { name: /Fixture Avery/ }).getAttribute('aria-current')).toBeNull();
+});
+
+/** Walks the create steps by hand (no content installed) up to "Create and save". */
+async function toCreate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'New character' }));
+  await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
+  return screen.findByRole('button', { name: 'Create and save' });
+}
+
+it('a save that lands after the user left the builder refreshes the list and says so, without changing the screen (R36)', async () => {
+  const user = userEvent.setup();
+  const created = viewOf('fixture-new', 'Fixture New');
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.preview).mockResolvedValue(created);
+  vi.mocked(client.createCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  render(<App />);
+  await user.click(await toCreate(user));
+  const lists = vi.mocked(client.listCharacters).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: 'Characters' })); // leaves the builder while the save is in flight
+  await screen.findByRole('region', { name: 'Characters' });
+  finish(created);
+  expect(await screen.findByText('Saved Fixture New.')).toBeTruthy();
+  expect(vi.mocked(client.listCharacters).mock.calls.length).toBeGreaterThan(lists);
+  expect(screen.getByRole('region', { name: 'Characters' })).toBeTruthy(); // still the home screen
+  expect(screen.queryByRole('article', { name: 'Fixture New' })).toBeNull();
+});
+
+it('a slow open never replaces a screen chosen after it (R37)', async () => {
+  const user = userEvent.setup();
+  let reply: (view: CharacterView) => void = () => {};
+  vi.mocked(client.getCharacter).mockReturnValue(new Promise<CharacterView>((r) => (reply = r)));
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'New character' }));
+  expect(await screen.findByRole('textbox', { name: 'Name' })).toBeTruthy();
+  reply(a);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy(); // the builder stays
+  expect(screen.queryByRole('article', { name: 'Fixture Avery' })).toBeNull();
 });
 
 it("a late rest reply for the first character leaves the second character's sheet on screen and shows no status", async () => {

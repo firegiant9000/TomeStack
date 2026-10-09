@@ -964,7 +964,8 @@ it('shows different allowed content for two campaign profiles, and records a rea
   await user.click(screen.getByRole('button', { name: 'New character' }));
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Campaigner');
   const courier = () => screen.getByRole<HTMLInputElement>('radio', { name: /^Fixture Courier/ });
-  const soldier = () => screen.getAllByRole<HTMLInputElement>('radio', { name: /^Soldier/ }).find((r) => !r.disabled);
+  const courierOff = () => courier().getAttribute('aria-disabled') === 'true'; // inert, never natively disabled (2.4.3)
+  const soldier = () => screen.getAllByRole<HTMLInputElement>('radio', { name: /^Soldier/ }).find((r) => r.getAttribute('aria-disabled') !== 'true');
   const toBackground = async () => {
     await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
     await user.click(screen.getByRole('radio', { name: 'Enter by hand' })); // the default method needs all six scores assigned
@@ -977,7 +978,7 @@ it('shows different allowed content for two campaign profiles, and records a rea
   // Profile 1: SRD only. The fixture background is listed but not allowed; the SRD one is.
   await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (srd-5.2.1)');
   await toBackground();
-  await waitFor(() => expect(courier().disabled).toBe(true));
+  await waitFor(() => expect(courierOff()).toBe(true));
   expect(courier().closest('label')!.textContent).toMatch(/not allowed in this campaign/);
   expect(soldier()).toBeTruthy();
 
@@ -985,18 +986,18 @@ it('shows different allowed content for two campaign profiles, and records a rea
   await toRules();
   await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Open (srd-5.2.1)');
   await toBackground();
-  await waitFor(() => expect(courier().disabled).toBe(false));
+  await waitFor(() => expect(courierOff()).toBe(false));
 
   // Back to profile 1, with a deliberate exception: a reason is required before outside content can be picked.
   await toRules();
   await user.selectOptions(screen.getByRole('combobox', { name: 'Campaign' }), 'E2E Strict (srd-5.2.1)');
   await toBackground();
-  await waitFor(() => expect(courier().disabled).toBe(true));
+  await waitFor(() => expect(courierOff()).toBe(true));
   const sources = screen.getByRole('group', { name: 'Campaign sources' });
   await user.click(within(sources).getByRole('checkbox', { name: 'Use content from outside the campaign' }));
-  expect(courier().disabled).toBe(true); // no reason yet
+  expect(courierOff()).toBe(true); // no reason yet
   await user.type(within(sources).getByRole('textbox', { name: /^Reason/ }), 'DM approved');
-  await waitFor(() => expect(courier().disabled).toBe(false));
+  await waitFor(() => expect(courierOff()).toBe(false));
   await user.click(courier());
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
@@ -1420,7 +1421,7 @@ it('drops picks that do not fit when the rules family changes, in the builder an
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
   const species = screen.getByRole('group', { name: 'Species' });
   const halfOrc = () => within(species).getByRole<HTMLInputElement>('radio', { name: /^Half-Orc/ });
-  await waitFor(() => expect(halfOrc().disabled).toBe(false));
+  await waitFor(() => expect(halfOrc().getAttribute('aria-disabled')).toBeNull());
   await user.click(halfOrc());
   expect(halfOrc().checked).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Back' }));

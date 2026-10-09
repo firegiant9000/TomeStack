@@ -121,18 +121,21 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   await user.click(screen.getByRole('button', { name: 'Next: class' }));
   await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ })).toBeTruthy());
   const outsider = screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement;
-  expect(outsider.disabled).toBe(true);
+  expect(outsider.getAttribute('aria-disabled')).toBe('true'); // inert, never natively disabled (2.4.3)
+  expect(outsider.disabled).toBe(false);
   expect(outsider.closest('label')!.textContent).toMatch(/not allowed in this campaign/);
+  await user.click(outsider); // a press on an inert option picks nothing
+  expect(outsider.checked).toBe(false);
   // Of the other family and outside the campaign: the family rule wins (R32), it is never listed, with or without a reason.
   expect(screen.queryByRole('radio', { name: /^Fixture Outlander/ })).toBeNull();
   expect(screen.queryByText(/Options for the other family cannot be selected/)).toBeNull();
   // An own-family option outside the campaign becomes selectable once an exception reason is given (P-01).
   await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
   await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
-  await waitFor(() => expect((screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement).disabled).toBe(false));
+  await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ }).getAttribute('aria-disabled')).toBeNull());
   expect(screen.queryByRole('radio', { name: /^Fixture Outlander/ })).toBeNull();
   await user.clear(screen.getByRole('textbox', { name: /Reason/ }));
-  await waitFor(() => expect((screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement).disabled).toBe(true));
+  await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ }).getAttribute('aria-disabled')).toBe('true'));
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
   expect(screen.queryByText(/Fixture Other Feat/)).toBeNull();
 });
@@ -848,7 +851,7 @@ it('ignores a second Create press, keeps focus on the button when the save fails
   expect(create.textContent).toBe('Create and save');
 });
 
-it('reports nothing and commits nothing once the builder is gone (carry 3)', async () => {
+it('still reports a save that lands after the builder is gone, and raises no error (R36)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
   vi.mocked(client.preview).mockResolvedValue(draftView());
@@ -862,7 +865,76 @@ it('reports nothing and commits nothing once the builder is gone (carry 3)', asy
   await user.click(await screen.findByRole('button', { name: 'Create and save' }));
   cleanup(); // the screen was left while the save was in flight
   pendingCreates[0]!.ok(draftView());
-  await new Promise((r) => setTimeout(r, 20));
-  expect(onCommitted).not.toHaveBeenCalled();
+  await waitFor(() => expect(onCommitted).toHaveBeenCalledTimes(1)); // the save happened: the app must refresh and say so
   expect(onError).not.toHaveBeenCalled();
+});
+
+it('keeps focus on a campaign-outside choice option whose reason is cleared, and on a row when the count fills (N1, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+  const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+  const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+  const third = content(9, 'feature', 'Fixture Third', 'srd-5.1');
+  vi.mocked(client.listContent).mockResolvedValue([mine, outsider, third]);
+  const view = (selected: ContentOption[]) => {
+    const v = choiceView(selected, [mine, outsider, third], 'fixture-camp');
+    v.sheet.choices![0]!.count = 1;
+    return v;
+  };
+  vi.mocked(client.previewChoice).mockImplementation(async (_c, _s, _id, selected) => view([mine, outsider, third].filter((o) => selected.some((s) => s.revisionId === o.reference.revisionId))));
+  render(<CharacterBuilder mode={{ kind: 'choices', view: view([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  const picker = await screen.findByRole('group', { name: /Fixture feature: choose 1/ });
+  const box = (name: RegExp) => within(picker).getByRole('checkbox', { name }) as HTMLInputElement;
+  await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ });
+  // (a) give a reason, tick the outside option, clear the reason, untick it: the box stays enabled and focused.
+  await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
+  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await user.click(box(/Fixture Outsider/));
+  await waitFor(() => expect(box(/Fixture Outsider/).checked).toBe(true));
+  await user.clear(screen.getByRole('textbox', { name: /Reason/ }));
+  await user.click(box(/Fixture Outsider/));
+  await waitFor(() => expect(box(/Fixture Outsider/).checked).toBe(false));
+  expect(box(/Fixture Outsider/).disabled).toBe(false);
+  expect(document.activeElement).toBe(box(/Fixture Outsider/));
+  expect(box(/Fixture Outsider/).getAttribute('aria-disabled')).toBe('true');
+  // (b) tick one, Tab to another row before the answer fills the count: the other row is inert, not disabled, and keeps focus.
+  await user.click(box(/Fixture Mine/));
+  box(/Fixture Third/).focus();
+  await waitFor(() => expect(box(/Fixture Mine/).checked).toBe(true));
+  expect(box(/Fixture Third/).disabled).toBe(false);
+  expect(box(/Fixture Third/).getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(box(/Fixture Third/));
+});
+
+it('ignores a stale preview reply when the Background pick changes while it is pending (N2)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue([...stepContent(), content(5, 'background', 'Fixture Acolyte', 'srd-5.1'), content(6, 'background', 'Fixture Sailor', 'srd-5.1')]);
+  const replies: Array<(view: CharacterView) => void> = [];
+  vi.mocked(client.preview).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Acolyte/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(screen.getByRole('radio', { name: /^Fixture Sailor/ })); // changed before the reply
+  replies[0]!(draftView());
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('form', { name: 'Background' })).toBeTruthy();
+  expect(screen.queryByRole('group', { name: 'Choices' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(vi.mocked(client.preview).mock.calls[1]![0].pins.map((p) => p.contentId)).toContain('fixture-c6');
+  replies[1]!(draftView());
+  const review = await screen.findByRole('region', { name: 'Review' });
+  expect(review.textContent).toMatch(/Background: Fixture Sailor/);
+});
+
+it('says why Next waits while Roll again is in flight (carry N4)', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await rollAndAssignAll(user);
+  expect(screen.queryByText('Rolling the scores…')).toBeNull();
+  const pending = pendingRolls();
+  await user.click(screen.getByRole('button', { name: 'Roll again' }));
+  expect(screen.getByText('Rolling the scores…')).toBeTruthy();
+  expect(nextSpecies().getAttribute('aria-describedby')).toBe('next-hint');
+  await settleRolls(pending, sixSets());
+  await waitFor(() => expect(screen.queryByText('Rolling the scores…')).toBeNull());
 });

@@ -135,9 +135,11 @@ function SinglePick(props: {
           <input
             type="radio"
             name={props.name}
-            disabled={!option.compatible}
+            aria-disabled={!option.compatible || undefined}
             checked={!!props.value && sameRef(props.value, option.reference)}
-            onChange={() => props.onChange(option.reference)}
+            onChange={() => {
+              if (option.compatible) props.onChange(option.reference); // inert, not disabled: a reason typed elsewhere can flip this under focus (2.4.3)
+            }}
           />
           <span className="option-name">{option.name}</span> {sourceLine(option)}
         </label>
@@ -329,17 +331,19 @@ function ScoresStep(props: {
   const inRange = abilityKeys.every((k) => Number.isFinite(pointBuyCost(basics.scores[k])));
   const assigned = !!pool && assignmentComplete(basics.assignment) && assignmentValid(basics.assignment, pool);
   const complete = method === 'manual' || (method === 'pointBuy' ? inRange && spent <= pointBuyBudget : assigned);
-  const nextHint = complete
-    ? undefined
-    : method === 'pointBuy'
-      ? inRange
-        ? 'Spend at most 27 points to continue.'
-        : `Keep every score between ${pointBuyRange.min} and ${pointBuyRange.max} to continue.`
-      : method === 'roll' && basics.rolled.length === 0
-        ? 'Roll the scores to continue.'
-        : 'Assign all six scores to continue.';
-
   const [rolling, setRolling] = useState(false);
+  const nextHint = rolling
+    ? 'Rolling the scores…'
+    : complete
+      ? undefined
+      : method === 'pointBuy'
+        ? inRange
+          ? 'Spend at most 27 points to continue.'
+          : `Keep every score between ${pointBuyRange.min} and ${pointBuyRange.max} to continue.`
+        : method === 'roll' && basics.rolled.length === 0
+          ? 'Roll the scores to continue.'
+          : 'Assign all six scores to continue.';
+
   const rollingNow = useRef(false);
   const [rollNote, setRollNote] = useState('');
   // A roll can finish after the step is gone (Back, Cancel): it then reports nothing.
@@ -576,9 +580,12 @@ function BackgroundStep(props: PickStepProps) {
                   <input
                     id={id}
                     type="checkbox"
-                    disabled={!option.compatible}
+                    aria-disabled={(!option.compatible && !basics.other.some((p) => sameRef(p, option.reference))) || undefined}
                     checked={basics.other.some((p) => sameRef(p, option.reference))}
-                    onChange={() => toggleOther(option)}
+                    onChange={() => {
+                      // Inert while not offerable, but a ticked one can always be unticked (2.4.3: never `disabled` under focus).
+                      if (option.compatible || basics.other.some((p) => sameRef(p, option.reference))) toggleOther(option);
+                    }}
                   />
                   <label htmlFor={id}>
                     <span className="option-name">{option.name}</span> <span className="tag">{option.kind}</span> {sourceLine(option)}
@@ -609,6 +616,7 @@ function LevelStep(props: {
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!target) return;
+    if (newClasses.some((o) => !o.compatible && sameRef(o.reference, target))) return; // the campaign reason was cleared after it was picked
     const existing = character.classes.find((c) => sameRef(c.class, target));
     props.onNext(
       existing
@@ -638,9 +646,11 @@ function LevelStep(props: {
               <input
                 type="radio"
                 name="levelClass"
-                disabled={!option.compatible}
+                aria-disabled={!option.compatible || undefined}
                 checked={!!target && sameRef(target, option.reference)}
-                onChange={() => setTarget(option.reference)}
+                onChange={() => {
+                  if (option.compatible) setTarget(option.reference);
+                }}
               />
               {option.name} (new class, level 1) {sourceLine(option)}
             </label>
@@ -702,14 +712,14 @@ function ChoicePicker(props: {
           // D31: an option of the other family is not offered, unless it was chosen when the picker appeared (an imported character).
           const kept = atMount.has(ref.revisionId);
           if (option && !visible(option) && !checked && !kept) return null;
-          const inert = !checked && kept && (full || unavailable);
+          // Never natively `disabled`: the count fills, or the campaign reason changes, while a row can hold the focus (2.4.3).
+          const inert = !checked && (full || unavailable);
           return (
             <li key={ref.revisionId} className={unavailable ? 'incompatible' : ''}>
               <input
                 id={id}
                 type="checkbox"
                 checked={checked}
-                disabled={!checked && !kept && (full || unavailable)}
                 aria-disabled={inert || undefined}
                 onChange={() => {
                   if (!inert) props.onChange(ref, !checked);
@@ -1023,6 +1033,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     heading.current?.focus();
   }, [step]);
 
+  // N2: a pick changed while a preview is pending (another Background, Other content, a listing that drops a pick) makes the
+  // reply stale: it would build a draft the Review no longer describes. Withdraw it; Next previews the current picks.
+  useEffect(() => {
+    previewSeq.current.next();
+  }, [basics]);
+
   // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
   const pickable = options.filter((o) => !o.superseded);
   const byRevision = new Map(options.map((o) => [o.reference.revisionId, o]));
@@ -1107,7 +1123,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               spells: draft.spells,
             })
           : await client.saveCharacter(draft);
-      if (mounted.current) onCommitted(saved);
+      onCommitted(saved); // always: the save happened, so the list refreshes and the app says so even if the player has left (R36)
     } catch (error) {
       fail(error);
     } finally {

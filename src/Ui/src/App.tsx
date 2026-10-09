@@ -83,16 +83,30 @@ export function App() {
   }, [onError]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
-  const openSeq = useRef(0);
+  // R37: any change of screen kind also withdraws a pending open, so a slow open never replaces a screen chosen after it.
+  const openSeq = useRef({
+    n: 0,
+    next() {
+      this.n += 1;
+      return this.n;
+    },
+  });
+  const screenNow = useRef(screen);
+  useEffect(() => {
+    screenNow.current = screen;
+  }, [screen]);
+  useEffect(() => {
+    openSeq.current.next();
+  }, [screen.kind]);
   async function open(id: string, tab?: SheetTabId) {
-    const request = ++openSeq.current;
+    const request = openSeq.current.next();
     try {
       setMessage(undefined);
       const view = await client.getCharacter(id);
-      if (request !== openSeq.current) return;
+      if (request !== openSeq.current.n) return;
       setScreen({ kind: 'sheet', view, tab });
     } catch (error) {
-      if (request === openSeq.current) onError(error);
+      if (request === openSeq.current.n) onError(error);
     }
   }
 
@@ -326,15 +340,26 @@ export function App() {
                 client
                   .getCharacter(id)
                   .then((view) => setScreen((current) => (current.kind === 'sheet' && current.view.character.id === id ? { ...current, view } : current)))
-                  .catch(onError);
+                  .catch((error) => {
+                    // Only while that sheet is still the screen (R37).
+                    const now = screenNow.current;
+                    if (now.kind === 'sheet' && now.view.character.id === id) onError(error);
+                  });
               }
               setMessage({ tone: 'status', text: 'Draft discarded. Nothing was changed.' });
             }}
             onCommitted={async (view) => {
-              setMessage(undefined);
+              // R36: a save that lands is never lost silently. The list is always refreshed; the sheet opens only while this
+              // builder is still the screen, otherwise the status says what happened and the screen stays where it is.
+              const builder = screen.mode;
               await refresh();
-              // Only while this builder is still the screen: a Cancel (or another screen) in the meantime wins.
-              setScreen((current) => (current.kind === 'builder' ? { kind: 'sheet', view } : current));
+              const now = screenNow.current;
+              if (now.kind === 'builder' && now.mode === builder) {
+                setMessage(undefined);
+                setScreen({ kind: 'sheet', view });
+              } else {
+                setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
+              }
             }}
           />
         )}
