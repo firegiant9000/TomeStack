@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterView, ContentOption, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
-import { CharacterBuilder } from './CharacterBuilder';
+import { CharacterBuilder, campaignLabel } from './CharacterBuilder';
 
 vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -138,6 +138,81 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   await waitFor(() => expect(screen.getByRole('radio', { name: /^Fixture Outsider/ }).getAttribute('aria-disabled')).toBe('true'));
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
   expect(screen.queryByText(/Fixture Other Feat/)).toBeNull();
+});
+
+describe('the review list Campaign row (carry 8)', () => {
+  const camps = [{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1' as const, allowedSources: [] }];
+  it('says none without a campaign, whatever the list state', () => {
+    expect(campaignLabel(undefined, camps, 'loaded')).toBe('none');
+    expect(campaignLabel(undefined, [], 'loading')).toBe('none');
+  });
+  it('shows the campaign name once known, even if a later list failed', () => {
+    expect(campaignLabel('fixture-camp', camps, 'loaded')).toBe('Fixture Campaign');
+    expect(campaignLabel('fixture-camp', camps, 'failed')).toBe('Fixture Campaign');
+  });
+  it('says loading while the list loads, never none', () => {
+    expect(campaignLabel('fixture-camp', [], 'loading')).toBe('loading…');
+  });
+  it('names an unknown campaign once loaded, and the id when the list failed', () => {
+    expect(campaignLabel('fixture-gone', camps, 'loaded')).toBe('(unknown campaign)');
+    expect(campaignLabel('fixture-gone', [], 'failed')).toBe('(unknown campaign fixture-gone)');
+  });
+});
+
+describe('arrow keys onto an inert (aria-disabled) radio', () => {
+  // user-event walks a radio group with CSS.escape, which jsdom lacks; the group names here need no escaping.
+  beforeEach(() => {
+    const css = ((window as unknown as { CSS?: { escape?: (s: string) => string } }).CSS ??= {});
+    css.escape ??= (s: string) => s;
+  });
+
+  /** Walks to the Class step inside a campaign where "Fixture Outsider" is outside it (inert) and optionally "Fixture Warden" is pickable. */
+  async function toClassStep(user: ReturnType<typeof userEvent.setup>, withWarden: boolean) {
+    vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+    vi.mocked(client.listContent).mockResolvedValue([
+      ...(withWarden ? [content(3, 'class', 'Fixture Warden', 'srd-5.1')] : []),
+      content(4, 'class', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false }),
+    ]);
+    renderCreate();
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+    await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+    await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+    await user.click(screen.getByRole('button', { name: 'Next: species' }));
+    await user.click(await screen.findByRole('button', { name: 'Next: class' }));
+    await screen.findByRole('radio', { name: /^Fixture Outsider/ });
+  }
+
+  it('does not pick the inert option when arrowing from a real pick, and focus stays in the group', async () => {
+    const user = userEvent.setup();
+    await toClassStep(user, true);
+    const warden = screen.getByRole('radio', { name: /^Fixture Warden/ }) as HTMLInputElement;
+    const outsider = screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement;
+    await user.click(warden);
+    expect(warden.checked).toBe(true);
+    const nextBefore = screen.getByRole('button', { name: 'Next: background' }).getAttribute('aria-disabled');
+    await user.keyboard('{ArrowDown}');
+    expect(outsider.getAttribute('aria-disabled')).toBe('true');
+    expect(outsider.checked).toBe(false);
+    expect(warden.checked).toBe(true);
+    const group = warden.closest('fieldset')!;
+    expect(group.contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole('button', { name: 'Next: background' }).getAttribute('aria-disabled')).toBe(nextBefore);
+  });
+
+  it('keeps None as the pick when arrowing onto the inert option', async () => {
+    const user = userEvent.setup();
+    await toClassStep(user, false);
+    const none = screen.getAllByRole('radio', { name: 'None' })[0] as HTMLInputElement;
+    const outsider = screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement;
+    expect(none.closest('fieldset')).toBe(outsider.closest('fieldset'));
+    none.focus();
+    expect(none.checked).toBe(true);
+    await user.keyboard('{ArrowDown}');
+    expect(outsider.checked).toBe(false);
+    expect(none.checked).toBe(true);
+    expect(none.closest('fieldset')!.contains(document.activeElement)).toBe(true);
+  });
 });
 
 it('keeps a checked option of the other family in a choice, and omits an unchecked one (D31)', async () => {

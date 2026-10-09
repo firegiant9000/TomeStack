@@ -164,7 +164,6 @@ it('pressing New character during a save mounts a fresh empty builder; the save 
   // The new builder starts empty at step 1; the saved draft is not offered again.
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
   expect(screen.getByText(/^Step 1 of 6/)).toBeTruthy();
-  finish(created);
   expect(await screen.findByText('Saved Fixture New.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Create and save' })).toBeNull();
   expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');

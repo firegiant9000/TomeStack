@@ -838,6 +838,15 @@ function SpellPicker(props: {
   );
 }
 
+/** The review list's Campaign row: never "none" for a campaign the character has: its name once known, else loading or the id. */
+export function campaignLabel(campaignId: string | undefined, campaigns: Campaign[], state: 'loading' | 'loaded' | 'failed'): string {
+  if (!campaignId) return 'none';
+  const found = campaigns.find((c) => c.id === campaignId);
+  if (found) return found.name;
+  if (state === 'loading') return 'loading…';
+  return state === 'failed' ? `(unknown campaign ${campaignId})` : '(unknown campaign)';
+}
+
 function ChoicesStep(props: {
   view: CharacterView;
   commitLabel: string;
@@ -1283,8 +1292,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               ? {
                   name: basics.name.trim(),
                   family: policy?.displayName ?? basics.rulesFamily,
-                  // Never "none" for a campaign the character has: its name once known, else loading or the id.
-                  campaign: !basics.campaignId ? undefined : (campaign?.name ?? (campaignsState === 'loading' ? 'loading…' : campaignsState === 'failed' ? `(unknown campaign ${basics.campaignId})` : '(unknown campaign)')),
+                  campaign: campaignLabel(basics.campaignId, campaigns, campaignsState),
                   scores: basics.scores,
                   method: scoreMethods.find((m) => m.id === basics.scoreMethod)!.label.toLowerCase(),
                   species: basics.species && nameOf(basics.species),

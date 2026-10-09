@@ -19,3 +19,25 @@ it('writes the headline as the Last roll region does', () => {
 it('lists every die, the constant and the modifiers', () => {
   expect(diceLine(record({ expressionConstant: 2 }))).toBe('Dice: d20 14, d20 7 (dropped) · constant 2 · Strength +3');
 });
+
+it('shows a negative modifier with its minus and no plus', () => {
+  expect(diceLine(record({ modifiers: [{ label: 'Fixture Penalty', amount: -2 }] }))).toBe('Dice: d20 14, d20 7 (dropped) · Fixture Penalty -2');
+});
+
+it('marks a critical die', () => {
+  const crit = record({
+    mode: 'normal', critical: true, modifiers: [],
+    dice: [{ term: 0, sides: 8, value: 5, kept: true, fromCritical: false }, { term: 0, sides: 8, value: 3, kept: true, fromCritical: true }],
+  });
+  expect(diceLine(crit)).toBe('Dice: d8 5, d8 3 (critical)');
+});
+
+it('has no trailing separator without modifiers or a constant', () => {
+  const plain = diceLine(record({ modifiers: [], expressionConstant: 0, dice: [{ term: 0, sides: 20, value: 9, kept: true, fromCritical: false }] }));
+  expect(plain).toBe('Dice: d20 9');
+  expect(plain).not.toContain('·');
+});
+
+it('names disadvantage in the headline', () => {
+  expect(rollHeadline(record({ mode: 'disadvantage' }))).toBe('Strength check: 17 (1d20+3, disadvantage)');
+});
