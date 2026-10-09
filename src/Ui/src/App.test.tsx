@@ -150,7 +150,7 @@ it('a level-up saved while the same character was opened again shows the saved s
   expect(await screen.findByRole('heading', { name: 'Fixture Avery Leveled' })).toBeTruthy();
 });
 
-it('a save that lands while a new builder replaced the old one under the same key leaves the new builder usable (R39 case 1)', async () => {
+it('pressing New character during a save mounts a fresh empty builder; the save still reports, and the old draft is gone (R40)', async () => {
   const user = userEvent.setup();
   const created = viewOf('fixture-new', 'Fixture New');
   let finish: (view: CharacterView) => void = () => {};
@@ -161,9 +161,30 @@ it('a save that lands while a new builder replaced the old one under the same ke
   await user.click(create);
   await user.click(screen.getByRole('button', { name: 'New character' })); // a new builder mode while the save is in flight
   finish(created);
+  // The new builder starts empty at step 1; the saved draft is not offered again.
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
+  expect(screen.getByText(/^Step 1 of 6/)).toBeTruthy();
+  finish(created);
   expect(await screen.findByText('Saved Fixture New.')).toBeTruthy();
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Create and save' }).getAttribute('aria-disabled')).toBeNull());
-  expect(screen.getByRole('button', { name: 'Create and save' }).textContent).toBe('Create and save');
+  expect(screen.queryByRole('button', { name: 'Create and save' })).toBeNull();
+  expect((screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement).value).toBe('');
+  expect(vi.mocked(client.createCharacter)).toHaveBeenCalledTimes(1);
+});
+
+it('says the save succeeded when only the list refresh fails after the user has left the builder (R40)', async () => {
+  const user = userEvent.setup();
+  const created = viewOf('fixture-new', 'Fixture New');
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.preview).mockResolvedValue(created);
+  vi.mocked(client.createCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  render(<App />);
+  await user.click(await toCreate(user));
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await screen.findByRole('region', { name: 'Characters' });
+  vi.mocked(client.listCharacters).mockRejectedValueOnce(new Error('fixture refresh failure'));
+  finish(created);
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toBe('Saved Fixture New. The character list could not be refreshed: fixture refresh failure');
 });
 
 it('a failing list refresh after a save leaves the saved sheet open, reports the error and sticks nothing (R39 case 2)', async () => {

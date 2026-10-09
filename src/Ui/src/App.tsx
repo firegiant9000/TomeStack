@@ -83,6 +83,14 @@ export function App() {
   }, [onError]);
 
   // Only the latest open applies: two quick opens can be answered out of order.
+  // R40: every "New character" mounts a fresh builder, so a draft that is being saved is never offered again.
+  const [builderKey, setBuilderKey] = useState(0);
+  function startCreate() {
+    setMessage(undefined);
+    setBuilderKey((k) => k + 1);
+    setScreen({ kind: 'builder', mode: { kind: 'create' } });
+  }
+
   // R37: any change of screen kind also withdraws a pending open, so a slow open never replaces a screen chosen after it.
   const openSeq = useRef({
     n: 0,
@@ -196,10 +204,7 @@ export function App() {
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button
             type="button"
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'builder', mode: { kind: 'create' } });
-            }}
+            onClick={startCreate}
             disabled={!info}
           >
             New character
@@ -315,17 +320,14 @@ export function App() {
           <HomePanel
             characters={characters}
             onOpen={(id) => void open(id)}
-            onNew={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'builder', mode: { kind: 'create' } });
-            }}
+            onNew={startCreate}
             canCreate={!!info}
             focusOnMount={screen.focus !== false}
           />
         )}
         {screen.kind === 'builder' && info && (
           <CharacterBuilder
-            key={screen.mode.kind === 'create' ? 'create' : `${screen.mode.kind}-${screen.mode.view.character.id}`}
+            key={screen.mode.kind === 'create' ? `create-${builderKey}` : `${screen.mode.kind}-${screen.mode.view.character.id}`}
             mode={screen.mode}
             rulesFamilies={info.rulesFamilies}
             onError={onError}
@@ -355,7 +357,8 @@ export function App() {
               // leave the builder stuck or overwrite a newer view.
               const builder = screen.mode;
               const now = screenNow.current;
-              if (now.kind === 'builder' && now.mode === builder) {
+              const stillHere = now.kind === 'builder' && now.mode === builder;
+              if (stillHere) {
                 setMessage(undefined);
                 setScreen({ kind: 'sheet', view });
               } else {
@@ -367,7 +370,9 @@ export function App() {
               try {
                 await refresh();
               } catch (error) {
-                onError(error);
+                // The save succeeded; the player must not read a list error as a failed save (R40).
+                if (stillHere) onError(error);
+                else setMessage({ tone: 'error', text: `Saved ${view.character.name}. The character list could not be refreshed: ${describeError(error)}` });
               }
             }}
           />
