@@ -484,9 +484,22 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <button type="button" ref={longRestButton} onClick={() => toggleRest('longRest')} aria-expanded={resting === 'longRest'} aria-controls={resting ? 'rest-panel' : undefined}>
           Long rest…
         </button>
-        <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
+        {/* aria-disabled with a visible reason, not native disabled: a disabled button leaves the tab order and says nothing (3.3.2, 4.1.2). */}
+        <button
+          type="button"
+          onClick={() => {
+            if (character.level < 20) onLevelUp();
+          }}
+          aria-disabled={character.level >= 20 || undefined}
+          aria-describedby={character.level >= 20 ? 'level-up-hint' : undefined}
+        >
           Level up
         </button>
+        {character.level >= 20 && (
+          <span id="level-up-hint" className="hint">
+            Already at level 20, the highest level.
+          </span>
+        )}
         <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>

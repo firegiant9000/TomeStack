@@ -680,9 +680,11 @@ function LevelStep(props: {
           ))}
         </fieldset>
       )}
-      <p className="hint">
-        Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
-      </p>
+      {!atMaximum && (
+        <p className="hint">
+          Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
+        </p>
+      )}
       <div className="actions">
         <button type="submit" aria-disabled={!!blocked || undefined} aria-describedby={blocked ? 'next-hint' : undefined}>
           Next: choices
@@ -1089,18 +1091,27 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // R41: a pick made in this builder (not one the saved character already holds, nor one with a recorded exception) of content
   // the campaign does not allow needs a reason now; the names of those that lack it block the step's Next or the save.
   const original = mode.kind === 'create' ? undefined : mode.view.character;
-  const held = original ? [...original.pins, ...original.classes.map((c) => c.class), ...original.choices.flatMap((c) => c.selected), ...(original.spells ?? []).map((s) => s.spell)] : [];
-  function reasonNames(refs: (ContentReference | undefined)[]): string[] {
+  // A pick is held by where it sits: a spell by its caster, a choice option by its source and choice (the same content for
+  // another caster or choice is a new pick); pins and classes by the content itself.
+  type Pick = { ref: ContentReference; key: string };
+  const plain = (r: ContentReference): Pick => ({ ref: r, key: `ref:${r.revisionId}` });
+  const picksOf = (c: Character): Pick[] => [
+    ...c.pins.map(plain),
+    ...c.classes.map((k) => plain(k.class)),
+    ...c.choices.flatMap((k) => k.selected.map((r) => ({ ref: r, key: `choice:${k.source.revisionId}/${k.choiceId}/${r.revisionId}` }))),
+    ...(c.spells ?? []).map((s) => ({ ref: s.spell, key: `spell:${s.caster}/${s.spell.revisionId}` })),
+  ];
+  const held = new Set(original ? picksOf(original).map((p) => p.key) : []);
+  function needReason(picks: Pick[]): string[] {
     if (outsideAllowed) return [];
-    const names = refs
-      .filter((r): r is ContentReference => !!r)
-      .filter((r) => listed.find((o) => sameRef(o.reference, r))?.allowedInCampaign === false)
-      .filter((r) => !held.some((h) => sameRef(h, r)) && !(original?.campaignExceptions ?? []).some((e) => sameRef(e.content, r)))
-      .map(nameOf);
+    const names = picks
+      .filter((p) => listed.find((o) => sameRef(o.reference, p.ref))?.allowedInCampaign === false)
+      .filter((p) => !held.has(p.key) && !(original?.campaignExceptions ?? []).some((e) => sameRef(e.content, p.ref)))
+      .map((p) => nameOf(p.ref));
     return [...new Set(names)];
   }
-  const draftRefs = (c: Character) => [...c.pins, ...c.classes.map((k) => k.class), ...c.choices.flatMap((k) => k.selected), ...(c.spells ?? []).map((s) => s.spell)];
-  const commitHint = view ? reasonHint(reasonNames(draftRefs(view.character))) : undefined;
+  const reasonNames = (refs: (ContentReference | undefined)[]) => needReason(refs.filter((r): r is ContentReference => !!r).map(plain));
+  const commitHint = view ? reasonHint(needReason(picksOf(view.character))) : undefined;
 
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still

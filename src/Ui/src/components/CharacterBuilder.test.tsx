@@ -1207,6 +1207,35 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([expect.objectContaining({ content: outsideSpell.reference, reason: 'DM approved' })]);
   });
 
+  it('asks for a reason when a spell the character holds for one caster is added for another caster', async () => {
+    const user = userEvent.setup();
+    const outsideSpell = { ...spell('fixture-hex', 'Fixture Hex', 1), allowedInCampaign: false };
+    vi.mocked(client.listContent).mockResolvedValue([...spells, outsideSpell]);
+    const twoCasters = (recorded: Character['spells']): CharacterView => {
+      const v = viewWith(recorded);
+      const first = v.sheet.spellcasting![0]!;
+      v.sheet.spellcasting = [first, { ...first, content: { contentId: 'fixture-caster-b', revisionId: 'fixture-caster-b-r1' }, name: 'Fixture second caster' }];
+      return v;
+    };
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({ ...twoCasters(draft.spells), character: draft }));
+    const start = twoCasters([{ caster: caster.contentId, spell: outsideSpell.reference, prepared: true }]); // held for caster A
+    start.character = { ...start.character, campaignId: 'fixture-camp' };
+    render(<CharacterBuilder mode={{ kind: 'choices', view: start }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const second = await screen.findByRole('group', { name: /Fixture second caster spells/ });
+    const save = screen.getByRole('button', { name: 'Save choices' });
+    expect(save.getAttribute('aria-disabled')).toBeNull(); // what is held asks nothing
+    const hexB = (await within(second).findByRole('checkbox', { name: /Fixture Hex/ })) as HTMLInputElement;
+    await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
+    await user.type(reasonField(), 'DM approved');
+    await user.click(hexB);
+    await waitFor(() => expect(hexB.checked).toBe(true));
+    await user.clear(reasonField()); // the same spell for caster B is a new pick
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText('Fixture Hex needs a campaign exception reason.')).toBeTruthy();
+    await user.click(save);
+    expect(vi.mocked(client.saveCharacter)).not.toHaveBeenCalled();
+  });
+
   it('does not ask for a reason for content the saved character already holds', async () => {
     const user = userEvent.setup();
     const outsideSpell = { ...spell('fixture-hex', 'Fixture Hex', 1), allowedInCampaign: false };
@@ -1240,6 +1269,7 @@ describe('level-up Next states its reason (R43)', () => {
     expect(next.hasAttribute('disabled')).toBe(false);
     expect(next.getAttribute('aria-describedby')).toBe('next-hint');
     expect(document.getElementById('next-hint')!.textContent).toBe('Already at level 20, the highest level.');
+    expect(screen.queryByText(/Hit points use the fixed value/)).toBeNull(); // advice for a level that cannot be gained
     await user.click(next);
     expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(next);

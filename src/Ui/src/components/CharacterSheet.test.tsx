@@ -879,3 +879,26 @@ it('logs a rest hit die without showing it, and keeps the log newest first by ti
   expect(items[1]).toMatch(/Roll A: 9/);
   vi.mocked(Date.now).mockRestore();
 });
+
+it('says why "Level up" is unavailable at level 20, and does nothing when pressed (R43)', async () => {
+  const user = userEvent.setup();
+  const onLevelUp = vi.fn();
+  const v = view();
+  v.character = { ...v.character, level: 20 };
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={onLevelUp} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const button = screen.getByRole('button', { name: 'Level up' });
+  expect(button.getAttribute('aria-disabled')).toBe('true'); // never native disabled: it stays reachable with its reason
+  expect(button.hasAttribute('disabled')).toBe(false);
+  expect(button.getAttribute('aria-describedby')).toBe('level-up-hint');
+  expect(document.getElementById('level-up-hint')!.textContent).toBe('Already at level 20, the highest level.');
+  await user.click(button);
+  expect(onLevelUp).not.toHaveBeenCalled();
+  cleanup();
+  render(<CharacterSheet view={view()} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={onLevelUp} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const open = screen.getByRole('button', { name: 'Level up' });
+  expect(open.getAttribute('aria-disabled')).toBeNull();
+  expect(open.hasAttribute('aria-describedby')).toBe(false);
+  expect(document.getElementById('level-up-hint')).toBeNull();
+  await user.click(open);
+  expect(onLevelUp).toHaveBeenCalledTimes(1);
+});
