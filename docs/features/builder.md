@@ -61,7 +61,7 @@ Vitest: `CharacterBuilder.test.tsx` (steps, methods, review). e2e: the `createCh
 
 ## Accessibility (WCAG 2.2 AA, D05)
 
-Radio groups and choice groups are `fieldset`/`legend`. Each step change moves focus to the builder heading (2.4.3). Each step is a named form, the selects and spinbuttons are labelled, Next is `aria-describedby` its reason when disabled, and the roll is announced politely (checklist row 45). The review list is a labelled region whose values wrap, so it reflows at 400% (1.4.10). The e2e test drives the whole flow by role and accessible name only.
+Radio groups and choice groups are `fieldset`/`legend`. Each step change moves focus to the builder heading (2.4.3). Each step is a named form, the selects and spinbuttons are labelled, Next is `aria-disabled` (never natively disabled, so it cannot lose focus) and `aria-describedby` its reason while it waits, the commit buttons and Cancel are `aria-disabled` while a save is in flight, and the roll is announced politely (checklist row 45). The review list is a labelled region whose values wrap, so it reflows at 400% (1.4.10). The e2e test drives the whole flow by role and accessible name only.
 
 ## Not in this slice
 

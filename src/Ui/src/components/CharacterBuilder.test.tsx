@@ -336,6 +336,12 @@ async function toScores(user: ReturnType<typeof userEvent.setup>, onError: (erro
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
 }
 const nextSpecies = () => screen.getByRole('button', { name: 'Next: species' }) as HTMLButtonElement;
+/** Next is aria-disabled, never natively `disabled` (2.4.3). */
+const nextOff = () => {
+  const button = nextSpecies();
+  expect(button.disabled).toBe(false);
+  return button.getAttribute('aria-disabled') === 'true';
+};
 const arrayOrder = [['Strength', '15'], ['Dexterity', '14'], ['Constitution', '13'], ['Intelligence', '12'], ['Wisdom', '10'], ['Charisma', '8']] as const;
 async function assignArray(user: ReturnType<typeof userEvent.setup>) {
   const group = screen.getByRole('group', { name: 'Assign the standard array' });
@@ -361,7 +367,7 @@ it('assigns the standard array once each and refuses a duplicate value (Review F
   const user = userEvent.setup();
   await toScores(user);
   const group = screen.getByRole('group', { name: 'Assign the standard array' });
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   expect(screen.getByText('Assign all six scores to continue.')).toBeTruthy();
   expect(nextSpecies().getAttribute('aria-describedby')).toBe('next-hint');
   expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
@@ -373,10 +379,10 @@ it('assigns the standard array once each and refuses a duplicate value (Review F
   expect(dex.value).toBe('');
   expect(within(dex).getByRole('option', { name: 'Choose' }).textContent).toBe('Choose');
   expect(screen.getByText('Assigned: 1 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   for (const [label, value] of arrayOrder.slice(1)) await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   expect(screen.queryByText('Assign all six scores to continue.')).toBeNull();
   expect(screen.getByText(/Base scores: Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8/)).toBeTruthy();
 });
@@ -420,7 +426,7 @@ it('counts point buy against 27 and blocks Next when over budget', async () => {
   const group = screen.getByRole('group', { name: 'Point buy' });
   expect(screen.getByText('Points left: 27 of 27')).toBeTruthy();
   expect(screen.getByText('You can still spend 27 points.')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   for (const label of ['Strength', 'Dexterity', 'Constitution'] as const) {
     const input = within(group).getByRole('spinbutton', { name: label });
     await user.clear(input);
@@ -432,7 +438,7 @@ it('counts point buy against 27 and blocks Next when over budget', async () => {
   await user.clear(wis);
   await user.type(wis, '9');
   expect(screen.getByText('Points left: -1 of 27')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   expect(screen.getByText('Spend at most 27 points to continue.')).toBeTruthy();
 });
 
@@ -443,7 +449,7 @@ it('blocks Next for a point buy score outside 8 to 15', async () => {
   const str = within(screen.getByRole('group', { name: 'Point buy' })).getByRole('spinbutton', { name: 'Strength' });
   await user.clear(str);
   await user.type(str, '16');
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
 });
 
 it('keeps focus on the method radios, resets point buy to all 8, and keeps the last scores when going to Enter by hand', async () => {
@@ -459,7 +465,7 @@ it('keeps focus on the method radios, resets point buy to all 8, and keeps the l
   // Back to the array: the assignment made earlier is still there and gives the scores again.
   await user.click(screen.getByRole('radio', { name: 'Standard array' }));
   expect((within(screen.getByRole('group', { name: 'Assign the standard array' })).getByRole('combobox', { name: 'Strength' }) as HTMLSelectElement).value).toBe('15');
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   expect(screen.getByText(/Base scores: Str 15, Dex 14/)).toBeTruthy();
 });
 
@@ -469,7 +475,7 @@ it('rolls six sets through dice.roll with keepHighest 3 and assigns them', async
   await toScores(user);
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   expect(screen.getByText('Roll the scores to continue.')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   const status = screen.getByRole('status');
   expect(status.textContent).toBe('');
   const button = screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' });
@@ -522,7 +528,7 @@ it('reports a roll error and never leaves a partial pool assignable; a failed re
   expect(screen.queryByRole('list', { name: 'Rolled sets' })).toBeNull();
   expect(screen.queryByRole('group', { name: 'Assign the rolled scores' })).toBeNull();
   expect(screen.getByRole('status').textContent).toBe('');
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   expect(document.activeElement).toBe(button);
   // A full roll, then a failure part-way: the complete set stays, with its assignment.
   queueSets(sixSets());
@@ -544,15 +550,15 @@ it('a new roll clears the rolled assignment; switching methods drops an assignme
   await assignArray(user);
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   // Nothing is rolled yet, so the empty pool cannot hold the array assignment: the switch itself clears it.
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   await user.click(screen.getByRole('radio', { name: 'Standard array' }));
   expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
   await screen.findByText('Roll 1: 14 (6, 5, 3, dropped 2)');
   expect(screen.getByText('Assigned: 0 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(true);
+  expect(nextOff()).toBe(true);
 });
 
 // Six sets whose totals are the standard array (15, 14, 13, 12, 10, 8): 4d6 drop lowest, the dropped die is a 1.
@@ -567,13 +573,13 @@ it('keeps a complete rolled assignment across a switch to the array and back, an
   const group = await screen.findByRole('group', { name: 'Assign the rolled scores' });
   for (const [label, value] of [['Strength', '8'], ['Dexterity', '10'], ['Constitution', '12'], ['Intelligence', '13'], ['Wisdom', '14'], ['Charisma', '15']] as const)
     await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   await user.click(screen.getByRole('radio', { name: 'Standard array' }));
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
   expect(screen.getByText(/Base scores: Str 8, Dex 10, Con 12, Int 13, Wis 14, Cha 15/)).toBeTruthy();
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   expect(screen.getByText(/Base scores: Str 8, Dex 10, Con 12, Int 13, Wis 14, Cha 15/)).toBeTruthy();
 });
 
@@ -610,7 +616,7 @@ it('keeps an assignment made in the array when a roll arrives late', async () =>
   }
   await new Promise((r) => setTimeout(r, 20));
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
-  expect(nextSpecies().disabled).toBe(false);
+  expect(nextOff()).toBe(false);
   expect(screen.getByText(/Base scores: Str 15, Dex 14/)).toBeTruthy();
 });
 
@@ -665,4 +671,172 @@ it('shows no few-options hint after a failed listing', async () => {
   await user.click(nextSpecies());
   await waitFor(() => expect(onError).toHaveBeenCalled());
   expect(screen.queryByText(/installed for/)).toBeNull();
+});
+
+// Checkpoint B fixes G2 (2.4.3, async): Next, the roll, the preview and the commit never act on a draft that has moved on.
+const pendingRolls = () => {
+  const pending: Array<(value: never) => void> = [];
+  vi.mocked(client.rollDice).mockImplementation(() => new Promise((resolve) => pending.push(resolve as never)));
+  return pending;
+};
+const settleRolls = async (pending: Array<(value: never) => void>, sets: ReturnType<typeof sixSets>) => {
+  for (const s of sets) {
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    pending.shift()!(s as never);
+  }
+};
+const rollAndAssignAll = async (user: ReturnType<typeof userEvent.setup>) => {
+  queueSets(arrayTotals());
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  const group = await screen.findByRole('group', { name: 'Assign the rolled scores' });
+  for (const [label, value] of [['Strength', '8'], ['Dexterity', '10'], ['Constitution', '12'], ['Intelligence', '13'], ['Wisdom', '14'], ['Charisma', '15']] as const)
+    await user.selectOptions(within(group).getByRole('combobox', { name: label }), value);
+};
+
+it('keeps Next inert and focused while Roll again is in flight, and a landing roll leaves it inert (2.4.3)', async () => {
+  const user = userEvent.setup();
+  await toScores(user);
+  await rollAndAssignAll(user);
+  expect(nextOff()).toBe(false);
+  const pending = pendingRolls();
+  await user.click(screen.getByRole('button', { name: 'Roll again' }));
+  const next = nextSpecies();
+  expect(next.getAttribute('aria-disabled')).toBe('true');
+  next.focus();
+  await user.click(next); // pressed while rolling: nothing happens
+  expect(screen.getByRole('form', { name: 'Ability scores' })).toBeTruthy();
+  await settleRolls(pending, sixSets());
+  expect(await screen.findByText('Assigned: 0 of 6')).toBeTruthy();
+  expect(nextSpecies()).toBe(next); // the same element, never replaced or natively disabled
+  expect(next.disabled).toBe(false);
+  expect(next.getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(next);
+});
+
+it('drops a roll that lands after the step was left, and the draft keeps its scores', async () => {
+  const user = userEvent.setup();
+  const pending = pendingRolls();
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Roll' }));
+  await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  await settleRolls(pending, sixSets());
+  await new Promise((r) => setTimeout(r, 20));
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  expect(screen.queryByRole('list', { name: 'Rolled sets' })).toBeNull();
+  expect(screen.getByText('Roll the scores to continue.')).toBeTruthy();
+});
+
+it('previews with the rolled assignment as the base scores (L5)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  await toScores(user);
+  await rollAndAssignAll(user);
+  for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
+  await screen.findByRole('group', { name: 'Choices' });
+  expect(vi.mocked(client.preview).mock.calls[0]![0].baseAbilities).toEqual({ str: 8, dex: 10, con: 12, int: 13, wis: 14, cha: 15 });
+});
+
+it('asks for a name before Next, with the reason linked to the button (carry 7)', async () => {
+  const user = userEvent.setup();
+  renderCreate();
+  const next = screen.getByRole('button', { name: 'Next: ability scores' });
+  expect(next.getAttribute('aria-disabled')).toBe('true');
+  expect(next.hasAttribute('disabled')).toBe(false);
+  expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+  expect(screen.getByText('Enter a name to continue.')).toBeTruthy();
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), '   ');
+  expect(next.getAttribute('aria-disabled')).toBe('true');
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  expect(next.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Enter a name to continue.')).toBeNull();
+});
+
+const twoClasses = () => [content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(3, 'class', 'Fixture Warden', 'srd-5.1'), content(4, 'class', 'Fixture Ranger', 'srd-5.1')];
+async function toBackground(user: ReturnType<typeof userEvent.setup>, cls: RegExp, extra: { onCommitted?: () => void; onCancel?: () => void; onError?: (e: unknown) => void } = {}) {
+  render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={extra.onCommitted ?? (() => {})} onCancel={extra.onCancel ?? (() => {})} onError={extra.onError ?? (() => {})} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(screen.getByRole('button', { name: 'Next: species' }));
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Hillfolk/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(screen.getByRole('radio', { name: cls }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+}
+
+it('cancels the jump to the choices when Back is pressed while the preview is pending (L2)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(twoClasses());
+  const replies: Array<(view: CharacterView) => void> = [];
+  vi.mocked(client.preview).mockImplementation(() => new Promise((resolve) => replies.push(resolve)));
+  await toBackground(user, /^Fixture Warden/);
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(screen.getByRole('button', { name: 'Back' })); // to Class, before the preview answers
+  await user.click(screen.getByRole('radio', { name: /^Fixture Ranger/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  replies[0]!(draftView()); // the old class's reply arrives late
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.getByRole('form', { name: 'Background' })).toBeTruthy();
+  expect(screen.queryByRole('group', { name: 'Choices' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  expect(replies).toHaveLength(2);
+  expect(vi.mocked(client.preview).mock.calls[1]![0].classes[0]!.class.contentId).toBe('fixture-c4');
+  const second = draftView();
+  second.character = { ...second.character, classes: [{ class: { contentId: 'fixture-c4', revisionId: 'fixture-r4' }, level: 1 }] };
+  replies[1]!(second);
+  const review = await screen.findByRole('region', { name: 'Review' });
+  expect(review.textContent).toMatch(/Class: Fixture Ranger/);
+});
+
+it('ignores a second Create press, keeps focus on the button when the save fails, and Cancel waits (L3, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  let fail: (error: unknown) => void = () => {};
+  vi.mocked(client.createCharacter).mockReset();
+  vi.mocked(client.createCharacter).mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+  const onError = vi.fn();
+  const onCancel = vi.fn();
+  await toBackground(user, /^Fixture Warden/, { onError, onCancel });
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  const create = await screen.findByRole('button', { name: 'Create and save' });
+  await user.click(create);
+  const busy = screen.getByRole('button', { name: 'Saving…' });
+  expect(busy).toBe(create);
+  expect(busy.getAttribute('aria-disabled')).toBe('true');
+  expect(busy.hasAttribute('disabled')).toBe(false);
+  await user.click(busy);
+  expect(vi.mocked(client.createCharacter)).toHaveBeenCalledTimes(1);
+  const cancel = screen.getByRole('button', { name: 'Cancel' });
+  expect(cancel.getAttribute('aria-disabled')).toBe('true');
+  await user.click(cancel);
+  expect(onCancel).not.toHaveBeenCalled();
+  create.focus(); // the press that started the save left the focus here
+  fail(new Error('fixture failure'));
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  expect(document.activeElement).toBe(create);
+  expect(create.getAttribute('aria-disabled')).toBeNull();
+  expect(create.textContent).toBe('Create and save');
+});
+
+it('reports nothing and commits nothing once the builder is gone (carry 3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  const pendingCreates: Array<{ ok: (view: CharacterView) => void; fail: (error: unknown) => void }> = [];
+  vi.mocked(client.createCharacter).mockReset();
+  vi.mocked(client.createCharacter).mockImplementation(() => new Promise((ok, fail) => pendingCreates.push({ ok, fail })));
+  const onError = vi.fn();
+  const onCommitted = vi.fn();
+  await toBackground(user, /^Fixture Warden/, { onError, onCommitted });
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  cleanup(); // the screen was left while the save was in flight
+  pendingCreates[0]!.ok(draftView());
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onCommitted).not.toHaveBeenCalled();
+  expect(onError).not.toHaveBeenCalled();
 });

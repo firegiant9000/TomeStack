@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type {
   Ability,
@@ -157,6 +157,7 @@ function StepForm(props: {
   onCancel: () => void;
   children: ReactNode;
 }) {
+  // aria-disabled, never `disabled`: Next can become inactive (a roll lands, a field is cleared) while it has focus (2.4.3).
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!props.nextDisabled) props.onNext();
@@ -170,7 +171,7 @@ function StepForm(props: {
             Back
           </button>
         )}
-        <button type="submit" disabled={props.nextDisabled} aria-describedby={props.nextHint ? 'next-hint' : undefined}>
+        <button type="submit" aria-disabled={props.nextDisabled || undefined} aria-describedby={props.nextHint ? 'next-hint' : undefined}>
           {props.next}
         </button>
         <button type="button" onClick={props.onCancel}>
@@ -198,7 +199,14 @@ function RulesStep(props: {
   const policy = props.rulesFamilies.find((f) => f.id === basics.rulesFamily);
 
   return (
-    <StepForm label="Rules" next="Next: ability scores" onNext={props.onNext} onCancel={props.onCancel}>
+    <StepForm
+      label="Rules"
+      next="Next: ability scores"
+      nextDisabled={!basics.name.trim()}
+      nextHint={basics.name.trim() ? undefined : 'Enter a name to continue.'}
+      onNext={props.onNext}
+      onCancel={props.onCancel}
+    >
       <label className="field">
         Name
         <input required value={basics.name} onChange={(e) => onChange({ ...basics, name: e.target.value })} autoFocus />
@@ -367,6 +375,8 @@ function ScoresStep(props: {
       for (let i = 1; i <= 6; i++) rolled.push(await client.rollDice('4d6', 3, `Ability score roll ${i}`));
       // Only a complete set replaces the old one; an error part-way leaves what was there.
       // The assignment is cleared only while the method is still Roll: one made in the array meanwhile is not the rolled pool's.
+      // A roll that lands after the step is gone is dropped: it must not change a draft that has moved on.
+      if (!mounted.current) return;
       onChange((b) => ({ ...b, rolled, assignment: b.scoreMethod === 'roll' ? {} : b.assignment }));
       setRollNote('Six scores rolled.');
     } catch (error) {
@@ -379,7 +389,7 @@ function ScoresStep(props: {
 
   const shown = (key: Ability) => (pool ? (basics.assignment[key] ?? '–') : basics.scores[key]);
   return (
-    <StepForm label="Ability scores" next="Next: species" nextDisabled={!complete} nextHint={nextHint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
+    <StepForm label="Ability scores" next="Next: species" nextDisabled={!complete || rolling} nextHint={nextHint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <fieldset>
         <legend>How are the scores determined?</legend>
         {scoreMethods.map((m) => (
@@ -859,7 +869,8 @@ function ChoicesStep(props: {
         />
       ))}
       <div className="actions">
-        <button type="button" onClick={props.onCommit} disabled={props.busy}>
+        {/* aria-disabled, not disabled: a failed save leaves the focus on the button (2.4.3); the guards are in commit() and Cancel. */}
+        <button type="button" onClick={props.onCommit} aria-disabled={props.busy || undefined}>
           {props.busy ? 'Saving…' : props.commitLabel}
         </button>
         {props.onBack && (
@@ -867,7 +878,7 @@ function ChoicesStep(props: {
             Back
           </button>
         )}
-        <button type="button" onClick={props.onCancel}>
+        <button type="button" onClick={props.onCancel} aria-disabled={props.busy || undefined}>
           Cancel
         </button>
       </div>
@@ -916,14 +927,43 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [outside, setOutside] = useState({ allow: false, reason: '' });
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
+  // After Cancel (or any unmount) nothing this builder started may report, set state or commit: "Draft discarded" must stay true.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const fail = useCallback((error: unknown) => {
+    if (mounted.current) onError(error);
+  }, [onError]);
+  const stepNow = useRef(step);
+  useEffect(() => {
+    stepNow.current = step;
+    previewSeq.current.next(); // leaving a step withdraws any preview it asked for, even if the player returns before it answers
+  }, [step]);
+  const previewSeq = useRef({
+    n: 0,
+    next() {
+      this.n += 1;
+      return this.n;
+    },
+  });
+  const committing = useRef(false);
 
   const family = mode.kind === 'create' ? basics.rulesFamily : mode.view.character.rulesFamily;
   const campaignId = mode.kind === 'create' ? basics.campaignId : mode.view.character.campaignId;
   const campaign = campaigns.find((c) => c.id === campaignId);
 
   useEffect(() => {
-    client.listCampaigns().then(setCampaigns).catch(onError);
-  }, [onError]);
+    client
+      .listCampaigns()
+      .then((result) => {
+        if (mounted.current) setCampaigns(result);
+      })
+      .catch(fail);
+  }, [fail]);
 
   useEffect(() => {
     let current = true;
@@ -943,11 +983,11 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           other: b.other.filter(fits),
         }));
       })
-      .catch(onError);
+      .catch(fail);
     return () => {
       current = false;
     };
-  }, [family, campaignId, onError]);
+  }, [family, campaignId, fail]);
 
   // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
   const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
@@ -983,12 +1023,20 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const optionOf = (ref: ContentReference) => byRevision.get(ref.revisionId);
   const nameOf = (ref: ContentReference) => optionOf(ref)?.name ?? ref.revisionId;
 
-  async function preview(draft: Character) {
+  /**
+   * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
+   * on the step that asked: Back while it is pending cancels the jump, so a late reply never carries an old class forward.
+   */
+  async function preview(draft: Character, from: 'background' | 'level') {
+    const request = previewSeq.current.next();
+    const current = () => mounted.current && request === previewSeq.current.n && stepNow.current === from;
     try {
-      setView(await client.preview(draft));
+      const result = await client.preview(draft);
+      if (!current()) return;
+      setView(result);
       setStep('choices');
     } catch (error) {
-      onError(error);
+      if (current()) onError(error);
     }
   }
 
@@ -1008,10 +1056,11 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       const others = now.selected.filter((s) => !sameRef(s, ref));
       try {
         const next = await client.previewChoice(current.character, choice.source, choice.choiceId, add ? [...others, ref] : others);
+        if (!mounted.current) return;
         latest.current = next;
         setView(next);
       } catch (error) {
-        onError(error);
+        fail(error);
       }
     });
   }
@@ -1023,20 +1072,22 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       const others = (current.character.spells ?? []).filter((s) => !(s.caster === caster && sameRef(s.spell, spell)));
       try {
         const next = await client.preview({ ...current.character, spells: add ? [...others, { caster, spell, prepared: true }] : others });
+        if (!mounted.current) return;
         latest.current = next;
         setView(next);
       } catch (error) {
-        onError(error);
+        fail(error);
       }
     });
   }
 
   async function commit() {
-    if (!view) return;
+    if (!view || committing.current) return; // aria-disabled while busy, so the press arrives here and is ignored
+    committing.current = true;
     setBusy(true);
     try {
       const draft = withExceptions(view.character);
-      onCommitted(
+      const saved =
         mode.kind === 'create'
           ? await client.createCharacter({
               name: draft.name,
@@ -1049,11 +1100,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               campaignExceptions: draft.campaignExceptions,
               spells: draft.spells,
             })
-          : await client.saveCharacter(draft),
-      );
+          : await client.saveCharacter(draft);
+      if (mounted.current) onCommitted(saved);
     } catch (error) {
-      onError(error);
+      fail(error);
     } finally {
+      committing.current = false;
       setBusy(false);
     }
   }
@@ -1106,14 +1158,14 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       {mode.kind === 'create' && step === 'species' && <SpeciesStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'class' && <ClassStep {...pickProps} onNext={next} />}
       {mode.kind === 'create' && step === 'background' && (
-        <BackgroundStep {...pickProps} onNext={() => preview(draftOf(basics, draftId, view?.character))} />
+        <BackgroundStep {...pickProps} onNext={() => preview(draftOf(basics, draftId, view?.character), 'background')} />
       )}
       {step === 'level' && mode.kind === 'levelUp' && (
         <LevelStep
           character={mode.view.character}
           options={pickable}
           nameOf={nameOf}
-          onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes })}
+          onNext={(classes) => preview({ ...(view?.character ?? mode.view.character), classes }, 'level')}
           onCancel={onCancel}
         />
       )}
@@ -1128,7 +1180,9 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
           onSpells={toggleSpell}
           onBack={mode.kind === 'create' ? () => setStep('background') : mode.kind === 'levelUp' ? () => setStep('level') : undefined}
           onCommit={commit}
-          onCancel={onCancel}
+          onCancel={() => {
+            if (!busy) onCancel(); // a save in flight cannot be discarded; the button says so with aria-disabled
+          }}
           busy={busy}
           review={
             mode.kind === 'create'
