@@ -613,10 +613,13 @@ function LevelStep(props: {
   const atMaximum = character.level >= maxLevel;
   const newClasses = props.options.filter((o) => o.kind === 'class' && visible(o) && !character.classes.some((c) => c.class.contentId === o.reference.contentId));
 
+  // The picked new class can become inert after it was picked (its campaign reason was cleared): Next then says why it waits.
+  const needsReason = !!target && newClasses.some((o) => !o.compatible && sameRef(o.reference, target));
+
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!target) return;
-    if (newClasses.some((o) => !o.compatible && sameRef(o.reference, target))) return; // the campaign reason was cleared after it was picked
+    if (needsReason) return; // aria-disabled with its reason shown, so this press is refused openly
     const existing = character.classes.find((c) => sameRef(c.class, target));
     props.onNext(
       existing
@@ -661,13 +664,18 @@ function LevelStep(props: {
         Hit points use the fixed value for each new level. If you rolled, record the total as an override on the sheet.
       </p>
       <div className="actions">
-        <button type="submit" disabled={atMaximum || !target}>
+        <button type="submit" disabled={atMaximum || !target} aria-disabled={needsReason || undefined} aria-describedby={needsReason ? 'next-hint' : undefined}>
           Next: choices
         </button>
         <button type="button" onClick={props.onCancel}>
           Cancel
         </button>
       </div>
+      {needsReason && (
+        <p id="next-hint" className="hint">
+          This class needs a campaign exception reason.
+        </p>
+      )}
     </form>
   );
 }
@@ -991,13 +999,17 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         setListedFor(`${family}|${campaignId ?? ''}`);
         // A pick that does not fit the (new) rules family is dropped, not left checked but disabled (SPEC S-02).
         const fits = (ref?: ContentReference) => !!ref && result.some((o) => o.compatible && sameRef(o.reference, ref));
-        setBasics((b) => ({
-          ...b,
-          species: fits(b.species) ? b.species : undefined,
-          background: fits(b.background) ? b.background : undefined,
-          startingClass: fits(b.startingClass) ? b.startingClass : undefined,
-          other: b.other.filter(fits),
-        }));
+        setBasics((b) => {
+          const other = b.other.filter(fits);
+          if ((!b.species || fits(b.species)) && (!b.background || fits(b.background)) && (!b.startingClass || fits(b.startingClass)) && other.length === b.other.length) return b; // nothing dropped: no change, so a pending preview stays valid
+          return {
+            ...b,
+            species: fits(b.species) ? b.species : undefined,
+            background: fits(b.background) ? b.background : undefined,
+            startingClass: fits(b.startingClass) ? b.startingClass : undefined,
+            other,
+          };
+        });
       })
       .catch(fail);
     return () => {
@@ -1035,9 +1047,11 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
 
   // N2: a pick changed while a preview is pending (another Background, Other content, a listing that drops a pick) makes the
   // reply stale: it would build a draft the Review no longer describes. Withdraw it; Next previews the current picks.
+  // Only the fields a preview is built from count; the scores method, a roll or an assignment do not change the draft.
+  const { name: draftName, rulesFamily: draftFamily, scores: draftScores, species: draftSpecies, background: draftBackground, startingClass: draftClass, other: draftOther, campaignId: draftCampaign } = basics;
   useEffect(() => {
     previewSeq.current.next();
-  }, [basics]);
+  }, [draftName, draftFamily, draftScores, draftSpecies, draftBackground, draftClass, draftOther, draftCampaign]);
 
   // SPEC I-06: new picks get the newest revision of each content; older ones only name what saved characters pin.
   const pickable = options.filter((o) => !o.superseded);
@@ -1124,12 +1138,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
             })
           : await client.saveCharacter(draft);
       onCommitted(saved); // always: the save happened, so the list refreshes and the app says so even if the player has left (R36)
+      return; // busy stays on: the builder is about to leave, and a second press must not create the character again
     } catch (error) {
       fail(error);
-    } finally {
-      committing.current = false;
-      setBusy(false);
     }
+    committing.current = false;
+    setBusy(false);
   }
 
   const at = createSteps.indexOf(step);

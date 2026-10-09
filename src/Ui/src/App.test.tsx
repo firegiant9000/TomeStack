@@ -20,6 +20,7 @@ vi.mock('./api/client', () => ({
     listCampaigns: vi.fn(),
     preview: vi.fn(),
     createCharacter: vi.fn(),
+    saveCharacter: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     play: vi.fn(),
@@ -121,6 +122,27 @@ it('a save that lands after the user left the builder refreshes the list and say
   expect(vi.mocked(client.listCharacters).mock.calls.length).toBeGreaterThan(lists);
   expect(screen.getByRole('region', { name: 'Characters' })).toBeTruthy(); // still the home screen
   expect(screen.queryByRole('article', { name: 'Fixture New' })).toBeNull();
+});
+
+it('a level-up saved while the same character was opened again shows the saved sheet, not the older read (R38 a)', async () => {
+  const user = userEvent.setup();
+  const before = viewOf('fixture-a', 'Fixture Avery');
+  before.character = { ...before.character, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }] };
+  const saved = viewOf('fixture-a', 'Fixture Avery Leveled');
+  vi.mocked(client.getCharacter).mockResolvedValue(before); // the read made after the save began: still level 1
+  vi.mocked(client.preview).mockResolvedValue(before);
+  let finish: (view: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise<CharacterView>((r) => (finish = r)));
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Save level-up' }));
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ })); // opens the sheet while the save is in flight
+  expect(await screen.findByRole('heading', { name: 'Fixture Avery' })).toBeTruthy();
+  finish(saved);
+  expect(await screen.findByRole('heading', { name: 'Fixture Avery Leveled' })).toBeTruthy();
 });
 
 it('a slow open never replaces a screen chosen after it (R37)', async () => {

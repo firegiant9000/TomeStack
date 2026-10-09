@@ -938,3 +938,61 @@ it('says why Next waits while Roll again is in flight (carry N4)', async () => {
   await settleRolls(pending, sixSets());
   await waitFor(() => expect(screen.queryByText('Rolling the scores…')).toBeNull());
 });
+
+it('does not create a second time while the app is still switching screens after a successful create (R38 b)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue(stepContent());
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  vi.mocked(client.createCharacter).mockReset();
+  vi.mocked(client.createCharacter).mockResolvedValue(draftView());
+  const onCommitted = vi.fn(); // the app has not switched screens yet
+  await toBackground(user, /^Fixture Warden/, { onCommitted });
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  const create = await screen.findByRole('button', { name: 'Create and save' });
+  await user.click(create);
+  await waitFor(() => expect(onCommitted).toHaveBeenCalledTimes(1));
+  const again = screen.getByRole('button', { name: 'Saving…' });
+  expect(again.getAttribute('aria-disabled')).toBe('true');
+  await user.click(again);
+  expect(vi.mocked(client.createCharacter)).toHaveBeenCalledTimes(1);
+});
+
+// R38: a level-up draft with one existing class.
+const levelView = (campaignId?: string): CharacterView => {
+  const view = viewWith([]);
+  view.character = { ...view.character, campaignId, classes: [{ class: { contentId: 'fixture-class', revisionId: 'fixture-class-r1' }, level: 1 }], level: 1 };
+  return view;
+};
+
+it('keeps a level-up preview that was asked for before the listing arrived, when the listing drops nothing (R38 c)', async () => {
+  const user = userEvent.setup();
+  let list: (options: ContentOption[]) => void = () => {};
+  vi.mocked(client.listContent).mockImplementation(() => new Promise((resolve) => (list = resolve)));
+  let answer: (view: CharacterView) => void = () => {};
+  vi.mocked(client.preview).mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+  render(<CharacterBuilder mode={{ kind: 'levelUp', view: levelView() }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  list([]); // the first listing arrives; no pick exists to drop
+  await new Promise((r) => setTimeout(r, 20));
+  answer(viewWith([]));
+  expect(await screen.findByRole('group', { name: 'Choices' })).toBeTruthy();
+});
+
+it('says why Next: choices waits when the picked new class needs a campaign reason (R38 d)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+  vi.mocked(client.listContent).mockResolvedValue([content(5, 'class', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false })]);
+  vi.mocked(client.preview).mockClear();
+  render(<CharacterBuilder mode={{ kind: 'levelUp', view: levelView('fixture-camp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await user.click(await screen.findByRole('checkbox', { name: 'Use content from outside the campaign' }));
+  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await user.click(await screen.findByRole('radio', { name: /^Fixture Outsider/ }));
+  const next = screen.getByRole('button', { name: 'Next: choices' });
+  expect(next.getAttribute('aria-disabled')).toBeNull();
+  await user.clear(screen.getByRole('textbox', { name: /Reason/ })); // the reason goes after the class was picked
+  expect(next.getAttribute('aria-disabled')).toBe('true');
+  expect(next.getAttribute('aria-describedby')).toBe('next-hint');
+  expect(screen.getByText('This class needs a campaign exception reason.')).toBeTruthy();
+  await user.click(next);
+  expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+});

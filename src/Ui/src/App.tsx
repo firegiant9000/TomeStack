@@ -359,6 +359,9 @@ export function App() {
                 setScreen({ kind: 'sheet', view });
               } else {
                 setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
+                // A sheet of this character opened while the save was in flight shows the saved version, never the older read
+                // (a stale sheet could later be saved over it).
+                setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
               }
             }}
           />
