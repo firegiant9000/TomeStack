@@ -411,12 +411,38 @@ it('lists a review of the draft above the choices (D32)', async () => {
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   const review = await screen.findByRole('region', { name: 'Review' });
   expect(review.textContent).toMatch(/Name: Fixture New/);
-  expect(review.textContent).toMatch(/Rules: .+/);
+  expect(review.textContent).toMatch(/Rules: SRD 5\.1/);
   expect(review.textContent).toMatch(/Campaign: none/);
   expect(review.textContent).toMatch(/Scores: Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8 \(standard array\)/);
   expect(review.textContent).toMatch(/Species: Fixture Hillfolk/);
   expect(review.textContent).toMatch(/Class: Fixture Warden/);
   expect(review.textContent).toMatch(/Background: none/);
+});
+
+it('names the rules family, the campaign and a hand-entered method in the review, and shows no review for level-up or choices (carry 9)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.2.1', allowedSources: ['fixture-source'] }]);
+  vi.mocked(client.listContent).mockResolvedValue([content(1, 'species', 'Fixture Hillfolk', 'srd-5.2.1', { compatible: true })]);
+  vi.mocked(client.preview).mockResolvedValue(draftView());
+  renderCreate();
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Campaign' }), 'fixture-camp');
+  await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
+  const review = await screen.findByRole('region', { name: 'Review' });
+  expect(review.textContent).toMatch(/Rules: SRD 5\.2\.1/);
+  expect(review.textContent).toMatch(/Campaign: Fixture Campaign/);
+  expect(review.textContent).not.toMatch(/Campaign: none/);
+  expect(review.textContent).toMatch(/\(enter by hand\)/);
+  cleanup();
+  render(<CharacterBuilder mode={{ kind: 'choices', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  await screen.findByRole('group', { name: 'Choices' });
+  expect(screen.queryByRole('region', { name: 'Review' })).toBeNull();
+  cleanup();
+  render(<CharacterBuilder mode={{ kind: 'levelUp', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  expect(screen.getByRole('form', { name: 'Level' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Review' })).toBeNull();
 });
 
 it('counts point buy against 27 and blocks Next when over budget', async () => {

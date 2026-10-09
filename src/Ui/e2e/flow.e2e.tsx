@@ -2238,19 +2238,41 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
   await user.click(newCharacter);
   await user.type(await screen.findByRole('textbox', { name: 'Name' }), 'E2E Rolled');
+  await user.click(screen.getByRole('radio', { name: /SRD 5\.2\.1/ }));
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
   await user.click(screen.getByRole('radio', { name: 'Roll' }));
   await user.click(screen.getByRole('button', { name: 'Roll six scores (4d6, drop the lowest)' }));
   const sets = await screen.findByRole('list', { name: 'Rolled sets' });
   const lines = within(sets).getAllByRole('listitem').map((li) => li.textContent!);
   expect(lines).toHaveLength(6);
-  for (const line of lines) expect(line).toMatch(/^Roll \d: (\d+) \((\d), (\d), (\d), dropped (\d)\)$/);
+  // Each line's total is the sum of the three kept dice (the fourth is dropped).
+  const totals: number[] = [];
+  for (const line of lines) {
+    const m = /^Roll \d: (\d+) \((\d), (\d), (\d), dropped (\d)\)$/.exec(line);
+    expect(m, line).not.toBeNull();
+    const [total, a, b, c, dropped] = m!.slice(1).map(Number) as [number, number, number, number, number];
+    expect(total).toBe(a + b + c);
+    expect(dropped).toBeLessThanOrEqual(Math.min(a, b, c));
+    totals.push(total);
+  }
   const group = screen.getByRole('group', { name: 'Assign the rolled scores' });
+  const assigned = new Map<string, number>();
   for (const label of ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'] as const) {
     const select = within(group).getByRole('combobox', { name: label });
     const free = within(select).getAllByRole('option').find((o) => !(o as HTMLOptionElement).disabled && o.textContent !== 'Choose')!;
     await user.selectOptions(select, (free as HTMLOptionElement).value);
+    assigned.set(label, Number((free as HTMLOptionElement).value));
   }
   expect(screen.getByText('Assigned: 6 of 6')).toBeTruthy();
+  expect([...assigned.values()].sort((x, y) => x - y)).toEqual([...totals].sort((x, y) => x - y)); // every rolled total used once
   await user.click(screen.getByRole('button', { name: 'Next: species' }));
+  await user.click(screen.getByRole('button', { name: 'Next: class' }));
+  await user.click(await screen.findByRole('radio', { name: /^Barbarian/ }));
+  await user.click(screen.getByRole('button', { name: 'Next: background' }));
+  await user.click(screen.getByRole('button', { name: 'Next: choices' }));
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Rolled' });
+  await openTab(user, sheet, 'Stats');
+  // The sheet's base scores are the assigned rolled totals (increases come from content the draft does not pin).
+  for (const [label, value] of assigned) expect(within(sheet).getByRole('heading', { name: new RegExp(`^${label} score: ${value}\\b`) })).toBeTruthy();
 });

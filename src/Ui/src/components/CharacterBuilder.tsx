@@ -924,6 +924,7 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
   const [listedFor, setListedFor] = useState<string>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaignsState, setCampaignsState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [outside, setOutside] = useState({ allow: false, reason: '' });
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -960,9 +961,14 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     client
       .listCampaigns()
       .then((result) => {
-        if (mounted.current) setCampaigns(result);
+        if (!mounted.current) return;
+        setCampaigns(result);
+        setCampaignsState('loaded');
       })
-      .catch(fail);
+      .catch((error) => {
+        if (mounted.current) setCampaignsState('failed');
+        fail(error);
+      });
   }, [fail]);
 
   useEffect(() => {
@@ -1189,7 +1195,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               ? {
                   name: basics.name.trim(),
                   family: policy?.displayName ?? basics.rulesFamily,
-                  campaign: campaign?.name,
+                  // Never "none" for a campaign the character has: its name once known, else loading or the id.
+                  campaign: !basics.campaignId ? undefined : (campaign?.name ?? (campaignsState === 'loading' ? 'loading…' : campaignsState === 'failed' ? `(unknown campaign ${basics.campaignId})` : '(unknown campaign)')),
                   scores: basics.scores,
                   method: scoreMethods.find((m) => m.id === basics.scoreMethod)!.label.toLowerCase(),
                   species: basics.species && nameOf(basics.species),
