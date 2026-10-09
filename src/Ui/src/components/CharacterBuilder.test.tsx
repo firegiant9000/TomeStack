@@ -161,9 +161,20 @@ describe('the review list Campaign row (carry 8)', () => {
 
 describe('arrow keys onto an inert (aria-disabled) radio', () => {
   // user-event walks a radio group with CSS.escape, which jsdom lacks; the group names here need no escaping.
+  type CssLike = { escape?: (s: string) => string };
+  let previous: { hadCss: boolean; hadEscape: boolean; escape?: (s: string) => string };
   beforeEach(() => {
-    const css = ((window as unknown as { CSS?: { escape?: (s: string) => string } }).CSS ??= {});
-    css.escape ??= (s: string) => s;
+    const w = window as unknown as { CSS?: CssLike };
+    const hadCss = w.CSS !== undefined;
+    w.CSS ??= {};
+    previous = { hadCss, hadEscape: 'escape' in w.CSS, escape: w.CSS.escape };
+    w.CSS.escape ??= (s: string) => s;
+  });
+  afterEach(() => {
+    const w = window as unknown as { CSS?: CssLike };
+    if (!previous.hadCss) delete w.CSS;
+    else if (previous.hadEscape) w.CSS!.escape = previous.escape;
+    else delete w.CSS!.escape;
   });
 
   /** Walks to the Class step inside a campaign where "Fixture Outsider" is outside it (inert) and optionally "Fixture Warden" is pickable. */
