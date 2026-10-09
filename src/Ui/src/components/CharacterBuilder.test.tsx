@@ -158,6 +158,29 @@ it('keeps a checked option of the other family in a choice, and omits an uncheck
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Absent/ })).toBeNull();
 });
 
+// R42 (follow-up F2): another option of the same choice can be ticked while an imported other-family option stays chosen.
+it('previews a tick on an own-family option while a kept other-family option stays in the selection (R42)', async () => {
+  const user = userEvent.setup();
+  const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+  const imported = content(8, 'feature', 'Fixture Imported', 'srd-5.2.1');
+  vi.mocked(client.listContent).mockResolvedValue([mine, imported]);
+  const source = { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' };
+  const answer = (selected: ContentOption[]) => {
+    const v = viewWith([]);
+    v.sheet.choices = [{ source, sourceName: 'Fixture feature', choiceId: 'pick', count: 2, options: [mine.reference, imported.reference], selected: selected.map((o) => o.reference), resolved: selected.length === 2 }];
+    return v;
+  };
+  vi.mocked(client.previewChoice).mockReset();
+  vi.mocked(client.previewChoice).mockResolvedValue(answer([imported, mine]));
+  render(<CharacterBuilder mode={{ kind: 'choices', view: answer([imported]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+  await user.click(await within(picker).findByRole('checkbox', { name: /Fixture Mine/ }));
+  await waitFor(() => expect(vi.mocked(client.previewChoice)).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.previewChoice).mock.calls[0]![3]).toEqual([imported.reference, mine.reference]); // the kept option is re-sent; the service accepts it
+  await waitFor(() => expect((within(picker).getByRole('checkbox', { name: /Fixture Mine/ }) as HTMLInputElement).checked).toBe(true));
+  expect((within(picker).getByRole('checkbox', { name: /Fixture Imported/ }) as HTMLInputElement).checked).toBe(true); // the kept row stays
+});
+
 // R33 (2.4.3): unticking a chosen option that is not offerable never removes the focused checkbox from the page.
 const choiceView = (selected: ContentOption[], options: ContentOption[], campaignId?: string): CharacterView => {
   const view = viewWith([]);

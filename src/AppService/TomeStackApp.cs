@@ -307,7 +307,11 @@ public sealed partial class TomeStackApp : IDisposable
         var chosenElsewhere = without.Choices.SelectMany(c => c.Selected).ToHashSet();
         foreach (var option in selected.Where(chosenElsewhere.Contains))
             problems.Add(new("choice.option-already-chosen", $"Revision {option.RevisionId} is already selected for another choice.", option));
-        foreach (var option in selected.Where(offered.Options.Contains))
+        // R42: an option the character already records for this choice is existing state, not a new offer, so re-sending it
+        // (an imported character keeping an option of the other rules family while the rest of the choice changes) is accepted.
+        // A newly added option is checked as before.
+        var recorded = character.Choices.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)?.Selected ?? [];
+        foreach (var option in selected.Where(o => offered.Options.Contains(o) && !recorded.Contains(o)))
         {
             var revision = _store.FindRevision(option);
             if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))

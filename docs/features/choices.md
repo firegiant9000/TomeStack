@@ -33,6 +33,6 @@ An option is ordinary content: a feature that grants a skill proficiency, a subc
 - the same option appears twice (`choice.duplicate-option`);
 - the count is exceeded (`choice.too-many`);
 - an option is not listed (`choice.invalid-option`);
-- an option is not a published revision for the character's family (`choice.option-unavailable`);
+- an option that is **newly added** is not a published revision for the character's family (`choice.option-unavailable`). An option the character already records for that same choice is existing state and is accepted when re-sent (R42), so an imported character that keeps an option of the other family can change the rest of the choice without unticking it first; the builder's `character.previewChoice` follows the same rule;
 - an option is already selected for another of the character's choices (`choice.option-already-chosen`), as SRD wording such as "another skill" requires;
 - the source or an option is empty (`choice.empty-entry`).
