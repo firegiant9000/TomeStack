@@ -334,8 +334,9 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .play-panel .inline-form button[aria-disabled='true'],
 .play-panel li button[aria-disabled='true'],
 .sheet-header button[aria-disabled='true'],
-section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { color: var(--muted); border-color: var(--line-strong); cursor: not-allowed; }
-/* The inactive look is a dimmed label, not opacity: opacity would also dim the focus ring (3:1, WCAG 1.4.11 and the project's focus 3:1 constraint). */
+section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { background: var(--bg); color: var(--muted); border-color: var(--line-strong); cursor: not-allowed; }
+/* The inactive look is a dimmed label on the page colour, not opacity: opacity would also dim the focus ring (3:1, WCAG 1.4.11 and
+   the project's focus 3:1 constraint), and the browser's own button face (#6b6b6b in dark) left the dimmed label at about 2.35:1. */
 /* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8). D28: compact, with a plain hexagon in currentColor
    beside the word (never icon-only, D26). */
 button.roll { display: inline-flex; align-items: center; gap: 0.35em; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.5rem; min-height: 1.5rem; font-size: var(--text-sm); }

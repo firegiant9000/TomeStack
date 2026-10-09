@@ -498,6 +498,9 @@ it('uses the assigned scores for the draft, not the legacy defaults', async () =
   expect(vi.mocked(client.preview).mock.calls[0]![0].baseAbilities).toEqual({ str: 15, dex: 14, con: 13, int: 12, wis: 10, cha: 8 });
 });
 
+/** The value of one review row, found by its term's own text (the colon is a hidden span, so it is not part of the term). */
+const reviewRow = (review: HTMLElement, term: string) => within(review).getByText(term, { selector: 'dt' }).parentElement!.querySelector('dd')!.textContent;
+
 it('lists a review of the draft above the choices (D32)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
@@ -511,13 +514,17 @@ it('lists a review of the draft above the choices (D32)', async () => {
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   const review = await screen.findByRole('region', { name: 'Review' });
-  expect(review.textContent).toMatch(/Name: Fixture New/);
-  expect(review.textContent).toMatch(/Rules: SRD 5\.1/);
-  expect(review.textContent).toMatch(/Campaign: none/);
-  expect(review.textContent).toMatch(/Scores: Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8 \(standard array\)/);
-  expect(review.textContent).toMatch(/Species: Fixture Hillfolk/);
-  expect(review.textContent).toMatch(/Class: Fixture Warden/);
-  expect(review.textContent).toMatch(/Background: none/);
+  expect(reviewRow(review, 'Name')).toBe('Fixture New');
+  expect(reviewRow(review, 'Rules')).toBe('SRD 5.1');
+  expect(reviewRow(review, 'Campaign')).toBe('none');
+  expect(reviewRow(review, 'Scores')).toBe('Str 15, Dex 14, Con 13, Int 12, Wis 10, Cha 8 (standard array)');
+  expect(reviewRow(review, 'Species')).toBe('Fixture Hillfolk');
+  expect(reviewRow(review, 'Class')).toBe('Fixture Warden');
+  expect(reviewRow(review, 'Background')).toBe('none');
+  // The drawn colon is hidden from assistive technology: a term reads "Name", never "Name colon".
+  const term = within(review).getByText('Name', { selector: 'dt' });
+  expect(term.textContent).toBe('Name:');
+  expect(term.querySelector('span[aria-hidden="true"]')?.textContent).toBe(':');
 });
 
 it('names the rules family, the campaign and a hand-entered method in the review, and shows no review for level-up or choices (carry 9)', async () => {
@@ -532,10 +539,9 @@ it('names the rules family, the campaign and a hand-entered method in the review
   await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
   for (const next of ['Next: species', 'Next: class', 'Next: background', 'Next: choices']) await user.click(await screen.findByRole('button', { name: next }));
   const review = await screen.findByRole('region', { name: 'Review' });
-  expect(review.textContent).toMatch(/Rules: SRD 5\.2\.1/);
-  expect(review.textContent).toMatch(/Campaign: Fixture Campaign/);
-  expect(review.textContent).not.toMatch(/Campaign: none/);
-  expect(review.textContent).toMatch(/\(enter by hand\)/);
+  expect(reviewRow(review, 'Rules')).toBe('SRD 5.2.1');
+  expect(reviewRow(review, 'Campaign')).toBe('Fixture Campaign');
+  expect(reviewRow(review, 'Scores')).toMatch(/\(enter by hand\)$/);
   cleanup();
   render(<CharacterBuilder mode={{ kind: 'choices', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
   await screen.findByRole('group', { name: 'Choices' });

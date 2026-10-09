@@ -886,7 +886,8 @@ function ChoicesStep(props: {
           <dl className="review-list">
             {rows.map(([term, value]) => (
               <div key={term}>
-                <dt>{term}:</dt> <dd>{value}</dd>
+                {/* The colon is only for the eye: a screen reader says "Name", not "Name colon". */}
+                <dt>{term}<span aria-hidden="true">:</span></dt> <dd>{value}</dd>
               </div>
             ))}
           </dl>
