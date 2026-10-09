@@ -351,8 +351,9 @@ export function App() {
             onCommitted={async (view) => {
               // R36: a save that lands is never lost silently. The list is always refreshed; the sheet opens only while this
               // builder is still the screen, otherwise the status says what happened and the screen stays where it is.
+              // R39: the screen is decided and switched first, synchronously, so nothing later (a slow or failed refresh) can
+              // leave the builder stuck or overwrite a newer view.
               const builder = screen.mode;
-              await refresh();
               const now = screenNow.current;
               if (now.kind === 'builder' && now.mode === builder) {
                 setMessage(undefined);
@@ -362,6 +363,11 @@ export function App() {
                 // A sheet of this character opened while the save was in flight shows the saved version, never the older read
                 // (a stale sheet could later be saved over it).
                 setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
+              }
+              try {
+                await refresh();
+              } catch (error) {
+                onError(error);
               }
             }}
           />

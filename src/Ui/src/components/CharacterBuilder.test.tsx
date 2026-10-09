@@ -784,7 +784,7 @@ it('asks for a name before Next, with the reason linked to the button (carry 7)'
 });
 
 const twoClasses = () => [content(1, 'species', 'Fixture Hillfolk', 'srd-5.1'), content(3, 'class', 'Fixture Warden', 'srd-5.1'), content(4, 'class', 'Fixture Ranger', 'srd-5.1')];
-async function toBackground(user: ReturnType<typeof userEvent.setup>, cls: RegExp, extra: { onCommitted?: () => void; onCancel?: () => void; onError?: (e: unknown) => void } = {}) {
+async function toBackground(user: ReturnType<typeof userEvent.setup>, cls: RegExp, extra: { onCommitted?: () => void | Promise<void>; onCancel?: () => void; onError?: (e: unknown) => void } = {}) {
   render(<CharacterBuilder mode={{ kind: 'create' }} rulesFamilies={families} onCommitted={extra.onCommitted ?? (() => {})} onCancel={extra.onCancel ?? (() => {})} onError={extra.onError ?? (() => {})} />);
   await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture New');
   await user.click(screen.getByRole('button', { name: 'Next: ability scores' }));
@@ -939,13 +939,14 @@ it('says why Next waits while Roll again is in flight (carry N4)', async () => {
   await waitFor(() => expect(screen.queryByText('Rolling the scores…')).toBeNull());
 });
 
-it('does not create a second time while the app is still switching screens after a successful create (R38 b)', async () => {
+it('does not create twice while the app handles a successful create, and is usable again if the builder stays (R39)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.listContent).mockResolvedValue(stepContent());
   vi.mocked(client.preview).mockResolvedValue(draftView());
   vi.mocked(client.createCharacter).mockReset();
   vi.mocked(client.createCharacter).mockResolvedValue(draftView());
-  const onCommitted = vi.fn(); // the app has not switched screens yet
+  let settle: () => void = () => {};
+  const onCommitted = vi.fn(() => new Promise<void>((resolve) => (settle = resolve))); // the app is still refreshing
   await toBackground(user, /^Fixture Warden/, { onCommitted });
   await user.click(screen.getByRole('button', { name: 'Next: choices' }));
   const create = await screen.findByRole('button', { name: 'Create and save' });
@@ -955,6 +956,8 @@ it('does not create a second time while the app is still switching screens after
   expect(again.getAttribute('aria-disabled')).toBe('true');
   await user.click(again);
   expect(vi.mocked(client.createCharacter)).toHaveBeenCalledTimes(1);
+  settle(); // the app finished and the builder was not replaced: nothing stays stuck on "Saving…"
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Create and save' }).getAttribute('aria-disabled')).toBeNull());
 });
 
 // R38: a level-up draft with one existing class.

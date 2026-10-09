@@ -88,7 +88,8 @@ interface Basics {
 interface Props {
   mode: BuilderMode;
   rulesFamilies: RulesFamilyPolicy[];
-  onCommitted: (view: CharacterView) => void;
+  /** Called after a successful save; it may return a promise (the app refreshing its list), which keeps the builder busy until it settles. */
+  onCommitted: (view: CharacterView) => void | Promise<void>;
   onCancel: () => void;
   onError: (error: unknown) => void;
 }
@@ -1137,13 +1138,15 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
               spells: draft.spells,
             })
           : await client.saveCharacter(draft);
-      onCommitted(saved); // always: the save happened, so the list refreshes and the app says so even if the player has left (R36)
-      return; // busy stays on: the builder is about to leave, and a second press must not create the character again
+      // Always: the save happened, so the app says so even if the player has left (R36). The app switches the screen before it
+      // awaits anything, so a second press cannot reach a builder that is leaving; one that stays is usable again below.
+      await Promise.resolve(onCommitted(saved));
     } catch (error) {
       fail(error);
+    } finally {
+      committing.current = false;
+      setBusy(false);
     }
-    committing.current = false;
-    setBusy(false);
   }
 
   const at = createSteps.indexOf(step);
