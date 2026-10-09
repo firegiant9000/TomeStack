@@ -3,12 +3,12 @@
 // names and values are invented.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterView, ContentOption, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
 import { CharacterBuilder } from './CharacterBuilder';
 
-vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), rollDice: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
 const caster = { contentId: 'fixture-caster', revisionId: 'fixture-caster-r1' };
 const spell = (id: string, name: string, level: number): ContentOption => ({
@@ -123,11 +123,16 @@ it('lists no option of the other family, and keeps a campaign-outside option lis
   const outsider = screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement;
   expect(outsider.disabled).toBe(true);
   expect(outsider.closest('label')!.textContent).toMatch(/not allowed in this campaign/);
-  // Outside the campaign and of the other family: still listed (P-01), with the campaign reason.
-  const outlander = screen.getByRole('radio', { name: /^Fixture Outlander/ }) as HTMLInputElement;
-  expect(outlander.disabled).toBe(true);
-  expect(outlander.closest('label')!.textContent).toMatch(/not allowed in this campaign/);
+  // Of the other family and outside the campaign: the family rule wins (R32), it is never listed, with or without a reason.
+  expect(screen.queryByRole('radio', { name: /^Fixture Outlander/ })).toBeNull();
   expect(screen.queryByText(/Options for the other family cannot be selected/)).toBeNull();
+  // An own-family option outside the campaign becomes selectable once an exception reason is given (P-01).
+  await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
+  await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+  await waitFor(() => expect((screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement).disabled).toBe(false));
+  expect(screen.queryByRole('radio', { name: /^Fixture Outlander/ })).toBeNull();
+  await user.clear(screen.getByRole('textbox', { name: /Reason/ }));
+  await waitFor(() => expect((screen.getByRole('radio', { name: /^Fixture Outsider/ }) as HTMLInputElement).disabled).toBe(true));
   await user.click(screen.getByRole('button', { name: 'Next: background' }));
   expect(screen.queryByText(/Fixture Other Feat/)).toBeNull();
 });
@@ -148,6 +153,115 @@ it('keeps a checked option of the other family in a choice, and omits an uncheck
   const kept = within(picker).getByRole('checkbox', { name: /Fixture Imported/ }) as HTMLInputElement;
   expect(kept.checked).toBe(true);
   expect(within(picker).queryByRole('checkbox', { name: /Fixture Absent/ })).toBeNull();
+});
+
+// R33 (2.4.3): unticking a chosen option that is not offerable never removes the focused checkbox from the page.
+const choiceView = (selected: ContentOption[], options: ContentOption[], campaignId?: string): CharacterView => {
+  const view = viewWith([]);
+  view.character = { ...view.character, campaignId };
+  view.sheet.choices = [
+    { source: { contentId: 'fixture-feature', revisionId: 'fixture-feature-r1' }, sourceName: 'Fixture feature', choiceId: 'pick', count: 2, options: options.map((o) => o.reference), selected: selected.map((o) => o.reference), resolved: false },
+  ];
+  return view;
+};
+
+it('keeps an unticked other-family option in the choice, focused and inert (R33, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+  const imported = content(8, 'feature', 'Fixture Imported', 'srd-5.2.1');
+  vi.mocked(client.listContent).mockResolvedValue([mine, imported]);
+  vi.mocked(client.previewChoice).mockResolvedValue(choiceView([], [mine, imported]));
+  render(<CharacterBuilder mode={{ kind: 'choices', view: choiceView([imported], [mine, imported]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+  const box = (await within(picker).findByRole('checkbox', { name: /Fixture Imported/ })) as HTMLInputElement;
+  await user.click(box);
+  await waitFor(() => expect(vi.mocked(client.previewChoice)).toHaveBeenCalled());
+  await waitFor(() => expect(box.checked).toBe(false));
+  const after = within(picker).getByRole('checkbox', { name: /Fixture Imported/ }) as HTMLInputElement;
+  expect(after).toBe(box); // the same element: never unmounted
+  expect(document.activeElement).toBe(box);
+  expect(box.disabled).toBe(false); // aria-disabled, never disabled under focus
+  expect(box.getAttribute('aria-disabled')).toBe('true');
+  vi.mocked(client.previewChoice).mockClear();
+  await user.click(box); // inert: it cannot be ticked again
+  expect(vi.mocked(client.previewChoice)).not.toHaveBeenCalled();
+});
+
+it('keeps an unticked campaign-outside option in the choice, focused and inert (R33)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+  const mine = content(7, 'feature', 'Fixture Mine', 'srd-5.1');
+  const outsider = content(8, 'feature', 'Fixture Outsider', 'srd-5.1', { allowedInCampaign: false });
+  vi.mocked(client.listContent).mockResolvedValue([mine, outsider]);
+  vi.mocked(client.previewChoice).mockResolvedValue(choiceView([], [mine, outsider], 'fixture-camp'));
+  render(<CharacterBuilder mode={{ kind: 'choices', view: choiceView([outsider], [mine, outsider], 'fixture-camp') }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+  const picker = await screen.findByRole('group', { name: /Fixture feature: choose 2/ });
+  const box = (await within(picker).findByRole('checkbox', { name: /Fixture Outsider/ })) as HTMLInputElement;
+  await user.click(box);
+  await waitFor(() => expect(box.checked).toBe(false));
+  expect(within(picker).getByRole('checkbox', { name: /Fixture Outsider/ })).toBe(box);
+  expect(document.activeElement).toBe(box);
+  expect(box.getAttribute('aria-disabled')).toBe('true');
+  expect(box.closest('li')!.textContent).toMatch(/not allowed in this campaign/);
+});
+
+// R34 (owner): spells are campaign-restricted like other content.
+describe('spells and the campaign (R34)', () => {
+  const campaignView = () => {
+    const view = viewWith([]);
+    view.character = { ...view.character, campaignId: 'fixture-camp' };
+    return view;
+  };
+  const outsideSpell = { ...spell('fixture-hex', 'Fixture Hex', 1), allowedInCampaign: false };
+  const otherFamilySpell = { ...spell('fixture-wisp', 'Fixture Wisp', 1), rulesFamilies: ['srd-5.2.1' as const], compatible: false, allowedInCampaign: false };
+
+  beforeEach(() => {
+    vi.mocked(client.listCampaigns).mockResolvedValue([{ id: 'fixture-camp', name: 'Fixture Campaign', rulesFamily: 'srd-5.1', allowedSources: ['fixture-source'] }]);
+    vi.mocked(client.listContent).mockResolvedValue([...spells, outsideSpell, otherFamilySpell]);
+    vi.mocked(client.preview).mockImplementation(async (draft) => ({ ...viewWith(draft.spells), character: draft }));
+    vi.mocked(client.saveCharacter).mockReset();
+  });
+
+  it('lists an own-family outside spell inert with the reason, never an other-family one, and records an exception once a reason is given', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: campaignView() }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture caster spells/ });
+    const hex = (await within(picker).findByRole('checkbox', { name: /Fixture Hex/ })) as HTMLInputElement;
+    expect(within(picker).queryByRole('checkbox', { name: /Fixture Wisp/ })).toBeNull();
+    expect(hex.getAttribute('aria-disabled')).toBe('true');
+    expect(hex.closest('li')!.textContent).toMatch(/not allowed in this campaign/);
+    await user.click(hex);
+    expect(vi.mocked(client.preview)).not.toHaveBeenCalled();
+    expect(hex.checked).toBe(false);
+
+    await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
+    await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+    await waitFor(() => expect(hex.getAttribute('aria-disabled')).toBeNull());
+    expect(within(picker).queryByRole('checkbox', { name: /Fixture Wisp/ })).toBeNull();
+    await user.click(hex);
+    await waitFor(() => expect(hex.checked).toBe(true));
+    await user.click(screen.getByRole('button', { name: 'Save choices' }));
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalled());
+    const saved = vi.mocked(client.saveCharacter).mock.calls[0]![0];
+    expect(saved.campaignExceptions).toEqual([expect.objectContaining({ content: outsideSpell.reference, reason: 'DM approved' })]);
+  });
+
+  it('records no exception for a spell the campaign allows', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...viewWith(c.spells), character: c }));
+    render(<CharacterBuilder mode={{ kind: 'choices', view: campaignView() }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={() => {}} />);
+    const picker = await screen.findByRole('group', { name: /Fixture caster spells/ });
+    const bolt = (await within(picker).findByRole('checkbox', { name: /Fixture Bolt/ })) as HTMLInputElement;
+    expect(bolt.getAttribute('aria-disabled')).toBeNull();
+    await user.click(bolt);
+    await waitFor(() => expect(bolt.checked).toBe(true));
+    await user.click(screen.getByRole('checkbox', { name: 'Use content from outside the campaign' }));
+    await user.type(screen.getByRole('textbox', { name: /Reason/ }), 'DM approved');
+    await user.click(screen.getByRole('button', { name: 'Save choices' }));
+    await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalled());
+    expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].campaignExceptions).toEqual([]);
+  });
 });
 
 // D32: the create flow in six steps.

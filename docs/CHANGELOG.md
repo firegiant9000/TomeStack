@@ -33,7 +33,8 @@
 
 ### Changed
 
-- **Only your rules family is offered in the builder (D31):** species, backgrounds, classes and choice options of the other family are no longer listed; the studio and Sources still show every family.
+- **Only your rules family is offered in the builder (D31):** species, backgrounds, classes and choice options of the other family are no longer listed; the studio and Sources still show every family. This holds inside a campaign too: content of the other family is never listed there, even when the campaign also disallows its source.
+- **Spells are campaign-restricted:** in the builder's spell picker a spell from a source the campaign does not allow is listed disabled ("not allowed in this campaign") until you give an exception reason, which is then recorded with the spell. A recorded spell from such a source now shows the same campaign warning on the sheet as other content (or the exception's reason). No data changes.
 - **Short and long rests at the top of the sheet (D29):** the two buttons are in the sheet header and the preview opens under the summary; they are no longer on Play. A hit die being rolled counts against the dice left, "Cancel rest" waits while a finish is being saved, and a late reply never switches the screen to another character. A button that cannot act yet is shown with a dimmed label rather than faded, so its focus ring stays clear.
 - **Bigger ability numbers, smaller Roll buttons (D28):** the modifier is larger and the roll control is a compact 'Roll' button with the same spoken name.
 - **Light mode is tinted and brighter (D27):** each theme colours the page, the sidebar, the summary and the header in light mode; dark mode is unchanged.

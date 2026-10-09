@@ -75,7 +75,7 @@ Play state adds `spellSlotsSpent: [{ level, spent }]` and `pactSlotsSpent`. v1â€
 
 ## Builder
 
-The choices step (create, level-up and "Make choices") has a picker per caster. It lists the spells on the caster's list up to its highest slot level, grouped by level, and shows the counts ("0 of 3 cantrips, 0 of 4 prepared spells"). Picks are previewed on the draft like choices, and going over a count is flagged on the sheet, not blocked.
+The choices step (create, level-up and "Make choices") has a picker per caster. It lists the spells on the caster's list up to its highest slot level, grouped by level, and shows the counts ("0 of 3 cantrips, 0 of 4 prepared spells"). Picks are previewed on the draft like choices, and going over a count is flagged on the sheet, not blocked. Spells are campaign-restricted like other content: in a campaign, a spell from a source it does not allow is listed disabled until an exception reason is given, and a recorded one from such a source gets the campaign warning ([campaigns.md](campaigns.md)). Spells of the other rules family are never listed.
 
 ## Search (D30)
 

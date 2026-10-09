@@ -93,8 +93,11 @@ interface Props {
   onError: (error: unknown) => void;
 }
 
-/** An option as the builder shows it: outside the campaign counts as unavailable until the player gives a reason. */
-type Shown = ContentOption & { outsideCampaign?: boolean };
+/**
+ * An option as the builder shows it: outside the campaign counts as unavailable until the player gives a reason.
+ * `familyOk` is the server's family fit before that overlay, so the other family stays out whatever the campaign says.
+ */
+type Shown = ContentOption & { outsideCampaign?: boolean; familyOk: boolean };
 
 function sourceLine(option: Shown) {
   return (
@@ -106,14 +109,17 @@ function sourceLine(option: Shown) {
   );
 }
 
-/** D31 (owner, 2026-10-07): content of the other rules family is never offered; only campaign-outside content is shown disabled (P-01). */
-const visible = (option: Shown) => option.compatible || option.outsideCampaign === true;
+/**
+ * D31 (owner, 2026-10-07): content of the other rules family is never offered, inside a campaign or out (R32). Of the
+ * character's own family, only campaign-outside content is shown disabled with its reason (P-01).
+ */
+const visible = (option: Shown) => option.familyOk && (option.compatible || option.outsideCampaign === true);
 
 /** One origin or class pick: a radio group with "None", so the choice is explicit and keyboard-operable. */
 function SinglePick(props: {
   legend: string;
   name: string;
-  options: ContentOption[];
+  options: Shown[];
   value?: ContentReference;
   onChange: (value?: ContentReference) => void;
 }) {
@@ -657,6 +663,9 @@ function ChoicePicker(props: {
 }) {
   const { choice } = props;
   const full = choice.selected.length >= choice.count;
+  // R33 (2.4.3): an option ticked when the picker appeared stays rendered for as long as the picker does, so unticking the
+  // focused checkbox never removes it; once unticked and not offerable it is aria-disabled, never `disabled` under focus.
+  const [atMount] = useState(() => new Set(choice.selected.map((s) => s.revisionId)));
   if (!props.optionsLoaded) {
     return (
       <fieldset className="choice-picker" aria-busy="true">
@@ -680,16 +689,21 @@ function ChoicePicker(props: {
           const checked = choice.selected.some((s) => sameRef(s, ref));
           const id = `choice-${choice.source.revisionId}-${choice.choiceId}-${ref.revisionId}`;
           const unavailable = !option || !option.compatible;
-          // D31: an option of the other family is not offered, unless it is already chosen (an imported character), so it can be unticked.
-          if (option && !visible(option) && !checked) return null;
+          // D31: an option of the other family is not offered, unless it was chosen when the picker appeared (an imported character).
+          const kept = atMount.has(ref.revisionId);
+          if (option && !visible(option) && !checked && !kept) return null;
+          const inert = !checked && kept && (full || unavailable);
           return (
             <li key={ref.revisionId} className={unavailable ? 'incompatible' : ''}>
               <input
                 id={id}
                 type="checkbox"
                 checked={checked}
-                disabled={!checked && (full || unavailable)}
-                onChange={() => props.onChange(ref, !checked)}
+                disabled={!checked && !kept && (full || unavailable)}
+                aria-disabled={inert || undefined}
+                onChange={() => {
+                  if (!inert) props.onChange(ref, !checked);
+                }}
               />
               <label htmlFor={id}>
                 <span className="option-name">{option?.name ?? `Missing content ${ref.revisionId}`}</span>
@@ -711,14 +725,15 @@ const levelName = (level: number) => (level === 0 ? 'Cantrips' : `Level ${level}
  */
 function SpellPicker(props: {
   entry: SpellcastingEntry;
-  spells: ContentOption[];
+  spells: Shown[];
   recorded: KnownSpell[];
   /** Records (`add`) or removes one spell of this caster; the builder applies it to the latest draft. */
   onChange: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
 }) {
   const { entry } = props;
   const highest = entry.slots.reduce((top, count, i) => (count > 0 ? i + 1 : top), 0);
-  const options = props.spells.filter((o) => o.compatible && o.spell && o.spell.lists.includes(entry.spellList) && o.spell.level <= highest);
+  // R32, R34: never the other family; an own-family spell outside the campaign is listed inert with its reason.
+  const options = props.spells.filter((o) => visible(o) && o.spell && o.spell.lists.includes(entry.spellList) && o.spell.level <= highest);
   // D30: a search by name; the legend's counts below still count what is recorded, not what is shown.
   const [query, setQuery] = useState('');
   const shown = options.filter((o) => matchesSpell(o.name, query));
@@ -732,8 +747,10 @@ function SpellPicker(props: {
     entry.spellsAllowed !== undefined ? `${mine.length - cantrips} of ${entry.spellsAllowed} ${entry.preparation === 'known' ? 'known' : 'prepared'} spells` : undefined,
   ].filter(Boolean);
 
-  function toggle(option: ContentOption) {
-    props.onChange(entry.content.contentId, option.reference, !mine.some((s) => sameRef(s.spell, option.reference)));
+  function toggle(option: Shown) {
+    const chosen = mine.some((s) => sameRef(s.spell, option.reference));
+    if (!chosen && !option.compatible) return; // inert, not disabled: the focus stays where it is (2.4.3)
+    props.onChange(entry.content.contentId, option.reference, !chosen);
   }
 
   return (
@@ -754,9 +771,10 @@ function SpellPicker(props: {
               .filter((o) => o.spell!.level === level)
               .map((option) => {
                 const id = `spell-${entry.content.contentId}-${option.reference.revisionId}`;
+                const chosen = mine.some((s) => sameRef(s.spell, option.reference));
                 return (
-                  <li key={option.reference.revisionId}>
-                    <input id={id} type="checkbox" checked={mine.some((s) => sameRef(s.spell, option.reference))} onChange={() => toggle(option)} />
+                  <li key={option.reference.revisionId} className={option.compatible ? '' : 'incompatible'}>
+                    <input id={id} type="checkbox" checked={chosen} aria-disabled={(!chosen && !option.compatible) || undefined} onChange={() => toggle(option)} />
                     <label htmlFor={id}>
                       <span className="option-name">{option.name}</span> {sourceLine(option)}
                     </label>
@@ -773,9 +791,9 @@ function SpellPicker(props: {
 function ChoicesStep(props: {
   view: CharacterView;
   commitLabel: string;
-  optionOf: (ref: ContentReference) => ContentOption | undefined;
+  optionOf: (ref: ContentReference) => Shown | undefined;
   optionsLoaded: boolean;
-  spellOptions: ContentOption[];
+  spellOptions: Shown[];
   onChoose: (choice: ChoiceStatus, ref: ContentReference, add: boolean) => void;
   onSpells: (caster: KnownSpell['caster'], spell: ContentReference, add: boolean) => void;
   onBack?: () => void;
@@ -934,14 +952,15 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   // SPEC P-01: content outside the campaign is unavailable until the player says why they use it (a recorded exception).
   const outsideAllowed = outside.allow && outside.reason.trim().length > 0;
   const options: Shown[] = listed.map((o) =>
-    o.allowedInCampaign === false && !outsideAllowed ? { ...o, compatible: false, outsideCampaign: true } : o,
+    o.allowedInCampaign === false && !outsideAllowed ? { ...o, familyOk: o.compatible, compatible: false, outsideCampaign: true } : { ...o, familyOk: o.compatible },
   );
 
   /** Exceptions for every referenced revision the campaign does not allow, with the player's reason. */
   function withExceptions(draft: Character): Character {
     if (!outsideAllowed) return draft; // without a reason nothing is recorded; the sheet then warns about outside content
     const known = draft.campaignExceptions ?? [];
-    const references = [...draft.pins, ...draft.classes.map((c) => c.class), ...draft.choices.flatMap((c) => c.selected)];
+    // R34: the chosen spells are campaign-restricted like the rest.
+    const references = [...draft.pins, ...draft.classes.map((c) => c.class), ...draft.choices.flatMap((c) => c.selected), ...(draft.spells ?? []).map((s) => s.spell)];
     const added: CampaignException[] = references
       .filter((r) => listed.find((o) => sameRef(o.reference, r))?.allowedInCampaign === false)
       .filter((r) => !known.some((e) => sameRef(e.content, r)))
