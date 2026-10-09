@@ -300,7 +300,7 @@ export function PrintView({ view, onError, onClose }: Props) {
             <ul>
               {notes.map((n) => (
                 <li key={n.id}>
-                  {n.target.label ?? n.target.kind} ({n.status}): {n.text}
+                  {n.target.label || n.target.kind} ({n.status}): {n.text}
                 </li>
               ))}
             </ul>

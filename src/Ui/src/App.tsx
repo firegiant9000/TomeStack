@@ -82,12 +82,17 @@ export function App() {
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
+  // Only the latest open applies: two quick opens can be answered out of order.
+  const openSeq = useRef(0);
   async function open(id: string, tab?: SheetTabId) {
+    const request = ++openSeq.current;
     try {
       setMessage(undefined);
-      setScreen({ kind: 'sheet', view: await client.getCharacter(id), tab });
+      const view = await client.getCharacter(id);
+      if (request !== openSeq.current) return;
+      setScreen({ kind: 'sheet', view, tab });
     } catch (error) {
-      onError(error);
+      if (request === openSeq.current) onError(error);
     }
   }
 
@@ -313,13 +318,23 @@ export function App() {
             onCancel={() => {
               const mode = screen.mode;
               if (mode.kind === 'create') setScreen({ kind: 'home', focus: true });
-              else setScreen({ kind: 'sheet', view: mode.view });
+              else {
+                // The sheet shown at once is the one the builder started from; a fresh read replaces it, so a change made
+                // meanwhile (a rest, a save) is never shown as it was.
+                const id = mode.view.character.id;
+                setScreen({ kind: 'sheet', view: mode.view });
+                client
+                  .getCharacter(id)
+                  .then((view) => setScreen((current) => (current.kind === 'sheet' && current.view.character.id === id ? { ...current, view } : current)))
+                  .catch(onError);
+              }
               setMessage({ tone: 'status', text: 'Draft discarded. Nothing was changed.' });
             }}
             onCommitted={async (view) => {
               setMessage(undefined);
               await refresh();
-              setScreen({ kind: 'sheet', view });
+              // Only while this builder is still the screen: a Cancel (or another screen) in the meantime wins.
+              setScreen((current) => (current.kind === 'builder' ? { kind: 'sheet', view } : current));
             }}
           />
         )}

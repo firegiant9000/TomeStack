@@ -17,6 +17,7 @@ vi.mock('./api/client', () => ({
     listGapNotes: vi.fn(),
     availableUpdates: vi.fn(),
     listContent: vi.fn(),
+    listCampaigns: vi.fn(),
     snapshots: vi.fn(),
     previewExport: vi.fn(),
     play: vi.fn(),
@@ -55,11 +56,41 @@ beforeEach(() => {
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue([]);
+  vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
 afterEach(() => {
   cleanup();
   localStorage.clear();
+});
+
+it('Cancel from a level-up shows the character as it is now, not as it was when the builder opened (carry 1)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(await screen.findByRole('button', { name: 'Level up' }));
+  await screen.findByRole('heading', { name: 'Level up Fixture Avery' });
+  vi.mocked(client.getCharacter).mockResolvedValue(viewOf('fixture-a', 'Fixture Avery Later'));
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(await screen.findByRole('heading', { name: 'Fixture Avery Later' })).toBeTruthy();
+  expect(screen.getByText('Draft discarded. Nothing was changed.')).toBeTruthy();
+});
+
+it('two quick opens: only the latest reply is shown (carry 4)', async () => {
+  const user = userEvent.setup();
+  const replies: Record<string, (view: CharacterView) => void> = {};
+  vi.mocked(client.getCharacter).mockImplementation((id) => new Promise<CharacterView>((r) => (replies[id] = r)));
+  render(<App />);
+  const list = await screen.findByRole('navigation', { name: 'Characters' });
+  await user.click(within(list).getByRole('button', { name: /Fixture Avery/ }));
+  await user.click(within(list).getByRole('button', { name: /Fixture Blake/ }));
+  replies['fixture-b']!(b);
+  await waitFor(() => expect(within(list).getByRole('button', { name: /Fixture Blake/ }).getAttribute('aria-current')).toBe('page'));
+  replies['fixture-a']!(a); // the older request answers last
+  await new Promise((r) => setTimeout(r, 20));
+  expect(within(list).getByRole('button', { name: /Fixture Blake/ }).getAttribute('aria-current')).toBe('page');
+  expect(within(list).getByRole('button', { name: /Fixture Avery/ }).getAttribute('aria-current')).toBeNull();
 });
 
 it("a late rest reply for the first character leaves the second character's sheet on screen and shows no status", async () => {

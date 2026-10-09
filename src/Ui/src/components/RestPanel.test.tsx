@@ -63,6 +63,21 @@ it('does nothing for Add d8 while a roll of the last die is in flight, and ends 
   expect(Math.max(...previewed)).toBe(1);
 });
 
+it('keeps Finish inert while a hit die is being rolled (carry 2)', async () => {
+  const user = userEvent.setup();
+  const resolve = deferredRoll();
+  vi.mocked(client.rest).mockResolvedValue({} as CharacterView);
+  panel();
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(screen.getByRole('button', { name: 'Roll a d8' }));
+  expect(finish.getAttribute('aria-disabled')).toBe('true');
+  await user.click(finish);
+  expect(client.rest).not.toHaveBeenCalled();
+  resolve();
+  await screen.findByText(/d8: 0 of 1 left/);
+});
+
 it('keeps Cancel rest inert, focus on it, and the panel open while a Finish is in flight', async () => {
   const user = userEvent.setup();
   const onCancel = vi.fn();

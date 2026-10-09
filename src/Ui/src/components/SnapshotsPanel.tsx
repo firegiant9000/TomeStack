@@ -95,7 +95,7 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
       onStatus(`Showing ${page.items.length} older snapshot${page.items.length === 1 ? '' : 's'}.`);
     });
 
-  const name = (s: SnapshotSummary) => s.label ?? (s.reason === 'beforeRestore' ? 'Before a restore' : 'Snapshot');
+  const name = (s: SnapshotSummary) => s.label || (s.reason === 'beforeRestore' ? 'Before a restore' : 'Snapshot');
 
   return (
     <section aria-labelledby="snapshots-heading">

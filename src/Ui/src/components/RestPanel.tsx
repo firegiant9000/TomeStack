@@ -86,8 +86,11 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     changeRolls((r) => r.filter((_, i) => i !== index));
   }
 
+  // A roll in flight is a die the proposal does not hold yet: finishing now would leave it out (and spend it anyway).
+  const rollingAny = Object.values(pending).some((n) => n > 0);
+
   async function finish() {
-    if (!preview || !ready || failed || busy) return;
+    if (!preview || !ready || failed || busy || rollingAny) return;
     setBusy(true);
     try {
       const applied = preview.changes.filter((c) => !skipped.includes(c.id)).length;
@@ -176,7 +179,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         </>
       )}
       <div className="actions">
-        <button type="button" onClick={finish} aria-disabled={!ready || failed || busy}>
+        <button type="button" onClick={finish} aria-disabled={!ready || failed || busy || rollingAny}>
           {busy ? 'Resting…' : `Finish ${name.toLowerCase()}`}
         </button>
         <button type="button" onClick={() => !busy && onCancel()} aria-disabled={busy}>
