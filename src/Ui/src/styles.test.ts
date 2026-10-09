@@ -104,13 +104,15 @@ it('maps each token to the light value the spec computed, per theme block (secti
 
 it('forced colours and print both reset --bg and --header-bg, and reach themed pages (html[data-theme])', () => {
   // The theme blocks have specificity (0,1,1): a bare :root list would leave the tinted hex values in force.
+  // The selector list is the text before the rule's first `{` (comments stripped, so a note naming html[data-theme] does not count).
+  const selectors = (block: string) => block.replace(/\/\*[\s\S]*?\*\//g, '').split('{')[0]!;
   const forced = blockAfter(css, '@media (forced-colors: active) {');
-  expect(forced).toMatch(/html\[data-theme\]/);
+  expect(selectors(forced)).toMatch(/html\[data-theme\]/);
   expect(forced).toMatch(/--bg:\s*Canvas;/);
   expect(forced).toMatch(/--header-bg:\s*Canvas;/);
   const print = blockAfter(css, '@media print {');
   const rule = print.slice(0, print.indexOf('}'));
-  expect(rule).toMatch(/html\[data-theme\]/);
+  expect(selectors(rule)).toMatch(/html\[data-theme\]/);
   expect(rule).toMatch(/--bg:\s*Canvas;/);
   expect(rule).toMatch(/--surface:\s*Canvas;/);
   expect(rule).toMatch(/--header-bg:\s*Canvas;/);
