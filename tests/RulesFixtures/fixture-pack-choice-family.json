@@ -1,0 +1,76 @@
+{
+  "packId": "tomestack-choice-family-fixtures",
+  "formatVersion": 1,
+  "notice": "Original TomeStack test fixtures: a background whose choice lists an option of one rules family only, so the service's handling of a kept option can be tested. Names and effects are invented and contain no SRD or third-party rules text. Test-only: not seeded into user data.",
+  "sources": [
+    {
+      "id": "5f0d5001-0000-4000-8000-000000000060",
+      "title": "TomeStack Fixtures: Choice Family",
+      "publisher": "TomeStack project",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "editionVersion": "fixture-1",
+      "license": "Original test fixture",
+      "redistributable": true,
+      "attribution": "Written for TomeStack tests."
+    }
+  ],
+  "revisions": [
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000060",
+      "revisionId": "5f1de000-0000-4000-8000-000000000060",
+      "schemaVersion": 3,
+      "kind": "background",
+      "name": "Fixture Keeper",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000060", "page": { "start": 1 } },
+      "status": "published",
+      "summary": "A test background with a choice of two among three features; one of them is for the 2014 family only.",
+      "effects": [
+        {
+          "type": "choice",
+          "id": "keeper-gift",
+          "choiceId": "keeper-gift",
+          "count": 2,
+          "options": [
+            { "contentId": "5f1dc000-0000-4000-8000-000000000061", "revisionId": "5f1de000-0000-4000-8000-000000000061" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000062", "revisionId": "5f1de000-0000-4000-8000-000000000062" },
+            { "contentId": "5f1dc000-0000-4000-8000-000000000063", "revisionId": "5f1de000-0000-4000-8000-000000000063" }
+          ]
+        }
+      ]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000061",
+      "revisionId": "5f1de000-0000-4000-8000-000000000061",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Keeper Gift: Hearth",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000060", "page": { "start": 2 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "hearth", "grant": "proficiency", "target": "skill.medicine" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000062",
+      "revisionId": "5f1de000-0000-4000-8000-000000000062",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Keeper Gift: Lantern",
+      "rulesFamilies": ["srd-5.1", "srd-5.2.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000060", "page": { "start": 2 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "lantern", "grant": "proficiency", "target": "skill.survival" }]
+    },
+    {
+      "contentId": "5f1dc000-0000-4000-8000-000000000063",
+      "revisionId": "5f1de000-0000-4000-8000-000000000063",
+      "schemaVersion": 3,
+      "kind": "feature",
+      "name": "Fixture Keeper Gift: Almanac (2014 only)",
+      "rulesFamilies": ["srd-5.1"],
+      "provenance": { "sourceId": "5f0d5001-0000-4000-8000-000000000060", "page": { "start": 2 } },
+      "status": "published",
+      "effects": [{ "type": "grant", "id": "almanac", "grant": "proficiency", "target": "skill.history" }]
+    }
+  ]
+}

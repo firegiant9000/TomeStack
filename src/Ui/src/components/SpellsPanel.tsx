@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
+import { SpellSearch } from './sheet/SpellSearch';
+import { foldName, matchesSpell } from '../spellSearch';
 import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
@@ -31,6 +34,8 @@ export function SpellsPanel({
   /** Saves a changed spell list (preparing is a choice, not play state). */
   onSave: (character: Character) => void;
 }) {
+  // D30: the search text per caster. The sheet is keyed by character in App, so this remounts (and resets) per character.
+  const [queries, setQueries] = useState<Record<string, string>>({});
   const casters = view.sheet.spellcasting ?? [];
   if (casters.length === 0) return null;
   const slots = view.sheet.spellSlots ?? [];
@@ -67,7 +72,10 @@ export function SpellsPanel({
           {pact && <SlotItem label={`Pact Magic slots (level ${pact.level})`} slot={pact} spend={{ action: 'spendPactSlot' }} regain={{ action: 'regainPactSlot' }} act={act} />}
         </ul>
       )}
-      {casters.map((entry) => (
+      {casters.map((entry) => {
+        const query = queries[entry.content.revisionId] ?? '';
+        const shown = entry.spells.filter((s) => matchesSpell(s.name, query));
+        return (
         <section key={entry.content.revisionId} aria-labelledby={`caster-${entry.content.revisionId}`}>
           <h4 id={`caster-${entry.content.revisionId}`}>
             {entry.name} (level {entry.classLevel}, {abilityNames[entry.ability]}): spell attack {entry.attackBonus >= 0 ? '+' : ''}
@@ -95,11 +103,22 @@ export function SpellsPanel({
               ))}
             </ul>
           )}
+          {entry.spells.length > 0 && (
+            <SpellSearch
+              id={`spell-search-${entry.content.revisionId}`}
+              label={`Search ${entry.name} spells by name`}
+              value={query}
+              onChange={(value) => setQueries((q) => ({ ...q, [entry.content.revisionId]: value }))}
+              shown={shown.length}
+              total={entry.spells.length}
+            />
+          )}
           {entry.spells.length === 0 ? (
             <p className="hint">No spells recorded. Pick them in the builder ("Make choices" or at level-up).</p>
           ) : (
+            shown.length > 0 && (
             <ul className="features" aria-label={`${entry.name} spells`}>
-              {entry.spells.map((spell) => (
+              {shown.map((spell) => (
                 <li key={spell.spell.revisionId} className="feature">
                   <details>
                     <summary>
@@ -152,9 +171,14 @@ export function SpellsPanel({
                 </li>
               ))}
             </ul>
+            )
+          )}
+          {shown.length === 0 && foldName(query) !== '' && (
+            <p className="hint">No spells match “{query}”. Clear the search to see all {entry.spells.length}.</p>
           )}
         </section>
-      ))}
+        );
+      })}
     </section>
   );
 }

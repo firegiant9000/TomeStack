@@ -11,7 +11,7 @@ The primary user is a fifth-edition player or DM who wants a reliable local char
 ### Sources and provenance
 
 - **S-01** A source record stores title, creator/publisher, rules compatibility, edition/version, license/redistribution status, import date, file hash, and optional local PDF reference. Every entity keeps source ID and page or page range when known.
-- **S-02** SRD 5.1 and SRD 5.2.1 are separate source packs. A character chooses a primary rule family. The picker shows the source and compatibility of every option, including user content.
+- **S-02** SRD 5.1 and SRD 5.2.1 are separate source packs. A character chooses a primary rule family. The picker shows the source of every option and offers only the content of the character's rules family; content written for the other family is never offered to a character (owner, 2026-10-07, D31). The homebrew studio and the Sources list show every family.
 - **S-03** Each character/campaign may enable sources. Duplicate names are displayed with source and rules family. An explicit selection or override resolves conflicts; the app does not merge mechanics by name.
 - **S-04** Linked PDFs are stored in an application-managed local library by default, with checksum, original filename and source-page navigation. The user may remove the attachment without deleting accepted structured content, subject to a confirmation describing what breaks.
 

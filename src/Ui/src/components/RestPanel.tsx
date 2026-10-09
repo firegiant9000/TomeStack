@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, HitDiceValue, HitDieRoll, RestPeriod, RestPreview } from '../api/types';
+import type { CharacterView, HitDiceValue, HitDieRoll, RestPeriod, RestPreview, RollRecord } from '../api/types';
 
 interface Props {
   characterId: string;
   kind: RestPeriod;
   /** The character's hit dice pools; a short rest spends from them. */
   hitDice: HitDiceValue[];
+  /** Identity of the character view the proposal is for; a new one (any change to the character) fetches the proposal again. */
+  version: unknown;
   onRested: (view: CharacterView, applied: number) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
+  /** Every hit-die roll, so the sheet can log it (D28); a rest never shows it as the Last roll. */
+  onRoll?: (record: RollRecord) => void;
 }
 
 /**
@@ -17,10 +21,17 @@ interface Props {
  * no food and drink) and confirms; nothing changes before "Finish … rest". A short rest first asks which hit dice to
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
-export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onError }: Props) {
-  const [preview, setPreview] = useState<RestPreview>();
-  const [skipped, setSkipped] = useState<string[]>([]);
+export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll }: Props) {
+  // The proposal belongs to the view and the hit dice it was worked out for: after any other change (for example "Lose 1 hit
+  // point" in the summary, or a die added or removed) it is stale and fetched again. The last proposal stays on screen
+  // meanwhile (so a focused control is not unmounted) but "Finish" waits for the one for the current view and dice.
+  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown; rolls: HitDieRoll[] }>();
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
+  const [failure, setFailure] = useState<{ version: unknown; rolls: HitDieRoll[] }>();
+  const preview = fetched?.preview;
+  const ready = fetched !== undefined && fetched.version === version && fetched.rolls === rolls;
+  const failed = failure !== undefined && failure.version === version && failure.rolls === rolls;
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const name = kind === 'shortRest' ? 'Short rest' : 'Long rest';
@@ -30,38 +41,56 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
     client
       .restPreview(characterId, kind, rolls)
       .then((next) => {
-        if (current) setPreview(next);
+        if (current) setFetched({ preview: next, version, rolls });
       })
-      .catch(onError);
+      .catch((error) => {
+        if (!current) return;
+        setFailure({ version, rolls });
+        onError(error);
+      });
     return () => {
       current = false;
     };
-  }, [characterId, kind, rolls, onError]);
+  }, [characterId, kind, rolls, version, onError]);
 
   // WCAG 2.4.3: the panel opens with focus on its heading.
   useEffect(() => heading.current?.focus(), []);
 
-  // A new set of dice is a new proposal: the old one is cleared, so "Finish" waits for the one the player will see.
+  // A new set of dice is a new proposal: the old one stays until it arrives, and "Finish" waits for the one the player will see.
   function changeRolls(change: (current: HitDieRoll[]) => HitDieRoll[]) {
-    setPreview(undefined);
     setRolls(change);
   }
 
+  // A roll in flight already counts against the dice left (the service checks only the die size), so a second press of Roll or
+  // Add cannot spend a die that is not there.
+  const [pending, setPending] = useState<Record<number, number>>({});
+  const bump = (die: number, by: number) => setPending((p) => ({ ...p, [die]: (p[die] ?? 0) + by }));
+
   async function roll(die: number) {
+    bump(die, 1);
     try {
       const record = await client.roll(characterId, { hitDie: die });
       changeRolls((r) => [...r, { die, roll: record.dice[0]!.value }]);
+      onRoll?.(record);
     } catch (error) {
       onError(error);
+    } finally {
+      bump(die, -1);
     }
   }
 
   function remove(index: number) {
+    if (!ready) return; // the list shown may be for other dice than the current ones
+    // The removed die's row goes when the new proposal arrives, so focus moves to the heading now (WCAG 2.4.3).
+    heading.current?.focus();
     changeRolls((r) => r.filter((_, i) => i !== index));
   }
 
+  // A roll in flight is a die the proposal does not hold yet: finishing now would leave it out (and spend it anyway).
+  const rollingAny = Object.values(pending).some((n) => n > 0);
+
   async function finish() {
-    if (!preview) return;
+    if (!preview || !ready || failed || busy || rollingAny) return;
     setBusy(true);
     try {
       const applied = preview.changes.filter((c) => !skipped.includes(c.id)).length;
@@ -89,7 +118,7 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
             <HitDiePicker
               key={pool.die}
               pool={pool}
-              left={pool.remaining - rolls.filter((r) => r.die === pool.die).length}
+              left={pool.remaining - rolls.filter((r) => r.die === pool.die).length - (pending[pool.die] ?? 0)}
               onRoll={() => roll(pool.die)}
               onAdd={(value) => changeRolls((r) => [...r, { die: pool.die, roll: value }])}
             />
@@ -99,8 +128,8 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
               {spent.map((change, index) => (
                 <li key={change.id}>
                   {change.label}: {change.reason}. Hit points {change.from} → {change.to}{' '}
-                  <button type="button" onClick={() => remove(index)}>
-                    Remove {change.label.replace('Spend a ', '')} ({rolls[index]?.roll})
+                  <button type="button" onClick={() => remove(index)} aria-disabled={!ready}>
+                    Remove {change.label.replace('Spend a ', '')} ({fetched?.rolls[index]?.roll})
                   </button>
                 </li>
               ))}
@@ -108,10 +137,12 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
           )}
         </fieldset>
       )}
+      {failed && <p className="error">Could not work out this rest. Cancel and try again.</p>}
       {!preview ? (
-        <p className="hint">Working out what a {name.toLowerCase()} recovers…</p>
+        !failed && <p className="hint">Working out what a {name.toLowerCase()} recovers…</p>
       ) : (
         <>
+          {!ready && !failed && <p className="hint">Updating the proposal…</p>}
           {toggles.length === 0 && spent.length === 0 ? (
             <p>A {name.toLowerCase()} would change nothing{kind === 'shortRest' ? ' yet' : ''}.</p>
           ) : (
@@ -148,10 +179,10 @@ export function RestPanel({ characterId, kind, hitDice, onRested, onCancel, onEr
         </>
       )}
       <div className="actions">
-        <button type="button" onClick={finish} disabled={!preview || busy}>
+        <button type="button" onClick={finish} aria-disabled={!ready || failed || busy || rollingAny}>
           {busy ? 'Resting…' : `Finish ${name.toLowerCase()}`}
         </button>
-        <button type="button" onClick={onCancel}>
+        <button type="button" onClick={() => !busy && onCancel()} aria-disabled={busy}>
           Cancel rest
         </button>
       </div>
@@ -168,7 +199,7 @@ function HitDiePicker({ pool, left, onRoll, onAdd }: { pool: HitDiceValue; left:
       <span>
         d{pool.die}: {left} of {pool.total} left ({pool.classes.join(', ')})
       </span>
-      <button type="button" disabled={left <= 0} onClick={onRoll}>
+      <button type="button" aria-disabled={left <= 0} onClick={() => left > 0 && onRoll()}>
         Roll a d{pool.die}
       </button>
       <label className="field">
@@ -177,8 +208,9 @@ function HitDiePicker({ pool, left, onRoll, onAdd }: { pool: HitDiceValue; left:
       </label>
       <button
         type="button"
-        disabled={left <= 0 || !valid}
+        aria-disabled={left <= 0 || !valid}
         onClick={() => {
+          if (left <= 0 || !valid) return;
           onAdd(value);
           setEntered('');
         }}

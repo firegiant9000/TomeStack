@@ -2,11 +2,12 @@
 // The sheet's tabs (ADR-014): Spells only when there is something to show, a tab that is not offered falls back to Play,
 // "Report a gap" switches to Notes and focuses the note text every time it is pressed, and choosing Notes by hand keeps
 // focus on the tab. The client is mocked; values are invented.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry } from '../api/types';
+import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { CharacterSheet } from './CharacterSheet';
 
 vi.mock('../api/client', () => ({
@@ -19,10 +20,15 @@ vi.mock('../api/client', () => ({
     previewExport: vi.fn(),
     info: vi.fn(),
     play: vi.fn(),
+    roll: vi.fn(),
+    restPreview: vi.fn(),
+    rest: vi.fn(),
   },
 }));
 
 beforeEach(() => {
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  vi.mocked(client.rest).mockReset();
   vi.mocked(client.listGapNotes).mockResolvedValue([]);
   vi.mocked(client.availableUpdates).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue([]);
@@ -373,8 +379,9 @@ it('moves focus to the print preview heading when the preview opens (investigati
   const user = userEvent.setup();
   renderSheet(view());
   const print = screen.getByRole('button', { name: 'Print…' });
-  expect(print.getAttribute('aria-controls')).toBe('print-preview');
+  expect(print.getAttribute('aria-controls')).toBeNull(); // 4.1.2: only while the preview exists
   await user.click(print);
+  expect(print.getAttribute('aria-controls')).toBe('print-preview');
   const preview = screen.getByRole('region', { name: 'Print preview' });
   expect(preview.id).toBe('print-preview');
   await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })));
@@ -432,4 +439,466 @@ it('keeps the header, print preview slot and summary as direct children of the a
   expect(children).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.sheet-body']);
   const body = article.querySelector('.sheet-body')!;
   expect(within(body as HTMLElement).getByRole('tablist', { name: 'Sheet sections' })).toBeTruthy();
+});
+
+const childShape = (article: HTMLElement) => Array.from(article.children).map((c) => `${c.tagName.toLowerCase()}.${c.className.split(' ')[0]}`);
+
+it('opens a rest from the header above the body, focuses its heading, and returns focus to the opener on cancel (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  const short = screen.getByRole('button', { name: 'Short rest…' });
+  expect(short.getAttribute('aria-controls')).toBeNull(); // 4.1.2: only while the panel exists
+  expect(short.getAttribute('aria-expanded')).toBe('false');
+  expect(within(screen.getByRole('tabpanel', { name: 'Play' })).queryByRole('button', { name: /rest…$/ })).toBeNull();
+  await user.click(short);
+  expect(childShape(screen.getByRole('article'))).toEqual(['header.sheet-header', 'section.sheet-summary', 'div.rest-sheet', 'div.sheet-body']);
+  const panel = screen.getByRole('region', { name: 'Short rest' });
+  expect(panel.parentElement!.id).toBe('rest-panel');
+  expect(short.getAttribute('aria-controls')).toBe('rest-panel');
+  await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('heading', { name: 'Short rest' })));
+  expect(short.getAttribute('aria-expanded')).toBe('true');
+  await user.click(within(panel).getByRole('button', { name: 'Cancel rest' }));
+  expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull();
+  expect(document.activeElement).toBe(short);
+  expect(short.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('switches from a short rest to a long rest without writing (Review Focus 3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const panel = screen.getByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(panel).getByRole('heading', { name: 'Long rest' })));
+  expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull();
+  expect(client.rest).not.toHaveBeenCalled();
+});
+
+it('discards the picked hit dice when switching from a short rest to a long rest', async () => {
+  const user = userEvent.setup();
+  renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const picked = { kind: 'shortRest' as const, basis: 'with-die', manual: [], changes: [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Awaited<ReturnType<typeof client.restPreview>>['changes'] };
+  vi.mocked(client.restPreview).mockImplementation(async (_id, kind, dice = []) => (dice.length > 0 ? picked : { kind, changes: [], manual: [], basis: 'fixture' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  expect(await screen.findByRole('button', { name: /^Remove/ })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const panel = screen.getByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(vi.mocked(client.restPreview).mock.lastCall).toEqual(['fixture-2', 'longRest', []]));
+  expect(within(panel).queryByRole('button', { name: /^Remove/ })).toBeNull();
+  expect(client.rest).not.toHaveBeenCalled();
+});
+
+it('toggles the rest panel closed from its own opener and keeps focus there (D29)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  const short = screen.getByRole('button', { name: 'Short rest…' });
+  await user.click(short);
+  expect(screen.getByRole('region', { name: 'Short rest' })).toBeTruthy();
+  await user.click(short);
+  expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull();
+  expect(short.getAttribute('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(short);
+});
+
+async function startFinish(user: ReturnType<typeof userEvent.setup>, onStatus: () => void) {
+  const v = view();
+  let resolveRest: (value: CharacterView) => void = () => {};
+  vi.mocked(client.rest).mockReturnValue(new Promise<CharacterView>((r) => (resolveRest = r)));
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const short = screen.getByRole('button', { name: 'Short rest…' });
+  await user.click(short);
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  return { short, resolve: () => resolveRest(v) };
+}
+
+it('a late finish of a closed rest neither closes the open rest nor moves focus (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const { short, resolve } = await startFinish(user, onStatus);
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const longPanel = screen.getByRole('region', { name: 'Long rest' });
+  await waitFor(() => expect(document.activeElement).toBe(within(longPanel).getByRole('heading', { name: 'Long rest' })));
+  resolve();
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Short rest finished: 0 changes applied.'));
+  expect(screen.getByRole('region', { name: 'Long rest' })).toBeTruthy();
+  expect(document.activeElement).not.toBe(short);
+});
+
+it('a late finish after the sheet is gone shows no rest-finished status', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const onChanged = vi.fn();
+  const v = view();
+  let resolveRest: (value: CharacterView) => void = () => {};
+  vi.mocked(client.rest).mockReturnValue(new Promise<CharacterView>((r) => (resolveRest = r)));
+  const { unmount } = render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  unmount(); // the user opened another character, or pressed Level up
+  resolveRest(v);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1)); // the App decides whether the view still applies
+  expect(onStatus).not.toHaveBeenCalled();
+});
+
+it('keeps Previous rolls through a rest (spec 2.4c)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const rested = changedView(v);
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 7)).mockResolvedValueOnce(rollRecord('Dexterity check', 12));
+  vi.mocked(client.rest).mockResolvedValue(rested);
+  function Host() {
+    const [shown, setShown] = useState(v);
+    return <CharacterSheet view={shown} onChanged={setShown} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />;
+  }
+  render(<Host />);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await screen.findByText('Previous rolls (1)');
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Short rest' })).toBeNull());
+  expect(screen.getByText('Previous rolls (1)')).toBeTruthy();
+});
+
+it('a late finish after the opener closed the rest does not steal focus (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const { short, resolve } = await startFinish(user, onStatus);
+  await user.click(short); // Cancel rest is inert while a Finish is in flight, so the panel is closed from its opener
+  expect(document.activeElement).toBe(short);
+  const long = screen.getByRole('button', { name: 'Long rest…' });
+  long.focus();
+  resolve();
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(document.activeElement).toBe(long);
+});
+
+it('fetches the rest proposal again when the character changes under an open rest (D29)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const { rerender } = renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await waitFor(() => expect(client.restPreview).toHaveBeenCalledTimes(1));
+  vi.mocked(client.restPreview).mockClear();
+  rerender(sheetElement({ ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } }));
+  await waitFor(() => expect(client.restPreview).toHaveBeenCalledTimes(1));
+});
+
+type Changes = Awaited<ReturnType<typeof client.restPreview>>['changes'];
+const tickable = [{ id: 'r1', kind: 'resource', label: 'Fixture charges', from: 1, to: 2, reason: 'Fixture reason' }] as unknown as Changes;
+const changedView = (v: CharacterView): CharacterView => ({ ...v, sheet: { ...v.sheet, hitPoints: { maximum: 8, current: 7, temporary: 0 } } });
+
+it('keeps the proposal, and a focused control in it, while it is worked out again, and Finish waits (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'longRest', changes: tickable, manual: [], basis: 'one' });
+  const { rerender } = renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const box = await screen.findByRole('checkbox', { name: /^Fixture charges/ });
+  box.focus();
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  rerender(sheetElement(changedView(v)));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  expect(document.body.contains(box)).toBe(true);
+  expect(document.activeElement).toBe(box);
+  expect(screen.getByRole('button', { name: 'Finish long rest' }).getAttribute('aria-disabled')).toBe('true');
+  resolveNext({ kind: 'longRest', changes: tickable, manual: [], basis: 'two' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish long rest' }).getAttribute('aria-disabled')).toBe('false'));
+  expect(screen.queryByText('Updating the proposal…')).toBeNull();
+});
+
+it('keeps the last proposal, including a picked die, when working it out again fails; Finish stays off (D29)', async () => {
+  const user = userEvent.setup();
+  const v = view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] });
+  const picked = { kind: 'shortRest' as const, basis: 'with-die', manual: [], changes: [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes };
+  const { rerender } = renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  vi.mocked(client.restPreview).mockImplementation(async (_id, kind, dice = []) => (dice.length > 0 ? picked : { kind, changes: [], manual: [], basis: 'fixture' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: /^Remove/ });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  vi.mocked(client.restPreview).mockRejectedValue(new Error('rest.needs-hit-points'));
+  rerender(sheetElement(changedView(v)));
+  expect(await screen.findByText('Could not work out this rest. Cancel and try again.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Remove/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('true');
+});
+
+it('does not report a preview that fails after the rest was cancelled (D29)', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  let rejectPreview: (e: unknown) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((_, rej) => (rejectPreview = rej)));
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(screen.getByRole('button', { name: 'Cancel rest' }));
+  rejectPreview(new Error('late'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onError).not.toHaveBeenCalled();
+});
+
+it('does not report a print preview lookup that fails after the preview was closed', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  let rejectExport: (e: unknown) => void = () => {};
+  vi.mocked(client.previewExport).mockReturnValue(new Promise((_, rej) => (rejectExport = rej)));
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const print = screen.getByRole('button', { name: 'Print…' });
+  await user.click(print);
+  await user.click(print);
+  rejectExport(new Error('late'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(onError).not.toHaveBeenCalled();
+});
+
+const dieChange = [{ id: 'hitDie:0', kind: 'hitDie', label: 'Spend a d8', from: 3, to: 8, reason: 'Fixture', die: 8, amount: 5 }] as unknown as Changes;
+const d8Pool = [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }];
+
+it('keeps focus when a picked die is removed, before and after the new proposal arrives (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  vi.mocked(client.restPreview).mockImplementation(async (_id, kind, dice = []) => ({ kind, changes: dice.length > 0 ? dieChange : [], manual: [], basis: dice.length > 0 ? 'die' : 'none' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  const remove = await screen.findByRole('button', { name: /^Remove/ });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  await user.click(remove);
+  const heading = screen.getByRole('heading', { name: 'Short rest' });
+  expect(document.activeElement).toBe(heading);
+  expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('true');
+  resolveNext({ kind: 'shortRest', changes: [], manual: [], basis: 'none' });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull());
+  expect(document.activeElement).toBe(heading);
+});
+
+it('keeps a focused checkbox mounted and focused when a die is added (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: tickable, manual: [], basis: 'base' });
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const box = await screen.findByRole('checkbox', { name: /^Fixture charges/ });
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  let resolveNext: (p: Awaited<ReturnType<typeof client.restPreview>>) => void = () => {};
+  vi.mocked(client.restPreview).mockReturnValue(new Promise((r) => (resolveNext = r)));
+  box.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Add d8' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  expect(document.body.contains(box)).toBe(true);
+  expect(document.activeElement).toBe(box);
+  resolveNext({ kind: 'shortRest', changes: [...tickable, ...dieChange], manual: [], basis: 'two' });
+  await waitFor(() => expect(screen.queryByText('Updating the proposal…')).toBeNull());
+  expect(document.activeElement).toBe(box);
+});
+
+const twoDice = (dice: { die: number; roll: number }[]) =>
+  dice.map((d, i) => ({ id: `hitDie:${i}`, kind: 'hitDie', label: 'Spend a d8', from: 3, to: 3 + d.roll, reason: `Fixture roll ${d.roll}`, die: 8, amount: d.roll }));
+const previewByDice = (_id: string, kind: 'shortRest' | 'longRest', dice: { die: number; roll: number }[] = []) =>
+  Promise.resolve({ kind, changes: twoDice(dice), manual: [], basis: `dice-${dice.length}` } as unknown as Awaited<ReturnType<typeof client.restPreview>>);
+
+it('keeps focus on the Add button after a die is added, and Add does nothing while it has no valid number (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const add = await screen.findByRole('button', { name: 'Add d8' });
+  expect(add.getAttribute('aria-disabled')).toBe('true');
+  await user.click(add);
+  expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(add);
+  expect(document.activeElement).toBe(add);
+  expect(add.getAttribute('aria-disabled')).toBe('true');
+  expect(await screen.findByRole('button', { name: 'Remove d8 (5)' })).toBeTruthy();
+  expect(document.activeElement).toBe(add);
+});
+
+it('keeps focus on Roll after the last die of the pool is rolled, and neither button acts with no dice left (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(rollRecord('Hit die', 4, 8));
+  renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 1, classes: ['Fixture'] }] }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const roll = await screen.findByRole('button', { name: 'Roll a d8' });
+  await user.click(roll);
+  await screen.findByRole('button', { name: 'Remove d8 (4)' });
+  expect(roll.getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(roll);
+  await user.click(roll);
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(client.roll).toHaveBeenCalledTimes(1);
+  expect(screen.getAllByRole('button', { name: /^Remove/ })).toHaveLength(1);
+});
+
+it('names each stale row\'s Remove button from the proposal that row belongs to (D29, 4.1.2)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const input = await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' });
+  await user.type(input, '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (5)' });
+  await user.type(input, '3');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (3)' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  vi.mocked(client.restPreview).mockReturnValue(new Promise(() => {}));
+  await user.click(screen.getByRole('button', { name: 'Remove d8 (5)' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  const rows = within(screen.getByRole('list', { name: 'Hit dice to spend' })).getAllByRole('listitem');
+  expect(rows).toHaveLength(2);
+  for (const row of rows) {
+    const rolled = /Fixture roll (\d)/.exec(row.textContent ?? '')![1];
+    const remove = within(row).getByRole('button');
+    expect(remove.textContent).toBe(`Remove d8 (${rolled})`);
+    expect(remove.textContent).not.toContain('undefined');
+  }
+});
+
+it('does nothing when Finish or a stale Remove is pressed while the proposal is being updated (D29)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(previewByDice);
+  renderSheet(view({ hitDice: d8Pool }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.type(await screen.findByRole('spinbutton', { name: 'd8 rolled at the table' }), '5');
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  await screen.findByRole('button', { name: 'Remove d8 (5)' });
+  await user.type(screen.getByRole('spinbutton', { name: 'd8 rolled at the table' }), '3');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Finish short rest' }).getAttribute('aria-disabled')).toBe('false'));
+  vi.mocked(client.restPreview).mockReturnValue(new Promise(() => {}));
+  await user.click(screen.getByRole('button', { name: 'Add d8' }));
+  expect(await screen.findByText('Updating the proposal…')).toBeTruthy();
+  const calls = vi.mocked(client.restPreview).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: 'Finish short rest' }));
+  expect(client.rest).not.toHaveBeenCalled();
+  const remove = screen.getByRole('button', { name: 'Remove d8 (5)' });
+  expect(remove.getAttribute('aria-disabled')).toBe('true');
+  await user.click(remove);
+  expect(screen.getAllByRole('button', { name: /^Remove/ })).toHaveLength(1);
+  expect(vi.mocked(client.restPreview).mock.calls.length).toBe(calls);
+});
+
+it('closes the print preview from its own button and keeps focus there (4.1.2)', async () => {
+  vi.mocked(client.previewExport).mockResolvedValue({ included: [] } as unknown as Awaited<ReturnType<typeof client.previewExport>>);
+  vi.mocked(client.info).mockResolvedValue({ version: '0.0.0-fixture' } as unknown as Awaited<ReturnType<typeof client.info>>);
+  const user = userEvent.setup();
+  renderSheet(view());
+  const print = screen.getByRole('button', { name: 'Print…' });
+  await user.click(print);
+  expect(screen.getByRole('region', { name: 'Print preview' })).toBeTruthy();
+  await user.click(print);
+  expect(screen.queryByRole('region', { name: 'Print preview' })).toBeNull();
+  expect(print.getAttribute('aria-expanded')).toBe('false');
+  expect(document.activeElement).toBe(print);
+});
+
+it('returns focus to the opener and reports the result when a rest finishes (D29, 2.4.3)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const onChanged = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.restPreview).mockResolvedValue({
+    kind: 'longRest',
+    changes: [{ id: 'hp', kind: 'hitPoints', label: 'Hit points', from: 3, to: 8, reason: 'Fixture reason' }] as unknown as Awaited<ReturnType<typeof client.restPreview>>['changes'],
+    manual: [],
+    basis: 'fixture',
+  });
+  vi.mocked(client.rest).mockResolvedValue(v);
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const long = screen.getByRole('button', { name: 'Long rest…' });
+  await user.click(long);
+  const finish = await screen.findByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Long rest finished: 1 change applied.'));
+  expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'fixture', [], []);
+  expect(onChanged).toHaveBeenCalledWith(v);
+  expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull();
+  expect(document.activeElement).toBe(long);
+});
+
+const rollRecord = (label: string, total: number, sides = 20): RollRecord => ({
+  formula: `1d${sides}`, mode: 'normal', critical: false, dice: [{ term: 0, sides, value: total, kept: true, fromCritical: false }],
+  diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: { rollId: 'fixture', label },
+});
+
+it('moves the replaced Last roll into Previous rolls (D28)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9)).mockResolvedValueOnce(rollRecord('Dexterity check', 15));
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  const log = await screen.findByText('Previous rolls (1)');
+  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
+  expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
+});
+
+it('logs a rest hit die without showing it, and keeps the log newest first by time when the Last roll is replaced (D28)', async () => {
+  const user = userEvent.setup();
+  let clock = 1_760_000_000_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => (clock += 60_000));
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll)
+    .mockResolvedValueOnce(rollRecord('Roll A', 9))
+    .mockResolvedValueOnce(rollRecord('Hit die H', 5, 8))
+    .mockResolvedValueOnce(rollRecord('Roll B', 15));
+  vi.mocked(client.restPreview).mockResolvedValue({ kind: 'shortRest', changes: [], manual: [], basis: 'fixture' });
+  renderSheet(view({ hitDice: [{ die: 8, total: 2, spent: 0, remaining: 2, classes: ['Fixture'] }] }));
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  await user.click(await screen.findByRole('button', { name: 'Roll a d8' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  expect(within(lastRoll).getByText(/Roll A: 9/)).toBeTruthy();
+  expect(within(lastRoll).queryByText(/Hit die H/)).toBeNull();
+  expect((await screen.findByText('Previous rolls (1)')).closest('details')!.textContent).toMatch(/Hit die H: 5/);
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  const log = (await screen.findByText('Previous rolls (2)')).closest('details')!;
+  expect(within(lastRoll).getByText(/Roll B: 15/)).toBeTruthy();
+  const items = within(log).getAllByRole('listitem').map((li) => li.textContent ?? '');
+  expect(items[0]).toMatch(/Hit die H: 5/);
+  expect(items[1]).toMatch(/Roll A: 9/);
+  vi.mocked(Date.now).mockRestore();
+});
+
+it('says why "Level up" is unavailable at level 20, and does nothing when pressed (R43)', async () => {
+  const user = userEvent.setup();
+  const onLevelUp = vi.fn();
+  const v = view();
+  v.character = { ...v.character, level: 20 };
+  render(<CharacterSheet view={v} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={onLevelUp} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const button = screen.getByRole('button', { name: 'Level up' });
+  expect(button.getAttribute('aria-disabled')).toBe('true'); // never native disabled: it stays reachable with its reason
+  expect(button.hasAttribute('disabled')).toBe(false);
+  expect(button.getAttribute('aria-describedby')).toBe('level-up-hint');
+  expect(document.getElementById('level-up-hint')!.textContent).toBe('Already at level 20, the highest level.');
+  await user.click(button);
+  expect(onLevelUp).not.toHaveBeenCalled();
+  cleanup();
+  render(<CharacterSheet view={view()} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={onLevelUp} onMakeChoices={noop} onArchiveChanged={noop} />);
+  const open = screen.getByRole('button', { name: 'Level up' });
+  expect(open.getAttribute('aria-disabled')).toBeNull();
+  expect(open.hasAttribute('aria-describedby')).toBe(false);
+  expect(document.getElementById('level-up-hint')).toBeNull();
+  await user.click(open);
+  expect(onLevelUp).toHaveBeenCalledTimes(1);
 });

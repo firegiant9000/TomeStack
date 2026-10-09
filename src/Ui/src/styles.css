@@ -2,18 +2,23 @@
 /* ADR-015: tokens. Three themes on the system-colour base; contrast ratios are in accessibility-checklist.md item 5. */
 :root {
   color-scheme: light dark;
-  --bg: Canvas;
+  /* D27 (owner, 2026-10-07): light mode gets its own tinted layer; every light-dark() second argument is the 2026-10-06
+     dark value, pinned by styles.test.ts. Light ratios are in accessibility-checklist.md item 5. */
+  --bg: light-dark(#eef8f0, Canvas);
   --fg: CanvasText;
   --muted: color-mix(in srgb, CanvasText 65%, Canvas);
   --line: color-mix(in srgb, CanvasText 20%, Canvas);
-  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. 3.95:1 light, 5.28:1 dark on Canvas. */
-  --line-strong: color-mix(in srgb, CanvasText 50%, Canvas);
+  /* WCAG 1.4.11: control boundaries need 3:1; --line is decoration only. Light: 55% (3.39:1 on the violet surface,
+     the tightest); dark: 50% as before (5.28:1 on Canvas). */
+  --line-strong: light-dark(color-mix(in srgb, CanvasText 55%, Canvas), color-mix(in srgb, CanvasText 50%, Canvas));
   /* Forest is the default theme (owner, 2026-10-05). Dark values lifted "a tiny bit" (owner, 2026-10-06; every pairing ≥ 4.5:1). */
-  --surface: light-dark(#f2f7f2, #1b241c);
+  --surface: light-dark(#cfe9d7, #1b241c);
   --accent: light-dark(#1e6a3a, #8fe0a8);
   --accent-2: light-dark(#7a5a00, #ebd070);
-  --warn: light-dark(#9a5b00, #f0b35a);
+  --warn: light-dark(#855000, #f0b35a);
   --error: light-dark(#b3261e, #f28b82);
+  /* The app header: a 30% accent tint in light (CanvasText ≥ 11.8:1, the accent edge ≥ 3.9:1), 12% in dark as before. */
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -24,6 +29,7 @@
   --text-lg: 1.125rem;
   --text-xl: 1.4rem;
   --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
   --radius: 0.375rem;
   /* Numbers in the summary and on the dice: Bahnschrift ships with Windows 10 (1709+) and 11; nothing is bundled. */
   --font-numbers: Bahnschrift, system-ui, sans-serif;
@@ -32,14 +38,18 @@
   line-height: 1.45;
 }
 html[data-theme='cool'] {
-  --surface: light-dark(#f2f4fb, #1e2230);
+  --bg: light-dark(#eef3fe, Canvas);
+  --surface: light-dark(#d3ddf8, #1e2230);
   --accent: light-dark(#3449b8, #aeb8ff);
-  --accent-2: light-dark(#0f6e66, #73ebdb);
+  --accent-2: light-dark(#0b625b, #73ebdb);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
 html[data-theme='violet'] {
-  --surface: light-dark(#f7f3fc, #211a2c);
+  --bg: light-dark(#f6f1fe, Canvas);
+  --surface: light-dark(#e2d4f7, #211a2c);
   --accent: light-dark(#6a33c4, #d6beff);
-  --accent-2: light-dark(#0a6b86, #86e3f5);
+  --accent-2: light-dark(#075f78, #86e3f5);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
 /* Investigation 2026-10-06 (ADR-015 §4 amended): preferences as html[data-*] attributes. Appearance overrides the OS scheme:
    light-dark() and Canvas/CanvasText resolve against the element's used color-scheme, so every token flips with no JS. */
@@ -67,6 +77,8 @@ html[data-underline='on'] :is(button.link, a) { text-decoration: underline; }
 @media (forced-colors: active) {
   /* html[data-theme] too: the theme blocks above have specificity (0,1,1) and would otherwise keep their hex values. */
   :root, html[data-theme], html[data-appearance], html[data-contrast] {
+    --bg: Canvas;
+    --header-bg: Canvas;
     --surface: Canvas;
     --accent: LinkText;
     --accent-2: Highlight;
@@ -95,7 +107,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .app {
   display: grid;
   grid-template-columns: [side] minmax(14rem, 18rem) [main] minmax(0, 1fr);
-  grid-template-rows: [top] auto [head] auto [summary] auto [messages] auto [print] auto [body] 1fr;
+  grid-template-rows: [top] auto [head] auto [summary] auto [rest] auto [messages] auto [print] auto [body] 1fr;
   min-height: 100vh;
 }
 .app[data-sidebar='collapsed'] { grid-template-columns: [side] 0 [main] minmax(0, 1fr); }
@@ -107,9 +119,9 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   align-items: baseline;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-5);
-  /* Investigation 2026-10-06 item 2 (owner: try both, ship one): a 12% tint of the theme accent on Canvas (CanvasText on it
-     ≥ 15:1, accent text ≥ 5.5:1, --line-strong ≥ 3.27:1 in every theme and scheme) plus a 2px accent edge (≥ 6.6:1 on Canvas). */
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  /* Investigation 2026-10-06 item 2 (owner: try both, ship one): a tint of the theme accent plus a 2px accent edge.
+     D27: the tint is the --header-bg token (30% light, 12% dark). */
+  background: var(--header-bg);
   border-bottom: 2px solid var(--accent);
 }
 .app-header h1 { margin: 0; font-size: var(--text-xl); }
@@ -145,6 +157,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 article.sheet { grid-column: 1 / -1; grid-row: head / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; background: none; padding: 0; }
 article.sheet > .sheet-header { grid-column: 1 / -1; grid-row: head; padding: var(--space-3) var(--space-5) 0; }
 article.sheet > .sheet-summary { grid-column: 1 / -1; grid-row: summary; margin: 0 var(--space-5); }
+/* D29: a rest opened from the header gets its own full-width row under the summary. */
+article.sheet > .rest-sheet { grid-column: 1 / -1; grid-row: rest; margin: 0 var(--space-5); }
 article.sheet > .print-sheet { grid-column: main; grid-row: print; margin-right: var(--space-5); }
 article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; gap: var(--space-4); align-content: start; margin-right: var(--space-5); }
 
@@ -158,6 +172,10 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .source-decision { margin: 0.75rem 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
+/* D32: the standard array and rolled scores are assigned with one select per ability (24px targets, WCAG 2.5.8). */
+.assign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-2) var(--space-4); }
+.assign-grid select { font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.rolled-sets { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-2); }
 input { font: inherit; padding: 0.3rem 0.4rem; }
 button { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; border-radius: var(--radius); }
 button.link { background: none; border: none; padding: 0.2rem 0; text-align: left; color: inherit; }
@@ -291,25 +309,39 @@ html[data-compact-play='on'] #sheet-panel-play .play-panel { padding-top: var(--
 .sheet-summary dl > div { display: grid; gap: 0.1rem; align-content: start; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .sheet-summary dt { font-weight: 600; font-size: var(--text-sm); color: var(--muted); }
 .sheet-summary dd { margin: 0; font-family: var(--font-numbers); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
-/* The ability box: modifier large, score small beneath; the "Ability boxes: Score first" setting swaps both by CSS order. */
-.sheet-summary dd.ability { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
-.sheet-summary dd.ability .derived { font-size: var(--text-2xl); flex-basis: 100%; }
+/* D28: the ability box. The modifier is the large number (what the roll adds), the score sits beside it on the baseline, the
+   compact Roll control beneath; the "Ability boxes: Score first" setting swaps the two numbers by CSS order. */
+.sheet-summary dd.ability { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: var(--space-2); }
+.sheet-summary dd.ability .derived { font-size: var(--text-3xl); line-height: 1.1; }
 .sheet-summary dd.ability .score { font-size: var(--text-sm); color: var(--muted); font-family: var(--font-numbers); }
-html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); flex-basis: auto; }
-html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-2xl); color: inherit; flex-basis: 100%; }
+.sheet-summary dd.ability .roll { grid-column: 1 / -1; justify-self: start; margin-top: var(--space-1); min-width: 0; overflow-wrap: anywhere; }
+.sheet-summary dd.ability > .override-label { grid-column: 1 / -1; }
+html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; font-size: var(--text-sm); color: var(--muted); }
+html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
-.sheet-summary dd.ability .roll { min-width: 0; overflow-wrap: anywhere; }
 .sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
 .sheet-summary > .hint { grid-area: hint; }
-.sheet-summary > .roll-result { grid-area: result; min-height: 7.5rem; }
+.sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
+.roll-log { margin-top: var(--space-2); }
+.roll-log ol { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
+.roll-time { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
 .quick-hp { display: inline-flex; gap: var(--space-1); }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
-.quick-hp button[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
-/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8); the d20 mode is one row of native radios. */
-button.roll { background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.6rem; min-height: 1.5rem; font-size: 0.875rem; }
+.quick-hp button[aria-disabled='true'],
+.play-panel .actions button[aria-disabled='true'],
+.play-panel .inline-form button[aria-disabled='true'],
+.play-panel li button[aria-disabled='true'],
+.sheet-header button[aria-disabled='true'],
+section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { background: var(--bg); color: var(--muted); border-color: var(--line-strong); border-style: dashed; cursor: not-allowed; }
+/* The inactive look is a dimmed label on the page colour with a dashed border (a shape cue, not only a tone), not opacity: opacity would also dim the focus ring (3:1, WCAG 1.4.11 and
+   the project's focus 3:1 constraint), and the browser's own button face (#6b6b6b in dark) left the dimmed label at about 2.35:1. */
+/* Roll buttons look like buttons (24px minimum height, WCAG 2.5.8). D28: compact, with a plain hexagon in currentColor
+   beside the word (never icon-only, D26). */
+button.roll { display: inline-flex; align-items: center; gap: 0.35em; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--accent); padding: 0.1rem 0.5rem; min-height: 1.5rem; font-size: var(--text-sm); }
 button.roll:hover { background: var(--accent); color: var(--bg); }
+.sheet-summary button.roll::before { content: ''; display: inline-block; width: 0.75em; height: 0.75em; background: currentColor; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
 .sheet-summary .roll-mode { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: none; margin: 0; }
 .sheet-summary .roll-mode legend { float: left; padding: 0; margin-right: 0.75rem; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 .sheet-summary .roll-mode .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.6rem; border: 1px solid var(--line-strong); margin-left: -1px; }
@@ -327,6 +359,13 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
      mode preserves while it forces the background to Canvas, so the checked label vanished. Paint it as a selection instead. */
   .sheet-summary .roll-mode .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border: 2px solid Highlight; }
   .sheet-summary .roll-mode .choice:has(:checked) input { accent-color: HighlightText; }
+  /* The forced palette would repaint the dimmed label as ButtonText, so an inactive button paints as a disabled one (GrayText). */
+  .quick-hp button[aria-disabled='true'],
+  .play-panel .actions button[aria-disabled='true'],
+  .play-panel .inline-form button[aria-disabled='true'],
+  .play-panel li button[aria-disabled='true'],
+  .sheet-header button[aria-disabled='true'],
+  section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { forced-color-adjust: none; color: GrayText; border-color: GrayText; }
   button.roll:hover { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
   .conditions .choice:has(:checked) { forced-color-adjust: none; color: HighlightText; background: Highlight; border-color: Highlight; }
   .pip[data-filled='true'] { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
@@ -340,7 +379,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .content { padding: var(--space-4); }
   .content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
-  article.sheet > .sheet-header, article.sheet > .sheet-summary { padding: 0; margin: 0 0 var(--space-3); }
+  article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet { padding: 0; margin: 0 0 var(--space-3); }
   .sheet-summary { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'abilities' 'line' 'mode' 'result' 'hint'; }
 }
 
@@ -351,7 +390,7 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) .content { padding: var(--space-4); }
   html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .print-sheet, article.sheet > .sheet-body) { margin-right: 0; margin-left: 0; }
-  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary) { padding: 0; margin: 0 0 var(--space-3); }
+  html:is([data-text-size='150'], [data-text-size='175'], [data-text-size='200']) :is(article.sheet > .sheet-header, article.sheet > .sheet-summary, article.sheet > .rest-sheet) { padding: 0; margin: 0 0 var(--space-3); }
 }
 
 /* M4 D5: import review. The excerpt keeps the PDF's line breaks. */
@@ -359,6 +398,13 @@ pre.excerpt { white-space: pre-wrap; font: inherit; border-left: 3px solid var(-
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; }
 dt { font-weight: 600; }
 dd { margin: 0; }
+/* D32: the builder's review list. Each term/value pair is one row; values wrap so the list reflows at 400%. */
+dl.review-list { display: block; }
+dl.review-list > div { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.2rem 0.75rem; margin-bottom: 0.2rem; }
+dl.review-list dd { overflow-wrap: anywhere; }
+
+/* D30: the spell search box (builder and Spells tab); it is a screen control, so the print block below hides it. */
+.spell-search { display: grid; gap: var(--space-1); max-width: 24rem; }
 
 /* M3 C4: the printable backup. On screen the print view is a preview; printed, it is the only thing on the page. */
 .print-sheet { border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; }
@@ -367,13 +413,15 @@ dd { margin: 0; }
 .print-feature p { margin: 0.2rem 0; }
 .print-notice { font-size: var(--text-sm); color: var(--muted); }
 @media print {
-  /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified). */
-  :root, html[data-appearance], html[data-text-size] { color-scheme: light; font-size: 100%; }
+  /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified).
+     Canvas for --bg, --surface and --header-bg: the tinted light tokens would print a tinted page (D27). */
+  :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: 100%; --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
   .app { display: block; min-height: 0; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
   .app[data-sidebar='collapsed'] :is(.content > .messages, .content > :not(.messages, .sheet), article.sheet > .sheet-body, article.sheet > .print-sheet) { margin-left: 0; }
   .app-header, .sidebar, main > :not(.panel), .print-controls { display: none !important; }
+  .roll-log, .spell-search { display: none !important; }
   article.panel:has(> .print-sheet) > :not(.print-sheet) { display: none !important; }
   .content { max-width: none; padding: 0; }
   .print-sheet { border: none; padding: 0; }
@@ -415,6 +463,8 @@ dd { margin: 0; }
 /* After the base rules so it wins the cascade (F5: the shape must stay visible; system colours only). */
 @media (forced-colors: active) {
   .tabs [role='tab']::before { forced-color-adjust: none; border-color: CanvasText; }
+  /* currentColor tracks ButtonText, and HighlightText on hover (a CanvasText glyph nearly vanishes on Highlight). */
+  .sheet-summary button.roll::before { forced-color-adjust: none; background: currentColor; }
   #sheet-tab-play::before, #sheet-tab-notes::before { background: CanvasText; }
   .die { forced-color-adjust: none; background: CanvasText; color: Canvas; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }

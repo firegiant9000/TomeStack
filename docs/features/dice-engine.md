@@ -14,6 +14,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 - **Advantage / disadvantage:** only for a single `1d20` (a d20 test). Both dice are recorded, with `kept` on one.
 - **Critical:** every die term is rolled twice as many times, and the extra dice are marked `fromCritical`. Constants and modifiers are not doubled. Critical doubling belongs to a damage roll and advantage to a d20 test, so a request with both is refused (`dice.critical-with-advantage`).
+- **Keep highest** (`KeepHighest`, D32): for one plain die term, the lowest dice are dropped and recorded with `kept: false` (the display greys them); refused with advantage, critical or several terms.
 - **Randomness:** `IRandomSource`. `SystemRandomSource` uses the OS CSPRNG for play. `SeededRandomSource` (SplitMix64 with rejection sampling) gives reproducible tests and examples. Its sequence is pinned by a test against values computed outside .NET.
 
 ## Roll record
@@ -22,7 +23,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 **Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command: `character.play` with `spend` (M2 item 2).
 
-**Display (ADR-015).** The UI draws `dice[]` as polygons showing each die's `value` from the first frame, with a 0.6 s CSS tumble; nothing is rolled or computed in the UI, and the record's text is in the DOM at once. Off under `prefers-reduced-motion` or the Settings switch. Hit dice spent in a rest read their roll directly and are not drawn; every other roll, death saves included, is drawn in the Last roll region. A d20 is drawn in the second accent only when another d20 in the same roll was dropped (advantage or disadvantage); a plain d20 and every other die use the accent, critical dice the second accent (2026-10-06).
+**Display (ADR-015).** The UI draws `dice[]` as polygons showing each die's `value` from the first frame, with a 0.6 s CSS tumble; nothing is rolled or computed in the UI, and the record's text is in the DOM at once. Off under `prefers-reduced-motion` or the Settings switch. Hit dice spent in a rest read their roll directly and are not drawn, but they are logged: a collapsed "Previous rolls" list under the Last roll keeps the last ten rolls of the sheet session (newest first, the current roll excluded, with the time), outside the live region and never stored (D28). Every other roll, death saves included, is drawn in the Last roll region. A d20 is drawn in the second accent only when another d20 in the same roll was dropped (advantage or disadvantage); a plain d20 and every other die use the accent, critical dice the second accent (2026-10-06).
 
 ## The `roll` command (M1 item 7)
 
@@ -33,3 +34,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 - Advantage and disadvantage apply only to a d20 test, and critical doubling only to damage dice. Dice errors come back with their `dice.*` code.
 - **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
 - Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.
+
+## The `dice.roll` command (D32)
+
+`dice.roll { formula, keepHighest?, label? }` rolls a formula with no character, for the builder's ability scores (`4d6` keeping the highest 3), and returns a roll record (`src/AppService/DiceCommands.cs`, `tests/AppService.Tests/DiceCommandTests.cs`; UI: `client.rollDice`). The formula obeys the dice limits (SPEC Q-02) and `keepHighest` the rules above; a missing or blank formula is `dice.empty`, and every dice error comes back with its `dice.*` code. The payload carries no modifiers. The `label` (trimmed, at most 80 characters, else `dice.label-too-long`; default the trimmed formula) is display text in the record's provenance (`rollId: "dice"`): it is not stored or logged. The command needs no character and writes nothing. It is on the bridge allowlist (`CommandDispatcher.Commands`), which DevHost shares.

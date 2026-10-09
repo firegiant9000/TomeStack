@@ -8,12 +8,13 @@ UI: `src/Ui/src/App.tsx`, `src/Ui/src/components/CharacterSheet.tsx`, `src/Ui/sr
 
 The shell is a grid with subgrid (ADR-015). Its rows, top to bottom:
 
-1. The app header: the sidebar toggle ("Hide sidebar"/"Show sidebar") at the left, then "TomeStack" and the "Offline" tag. It carries a 12% tint of the theme's accent and a 2px accent bottom edge (ADR-015 §1, amended 2026-10-06).
-2. The sheet header across the window: name, rules family, level, campaign, "Level up", "Print…".
+1. The app header: the sidebar toggle ("Hide sidebar"/"Show sidebar") at the left, then "TomeStack" and the "Offline" tag. It carries the `--header-bg` tint of the theme's accent (30% in light, 12% in dark) and a 2px accent bottom edge (ADR-015 §1, amended 2026-10-06 and 2026-10-07).
+2. The sheet header across the window: name, rules family, level, campaign, "Short rest…", "Long rest…", "Level up", "Print…" (rests moved here from Play, D29).
 3. The summary across the window (below).
-4. Messages (status and errors).
-5. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
-6. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
+4. The rest proposal, when open (`rest` row, D29): across the window under the summary, a direct child of the article in DOM order too ([rests.md](rests.md)).
+5. Messages (status and errors).
+6. Print preview, when open, in the main column (`printable-backup.md`; a direct child of the article, after the summary in DOM order too, so focus order matches what is seen).
+7. The sheet body in the main column: campaign warnings, "Choices to make" and "Content not applied" (always visible, above the tabs), then the tab strip "Sheet sections" (Play, Spells, Inventory, Features, Stats, Notes, Manage) and one panel per tab. Inactive panels stay mounted and hidden, so nothing typed is lost.
 
 The main column starts on the Characters home screen: a card per active character (name, family, level, last change) with "Open {name}"; "Characters" in the sidebar's Tools returns to it. Archived characters stay in the sidebar's collapsed list (SPEC C-08). The home heading takes focus when the user navigates to it, but not at app start (the first Tab must reach the header's "Hide sidebar").
 
@@ -27,9 +28,9 @@ The app header holds a button named "Hide sidebar" or "Show sidebar" (`aria-expa
 
 ## Summary (always visible)
 
-A definition list, not headings or named regions, so it never shares a name with a panel. Since 2026-10-06 every item is a box (a 1px `--line-strong` border on the existing `dl > div`, no shadow; the generic paper-sheet convention, SPEC P-03). An ability box shows the modifier large and the score small beneath (or the reverse, Settings "Ability boxes"); the d20 roll mode and the Last roll share one full-width strip under the boxes with a reserved height, so an ordinary roll does not move the tabs (a Spend button or a variable-cost form can still grow the strip). It shows:
+A definition list, not headings or named regions, so it never shares a name with a panel. Since 2026-10-06 every item is a box (a 1px `--line-strong` border on the existing `dl > div`, no shadow; the generic paper-sheet convention, SPEC P-03). An ability box shows the modifier large with the score beside it on the baseline (or the reverse, Settings "Ability boxes"); the d20 roll mode and the Last roll share one full-width strip under the boxes with a reserved height, so an ordinary roll does not move the tabs (a Spend button or a variable-cost form can still grow the strip). Under the Last roll, **Previous rolls**: a collapsed list of the last ten rolls of this sheet session (newest first, the current roll excluded, hit dice from a rest included, and a hit die stays there even if it is removed from the rest or the rest is cancelled, because it was rolled), with the time; not announced, not stored, cleared when the sheet closes (D28). It shows:
 
-- each ability's score with a "Roll <Ability> check (+N)" button (outlined in the accent colour; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
+- each ability's modifier large, its score beside it and a compact **Roll** button whose accessible name is "Roll <Ability> check (+N)" (D28; outlined in the accent colour with a small hexagon glyph; a d20 test in the chosen mode; the field cards keep "Roll <Ability> modifier" with the trace); an overridden ability modifier adds "(modifier overridden)" after its roll button;
 - Proficiency bonus, Armor Class, Initiative, Speed (30 ft. by rules policy until species content carries it; override on Stats); an overridden number reads "16 (overridden)";
 - Hit points "current of maximum, N temporary" (an overridden maximum reads "(maximum overridden)"), Hit dice per size as "N of M (dX)", Inspiration or Heroic Inspiration (by family) as a checkbox (the confirmed `setInspiration` play action), and one-point hit-point buttons "Lose 1 hit point" and "Regain 1 hit point" (`damage`/`heal`) in a second `<dd>`;
 - Conditions and exhaustion, only when there are any;
@@ -41,8 +42,8 @@ Traces, overrides and "Report a gap" stay on the field cards.
 
 | Tab | Holds |
 | --- | --- |
-| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, short and long rest, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides only the explanatory parts (resource and attack traces, the hit point and Concentration explanations, class columns) for combat; rest, spend and recovery text stay (D20) |
-| Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M" |
+| Play (default) | Hit points (damage, healing, temporary hit points, hit dice, inspiration), death saving throws, Conditions, Resources, Class columns, Attacks and actions; at 60rem and up, Attacks and actions sit in a right-hand column (in one column they follow Resources and Class columns); conditions are outlined chips; a "Compact view" checkbox (remembered, `tomestack.compactPlay`) hides only the explanatory parts (resource and attack traces, the hit point and Concentration explanations, class columns) for combat; spend and recovery text stay (rests moved to the sheet header, D29) (D20) |
+| Spells | Spells and slots, and the Spellcasting field cards (spell attack, save DC, slots) with their traces and overrides. Offered only to a caster, or when a spell field has a value or override; slot pips beside "N of M"; a search by name per caster (D30) |
 | Inventory | Equipment, listed as Equipped and Carried; Currency (cp, sp, ep, gp, pp; D21) |
 | Features | Features, with "Open page" and "Report a gap" ("No features yet." when there are none), grouped by what granted them ("From Fixture Fighter") or by kind (Classes, Subclasses, Species, Background, Feats, Granted features, Spells, Items) |
 | Stats | The field cards: Abilities, Proficiency, Saving throws, Skills, Combat, each with its trace, roll button, override form and "Report a gap"; two columns at 60rem and up. Saving throws and Skills show " · proficient" or " · expertise" after the value when a grant applies; Skills also list Passive Perception, Insight and Investigation (10 + the skill; calculated, overridable on Stats; content cannot target them until a content schema version allows it); Combat lists Speed |

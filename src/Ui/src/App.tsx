@@ -82,12 +82,39 @@ export function App() {
     Promise.all([client.info().then(setInfo), client.listCharacters().then(setCharacters)]).catch(onError);
   }, [onError]);
 
+  // Only the latest open applies: two quick opens can be answered out of order.
+  // R40: every "New character" mounts a fresh builder, so a draft that is being saved is never offered again.
+  const [builderKey, setBuilderKey] = useState(0);
+  function startCreate() {
+    setMessage(undefined);
+    setBuilderKey((k) => k + 1);
+    setScreen({ kind: 'builder', mode: { kind: 'create' } });
+  }
+
+  // R37: any change of screen kind also withdraws a pending open, so a slow open never replaces a screen chosen after it.
+  const openSeq = useRef({
+    n: 0,
+    next() {
+      this.n += 1;
+      return this.n;
+    },
+  });
+  const screenNow = useRef(screen);
+  useEffect(() => {
+    screenNow.current = screen;
+  }, [screen]);
+  useEffect(() => {
+    openSeq.current.next();
+  }, [screen.kind]);
   async function open(id: string, tab?: SheetTabId) {
+    const request = openSeq.current.next();
     try {
       setMessage(undefined);
-      setScreen({ kind: 'sheet', view: await client.getCharacter(id), tab });
+      const view = await client.getCharacter(id);
+      if (request !== openSeq.current.n) return;
+      setScreen({ kind: 'sheet', view, tab });
     } catch (error) {
-      onError(error);
+      if (request === openSeq.current.n) onError(error);
     }
   }
 
@@ -177,10 +204,7 @@ export function App() {
           {/* Disabled until app.info has loaded: the form needs the rules families, and a click must never do nothing. */}
           <button
             type="button"
-            onClick={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'builder', mode: { kind: 'create' } });
-            }}
+            onClick={startCreate}
             disabled={!info}
           >
             New character
@@ -296,30 +320,60 @@ export function App() {
           <HomePanel
             characters={characters}
             onOpen={(id) => void open(id)}
-            onNew={() => {
-              setMessage(undefined);
-              setScreen({ kind: 'builder', mode: { kind: 'create' } });
-            }}
+            onNew={startCreate}
             canCreate={!!info}
             focusOnMount={screen.focus !== false}
           />
         )}
         {screen.kind === 'builder' && info && (
           <CharacterBuilder
-            key={screen.mode.kind === 'create' ? 'create' : `${screen.mode.kind}-${screen.mode.view.character.id}`}
+            key={screen.mode.kind === 'create' ? `create-${builderKey}` : `${screen.mode.kind}-${screen.mode.view.character.id}`}
             mode={screen.mode}
             rulesFamilies={info.rulesFamilies}
             onError={onError}
             onCancel={() => {
               const mode = screen.mode;
               if (mode.kind === 'create') setScreen({ kind: 'home', focus: true });
-              else setScreen({ kind: 'sheet', view: mode.view });
+              else {
+                // The sheet shown at once is the one the builder started from; a fresh read replaces it, so a change made
+                // meanwhile (a rest, a save) is never shown as it was.
+                const id = mode.view.character.id;
+                setScreen({ kind: 'sheet', view: mode.view });
+                client
+                  .getCharacter(id)
+                  .then((view) => setScreen((current) => (current.kind === 'sheet' && current.view.character.id === id ? { ...current, view } : current)))
+                  .catch((error) => {
+                    // Only while that sheet is still the screen (R37).
+                    const now = screenNow.current;
+                    if (now.kind === 'sheet' && now.view.character.id === id) onError(error);
+                  });
+              }
               setMessage({ tone: 'status', text: 'Draft discarded. Nothing was changed.' });
             }}
             onCommitted={async (view) => {
-              setMessage(undefined);
-              await refresh();
-              setScreen({ kind: 'sheet', view });
+              // R36: a save that lands is never lost silently. The list is always refreshed; the sheet opens only while this
+              // builder is still the screen, otherwise the status says what happened and the screen stays where it is.
+              // R39: the screen is decided and switched first, synchronously, so nothing later (a slow or failed refresh) can
+              // leave the builder stuck or overwrite a newer view.
+              const builder = screen.mode;
+              const now = screenNow.current;
+              const stillHere = now.kind === 'builder' && now.mode === builder;
+              if (stillHere) {
+                setMessage(undefined);
+                setScreen({ kind: 'sheet', view });
+              } else {
+                setMessage({ tone: 'status', text: `Saved ${view.character.name}.` });
+                // A sheet of this character opened while the save was in flight shows the saved version, never the older read
+                // (a stale sheet could later be saved over it).
+                setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
+              }
+              try {
+                await refresh();
+              } catch (error) {
+                // The save succeeded; the player must not read a list error as a failed save (R40).
+                if (stillHere) onError(error);
+                else setMessage({ tone: 'error', text: `Saved ${view.character.name}. The character list could not be refreshed: ${describeError(error)}` });
+              }
             }}
           />
         )}
@@ -386,7 +440,8 @@ export function App() {
             }}
             onStatus={(text) => setMessage({ tone: 'status', text })}
             onChanged={async (view) => {
-              setScreen({ kind: 'sheet', view });
+              // A late reply (a rest, a save) must not pull the user back from another screen or another character.
+              setScreen((cur) => (cur.kind === 'sheet' && cur.view.character.id === view.character.id ? { ...cur, view } : cur));
               await refresh();
             }}
             onArchiveChanged={async () => {

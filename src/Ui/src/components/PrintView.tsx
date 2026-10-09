@@ -49,25 +49,42 @@ export function PrintView({ view, onError, onClose }: Props) {
       .then((preview) => {
         if (current) setNotices(preview.included);
       })
-      .catch(onError);
+      .catch((error) => {
+        if (current) onError(error);
+      });
     client
       .info()
       .then((info) => {
         if (current) setVersion(info.version);
       })
-      .catch(onError);
+      .catch((error) => {
+        if (current) onError(error);
+      });
     return () => {
       current = false;
     };
   }, [character.id, onError]);
+
+  // The panel may close before the notes arrive; a late reply or failure must not touch the sheet (no effect owns this call).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function toggleNotes(on: boolean) {
     setIncludeNotes(on);
     if (on && !notes)
       client
         .listGapNotes(character.id)
-        .then(setNotes)
-        .catch(onError);
+        .then((list) => {
+          if (mounted.current) setNotes(list);
+        })
+        .catch((error) => {
+          if (mounted.current) onError(error);
+        });
   }
 
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
@@ -283,7 +300,7 @@ export function PrintView({ view, onError, onClose }: Props) {
             <ul>
               {notes.map((n) => (
                 <li key={n.id}>
-                  {n.target.label ?? n.target.kind} ({n.status}): {n.text}
+                  {n.target.label || n.target.kind} ({n.status}): {n.text}
                 </li>
               ))}
             </ul>

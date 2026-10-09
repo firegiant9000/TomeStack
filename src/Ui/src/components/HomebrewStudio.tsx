@@ -459,7 +459,7 @@ function EntryEditor(props: {
         classes.forEach((c, i) => {
           const latest = histories[i]!.filter((r) => r.status === 'published').at(-1);
           for (const effect of latest?.effects ?? []) {
-            if (effect.type === 'choice') found.push({ classContentId: c.reference.contentId, className: c.name, choiceId: effect.choiceId, text: effect.text ?? effect.choiceId });
+            if (effect.type === 'choice') found.push({ classContentId: c.reference.contentId, className: c.name, choiceId: effect.choiceId, text: effect.text || effect.choiceId });
           }
         });
         if (current) setClassChoices(found);

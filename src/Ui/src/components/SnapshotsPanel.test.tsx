@@ -43,6 +43,13 @@ it('names the coins the restore brings back and the coins now', async () => {
   expect(region.textContent).toContain('Coins go back to 3 gp, 12 sp (now 40 gp).');
 });
 
+it('names a snapshot with an empty label by its reason, never by an empty name (carry 5)', async () => {
+  vi.mocked(client.snapshots).mockResolvedValue({ items: [{ ...snapshot, label: '', reason: 'beforeRestore' }], hasMore: false });
+  vi.mocked(client.restorePreview).mockResolvedValue(preview({}));
+  render(<SnapshotsPanel character={character} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
+  expect(await screen.findByRole('button', { name: /^Restore Before a restore/ })).toBeTruthy();
+});
+
 it('says nothing about coins when the restore leaves them as they are', async () => {
   const region = await openPreview(preview({}));
   expect(region.textContent).not.toContain('Coins');

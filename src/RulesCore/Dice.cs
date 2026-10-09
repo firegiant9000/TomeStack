@@ -188,15 +188,20 @@ public sealed record RollProvenance(
     string? LinkedResourceId = null,
     Guid? LinkedResourceContent = null);
 
+/// <param name="KeepHighest">
+/// Item 2, D32: keep this many highest dice of the single die term (4d6 drop lowest); the dropped dice are recorded
+/// with Kept = false.
+/// </param>
 public sealed record RollRequest(
     string Formula,
     RollMode Mode = RollMode.Normal,
     bool Critical = false,
     IReadOnlyList<RollModifier>? Modifiers = null,
-    RollProvenance? Provenance = null);
+    RollProvenance? Provenance = null,
+    int? KeepHighest = null);
 
 /// <param name="Term">Index of the expression term the die belongs to.</param>
-/// <param name="Kept">False for the die dropped by advantage or disadvantage.</param>
+/// <param name="Kept">False for a die that does not count: dropped by advantage/disadvantage or by KeepHighest.</param>
 public sealed record DieResult(int Term, int Sides, int Value, bool Kept, bool FromCritical = false);
 
 /// <summary>
@@ -241,6 +246,22 @@ public static class DiceRoller
             error = new("dice.modifier-out-of-range", $"Roll modifiers must be within ±{DiceLimits.MaxConstant}.");
             return false;
         }
+        if (request.KeepHighest is { } keep)
+        {
+            var diceTerms = expression!.Terms.Where(t => t.IsDice).ToList();
+            if (diceTerms.Count != 1 || request.Mode != RollMode.Normal || request.Critical)
+            {
+                error = new("dice.keep-requires-single-term", "Keeping the highest dice applies to one plain die term, without advantage or critical doubling.");
+                return false;
+            }
+            if (keep < 1 || keep >= diceTerms[0].Count)
+            {
+                error = new("dice.keep-out-of-range", diceTerms[0].Count == 1
+                    ? $"Keeping the highest dice needs more than one die in '{request.Formula}'."
+                    : $"Keep between 1 and {diceTerms[0].Count - 1} dice of '{request.Formula}'.");
+                return false;
+            }
+        }
 
         var dice = new List<DieResult>();
         var diceTotal = 0;
@@ -265,11 +286,22 @@ public static class DiceRoller
             }
             // 5e critical: roll the damage dice twice; flat modifiers are not doubled.
             var count = request.Critical ? term.Count * 2 : term.Count;
+            var values = new int[count];
+            for (var d = 0; d < count; d++)
+                values[d] = random.Next(term.Sides);
+            var kept = new bool[count];
+            Array.Fill(kept, true);
+            if (request.KeepHighest is { } keepCount)
+            {
+                // Drop the lowest; among ties the earliest rolled is dropped first (stable order by value, then index).
+                foreach (var index in Enumerable.Range(0, count).OrderBy(i => values[i]).ThenBy(i => i).Take(count - keepCount))
+                    kept[index] = false;
+            }
             for (var d = 0; d < count; d++)
             {
-                var value = random.Next(term.Sides);
-                dice.Add(new(t, term.Sides, value, Kept: true, FromCritical: d >= term.Count));
-                diceTotal += term.Sign * value;
+                dice.Add(new(t, term.Sides, values[d], kept[d], FromCritical: d >= term.Count));
+                if (kept[d])
+                    diceTotal += term.Sign * values[d];
             }
         }
 

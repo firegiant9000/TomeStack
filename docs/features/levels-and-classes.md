@@ -1,6 +1,6 @@
 # Levels, classes, hit points and armor class
 
-SPEC C-01, C-02, C-03 · ROADMAP M1 · status: calculation implemented (M1 item 5). The level-up UI is M2.
+SPEC C-01, C-02, C-03 · ROADMAP M1 · status: calculation implemented (M1 item 5). The level-up UI is M2 ([builder.md](builder.md)).
 
 `src/RulesCore/Calculation.cs`, tested in `tests/RulesCore.Tests/ClassLevelTests.cs`.
 

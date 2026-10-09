@@ -22,6 +22,7 @@ import { SessionNotesPanel } from './SessionNotesPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
+import { logged, rollLogLimit, type LoggedRoll } from './RollLog';
 import { SheetSummary } from './SheetSummary';
 import { SpellsPanel } from './SpellsPanel';
 import { TraceTable } from './TraceTable';
@@ -230,6 +231,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
   const printButton = useRef<HTMLButtonElement>(null);
+  const shortRestButton = useRef<HTMLButtonElement>(null);
+  const longRestButton = useRef<HTMLButtonElement>(null);
 
   // WCAG 2.4.3: opening a sheet (after create, import or picking from the list) moves focus to its heading instead of
   // leaving it on <body>. The sheet is keyed by character, so this runs once per opened character, not on every save.
@@ -237,6 +240,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
   const [rollMode, setRollMode] = useState<RollMode>('normal');
   const [lastRoll, setLastRoll] = useState<RollRecord>();
+  // D28: the previous rolls of this session. The sheet is keyed by character id, so a switch remounts and clears both.
+  const [rollLog, setRollLog] = useState<LoggedRoll[]>([]);
+  const lastLogged = useRef<LoggedRoll | undefined>(undefined);
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
@@ -306,7 +312,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       .then((found) => {
         if (current) setPdfSources(new Set(found.filter(([, a]) => a?.status === 'available' || a?.status === 'changed').map(([id]) => id)));
       })
-      .catch(onError);
+      .catch((error) => {
+        if (current) onError(error);
+      });
     return () => {
       current = false;
     };
@@ -334,6 +342,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   // a time and answers them in order, so quick repeated presses all apply. A change gets no entry when it overlapped another
   // play change or an Undo (started after it, or still running), or when another view (a rest, a restore, a save) was shown
   // while it was in flight: its "before" is then not what the service changed.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const started = useRef(0);
   const running = useRef(0);
   const shownView = useRef(view);
@@ -393,12 +408,54 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     refocus();
   }
 
+  /** A roll shown in Last roll; the one it replaces moves into the log, in `at` order (newest first), so a hit die logged since stays above it. */
+  function showRoll(record: RollRecord) {
+    const replaced = lastLogged.current;
+    if (replaced) {
+      setRollLog((log) => {
+        const at = log.findIndex((entry) => entry.at < replaced.at);
+        const next = at < 0 ? [...log, replaced] : [...log.slice(0, at), replaced, ...log.slice(at)];
+        return next.slice(0, rollLogLimit);
+      });
+    }
+    lastLogged.current = logged(record);
+    setLastRoll(record);
+  }
+
+  /** A roll the strip does not show (hit dice in a rest, dice-engine.md "Display"): logged only. */
+  function logRoll(record: RollRecord) {
+    const entry = logged(record);
+    setRollLog((log) => [entry, ...log].slice(0, rollLogLimit));
+  }
+
   async function roll(target: RollTarget) {
     try {
-      setLastRoll(await client.roll(character.id, target));
+      showRoll(await client.roll(character.id, target));
     } catch (error) {
       onError(error);
     }
+  }
+
+  /** The rest that is open right now, readable from a callback that outlives its render (a finish still in flight). */
+  const openRest = useRef<RestPeriod>(undefined);
+  function showRest(kind: RestPeriod | undefined) {
+    openRest.current = kind;
+    setResting(kind);
+  }
+
+  /** The opener button toggles its own panel; the other one switches kind. Focus stays on the pressed button. */
+  function toggleRest(kind: RestPeriod) {
+    showRest(openRest.current === kind ? undefined : kind);
+  }
+
+  /**
+   * D29: closing a rest returns focus to the button that opened it (WCAG 2.4.3), but only when `kind` is still the open
+   * one. A finish that lands after the player cancelled or switched kind must not close the newer panel or take focus.
+   */
+  function closeRest(kind: RestPeriod) {
+    if (openRest.current !== kind) return;
+    showRest(undefined);
+    (kind === 'shortRest' ? shortRestButton : longRestButton).current?.focus();
   }
 
   const fieldGroup = (title: string, fields: DerivedValue[]) =>
@@ -420,15 +477,59 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         <span className="tag">{character.rulesFamily}</span>
         <span className="tag">Level {character.level}</span>
         {view.campaign && <span className="tag">Campaign: {view.campaign.name}</span>}
-        <button type="button" onClick={onLevelUp} disabled={character.level >= 20}>
+        {/* D29 (owner, 2026-10-07): rests at the top of the sheet, not in Play. */}
+        <button type="button" ref={shortRestButton} onClick={() => toggleRest('shortRest')} aria-expanded={resting === 'shortRest'} aria-controls={resting ? 'rest-panel' : undefined}>
+          Short rest…
+        </button>
+        <button type="button" ref={longRestButton} onClick={() => toggleRest('longRest')} aria-expanded={resting === 'longRest'} aria-controls={resting ? 'rest-panel' : undefined}>
+          Long rest…
+        </button>
+        {/* aria-disabled with a visible reason, not native disabled: a disabled button leaves the tab order and says nothing (3.3.2, 4.1.2). */}
+        <button
+          type="button"
+          onClick={() => {
+            if (character.level < 20) onLevelUp();
+          }}
+          aria-disabled={character.level >= 20 || undefined}
+          aria-describedby={character.level >= 20 ? 'level-up-hint' : undefined}
+        >
           Level up
         </button>
-        <button type="button" ref={printButton} onClick={() => setPrinting(true)} aria-expanded={printing} aria-controls="print-preview">
+        {character.level >= 20 && (
+          <span id="level-up-hint" className="hint">
+            Already at level 20, the highest level.
+          </span>
+        )}
+        <button type="button" ref={printButton} onClick={() => setPrinting((open) => !open)} aria-expanded={printing} aria-controls={printing ? 'print-preview' : undefined}>
           Print…
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+
+      {resting && (
+        <div className="rest-sheet" id="rest-panel">
+          <RestPanel
+            key={resting}
+            characterId={character.id}
+            kind={resting}
+            hitDice={sheet.hitDice ?? []}
+            version={view}
+            onError={onError}
+            onRoll={logRoll}
+            onCancel={() => closeRest(resting)}
+            onRested={(rested, applied) => {
+              const kind = resting;
+              closeRest(kind);
+              onChanged(rested);
+              // A reply that lands after this sheet is gone (another character opened, Level up pressed) says nothing: its
+              // rest is saved, but the status would describe a screen the user has left.
+              if (!mounted.current) return;
+              onStatus(`${kind === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
+            }}
+          />
+        </div>
+      )}
 
       {printing && (
         <PrintView
@@ -510,30 +611,6 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <HitPointsPanel view={view} act={act} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
-          {resting ? (
-            <RestPanel
-              key={resting}
-              characterId={character.id}
-              kind={resting}
-              hitDice={sheet.hitDice ?? []}
-              onError={onError}
-              onCancel={() => setResting(undefined)}
-              onRested={(rested, applied) => {
-                setResting(undefined);
-                onChanged(rested);
-                onStatus(`${resting === 'shortRest' ? 'Short' : 'Long'} rest finished: ${applied} change${applied === 1 ? '' : 's'} applied.`);
-              }}
-            />
-          ) : (
-            <div className="actions">
-              <button type="button" onClick={() => setResting('shortRest')}>
-                Short rest…
-              </button>
-              <button type="button" onClick={() => setResting('longRest')}>
-                Long rest…
-              </button>
-            </div>
-          )}
           <ConditionsPanel view={view} act={act} />
           <ResourcesPanel view={view} act={act} />
           <ClassColumnsPanel view={view} />
