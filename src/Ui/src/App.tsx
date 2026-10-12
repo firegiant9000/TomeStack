@@ -165,12 +165,8 @@ export function App() {
         <span className="tag">Offline</span>
       </header>
 
+      {/* Owner (2026-10-12): the header's "Hide sidebar" is the only close control; the sidebar has none of its own. */}
       <nav id="sidebar" className="sidebar" aria-labelledby="characters-heading" ref={sidebar} hidden={collapsed}>
-        {/* Owner (2026-10-06): a visible close control inside the sidebar. A distinct name from the header's "Hide sidebar"
-            (two buttons with one name would make getByRole throw). Never shown collapsed, so no aria-expanded. */}
-        <button type="button" className="sidebar-close" aria-controls="sidebar" onClick={toggleSidebar}>
-          Close sidebar
-        </button>
         <h2 id="characters-heading" className="sidebar-heading">
           Characters
         </h2>
