@@ -338,6 +338,25 @@ it('awaits onCreated and keeps Create disabled for good after a successful apply
   expect(client.ddbApply).toHaveBeenCalledTimes(1);
 });
 
+it('sends equipMatched true by default and false once the summary checkbox is cleared on the numbers step (D16g)', async () => {
+  const user = userEvent.setup();
+  render(<DdbImportPanel rulesFamilies={families} onError={vi.fn()} onCancel={vi.fn()} onCreated={vi.fn()} />);
+  await toMatches(user);
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Match for Fixture Veil' }), '1');
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.anything()] })));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  const box = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Equip matched weapons and armour' });
+  expect(box.checked).toBe(true);
+  expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].equipMatched).toBe(true);
+  await user.click(box);
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].equipMatched).toBe(false));
+  // The summary step no longer offers it.
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+  await screen.findByRole('button', { name: 'Create character' });
+  expect(screen.queryByRole('checkbox', { name: 'Equip matched weapons and armour' })).toBeNull();
+});
+
 it('discards the token of a read that resolves after Cancel', async () => {
   const pending = deferred<DdbReadResult>();
   vi.mocked(client.ddbRead).mockReturnValueOnce(pending.promise);

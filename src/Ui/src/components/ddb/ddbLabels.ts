@@ -35,6 +35,7 @@ export const noteLabels: Record<string, string> = {
   'campaign.source-not-allowed': 'The campaign does not allow its source; the sheet will warn.',
   'choice.not-offered': 'The class has not reached the level of its subclass choice.',
   'class.not-matched': 'Its class was not matched.',
+  'subclass.detected-from-features': "Proposed from the sheet's features; change it if the sheet meant another subclass.",
   'content.no-open-choice': 'Installed, but no open choice offers it and it cannot be added on its own.',
   'skill.no-open-choice': 'No open choice offers this skill.',
   'spell.no-caster': 'No class or subclass of the character casts spells.',

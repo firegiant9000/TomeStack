@@ -1,6 +1,6 @@
 # Implementation plan: character import from a D&D Beyond PDF sheet
 
-Spec: [ddb-pdf-import.md](ddb-pdf-import.md) (reviewed 2026-10-02). Status: **built as planned in slices S0 to S4 and S6 (PRs #57 to #63); the contract additions and deviations are in the LIVING_SPECS change history, and this plan is kept as written for the record.** Every slice lands on its own branch off `main`, as a PR, with tests written first, the doc updates LIVING_SPECS asks for, and the full CLAUDE.md gate green (warning budget 0, `TreatWarningsAsErrors`).
+Spec: [ddb-pdf-import.md](ddb-pdf-import.md) (reviewed 2026-10-02). Status: **built as planned in slices S0 to S4 and S6 (PRs #57 to #63); the contract additions and deviations are in the LIVING_SPECS change history, and this plan is kept as written for the record** · D16f and D16g added 2026-10-05 (PR `ddb-subclass-equip`). Every slice lands on its own branch off `main`, as a PR, with tests written first, the doc updates LIVING_SPECS asks for, and the full CLAUDE.md gate green (warning budget 0, `TreatWarningsAsErrors`).
 
 The gate, for every slice:
 

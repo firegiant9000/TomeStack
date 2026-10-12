@@ -1470,6 +1470,8 @@ export interface DdbPreviewRequest {
   includePlayState: boolean;
   /** Open choices answered in the matches step (a 2024 background's ability scores). */
   answers?: ChoiceSelection[];
+  /** D16g: create matched weapons and armour equipped. */
+  equipMatched?: boolean;
 }
 
 /** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */

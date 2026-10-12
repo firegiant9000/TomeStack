@@ -130,7 +130,7 @@ public sealed partial class TomeStackApp
         var sheet = DdbSessions.Peek(request.Token)
             ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
         var proposal = ProposeDdbCharacter(sheet,
-            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers),
+            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched),
             Guid.NewGuid());
 
         var problems = new List<Diagnostic>();
@@ -183,7 +183,7 @@ public sealed partial class TomeStackApp
             CampaignId = request.CampaignId,
         };
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
-            (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision);
+            (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision, request.EquipMatched);
         planner.Plan(sheet);
         var diagnostics = new List<Diagnostic>();
         var answered = planner.Character;
@@ -329,10 +329,11 @@ public sealed record DdbPreview(
     bool CanApply);
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
-public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null);
+/// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped.</param>
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = false);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false);
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = false);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>
