@@ -2,7 +2,8 @@
 
 A local-first Windows desktop app for building 5E-compatible characters and homebrew. It works offline, with no account.
 
-> **Status: v0.4.0, a limited-content build, the first one published as a GitHub release (unsigned; see [CHANGELOG](docs/CHANGELOG.md)).**
+> **Status: v0.5.0, a limited-content build published as a GitHub release (unsigned; see [CHANGELOG](docs/CHANGELOG.md)).**
+> - 0.5.0 adds the tabbed character sheet, a refreshed look with themes and Settings, a guided six-step builder, and character import from a D&D Beyond PDF sheet. They are fixture-verified; the checks on an installed build are owner checks.
 > - The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet.
 > - M2.1 (data safety), M2.2 (the Fighter), M5 (homebrew studio) and M6 (source and campaign packs, extensions, VTT export) are in 0.4.0. They are fixture-verified; the checks on the installed 0.4.0 are owner checks ([release-0.4.0-verification.md](docs/features/release-0.4.0-verification.md)).
 > - The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).
