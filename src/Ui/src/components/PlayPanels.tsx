@@ -1,9 +1,10 @@
-import { useState, type SubmitEvent } from 'react';
+import { useEffect, useRef, useState, type SubmitEvent } from 'react';
 import type {
   Activation,
   AttackEntry,
   AutomationStatus,
   CharacterView,
+  ContentKind,
   FeatureEntry,
   PageRef,
   PlayAction,
@@ -12,7 +13,13 @@ import type {
   RollRecord,
   RollTarget,
 } from '../api/types';
-import { rollBonus } from '../format';
+import { hitDiceText, rollBonus } from '../format';
+import { diceLine } from '../rollText';
+import { announceRollsOn, diceAnimationOn } from '../settings';
+import { Pips } from './Pips';
+
+/** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
+export const inspirationLabel = (rulesFamily: string) => (rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration');
 
 const conditionLabels: Record<string, string> = {
   blinded: 'Blinded',
@@ -37,7 +44,37 @@ const automationLabels: Record<AutomationStatus, string> = {
   reference: 'reference only: text, not calculated',
 };
 
-export const pageText = (page?: PageRef) =>
+/** Investigation 2026-10-06 item 8: Features grouped by what granted them (D25, "From {name}"), else by what the content is. */
+const featureGroups: { kind: ContentKind; title: string }[] = [
+  { kind: 'class', title: 'Classes' },
+  { kind: 'subclass', title: 'Subclasses' },
+  { kind: 'species', title: 'Species' },
+  { kind: 'background', title: 'Background' },
+  { kind: 'feat', title: 'Feats' },
+  { kind: 'feature', title: 'Granted features' },
+  { kind: 'spell', title: 'Spells' },
+  { kind: 'item', title: 'Items' },
+];
+
+/**
+ * The kind groups first (entries with no granter), then one "From {name}" group per granter sorted by name, then "Other".
+ * Every feature lands in exactly one group.
+ */
+function groupFeatures(features: FeatureEntry[]): { title: string; items: FeatureEntry[] }[] {
+  const groupKey = (f: FeatureEntry) =>
+    f.grantedByName ? `From ${f.grantedByName}` : (featureGroups.find((g) => g.kind === f.kind)?.title ?? 'Other');
+  const byKey = new Map<string, FeatureEntry[]>();
+  for (const f of features) {
+    const key = groupKey(f);
+    byKey.set(key, [...(byKey.get(key) ?? []), f]);
+  }
+  const kindTitles = featureGroups.map((g) => g.title);
+  const granted = [...byKey.keys()].filter((k) => k.startsWith('From ')).sort((a, b) => a.localeCompare(b));
+  const ordered = [...kindTitles.filter((t) => byKey.has(t)), ...granted, ...(byKey.has('Other') ? ['Other'] : [])];
+  return ordered.map((title) => ({ title, items: byKey.get(title) ?? [] }));
+}
+
+export const pageText =(page?: PageRef) =>
   page ? (page.end && page.end !== page.start ? `pp. ${page.start}-${page.end}` : `p. ${page.start}`) : '';
 
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
@@ -62,7 +99,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
 
   return (
     <section aria-labelledby="hp-heading" className="play-panel">
-      <h3 id="hp-heading">
+      <h3 id="hp-heading" tabIndex={-1}>
         Hit points: {hp.current} of {hp.maximum}
         {hp.temporary > 0 ? `, ${hp.temporary} temporary` : ''}
       </h3>
@@ -84,7 +121,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
       <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
-          Hit dice: {(view.sheet.hitDice ?? []).map((h) => `d${h.die} ${h.remaining} of ${h.total}`).join(', ')}
+          Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
         </p>
       )}
       <label className="choice">
@@ -93,7 +130,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           checked={view.character.play?.inspiration ?? false}
           onChange={(e) => act({ action: 'setInspiration', amount: e.target.checked ? 1 : 0 })}
         />
-        {view.character.rulesFamily === 'srd-5.2.1' ? 'Heroic Inspiration' : 'Inspiration'}
+        {inspirationLabel(view.character.rulesFamily)}
       </label>
     </section>
   );
@@ -167,6 +204,55 @@ export function DeathSavesPanel({
   );
 }
 
+/**
+ * Character schema v8 (D19): concentration. Rolling the save changes nothing; "Kept concentration" and "End concentration" are
+ * the confirmed changes (SPEC C-05). The DC was set by the service when damage was taken (max(10, half the damage dealt)).
+ */
+export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; act: Act; roll: (target: RollTarget) => void }) {
+  const con = view.character.play?.concentration;
+  const pending = con?.pendingSaveDc !== undefined;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const wasConcentrating = useRef(false);
+  const wasPending = useRef(false);
+  // WCAG 2.4.3: both confirmed outcomes unmount the focused button. If focus fell to <body>, "Kept concentration" puts it on
+  // this panel's heading and "End concentration" (the whole panel gone) on the Hit points heading, which stays on the tab.
+  useEffect(() => {
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (lost && con && wasPending.current && !pending) heading.current?.focus();
+    if (lost && !con && wasConcentrating.current) document.getElementById('hp-heading')?.focus();
+    wasConcentrating.current = con !== undefined;
+    wasPending.current = pending;
+  }, [con, pending]);
+  if (!con) return null;
+  return (
+    <section aria-labelledby="concentration-heading" className="play-panel">
+      <h3 id="concentration-heading" tabIndex={-1} ref={heading}>
+        Concentration: {con.name}
+        {pending ? `, Constitution saving throw DC ${con.pendingSaveDc} pending` : ''}
+      </h3>
+      <div className="actions">
+        {pending && (
+          <>
+            <button type="button" onClick={() => roll({ field: 'save.con' })}>
+              Roll Constitution saving throw
+            </button>
+            <button type="button" onClick={() => act({ action: 'clearConcentrationCheck' })}>
+              Kept concentration
+            </button>
+          </>
+        )}
+        <button type="button" onClick={() => act({ action: 'endConcentration' })}>
+          End concentration
+        </button>
+      </div>
+      <p className="hint">
+        Taking damage asks for a Constitution save of DC 10 or half the damage, whichever is higher (at most 30 under the 2024 rules); at 0
+        hit points the spell ends by itself.
+      </p>
+    </section>
+  );
+}
+
 export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }) {
   const play = view.character.play;
   const active = play?.conditions ?? [];
@@ -208,6 +294,7 @@ function ResourceCard({ resource, act }: { resource: ResourceValue; act: Act }) 
     <li className="resource">
       <h4 id={headingId}>
         {resource.label}: {tracked ? `${resource.current} of ${resource.maximum}` : 'tracked by hand'}
+        {tracked && <Pips filled={resource.current!} total={resource.maximum!} />}
       </h4>
       <p className="hint">
         From {resource.contentName} · {automationLabels[resource.automation]}
@@ -349,7 +436,7 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
               {groupRolls.map(({ feature, effect }) => (
                 <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
                   <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-                    Roll {effect.label ?? effect.id} ({effect.dice}
+                    Roll {effect.label || effect.id} ({effect.dice}
                     {rollBonus(effect.bonus)})
                   </button>{' '}
                   <span className="hint">
@@ -429,16 +516,23 @@ export function FeaturesPanel({
   return (
     <section aria-labelledby="features-heading" className="play-panel">
       <h3 id="features-heading">Features</h3>
-      <ul className="features">
-        {features.map((feature) => (
-          <FeatureItem
-            key={feature.content.revisionId}
-            feature={feature}
-            openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
-            reportGap={reportGap}
-          />
-        ))}
-      </ul>
+      {groupFeatures(features).map(({ title, items }, index) => {
+        return (
+          <section key={title} aria-labelledby={`features-${index}`}>
+            <h4 id={`features-${index}`}>{title}</h4>
+            <ul className="features">
+              {items.map((feature) => (
+                <FeatureItem
+                  key={feature.content.revisionId}
+                  feature={feature}
+                  openPage={feature.origin.sourceId && feature.origin.page && pdfSources.has(feature.origin.sourceId) ? openPage : undefined}
+                  reportGap={reportGap}
+                />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </section>
   );
 }
@@ -497,6 +591,21 @@ function FeatureItem({
   );
 }
 
+/** ADR-015: at most this many dice are drawn; the record's text always lists every die. */
+const drawnDice = 10;
+
+/**
+ * A key per record object, so an identical second roll (a new object with the same faces) mounts a new dice row and the
+ * CSS tumble runs again. A WeakMap keeps it pure: no state, no effect, and old records are collected.
+ */
+const rollKeys = new WeakMap<RollRecord, number>();
+let nextRollKey = 0;
+function rollKey(record: RollRecord): number {
+  let key = rollKeys.get(record);
+  if (key === undefined) rollKeys.set(record, (key = ++nextRollKey));
+  return key;
+}
+
 /** The last roll's record (SPEC C-04): formula, every die, modifiers and provenance. Announced politely. */
 export function RollResult({
   record,
@@ -513,7 +622,9 @@ export function RollResult({
   const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
   const amount = typed.record === record ? typed.value : '';
   const setAmount = (value: string) => setTyped({ record, value });
-  if (!record) return <div role="region" aria-label="Last roll" aria-live="polite" />;
+  // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
+  // full effect on the next sheet open, which the Settings hint says.
+  if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
   const p = record.provenance;
   // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
   // resource (content v6) is found through the content that defines it.
@@ -528,22 +639,32 @@ export function RollResult({
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
   return (
-    <div role="region" aria-label="Last roll" aria-live="polite" className="roll-result">
+    <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result">
+      {/* ADR-015: the service's dice, drawn. aria-hidden and textless (faces come from CSS attr()), so the text below is
+          the result for everyone and the region announces once. Nothing is rolled here. */}
+      <div key={rollKey(record)} className={diceAnimationOn() ? 'dice' : 'dice dice-still'} aria-hidden="true">
+        {record.dice.slice(0, drawnDice).map((d, i) => (
+          <span
+            key={i}
+            className="die"
+            data-sides={d.sides}
+            data-value={d.value}
+            data-kept={d.kept ? 'true' : 'false'}
+            data-critical={d.fromCritical ? 'true' : 'false'}
+          />
+        ))}
+        {record.dice.length > drawnDice && <span className="die-more" data-more={record.dice.length - drawnDice} />}
+      </div>
       <p>
         <strong>
-          {p?.label ?? 'Roll'}: {record.total}
+          {p?.label || 'Roll'}: {record.total}
         </strong>{' '}
         ({record.formula}
         {record.mode !== 'normal' ? `, ${record.mode}` : ''}
         {record.critical ? ', critical' : ''})
       </p>
       <p className="hint">
-        Dice:{' '}
-        {record.dice
-          .map((d) => `d${d.sides} ${d.value}${d.kept ? '' : ' (dropped)'}${d.fromCritical ? ' (critical)' : ''}`)
-          .join(', ')}
-        {record.expressionConstant !== 0 ? ` · constant ${record.expressionConstant}` : ''}
-        {record.modifiers.map((m) => ` · ${m.label} ${m.amount >= 0 ? '+' : ''}${m.amount}`).join('')}
+        {diceLine(record)}
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
       {linked && linked.current !== undefined && !effect?.variableCost && (

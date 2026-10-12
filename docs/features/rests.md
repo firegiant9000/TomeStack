@@ -42,6 +42,8 @@ The plan is calculated from the sheet (both SRDs):
 
 **Toggles (content v6, [m3-effects.md](m3-effects.md)):** a long rest proposes switching every active toggle off (`toggle:<content>:<id>`); untick it to keep one on.
 
+**Concentration (character schema v8, D19):** a long rest of a character who is concentrating proposes ending it (`concentration`, "Concentration", 1 → 0, naming the spell), so the end is seen before it happens; untick it to keep concentrating, as with a toggle. A short rest does not list it.
+
 **Spell slots ([spellcasting.md](spellcasting.md)):** a long rest proposes every spent slot back (`spellSlots:<level>`), and both rests propose spent Pact Magic slots back (`pactSlots`). Each is ticked and can be unticked like any change.
 
 ## Commands
@@ -56,4 +58,4 @@ The plan is calculated from the sheet (both SRDs):
 
 ## UI
 
-"Short rest…" and "Long rest…" on the sheet open the proposal with every change ticked, and focus moves to its heading. For a short rest, each die size has "Roll a d<size>" and "d<size> rolled at the table" + "Add"; the dice to spend are listed with the hit points each restores and a "Remove" button. The player unticks what does not apply, then presses "Finish short rest" / "Finish long rest" or "Cancel rest". The status line then says how many changes were applied. The hit points panel shows the hit dice left ("Hit dice: d12 2 of 3").
+"Short rest…" and "Long rest…" sit in the sheet header beside Level up (D29); the proposal opens in its own row under the summary with every change ticked, focus moves to its heading, and closing it (Cancel or Finish) returns focus to the button that opened it. Pressing the other button switches the kind and writes nothing. For a short rest, each die size has "Roll a d<size>" and "d<size> rolled at the table" + "Add"; the dice to spend are listed with the hit points each restores and a "Remove" button. The player unticks what does not apply, then presses "Finish short rest" / "Finish long rest" or "Cancel rest". The status line then says how many changes were applied. The hit points panel shows the hit dice left ("Hit dice: d12 2 of 3").

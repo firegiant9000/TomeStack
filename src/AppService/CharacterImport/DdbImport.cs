@@ -98,8 +98,38 @@ public sealed partial class TomeStackApp
     public const string ImportedOverrideReason = "Imported from D&D Beyond";
 
     /// <summary>What the import leaves out by design (D16d, D16e), listed in every report.</summary>
-    private static readonly string[] NotBroughtOver =
-        ["currency", "notes", "speed", "passivePerception", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
+    private static readonly string[] AlwaysNotBroughtOver =
+        ["notes", "attunement", "languages", "toolProficiencies", "senses", "appearance", "backstory", "playerName"];
+
+    /// <summary>
+    /// D16e amended (D21, D24): currency is brought over only when a coin was read and none was unreadable (a partly read
+    /// purse is never zeroed silently: no coins come over and it is listed); speed and passive Perception are numbers now,
+    /// compared when the layout maps them and the value reads, and listed otherwise (unmapped, blank or unreadable).
+    /// </summary>
+    private static IEnumerable<string> NotBroughtOver(DdbSheet sheet)
+    {
+        if (!CurrencyBroughtOver(sheet))
+            yield return "currency";
+        if (!NumberRead(sheet, FieldIds.Speed))
+            yield return "speed";
+        if (!NumberRead(sheet, FieldIds.Passive("perception")))
+            yield return "passivePerception";
+        foreach (var code in AlwaysNotBroughtOver)
+            yield return code;
+    }
+
+    private static bool NumberRead(DdbSheet sheet, string field) => sheet.Numbers.TryGetValue(field, out var read) && read.Status == ReadStatus.Ok;
+
+    private static bool CurrencyBroughtOver(DdbSheet sheet) =>
+        sheet.Currency.Values.Any(r => r.Status == ReadStatus.Ok) && sheet.Currency.Values.All(r => r.Status != ReadStatus.Unreadable);
+
+    private static Currency CurrencyFrom(DdbSheet sheet)
+    {
+        if (!CurrencyBroughtOver(sheet))
+            return new();
+        int Coin(string key) => sheet.Currency.TryGetValue(key, out var read) && read.Status == ReadStatus.Ok ? read.Value : 0;
+        return new(Coin("cp"), Coin("sp"), Coin("ep"), Coin("gp"), Coin("pp"));
+    }
 
     /// <summary>
     /// <c>ddb.preview</c>: the proposed character for the read sheet under the chosen family and campaign, with every match,
@@ -130,7 +160,7 @@ public sealed partial class TomeStackApp
         var sheet = DdbSessions.Peek(request.Token)
             ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
         var proposal = ProposeDdbCharacter(sheet,
-            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers),
+            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched),
             Guid.NewGuid());
 
         var problems = new List<Diagnostic>();
@@ -181,9 +211,10 @@ public sealed partial class TomeStackApp
             RulesFamily = request.RulesFamily,
             BaseAbilities = new(AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase),
             CampaignId = request.CampaignId,
+            Currency = CurrencyFrom(sheet),
         };
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
-            (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision);
+            (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision, request.EquipMatched);
         planner.Plan(sheet);
         var diagnostics = new List<Diagnostic>();
         var answered = planner.Character;
@@ -252,7 +283,7 @@ public sealed partial class TomeStackApp
             Count(MatchStatus.NoPlace),
             Count(MatchStatus.Unreadable),
             Count(MatchStatus.LeftOut),
-            [.. NotBroughtOver, .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
+            [.. NotBroughtOver(sheet), .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
@@ -329,10 +360,11 @@ public sealed record DdbPreview(
     bool CanApply);
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
-public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null);
+/// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped. Defaults to true, as the UI's checkbox does; a caller that omits it gets the guess.</param>
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false);
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>

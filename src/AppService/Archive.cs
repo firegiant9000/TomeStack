@@ -60,7 +60,7 @@ public sealed partial class TomeStackApp
 
     private static CharacterSummary Summary(Character character) =>
         new(character.Id, character.Name, character.RulesFamily, character.UpdatedAt, character.ArchivedAt,
-            [.. character.CrossFamilyExceptions.Select(e => e.Content.ContentId).Distinct()]);
+            [.. character.CrossFamilyExceptions.Select(e => e.Content.ContentId).Distinct()], character.TotalLevel);
 
     private Character FindCharacterOrThrow(Guid characterId) =>
         _store.FindCharacter(characterId) ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);

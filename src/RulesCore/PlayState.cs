@@ -13,6 +13,12 @@ public sealed record PlayState
     public const int MaxHitPoints = 10_000;
     public const int MaxExhaustion = 6;
 
+    /// <summary>The highest pending concentration save DC validation accepts (the damage command clamps to it).</summary>
+    public const int MaxConcentrationSaveDc = 100;
+
+    /// <summary>The longest spell name a concentration records (a name the player's own content gave it; the same bound as a snapshot label).</summary>
+    public const int MaxConcentrationNameLength = 200;
+
     /// <summary>A bound on spent slots of one level (untrusted input); overrides can raise a maximum, never past this.</summary>
     public const int MaxSlots = 100;
 
@@ -50,6 +56,13 @@ public sealed record PlayState
 
     /// <summary>Character schema v7 (M3 B2): the <c>toggle</c> effects switched on, keyed by content id (so an update keeps them).</summary>
     public IReadOnlyList<ActiveToggle> Toggles { get; init; } = [];
+
+    /// <summary>
+    /// Character schema v8 (D19): the concentration spell, or null. Set by <c>startConcentration</c>, cleared by
+    /// <c>endConcentration</c>, by damage that drops hit points to 0, and by a long rest. <see cref="Concentration.PendingSaveDc"/>
+    /// is set by <c>damage</c> (max(10, half the damage dealt), at most the family's cap: 30 under SRD 5.2.1) and cleared by <c>clearConcentrationCheck</c> or <c>endConcentration</c>.
+    /// </summary>
+    public Concentration? Concentration { get; init; }
 
     public bool IsOn(Guid contentId, string toggleId) => Toggles.Any(t => t.ContentId == contentId && t.ToggleId == toggleId);
 
@@ -123,6 +136,8 @@ public sealed record PlayState
             yield return new("play.spell-slots-invalid", $"Spent Pact Magic slots must be between 0 and {MaxSlots}.");
         if (DeathSaves.Successes is < 0 or > DeathSaves.Maximum || DeathSaves.Failures is < 0 or > DeathSaves.Maximum)
             yield return new("play.death-saves-out-of-range", $"Death saving throw successes and failures must each be between 0 and {DeathSaves.Maximum}.");
+        if (Concentration is { } con && (string.IsNullOrWhiteSpace(con.Name) || con.Name.Length > MaxConcentrationNameLength || con.PendingSaveDc is < 10 or > MaxConcentrationSaveDc))
+            yield return new("play.concentration-invalid", $"Concentration needs the spell's name (at most {MaxConcentrationNameLength} characters), and a pending save DC between 10 and 100.");
     }
 }
 
@@ -131,6 +146,18 @@ public sealed record ResourceUse(Guid ContentId, string ResourceId, int Spent);
 
 /// <summary>A <c>toggle</c> effect that is switched on: the content that defines it and its toggle id.</summary>
 public sealed record ActiveToggle(Guid ContentId, string ToggleId);
+
+/// <summary>Character schema v8 (D19): the spell being concentrated on (an exact pin and its name) and a pending Constitution save DC.</summary>
+public sealed record Concentration(ContentReference Spell, string Name, int? PendingSaveDc = null)
+{
+    /// <summary>
+    /// Concentration on <paramref name="spell"/>, named for display. Content names have no length bound, so a longer name is
+    /// clipped to <see cref="PlayState.MaxConcentrationNameLength"/> rather than refusing the change (the pin, not the name,
+    /// identifies the spell).
+    /// </summary>
+    public static Concentration On(ContentReference spell, string name) =>
+        new(spell, name.Length > PlayState.MaxConcentrationNameLength ? name[..PlayState.MaxConcentrationNameLength] : name);
+}
 
 /// <summary>How many spell slots of one spell level are spent.</summary>
 public sealed record SpellSlotUse(int Level, int Spent);

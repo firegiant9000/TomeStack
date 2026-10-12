@@ -39,6 +39,7 @@ public class ArchiveTests
     {
         var (temp, id) = Setup();
         using var _t = temp;
+        temp.App.SaveCharacter(temp.App.Store.FindCharacter(id)! with { Level = 5 }); // a level above the default of 1
         var before = temp.App.Store.FindCharacter(id)!;
         var sheet = TempApp.Json(temp.App.GetCharacter(id).Sheet);
 
@@ -46,6 +47,7 @@ public class ArchiveTests
 
         Assert.NotNull(archived.ArchivedAt);
         Assert.Equal(archived.ArchivedAt, Assert.Single(temp.App.ListCharacters(), c => c.Id == id).ArchivedAt);
+        Assert.Equal((5, 5), (archived.Level, Assert.Single(temp.App.ListCharacters(), c => c.Id == id).Level)); // D25
         var stored = temp.App.Store.FindCharacter(id)!;
         Assert.Equal(TempApp.Json(before with { ArchivedAt = stored.ArchivedAt }), TempApp.Json(stored)); // play state, choices and UpdatedAt unchanged
         Assert.Single(temp.App.ListGapNotes(id));

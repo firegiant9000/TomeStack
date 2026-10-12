@@ -61,6 +61,34 @@ public class CampaignTests
     }
 
     [Fact]
+    public void A_recorded_spell_from_a_source_the_campaign_does_not_allow_warns_until_an_exception_is_recorded()
+    {
+        using var temp = new TempApp();
+        var spellFixtures = Guid.Parse("5f5d5000-0000-4000-8000-000000000001");
+        var campaign = temp.App.SaveCampaign(New("Fixture spells only", spellFixtures));
+        var arcanist = new ContentReference(Guid.Parse("5f5dc000-0000-4000-8000-000000000001"), Guid.Parse("5f5de000-0000-4000-8000-000000000001"));
+        var spark = new ContentReference(Guid.Parse("5f5dc000-0000-4000-8000-000000000011"), Guid.Parse("5f5de000-0000-4000-8000-000000000011"));
+        var srdSpells = TomeStackApp.LoadBundledPack("TomeStack.Content.srd-5.2.1-spells.json");
+        var outside = srdSpells.Revisions.Last(r => r.Name == "Fire Bolt" && r.Kind == ContentKind.Spell).Reference;
+        var character = new Character
+        {
+            Id = Guid.NewGuid(), Name = "Test Spell Camper", RulesFamily = RulesFamilies.Srd521, Level = 1, CampaignId = campaign.Id,
+            Classes = [new(arcanist, 1)], BaseAbilities = new(8, 14, 12, 16, 10, 10),
+            Spells = [new(arcanist.ContentId, spark), new(arcanist.ContentId, outside)],
+        };
+
+        var view = temp.App.SaveCharacter(character);
+
+        // Only the spell from the other source is flagged; the campaign's own spell and class are not.
+        var flagged = Assert.Single(view.Campaign!.Warnings, w => w.Code == "campaign.source-not-allowed");
+        Assert.Equal(outside, flagged.Content);
+
+        var excepted = temp.App.SaveCharacter(view.Character with { CampaignExceptions = [new(outside, "DM approved")] });
+        Assert.DoesNotContain(excepted.Campaign!.Warnings, w => w.Code == "campaign.source-not-allowed");
+        Assert.Contains(excepted.Campaign.Warnings, w => w.Code == "campaign.exception" && w.Content == outside && w.Message.Contains("DM approved", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_rules_family_other_than_the_campaigns_is_flagged()
     {
         using var temp = new TempApp();

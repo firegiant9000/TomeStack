@@ -246,7 +246,8 @@ public sealed partial class TomeStackApp : IDisposable
     /// says, so a save for another reason (or from a stale copy) never changes hit points, spent uses or conditions.
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
     /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
-    /// <c>character.unarchive</c> change it.
+    /// <c>character.unarchive</c> change it. Currency and session notes (v8) are ordinary saved fields: the payload wins,
+    /// as for equipment and overrides.
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
@@ -306,7 +307,12 @@ public sealed partial class TomeStackApp : IDisposable
         var chosenElsewhere = without.Choices.SelectMany(c => c.Selected).ToHashSet();
         foreach (var option in selected.Where(chosenElsewhere.Contains))
             problems.Add(new("choice.option-already-chosen", $"Revision {option.RevisionId} is already selected for another choice.", option));
-        foreach (var option in selected.Where(offered.Options.Contains))
+        // R42: an option the character already records for this choice is existing state, not a new offer, so re-sending it
+        // (an imported character keeping an option of the other rules family while the rest of the choice changes) is accepted.
+        // A newly added option is checked as before. Previews trust the draft's recorded options; the stored character decides in
+        // Choose, and the calculator drops other-family or unpublished content with warnings.
+        var recorded = character.Choices.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)?.Selected ?? [];
+        foreach (var option in selected.Where(o => offered.Options.Contains(o) && !recorded.Contains(o)))
         {
             var revision = _store.FindRevision(option);
             if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))
@@ -438,7 +444,7 @@ public sealed record ContentOption(
 public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string? School, bool Concentration, bool Ritual);
 
 /// <param name="ArchivedAt">SPEC C-08: set while the character is archived; the UI lists it apart, collapsed.</param>
-public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null);
+public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);

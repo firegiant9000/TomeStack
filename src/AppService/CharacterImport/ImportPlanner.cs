@@ -23,15 +23,17 @@ internal sealed class ImportPlanner
     private readonly List<MatchRow> _rows = [];
     private readonly HashSet<string> _chosenByUser = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ContentReference> _classes = [];
+    private readonly bool _equipMatched;
     private Character _character;
 
     /// <param name="options">The listing for the chosen family and campaign: published, compatible and current only.</param>
-    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find)
+    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find, bool equipMatched = false)
     {
         _character = start;
         _calculate = calculate;
         _choose = choose;
         _find = find;
+        _equipMatched = equipMatched;
         foreach (var option in options)
         {
             var key = (option.Kind, Normalise.Name(option.Name));
@@ -57,7 +59,7 @@ internal sealed class ImportPlanner
         Classes(sheet.Classes);
         Content("species", MatchKind.Species, ContentKind.Species, sheet.Species);
         Content("background", MatchKind.Background, ContentKind.Background, sheet.Background);
-        Subclasses(sheet.Classes);
+        Subclasses(sheet.Classes, sheet.Features);
         for (var i = 0; i < sheet.Feats.Count; i++)
             Content($"feat:{i}", MatchKind.Feat, ContentKind.Feat, sheet.Feats[i]);
         Skills(sheet.SkillProficient);
@@ -94,29 +96,70 @@ internal sealed class ImportPlanner
         _character = _character with { Classes = levels };
     }
 
-    private void Subclasses(Read<IReadOnlyList<ClassText>> read)
+    /// <summary>
+    /// The sheet's subclass, or (D16f) when it names none and the matched class offers its subclass choice at the imported
+    /// level, the choice's options: one whose granted features appear on the sheet is proposed, else the user picks or leaves
+    /// it out. Below the choice level, or with an unmatched class, nothing is offered.
+    /// </summary>
+    private void Subclasses(Read<IReadOnlyList<ClassText>> read, IReadOnlyList<Read<string>> features)
     {
         if (read.Status != ReadStatus.Ok)
             return;
+        var onSheet = features.Where(f => f.Status == ReadStatus.Ok).Select(f => Normalise.Name(f.Value!)).ToHashSet(StringComparer.Ordinal);
         for (var i = 0; i < read.Value!.Count; i++)
         {
-            if (read.Value[i].Subclass is not { } name)
-                continue;
+            var text = read.Value[i];
             var rowId = $"class:{i}:subclass";
-            var options = Lookup(ContentKind.Subclass, name);
             ChoiceStatus? choice = null;
             if (_classes.TryGetValue(i, out var classRef))
                 choice = Calculate().Choices?.FirstOrDefault(c => c.Source == classRef && c.Options.Any(o => _find(o)?.Kind == ContentKind.Subclass));
             MatchCandidate For(ContentOption o) => choice?.Options.FirstOrDefault(x => x.ContentId == o.Reference.ContentId) is { } inChoice
                 ? Candidate(o, new(PlacementKind.Choice, choice.Source, choice.ChoiceId), inChoice)
                 : Candidate(o, new(PlacementKind.Nowhere));
-            var candidates = options.Select(For).ToList();
-            if (choice is null && !LeftOut(rowId))
+
+            if (text.Subclass is { } name)
             {
-                _rows.Add(new(rowId, MatchKind.Subclass, name, MatchStatus.NoPlace, candidates, null, classRef is null ? "class.not-matched" : "choice.not-offered"));
+                var options = Lookup(ContentKind.Subclass, name);
+                var candidates = options.Select(For).ToList();
+                if (choice is null && !LeftOut(rowId))
+                {
+                    _rows.Add(new(rowId, MatchKind.Subclass, name, MatchStatus.NoPlace, candidates, null, classRef is null ? "class.not-matched" : "choice.not-offered"));
+                    continue;
+                }
+                Place(rowId, MatchKind.Subclass, name, ContentKind.Subclass, candidates, For);
                 continue;
             }
-            Place(rowId, MatchKind.Subclass, name, ContentKind.Subclass, candidates, For);
+
+            if (choice is null)
+                continue;
+            var label = $"{text.Name} subclass (not on the sheet)";
+            // The choice can offer several published revisions of one subclass: one candidate each.
+            var offered = choice.Options.Select(o => _byContent.GetValueOrDefault(o.ContentId)).OfType<ContentOption>().Where(o => o.Kind == ContentKind.Subclass)
+                .DistinctBy(o => o.Reference.ContentId).ToList();
+            // Detected: every feature the subclass grants up to the imported level is on the sheet (a shared generic name is
+            // not enough). Likely: any one of them is.
+            var granted = offered.ToDictionary(o => o.Reference.ContentId, o => GrantedNames(o.Reference, text.Level));
+            var detected = offered.Where(o => granted[o.Reference.ContentId] is { Count: > 0 } names && names.IsSubsetOf(onSheet)).ToList();
+            var likely = offered.Except(detected).Where(o => granted[o.Reference.ContentId].Overlaps(onSheet)).ToList();
+            var ordered = detected.Concat(likely).Concat(offered.Except(detected).Except(likely)).Select(For).ToList();
+            if (detected.Count == 1 && !_resolutions.ContainsKey(rowId))
+            {
+                var pick = For(detected[0]);
+                var refused = Apply(pick);
+                _rows.Add(refused is null
+                    ? new(rowId, MatchKind.Subclass, label, MatchStatus.Matched, ordered, pick, CampaignNote(pick) ?? "subclass.detected-from-features")
+                    : new(rowId, MatchKind.Subclass, label, MatchStatus.NoPlace, ordered, null, refused));
+                continue;
+            }
+            // A pick that is not one of this choice's options (a stale resolution) would end as "No place" and unblock Create
+            // with the choice still open: ask again instead.
+            if (_resolutions.GetValueOrDefault(rowId) is { LeaveOut: false, Chosen: { } picked } && !offered.Any(o => o.Reference.ContentId == picked.ContentId))
+            {
+                _rows.Add(new(rowId, MatchKind.Subclass, label, MatchStatus.Choose, ordered, null, "resolution.not-found"));
+                continue;
+            }
+            // One option is never taken silently: the sheet did not name it (autoPick: false).
+            Place(rowId, MatchKind.Subclass, label, ContentKind.Subclass, ordered, For, autoPick: false);
         }
     }
 
@@ -213,7 +256,8 @@ internal sealed class ImportPlanner
 
     private void Items(IReadOnlyList<Read<ItemText>> items)
     {
-        var merged = new Dictionary<ContentReference, (int Quantity, bool Equipped)>();
+        // Equipped is null when no merged row carried a mark (the 2014 layout has none); an explicit false is a mark too.
+        var merged = new Dictionary<ContentReference, (int Quantity, bool? Equipped)>();
         var order = new List<ContentReference>();
         for (var i = 0; i < items.Count; i++)
         {
@@ -232,12 +276,47 @@ internal sealed class ImportPlanner
                 var (quantity, equipped) = merged.GetValueOrDefault(chosen!.Reference);
                 if (!merged.ContainsKey(chosen.Reference))
                     order.Add(chosen.Reference);
-                merged[chosen.Reference] = ((int)Math.Min(EquipmentEntry.MaxQuantity, (long)quantity + item.Quantity), equipped || item.Equipped == true);
+                merged[chosen.Reference] = ((int)Math.Min(EquipmentEntry.MaxQuantity, (long)quantity + item.Quantity), equipped is null ? item.Equipped : item.Equipped is null ? equipped : equipped == true || item.Equipped == true);
                 note ??= CampaignNote(chosen);
             }
             _rows.Add(new(rowId, MatchKind.Item, item.Name, status, candidates, status == MatchStatus.Matched ? chosen : null, note));
         }
-        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped, merged[r].Quantity))] };
+        // D16g: the 2014 sheet has no equipped mark. When asked, equip every matched weapon, the first body armour and the
+        // first shield, in sheet order, so an import never raises equipment.multiple-armor or equipment.multiple-shields.
+        // The sheet's own marks win: armour it marks equipped takes the slot first, and an item it marks unequipped stays so.
+        // Only armour and weapons the calculator would count (automatic, always on; not reference-only) take part.
+        var wornBody = false;
+        var wornShield = false;
+        ArmorEffect? CountedArmor(ContentReference reference) =>
+            (_find(reference)?.Effects ?? []).OfType<ArmorEffect>().FirstOrDefault(a => a.Automation == AutomationStatus.Automatic && a.Timing == EffectTiming.Always);
+        foreach (var r in order.Where(r => merged[r].Equipped == true))
+        {
+            if (CountedArmor(r) is not { } marked)
+                continue;
+            if (marked.Category == ArmorCategory.Shield)
+                wornShield = true;
+            else
+                wornBody = true;
+        }
+        bool Wear(ContentReference reference)
+        {
+            if (CountedArmor(reference) is { } armor)
+            {
+                if (armor.Category == ArmorCategory.Shield)
+                {
+                    if (wornShield)
+                        return false;
+                    wornShield = true;
+                    return true;
+                }
+                if (wornBody)
+                    return false;
+                wornBody = true;
+                return true;
+            }
+            return (_find(reference)?.Effects ?? []).OfType<WeaponEffect>().Any(w => w.Automation != AutomationStatus.Reference);
+        }
+        _character = _character with { Equipment = [.. order.Select(r => new EquipmentEntry(r, merged[r].Equipped ?? (_equipMatched && Wear(r)), merged[r].Quantity))] };
     }
 
     private void Spells(IReadOnlyList<Read<SpellText>> spells)
@@ -367,9 +446,9 @@ internal sealed class ImportPlanner
     }
 
     /// <summary>Decides a content row and applies its placement; a match with nowhere to go, or one the builder refuses, is "No place".</summary>
-    private void Place(string rowId, MatchKind kind, string label, ContentKind contentKind, List<MatchCandidate> candidates, Func<ContentOption, MatchCandidate?> candidateFor)
+    private void Place(string rowId, MatchKind kind, string label, ContentKind contentKind, List<MatchCandidate> candidates, Func<ContentOption, MatchCandidate?> candidateFor, bool autoPick = true)
     {
-        var (status, chosen, note) = Decide(rowId, contentKind, candidates, candidateFor);
+        var (status, chosen, note) = Decide(rowId, contentKind, candidates, candidateFor, autoPick);
         if (status == MatchStatus.Matched && chosen!.Placement.Kind == PlacementKind.Nowhere)
             (status, note) = (MatchStatus.NoPlace, "content.no-open-choice");
         else if (status == MatchStatus.Matched && Apply(chosen!) is { } refused)
@@ -430,6 +509,18 @@ internal sealed class ImportPlanner
     private bool IsProficiencyGrant(TraceOrigin origin, string field) =>
         origin.Content is { } content && origin.EffectId is { } effect
         && _find(content)?.Effects.OfType<GrantEffect>().Any(g => g.Id == effect && g.Grant is GrantKind.Proficiency or GrantKind.Expertise && g.Target == field) == true;
+
+    /// <summary>
+    /// The normalised names of the content a revision grants (its features) at or below the class level (a grant with no
+    /// level counts), for D16f detection.
+    /// </summary>
+    private HashSet<string> GrantedNames(ContentReference reference, int classLevel) =>
+        (_find(reference)?.Effects ?? []).OfType<GrantEffect>()
+            .Where(g => g.Content is not null && (g.Level is not { } level || level <= classLevel))
+            .Select(g => _find(g.Content!)?.Name)
+            .OfType<string>()
+            .Select(Normalise.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The label of a row whose name could not be read: its kind only, never a value, so its gap note says what it was.</summary>
     private static string UnreadableLabel(MatchKind kind) => $"Unreadable {kind.ToString().ToLowerInvariant()}";

@@ -44,6 +44,65 @@ public class DiceTests
     }
 
     [Fact]
+    public void Keep_highest_drops_the_lowest_dice_and_marks_them_not_kept()
+    {
+        var random = new ScriptedRandom(6, 2, 5, 3);
+        var record = Roll(new RollRequest("4d6", KeepHighest: 3), random);
+
+        Assert.Equal([true, false, true, true], record.Dice.Select(d => d.Kept));
+        Assert.Equal(14, record.DiceTotal);
+        Assert.Equal(14, record.Total);
+    }
+
+    [Fact]
+    public void Keep_highest_drops_the_earliest_of_tied_lowest_dice()
+    {
+        var random = new ScriptedRandom(3, 3, 6, 5);
+        var record = Roll(new RollRequest("4d6", KeepHighest: 3), random);
+
+        Assert.Equal([false, true, true, true], record.Dice.Select(d => d.Kept));
+        Assert.Equal(14, record.DiceTotal);
+    }
+
+    [Fact]
+    public void Keep_highest_on_a_negative_term_keeps_the_highest_faces_and_subtracts_them()
+    {
+        var record = Roll(new RollRequest("-4d6+10", KeepHighest: 3), new ScriptedRandom(6, 2, 5, 3));
+
+        Assert.Equal([true, false, true, true], record.Dice.Select(d => d.Kept));
+        Assert.Equal(-14, record.DiceTotal);
+        Assert.Equal(-4, record.Total);
+    }
+
+    [Theory]
+    [InlineData("1d8+1d6", 1, "dice.keep-requires-single-term")]
+    [InlineData("4d6", 4, "dice.keep-out-of-range")]
+    [InlineData("4d6", 0, "dice.keep-out-of-range")]
+    [InlineData("4d6", -1, "dice.keep-out-of-range")]
+    public void Keep_highest_is_refused_for_several_terms_or_an_out_of_range_count(string formula, int keep, string code)
+    {
+        Assert.False(DiceRoller.TryRoll(new RollRequest(formula, KeepHighest: keep), new ScriptedRandom(1, 1, 1, 1, 1), out _, out var error));
+        Assert.Equal(code, error!.Code);
+    }
+
+    [Fact]
+    public void Keep_highest_on_a_single_die_is_refused_with_a_sensible_message()
+    {
+        Assert.False(DiceRoller.TryRoll(new RollRequest("1d6", KeepHighest: 1), new ScriptedRandom(1), out _, out var error));
+        Assert.Equal("dice.keep-out-of-range", error!.Code);
+        Assert.DoesNotContain("between 1 and 0", error.Message);
+    }
+
+    [Fact]
+    public void Keep_highest_is_refused_with_advantage_or_critical()
+    {
+        Assert.False(DiceRoller.TryRoll(new RollRequest("1d20", RollMode.Advantage, KeepHighest: 1), new ScriptedRandom(1, 1), out _, out var a));
+        Assert.False(DiceRoller.TryRoll(new RollRequest("4d6", Critical: true, KeepHighest: 3), new ScriptedRandom(1, 1, 1, 1), out _, out var c));
+        Assert.Equal("dice.keep-requires-single-term", a!.Code);
+        Assert.Equal("dice.keep-requires-single-term", c!.Code);
+    }
+
+    [Fact]
     public void Rolls_record_every_die_and_sum_dice_constants_and_modifiers()
     {
         var random = new ScriptedRandom(4, 6, 3);

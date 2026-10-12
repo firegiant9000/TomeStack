@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using TomeStack.AppService;
 
@@ -96,6 +97,12 @@ public partial class MainWindow : Window
         settings.IsStatusBarEnabled = false;
         settings.IsGeneralAutofillEnabled = false;
         settings.IsPasswordAutosaveEnabled = false;
+        // Investigation 2026-10-06 item 5 (owner answer 5): WebView2's browser accelerators are off outside a DevTools session, so
+        // F5 and Ctrl+R cannot reload the app mid-session, Ctrl+P cannot print the whole page past the preview, and Ctrl+F, F3,
+        // F7 and Alt+arrows do nothing. Zoom (Ctrl+plus, Ctrl+minus, Ctrl+0) is kept by the host below (ADR-006 "Security
+        // measures in the shell"; no bridge command).
+        settings.AreBrowserAcceleratorKeysEnabled = _options.DevTools;
+        WebView.KeyDown += OnWebViewKeyDown;
 
         core.SetVirtualHostNameToFolderMapping(AppHost, uiFolder, CoreWebView2HostResourceAccessKind.DenyCors);
         core.NavigationStarting += (_, e) =>
@@ -123,6 +130,41 @@ public partial class MainWindow : Window
         };
         core.WebMessageReceived += OnWebMessageReceived;
         core.Navigate($"{AppOrigin}index.html");
+    }
+
+    private const double MinZoom = 0.5;
+    private const double MaxZoom = 3.0;
+    private const double ZoomStep = 1.1;
+
+    /// <summary>
+    /// Ctrl+plus, Ctrl+minus and Ctrl+0 as the browser would do them. The WebView2 WPF control raises WPF key events for
+    /// accelerator keys while the browser process waits, so the zoom is applied on the dispatcher, not inside the handler.
+    /// </summary>
+    private void OnWebViewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control)
+            return;
+        var current = WebView.ZoomFactor;
+        double next;
+        switch (e.Key)
+        {
+            case Key.OemPlus:
+            case Key.Add:
+                next = Math.Min(MaxZoom, current * ZoomStep);
+                break;
+            case Key.OemMinus:
+            case Key.Subtract:
+                next = Math.Max(MinZoom, current / ZoomStep);
+                break;
+            case Key.D0:
+            case Key.NumPad0:
+                next = 1.0;
+                break;
+            default:
+                return;
+        }
+        e.Handled = true;
+        Dispatcher.BeginInvoke(() => WebView.ZoomFactor = next);
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

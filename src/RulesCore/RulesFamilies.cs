@@ -31,7 +31,7 @@ public static class RulesFamilies
         new(Srd521, "SRD 5.2.1 (2024 rules)", AbilityIncreaseSource: ContentKind.Background, BackgroundGrantsFeat: true, LongRestExhaustionNeedsFoodAndDrink: false,
             LongRestHitDice: HitDiceRecovery.All, HitDieHealingMinimum: 1, ShortRestNeedsOneHitPoint: true,
             HalfCasterLevels: CasterLevelRounding.Up, ThirdCasterLevels: CasterLevelRounding.Down, MulticlassSpellSlots: SrdMulticlassSpellSlots,
-            UntrainedShieldGivesArmorClass: false),
+            UntrainedShieldGivesArmorClass: false, ConcentrationSaveMaximumDc: 30),
     ];
 
     public static bool IsKnown(string? id) => All.Any(p => p.Id == id);
@@ -87,6 +87,10 @@ public static class RulesFamilies
 /// Class benefit of a Shield only if you have training with it" (SRD 5.2.1 p. 92). Checked only for a character whose
 /// content records armor training at all (M2.2); older classes record none, and nothing changes for them.
 /// </param>
+/// <param name="ConcentrationSaveMaximumDc">
+/// The highest DC of the Constitution saving throw that damage asks of a concentrating character: 30 under 2024 rules
+/// (SRD 5.2.1, Concentration: "up to a maximum DC of 30"); none under 2014 rules (SRD 5.1 sets no ceiling).
+/// </param>
 public sealed record RulesFamilyPolicy(
     string Id,
     string DisplayName,
@@ -99,7 +103,8 @@ public sealed record RulesFamilyPolicy(
     CasterLevelRounding HalfCasterLevels,
     CasterLevelRounding ThirdCasterLevels,
     IReadOnlyList<IReadOnlyList<int>> MulticlassSpellSlots,
-    bool UntrainedShieldGivesArmorClass);
+    bool UntrainedShieldGivesArmorClass,
+    int? ConcentrationSaveMaximumDc = null);
 
 /// <summary>How many spent hit dice a long rest gives back (<see cref="RulesFamilyPolicy.LongRestHitDice"/>).</summary>
 public enum HitDiceRecovery { HalfTotal, All }

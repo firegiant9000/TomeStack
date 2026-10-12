@@ -1,7 +1,7 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
@@ -175,6 +175,14 @@ public static class RestPlanner
                 $"{toggle.ContentName}: switched off after a long rest (untick to keep it on)", rules, toggle.Content.ContentId, toggle.ToggleId));
         }
 
+        // Character schema v8 (D19): a long rest ends the spell being concentrated on. Listed like the toggles, so it is seen before it happens.
+        if (character.Play.Concentration is { } concentration)
+        {
+            changes.Add(new(
+                "concentration", RestChangeKind.Concentration, "Concentration", 1, 0,
+                $"{concentration.Name}: concentration ends after a long rest (untick to keep it)", rules, concentration.Spell.ContentId));
+        }
+
         if (character.Play.Exhaustion > 0)
         {
             changes.Add(new(
@@ -343,6 +351,9 @@ public static class RestPlanner
                     break;
                 case RestChangeKind.Toggle:
                     play = play with { Toggles = [.. play.Toggles.Where(t => !(t.ContentId == change.ContentId && t.ToggleId == change.ResourceId))] };
+                    break;
+                case RestChangeKind.Concentration:
+                    play = play with { Concentration = null };
                     break;
                 case RestChangeKind.DeathSaves:
                     // Only when hit points were actually regained: unticking every hit die keeps the saves.

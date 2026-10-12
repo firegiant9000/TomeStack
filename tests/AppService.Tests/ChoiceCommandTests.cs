@@ -88,6 +88,63 @@ public class ChoiceCommandTests
         Assert.True(Choose(temp, id, Srd(25), "primal-knowledge-skill", Srd(21)).GetProperty("ok").GetBoolean()); // Perception
     }
 
+    // R42: a choice that records an option of the other rules family (an imported character) can be changed around it.
+    private static readonly ContentReference Keeper = Ref(60);
+    private static readonly ContentReference Hearth = Ref(61);
+    private static readonly ContentReference Lantern = Ref(62);
+    private static readonly ContentReference AlmanacOf2014 = Ref(63);
+
+    private static (TempApp Temp, Character Draft) KeeperDraft(params ContentReference[] recorded)
+    {
+        var temp = new TempApp();
+        temp.AddPack("fixture-pack-m1.json");
+        temp.AddPack("fixture-pack-choice-family.json");
+        var ash = TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [Keeper], Classes = [new(Warden, 1)] };
+        return (temp, ash with { Choices = recorded.Length == 0 ? [] : [new(Keeper, "keeper-gift", recorded)] });
+    }
+
+    [Fact]
+    public void A_recorded_option_of_the_other_family_is_accepted_when_resent_with_an_added_own_family_option()
+    {
+        var (temp, draft) = KeeperDraft(AlmanacOf2014);
+        using var _ = temp;
+
+        var view = temp.App.PreviewChoice(new(draft, Keeper, "keeper-gift", [AlmanacOf2014, Hearth]));
+
+        Assert.Equal([AlmanacOf2014, Hearth], Assert.Single(view.Character.Choices).Selected);
+        Assert.Null(temp.App.Store.FindCharacter(draft.Id)); // a preview writes nothing
+    }
+
+    [Fact]
+    public void A_newly_added_option_of_the_other_family_is_still_refused()
+    {
+        var (temp, draft) = KeeperDraft(Hearth);
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.PreviewChoice(new(draft, Keeper, "keeper-gift", [Hearth, AlmanacOf2014])));
+        Assert.Contains(refused.Problems, p => p.Code == "choice.option-unavailable");
+
+        // Nor does it excuse the same option in a draft that never recorded it.
+        var again = Assert.Throws<AppValidationException>(() => temp.App.PreviewChoice(new(draft with { Choices = [] }, Keeper, "keeper-gift", [AlmanacOf2014])));
+        Assert.Contains(again.Problems, p => p.Code == "choice.option-unavailable");
+    }
+
+    [Fact]
+    public void A_recorded_option_of_the_other_family_can_be_removed_or_replaced()
+    {
+        var (temp, draft) = KeeperDraft(AlmanacOf2014, Hearth);
+        using var _ = temp;
+
+        var removed = temp.App.PreviewChoice(new(draft, Keeper, "keeper-gift", [Hearth]));
+        Assert.Equal([Hearth], Assert.Single(removed.Character.Choices).Selected);
+
+        var replaced = temp.App.PreviewChoice(new(draft, Keeper, "keeper-gift", [Hearth, Lantern]));
+        Assert.Equal([Hearth, Lantern], Assert.Single(replaced.Character.Choices).Selected);
+
+        var cleared = temp.App.PreviewChoice(new(draft, Keeper, "keeper-gift", []));
+        Assert.Empty(cleared.Character.Choices);
+    }
+
     [Fact]
     public void Chosen_content_travels_in_packages()
     {

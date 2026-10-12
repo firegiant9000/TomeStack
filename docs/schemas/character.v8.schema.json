@@ -1,0 +1,492 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tomestack.local/schemas/character.v8.schema.json",
+  "title": "TomeStack character (schemaVersion 8)",
+  "description": "Stored character choices, pins, overrides and play state. Derived values are never stored. Unknown properties round-trip. v8 adds currency, notes (dated session notes) and play.concentration (owner, 2026-10-06). v7 adds play.toggles, the toggle effects switched on (M3 B2). v6 adds spells (known or prepared, per caster) and spent spell and Pact Magic slots in play (D04). v5 adds hitDiceSpent, deathSaves and inspiration to play (short rest and hit dice, SPEC C-05). v4 adds play (hit points, spent resources, conditions; SPEC C-05) and equipment. v3 adds classes and choices. Older versions are read with the new data at its default (full hit points, nothing spent).",
+  "type": "object",
+  "required": [
+    "id",
+    "schemaVersion",
+    "name",
+    "rulesFamily",
+    "baseAbilities"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "schemaVersion": {
+      "const": 8
+    },
+    "currency": {
+      "description": "Character schema v8 (D21): coins carried; plain counts, never converted.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cp": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "sp": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "ep": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "gp": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "pp": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
+    },
+    "notes": {
+      "description": "Character schema v8 (D22): dated session notes. Never in a share package.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": ["id", "date", "text", "createdAt"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/uuid" },
+          "date": { "type": "string", "format": "date" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "campaignExceptions": {
+      "description": "SPEC P-01 (M2 item 7): content used although the campaign does not allow its source, each with a reason.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "content",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "equipment": {
+      "description": "Items carried (M2 item 4). Only equipped items apply; worn armor sets the Armor Class base.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "item"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "equipped": {
+            "type": "boolean"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9999
+          }
+        }
+      }
+    },
+    "play": {
+      "description": "Mutable play state, changed only by the confirmed character.play command (and confirmed rests).",
+      "type": "object",
+      "properties": {
+        "currentHitPoints": {
+          "description": "Absent or null: at the hit point maximum.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "temporaryHitPoints": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "contentId",
+              "resourceId",
+              "spent"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "contentId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "resourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "spent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            }
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "blinded",
+              "charmed",
+              "deafened",
+              "frightened",
+              "grappled",
+              "incapacitated",
+              "invisible",
+              "paralyzed",
+              "petrified",
+              "poisoned",
+              "prone",
+              "restrained",
+              "stunned",
+              "unconscious"
+            ]
+          }
+        },
+        "exhaustion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "hitDiceSpent": {
+          "description": "Spent hit dice per die size (sizes pool across classes).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "die",
+              "spent"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "die": {
+                "enum": [
+                  6,
+                  8,
+                  10,
+                  12
+                ]
+              },
+              "spent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              }
+            }
+          }
+        },
+        "deathSaves": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "successes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "failures": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          }
+        },
+        "inspiration": {
+          "description": "Inspiration (2014) or Heroic Inspiration (2024).",
+          "type": "boolean"
+        },
+        "spellSlotsSpent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "level",
+              "spent"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9
+              },
+              "spent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          }
+        },
+        "pactSlotsSpent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "toggles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "contentId",
+              "toggleId"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "contentId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "toggleId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "concentration": {
+          "description": "Character schema v8 (D19): the spell being concentrated on, and a Constitution save DC pending after damage.",
+          "type": "object",
+          "required": ["spell", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "spell": { "$ref": "#/$defs/contentReference" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "pendingSaveDc": { "type": "integer", "minimum": 10, "maximum": 100 }
+          }
+        }
+      }
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rulesFamily": {
+      "enum": [
+        "srd-5.1",
+        "srd-5.2.1"
+      ]
+    },
+    "level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "classes": {
+      "description": "Levels per class in the order taken; the first is the starting class. Each class reference is an active pin.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "class",
+          "level"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "class": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
+      }
+    },
+    "choices": {
+      "description": "SPEC C-01: selections for choice effects. source is the revision offering the choice; selected pins must be among its options.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "choiceId",
+          "selected"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "choiceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "selected": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/contentReference"
+            }
+          }
+        }
+      }
+    },
+    "crossFamilyExceptions": {
+      "description": "BACKLOG B06: recorded, deliberate use of a pinned revision outside its rules families.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "content",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "campaignId": {
+      "$ref": "#/$defs/uuid"
+    },
+    "baseAbilities": {
+      "type": "object",
+      "required": [
+        "str",
+        "dex",
+        "con",
+        "int",
+        "wis",
+        "cha"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "str": {
+          "$ref": "#/$defs/score"
+        },
+        "dex": {
+          "$ref": "#/$defs/score"
+        },
+        "con": {
+          "$ref": "#/$defs/score"
+        },
+        "int": {
+          "$ref": "#/$defs/score"
+        },
+        "wis": {
+          "$ref": "#/$defs/score"
+        },
+        "cha": {
+          "$ref": "#/$defs/score"
+        }
+      }
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contentReference"
+      }
+    },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "field",
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "archivedAt": {
+      "description": "SPEC C-08 (2026-09-28): when the character was archived; absent while it is not. Optional and not a schema version change: older builds keep it as an unknown property and list the character as active.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "spells": {
+      "description": "Spells known or prepared, each for one caster (the content id of the class or subclass with spellcasting).",
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "caster",
+          "spell"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "caster": {
+            "$ref": "#/$defs/uuid"
+          },
+          "spell": {
+            "$ref": "#/$defs/contentReference"
+          },
+          "prepared": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30
+    },
+    "contentReference": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "revisionId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "revisionId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    }
+  }
+}

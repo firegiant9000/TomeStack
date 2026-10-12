@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../../api/client';
 import type { Campaign, RulesFamilyId, RulesFamilyPolicy } from '../../api/types';
+import { numberPresetIds, numberPresetLabels, type NumberPreset } from './ddbLabels';
 
 interface Props {
   rulesFamilies: RulesFamilyPolicy[];
@@ -9,11 +10,13 @@ interface Props {
   campaignId?: string;
   onFamily: (family: RulesFamilyId) => void;
   onCampaign: (campaignId: string | undefined) => void;
+  numberPreset: NumberPreset;
+  onNumberPreset: (preset: NumberPreset) => void;
   onError: (error: unknown) => void;
 }
 
 /** Step 2: the layout suggests a family, but the user picks it; picking the other one is warned about (C-01, S-02). */
-export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, onFamily, onCampaign, onError }: Props) {
+export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, onFamily, onCampaign, numberPreset, onNumberPreset, onError }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
 
   useEffect(() => {
@@ -50,6 +53,16 @@ export function DdbFamilyStep({ rulesFamilies, suggested, family, campaignId, on
           ))}
         </select>
       </label>
+      {/* D16h: the preset decides only the Numbers rows that differ. Matches are about identity and are always reviewed. */}
+      <fieldset role="radiogroup" aria-labelledby="ddb-number-preset-legend">
+        <legend id="ddb-number-preset-legend">Numbers that differ from TomeStack's calculation</legend>
+        {numberPresetIds.map((preset) => (
+          <label key={preset}>
+            <input type="radio" name="ddb-number-preset" checked={numberPreset === preset} onChange={() => onNumberPreset(preset)} /> {numberPresetLabels[preset]}
+          </label>
+        ))}
+        <p className="hint">Pre-fills the Numbers step; you can still change any row there. The sheet's values become overrides that say "Imported from D&amp;D Beyond". Speed starts as the sheet's number either way, because TomeStack's is only a 30-foot placeholder until species speeds are in the content.</p>
+      </fieldset>
     </>
   );
 }

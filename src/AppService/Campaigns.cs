@@ -191,13 +191,18 @@ public sealed partial class TomeStackApp
         return new(campaign.Id, campaign.Name, campaign.RulesFamily, warnings);
     }
 
-    /// <summary>The character's own active references (pins, classes, chosen options, equipment) from sources <paramref name="campaign"/> does not allow.</summary>
+    /// <summary>
+    /// The character's own active references (pins, classes, chosen options, equipment) from sources <paramref name="campaign"/>
+    /// does not allow. A recorded spell is the character's own pick, so it is checked too (owner decision: spells are
+    /// campaign-restricted); the sheet's active set only holds applied content, which a spell is not.
+    /// </summary>
     private static IEnumerable<(ContentReference Reference, ContentRevision Revision)> OutsideCampaign(
         Character character, CharacterSheet sheet, Campaign campaign, IContentCatalog catalog)
     {
         var allowed = campaign.AllowedSources.ToHashSet();
         var active = (sheet.Active ?? []).ToHashSet();
-        foreach (var reference in character.AllReferences().Where(active.Contains))
+        var spells = character.Spells.Select(s => s.Spell).ToHashSet();
+        foreach (var reference in character.AllReferences().Where(r => active.Contains(r) || spells.Contains(r)))
         {
             if (catalog.FindRevision(reference) is { } revision && !allowed.Contains(revision.Provenance.SourceId))
                 yield return (reference, revision);

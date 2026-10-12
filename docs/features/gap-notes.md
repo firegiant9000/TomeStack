@@ -18,6 +18,7 @@ Notes can describe private homebrew, so:
   - An import refuses a share package, or a pre-v5 package, that carries them (`package.gap-notes-not-allowed`).
   - An import refuses a note whose character is not in the package (`package.gap-note-orphan`).
   - The export radios say so.
+- Session notes (character schema v8, D22) follow the same rule: in a personal backup, never in a share.
 - **No error message or log quotes a note's text.** Errors name the note's id and a count. The error log records only unexpected exceptions, and the note commands raise none that carry the text.
 
 ## A note
@@ -56,9 +57,9 @@ A note never changes the character, and has no effect on the sheet.
 - "What was missing or wrong?" and "Save note".
 - The notes, each with "Mark resolved" / "Reopen" and "Delete…", which asks for confirmation.
 
-**"Report a gap: <name>" (M3 C5)** is a button on each feature (in "Features") and in each field's details. It picks that feature or field in "About" and moves focus to "What was missing or wrong?", so a note takes one click and typing. It saves nothing by itself: "Save note" still does.
+**"Report a gap: <name>" (M3 C5)** is a button on each feature (in "Features") and in each field's details. It picks that feature or field in "About" and moves focus to "What was missing or wrong?", so a note takes one click and typing. Since ADR-014 the form is on the sheet's Notes tab, which "Report a gap" opens before focusing the text. It saves nothing by itself: "Save note" still does.
 
-**"Gap notes" in the sidebar (M3 C5)** lists every character's notes (`gap.listAll`), with the character's name, open first. "Show resolved notes" adds the resolved ones. Each note has "Mark resolved" / "Reopen" and "Open <character>". Deleting stays on the character's sheet, with its confirmation.
+**"Gap notes" in the sidebar (M3 C5)** lists every character's notes (`gap.listAll`), with the character's name, open first. "Show resolved notes" adds the resolved ones. Each note has "Mark resolved" / "Reopen" and "Open <character>", which opens the sheet on its Notes tab (ADR-014). Deleting stays on the character's sheet, with its confirmation.
 
 Acceptance for C5: `GapNoteTests.Notes_of_every_character_list_together_with_their_names_open_first_and_the_list_writes_nothing` and the "Report a gap" and "Gap notes of all characters" steps of the e2e test "records a gap note on a field and a feature…".
 

@@ -82,7 +82,7 @@ public class RestrictionTests
         var broken = grip with
         {
             RevisionId = Guid.Parse("5f1de000-0000-4000-8000-0000000000f8"),
-            Effects = [new RestrictionEffect { Id = "odd", Field = "speed", Minimum = 30 }, .. grip.Effects.Where(e => e is not RestrictionEffect)],
+            Effects = [new RestrictionEffect { Id = "odd", Field = "swimSpeed", Minimum = 30 }, .. grip.Effects.Where(e => e is not RestrictionEffect)],
         };
         var catalog = new InMemoryContentCatalog([.. Fixtures.Pack().Sources, .. Fixtures.M1Pack().Sources], [.. Fixtures.Pack().Revisions, .. Fixtures.M1Pack().Revisions, broken]);
 

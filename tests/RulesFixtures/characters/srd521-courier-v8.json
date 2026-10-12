@@ -1,0 +1,25 @@
+{
+  "id": "5f0dca00-0000-4000-8000-000000000522",
+  "schemaVersion": 8,
+  "name": "Wren (2024 fixture, schema v8)",
+  "rulesFamily": "srd-5.2.1",
+  "baseAbilities": { "str": 10, "dex": 14, "con": 12, "int": 10, "wis": 13, "cha": 8 },
+  "pins": [
+    { "contentId": "5f0dc000-0000-4000-8000-000000000002", "revisionId": "5f0de000-0000-4000-8000-000000000002" },
+    { "contentId": "5f0dc000-0000-4000-8000-000000000003", "revisionId": "5f0de000-0000-4000-8000-000000000003" },
+    { "contentId": "5f0dc000-0000-4000-8000-000000000005", "revisionId": "5f0de000-0000-4000-8000-000000000005" },
+    { "contentId": "5f0dc000-0000-4000-8000-000000000006", "revisionId": "5f0de000-0000-4000-8000-000000000006" }
+  ],
+  "overrides": [],
+  "currency": { "cp": 3, "sp": 0, "ep": 0, "gp": 12, "pp": 0 },
+  "notes": [
+    { "id": "00000000-0000-4000-8000-0000000000a1", "date": "2026-10-06", "text": "Fixture session one.", "createdAt": "2026-10-06T20:00:00Z" }
+  ],
+  "play": {
+    "concentration": {
+      "spell": { "contentId": "5f5dc000-0000-4000-8000-000000000013", "revisionId": "5f5de000-0000-4000-8000-000000000013" },
+      "name": "Fixture Veil"
+    }
+  },
+  "updatedAt": "2026-09-24T00:00:00+00:00"
+}

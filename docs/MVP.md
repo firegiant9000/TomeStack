@@ -12,7 +12,7 @@ A Windows player can install TomeStack, create and play a level-1-to-20 SRD-base
 | --- | --- | --- |
 | Windows app | Offline installer; local data location; no login; safe startup after restart | Clean-machine install and reopen |
 | Rules packs | Attributed SRD 5.1 and 5.2.1 baseline data, separate edition IDs and key differing rules | Fixture characters for each family; explicit mix warning |
-| Builder | Species, background, class/subclass, scores, skills, equipment, spells, level-up; multiclass path | Finish two fixture characters and level them; unresolved choices flagged |
+| Builder | Species, background, class/subclass, scores, skills, equipment, spells, level-up; multiclass path (guided steps since 2026-10-07) | Finish two fixture characters and level them; unresolved choices flagged |
 | Sheet | Derived stats with traces; attacks, saves, skills, damage and formula dice; mutable HP/slots/resources/conditions | Play through a short scripted encounter and rest |
 | Homebrew | Guided subclass/features, simple modifiers/resources/actions/rolls/recovery; reference-only text; revision pinning | Stardust Guardian fixture with representative automatic and assisted features |
 | Sources | Attach PDF; page navigation; manual entry tied to pages; import limited page ranges and whole documents as reference | Open the cited page from a feature offline |

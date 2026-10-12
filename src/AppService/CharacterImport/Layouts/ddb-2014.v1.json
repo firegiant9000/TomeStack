@@ -204,6 +204,28 @@
     "spellSaveDC0": {
       "semantic": "numbers.spellSaveDc"
     },
+    "Speed": {
+      "semantic": "numbers.speed",
+      "pattern": "^(?<value>[0-9]{1,3})(?:\\s*ft\\.?)?(?:\\s.*)?$"
+    },
+    "Passive1": {
+      "semantic": "numbers.passive.perception"
+    },
+    "CP": {
+      "semantic": "currency.cp"
+    },
+    "SP": {
+      "semantic": "currency.sp"
+    },
+    "EP": {
+      "semantic": "currency.ep"
+    },
+    "GP": {
+      "semantic": "currency.gp"
+    },
+    "PP": {
+      "semantic": "currency.pp"
+    },
     "CurrentHP": {
       "semantic": "play.currentHitPoints"
     },
