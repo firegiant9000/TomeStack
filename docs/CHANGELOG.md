@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
+
+Everything built since 0.4.0, listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print).
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating from 0.4.0:** download the newer `Setup.exe` and run it; TomeStack never checks for updates and makes no network calls. On first start, 0.5.0 backs up the database (`tomestack.db.v9.bak`) and moves the data folder to database version 10. After that, **0.4.0 can no longer open the folder**, and a backup or share made by 0.5.0 that holds a character (character schema v8) cannot be imported into 0.4.0.
+
+**Not affiliated:** TomeStack names D&D Beyond only to say which character-sheet PDF it imports. It is not affiliated with D&D Beyond or Wizards of the Coast, and the importer says so on its first step.
 
 ### Added
 

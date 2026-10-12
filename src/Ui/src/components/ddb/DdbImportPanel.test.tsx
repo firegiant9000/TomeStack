@@ -104,6 +104,11 @@ async function toMatches(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole('heading', { name: 'Matches' });
 }
 
+it('says on the first step that TomeStack is not affiliated with D&D Beyond (release checklist item 1, 0.5.0)', async () => {
+  renderPanel();
+  expect(await screen.findByText('TomeStack is not affiliated with D&D Beyond or Wizards of the Coast.')).toBeTruthy();
+});
+
 it('moves focus to the step heading on every step and Cancel discards the token', async () => {
   const user = userEvent.setup();
   const { onCancel } = renderPanel();

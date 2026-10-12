@@ -2,12 +2,21 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 |
-|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) |
+|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided |
+
+## 0.5.0 re-check (2026-10-12)
+
+- **Dependencies:** no shipped dependency was added or changed since 0.4.0. No package reference in a project file changed (the only project-file change embeds the importer's layout maps), and `.config/dotnet-tools.json` is unchanged; the only `package-lock.json` change is `source-map-js` 1.2.1 → 1.2.2, a development-only package.
+- **Trademark:** the same search as 0.4.0, over `src/` (excluding build output, dependencies and the SRD packs).
+  - The product name, window title, installer title, exe metadata and README tagline are unchanged: "TomeStack", "5E-compatible".
+  - **"D&D Beyond" is new in the product,** all of it from the character importer (D16): the sidebar's "Import from D&D Beyond PDF…", the importer's heading, steps and hints, the file picker title, two refusal messages, and two texts written into the characters it creates (the override reason "Imported from D&D Beyond" and the import gap-note text), which therefore also appear in prints and exports.
+  - **Decided (owner, 2026-10-12): keep it.** Every use names the source of the file being imported, as the Foundry export names `dnd5e`; none uses the mark as TomeStack's name or branding. The importer's first step now says "TomeStack is not affiliated with D&D Beyond or Wizards of the Coast." (tested in `DdbImportPanel.test.tsx`), and the 0.5.0 release notes say the same. This is an owner decision, not legal advice.
+  - "Wizards of the Coast" otherwise appears only where it did in 0.4.0 (the SRD attribution and the non-affiliation statements).
 
 ## 1. Trademark
 

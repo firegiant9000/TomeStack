@@ -16,7 +16,7 @@ No other third-party rules text is bundled. The test fixtures in `tests/RulesFix
 
 ## Third-party components in the shipped app
 
-Checked on 2026-09-25, and again on 2026-10-01 for 0.4.0, from `npm ls --omit=dev` and `dotnet list src/DesktopShell package --include-transitive`. Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
+Checked on 2026-09-25, again on 2026-10-01 for 0.4.0, and on 2026-10-12 for 0.5.0 (no shipped dependency added or changed since 0.4.0), from `npm ls --omit=dev` and `dotnet list src/DesktopShell package --include-transitive`. Development-only tools (Vite, TypeScript, ESLint, Vitest, xUnit and similar) are not shipped and are not listed.
 
 | Component | Version | License | Copyright |
 | --- | --- | --- | --- |
