@@ -23,7 +23,7 @@ namespace TomeStack.AppService.Extensions
         IReadOnlyList<string> PermissionsAdded, IReadOnlyList<string> PermissionsRemoved, IReadOnlyList<string> HooksAdded, IReadOnlyList<string> HooksRemoved);
 
     /// <summary>
-    /// <c>extension.installPreview</c>: the review before anything is installed (CLAUDE.md: imported content never
+    /// <c>extension.installPreview</c>: the review before anything is installed (CONTRIBUTING.md: imported content never
     /// becomes active without review). <paramref name="Token"/> is set only when it can be installed.
     /// </summary>
     public sealed record ExtensionInstallPreview(
