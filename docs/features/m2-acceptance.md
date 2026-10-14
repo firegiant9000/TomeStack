@@ -2,7 +2,7 @@
 
 ROADMAP M2 exit gate ("all MVP.md checks pass on an installed Windows build") · build **0.2.2** (the M2 exit candidate) · status: **delivered as a limited-content build (0.3.0, 2026-09-28)**. Every automated check passed on 0.2.2, and the owner checks passed on the installed 0.2.2 (table below), so the version became 0.3.0 (ADR-008). **The MVP goal is not met yet:** only the spellcasting classes can be built 1–20, and there is one species and one background per family ("Known limits" below). The M2 checks passed; the goal they stand for did not.
 
-Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2e` against the real DevHost, and `scripts/smoke.ps1` on the built shell. Owner means a person at the installed app. Anything that cannot be verified on the development machine is listed at the end.
+Automated means it runs in the gate (CONTRIBUTING.md): `dotnet test`, `npm run test:e2e` against the real DevHost, and `scripts/smoke.ps1` on the built shell. Owner means a person at the installed app. Anything that cannot be verified on the development machine is listed at the end.
 
 ## Evidence levels (M2.1, 2026-09-28)
 
