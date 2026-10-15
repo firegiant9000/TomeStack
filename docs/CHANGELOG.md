@@ -4,6 +4,7 @@
 
 ### Added
 
+- **A session-prep guide** (`docs/features/session-prep.md`) for characters built mostly from homebrew.
 - **Roll any dice from the summary:** type something like 2d6+3 beside the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
 
 ### Changed

@@ -34,7 +34,7 @@ UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on t
 5. **Open <source> in the studio.**
 6. **Publish each draft.** The builder then offers it.
 
-Nothing becomes a rule until it is published there (ADR-004).
+Nothing becomes a rule until it is published there (ADR-004). For homebrew-heavy characters, see the [session-prep guide](session-prep.md).
 
 ## D4: dependency and confidence validation (SPEC I-02, ADR-004)
 
