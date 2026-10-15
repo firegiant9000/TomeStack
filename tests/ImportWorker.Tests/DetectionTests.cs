@@ -204,7 +204,7 @@ public class DetectionTests
         var candidate = Assert.Single(CandidateDetector.Detect([page], new(Source, [RulesFamilies.Srd521], _ => false)));
 
         Assert.Equal([RulesFamilies.Srd521], candidate.RulesFamilies);
-        Assert.Contains(candidate.Uncertainties, u => u.Contains("does not declare", StringComparison.Ordinal));
+        Assert.Contains("The layout looks like srd-5.1, which is outside the families this reading is for; those families are used.", candidate.Uncertainties);
     }
 
     // 2026-10-14 items 5 and 6: tolerance for third-party layouts. Every block here is invented.

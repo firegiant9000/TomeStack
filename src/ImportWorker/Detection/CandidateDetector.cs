@@ -221,7 +221,7 @@ public static partial class CandidateDetector
     {
         if (context.SourceFamilies.Contains(layout))
             return ([layout], []);
-        return (context.SourceFamilies, [$"The layout looks like {layout}, which this source does not declare; the source's families are used."]);
+        return (context.SourceFamilies, [$"The layout looks like {layout}, which is outside the families this reading is for; those families are used."]);
     }
 
     /// <summary>
