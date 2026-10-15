@@ -319,7 +319,16 @@ html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; 
 html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
-.sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
+.sheet-summary > .roll-controls { grid-area: mode; align-self: start; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+/* Item 8: the free dice box sits under the d20 mode row, outside the fixed .roll-strip (whose height is unchanged). The label,
+   box and button wrap onto further lines when the column is narrow; the refusal is a full-width line under them. */
+.dice-box { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; }
+.dice-box label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-weight: 600; font-size: 0.9rem; color: var(--muted); }
+.dice-box input { width: 9rem; max-width: 100%; min-height: 1.5rem; font-family: var(--font-numbers); }
+.dice-box input[aria-invalid='true'] { border: 2px solid var(--error); }
+/* width: 0 with min-width: 100% keeps the message out of the column's max-content, so a long refusal wraps under the box instead of widening
+   the d20 column and squeezing the Last roll. */
+.dice-box p.error { flex: 1 1 100%; width: 0; min-width: 100%; margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
 .sheet-summary > .hint { grid-area: hint; }
 .sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
 .roll-log { margin-top: var(--space-2); }

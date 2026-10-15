@@ -436,6 +436,11 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     }
   }
 
+  /** Typed dice from the summary (item 8). The label is fixed, never the typed text; a refusal goes back to the box, not the sheet banner. */
+  async function rollDice(formula: string) {
+    showRoll(await client.rollDice(formula, undefined, 'Dice'));
+  }
+
   /** The rest that is open right now, readable from a callback that outlives its render (a finish still in flight). */
   const openRest = useRef<RestPeriod>(undefined);
   function showRest(kind: RestPeriod | undefined) {
@@ -505,7 +510,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </button>
       </header>
 
-      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} />
+      <SheetSummary view={view} rollMode={rollMode} onRollMode={setRollMode} lastRoll={lastRoll} rollLog={rollLog} act={act} spellsTab={showSpells} onRoll={(f) => roll({ field: f, mode: rollMode })} onRollDice={rollDice} />
 
       {resting && (
         <div className="rest-sheet" id="rest-panel">

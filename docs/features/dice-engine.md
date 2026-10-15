@@ -35,6 +35,10 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 - **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
 - Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.
 
+## Rolling from the summary
+
+Type `NdM+K` terms into the dice box on the summary; the engine's limits apply. The roll is labelled "Dice" (the typed text is never the label) and goes to Last roll, the one it replaces moving to Previous rolls; nothing is stored. A blank box does nothing. A refusal shows the engine's message under the box (`aria-invalid`, linked with `aria-describedby`, focus kept), changes neither Last roll nor the log, and clears when the text changes. The box uses `dice.roll` through `client.rollDice` (below).
+
 ## The `dice.roll` command (D32)
 
 `dice.roll { formula, keepHighest?, label? }` rolls a formula with no character, for the builder's ability scores (`4d6` keeping the highest 3), and returns a roll record (`src/AppService/DiceCommands.cs`, `tests/AppService.Tests/DiceCommandTests.cs`; UI: `client.rollDice`). The formula obeys the dice limits (SPEC Q-02) and `keepHighest` the rules above; a missing or blank formula is `dice.empty`, and every dice error comes back with its `dice.*` code. The payload carries no modifiers. The `label` (trimmed, at most 80 characters, else `dice.label-too-long`; default the trimmed formula) is display text in the record's provenance (`rollId: "dice"`): it is not stored or logged. The command needs no character and writes nothing. It is on the bridge allowlist (`CommandDispatcher.Commands`), which DevHost shares.

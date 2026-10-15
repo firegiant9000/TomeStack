@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Roll any dice from the summary:** type something like 2d6+3 beside the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
+
 ### Changed
 
 - **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
