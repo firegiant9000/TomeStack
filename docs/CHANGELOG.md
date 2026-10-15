@@ -5,7 +5,7 @@
 ### Added
 
 - **A session-prep guide** (`docs/features/session-prep.md`) for characters built mostly from homebrew.
-- **Roll any dice from the summary:** type something like 2d6+3 beside the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
+- **Roll any dice from the summary:** type something like 2d6+3 under the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
 
 ### Changed
 
@@ -20,7 +20,7 @@
 
 ### Migration
 
-- None yet.
+- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
 
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 
