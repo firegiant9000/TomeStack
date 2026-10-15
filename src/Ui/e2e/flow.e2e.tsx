@@ -942,6 +942,51 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
+it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Bulk Book', ['srd-5.2.1']);
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Bulk Book' })).getByRole('region', { name: 'Read the text of E2E Bulk Book' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Bulk Book' })).getByRole('button', { name: 'Read the whole document' }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Bulk Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Bulk Book' });
+  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(9));
+
+  // Nothing is selected yet: the bulk buttons are held with their reason.
+  const bulk = within(panel()).getByRole('button', { name: 'Accept selected as drafts' });
+  expect(bulk.getAttribute('aria-disabled')).toBe('true');
+  await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Ember Lance' }));
+  await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Keen Watcher' }));
+  expect(within(panel()).getByText('2 selected', { selector: '[aria-live="polite"]' })).toBeTruthy();
+  await user.click(bulk);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Accepted 2\./));
+  const drafts = (await client.contentBySource(source.id)).filter((e) => e.latest.status === 'draft').map((e) => e.name).sort();
+  expect(drafts).toEqual(['Fixture Ember Lance', 'Fixture Keen Watcher']);
+
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ }));
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Bulk Book' });
+  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' }));
+  const publish = await within(region).findByRole('button', { name: 'Publish 2 drafts' });
+  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
+  await user.click(publish);
+
+  const result = await within(region).findByText('Published 2 drafts.');
+  expect(document.activeElement).toBe(result);
+  expect((await client.contentBySource(source.id)).map((e) => e.latest.status)).toEqual(['published', 'published']);
+  // A second press would find nothing pending: the button is gone with the drafts.
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull());
+  expect((await client.listContent('srd-5.2.1')).some((o) => o.name === 'Fixture Ember Lance')).toBe(true);
+});
+
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
   const user = userEvent.setup();
   render(<App />);
