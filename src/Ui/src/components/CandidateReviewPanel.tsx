@@ -12,6 +12,9 @@ interface Props {
   onOpenStudio: (sourceId: string) => void;
 }
 
+/** How long the page-range fields wait after a keystroke before the list reloads. */
+const pageRangeDelayMs = 300;
+
 /** Item 13: candidates shown at a time (the buttons say "Previous 50" and "Next 50"). */
 const pageSize = 50;
 
@@ -43,32 +46,55 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const heading = useRef<HTMLHeadingElement>(null);
   const announceNext = useRef(false);
   const latestRequest = useRef(0);
+  const shownOffset = useRef(0); // the offset the rows on screen were fetched for
+  const [shown, setShown] = useState(0); // the same, for rendering
   const [dirty, setDirty] = useState(false); // the open candidate's form differs from what is stored
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const [rangeFields, setRangeFields] = useState({ from: '', to: '' }); // what the page-range fields show; the filter follows after a pause
+  const pageTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dirtyId = `unsaved-${job.id}`;
+  const rangeId = `range-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
 
   const load = useCallback(() => {
     const request = ++latestRequest.current;
-    return client.candidates(job.id, filter, { offset, limit: pageSize }).then((page) => {
-      if (request !== latestRequest.current) return page.items; // a newer request is on its way
-      if (page.items.length === 0 && page.total > 0 && offset > 0) {
-        // The last candidate of the last page left the list: go to the page that is now last.
-        setOffset(Math.floor((page.total - 1) / pageSize) * pageSize);
+    return client
+      .candidates(job.id, filter, { offset, limit: pageSize })
+      .then((page) => {
+        if (request !== latestRequest.current) return page.items; // a newer request is on its way
+        if (page.items.length === 0 && page.total > 0 && offset > 0) {
+          // The last candidate of the last page left the list: go to the page that is now last.
+          setOffset(Math.floor((page.total - 1) / pageSize) * pageSize);
+          return page.items;
+        }
+        setResult(page);
+        shownOffset.current = offset;
+        setShown(offset);
+        // WCAG 2.4.3: a detail whose candidate is no longer listed goes away, so it cannot return later and take focus.
+        setSelected((s) => (s !== undefined && page.items.some((c) => c.id === s) ? s : undefined));
+        if (announceNext.current) {
+          announceNext.current = false;
+          setAnnouncement(`Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`);
+        }
         return page.items;
-      }
-      setResult(page);
-      if (announceNext.current) {
-        announceNext.current = false;
-        setAnnouncement(`Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`);
-      }
-      return page.items;
-    });
+      })
+      .catch((error: unknown) => {
+        if (request === latestRequest.current && announceNext.current) {
+          // A page turn failed: stay on the page that is shown, and announce nothing later.
+          announceNext.current = false;
+          setOffset(shownOffset.current);
+        }
+        throw error;
+      });
   }, [job.id, filter, offset]);
 
   useEffect(() => {
     load().catch(onError);
   }, [load, onError]);
+
+  useEffect(() => () => clearTimeout(pageTimer.current), []);
 
   const current = candidates?.find((c) => c.id === selected);
 
@@ -78,14 +104,38 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   function changeFilter(next: CandidateFilter) {
     if (dirty) return;
     setFilter(next);
+    resetToFirstPage();
+  }
+
+  function resetToFirstPage() {
     setOffset(0);
     setAnnouncement('');
+    setSelected(undefined);
+  }
+
+  const pageNumber = (text: string) => (text === '' ? undefined : Number(text));
+
+  /** The page-range fields show every keystroke at once but reload the list only after a pause (the service reads the whole job each time). */
+  function changePageRange(which: 'from' | 'to', text: string) {
+    if (dirty) return;
+    const next = { ...rangeFields, [which]: text };
+    setRangeFields(next);
+    clearTimeout(pageTimer.current);
+    pageTimer.current = setTimeout(() => {
+      if (dirtyRef.current) {
+        setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
+        return;
+      }
+      setFilter((f) => ({ ...f, firstPage: pageNumber(next.from), lastPage: pageNumber(next.to) }));
+      resetToFirstPage();
+    }, pageRangeDelayMs);
   }
 
   function turnPage(direction: -1 | 1) {
-    const target = offset + direction * pageSize;
+    const target = shown + direction * pageSize;
     if (dirty || target < 0 || target >= total) return;
     announceNext.current = true;
+    setSelected(undefined);
     setOffset(target);
   }
 
@@ -94,8 +144,10 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setSelected(id);
   }
 
-  const atStart = offset === 0;
-  const atEnd = offset + pageSize >= total;
+  const atStart = shown === 0;
+  const atEnd = shown + pageSize >= total;
+  // A button held at an end points at the range, which says why ("1–50 of 340"); a held edit points at its own reason.
+  const pagingReason = dirty ? dirtyId : atStart || atEnd ? rangeId : undefined;
 
   return (
     <section aria-label={`Candidates from ${source.title}`} className="play-panel">
@@ -130,8 +182,8 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
               type="number"
               min={1}
               {...heldProps}
-              value={filter.firstPage ?? ''}
-              onChange={(e) => changeFilter({ ...filter, firstPage: e.target.value === '' ? undefined : Number(e.target.value) })}
+              value={rangeFields.from}
+              onChange={(e) => changePageRange('from', e.target.value)}
             />
           </label>
           <label className="field">
@@ -140,8 +192,8 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
               type="number"
               min={1}
               {...heldProps}
-              value={filter.lastPage ?? ''}
-              onChange={(e) => changeFilter({ ...filter, lastPage: e.target.value === '' ? undefined : Number(e.target.value) })}
+              value={rangeFields.to}
+              onChange={(e) => changePageRange('to', e.target.value)}
             />
           </label>
           <label className="field">
@@ -202,18 +254,18 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           <button
             type="button"
             aria-disabled={atStart || dirty || undefined}
-            aria-describedby={dirty ? dirtyId : undefined}
+            aria-describedby={atStart || dirty ? pagingReason : undefined}
             onClick={() => turnPage(-1)}
           >
             Previous {pageSize}
           </button>
-          <span className="hint">
-            {offset + 1}–{offset + candidates.length} of {total}
+          <span id={rangeId} className="hint">
+            {shown + 1}–{shown + candidates.length} of {total}
           </span>
           <button
             type="button"
             aria-disabled={atEnd || dirty || undefined}
-            aria-describedby={dirty ? dirtyId : undefined}
+            aria-describedby={atEnd || dirty ? pagingReason : undefined}
             onClick={() => turnPage(1)}
           >
             Next {pageSize}

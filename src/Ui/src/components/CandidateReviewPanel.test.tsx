@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Item 2: the review screen says what happens to an accepted entry and offers the way to the studio.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
@@ -396,4 +396,175 @@ it('holds the other rows, keeps the edit when one is pressed, and still lets the
   expect(other.getAttribute('aria-disabled')).toBeNull();
   await user.click(other);
   expect(screen.getByRole('button', { name: 'Testy Item 2' }).getAttribute('aria-current')).toBe('true');
+});
+
+// Fix round 1 (review of item 13).
+it('keeps focus on Previous 50 after paging away from an open candidate and back', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Item 1' }));
+  await screen.findByLabelText('Name');
+
+  await user.click(screen.getByRole('button', { name: 'Next 50' }));
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(screen.queryByLabelText('Name')).toBeNull(); // the open candidate is not on this page, so its detail closes
+  const previous = screen.getByRole('button', { name: 'Previous 50' });
+  await user.click(previous);
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+
+  expect(document.activeElement).toBe(previous);
+  expect(screen.queryByLabelText('Name')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Testy Item 1' }).getAttribute('aria-current')).toBeNull();
+});
+
+it('keeps focus on the filter after one that drops the open candidate is undone', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  const everything = vi.mocked(client.candidates).getMockImplementation()!;
+  vi.mocked(client.candidates).mockImplementation((id, f, p) => (f?.kind === 'spell' ? Promise.resolve(pageOf([])) : everything(id, f, p)));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Item 1' }));
+  await screen.findByLabelText('Name');
+  const kind = within(screen.getByRole('group', { name: 'Show' })).getByLabelText('Kind');
+
+  await user.selectOptions(kind, 'spell');
+  await screen.findByText('No candidates match.');
+  await user.selectOptions(kind, '');
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+
+  expect(document.activeElement).toBe(kind);
+  expect(screen.queryByLabelText('Name')).toBeNull();
+});
+
+it('points a paging button held at an end to the visible range, and an edit to its own reason', async () => {
+  const user = userEvent.setup();
+  longList(340);
+  renderPanel(vi.fn(), bothSource);
+  const previous = await screen.findByRole('button', { name: 'Previous 50' });
+  const next = screen.getByRole('button', { name: 'Next 50' });
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+  const range = screen.getByText('1–50 of 340');
+
+  expect(range.id).not.toBe('');
+  expect(previous.getAttribute('aria-describedby')).toBe(range.id);
+  expect(next.getAttribute('aria-describedby')).toBeNull(); // not held
+
+  await user.click(next);
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(previous.getAttribute('aria-describedby')).toBeNull();
+
+  // An unsaved edit is the reason that counts.
+  await user.click(screen.getByRole('button', { name: 'Previous 50' }));
+  await user.click(await screen.findByRole('button', { name: 'Testy Item 1' }));
+  await user.type(await screen.findByLabelText('Name'), ' II');
+  const reason = screen.getByText('Save or undo your edit first.');
+  expect(previous.getAttribute('aria-describedby')).toBe(reason.id);
+  expect(next.getAttribute('aria-describedby')).toBe(reason.id);
+});
+
+it('stays on the shown page, and announces nothing later, when a page turn fails', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  const works = vi.mocked(client.candidates).getMockImplementation()!;
+  let failing = true;
+  vi.mocked(client.candidates).mockImplementation((id, f, p) => (failing && p?.offset === 50 ? Promise.reject(new Error('no')) : works(id, f, p)));
+  vi.mocked(client.editCandidate).mockResolvedValue(numbered(1));
+  const onError = vi.fn();
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Next 50' }));
+  await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+
+  expect(screen.getByText('1–50 of 120')).toBeTruthy(); // still the page that is shown
+  expect(screen.getByRole('button', { name: 'Testy Item 1' })).toBeTruthy();
+  expect(screen.queryByText(/^Showing /)).toBeNull();
+
+  // A reload after an action (a saved edit) does not announce on its own.
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+  await user.click(screen.getByRole('button', { name: 'Testy Item 1' }));
+  await user.type(await screen.findByLabelText('Name'), 'x');
+  await user.click(screen.getByRole('button', { name: 'Save edit' }));
+  await vi.waitFor(() => expect(vi.mocked(client.candidates).mock.calls.length).toBeGreaterThan(calls));
+  expect(screen.queryByText(/^Showing /)).toBeNull();
+  await user.type(screen.getByLabelText('Name'), '{Backspace}'); // the mock keeps the old row, so undo the typed letter
+
+  // The next press goes to page 2 (it does not skip to page 3).
+  failing = false;
+  await user.click(screen.getByRole('button', { name: 'Next 50' }));
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(screen.getByText('51–100 of 120')).toBeTruthy();
+  expect(screen.getByText('Showing 51–100 of 120')).toBeTruthy();
+});
+
+it('moves back a page, with focus on the heading, when the only candidate on the last page is accepted', async () => {
+  const user = userEvent.setup();
+  let accepted = false;
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockImplementation((_id, _f, paging) => {
+    const all = Array.from({ length: accepted ? 50 : 51 }, (_, i) => numbered(i + 1));
+    const offset = paging?.offset ?? 0;
+    return Promise.resolve(pageOf(all.slice(offset, offset + 50), all.length));
+  });
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.acceptCandidate).mockImplementation(() => {
+    accepted = true;
+    return Promise.resolve(numbered(51));
+  });
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Next 50' }));
+  await user.click(await screen.findByRole('button', { name: 'Testy Item 51' }));
+  await user.click(await screen.findByRole('button', { name: 'Accept as a draft' }));
+
+  await screen.findByRole('button', { name: 'Testy Item 50' });
+  expect(screen.getByText('1–50 of 50')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Candidates from Testy Both' }));
+});
+
+it('shows the newest filter result when two requests answer out of order', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  const everything = vi.mocked(client.candidates).getMockImplementation()!;
+  const answers: Record<string, (value: { items: StoredCandidate[]; total: number }) => void> = {};
+  vi.mocked(client.candidates).mockImplementation((id, f, p) =>
+    f?.kind === 'spell' || f?.kind === 'feat' ? new Promise((resolve) => (answers[f.kind as string] = resolve)) : everything(id, f, p),
+  );
+  renderPanel(vi.fn(), bothSource);
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+  const kind = within(screen.getByRole('group', { name: 'Show' })).getByLabelText('Kind');
+
+  await user.selectOptions(kind, 'spell');
+  await user.selectOptions(kind, 'feat');
+  answers.feat?.(pageOf([numbered(22)]));
+  await screen.findByRole('button', { name: 'Testy Item 22' });
+  answers.spell?.(pageOf([numbered(11)])); // the older request answers last
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  expect(screen.queryByRole('button', { name: 'Testy Item 11' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Testy Item 22' })).toBeTruthy();
+});
+
+it('reloads for the page-range fields only after a pause in typing, while the field shows each keystroke', async () => {
+  longList(120);
+  renderPanel(vi.fn(), bothSource);
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+  const from = screen.getByLabelText('From page') as HTMLInputElement;
+
+  vi.useFakeTimers();
+  try {
+    fireEvent.change(from, { target: { value: '7' } });
+    fireEvent.change(from, { target: { value: '75' } });
+    expect(from.value).toBe('75');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(vi.mocked(client.candidates)).toHaveBeenCalledTimes(calls); // still waiting
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(vi.mocked(client.candidates)).toHaveBeenCalledTimes(calls + 1);
+  expect(vi.mocked(client.candidates)).toHaveBeenLastCalledWith('job-1', { status: 'pending', firstPage: 75 }, { offset: 0, limit: 50 });
 });
