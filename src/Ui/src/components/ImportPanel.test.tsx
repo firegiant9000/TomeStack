@@ -179,6 +179,23 @@ it('shows one studio button while a job is under review: the panel\'s own, not a
   expect(screen.queryByRole('region', { name: 'Candidates from Testy Both' })).toBeNull();
 });
 
+it('hides every job line\'s studio button while any review is open, so no unsaved edit can be left behind', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 2)]);
+  vi.mocked(client.candidates).mockResolvedValue([]);
+  const user = await renderPanel(both);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  expect(buttons).toHaveLength(1);
+  expect(region.contains(buttons[0] ?? null)).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+});
+
+//ITEM2
 it('offers the studio from a finished job that found candidates, and not from one that found none', async () => {
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 0)]);
   await renderPanel(both);
