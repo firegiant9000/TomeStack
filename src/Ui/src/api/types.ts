@@ -874,6 +874,8 @@ export interface ImportJob {
   firstPage: number;
   lastPage?: number;
   wholeDocument: boolean;
+  /** The families the reviewer said the book is written for; absent: the source's families. */
+  writtenFor?: RulesFamilyId[];
   status: ImportJobStatus;
   pageCount?: number;
   nextPage?: number;

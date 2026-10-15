@@ -139,7 +139,7 @@ export function createClient(transport: Transport) {
     importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
       call<ContentRevision>('source.importPages', { sourceId, ...request }),
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
-    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) =>
+    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),

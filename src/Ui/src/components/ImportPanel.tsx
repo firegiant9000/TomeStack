@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
-import type { ImportJob, ImportSearchHit, SourceRecord } from '../api/types';
+import type { ImportJob, ImportSearchHit, RulesFamilyId, SourceRecord } from '../api/types';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
+import { familyLabel, familyShortName } from './familyLabels';
 
 interface Props {
   source: SourceRecord;
@@ -32,6 +33,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
   const [reviewing, setReviewing] = useState<string>();
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<ImportSearchHit[]>();
+  const [picked, setPicked] = useState<{ sourceId: string; value: RulesFamilyId | 'both' }>();
 
   const refresh = useCallback(() => client.listImports(source.id).then(setJobs), [source.id]);
 
@@ -49,9 +51,17 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
     return () => clearInterval(timer);
   }, [running, refresh, onError]);
 
+  // 2026-10-14 item 3: a book written for both rules families is asked what it is written for; no default, so an armour row
+  // or a class table is never silently placed in one of them. A one-family source needs no answer.
+  const askFamily = source.rulesFamilies.length > 1;
+  const answer = picked?.sourceId === source.id ? picked.value : undefined;
+  const needsAnswer = askFamily && answer === undefined;
+  const writtenFor = askFamily && answer ? (answer === 'both' ? [...source.rulesFamilies] : [answer]) : undefined;
+
   async function start(request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) {
+    if (needsAnswer) return; // aria-disabled with its reason shown, so this press is refused openly
     try {
-      await client.startImport(source.id, request);
+      await client.startImport(source.id, writtenFor ? { ...request, writtenFor } : request);
       onStatus(`Reading ${source.title}. Nothing changes until you review what is found.`);
       await refresh();
     } catch (error) {
@@ -99,6 +109,30 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
         TomeStack reads the PDF on this computer and proposes entries for you to review. The text is never exported. Experimental: it has not been
         proven on a real third-party book yet, so check every candidate against its page. Nothing becomes a rule until you publish it.
       </p>
+      {askFamily ? (
+        <fieldset>
+          <legend>This book is written for</legend>
+          <p className="hint">Armour tables and class tables do not say which rules they use, so your answer decides what TomeStack proposes.</p>
+          {[...source.rulesFamilies, 'both' as const].map((value) => (
+            <label key={value} className="choice">
+              <input
+                type="radio"
+                name={`written-for-${source.id}`}
+                checked={answer === value}
+                onChange={() => setPicked({ sourceId: source.id, value })}
+              />
+              {value === 'both' ? 'Both' : familyLabel(value)}
+            </label>
+          ))}
+        </fieldset>
+      ) : (
+        <p className="hint">Written for {source.rulesFamilies.map(familyShortName).join(' and ')} (from the source).</p>
+      )}
+      {needsAnswer && (
+        <p id="written-for-hint" className="hint">
+          Say what the book is written for.
+        </p>
+      )}
       <div className="inline-form">
         <label className="field">
           From page
@@ -108,10 +142,22 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           To page (optional)
           <input type="number" min={1} value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
-        <button type="button" disabled={!valid || running} onClick={() => start({ firstPage: first, lastPage: last ?? first })}>
+        <button
+          type="button"
+          disabled={!valid || running}
+          aria-disabled={needsAnswer || undefined}
+          aria-describedby={needsAnswer ? 'written-for-hint' : undefined}
+          onClick={() => start({ firstPage: first, lastPage: last ?? first })}
+        >
           Read these pages
         </button>
-        <button type="button" disabled={running} onClick={() => start({ wholeDocument: true })}>
+        <button
+          type="button"
+          disabled={running}
+          aria-disabled={needsAnswer || undefined}
+          aria-describedby={needsAnswer ? 'written-for-hint' : undefined}
+          onClick={() => start({ wholeDocument: true })}
+        >
           Read the whole document
         </button>
       </div>

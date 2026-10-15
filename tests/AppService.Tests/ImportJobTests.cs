@@ -394,4 +394,80 @@ public class ImportJobTests
         Assert.Empty(over);
         Assert.Equal(2, stopped);
     }
+
+    private static Guid TwoFamilySourceWithBook(TempApp temp)
+    {
+        var source = temp.App.CreateHomebrewSource(new("Test Both Families Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
+        temp.App.AttachPdf(source.Id, "fixture-import.pdf", FixtureBook);
+        return source.Id;
+    }
+
+    private static string StartCode(TempApp temp, ImportStartRequest request) =>
+        Assert.Throws<AppValidationException>(() => temp.App.StartImport(request)).Problems[0].Code;
+
+    [Fact]
+    public void A_written_for_family_outside_the_source_is_refused_and_no_job_is_written()
+    {
+        // 2026-10-14 item 3.
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp); // declares SRD 5.2.1 only
+
+        Assert.Equal("import.family-not-in-source", StartCode(temp, new(sourceId, WholeDocument: true, WrittenFor: [RulesFamilies.Srd51])));
+        Assert.Equal("import.family-not-in-source", StartCode(temp, new(sourceId, WholeDocument: true, WrittenFor: [])));
+        Assert.Equal("import.family-not-in-source", StartCode(temp, new(sourceId, WholeDocument: true, WrittenFor: ["srd-9"])));
+        Assert.Empty(temp.App.ListImports(sourceId));
+    }
+
+    [Fact]
+    public void A_written_for_answer_is_stored_and_detection_uses_it()
+    {
+        using var temp = new TempApp();
+        var sourceId = TwoFamilySourceWithBook(temp);
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true, WrittenFor: [RulesFamilies.Srd51])).Id);
+
+        Assert.Equal([RulesFamilies.Srd51], job.WrittenFor);
+        Assert.Equal(9, job.Candidates);
+        var coat = temp.App.ListCandidates(new(job.Id)).Single(c => c.Candidate.ProposedName == "Fixture Quilted Coat");
+        Assert.Equal([RulesFamilies.Srd51], coat.Current.RulesFamilies);
+        Assert.Empty(coat.Current.LowConfidenceFields);
+        Assert.Contains("written for", temp.App.ImportAudit(job.Id)[0].Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("Fixture", temp.App.ImportAudit(job.Id)[0].Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_two_family_source_without_an_answer_proposes_no_family_for_armour_and_class_tables()
+    {
+        // Review Focus 1: never a silent srd-5.2.1. "Both" is the same as no answer.
+        using var temp = new TempApp();
+        var sourceId = TwoFamilySourceWithBook(temp);
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true, WrittenFor: [RulesFamilies.Srd51, RulesFamilies.Srd521])).Id);
+
+        foreach (var name in new[] { "Fixture Quilted Coat", "Fixture Plate Shell", "Fixture Warden" })
+        {
+            var candidate = temp.App.ListCandidates(new(job.Id)).Single(c => c.Candidate.ProposedName == name);
+            Assert.Empty(candidate.Current.RulesFamilies);
+            Assert.Contains("rulesFamilies", candidate.Current.LowConfidenceFields);
+        }
+    }
+
+    [Fact]
+    public void A_job_stored_without_written_for_reads_back_null_and_detects_with_the_sources_families()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+
+        // A 0.5.0 job's JSON has no writtenFor property.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(TomeStack.AppService.Persistence.SqliteStore.Serialize(job))!.AsObject();
+        node.Remove("writtenFor");
+        var old = JsonSerializer.Deserialize<ImportJobRecord>(node.ToJsonString(), RulesJson.Compact)!;
+        Assert.Null(old.WrittenFor);
+
+        temp.App.Store.SaveImportJob(old with { Status = ImportJobStatus.Interrupted, NextPage = 1 });
+        var resumed = Settle(temp, temp.App.ResumeImport(job.Id).Id);
+        Assert.Null(resumed.WrittenFor);
+        Assert.All(temp.App.ListCandidates(new(job.Id)), c => Assert.Equal([RulesFamilies.Srd521], c.Current.RulesFamilies));
+    }
 }

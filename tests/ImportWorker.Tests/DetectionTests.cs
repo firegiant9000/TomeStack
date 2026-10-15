@@ -13,7 +13,7 @@ public class DetectionTests
 {
     private static readonly Guid Source = Guid.Parse("5fad5000-0000-4000-8000-000000000001");
 
-    private static async Task<IReadOnlyList<DraftCandidate>> Detect(Func<string, bool>? installed = null)
+    private static async Task<IReadOnlyList<DraftCandidate>> Detect(Func<string, bool>? installed = null, IReadOnlyList<string>? families = null)
     {
         var pages = new List<DetectionPage>();
         await foreach (var item in new PdfPigExtractor().ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
@@ -21,7 +21,7 @@ public class DetectionTests
             if (item is ExtractedPage page)
                 pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
         }
-        return CandidateDetector.Detect(pages, new(Source, [RulesFamilies.Srd51, RulesFamilies.Srd521], installed ?? (_ => false)));
+        return CandidateDetector.Detect(pages, new(Source, families ?? [RulesFamilies.Srd51, RulesFamilies.Srd521], installed ?? (_ => false)));
     }
 
     private static DraftCandidate Named(IReadOnlyList<DraftCandidate> found, string name) => Assert.Single(found, c => c.ProposedName == name);
@@ -144,6 +144,40 @@ public class DetectionTests
         // Fixture Stormcall is another candidate of the job; the other two are not in the book.
         Assert.Equal(["Fixture Focus", "Fixture Resolve"], warden.UnresolvedReferences);
         Assert.Contains("effects", warden.LowConfidenceFields);
+    }
+
+    [Fact]
+    public async Task A_two_family_context_proposes_no_family_for_layout_neutral_kinds()
+    {
+        // 2026-10-14 item 3: no family under a two-family context (armour rows and class tables carry no layout).
+        var found = await Detect();
+
+        var neutral = found.Where(c => c.ProposedKind == ContentKind.Class || c.ProposedEffects.Any(e => e is ArmorEffect)).ToList();
+        Assert.Equal(3, neutral.Count);
+        Assert.All(neutral, c =>
+        {
+            Assert.Empty(c.RulesFamilies);
+            Assert.Contains("rulesFamilies", c.LowConfidenceFields);
+            Assert.Contains("Say which rules family this is written for before accepting.", c.Uncertainties);
+        });
+        // Layout-decided kinds still pick their family.
+        Assert.Equal([RulesFamilies.Srd521], Named(found, "Fixture Ember Lance").RulesFamilies);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public async Task A_one_family_context_gives_layout_neutral_kinds_that_family(string family)
+    {
+        var found = await Detect(families: [family]);
+
+        var neutral = found.Where(c => c.ProposedKind == ContentKind.Class || c.ProposedEffects.Any(e => e is ArmorEffect)).ToList();
+        Assert.Equal(3, neutral.Count);
+        Assert.All(neutral, c =>
+        {
+            Assert.Equal([family], c.RulesFamilies);
+            Assert.DoesNotContain("rulesFamilies", c.LowConfidenceFields);
+        });
     }
 
     [Fact]

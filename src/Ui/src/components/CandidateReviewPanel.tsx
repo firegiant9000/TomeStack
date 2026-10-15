@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CandidateCheck, CandidateFilter, CandidateStatus, ContentKind, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import { familyLabel } from './familyLabels';
 
 interface Props {
   job: ImportJob;
@@ -134,6 +135,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         <CandidateDetail
           key={`${current.id}-${current.updatedAt}`}
           stored={current}
+          sourceFamilies={source.rulesFamilies}
           onOpenPage={onOpenPage}
           onError={onError}
           onChanged={async (text) => {
@@ -153,15 +155,18 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
 interface DetailProps {
   stored: StoredCandidate;
+  /** Items 3 and 4: a candidate can only be written for the families its source declares. */
+  sourceFamilies: RulesFamilyId[];
   onOpenPage: (page: number) => void;
   onError: (error: unknown) => void;
   onChanged: (status: string) => Promise<void>;
 }
 
-function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps) {
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
+  const [families, setFamilies] = useState<RulesFamilyId[]>(candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f)));
   const [kind, setKind] = useState<ContentKind>(candidate.proposedKind);
   const [summary, setSummary] = useState(candidate.summary ?? '');
   const [effects, setEffects] = useState(JSON.stringify(candidate.proposedEffects, null, 2));
@@ -198,7 +203,7 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
     }
     setEffectsError(undefined);
     try {
-      await client.editCandidate(stored.id, { name, kind, summary, effects: parsed, dismissReferences: dismissed });
+      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed });
       await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
     } catch (error) {
       onError(error);
@@ -232,7 +237,7 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
         Candidate: {candidate.proposedName}
       </h5>
       <p className="hint">
-        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.join(', ')} · confidence {percent(candidate.confidence)} (a hint, not a
+        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules family yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
       </p>
       <div className="actions">
@@ -300,6 +305,19 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
               ))}
             </select>
           </label>
+          <fieldset>
+            <legend>Rules families</legend>
+            {sourceFamilies.map((f) => (
+              <label key={f} className="choice">
+                <input
+                  type="checkbox"
+                  checked={families.includes(f)}
+                  onChange={() => setFamilies(families.includes(f) ? families.filter((x) => x !== f) : [...families, f])}
+                />
+                {familyLabel(f)}
+              </label>
+            ))}
+          </fieldset>
           <label className="field">
             Text
             <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={20000} />

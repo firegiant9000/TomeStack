@@ -189,6 +189,15 @@ public static partial class CandidateDetector
         return (context.SourceFamilies, [$"The layout looks like {layout}, which this source does not declare; the source's families are used."]);
     }
 
+    /// <summary>
+    /// 2026-10-14 item 3: a layout-neutral kind (armour rows, class tables) takes the context's family when there is one.
+    /// With two, the reviewer says which: no family is proposed, and the field is marked unsure.
+    /// </summary>
+    private static (IReadOnlyList<string> Families, List<string> Notes, bool Unsure) NeutralFamily(DetectionContext context) =>
+        context.SourceFamilies.Count == 1
+            ? ([context.SourceFamilies[0]], [], false)
+            : ([], ["Say which rules family this is written for before accepting."], true);
+
     /// <summary>The description after a header: the following blocks until the next header or heading, at most 80 lines.</summary>
     private static List<string> Description(List<Unit> units, int start, double body, Func<Unit, bool> isHeader, out int endPage)
     {
@@ -618,8 +627,10 @@ public static partial class CandidateDetector
                 uncertainties.Add("No 'Light', 'Medium' or 'Heavy Armor' heading was found above the row; the category comes from the Armor Class column.");
                 low.Add("category");
             }
-            var (families, familyNotes) = Family(context.SourceFamilies.Count == 1 ? context.SourceFamilies[0] : RulesFamilies.Srd521, context);
+            var (families, familyNotes, familyUnsure) = NeutralFamily(context);
             uncertainties.AddRange(familyNotes);
+            if (familyUnsure)
+                low.Add("rulesFamilies");
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt([string.Join("  ", SameRow(lines, line).Select(c => c.Text))]),
                 ContentKind.Item, name, families,
@@ -673,7 +684,7 @@ public static partial class CandidateDetector
             return [];
         var features = byLevel.ToDictionary(r => r.Key, r => Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
         var references = features.Values.SelectMany(f => f).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
-        var (families, uncertainties) = Family(context.SourceFamilies.Count == 1 ? context.SourceFamilies[0] : RulesFamilies.Srd521, context);
+        var (families, uncertainties, familyUnsure) = NeutralFamily(context);
         uncertainties.Add("A class is proposed from its features table only: add its hit die, proficiencies and grants by hand, or accept it as reference.");
         return
         [
@@ -683,7 +694,7 @@ public static partial class CandidateDetector
             {
                 Fields = features.ToDictionary(f => $"level {f.Key}", f => string.Join(", ", f.Value), StringComparer.Ordinal),
                 UnresolvedReferences = references,
-                LowConfidenceFields = ["effects"],
+                LowConfidenceFields = familyUnsure ? ["effects", "rulesFamilies"] : ["effects"],
             },
         ];
     }

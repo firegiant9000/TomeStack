@@ -25,6 +25,11 @@ public sealed record ImportJobRecord
     /// <summary>Null: to the end of the document.</summary>
     public int? LastPage { get; init; }
     public bool WholeDocument { get; init; }
+    /// <summary>
+    /// 2026-10-14 item 3: the rules families the reviewer said the book is written for; always within the source's.
+    /// Null (a 0.5.0 job, or not asked): the source's families.
+    /// </summary>
+    public IReadOnlyList<string>? WrittenFor { get; init; }
     public ImportJobStatus Status { get; init; } = ImportJobStatus.Queued;
     public int? PageCount { get; init; }
     /// <summary>The next page to extract; null once the scope is done.</summary>
@@ -66,7 +71,8 @@ public sealed record StoredPage(
 public sealed record ImportAuditEntry(DateTimeOffset At, string Event, string? Detail);
 
 /// <param name="WholeDocument">Import every page; otherwise <paramref name="FirstPage"/> to <paramref name="LastPage"/>.</param>
-public sealed record ImportStartRequest(Guid SourceId, int? FirstPage = null, int? LastPage = null, bool WholeDocument = false);
+/// <param name="WrittenFor">The families the book is written for, within the source's; null: the source's families.</param>
+public sealed record ImportStartRequest(Guid SourceId, int? FirstPage = null, int? LastPage = null, bool WholeDocument = false, IReadOnlyList<string>? WrittenFor = null);
 
 public sealed record ImportJobRequest(Guid JobId);
 
@@ -119,11 +125,20 @@ public sealed partial class TomeStackApp
         if (first < 1 || first > MaxPage || last is < 1 or > MaxPage || (last is { } end && end < first))
             throw new AppValidationException([new("source.page-range-invalid", $"Pages go from 1 to {MaxPage}, and the last page cannot come before the first.")]);
 
+        // 2026-10-14 item 3: the answer must name at least one family, each known and each declared by the source (ids only in the message).
+        string[]? writtenFor = null;
+        if (request.WrittenFor is { } asked)
+        {
+            writtenFor = [.. asked.Distinct(StringComparer.Ordinal)];
+            if (writtenFor.Length == 0 || writtenFor.Any(f => !RulesFamilies.IsKnown(f) || !source.RulesFamilies.Contains(f)))
+                throw new AppValidationException([new("import.family-not-in-source", $"The book can only be written for families the source declares ({string.Join(", ", source.RulesFamilies)}).")]);
+        }
+
         var now = _time.GetUtcNow();
         var job = new ImportJobRecord
         {
             Id = Guid.NewGuid(), SourceId = source.Id, Sha256 = sha, FirstPage = first, LastPage = last, WholeDocument = request.WholeDocument,
-            NextPage = first, CreatedAt = now, UpdatedAt = now,
+            WrittenFor = writtenFor, NextPage = first, CreatedAt = now, UpdatedAt = now,
         };
         lock (_importGate)
         {
@@ -133,7 +148,7 @@ public sealed partial class TomeStackApp
             {
                 MarkImportDerived(source.Id); // M6 slice 1: an import job is evidence too (migration v8 counts it)
                 _store.SaveImportJob(job);
-                _store.AddImportAudit(job.Id, now, "created", request.WholeDocument ? "whole document" : $"pages {first}-{(last is { } l ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : "end")}");
+                _store.AddImportAudit(job.Id, now, "created", (request.WholeDocument ? "whole document" : $"pages {first}-{(last is { } l ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : "end")}") + (writtenFor is null ? "" : $"; written for {string.Join(", ", writtenFor)}"));
             });
             Launch(job.Id, "started");
         }

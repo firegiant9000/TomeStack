@@ -8,8 +8,11 @@
 
 - **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
 - **The import review says what happens next:** a line above the candidates says that accepted entries are drafts in the Homebrew studio, and a button opens that source in the studio.
+- **Reading a two-family book asks "This book is written for":** 2014 rules, 2024 rules or both, with no default. The Read buttons wait for the answer and say why. A job stores the answer (`writtenFor`, optional; a 0.5.0 job without it uses the source's families).
 
 ### Fixed
+
+- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares).
 
 ### Migration
 

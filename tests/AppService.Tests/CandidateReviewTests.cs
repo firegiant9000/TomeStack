@@ -87,7 +87,8 @@ public class CandidateReviewTests
         var warden = Named(temp, jobId, "Fixture Warden");
         Assert.Contains(temp.App.CheckCandidate(warden.Id).Blockers, b => b.Code == "candidate.low-confidence");
 
-        var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
+        // 2026-10-14 item 3: a two-family source gives the class no family, so the reviewer sets one.
+        var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         Assert.Empty(edited.Current.LowConfidenceFields);
         Assert.Equal(["Fixture Focus", "Fixture Resolve"], edited.Current.UnresolvedReferences);
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
@@ -166,5 +167,57 @@ public class CandidateReviewTests
         Assert.Equal("candidate.family-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, RulesFamilies: ["srd-9"]))));
         Assert.Equal("candidate.summary-too-long", Code(() => temp.App.EditCandidate(new(veil.Id, Summary: new string('x', 20_001)))));
         Assert.Equal("candidate.not-found", Code(() => temp.App.CheckCandidate(Guid.NewGuid())));
+    }
+
+    [Fact]
+    public void An_edit_naming_a_family_the_source_does_not_declare_is_refused_and_nothing_is_saved()
+    {
+        // Review Focus 4: a stale or hostile client sends the command directly.
+        var temp = new TempApp();
+        using var _t = temp;
+        var source = temp.App.CreateHomebrewSource(new("Test One Family Book", [RulesFamilies.Srd51]));
+        temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
+        var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var coat = Named(temp, job.Id, "Fixture Quilted Coat");
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
+
+        Assert.Equal("import.family-not-in-source", refused.Problems[0].Code);
+        Assert.All(refused.Problems, p => Assert.DoesNotContain("Fixture", p.Message, StringComparison.Ordinal));
+        var after = Named(temp, job.Id, "Fixture Quilted Coat");
+        Assert.Null(after.Edited);
+        Assert.Equal([RulesFamilies.Srd51], after.Current.RulesFamilies);
+        Assert.Equal("Fixture Quilted Coat", after.Current.ProposedName);
+    }
+
+    [Fact]
+    public void Accept_waits_for_a_family_on_a_two_family_source()
+    {
+        // Review Focus 1.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+        Assert.Empty(coat.Current.RulesFamilies);
+
+        var check = temp.App.CheckCandidate(coat.Id);
+        Assert.False(check.CanAccept);
+        Assert.Contains(check.Blockers, b => b.Code == "import.family-needed");
+        Assert.False(check.CanAcceptAsReference); // a reference entry needs a family too
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true))));
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true)));
+        Assert.Equal("import.family-needed", refused.Problems[0].Code);
+
+        // Saving an edit that leaves the family empty is allowed (other fields can be fixed first); accept still waits.
+        var renamed = temp.App.EditCandidate(new(coat.Id, Name: "Fixture Quilted Coat", RulesFamilies: []));
+        Assert.Empty(renamed.Current.RulesFamilies);
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+
+        temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51]));
+        var ready = temp.App.CheckCandidate(coat.Id);
+        Assert.True(ready.CanAccept, string.Join("; ", ready.Blockers.Concat(ready.Report.Errors).Select(d => d.Code)));
+        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
+        Assert.Equal([RulesFamilies.Srd51], draft.RulesFamilies);
     }
 }

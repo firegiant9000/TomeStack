@@ -6,6 +6,7 @@ ROADMAP M4 "Import intelligence" · SPEC I-01, I-02, I-03, Q-02 · ADR-004, ADR-
 
 UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on the **Sources** screen, for each of the user's own sources with a PDF. Acceptance: the e2e test "reads the fixture PDF, reviews its candidates, and publishes an accepted one through the studio", run against the real DevHost and worker.
 
+- **What the book is written for (items 3, 4):** a source that declares both rules families shows a group "This book is written for" with "2014 rules (SRD 5.1)", "2024 rules (SRD 5.2.1)" and "Both", none chosen. Both Read buttons are `aria-disabled` (never natively disabled, so keyboard users reach them) with the linked reason "Say what the book is written for." until one is picked, and a press is refused. The answer goes to `import.start` as `writtenFor` (the family ids; "Both" sends both). A one-family source shows "Written for SRD 5.1 (from the source)." instead and sends nothing. The service refuses a `writtenFor` that is empty, unknown or outside the source (`import.family-not-in-source`, naming family ids only, and no job is written). The job stores it; a job without it (0.5.0) detects with the source's families.
 - **Read the text and find candidates:** "Read these pages" (from and to) or "Read the whole document" starts a job. Its line shows progress while it runs, with Cancel and Resume. The line is a polite live region whatever the job's state, so the final status ("completed, …") is announced too. When it completes, it shows "Review N candidates".
 - **Search the text of <source>** (SPEC I-03): pages with a snippet and "Open page N".
 - **Candidates from <source>:** filters for page, kind, confidence (unsure first: below 80 %) and status (to review by default). Each candidate shows its name, kind, page, confidence and status.
@@ -16,7 +17,7 @@ UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on t
   - **what was read**, with unsure fields marked "(unsure)";
   - its **uncertainties**;
   - its **unresolved references**, each with "Dismiss";
-  - an edit form: name, kind, text, and the proposed effects as JSON (they stay reference-only);
+  - an edit form: name, kind, a **Rules families** checkbox group (one box per family the source declares, ticked as the candidate has them; none ticked is allowed to save), text, and the proposed effects as JSON (they stay reference-only);
   - the **check** (blockers, the validator's problems, what it depends on);
   - **Accept as a draft**, which is disabled until the check passes;
   - **Accept as reference** and **Ignore**.
@@ -27,8 +28,8 @@ UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on t
 ### From a book to a character
 
 1. **Sources:** add a homebrew source written for the book's rules (in the studio), then attach the PDF.
-2. **Read the whole document.** Say what the book is written for.
-3. **Review each candidate:** open its page, and fix its name, kind and family.
+2. **Say what the book is written for** ("This book is written for": 2014 rules, 2024 rules or both; a one-family source needs no answer), then **Read the whole document**.
+3. **Review each candidate:** open its page, and fix its name, kind and **Rules families**. An armour row or class table the book does not place waits with no family until you tick one.
 4. **Accept as a draft** or **Accept as reference**.
 5. **Open <source> in the studio.**
 6. **Publish each draft.** The builder then offers it.
@@ -42,7 +43,7 @@ Service: `src/AppService/ImportCandidates.cs`. Acceptance: `tests/AppService.Tes
 | Command | Payload | Does |
 | --- | --- | --- |
 | `import.candidate.check` | `{ candidateId }` | **Writes nothing.** Builds the draft the candidate would become (through `CandidateQuarantine.ToDraftRevision`, the only conversion) and runs `ContentValidator` on it: schema, references, formulas and cycles. It also lists **dependencies**: the source, installed content it grants or offers (by name and pin), content it names that is missing, and unresolved names. And it lists **blockers**: each low-confidence field and unresolved reference. The result is `canAccept` and `canAcceptAsReference` |
-| `import.candidate.edit` | `{ candidateId, name?, kind?, rulesFamilies?, summary?, effects?, dismissReferences? }` | Saves the reviewer's version next to the detected one, which stays unchanged. Saving clears the low-confidence flags: the reviewer has seen the fields. References go only when dismissed by name, or when content of that name is installed. It is still a proposal |
+| `import.candidate.edit` | `{ candidateId, name?, kind?, rulesFamilies?, summary?, effects?, dismissReferences? }` | Saves the reviewer's version next to the detected one, which stays unchanged. `rulesFamilies` must be known and within the source's (`import.family-not-in-source`); it may be empty, and check/accept then report `import.family-needed`. Saving clears the low-confidence flags: the reviewer has seen the fields. References go only when dismissed by name, or when content of that name is installed. It is still a proposal |
 | `import.candidate.accept` | `{ candidateId, asReference?, confirm: true }` | Creates a **draft** revision in the source. Refused without `confirm` (`candidate.confirmation-required`), while any blocker remains (`candidate.needs-review`), or when validation reports an error (`candidate.validation-failed`, with the validator's errors). **As reference:** the text and page without the proposed effects; blockers do not apply, and validation still runs |
 | `import.candidate.ignore` | `{ candidateId }` | Sets it aside; nothing is created |
 
@@ -68,7 +69,7 @@ Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it whe
 | Class table | A "The Bard" or "Bard Features" title and a "Level … Features" table | A class with its features per level as fields, and the feature names found nowhere as unresolved references |
 
 - **Every candidate** carries an excerpt (at most 4,000 characters), its page or page range, the proposed kind, name and rules family, the proposed effects, a confidence (0.05 to 0.99), uncertainties, the fields it read, **low-confidence fields**, and **unresolved references**: names it refers to that are neither installed (published content of the source's families) nor another candidate of the job. For example, "Fixture Stormcall" casts "Fixture Thunder Word".
-- **Rules family:** the layout suggests one (the 2014 or 2024 style), within the source's declared families. A layout the source does not declare falls back to the source's families, with an uncertainty.
+- **Rules family:** the layout suggests one (the 2014 or 2024 style) for spells, feats and features, within the families the book is written for (the job's `writtenFor`, else the source's). A layout outside them falls back to those families, with an uncertainty. **Armour rows and class tables have no layout:** with one family they take it; with two (2026-10-14, item 3) they get **no family**, `rulesFamilies` marked unsure, and the uncertainty "Say which rules family this is written for before accepting." Check and accept are blocked with `import.family-needed` ("Say which rules family this entry is written for.") until the reviewer ticks one; that includes "Accept as reference". Editing may leave the families empty (other fields can be saved first) but never names one outside the source (`import.family-not-in-source`, nothing saved).
 - **Running headers and footers** (the same text, digits ignored, on at least a third of the pages) are ignored. **Known limit:** a heading printed on that many pages (for example a chapter title repeated on each of its pages) is ignored as well. No test covers that case yet.
 - **Nothing becomes content:** candidates are stored per job for review (`import_candidates`, local only). A re-run replaces only candidates still pending. A later import of the **same PDF into the same source** does not propose again what an earlier import's review accepted or ignored (same kind, name and page; `ImportJobTests.A_second_import_of_the_same_PDF_does_not_propose_what_was_already_reviewed`).
 - **Bounded in the app's memory:** detection reads the stored blocks and lines, not the joined text, up to 64 million stored characters (about 4,000 typical pages; `TomeStackApp.MaxDetectionChars`). A job past that detects its first pages only, and its audit says where it stopped (`detection-limited`); importing the rest as a page range detects them.
