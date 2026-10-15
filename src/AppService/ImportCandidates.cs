@@ -62,6 +62,15 @@ public sealed record CandidateRequest(Guid CandidateId);
 /// <param name="Confirm">Must be true: it creates a draft revision.</param>
 public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false);
 
+/// <param name="CandidateIds">At most <see cref="TomeStackApp.MaxAcceptMany"/>.</param>
+/// <param name="Confirm">Must be true: it creates draft revisions.</param>
+public sealed record CandidateAcceptManyRequest(IReadOnlyList<Guid> CandidateIds, bool AsReference = false, bool Confirm = false);
+
+/// <summary>A candidate that <c>import.candidate.acceptMany</c> skipped, and why (diagnostic codes only).</summary>
+public sealed record BlockedCandidate(Guid CandidateId, IReadOnlyList<string> Codes);
+
+public sealed record AcceptManyResult(IReadOnlyList<StoredCandidate> Accepted, IReadOnlyList<BlockedCandidate> Blocked);
+
 /// <summary>Something an accepted candidate depends on: its source, installed content it names, or a name found nowhere.</summary>
 /// <param name="Kind"><c>source</c>, <c>content</c>, <c>missing-content</c> or <c>unresolved-name</c>.</param>
 public sealed record CandidateDependency(string Kind, string Name, ContentReference? Reference = null);
@@ -229,19 +238,77 @@ public sealed partial class TomeStackApp
         var draft = DraftOf(stored, request.AsReference);
         StoredCandidate? accepted = null;
         // One transaction: a draft never exists without its candidate marked accepted, so a crash cannot lead to a second draft.
+        _store.InTransaction(() => accepted = WriteAccepted(stored, draft, request.AsReference));
+        return accepted!;
+    }
+
+    /// <summary>The writes of one acceptance; call inside the transaction.</summary>
+    private StoredCandidate WriteAccepted(StoredCandidate stored, ContentRevision draft, bool asReference)
+    {
+        MarkImportDerived(draft.Provenance.SourceId); // M6 slice 1: PDF material now lives in this source
+        var accepted = stored with
+        {
+            Status = asReference ? CandidateStatus.AcceptedAsReference : CandidateStatus.Accepted,
+            Draft = SaveDraft(draft),
+            UpdatedAt = _time.GetUtcNow(),
+        };
+        _store.SaveImportCandidate(accepted);
+        _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), asReference ? "candidate-accepted-as-reference" : "candidate-accepted", stored.Current.ProposedKind.ToString().ToLowerInvariant());
+        return accepted;
+    }
+
+    /// <summary>The most candidates one <c>import.candidate.acceptMany</c> takes.</summary>
+    public const int MaxAcceptMany = 200;
+
+    /// <summary>
+    /// <c>import.candidate.acceptMany</c> (tester feedback item 9, D33): <see cref="AcceptCandidate"/> for each id, in one
+    /// transaction. Each goes through the same checks (provenance, blockers, validation); a candidate that fails any is
+    /// returned with its codes and skipped, never forced, and the rest are accepted. The provenance check runs once per
+    /// candidate and inside the transaction, so two twins in one request do not both pass. Messages never quote the document.
+    /// </summary>
+    public AcceptManyResult AcceptMany(CandidateAcceptManyRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates draft entries. Confirm to accept; nothing was changed.")]);
+        var ids = (request.CandidateIds ?? []).Distinct().ToList();
+        if (ids.Count is < 1 or > MaxAcceptMany)
+            throw new AppValidationException([new("import.limit-out-of-range", $"Accept 1 to {MaxAcceptMany} candidates at a time.")]);
+        var accepted = new List<StoredCandidate>();
+        var blocked = new List<BlockedCandidate>();
         _store.InTransaction(() =>
         {
-            MarkImportDerived(draft.Provenance.SourceId); // M6 slice 1: PDF material now lives in this source
-            accepted = stored with
+            foreach (var id in ids)
             {
-                Status = request.AsReference ? CandidateStatus.AcceptedAsReference : CandidateStatus.Accepted,
-                Draft = SaveDraft(draft),
-                UpdatedAt = _time.GetUtcNow(),
-            };
-            _store.SaveImportCandidate(accepted);
-            _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), request.AsReference ? "candidate-accepted-as-reference" : "candidate-accepted", stored.Current.ProposedKind.ToString().ToLowerInvariant());
+                if (_store.FindImportCandidate(id) is not { } stored)
+                {
+                    blocked.Add(new(id, ["candidate.not-found"]));
+                    continue;
+                }
+                if (stored.Status != CandidateStatus.Pending)
+                {
+                    blocked.Add(new(id, ["candidate.already-reviewed"]));
+                    continue;
+                }
+                var provenance = ProvenanceBlockers(stored); // once per candidate, passed on to Check
+                var check = Check(stored, request.AsReference, provenance);
+                var codes = new List<string>(provenance.Select(p => p.Code));
+                if (provenance.Count == 0)
+                {
+                    if (!request.AsReference)
+                        codes.AddRange(check.Blockers.Select(b => b.Code));
+                    if (!check.Report.CanPublish)
+                        codes.Add("candidate.validation-failed");
+                }
+                if (codes.Count > 0)
+                {
+                    blocked.Add(new(id, [.. codes.Distinct()]));
+                    continue;
+                }
+                accepted.Add(WriteAccepted(stored, DraftOf(stored, request.AsReference), request.AsReference));
+            }
         });
-        return accepted!;
+        return new(accepted, blocked);
     }
 
     /// <summary><c>import.candidate.ignore</c>: sets a pending candidate aside. Nothing is created.</summary>
