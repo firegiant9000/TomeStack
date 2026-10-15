@@ -276,6 +276,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("import.limit-out-of-range", $"Accept 1 to {MaxAcceptMany} candidates at a time.")]);
         var accepted = new List<StoredCandidate>();
         var blocked = new List<BlockedCandidate>();
+        var acceptedCache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
         _store.InTransaction(() =>
         {
             foreach (var id in ids)
@@ -290,7 +291,7 @@ public sealed partial class TomeStackApp
                     blocked.Add(new(id, ["candidate.already-reviewed"]));
                     continue;
                 }
-                var provenance = ProvenanceBlockers(stored); // once per candidate, passed on to Check
+                var provenance = ProvenanceBlockers(stored, acceptedCache); // once per candidate; the document's accepted identities are read once
                 var check = Check(stored, request.AsReference, provenance);
                 var codes = new List<string>(provenance.Select(p => p.Code));
                 if (provenance.Count == 0)
@@ -305,7 +306,9 @@ public sealed partial class TomeStackApp
                     blocked.Add(new(id, [.. codes.Distinct()]));
                     continue;
                 }
-                accepted.Add(WriteAccepted(stored, DraftOf(stored, request.AsReference), request.AsReference));
+                var written = WriteAccepted(stored, DraftOf(stored, request.AsReference), request.AsReference);
+                accepted.Add(written);
+                AcceptedOf(acceptedCache, ImportStatus(stored.JobId)).Add((stored.JobId, CandidateIdentity(written.Candidate)));
             }
         });
         return new(accepted, blocked);
@@ -348,7 +351,7 @@ public sealed partial class TomeStackApp
     /// an armour row or class table kept by a 0.5.0 job on a two-family source, which silently took srd-5.2.1 (ruling R28), until the
     /// reviewer saves a family; and an entry another reading of the same document already turned into a draft (ruling R27).
     /// </summary>
-    private List<Diagnostic> ProvenanceBlockers(StoredCandidate stored)
+    private List<Diagnostic> ProvenanceBlockers(StoredCandidate stored, Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>? acceptedCache = null)
     {
         var blockers = new List<Diagnostic>();
         if (stored.Status != CandidateStatus.Pending)
@@ -361,15 +364,35 @@ public sealed partial class TomeStackApp
             && (_store.FindSource(job.SourceId)?.RulesFamilies.Count ?? 0) > 1)
             blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
 
-        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
-        var identity = Identity(current); // the effective values: renaming a twin is how a deliberate second copy is made (R27)
-        var already = _store.ListImportJobs()
-            .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
-            .SelectMany(j => _store.ListImportCandidates(j.Id))
-            .Any(c => c.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && Identity(c.Candidate) == identity);
+        var identity = CandidateIdentity(current); // the effective values: renaming a twin is how a deliberate second copy is made (R27)
+        var already = acceptedCache is null
+            ? _store.ListImportJobs()
+                .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+                .SelectMany(j => _store.ListImportCandidates(j.Id))
+                .Any(c => c.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && CandidateIdentity(c.Candidate) == identity)
+            : AcceptedOf(acceptedCache, job).Any(a => a.JobId != job.Id && a.Identity == identity);
         if (already)
             blockers.Add(new("import.already-accepted", "This entry was already accepted from another reading of this document."));
         return blockers;
+    }
+
+    private static (ContentKind, string, int) CandidateIdentity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+
+    /// <summary>
+    /// The identities already accepted from one document in one source, across all its jobs, read once per (source, document)
+    /// for a bulk accept; the caller adds each identity it accepts, so later twins in the same request see it (R27).
+    /// </summary>
+    private List<(Guid JobId, (ContentKind, string, int) Identity)> AcceptedOf(
+        Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>> cache, ImportJobRecord job)
+    {
+        if (!cache.TryGetValue((job.SourceId, job.Sha256), out var list))
+        {
+            list = [.. _store.ListImportJobs()
+                .Where(j => j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+                .SelectMany(j => _store.ListImportCandidates(j.Id).Where(c => c.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference).Select(c => (j.Id, CandidateIdentity(c.Candidate))))];
+            cache[(job.SourceId, job.Sha256)] = list;
+        }
+        return list;
     }
 
     /// <summary>Armour rows and class tables carry no layout, so the detector cannot tell which rules family they use.</summary>
