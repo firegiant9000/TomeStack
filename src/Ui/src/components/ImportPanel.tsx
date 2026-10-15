@@ -59,8 +59,16 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
   const hintId = `written-for-hint-${source.id}`; // one panel per source on the Sources screen: ids must be unique (4.1.2)
   const writtenFor = askFamily && answer ? (answer === 'both' ? [...source.rulesFamilies] : [answer]) : undefined;
 
-  async function start(request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) {
-    if (needsAnswer) return; // aria-disabled with its reason shown, so this press is refused openly
+  const busyId = `read-busy-${source.id}`;
+  const pagesHintId = `pages-hint-${source.id}`;
+
+  /** Put focus on a job's line: the button pressed is about to go away or change, and focus must not fall to the page (2.4.3). */
+  function focusJobLine(jobId: string) {
+    document.getElementById(`import-progress-${jobId}`)?.focus();
+  }
+
+  async function start(request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }, blocked: boolean) {
+    if (blocked) return; // aria-disabled with its reason shown, so this press is refused openly
     try {
       await client.startImport(source.id, writtenFor ? { ...request, writtenFor } : request);
       onStatus(`Reading ${source.title}. Nothing changes until you review what is found.`);
@@ -70,9 +78,10 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
     }
   }
 
-  async function act(action: () => Promise<unknown>, done: string) {
+  async function act(action: () => Promise<unknown>, done: string, jobId: string) {
     try {
       await action();
+      focusJobLine(jobId); // before the refresh removes the pressed button
       onStatus(done);
       await refresh();
     } catch (error) {
@@ -100,6 +109,12 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
   const first = Number(from);
   const last = to === '' ? undefined : Number(to);
   const valid = from !== '' && Number.isInteger(first) && first >= 1 && (last === undefined || (Number.isInteger(last) && last >= first));
+  const wholeBlocked = running || needsAnswer;
+  const pagesBlocked = wholeBlocked || !valid;
+  // One reason per button, the most pressing first; each is visible text, so aria-describedby never points at nothing.
+  const wholeReason = running ? busyId : needsAnswer ? hintId : undefined;
+  const pagesReason = running ? busyId : needsAnswer ? hintId : !valid ? pagesHintId : undefined;
+  const busyText = 'Reading… — cancel it first or wait.';
 
   return (
     <section aria-label={`Read the text of ${source.title}`} className="play-panel">
@@ -134,6 +149,16 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           Say what the book is written for.
         </p>
       )}
+      {running && (
+        <p id={busyId} className="hint">
+          {busyText}
+        </p>
+      )}
+      {!valid && (
+        <p id={pagesHintId} className="hint">
+          {from === '' ? 'Enter a first page.' : 'Check the pages: the last page cannot be before the first.'}
+        </p>
+      )}
       <div className="inline-form">
         <label className="field">
           From page
@@ -143,21 +168,20 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           To page (optional)
           <input type="number" min={1} value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
+        {/* aria-disabled, never `disabled`: the pressed button stays focused when the job starts (2.4.3, 4.1.2). */}
         <button
           type="button"
-          disabled={!valid || running}
-          aria-disabled={needsAnswer || undefined}
-          aria-describedby={needsAnswer ? hintId : undefined}
-          onClick={() => start({ firstPage: first, lastPage: last ?? first })}
+          aria-disabled={pagesBlocked || undefined}
+          aria-describedby={pagesReason}
+          onClick={() => start({ firstPage: first, lastPage: last ?? first }, pagesBlocked)}
         >
           Read these pages
         </button>
         <button
           type="button"
-          disabled={running}
-          aria-disabled={needsAnswer || undefined}
-          aria-describedby={needsAnswer ? hintId : undefined}
-          onClick={() => start({ wholeDocument: true })}
+          aria-disabled={wholeBlocked || undefined}
+          aria-describedby={wholeReason}
+          onClick={() => start({ wholeDocument: true }, wholeBlocked)}
         >
           Read the whole document
         </button>
@@ -168,17 +192,24 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           {jobs.map((job) => (
             <li key={job.id} className="resource">
               {/* Live whatever the state: a region added with the last change ("completed") is often not announced. */}
-              <p aria-live="polite" aria-atomic="true">
+              <p id={`import-progress-${job.id}`} tabIndex={-1} aria-live="polite" aria-atomic="true">
                 {progress(job)}
               </p>
               <div className="actions">
                 {active(job) && (
-                  <button type="button" onClick={() => act(() => client.cancelImport(job.id), 'Import cancelled. The pages read so far are kept.')}>
+                  <button type="button" onClick={() => act(() => client.cancelImport(job.id), 'Import cancelled. The pages read so far are kept.', job.id)}>
                     Cancel
                   </button>
                 )}
                 {resumable(job) && (
-                  <button type="button" disabled={running} onClick={() => act(() => client.resumeImport(job.id), 'Import resumed.')}>
+                  <button
+                    type="button"
+                    aria-disabled={running || undefined}
+                    aria-describedby={running ? busyId : undefined}
+                    onClick={() => {
+                      if (!running) void act(() => client.resumeImport(job.id), 'Import resumed.', job.id);
+                    }}
+                  >
                     Resume
                   </button>
                 )}

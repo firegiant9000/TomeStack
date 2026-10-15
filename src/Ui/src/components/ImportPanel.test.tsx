@@ -7,7 +7,7 @@ import { client } from '../api/client';
 import type { ImportJob, SourceRecord } from '../api/types';
 import { ImportPanel } from './ImportPanel';
 
-vi.mock('../api/client', () => ({ client: { listImports: vi.fn(), startImport: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { listImports: vi.fn(), startImport: vi.fn(), resumeImport: vi.fn(), cancelImport: vi.fn() } }));
 
 const both = { id: 'src-2', title: 'Testy Both', rulesFamilies: ['srd-5.1', 'srd-5.2.1'] } as SourceRecord;
 const single = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -107,6 +107,59 @@ it('says a one-family source is written for that family, with no question and no
   expect(whole.getAttribute('aria-disabled')).toBeNull();
   await user.click(whole);
   expect(client.startImport).toHaveBeenCalledWith('src-1', { wholeDocument: true });
+});
+
+const running = (id: string) => ({ ...completed(id, 0), status: 'running' }) as ImportJob;
+const cancelled = (id: string) => ({ ...completed(id, 0), status: 'cancelled' }) as ImportJob;
+
+it('keeps focus on the pressed Read button when the job starts, and refuses a press while it runs (2.4.3)', async () => {
+  const user = await renderPanel(single);
+  const whole = screen.getByRole('button', { name: 'Read the whole document' });
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a')]);
+  await user.click(whole);
+  await vi.waitFor(() => expect(whole.getAttribute('aria-disabled')).toBe('true'));
+  expect(whole).toHaveProperty('disabled', false);
+  expect(document.activeElement).toBe(whole);
+  const reason = document.getElementById(whole.getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toBe('Reading… — cancel it first or wait.');
+
+  await user.click(whole);
+  expect(client.startImport).toHaveBeenCalledTimes(1);
+});
+
+it('holds Read these pages without a first page, with a linked reason, and never natively disables it', async () => {
+  const user = await renderPanel(single);
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(pages.getAttribute('aria-disabled')).toBe('true');
+  expect(pages).toHaveProperty('disabled', false);
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Enter a first page.');
+  await user.click(pages);
+  expect(client.startImport).not.toHaveBeenCalled();
+  await user.type(screen.getByLabelText('From page'), '3');
+  expect(pages.getAttribute('aria-disabled')).toBeNull();
+});
+
+it('moves focus to the job line when Resume is pressed and the button goes away (2.4.3)', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([cancelled('job-a')]);
+  vi.mocked(client.resumeImport).mockResolvedValue({} as ImportJob);
+  const user = await renderPanel(single);
+  const resume = await screen.findByRole('button', { name: 'Resume' });
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a')]);
+  await user.click(resume);
+  await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+  expect(client.resumeImport).toHaveBeenCalledWith('job-a');
+  expect(document.activeElement?.id).toBe('import-progress-job-a');
+});
+
+it('holds Resume while another job runs: aria-disabled, a linked reason, and the press does nothing', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a'), cancelled('job-b')]);
+  const user = await renderPanel(single);
+  const resume = await screen.findByRole('button', { name: 'Resume' });
+  expect(resume.getAttribute('aria-disabled')).toBe('true');
+  expect(resume).toHaveProperty('disabled', false);
+  expect(document.getElementById(resume.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Reading… — cancel it first or wait.');
+  await user.click(resume);
+  expect(client.resumeImport).not.toHaveBeenCalled();
 });
 
 it('offers the studio from a finished job that found candidates, and not from one that found none', async () => {

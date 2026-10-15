@@ -74,7 +74,7 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
 | 46 | Dice box (item 8) | 1.3.1, 3.3.1, 4.1.3, 2.5.8 | 🔧 Vitest: labelled input and button, aria-invalid with a linked engine message, focus stays; one permanently mounted polite live region (`aria-live="polite"`, not `role="status"`, which the app status line owns) holds the refusal (empty until then; no `role="alert"`), so a refusal after Enter is announced while a success is announced only by Last roll; a refusal that returns after the text changed is ignored; the strip height is unchanged (headless Edge). **Owner check:** 400% zoom and Narrator. |
 | 47 | Builder missing-content hint (item 1) | 1.3.1, 3.3.2 | 🔧 Vitest-verified: plain text in the step (not a live region), never shown while loading or after a failure, counts only. |
 | 48 | Review guidance and studio link (item 2) | 1.3.1, 2.4.3, 2.5.8 | 🔧 Vitest: persistent text and a named button; focus to the studio heading on arrival. **Owner check:** Narrator reads the line once. |
-| 49 | Written for and Rules families (items 3, 4) | 1.3.1, 3.3.2, 4.1.2 | 🔧 Vitest: radio group with legend, aria-disabled Read buttons with a linked reason, a family checkbox group in review. |
+| 49 | Written for and Rules families (items 3, 4) | 1.3.1, 3.3.2, 4.1.2 | 🔧 Vitest: radio group with legend, aria-disabled Read buttons (also while a job runs or the first page is missing; never natively disabled, so the pressed button keeps focus, 2.4.3) with a linked reason, Resume and Cancel move focus to the job's line, a family checkbox group in review. |
 
 ## Manual keyboard walkthrough
 
