@@ -37,7 +37,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 ## Rolling from the summary
 
-Type `NdM+K` terms into the dice box on the summary; the engine's limits apply. The roll is labelled "Dice" (the typed text is never the label) and goes to Last roll, the one it replaces moving to Previous rolls; nothing is stored. A blank box does nothing. A refusal shows the engine's message under the box (`aria-invalid`, linked with `aria-describedby`, focus kept), changes neither Last roll nor the log, and clears when the text changes. The box uses `dice.roll` through `client.rollDice` (below).
+Type `NdM+K` terms into the dice box on the summary; the engine's limits apply. The roll is labelled "Dice" (the typed text is never the label) and goes to Last roll, the one it replaces moving to Previous rolls; nothing is stored. A blank box does nothing. A refusal shows the engine's message under the box (`aria-invalid`, linked with `aria-describedby`, focus kept), changes neither Last roll nor the log, and clears when the text changes. A refused formula is shown to you and is not logged. The box uses `dice.roll` through `client.rollDice` (below).
 
 ## The `dice.roll` command (D32)
 

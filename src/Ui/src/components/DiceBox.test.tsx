@@ -9,7 +9,9 @@ import { DiceBox } from './DiceBox';
 
 afterEach(cleanup);
 
-const refusal = () => new TomeStackError({ code: 'bad-request', message: 'Too many dice.', diagnostics: [{ code: 'dice.too-many', message: 'Too many dice.' }] });
+const refusal = () => new TomeStackError({ code: 'bad-request', message: 'Too many dice.', diagnostics: [{ code: 'dice.too-many-dice', message: 'Too many dice.' }] });
+// The refusal's polite live region (not role="status": the app's own status line owns that role, which e2e queries by role).
+const statusRegion = () => document.querySelector<HTMLElement>('.dice-box [aria-live="polite"]')!;
 const input = () => screen.getByRole('textbox', { name: 'Dice to roll' });
 
 it('rolls a typed formula', async () => {
@@ -44,7 +46,7 @@ it('does nothing for a blank or spaces-only box', async () => {
   await userEvent.type(input(), '{Enter}');
   expect(onRoll).not.toHaveBeenCalled();
   expect(input().getAttribute('aria-invalid')).toBeNull();
-  expect(document.querySelector('.dice-box .error')).toBeNull();
+  expect(statusRegion().textContent).toBe('');
 });
 
 it('shows the engine refusal linked to the box and keeps focus there', async () => {
@@ -92,6 +94,32 @@ it('limits the text to 80 characters and offers no autocomplete or spellcheck', 
   expect(input().getAttribute('maxlength')).toBe('80');
   expect(input().getAttribute('autocomplete')).toBe('off');
   expect(input().getAttribute('spellcheck')).toBe('false');
+});
+
+it('announces a refusal after Enter in a polite status that is empty before and cleared on edit', async () => {
+  const onRoll = vi.fn().mockRejectedValue(refusal());
+  render(<DiceBox onRoll={onRoll} />);
+  const status = statusRegion();
+  expect(status.textContent).toBe('');
+  expect(input().getAttribute('aria-describedby')).toBeNull();
+  await userEvent.type(input(), '1000d6{Enter}');
+  expect(statusRegion()).toBe(status); // permanently mounted, not created by the refusal
+  expect(status.textContent).toBe('Too many dice.');
+  expect(input().getAttribute('aria-describedby')).toBe(status.id);
+  await userEvent.type(input(), '0');
+  expect(status.textContent).toBe('');
+});
+
+it('ignores a refusal that arrives after the text was edited', async () => {
+  let reject!: (e: unknown) => void;
+  const onRoll = vi.fn().mockReturnValue(new Promise((_, r) => (reject = r)));
+  render(<DiceBox onRoll={onRoll} />);
+  await userEvent.type(input(), '1000d6{Enter}');
+  await userEvent.type(input(), '0');
+  reject(refusal());
+  await new Promise((r) => setTimeout(r, 0));
+  expect(input().getAttribute('aria-invalid')).toBeNull();
+  expect(statusRegion().textContent).toBe('');
 });
 
 it('is a form named Roll dice', () => {
