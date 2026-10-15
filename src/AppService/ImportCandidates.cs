@@ -264,7 +264,7 @@ public sealed partial class TomeStackApp
             blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
 
         static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
-        var identity = Identity(stored.Candidate);
+        var identity = Identity(current); // the effective values: renaming a twin is how a deliberate second copy is made (R27)
         var already = _store.ListImportJobs()
             .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
             .SelectMany(j => _store.ListImportCandidates(j.Id))

@@ -291,6 +291,26 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Renaming_a_twin_lifts_the_already_accepted_blocker_for_a_deliberate_second_copy()
+    {
+        var (temp, sourceId, firstJob) = Imported();
+        using var _t = temp;
+        var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.App.AcceptCandidate(new(Named(temp, firstJob, "Fixture Ember Lance").Id, Confirm: true));
+        var twin = Named(temp, second.Id, "Fixture Ember Lance");
+        Assert.Contains(temp.App.CheckCandidate(twin.Id).Blockers, b => b.Code == "import.already-accepted");
+
+        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+
+        var check = temp.App.CheckCandidate(twin.Id);
+        Assert.DoesNotContain(check.Blockers, b => b.Code == "import.already-accepted");
+        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(twin.Id, Confirm: true)).Status);
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance Copy"));
+    }
+
+    [Fact]
     public void Accept_waits_for_a_family_on_a_two_family_source()
     {
         // Review Focus 1.
