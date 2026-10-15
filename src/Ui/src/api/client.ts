@@ -13,6 +13,7 @@ import type {
   StoredCandidate,
   DetachPreview,
   OpenPageOutcome,
+  ContentKind,
   ContentRevision,
   PublishResult,
   SourcePackPreview,
@@ -81,6 +82,8 @@ export function createClient(transport: Transport) {
     info: () => call<AppInfo>('app.info'),
     /** With a campaign, every option says whether the campaign allows its source (SPEC P-01). */
     listContent: (rulesFamily: RulesFamilyId, campaignId?: string) => call<ContentOption[]>('content.list', { rulesFamily, campaignId }),
+    /** Item 1: entries of each kind in the family with no published revision (counts only). */
+    draftCounts: (rulesFamily: RulesFamilyId) => call<Partial<Record<ContentKind, number>>>('content.draftCounts', { rulesFamily }),
     listCampaigns: () => call<Campaign[]>('campaign.list'),
     /** Creates (empty id) or updates a campaign profile. */
     saveCampaign: (campaign: Campaign) => call<Campaign>('campaign.save', campaign),

@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
+
 ### Fixed
 
 ### Migration

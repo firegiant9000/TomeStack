@@ -197,6 +197,22 @@ public sealed partial class TomeStackApp : IDisposable
         ];
     }
 
+    /// <summary>
+    /// Item 1 (2026-10-14 plan): how many entries of each kind in <paramref name="rulesFamily"/> have no published revision,
+    /// so the builder can say why they are missing. Content with any published revision is offered (its newest published
+    /// revision), so it is never counted, even with a newer draft. Counts only, never names.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> DraftCounts(string rulesFamily)
+    {
+        if (!RulesFamilies.IsKnown(rulesFamily))
+            throw new AppValidationException([new("rules-family.unknown", $"Rules family '{rulesFamily}' is not supported.")]);
+        return _store.ListRevisionsInOrder()
+            .GroupBy(r => r.ContentId)
+            .Where(g => g.All(r => r.Status != RevisionStatus.Published) && g.Last().RulesFamilies.Contains(rulesFamily))
+            .GroupBy(g => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(g.Last().Kind.ToString()))
+            .ToDictionary(k => k.Key, k => k.Count(), StringComparer.Ordinal);
+    }
+
     /// <summary>A listing needs only the start of a summary; full feature texts would make every list call megabytes.</summary>
     private const int SummaryPreviewLength = 200;
 
