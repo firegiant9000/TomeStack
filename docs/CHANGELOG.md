@@ -7,6 +7,7 @@
 ### Changed
 
 - **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
+- **The import review says what happens next:** a line above the candidates says that accepted entries are drafts in the Homebrew studio, and a button opens that source in the studio.
 
 ### Fixed
 

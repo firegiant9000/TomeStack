@@ -8,6 +8,7 @@ interface Props {
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
   onOpenPage: (page: number) => void;
+  onOpenStudio: (sourceId: string) => void;
 }
 
 const kinds: ContentKind[] = ['spell', 'feat', 'feature', 'item', 'class', 'subclass', 'species', 'background'];
@@ -29,7 +30,7 @@ const percent = (confidence: number) => `${Math.round(confidence * 100)} %`;
  * effects. Accept makes a draft (validated first, ADR-004); Accept as reference keeps the text and page only; Ignore sets
  * it aside. Publishing is the homebrew studio's, with its own validation. Confidence is a hint, never permission.
  */
-export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPage }: Props) {
+export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPage, onOpenStudio }: Props) {
   const [filter, setFilter] = useState<CandidateFilter>({ status: 'pending' });
   const [candidates, setCandidates] = useState<StoredCandidate[]>();
   const [selected, setSelected] = useState<string>();
@@ -55,6 +56,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       <h5 ref={heading} tabIndex={-1}>
         Candidates from {source.title}
       </h5>
+      <p className="hint">Accepted entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
+      <div className="actions">
+        <button type="button" onClick={() => onOpenStudio(source.id)}>
+          Open {source.title} in the studio
+        </button>
+      </div>
       <fieldset>
         <legend>Show</legend>
         <div className="inline-form">

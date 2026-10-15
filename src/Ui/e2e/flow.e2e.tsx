@@ -894,6 +894,8 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in the studio/));
   // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
   await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Candidates from E2E Grimoire' })));
+  // The review says what happens next and offers the studio (item 2); the flow below still goes by the sidebar.
+  expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in the studio' })).toBeTruthy();
 
   // Ignore the other spell.
   await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));

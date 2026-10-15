@@ -8,6 +8,7 @@ interface Props {
   source: SourceRecord;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  onOpenStudio: (sourceId: string) => void;
 }
 
 const active = (job: ImportJob) => job.status === 'queued' || job.status === 'running';
@@ -24,7 +25,7 @@ function progress(job: ImportJob): string {
  * M4 D2, D5 (SPEC I-01, I-03): extract a source's PDF as a cancellable, resumable job, search its text, and review
  * what was found. Nothing here changes content: accepting a candidate creates a draft, which the studio publishes.
  */
-export function ImportPanel({ source, onError, onStatus }: Props) {
+export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) {
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -139,8 +140,15 @@ export function ImportPanel({ source, onError, onStatus }: Props) {
                     Review {job.candidates} candidate{job.candidates === 1 ? '' : 's'}
                   </button>
                 )}
+                {job.status === 'completed' && job.candidates > 0 && (
+                  <button type="button" onClick={() => onOpenStudio(source.id)}>
+                    Open {source.title} in the studio
+                  </button>
+                )}
               </div>
-              {reviewing === job.id && <CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={openPage} />}
+              {reviewing === job.id && (
+                <CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={openPage} onOpenStudio={onOpenStudio} />
+              )}
             </li>
           ))}
         </ul>

@@ -22,6 +22,18 @@ UI: `src/Ui/src/components/ImportPanel.tsx` and `CandidateReviewPanel.tsx`, on t
   - **Accept as reference** and **Ignore**.
 - **Focus (WCAG 2.4.3):** a candidate that leaves the filtered list once reviewed (the default filter shows those to review) takes its details with it, so focus goes back to the "Candidates from <source>" heading.
 - **Publishing** is the homebrew studio's, with its own validation: an accepted candidate is a draft in the source, listed there like any other.
+- **What happens next (item 2):** a line under the "Candidates from <source>" heading says "Accepted entries are drafts in the Homebrew studio under <source>. Publish them there to use them in the builder." (plain text, always visible, not a live region), and "Open <source> in the studio" opens the studio on that source. A completed job that found candidates has the same button beside "Review N candidates". The studio's heading takes focus on arrival (WCAG 2.4.3), because the button that was pressed is gone with the Sources screen.
+
+### From a book to a character
+
+1. **Sources:** add a homebrew source written for the book's rules (in the studio), then attach the PDF.
+2. **Read the whole document.** Say what the book is written for.
+3. **Review each candidate:** open its page, and fix its name, kind and family.
+4. **Accept as a draft** or **Accept as reference**.
+5. **Open <source> in the studio.**
+6. **Publish each draft.** The builder then offers it.
+
+Nothing becomes a rule until it is published there (ADR-004).
 
 ## D4: dependency and confidence validation (SPEC I-02, ADR-004)
 
