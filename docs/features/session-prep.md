@@ -25,6 +25,11 @@ Fixture Ward gives +1 AC while it is switched on. The studio has no "add toggle"
 4. Keep the template's modifier (it already adds 1 to Armor Class and applies "While Ward is on"). Do not add a second one.
 5. "Save draft", "Publish".
 
+### Getting it onto a character
+
+- **A new character:** in the builder's Background step, open "Other content" and tick Fixture Ward.
+- **An existing character:** put it in a class. In the class's draft, use "Grant a feature" and pick Fixture Ward, then "Save draft" and "Publish". On the character's sheet, open the Manage tab. Under "Updates available", choose "Review update: <class name>", check what would change, then "Apply update".
+
 On the sheet you switch Ward on and off yourself. The AC changes only while it is on.
 
 ## A limited reaction: Fixture Parry
@@ -38,13 +43,15 @@ Fixture Parry has `max(1, WIS.MOD)` uses. Spending one switches on an AC bonus o
 5. Keep the template's recovery (Long rest, all uses) or change "When" or "How many".
 6. "Save draft", "Publish".
 
+Add Fixture Parry to a character the same way as Fixture Ward (see "Getting it onto a character" above).
+
 At the table, switch Parry on when you react, and **switch it off by hand** afterwards. TomeStack does not know when a reaction ends.
 
 The formula words are `WIS.MOD`, `floor` and `max`, spelled like that.
 
 ## Spells from a book
 
-A caster can use only a spell that names the caster's list. A spell that names none publishes with the warning `validate.spell-lists`, and casters can record it only by hand. In this release the one place to fix that is **candidate review, before you accept**.
+A caster can use only a spell that names the caster's list. A spell that names none publishes with the warning `validate.spell-lists`, and a caster cannot pick it; add the list in candidate review before accepting. In this release the one place to fix that is **candidate review, before you accept**.
 
 1. Give the class its list: in its spellcasting rule ("Add spellcasting"), set the "Spell list key" to a short key you choose, for example `fixture-list`.
 2. Import the book. A spell comes with its lists only when the PDF prints them. Otherwise its candidate says it names no class lists and to add them.
@@ -57,7 +64,7 @@ A caster can use only a spell that names the caster's list. A spell that names n
 4. Choose "Save edit", check the candidate again, then "Accept as a draft".
 5. Open the source in the studio and "Publish".
 
-A spell that was accepted without a list cannot be fixed in the studio yet. A later release adds an "Add to spell list" action. Until then, use the sheet's Report a gap for it.
+A spell that was accepted without a list cannot be fixed in the studio yet. A later wave adds an "Add to spell list" action. Until then, use the sheet's Report a gap for it.
 
 ## Familiars, custom weapons and backstory
 
