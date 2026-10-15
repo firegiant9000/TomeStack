@@ -42,6 +42,10 @@ public sealed record ImportJobRecord
     public string? FailureCode { get; init; }
     public string? FailureMessage { get; init; }
     public int Candidates { get; init; }
+    /// <summary>Tester feedback item 13: true when more candidates were found than the cap keeps. Omitted otherwise (and in 0.5.0 jobs).</summary>
+    public bool? TruncatedCandidates { get; init; }
+    /// <summary>Tester feedback item 13: the first page detection did not read, when it stopped for size. Omitted otherwise.</summary>
+    public int? DetectionLimitedFromPage { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 

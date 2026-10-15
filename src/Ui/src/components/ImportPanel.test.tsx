@@ -164,7 +164,7 @@ it('holds Resume while another job runs: aria-disabled, a linked reason, and the
 
 it('shows one studio button while a job is under review: the panel\'s own, not also the job line\'s', async () => {
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3)]);
-  vi.mocked(client.candidates).mockResolvedValue([]);
+  vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
   const user = await renderPanel(both);
   expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
 
@@ -181,7 +181,7 @@ it('shows one studio button while a job is under review: the panel\'s own, not a
 
 it('hides every job line\'s studio button while any review is open, so no unsaved edit can be left behind', async () => {
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 2)]);
-  vi.mocked(client.candidates).mockResolvedValue([]);
+  vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
   const user = await renderPanel(both);
   expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
 

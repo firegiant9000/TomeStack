@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CandidateCheck, CandidateFilter, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
 import { familyLabel } from './familyLabels';
 
 interface Props {
@@ -11,6 +11,9 @@ interface Props {
   onOpenPage: (page: number) => void;
   onOpenStudio: (sourceId: string) => void;
 }
+
+/** Item 13: candidates shown at a time (the buttons say "Previous 50" and "Next 50"). */
+const pageSize = 50;
 
 const kinds: ContentKind[] = ['spell', 'feat', 'feature', 'item', 'class', 'subclass', 'species', 'background'];
 
@@ -33,26 +36,66 @@ const percent = (confidence: number) => `${Math.round(confidence * 100)} %`;
  */
 export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPage, onOpenStudio }: Props) {
   const [filter, setFilter] = useState<CandidateFilter>({ status: 'pending' });
-  const [candidates, setCandidates] = useState<StoredCandidate[]>();
+  const [offset, setOffset] = useState(0); // item 13: which of the filtered candidates the list starts at
+  const [result, setResult] = useState<CandidatePage>();
+  const [announcement, setAnnouncement] = useState(''); // "Showing 51–100 of 340", set only when the player changes page
   const [selected, setSelected] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const announceNext = useRef(false);
+  const latestRequest = useRef(0);
   const [dirty, setDirty] = useState(false); // the open candidate's form differs from what is stored
   const dirtyId = `unsaved-${job.id}`;
+  const candidates = result?.items;
+  const total = result?.total ?? 0;
 
-  const load = useCallback(
-    () =>
-      client.candidates(job.id, filter).then((list) => {
-        setCandidates(list);
-        return list;
-      }),
-    [job.id, filter],
-  );
+  const load = useCallback(() => {
+    const request = ++latestRequest.current;
+    return client.candidates(job.id, filter, { offset, limit: pageSize }).then((page) => {
+      if (request !== latestRequest.current) return page.items; // a newer request is on its way
+      if (page.items.length === 0 && page.total > 0 && offset > 0) {
+        // The last candidate of the last page left the list: go to the page that is now last.
+        setOffset(Math.floor((page.total - 1) / pageSize) * pageSize);
+        return page.items;
+      }
+      setResult(page);
+      if (announceNext.current) {
+        announceNext.current = false;
+        setAnnouncement(`Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`);
+      }
+      return page.items;
+    });
+  }, [job.id, filter, offset]);
 
   useEffect(() => {
     load().catch(onError);
   }, [load, onError]);
 
   const current = candidates?.find((c) => c.id === selected);
+
+  // Ruling R35: paging, the filters and the other rows would silently drop an unsaved edit, so they are held while there is one.
+  const heldProps = { 'aria-disabled': dirty || undefined, 'aria-describedby': dirty ? dirtyId : undefined };
+
+  function changeFilter(next: CandidateFilter) {
+    if (dirty) return;
+    setFilter(next);
+    setOffset(0);
+    setAnnouncement('');
+  }
+
+  function turnPage(direction: -1 | 1) {
+    const target = offset + direction * pageSize;
+    if (dirty || target < 0 || target >= total) return;
+    announceNext.current = true;
+    setOffset(target);
+  }
+
+  function select(id: string) {
+    if (dirty && id !== selected) return;
+    setSelected(id);
+  }
+
+  const atStart = offset === 0;
+  const atEnd = offset + pageSize >= total;
 
   return (
     <section aria-label={`Candidates from ${source.title}`} className="play-panel">
@@ -82,17 +125,28 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         <legend>Show</legend>
         <div className="inline-form">
           <label className="field">
-            Page
+            From page
             <input
               type="number"
               min={1}
-              value={filter.page ?? ''}
-              onChange={(e) => setFilter({ ...filter, page: e.target.value === '' ? undefined : Number(e.target.value) })}
+              {...heldProps}
+              value={filter.firstPage ?? ''}
+              onChange={(e) => changeFilter({ ...filter, firstPage: e.target.value === '' ? undefined : Number(e.target.value) })}
+            />
+          </label>
+          <label className="field">
+            To page
+            <input
+              type="number"
+              min={1}
+              {...heldProps}
+              value={filter.lastPage ?? ''}
+              onChange={(e) => changeFilter({ ...filter, lastPage: e.target.value === '' ? undefined : Number(e.target.value) })}
             />
           </label>
           <label className="field">
             Kind
-            <select value={filter.kind ?? ''} onChange={(e) => setFilter({ ...filter, kind: (e.target.value || undefined) as ContentKind | undefined })}>
+            <select {...heldProps} value={filter.kind ?? ''} onChange={(e) => changeFilter({ ...filter, kind: (e.target.value || undefined) as ContentKind | undefined })}>
               <option value="">Every kind</option>
               {kinds.map((k) => (
                 <option key={k} value={k}>
@@ -104,9 +158,10 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           <label className="field">
             Confidence
             <select
+              {...heldProps}
               value={filter.maxConfidence !== undefined ? 'low' : filter.minConfidence !== undefined ? 'high' : ''}
               onChange={(e) =>
-                setFilter({
+                changeFilter({
                   ...filter,
                   minConfidence: e.target.value === 'high' ? 0.8 : undefined,
                   maxConfidence: e.target.value === 'low' ? 0.79 : undefined,
@@ -120,7 +175,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           </label>
           <label className="field">
             Status
-            <select value={filter.status ?? ''} onChange={(e) => setFilter({ ...filter, status: (e.target.value || undefined) as CandidateStatus | undefined })}>
+            <select {...heldProps} value={filter.status ?? ''} onChange={(e) => changeFilter({ ...filter, status: (e.target.value || undefined) as CandidateStatus | undefined })}>
               <option value="">Any status</option>
               {(Object.keys(statusLabels) as CandidateStatus[]).map((s) => (
                 <option key={s} value={s}>
@@ -131,12 +186,52 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           </label>
         </div>
       </fieldset>
+      {job.truncatedCandidates && <p className="hint">Showing the first 5,000 candidates; read fewer pages at a time to see the rest.</p>}
+      {job.detectionLimitedFromPage !== undefined && (
+        <p className="hint">
+          Detection stopped before page {job.detectionLimitedFromPage}; read pages {job.detectionLimitedFromPage} on as a range to detect them.
+        </p>
+      )}
+      <p className="visually-hidden" aria-live="polite">
+        {announcement}
+      </p>
       {candidates && candidates.length === 0 && <p className="hint">No candidates match.</p>}
+      {candidates && candidates.length > 0 && (
+        <div className="actions">
+          {/* aria-disabled, never `disabled`: a held button keeps focus and its place in the tab order. */}
+          <button
+            type="button"
+            aria-disabled={atStart || dirty || undefined}
+            aria-describedby={dirty ? dirtyId : undefined}
+            onClick={() => turnPage(-1)}
+          >
+            Previous {pageSize}
+          </button>
+          <span className="hint">
+            {offset + 1}–{offset + candidates.length} of {total}
+          </span>
+          <button
+            type="button"
+            aria-disabled={atEnd || dirty || undefined}
+            aria-describedby={dirty ? dirtyId : undefined}
+            onClick={() => turnPage(1)}
+          >
+            Next {pageSize}
+          </button>
+        </div>
+      )}
       {candidates && candidates.length > 0 && (
         <ul className="resources" aria-label="Candidates">
           {candidates.map((c) => (
             <li key={c.id} className="resource">
-              <button type="button" className="link" aria-current={selected === c.id ? 'true' : undefined} onClick={() => setSelected(c.id)}>
+              <button
+                type="button"
+                className="link"
+                aria-current={selected === c.id ? 'true' : undefined}
+                aria-disabled={(dirty && selected !== c.id) || undefined}
+                aria-describedby={dirty && selected !== c.id ? dirtyId : undefined}
+                onClick={() => select(c.id)}
+              >
                 {(c.edited ?? c.candidate).proposedName}
               </button>{' '}
               <span className="tag">{(c.edited ?? c.candidate).proposedKind}</span> <span className="hint">{pageText((c.edited ?? c.candidate).page)}</span>{' '}

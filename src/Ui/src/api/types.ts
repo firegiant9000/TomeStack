@@ -887,6 +887,10 @@ export interface ImportJob {
   failureCode?: string;
   failureMessage?: string;
   candidates: number;
+  /** More candidates were found than the list keeps (5,000); absent otherwise. */
+  truncatedCandidates?: boolean;
+  /** Detection stopped for size before this page; absent otherwise. */
+  detectionLimitedFromPage?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -943,11 +947,20 @@ export interface CandidateCheck {
 }
 
 export interface CandidateFilter {
-  page?: number;
+  /** Only candidates that reach this page or later. */
+  firstPage?: number;
+  /** Only candidates that start on or before this page. */
+  lastPage?: number;
   kind?: ContentKind;
   minConfidence?: number;
   maxConfidence?: number;
   status?: CandidateStatus;
+}
+
+/** One page of a job's filtered candidates; `total` counts the whole filtered set. */
+export interface CandidatePage {
+  items: StoredCandidate[];
+  total: number;
 }
 
 export interface CandidateEdit {
