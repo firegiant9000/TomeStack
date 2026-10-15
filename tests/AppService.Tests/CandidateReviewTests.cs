@@ -456,4 +456,91 @@ public class CandidateReviewTests
         var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
         Assert.Equal([RulesFamilies.Srd51], draft.RulesFamilies);
     }
+
+    [Fact]
+    public void Accept_many_writes_the_clean_ones_in_one_go_and_lists_the_blocked_with_their_codes()
+    {
+        // Item 9, D33: blocked ones are returned, never forced.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var stormcall = Named(temp, jobId, "Fixture Stormcall"); // an unresolved reference
+        var coat = Named(temp, jobId, "Fixture Quilted Coat"); // no family
+        var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
+
+        var result = temp.App.AcceptMany(new([ember.Id, stormcall.Id, coat.Id, ember.Id], AsReference: false, Confirm: true));
+
+        Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(CandidateStatus.Accepted, result.Accepted[0].Status);
+        Assert.Equal(drafts + 1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+        Assert.Equal([stormcall.Id, coat.Id], result.Blocked.Select(b => b.CandidateId));
+        Assert.Contains("candidate.unresolved-reference", result.Blocked[0].Codes);
+        Assert.Contains("import.family-needed", result.Blocked[1].Codes);
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(stormcall.Id)!.Status);
+        Assert.Equal(CandidateStatus.Accepted, temp.App.Store.FindImportCandidate(ember.Id)!.Status);
+        Assert.True(temp.App.Store.FindSource(temp.App.Store.FindRevision(result.Accepted[0].Draft!)!.Provenance.SourceId)!.ImportDerived);
+
+        // Asking again: the accepted one is now blocked as already reviewed, nothing is duplicated.
+        var again = temp.App.AcceptMany(new([ember.Id], AsReference: false, Confirm: true));
+        Assert.Empty(again.Accepted);
+        Assert.Equal(["candidate.already-reviewed"], again.Blocked.Single().Codes);
+        Assert.Equal(drafts + 1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+    }
+
+    [Fact]
+    public void Accept_many_as_reference_lifts_the_review_blockers_but_not_the_provenance_ones()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var stormcall = Named(temp, jobId, "Fixture Stormcall");
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var result = temp.App.AcceptMany(new([stormcall.Id, coat.Id], AsReference: true, Confirm: true));
+
+        Assert.Equal([stormcall.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(CandidateStatus.AcceptedAsReference, result.Accepted[0].Status);
+        Assert.Empty(temp.App.Store.FindRevision(result.Accepted[0].Draft!)!.Effects);
+        Assert.Equal(["import.family-needed"], result.Blocked.Single().Codes);
+    }
+
+    [Fact]
+    public void Accept_many_needs_the_confirmation_a_list_and_at_most_200_and_writes_nothing_otherwise()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
+
+        Assert.Equal("candidate.confirmation-required", Code(() => temp.App.AcceptMany(new([ember.Id]))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([.. Enumerable.Range(0, 201).Select(_ => Guid.NewGuid())], Confirm: true))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([], Confirm: true))));
+        Assert.Equal(drafts, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(ember.Id)!.Status);
+
+        // A candidate that does not exist is blocked, not thrown: the rest still go through.
+        var ghost = Guid.NewGuid();
+        var result = temp.App.AcceptMany(new([ghost, ember.Id], Confirm: true));
+        Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(["candidate.not-found"], result.Blocked.Single().Codes);
+    }
+
+    [Fact]
+    public void The_accept_many_command_returns_accepted_and_blocked()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        Assert.Contains("import.candidate.acceptMany", CommandDispatcher.Commands);
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var stormcall = Named(temp, jobId, "Fixture Stormcall");
+
+        using var response = System.Text.Json.JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(System.Text.Json.JsonSerializer.Serialize(
+            new { id = "1", command = "import.candidate.acceptMany", payload = new { candidateIds = new[] { ember.Id, stormcall.Id }, asReference = false, confirm = true } }, RulesJson.Compact)));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        var data = response.RootElement.GetProperty("result");
+        Assert.Equal(1, data.GetProperty("accepted").GetArrayLength());
+        var blocked = data.GetProperty("blocked");
+        Assert.Equal(stormcall.Id, blocked[0].GetProperty("candidateId").GetGuid());
+        Assert.Equal("candidate.unresolved-reference", blocked[0].GetProperty("codes")[0].GetString());
+    }
 }
