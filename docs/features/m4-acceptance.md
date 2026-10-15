@@ -32,11 +32,19 @@ Every accepted candidate is a draft, and every effect in it is reference-only.
 
 `M4AcceptanceTests.A_third_party_test_PDF_produces_reviewable_candidates_and_no_unapproved_active_rules` reads every PDF in the gitignored `tests/RulesFixtures/local/third-party/`. It skips when there is none. Its output, and the `report.md` it writes in that folder, are counts only: pages, candidates by kind, accepted, accepted as reference, ignored, pending, and "active without approval". PDFs are numbered by position, never named.
 
-**Not run:** the folder is not on the development machine. To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PDF`, then record the counts here:
+To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PDF`, then record the counts here. Counts only, never names:
 
 | Date | Build | PDF | Candidates by kind | Accepted | As reference | Ignored | Active without approval |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | |
+| 2026-10-14, before | branch `wave-0`, before the detector change | 1 | 186: spell 116, item 69, feature 1 | 2 | 1 | 1 | 0 |
+| 2026-10-14, after | branch `wave-0`, with the detector change | 1 | 238: spell 116, feat 47, item 66, class 8, feature 1 | 3 | 2 | 1 | 0 |
+
+**2026-10-14 run (a third-party book, local, counts only).** 385 pages, 5 of them by OCR, 0 page errors; extraction about 20 s, detection 0.35 s. The book has 17 fonts; 7 carry a weight word, and 1 of those carries one only as Black, Heavy, Semibold or Demi (about 4,400 letters, none of it counted as bold before), so the extractor now accepts those words.
+
+- **Before** the change: spell 116, item 69 (2 of them not items), feature 1 (spurious), class, feat, species, background and subclass 0. Spell recall was about 84 % (116 of about 138 spell headers).
+- **After** the change: spell 116 (recall unchanged, about 84 %), item 66 (3 fewer: rows whose name held a price or read as a sentence), feat 47, class 8, feature 1. The feats and classes are new and their precision is **not reviewed**: the numbers show only that the detector now finds more, not that what it finds is right. Several of the 47 may be other kinds of entry in the same layout.
+- **SRD floors re-run the same day** with both PDFs hash-checked: every floor holds, and every number is the same as before the change (spells 100 % / 100 % on both SRDs; weapons 97.2 % / 100 % (5.1) and 97.4 % / 100 % (5.2.1); armor 100 % / 100 %; classes 83.3 % / 100 %; class features recall 88.2 % (5.1) and 100 % (5.2.1); feats recall 100 % with 1 candidate (5.1) and 17 (5.2.1)). A first draft of the feat rule took the SRDs' Eldritch Invocations for feats (+21 and +23 candidates), and a first draft of the junk-row rule dropped the SRD's "Crossbow, hand" rows (5.1 weapon recall 91.4 %). Both were narrowed until the numbers matched the baseline again.
+- **The gate stays not met.** It needs the owner to review precision on the book (accepted and ignored candidates, kind by kind), which this run does not replace.
 
 ## Precision and recall (D3)
 
@@ -68,7 +76,7 @@ The class precision floor went from 70 % to 80 %; the other floors are unchanged
 
 ## Could not be verified here
 
-- **The third-party test PDF run** (above). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
+- **The third-party test PDF's precision** (above: the run of 2026-10-14 has counts only; the owner has not reviewed the candidates). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
 - **The review screen by keyboard only and with Narrator** (`accessibility-checklist.md`, items 3 and 15).
 - **OCR on a clean machine:** it needs an installed Windows OCR language. Without one, pages without text are reported (`ocr.unavailable`) and stay empty.
 - **The installer growth** was measured on a self-contained publish (+31.4 MB, ADR-009), not on the Velopack package.

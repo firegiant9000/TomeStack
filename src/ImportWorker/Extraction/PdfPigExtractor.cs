@@ -200,13 +200,19 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
             {
                 var letters = block.TextLines.SelectMany(l => l.Words).SelectMany(w => w.Letters).ToList();
                 var size = letters.Count == 0 ? 0 : letters.GroupBy(l => Math.Round(l.PointSize, 1)).MaxBy(g => g.Count())!.Key;
-                var bold = letters.Count > 0 && letters.Count(l => l.FontName?.Contains("Bold", StringComparison.OrdinalIgnoreCase) == true) * 2 > letters.Count;
+                var bold = letters.Count > 0 && letters.Count(l => IsBoldFontName(l.FontName)) * 2 > letters.Count;
                 var box = block.BoundingBox;
                 var lines = block.TextLines.Select(l => new TextLine(Normalize(l.Text), l.BoundingBox.Left, l.BoundingBox.Bottom, l.BoundingBox.Width, l.BoundingBox.Height)).ToList();
                 return new TextBlock(Normalize(block.Text), box.Left, box.Bottom, box.Width, box.Height, size, bold, lines);
             }),
         ];
     }
+
+    private static readonly string[] WeightWords = ["Bold", "Black", "Heavy", "Semibold", "Demi"];
+
+    /// <summary>A font whose name carries a weight word draws bold text: some books name their heading face "Black" or "Demi" rather than "Bold".</summary>
+    internal static bool IsBoldFontName(string? fontName) =>
+        fontName is not null && WeightWords.Any(w => fontName.Contains(w, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Compatibility forms (ligatures such as "ﬁ") become plain letters, and line breaks inside a block become "\n".

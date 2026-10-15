@@ -207,6 +207,139 @@ public class DetectionTests
         Assert.Contains(candidate.Uncertainties, u => u.Contains("does not declare", StringComparison.Ordinal));
     }
 
+    // 2026-10-14 items 5 and 6: tolerance for third-party layouts. Every block here is invented.
+
+    private static IReadOnlyList<DraftCandidate> DetectBlocks(IReadOnlyList<string> families, params TextBlock[] blocks) =>
+        CandidateDetector.Detect([new DetectionPage(1, "", blocks, false)], new(Source, families, _ => false));
+
+    [Fact]
+    public void A_feat_whose_name_and_prerequisites_share_one_block_is_found()
+    {
+        var page = new DetectionPage(1, "", [
+            new TextBlock("FIXTURE DEFT HANDS\nPrerequisites: Dexterity 13 or higher\nYou handle fixture tools quickly. You gain a +1 bonus to initiative.", 50, 600, 200, 40, 10, false),
+        ], false);
+
+        var feat = Assert.Single(CandidateDetector.Detect([page], new(Source, [RulesFamilies.Srd51], _ => false)), c => c.ProposedKind == ContentKind.Feat);
+
+        Assert.Equal("Fixture Deft Hands", feat.ProposedName);
+        Assert.Equal("Dexterity 13 or higher", feat.Fields["prerequisite"]);
+        Assert.Equal([RulesFamilies.Srd51], feat.RulesFamilies);
+        Assert.Contains("FIXTURE DEFT HANDS", feat.Excerpt, StringComparison.Ordinal);
+        Assert.StartsWith("You handle fixture tools quickly.", feat.Summary, StringComparison.Ordinal);
+        Assert.Contains(feat.ProposedEffects, e => e is ModifierEffect { Target: FieldIds.Initiative, Value: "1" });
+    }
+
+    [Fact]
+    public void A_description_paragraph_starting_with_Prerequisites_is_not_a_feat()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Fixture Knack\nAt 3rd level, you learn a fixture trick that you can use once per rest.", 50, 600, 200, 40, 10, false),
+            new TextBlock("Prerequisites: none are needed for the fixture trick, which anyone may learn at any time.", 50, 550, 200, 30, 10, false),
+            new TextBlock("Fixture Hush\nAt 5th level, you learn a second trick.\nPrerequisites: none are needed for this one either.", 50, 450, 200, 40, 10, false));
+
+        Assert.DoesNotContain(found, c => c.ProposedKind == ContentKind.Feat);
+    }
+
+    [Fact]
+    public void A_name_and_a_singular_Prerequisite_line_in_one_block_is_an_option_list_entry_not_a_feat()
+    {
+        // The SRDs' Eldritch Invocations have this shape; they measured as 20+ spurious feats.
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Fixture Quiet Step\nPrerequisite: 5th level\nYou move without a sound.", 50, 600, 200, 40, 10, false));
+
+        Assert.DoesNotContain(found, c => c.ProposedKind == ContentKind.Feat);
+    }
+
+    [Fact]
+    public void An_item_name_with_a_comma_and_one_lower_case_word_stays_an_item()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Martial Melee Weapons", 50, 700, 200, 10, 10, false),
+            new TextBlock("Fixture Crossbow, hand  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
+
+        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Crossbow, hand");
+    }
+
+    [Fact]
+    public void A_heading_followed_by_a_Prerequisites_block_is_a_feat_with_the_plural_label_too()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Fixture Steady Aim", 50, 640, 200, 20, 16, true),
+            new TextBlock("Prerequisites: Wisdom 13 or higher", 50, 610, 200, 12, 10, false),
+            new TextBlock("You steady your fixture aim.", 50, 590, 200, 12, 10, false));
+
+        var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
+        Assert.Equal(("Fixture Steady Aim", "Wisdom 13 or higher"), (feat.ProposedName, feat.Fields["prerequisite"]));
+    }
+
+    [Fact]
+    public void Spell_names_in_capitals_are_title_cased_and_the_excerpt_keeps_them()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("FIXTURE BOLT\n1st-level evocation\nCasting Time: 1 action\nRange: 60 feet\nComponents: V, S\nDuration: Instantaneous\nA bolt of fixture light leaps from your hand.", 50, 600, 200, 80, 10, false),
+            new TextBlock("FIXTURE BLADE OF DUSK\n2nd-level illusion\nCasting Time: 1 action\nRange: Self\nComponents: V\nDuration: 1 minute\nA blade of fixture dusk forms.", 50, 400, 200, 80, 10, false));
+
+        var bolt = Assert.Single(found, c => c.ProposedName == "Fixture Bolt");
+        Assert.Contains("FIXTURE BOLT", bolt.Excerpt, StringComparison.Ordinal);
+        Assert.Single(found, c => c.ProposedName == "Fixture Blade of Dusk");
+    }
+
+    [Fact]
+    public void A_class_table_titled_in_capitals_is_found()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("THE FIXTURE WARDEN", 50, 700, 200, 20, 10, false),
+            new TextBlock("Level", 50, 660, 40, 10, 10, false),
+            new TextBlock("Features", 150, 660, 100, 10, 10, false),
+            new TextBlock("1st", 50, 640, 40, 10, 10, false), new TextBlock("Fixture Focus", 150, 640, 100, 10, 10, false),
+            new TextBlock("2nd", 50, 620, 40, 10, 10, false), new TextBlock("Fixture Resolve", 150, 620, 100, 10, 10, false),
+            new TextBlock("3rd", 50, 600, 40, 10, 10, false), new TextBlock("Fixture Stormcall", 150, 600, 100, 10, 10, false));
+
+        var warden = Assert.Single(found, c => c.ProposedKind == ContentKind.Class);
+        Assert.Equal("Fixture Warden", warden.ProposedName);
+        Assert.Equal("Fixture Resolve", warden.Fields["level 2"]);
+    }
+
+    [Fact]
+    public void A_class_table_titled_with_Features_in_capitals_is_found()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd521],
+            new TextBlock("FIXTURE WARDEN FEATURES", 50, 700, 200, 20, 10, false),
+            new TextBlock("Level  Proficiency Bonus  Class Features", 50, 670, 300, 10, 10, false),
+            new TextBlock("1  +2  Fixture Focus", 50, 650, 300, 10, 10, false),
+            new TextBlock("2  +2  Fixture Resolve", 50, 630, 300, 10, 10, false));
+
+        Assert.Equal("Fixture Warden", Assert.Single(found, c => c.ProposedKind == ContentKind.Class).ProposedName);
+    }
+
+    [Theory]
+    [InlineData("Fixture Hook 5 gp")]                   // a price inside a name
+    [InlineData("Fixture hook, which counts as")]       // a sentence fragment
+    [InlineData("Fixture Hook, a hook")]                // a comma and a lower-case word
+    public void Item_rows_with_prices_or_sentence_fragments_in_the_name_are_dropped(string name)
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Martial Melee Weapons", 50, 700, 200, 10, 10, false),
+            new TextBlock("Fixture Hookblade  1d8 slashing  Finesse, Light", 50, 680, 300, 10, 10, false),
+            new TextBlock($"{name}  1d6 slashing  Light", 50, 660, 300, 10, 10, false));
+
+        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Hookblade");
+        Assert.DoesNotContain(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName.StartsWith("Fixture Hook", StringComparison.Ordinal) && c.ProposedName != "Fixture Hookblade");
+    }
+
+    [Fact]
+    public void Armor_rows_with_prices_in_the_name_are_dropped()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Light Armor", 50, 700, 200, 10, 10, false),
+            new TextBlock("Armor  Armor Class (AC)", 50, 715, 300, 10, 10, false),
+            new TextBlock("Fixture Quilted Coat  11 + Dex modifier  -  -", 50, 680, 300, 10, 10, false),
+            new TextBlock("Fixture Cap 3 sp  11 + Dex modifier  -  -", 50, 660, 300, 10, 10, false));
+
+        Assert.Contains(found, c => c.ProposedName == "Fixture Quilted Coat");
+        Assert.DoesNotContain(found, c => c.ProposedName.StartsWith("Fixture Cap", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Prose_and_long_text_do_not_become_candidates_or_hang()
     {
