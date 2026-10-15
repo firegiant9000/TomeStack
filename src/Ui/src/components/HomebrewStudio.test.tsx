@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 // Item 2: the studio can open on a given source (from the import review), and then names itself by taking focus.
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { AppInfo, SourceRecord } from '../api/types';
+import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
 import { HomebrewStudio } from './HomebrewStudio';
 
-vi.mock('../api/client', () => ({ client: { listSources: vi.fn(), contentBySource: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn() } }));
 
 const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] } as unknown as AppInfo;
 const homebrew = (id: string, title: string) => ({ id, title, rulesFamilies: ['srd-5.1'], editionVersion: 'homebrew' }) as SourceRecord;
@@ -34,4 +35,31 @@ it('leaves focus alone when opened from the sidebar (the sidebar button keeps it
   render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
   await screen.findByRole('combobox', { name: 'Homebrew source' });
   expect(document.activeElement).toBe(document.body);
+});
+
+// Item 9: "Publish all drafts in this source…" opens the named region with the pending drafts of the source.
+it('offers Publish all drafts only when a draft is pending, and opens the region named for the source', async () => {
+  const user = userEvent.setup();
+  const revision = (status: 'draft' | 'published', revisionId: string) => ({ contentId: 'c1', revisionId, status, effects: [] }) as unknown as StudioEntry['latest'];
+  const entry = (name: string, status: 'draft' | 'published'): StudioEntry => ({
+    contentId: `id-${name}`,
+    name,
+    kind: 'feat',
+    revisions: [],
+    latest: { ...revision(status, `r-${name}`), contentId: `id-${name}` },
+  });
+  vi.mocked(client.contentBySource).mockResolvedValue([entry('Testy Done', 'published')]);
+  const view = render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await screen.findByText('Testy Done');
+  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  view.unmount();
+
+  vi.mocked(client.contentBySource).mockResolvedValue([entry('Testy Done', 'published'), entry('Testy Waiting', 'draft')]);
+  vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  const region = screen.getByRole('region', { name: 'Publish drafts of Testy Alpha' });
+  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of Testy Alpha' }));
+  expect(within(region).getByRole('checkbox', { name: 'Publish Testy Waiting' })).toHaveProperty('checked', true);
+  expect(within(region).queryByRole('checkbox', { name: 'Publish Testy Done' })).toBeNull();
 });
