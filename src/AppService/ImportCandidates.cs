@@ -187,9 +187,10 @@ public sealed partial class TomeStackApp
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
         // Even as reference, an entry needs a family, and a double acceptance is refused: "reference only" lifts neither.
-        if (ProvenanceBlockers(stored) is [var first, ..])
+        var provenance = ProvenanceBlockers(stored); // once: it reads every candidate of every same-document job
+        if (provenance is [var first, ..])
             throw new AppValidationException([first with { Message = $"{first.Message} Nothing was changed." }]);
-        var check = Check(stored, request.AsReference);
+        var check = Check(stored, request.AsReference, provenance);
         if (!request.AsReference && check.Blockers.Count > 0)
             throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s) or unresolved reference(s). Edit them, or accept it as reference only."), .. check.Blockers]);
         if (!check.Report.CanPublish)
@@ -227,12 +228,12 @@ public sealed partial class TomeStackApp
         return ignored;
     }
 
-    private CandidateCheck Check(StoredCandidate stored, bool asReference)
+    private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null)
     {
         var current = stored.Current;
         var draft = DraftOf(stored, asReference);
         var report = ContentValidator.Validate(draft, _store);
-        var provenance = ProvenanceBlockers(stored);
+        provenance ??= ProvenanceBlockers(stored);
         var blockers = new List<Diagnostic>(provenance);
         foreach (var field in current.LowConfidenceFields.Where(f => f != "rulesFamilies" || current.RulesFamilies.Count > 0))
             blockers.Add(new("candidate.low-confidence", $"The detector is unsure of '{field}'. Check it against the page and save your edit."));
