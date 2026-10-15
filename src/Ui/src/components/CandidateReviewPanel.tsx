@@ -27,6 +27,17 @@ const statusLabels: Record<CandidateStatus, string> = {
   ignored: 'ignored',
 };
 
+/** Item 9: why a bulk accept skipped a candidate, by the service's codes (never text from the document). */
+const blockedReasons: Record<string, string> = {
+  'candidate.low-confidence': 'has fields the detector is unsure of',
+  'candidate.unresolved-reference': 'names something that is neither installed nor imported',
+  'import.family-needed': 'needs a rules family',
+  'import.already-accepted': 'was already accepted from another reading of this document',
+  'candidate.validation-failed': 'has problems the check reports',
+  'candidate.already-reviewed': 'was already reviewed',
+  'candidate.not-found': 'no longer exists',
+};
+
 const pageText = (page: { start: number; end?: number }) => (page.end && page.end !== page.start ? `pp. ${page.start}–${page.end}` : `p. ${page.start}`);
 
 const percent = (confidence: number) => `${Math.round(confidence * 100)} %`;
@@ -43,6 +54,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [result, setResult] = useState<CandidatePage>();
   const [announcement, setAnnouncement] = useState(''); // "Showing 51–100 of 340", set only when the player changes page
   const [selected, setSelected] = useState<string>();
+  // Item 9: the rows ticked for a bulk accept (the open row, `selected`, is a different thing), and what to say about them.
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [selectionNote, setSelectionNote] = useState('');
+  const [skipped, setSkipped] = useState<{ id: string; name: string; reasons: string[] }[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const bulkRunning = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const announceNext = useRef(false);
   const latestRequest = useRef(0);
@@ -55,8 +72,10 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const pageTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dirtyId = `unsaved-${job.id}`;
   const rangeId = `range-${job.id}`;
+  const noneId = `none-selected-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
+  const pendingShown = candidates?.filter((c) => c.status === 'pending') ?? [];
 
   const load = useCallback(() => {
     const request = ++latestRequest.current;
@@ -74,6 +93,11 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         setShown(offset);
         // WCAG 2.4.3: a detail whose candidate is no longer listed goes away, so it cannot return later and take focus.
         setSelected((s) => (s !== undefined && page.items.some((c) => c.id === s) ? s : undefined));
+        // Only pending rows still shown stay ticked (an accepted row leaves; a blocked one stays).
+        setTicked((t) => {
+          const keep = t.filter((id) => page.items.some((c) => c.id === id && c.status === 'pending'));
+          return keep.length === t.length ? t : keep;
+        });
         if (announceNext.current) {
           announceNext.current = false;
           setAnnouncement(`Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`);
@@ -111,6 +135,50 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setOffset(0);
     setAnnouncement('');
     setSelected(undefined);
+    clearTicks();
+  }
+
+  /** The ticks never outlive the rows they were made on; say so once (WCAG 4.1.3), and only when there was something to lose. */
+  function clearTicks() {
+    setSkipped([]);
+    if (ticked.length === 0) return;
+    setTicked([]);
+    setSelectionNote('Selection cleared');
+  }
+
+  function tick(next: string[]) {
+    setTicked(next);
+    setSkipped([]);
+    setSelectionNote(`${next.length} selected`);
+  }
+
+  async function acceptTicked(asReference: boolean) {
+    if (dirty || bulkRunning.current || ticked.length === 0) return;
+    bulkRunning.current = true; // a second press while the first is in flight does nothing
+    setBulkBusy(true);
+    try {
+      const outcome = await client.acceptCandidates(ticked, asReference);
+      const nameOf = (id: string) => {
+        const c = candidates?.find((x) => x.id === id);
+        return c ? (c.edited ?? c.candidate).proposedName : 'A candidate';
+      };
+      const blocked = outcome.blocked.length;
+      onStatus(
+        `Accepted ${outcome.accepted.length}${blocked > 0 ? `; ${blocked} need review` : ''}.${
+          outcome.accepted.length > 0 ? ' They are drafts in the studio and do nothing until you publish them there.' : ''
+        }`,
+      );
+      setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map((code) => blockedReasons[code] ?? code) })));
+      const stay = outcome.blocked.map((b) => b.candidateId);
+      setTicked(stay);
+      setSelectionNote(`${stay.length} selected`);
+      await load();
+    } catch (error) {
+      onError(error);
+    } finally {
+      bulkRunning.current = false;
+      setBulkBusy(false);
+    }
   }
 
   const pageNumber = (text: string) => (text === '' ? undefined : Number(text));
@@ -136,6 +204,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     if (dirty || target < 0 || target >= total) return;
     announceNext.current = true;
     setSelected(undefined);
+    clearTicks();
     setOffset(target);
   }
 
@@ -272,10 +341,69 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           </button>
         </div>
       )}
+      <p className="visually-hidden selection-note" aria-live="polite">
+        {selectionNote}
+      </p>
+      {pendingShown.length > 0 && (
+        <div className="actions" role="group" aria-label="Accept several at once">
+          {/* Item 9, D33: the same checks as accepting one at a time; blocked ones are listed, never forced. aria-disabled, as everywhere here. */}
+          <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyId : undefined} onClick={() => !dirty && tick(pendingShown.map((c) => c.id))}>
+            Select the {pendingShown.length} shown
+          </button>
+          {ticked.length > 0 && (
+            <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyId : undefined} onClick={() => !dirty && clearTicks()}>
+              Clear selection
+            </button>
+          )}
+          <button
+            type="button"
+            aria-disabled={dirty || ticked.length === 0 || bulkBusy || undefined}
+            aria-describedby={dirty ? dirtyId : ticked.length === 0 ? noneId : undefined}
+            onClick={() => void acceptTicked(false)}
+          >
+            Accept selected as drafts
+          </button>
+          <button
+            type="button"
+            aria-disabled={dirty || ticked.length === 0 || bulkBusy || undefined}
+            aria-describedby={dirty ? dirtyId : ticked.length === 0 ? noneId : undefined}
+            onClick={() => void acceptTicked(true)}
+          >
+            Accept selected as reference
+          </button>
+          {ticked.length > 0 ? (
+            <span className="hint">{ticked.length} selected</span>
+          ) : (
+            <span id={noneId} className="hint">
+              Select at least one candidate first.
+            </span>
+          )}
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <ul className="warnings" aria-label="Not accepted">
+          {skipped.map((s) => (
+            <li key={s.id}>
+              {s.name}: {s.reasons.join('; ')}. It stays selected; edit it, or accept it as reference only.
+            </li>
+          ))}
+        </ul>
+      )}
       {candidates && candidates.length > 0 && (
         <ul className="resources" aria-label="Candidates">
           {candidates.map((c) => (
             <li key={c.id} className="resource">
+              {c.status === 'pending' && (
+                <input
+                  type="checkbox"
+                  className="row-select"
+                  aria-label={`Select ${(c.edited ?? c.candidate).proposedName}`}
+                  checked={ticked.includes(c.id)}
+                  aria-disabled={dirty || undefined}
+                  aria-describedby={dirty ? dirtyId : undefined}
+                  onChange={() => !dirty && tick(ticked.includes(c.id) ? ticked.filter((id) => id !== c.id) : [...ticked, c.id])}
+                />
+              )}{' '}
               <button
                 type="button"
                 className="link"

@@ -23,6 +23,7 @@ import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBas
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
+import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
 import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
 import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
@@ -92,6 +93,20 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   }, [loadSources]);
 
   const source = sources.find((s) => s.id === sourceId) ?? sources[0];
+
+  // Item 9: a content is pending when its newest revision is a draft; "Publish all drafts" previews them.
+  const [publishingAll, setPublishingAll] = useState(false);
+  const publishAllButton = useRef<HTMLButtonElement>(null);
+  const pendingDrafts: PendingDraft[] = entries
+    .filter((e) => e.latest.status === 'draft')
+    .map((e) => ({
+      contentId: e.contentId,
+      name: e.name,
+      kind: e.kind,
+      replacesPublished: e.latestPublished !== undefined,
+      draft: { contentId: e.latest.contentId, revisionId: e.latest.revisionId },
+      latestPublished: e.latestPublished && { contentId: e.latestPublished.contentId, revisionId: e.latestPublished.revisionId },
+    }));
 
   const loadEntries = useCallback(
     (id: string) => client.contentBySource(id).then(setEntries).catch(onError),
@@ -175,7 +190,10 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         sources={sources}
         selected={source}
         rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: f.displayName }))}
-        onSelect={setSourceId}
+        onSelect={(id) => {
+          setSourceId(id);
+          setPublishingAll(false);
+        }}
         onCreated={async (created) => {
           await loadSources();
           setSourceId(created.id);
@@ -239,7 +257,29 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                 Find problems in {source.title}
               </button>
             )}
+            {pendingDrafts.length > 0 && (
+              <button type="button" ref={publishAllButton} onClick={() => setPublishingAll(true)}>
+                Publish all drafts in this source…
+              </button>
+            )}
           </div>
+          {publishingAll && (
+            <PublishManyPanel
+              key={source.id}
+              source={source}
+              pending={pendingDrafts}
+              onError={onError}
+              onClose={() => {
+                setPublishingAll(false);
+                // WCAG 2.4.3: the panel is gone, so focus goes back to the button that opened it (or the heading if that is gone too).
+                setTimeout(() => (publishAllButton.current ?? heading.current)?.focus());
+              }}
+              onPublished={async (count) => {
+                await loadEntries(source.id);
+                onStatus(`Published ${count} draft${count === 1 ? '' : 's'}. Characters keep their current revisions until you review an update.`);
+              }}
+            />
+          )}
           {sourceReport?.sourceId === source.id && (
             <DebugFindings report={sourceReport.report} label={`Debugger findings for ${source.title}`} showNames onShow={show} />
           )}

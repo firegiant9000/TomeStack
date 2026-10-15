@@ -17,6 +17,9 @@ import type {
   ContentKind,
   ContentRevision,
   PublishResult,
+  PublishManyPreview,
+  PublishManyResult,
+  AcceptManyResult,
   SourcePackPreview,
   CampaignPackPreview,
   ExtensionInstallPreview,
@@ -97,6 +100,10 @@ export function createClient(transport: Transport) {
     saveDraft: (revision: ContentRevision) => call<ContentReference>('content.saveDraft', { revision }),
     /** Validates again and publishes a new immutable revision; no character changes (SPEC I-06). */
     publish: (reference: ContentReference) => call<PublishResult>('content.publish', { reference }),
+    /** Item 9, D33: what publishing these contents' pending drafts would do, with re-pointed dependents; writes nothing. */
+    publishManyPreview: (contentIds: string[]) => call<PublishManyPreview>('content.publishManyPreview', { contentIds }),
+    /** Item 9, D33: one transaction; `expected` is the pending draft revision ids the preview showed. Only the panel's button calls this. */
+    publishMany: (contentIds: string[], expected: string[]) => call<PublishManyResult>('content.publishMany', { contentIds, expected, confirm: true }),
     contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
     affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
     contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
@@ -157,6 +164,9 @@ export function createClient(transport: Transport) {
     /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
     acceptCandidate: (candidateId: string, asReference: boolean) =>
       call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true }),
+    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
+    acceptCandidates: (candidateIds: string[], asReference: boolean) =>
+      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),
     ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>

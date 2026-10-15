@@ -7,7 +7,9 @@ import { client } from '../api/client';
 import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
-vi.mock('../api/client', () => ({ client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn() } }));
+vi.mock('../api/client', () => ({
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), acceptCandidates: vi.fn() },
+}));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
 const bothSource = { id: 'src-2', title: 'Testy Both', rulesFamilies: ['srd-5.1', 'srd-5.2.1'] } as SourceRecord;
@@ -567,4 +569,139 @@ it('reloads for the page-range fields only after a pause in typing, while the fi
   }
   expect(vi.mocked(client.candidates)).toHaveBeenCalledTimes(calls + 1);
   expect(vi.mocked(client.candidates)).toHaveBeenLastCalledWith('job-1', { status: 'pending', firstPage: 75 }, { offset: 0, limit: 50 });
+});
+
+// Item 9, D33: row checkboxes, "Select the N shown", and the two bulk accepts.
+const pollite = () => screen.getByText((_, el) => el?.tagName === 'P' && el.getAttribute('aria-live') === 'polite' && el.classList.contains('selection-note'));
+
+it('ticks rows, says how many are selected politely, and selects only the rows shown', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  renderPanel(vi.fn(), bothSource);
+  await screen.findByRole('button', { name: 'Testy Item 1' });
+
+  const boxes = screen.getAllByRole('checkbox', { name: /^Select Testy Item / });
+  expect(boxes).toHaveLength(50);
+  expect(boxes[0]!.className).toContain('row-select'); // 24 px target (WCAG 2.5.8) is its CSS
+  await user.click(boxes[0]!);
+  expect(screen.getByText('1 selected', { selector: '[aria-live="polite"]' }).tagName).toBe('P');
+
+  await user.click(screen.getByRole('button', { name: 'Select the 50 shown' }));
+  expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
+  expect(screen.getByText('50 selected', { selector: '[aria-live="polite"]' })).toBeTruthy();
+  expect(screen.queryByRole('status')).toBeNull(); // never a second role=status
+  expect(pollite()).toBeTruthy();
+});
+
+it('says the real count on the last page, "Select the 20 shown"', async () => {
+  const user = userEvent.setup();
+  longList(70);
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Next 50' }));
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(screen.getByRole('button', { name: 'Select the 20 shown' })).toBeTruthy();
+});
+
+it('clears the selection when the page or a filter changes, announcing it once', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
+  expect(screen.getByText('50 selected', { selector: '[aria-live="polite"]' })).toBeTruthy();
+
+  await user.click(screen.getByRole('button', { name: 'Next 50' }));
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(screen.getByText('Selection cleared', { selector: '[aria-live="polite"]' })).toBeTruthy();
+  expect(screen.getAllByRole('checkbox', { name: /^Select Testy Item / }).some((b) => (b as HTMLInputElement).checked)).toBe(false);
+
+  await user.click(screen.getByRole('button', { name: 'Select the 50 shown' }));
+  await user.selectOptions(screen.getByLabelText('Kind'), 'spell');
+  expect(screen.getByText('Selection cleared', { selector: '[aria-live="polite"]' })).toBeTruthy();
+});
+
+it('holds the bulk buttons with a linked reason until something is selected', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  renderPanel(vi.fn(), bothSource);
+  const drafts = await screen.findByRole('button', { name: 'Accept selected as drafts' });
+  const reference = screen.getByRole('button', { name: 'Accept selected as reference' });
+  for (const button of [drafts, reference]) {
+    expect(held(button)).toBe(true);
+    expect(button).toHaveProperty('disabled', false);
+    expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Select at least one candidate first.');
+    await user.click(button);
+  }
+  expect(client.acceptCandidates).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('checkbox', { name: 'Select Testy Item 1' }));
+  expect(held(drafts)).toBe(false);
+});
+
+it('accepts the selection in bulk, reports the counts, and leaves the blocked rows selected and explained', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  const onStatus = vi.fn();
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
+  vi.mocked(client.acceptCandidates).mockResolvedValue({
+    accepted: [numbered(1), numbered(2)],
+    blocked: [{ candidateId: 'cand-3', codes: ['candidate.unresolved-reference', 'import.family-needed'] }],
+  });
+  // After the accept the first two are no longer pending.
+  const everything = vi.mocked(client.candidates).getMockImplementation()!;
+  vi.mocked(client.candidates).mockImplementation((id, f, p) => everything(id, f, p).then((page) => ({ items: page.items.filter((c) => c.id === 'cand-3'), total: 1 })));
+
+  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+
+  expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false);
+  await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Accepted 2; 1 need review\./)));
+  await screen.findByText('1 selected', { selector: '[aria-live="polite"]' });
+  expect((screen.getByRole('checkbox', { name: 'Select Testy Item 3' }) as HTMLInputElement).checked).toBe(true);
+  const reasons = screen.getByRole('list', { name: 'Not accepted' });
+  expect(within(reasons).getByText(/Testy Item 3/).textContent).toContain('needs a rules family');
+});
+
+it('accepts as reference with the same selection', async () => {
+  const user = userEvent.setup();
+  longList(2);
+  vi.mocked(client.acceptCandidates).mockResolvedValue({ accepted: [numbered(1)], blocked: [] });
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('checkbox', { name: 'Select Testy Item 1' }));
+  await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
+  expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true);
+});
+
+it('ignores a second press while a bulk accept is in flight', async () => {
+  const user = userEvent.setup();
+  longList(2);
+  vi.mocked(client.acceptCandidates).mockReset();
+  let finish: (value: { accepted: StoredCandidate[]; blocked: [] }) => void = () => {};
+  vi.mocked(client.acceptCandidates).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Select the 2 shown' }));
+  const button = screen.getByRole('button', { name: 'Accept selected as drafts' });
+  await user.click(button);
+  await user.click(button);
+  await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
+  expect(client.acceptCandidates).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ accepted: [], blocked: [] }));
+});
+
+it('holds the checkboxes and bulk buttons while the open candidate has an unsaved edit', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.acceptCandidates).mockClear();
+  const { reason } = await openFirstAndEdit(user);
+
+  const box = screen.getByRole('checkbox', { name: 'Select Testy Item 2' });
+  expect(box.getAttribute('aria-disabled')).toBe('true');
+  expect(box.getAttribute('aria-describedby')).toBe(reason.id);
+  await user.click(box);
+  expect((box as HTMLInputElement).checked).toBe(false);
+  for (const name of ['Select the 50 shown', 'Accept selected as drafts', 'Accept selected as reference']) {
+    const button = screen.getByRole('button', { name });
+    expect(held(button)).toBe(true);
+    expect(button.getAttribute('aria-describedby')).toBe(reason.id);
+    await user.click(button);
+  }
+  expect(screen.queryByText(/ selected$/)).toBeNull();
+  expect(client.acceptCandidates).not.toHaveBeenCalled();
 });

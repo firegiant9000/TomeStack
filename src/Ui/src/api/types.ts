@@ -1172,6 +1172,46 @@ export interface PublishResult {
   affected: AffectedCharacter[];
 }
 
+/** Item 9: grants and choice options of one content that move to the revisions published in the same batch. */
+export interface RePointing {
+  dependent: ContentReference;
+  dependentName: string;
+  grantsMoved: number;
+  optionsMoved: number;
+}
+
+/** One content of a bulk publish: its pending draft (or, for a dependent, its newest revision), validation and findings. */
+export interface PublishManyEntry {
+  draft: ContentReference;
+  name: string;
+  kind: ContentKind;
+  report: ValidationReport;
+  findings: DebugFinding[];
+  replacesPublished: boolean;
+  rePointings: RePointing[];
+}
+
+export interface PublishManyPreview {
+  entries: PublishManyEntry[];
+  dependents: PublishManyEntry[];
+  canPublish: boolean;
+}
+
+export interface PublishManyResult {
+  published: PublishResult[];
+}
+
+/** Item 9: a candidate bulk accept skipped, with the diagnostic codes (never text from the document). */
+export interface BlockedCandidate {
+  candidateId: string;
+  codes: string[];
+}
+
+export interface AcceptManyResult {
+  accepted: StoredCandidate[];
+  blocked: BlockedCandidate[];
+}
+
 export interface EffectChange {
   effectId: string;
   change: 'added' | 'removed' | 'changed';

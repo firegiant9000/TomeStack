@@ -172,6 +172,9 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
 /* D32: the standard array and rolled scores are assigned with one select per ability (24px targets, WCAG 2.5.8). */
+/* Item 9: the row checkboxes of the review list and the publish table are 24px targets (WCAG 2.5.8). */
+.row-select, .publish-table input[type='checkbox'] { width: 1.5rem; height: 1.5rem; padding: 0; margin: 0 0.25rem 0 0; vertical-align: middle; }
+.publish-table th, .publish-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .assign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-2) var(--space-4); }
 .assign-grid select { font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
 .rolled-sets { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-2); }
