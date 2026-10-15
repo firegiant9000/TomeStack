@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Migration
+
+- None yet.
+
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 
 Everything built since 0.4.0, listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print).
