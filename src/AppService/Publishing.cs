@@ -11,6 +11,30 @@ public sealed record AffectedCharacter(Guid CharacterId, string Name, ContentRef
 
 public sealed record PublishResult(ContentReference Draft, ContentReference Published, ValidationReport Report, IReadOnlyList<AffectedCharacter> Affected);
 
+/// <summary>What publishing would move in one content: grants and choice options that pin a revision of something published in the same batch.</summary>
+public sealed record RePointing(ContentReference Dependent, string DependentName, int GrantsMoved, int OptionsMoved);
+
+/// <summary>
+/// One content in a bulk publish. For an entry of the request, <paramref name="Draft"/> is its pending draft; for a dependent,
+/// its newest revision (published, or a draft the request did not name, which is an error).
+/// </summary>
+/// <param name="ReplacesPublished">The content already has a published revision, so publishing replaces what a character gets.</param>
+/// <param name="Report">Validation of that revision, plus the bulk publish's own errors (<c>publish.*</c>).</param>
+public sealed record PublishManyEntry(
+    ContentReference Draft, string Name, ContentKind Kind, ValidationReport Report,
+    IReadOnlyList<DebugFinding> Findings, bool ReplacesPublished, IReadOnlyList<RePointing> RePointings);
+
+/// <param name="Entries">The requested drafts, in the order they would publish (what they grant first).</param>
+/// <param name="Dependents">Content of the same source whose grants or options pin something published here; each is re-pointed and re-published.</param>
+public sealed record PublishManyPreview(IReadOnlyList<PublishManyEntry> Entries, IReadOnlyList<PublishManyEntry> Dependents, bool CanPublish);
+
+/// <param name="ContentIds">The content to publish.</param>
+/// <param name="Expected">The pending draft revision ids the user saw in the preview; must equal the pending set exactly.</param>
+/// <param name="Confirm">Must be true.</param>
+public sealed record PublishManyRequest(IReadOnlyList<Guid> ContentIds, IReadOnlyList<Guid> Expected, bool Confirm);
+
+public sealed record PublishManyResult(IReadOnlyList<PublishResult> Published);
+
 /// <summary>
 /// M3 C7 (SPEC I-06): a newer published revision of content the character references directly, from a bundled pack or
 /// the user's own source. An offer only: <c>character.reviewUpdate</c> shows it and <c>character.applyUpdate</c> adopts it.
@@ -103,6 +127,232 @@ public sealed partial class TomeStackApp
     }
 
     public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) => _store.ListRevisions(contentId);
+
+    /// <summary>The most content one bulk publish takes (a larger set is published in parts).</summary>
+    public const int MaxPublishMany = 500;
+
+    private sealed class PlanItem(ContentRevision revision, bool isEntry)
+    {
+        public ContentRevision Revision { get; } = revision;
+        public bool IsEntry { get; } = isEntry;
+        public List<Diagnostic> Extra { get; } = [];
+        public int Grants { get; set; }
+        public int Options { get; set; }
+        public ValidationReport Report { get; set; } = null!;
+    }
+
+    private sealed record PublishPlan(List<PlanItem> Ordered, List<PlanItem> Blocked, HashSet<Guid> HasPublished, DebugReport? Debug)
+    {
+        public IEnumerable<PlanItem> All => Ordered.Concat(Blocked);
+    }
+
+    private static AppValidationException PublishSetChanged() =>
+        new([new("content.publish-set-changed", "The drafts waiting to be published are not the ones you reviewed. Nothing was published; look at the list again.")]);
+
+    /// <summary>Every grant's content and every choice option the revision names, one per mention.</summary>
+    private static IEnumerable<ContentReference> NamedContent(ContentRevision revision) =>
+        revision.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!)
+            .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options));
+
+    /// <summary>
+    /// Points every grant and choice option that names a content of <paramref name="published"/> at the revision given there.
+    /// <c>extendsChoice</c> names a content id and stays as it is. Returns the same instance when nothing moves.
+    /// </summary>
+    private static (ContentRevision Revision, int Grants, int Options) RePoint(ContentRevision revision, IReadOnlyDictionary<Guid, ContentReference> published)
+    {
+        ContentReference Map(ContentReference r) => r.ContentId != revision.ContentId && published.TryGetValue(r.ContentId, out var moved) ? moved : r;
+        int grants = 0, options = 0;
+        var effects = new List<Effect>();
+        foreach (var effect in revision.Effects)
+        {
+            if (effect is GrantEffect { Content: { } content } grant && Map(content) != content)
+            {
+                effects.Add(grant with { Content = Map(content) });
+                grants++;
+            }
+            else if (effect is ChoiceEffect choice && choice.Options.Any(o => Map(o) != o))
+            {
+                options += choice.Options.Count(o => Map(o) != o);
+                effects.Add(choice with { Options = [.. choice.Options.Select(Map)] });
+            }
+            else
+            {
+                effects.Add(effect);
+            }
+        }
+        return (grants + options == 0 ? revision : revision with { Effects = effects }, grants, options);
+    }
+
+    /// <summary>
+    /// The read-only plan of a bulk publish (tester feedback item 9, D33), shared by the preview and the publish so they
+    /// cannot disagree. Pending is per content id: its newest revision in stored order is a draft. A content id with nothing
+    /// pending, or a pending set unlike <paramref name="expected"/>, is <c>content.publish-set-changed</c>. Dependents are
+    /// content of the same source whose newest revision grants or offers a revision of anything published here, followed
+    /// transitively; a dependent with a draft the request did not name is an error and is never swept in (ruling R41).
+    /// </summary>
+    private PublishPlan PlanPublishMany(IReadOnlyList<Guid>? contentIds, IReadOnlyList<Guid>? expected, bool withFindings)
+    {
+        var requested = (contentIds ?? []).Distinct().ToList();
+        if (requested.Count == 0)
+            throw PublishSetChanged();
+        if (requested.Count > MaxPublishMany)
+            throw new AppValidationException([new("content.publish-too-many", $"Publish at most {MaxPublishMany} entries at a time.")]);
+        var all = _store.ListRevisionsInOrder();
+        var newest = new Dictionary<Guid, ContentRevision>();
+        var hasPublished = new HashSet<Guid>();
+        foreach (var revision in all)
+        {
+            newest[revision.ContentId] = revision; // stored order: the last one is the newest
+            if (revision.Status == RevisionStatus.Published)
+                hasPublished.Add(revision.ContentId);
+        }
+        var drafts = new List<ContentRevision>();
+        foreach (var id in requested)
+        {
+            if (!newest.TryGetValue(id, out var pending) || pending.Status != RevisionStatus.Draft)
+                throw PublishSetChanged();
+            drafts.Add(pending);
+        }
+        if (expected is not null && !expected.ToHashSet().SetEquals(drafts.Select(d => d.RevisionId)))
+            throw PublishSetChanged();
+
+        var sources = drafts.Select(d => d.Provenance.SourceId).ToHashSet();
+        var inSet = requested.ToHashSet();
+        var items = drafts.Select(d => new PlanItem(d, isEntry: true)).ToList();
+        var blocked = new List<PlanItem>();
+        var seen = new HashSet<Guid>();
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var revision in newest.Values)
+            {
+                if (inSet.Contains(revision.ContentId) || seen.Contains(revision.ContentId) || !sources.Contains(revision.Provenance.SourceId)
+                    || !NamedContent(revision).Any(r => inSet.Contains(r.ContentId)))
+                    continue;
+                seen.Add(revision.ContentId);
+                var item = new PlanItem(revision, isEntry: false);
+                if (revision.Status == RevisionStatus.Draft)
+                {
+                    item.Extra.Add(new("publish.dependent-pending", $"'{revision.Name}' has an unpublished draft that grants an entry in this batch; include it or publish it first.", revision.Reference));
+                    blocked.Add(item);
+                    continue;
+                }
+                inSet.Add(revision.ContentId);
+                items.Add(item);
+                grew = true;
+            }
+        }
+        while (grew);
+
+        var placeholders = inSet.ToDictionary(id => id, id => new ContentReference(id, Guid.Empty));
+        foreach (var item in items)
+        {
+            (_, item.Grants, item.Options) = RePoint(item.Revision, placeholders);
+            if (!item.IsEntry)
+                continue;
+            foreach (var target in NamedContent(item.Revision).Where(t => !inSet.Contains(t.ContentId)).Distinct())
+            {
+                if (_store.FindRevision(target) is { Status: RevisionStatus.Draft } outside)
+                    item.Extra.Add(new("publish.grants-unpublished", $"'{item.Revision.Name}' grants or offers '{outside.Name}', a draft that is not in this batch. Include it, or publish it first.", item.Revision.Reference));
+            }
+        }
+
+        // Leaves first: what an item grants publishes before it, so its grants can be re-pointed at the published revisions.
+        var byId = items.ToDictionary(i => i.Revision.ContentId);
+        var needs = items.ToDictionary(i => i, i => NamedContent(i.Revision).Select(r => r.ContentId).Where(id => id != i.Revision.ContentId && byId.ContainsKey(id)).ToHashSet());
+        var ordered = new List<PlanItem>();
+        var done = new HashSet<Guid>();
+        var remaining = new List<PlanItem>(items);
+        while (remaining.Count > 0)
+        {
+            var ready = remaining.Where(i => needs[i].All(done.Contains)).ToList();
+            if (ready.Count == 0)
+            {
+                foreach (var stuck in remaining)
+                    stuck.Extra.Add(new("publish.grants-cycle", $"'{stuck.Revision.Name}' grants, directly or through others, something that grants it back; there is no order to publish them in.", stuck.Revision.Reference));
+                ordered.AddRange(remaining);
+                break;
+            }
+            foreach (var item in ready)
+            {
+                ordered.Add(item);
+                done.Add(item.Revision.ContentId);
+            }
+            remaining.RemoveAll(ready.Contains);
+        }
+
+        foreach (var item in ordered.Concat(blocked))
+        {
+            var report = ContentValidator.Validate(item.Revision, _store);
+            item.Report = item.Extra.Count == 0 ? report : report with { Errors = [.. report.Errors, .. item.Extra] };
+        }
+        DebugReport? debug = null;
+        if (withFindings)
+        {
+            var context = newest.Values.Where(r => sources.Contains(r.Provenance.SourceId)).ToList();
+            debug = ContentDebugger.Diagnose([.. ordered.Select(i => i.Revision)], all, _store, context);
+        }
+        return new(ordered, blocked, hasPublished, debug);
+    }
+
+    /// <summary>
+    /// <c>content.publishManyPreview</c> (item 9, D33): what <see cref="PublishMany"/> would publish for these content ids,
+    /// without writing anything: each pending draft with its validation report, the debugger's findings, whether it replaces
+    /// a published version, and the re-pointing it needs; then the dependents that would be re-pointed and republished.
+    /// </summary>
+    public PublishManyPreview PreviewPublishMany(IReadOnlyList<Guid> contentIds)
+    {
+        var plan = PlanPublishMany(contentIds, expected: null, withFindings: true);
+        var findings = plan.Debug!.Findings.GroupBy(f => f.Content).ToDictionary(g => g.Key, g => (IReadOnlyList<DebugFinding>)[.. g]);
+        PublishManyEntry Entry(PlanItem item) => new(
+            item.Revision.Reference, item.Revision.Name, item.Revision.Kind, item.Report,
+            findings.GetValueOrDefault(item.Revision.Reference) ?? [],
+            plan.HasPublished.Contains(item.Revision.ContentId),
+            item.Grants + item.Options == 0 ? [] : [new(item.Revision.Reference, item.Revision.Name, item.Grants, item.Options)]);
+        var entries = plan.Ordered.Where(i => i.IsEntry).Select(Entry).ToList();
+        var dependents = plan.Ordered.Where(i => !i.IsEntry).Concat(plan.Blocked).Select(Entry).ToList();
+        return new(entries, dependents, entries.Concat(dependents).All(e => e.Report.CanPublish));
+    }
+
+    /// <summary>
+    /// <c>content.publishMany</c> (item 9, D33; ADR-004: a confirmed preview of the exact drafts is review). In one
+    /// transaction: re-reads the pending set and refuses with <c>content.publish-set-changed</c> unless it equals
+    /// <see cref="PublishManyRequest.Expected"/>, refuses on any error, then publishes leaves first. Each item that grants
+    /// something published here (and each dependent) is saved as a new draft with those grants and options re-pointed at the
+    /// published revisions, and that draft is published. Any failure rolls everything back. Characters are not re-pinned.
+    /// A repeat finds nothing pending and writes nothing.
+    /// </summary>
+    public PublishManyResult PublishMany(PublishManyRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw new AppValidationException([new("content.publish-confirmation-required", "Publishing creates permanent revisions. Review the preview and confirm; nothing was published.")]);
+        PublishManyResult? result = null;
+        _store.InTransaction(() =>
+        {
+            var plan = PlanPublishMany(request.ContentIds, request.Expected ?? throw PublishSetChanged(), withFindings: false);
+            var errors = plan.All.SelectMany(i => i.Report.Errors).ToList();
+            if (errors.Count > 0)
+                throw new AppValidationException([new("content.validation-failed", $"This batch has {errors.Count} problem(s). Nothing was published."), .. errors]);
+
+            var published = new Dictionary<Guid, ContentReference>();
+            var results = new List<PublishResult>();
+            foreach (var item in plan.Ordered)
+            {
+                var (repointed, _, _) = RePoint(item.Revision, published);
+                // An entry nothing re-points publishes as it is; anything else goes through a new draft, so drafts stay insert-only.
+                var draft = item.IsEntry && ReferenceEquals(repointed, item.Revision)
+                    ? item.Revision.Reference
+                    : SaveDraft(repointed with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft });
+                var one = Publish(draft);
+                published[item.Revision.ContentId] = one.Published;
+                results.Add(one);
+            }
+            result = new(results);
+        });
+        return result!;
+    }
 
     /// <summary>
     /// SPEC I-06: characters that use any revision of <paramref name="contentId"/>, whether they pin it, level in it,

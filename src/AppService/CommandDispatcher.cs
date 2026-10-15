@@ -19,7 +19,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     public static IReadOnlyList<string> Commands { get; } =
     [
-        "app.info", "content.list", "content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.revisions", "content.affected",
+        "app.info", "content.list", "content.draftCounts","campaign.list", "campaign.save", "campaign.delete","content.validate", "content.saveDraft", "content.publish", "content.publishManyPreview", "content.publishMany", "content.revisions", "content.affected",
         "content.bySource", "content.diagnose", "content.sandbox", "content.compare", "content.tree", "content.feedback", "source.list", "source.createHomebrew", "source.setShareable",
         "source.attachment", "source.attachPdf", "source.attachPdfData", "source.detachPreview", "source.detach", "source.openPage", "source.importPages",
         "character.list", "character.get", "character.create", "character.save", "character.choose", "character.preview", "character.previewChoice",
@@ -103,6 +103,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.validate" => Validate(Payload<ContentPayload>(payload)),
         "content.saveDraft" => app.SaveDraft(Payload<ContentPayload>(payload).Revision ?? throw new JsonException("content.saveDraft needs a revision.")),
         "content.publish" => app.Publish(Payload<ContentPayload>(payload).Reference ?? throw new JsonException("content.publish needs a reference.")),
+        "content.publishManyPreview" => app.PreviewPublishMany(Payload<ContentIdsPayload>(payload).ContentIds),
+        "content.publishMany" => app.PublishMany(Payload<PublishManyRequest>(payload)),
         "content.revisions" => app.ListRevisions(Payload<ContentIdPayload>(payload).ContentId),
         "content.affected" => app.AffectedCharacters(Payload<ContentIdPayload>(payload).ContentId),
         "content.bySource" => app.ContentBySource(Payload<SourceIdPayload>(payload).SourceId),
@@ -587,6 +589,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record RulesFamilyPayload(string RulesFamily, Guid? CampaignId = null);
 
     private sealed record IdPayload(Guid Id);
+
+    private sealed record ContentIdsPayload(IReadOnlyList<Guid> ContentIds);
 
     private sealed record CharacterIdPayload(Guid CharacterId);
 
