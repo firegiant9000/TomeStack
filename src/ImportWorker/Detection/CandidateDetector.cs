@@ -12,6 +12,10 @@ public sealed record DetectionPage(int Page, string Text, IReadOnlyList<TextBloc
 /// <param name="IsInstalled">Whether content of that name is installed (for unresolved references).</param>
 public sealed record DetectionContext(Guid SourceId, IReadOnlyList<string> SourceFamilies, Func<string, bool> IsInstalled);
 
+/// <param name="Candidates">At most <see cref="CandidateDetector.MaxCandidates"/>, in page order.</param>
+/// <param name="Truncated">More were found than the cap allows.</param>
+public sealed record DetectionResult(IReadOnlyList<DraftCandidate> Candidates, bool Truncated);
+
 /// <summary>
 /// M4 D3 (SPEC I-01, I-02; ADR-004): deterministic, rule-based detection of SRD-shaped blocks in extracted page text. No
 /// AI (an optional local model is M7). It reads the page blocks and their positioned lines and proposes
@@ -33,7 +37,15 @@ public static partial class CandidateDetector
     private sealed record Row(int Page, double Y, List<TextLine> Cells);
 
     /// <param name="cancellationToken">Checked between passes and pages: cancelling an import also stops its detection.</param>
-    public static IReadOnlyList<DraftCandidate> Detect(IReadOnlyList<DetectionPage> pages, DetectionContext context, CancellationToken cancellationToken = default)
+    public static IReadOnlyList<DraftCandidate> Detect(IReadOnlyList<DetectionPage> pages, DetectionContext context, CancellationToken cancellationToken = default) =>
+        DetectWithLimit(pages, context, cancellationToken: cancellationToken).Candidates;
+
+    /// <summary>
+    /// <see cref="Detect"/> and whether more than <see cref="MaxCandidates"/> were found (the cap applies before the
+    /// reviewer's earlier decisions are taken out, so it is reported as it is).
+    /// </summary>
+    /// <param name="maxCandidates">The cap; <see cref="MaxCandidates"/> unless a test lowers it.</param>
+    public static DetectionResult DetectWithLimit(IReadOnlyList<DetectionPage> pages, DetectionContext context, int maxCandidates = MaxCandidates, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(context);
@@ -58,13 +70,11 @@ public static partial class CandidateDetector
 
         // A candidate's references resolve against installed content and the job's other candidates.
         var named = found.Select(c => Key(c.ProposedName)).ToHashSet(StringComparer.Ordinal);
-        return
-        [
-            .. found
-                .Select(c => c with { UnresolvedReferences = [.. c.UnresolvedReferences.Where(r => !named.Contains(Key(r)) && !context.IsInstalled(r)).Distinct(StringComparer.OrdinalIgnoreCase)] })
-                .OrderBy(c => c.Page.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName, StringComparer.Ordinal)
-                .Take(MaxCandidates),
-        ];
+        var ordered = found
+            .Select(c => c with { UnresolvedReferences = [.. c.UnresolvedReferences.Where(r => !named.Contains(Key(r)) && !context.IsInstalled(r)).Distinct(StringComparer.OrdinalIgnoreCase)] })
+            .OrderBy(c => c.Page.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName, StringComparer.Ordinal)
+            .ToList();
+        return new([.. ordered.Take(maxCandidates)], ordered.Count > maxCandidates);
     }
 
     /// <summary>Case, spacing and apostrophes do not matter when names are compared.</summary>

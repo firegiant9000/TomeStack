@@ -8,6 +8,7 @@ import type {
   CandidateCheck,
   CandidateEdit,
   CandidateFilter,
+  CandidatePage,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
@@ -147,7 +148,9 @@ export function createClient(transport: Transport) {
     resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
     /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
     searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
-    candidates: (jobId: string, filter: CandidateFilter = {}) => call<StoredCandidate[]>('import.candidates', { jobId, ...filter }),
+    /** One page (50 unless `limit` says; at most 200) of a job's candidates in page order, and the total the filter matches. */
+    candidates: (jobId: string, filter: CandidateFilter = {}, paging: { offset?: number; limit?: number } = {}) =>
+      call<CandidatePage>('import.candidates', { jobId, ...filter, ...paging }),
     /** Validation, dependencies and blockers of accepting; writes nothing. */
     checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
     editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),

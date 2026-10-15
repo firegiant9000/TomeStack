@@ -81,7 +81,17 @@ public sealed record CandidateCheck(
 
 /// <param name="Kind">Only this kind; null for every kind.</param>
 /// <param name="MaxConfidence">Only candidates at or below this confidence (the unsure ones first, for example 0.7).</param>
-public sealed record ImportCandidatesRequest(Guid JobId, int? Page = null, ContentKind? Kind = null, double? MinConfidence = null, double? MaxConfidence = null, CandidateStatus? Status = null);
+/// <param name="Page">An alias for <paramref name="FirstPage"/> and <paramref name="LastPage"/> both set to this page.</param>
+/// <param name="FirstPage">Only candidates that reach this page or later.</param>
+/// <param name="LastPage">Only candidates that start on or before this page.</param>
+/// <param name="Offset">Candidates to skip (paged lists only); 0 or more.</param>
+/// <param name="Limit">Candidates to return (paged lists only); 1 to <see cref="TomeStackApp.MaxCandidatePageSize"/>, 50 when absent.</param>
+public sealed record ImportCandidatesRequest(
+    Guid JobId, int? Page = null, ContentKind? Kind = null, double? MinConfidence = null, double? MaxConfidence = null, CandidateStatus? Status = null,
+    int? FirstPage = null, int? LastPage = null, int? Offset = null, int? Limit = null);
+
+/// <summary>One page of a job's filtered candidates, and how many the filter matches in all.</summary>
+public sealed record CandidatePage(IReadOnlyList<StoredCandidate> Items, int Total);
 
 public sealed partial class TomeStackApp
 {
@@ -91,6 +101,11 @@ public sealed partial class TomeStackApp
     /// extraction is bounded per page, and a 5,000-page PDF at the per-page limit would otherwise exhaust the app).
     /// </summary>
     public const long MaxDetectionChars = 64_000_000;
+
+    /// <summary>The limits detection runs under; tests lower them to reach the limits with a small book.</summary>
+    internal long DetectionCharBudget { get; set; } = MaxDetectionChars;
+
+    internal int DetectionCandidateCap { get; set; } = CandidateDetector.MaxCandidates;
 
     /// <summary>
     /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
@@ -102,7 +117,7 @@ public sealed partial class TomeStackApp
         var source = _store.FindSource(job.SourceId);
         if (source is null)
             return job;
-        var stored = _store.ListImportPagesForDetection(job.Sha256, job.FirstPage, job.ScopeEnd ?? int.MaxValue, MaxDetectionChars, out var stoppedBefore);
+        var stored = _store.ListImportPagesForDetection(job.Sha256, job.FirstPage, job.ScopeEnd ?? int.MaxValue, DetectionCharBudget, out var stoppedBefore);
         if (stoppedBefore is { } page)
             _store.AddImportAudit(job.Id, _time.GetUtcNow(), "detection-limited", $"pages {job.FirstPage}-{page - 1} detected; import pages {page} on as a range to detect them");
         var pages = stored.Where(p => p.Error is null).Select(p => new DetectionPage(p.Page, "", p.Blocks, p.FromOcr)).ToList();
@@ -111,7 +126,8 @@ public sealed partial class TomeStackApp
             .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(families.Contains))
             .Select(r => CandidateDetector.Key(r.Name))
             .ToHashSet(StringComparer.Ordinal);
-        var detected = CandidateDetector.Detect(pages, new(source.Id, families, name => installed.Contains(CandidateDetector.Key(name))), cancellationToken);
+        var result = CandidateDetector.DetectWithLimit(pages, new(source.Id, families, name => installed.Contains(CandidateDetector.Key(name))), DetectionCandidateCap, cancellationToken);
+        var detected = result.Candidates;
 
         static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
         var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).Select(c => Identity(c.Candidate)).ToHashSet();
@@ -130,7 +146,13 @@ public sealed partial class TomeStackApp
             foreach (var candidate in fresh)
                 _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = candidate, UpdatedAt = now });
         });
-        return job with { Candidates = reviewed.Count + fresh.Count };
+        // Item 13: the review list says when it is not the whole book. The flags are set each run (a resumed job re-detects).
+        return job with
+        {
+            Candidates = reviewed.Count + fresh.Count,
+            TruncatedCandidates = result.Truncated ? true : null,
+            DetectionLimitedFromPage = stoppedBefore,
+        };
     }
 
     /// <summary><c>import.candidate.check</c> (SPEC I-02, M4 D4): validation, dependencies and blockers of accepting; writes nothing.</summary>
@@ -333,15 +355,42 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         ImportStatus(request.JobId);
-        return
-        [
-            .. _store.ListImportCandidates(request.JobId)
-                .Where(c => request.Page is not { } page || (c.Current.Page.Start <= page && (c.Current.Page.End ?? c.Current.Page.Start) >= page))
-                .Where(c => request.Kind is not { } kind || c.Current.ProposedKind == kind)
-                .Where(c => request.MinConfidence is not { } min || c.Current.Confidence >= min)
-                .Where(c => request.MaxConfidence is not { } max || c.Current.Confidence <= max)
-                .Where(c => request.Status is not { } status || c.Status == status)
-                .OrderBy(c => c.Current.Page.Start).ThenBy(c => c.Current.ProposedName, StringComparer.CurrentCultureIgnoreCase),
-        ];
+        return [.. Filtered(request)];
+    }
+
+    /// <summary>The most candidates one page of <c>import.candidates</c> returns.</summary>
+    public const int MaxCandidatePageSize = 200;
+
+    /// <summary>The page size when the request names none.</summary>
+    public const int DefaultCandidatePageSize = 50;
+
+    /// <summary>
+    /// <c>import.candidates</c> (tester feedback item 13): <see cref="ListCandidates"/> in pages. <c>Total</c> counts the
+    /// whole filtered set, so the list can say "51-100 of 340". Writes nothing.
+    /// </summary>
+    public CandidatePage ListCandidatesPage(ImportCandidatesRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Offset is < 0)
+            throw new AppValidationException([new("import.offset-out-of-range", "The offset is 0 or more.")]);
+        if (request.Limit is < 1 or > MaxCandidatePageSize)
+            throw new AppValidationException([new("import.limit-out-of-range", $"A page holds 1 to {MaxCandidatePageSize} candidates.")]);
+        ImportStatus(request.JobId);
+        var all = Filtered(request).ToList();
+        return new([.. all.Skip(request.Offset ?? 0).Take(request.Limit ?? DefaultCandidatePageSize)], all.Count);
+    }
+
+    private IEnumerable<StoredCandidate> Filtered(ImportCandidatesRequest request)
+    {
+        var first = request.FirstPage ?? request.Page;
+        var last = request.LastPage ?? request.Page;
+        return _store.ListImportCandidates(request.JobId)
+            .Where(c => first is not { } from || (c.Current.Page.End ?? c.Current.Page.Start) >= from)
+            .Where(c => last is not { } to || c.Current.Page.Start <= to)
+            .Where(c => request.Kind is not { } kind || c.Current.ProposedKind == kind)
+            .Where(c => request.MinConfidence is not { } min || c.Current.Confidence >= min)
+            .Where(c => request.MaxConfidence is not { } max || c.Current.Confidence <= max)
+            .Where(c => request.Status is not { } status || c.Status == status)
+            .OrderBy(c => c.Current.Page.Start).ThenBy(c => c.Current.ProposedName, StringComparer.CurrentCultureIgnoreCase);
     }
 }

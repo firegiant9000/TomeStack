@@ -24,6 +24,59 @@ public class DetectionTests
         return CandidateDetector.Detect(pages, new(Source, families ?? [RulesFamilies.Srd51, RulesFamilies.Srd521], installed ?? (_ => false)));
     }
 
+    /// <summary>Letters (not digits: running headers ignore digits) that make every generated page's text its own.</summary>
+    private static string Letters(int n)
+    {
+        var s = "";
+        do
+        {
+            s = (char)('a' + n % 26) + s;
+            n /= 26;
+        }
+        while (n > 0);
+        return s;
+    }
+
+    /// <summary>The fixture's spell page repeated <paramref name="pages"/> times, each with its own invented names: two spells a page.</summary>
+    private static async Task<List<DetectionPage>> GeneratedSpellPages(int pages)
+    {
+        var template = new List<TextBlock>();
+        await foreach (var item in new PdfPigExtractor().ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
+        {
+            if (item is ExtractedPage { PageNumber: 2 } page)
+                template.AddRange(page.Blocks ?? []);
+        }
+        var result = new List<DetectionPage>();
+        for (var n = 0; n < pages; n++)
+        {
+            var tag = Letters(n);
+            string Tag(string text) => text.Replace("Fixture Ember Lance", $"Fixture Ember Lance {tag}", StringComparison.Ordinal).Replace("Fixture Frost Veil", $"Fixture Frost Veil {tag}", StringComparison.Ordinal);
+            var blocks = template.Select(b => b with
+            {
+                Text = Tag(b.Text) + (b.Text.Contains("Fixture", StringComparison.Ordinal) ? "" : $" {tag}"),
+                Lines = b.Lines?.Select(l => l with { Text = Tag(l.Text) }).ToList(),
+            }).ToList();
+            result.Add(new(n + 1, "", blocks, false));
+        }
+        return result;
+    }
+
+    [Fact]
+    public async Task Detection_says_when_the_candidate_cap_was_hit()
+    {
+        var context = new DetectionContext(Source, [RulesFamilies.Srd521], _ => false);
+
+        var exactly = CandidateDetector.DetectWithLimit(await GeneratedSpellPages(2_500), context);
+        Assert.Equal(CandidateDetector.MaxCandidates, exactly.Candidates.Count);
+        Assert.False(exactly.Truncated); // the cap is reached, not exceeded
+
+        var over = CandidateDetector.DetectWithLimit(await GeneratedSpellPages(2_501), context);
+        Assert.Equal(CandidateDetector.MaxCandidates, over.Candidates.Count);
+        Assert.True(over.Truncated); // 5,002 found
+
+        Assert.False(CandidateDetector.DetectWithLimit(await GeneratedSpellPages(3), context).Truncated);
+    }
+
     private static DraftCandidate Named(IReadOnlyList<DraftCandidate> found, string name) => Assert.Single(found, c => c.ProposedName == name);
 
     [Fact]

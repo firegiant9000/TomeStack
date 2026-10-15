@@ -26,6 +26,80 @@ public class CandidateReviewTests
     private static string Code(Action action) => Assert.Throws<AppValidationException>(action).Problems[0].Code;
 
     [Fact]
+    public void The_list_pages_in_page_then_name_order_and_the_total_counts_the_filtered_set()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+        var everything = temp.App.ListCandidates(new(jobId)).Select(c => c.Id).ToList();
+        Assert.Equal(9, everything.Count);
+
+        var first = temp.App.ListCandidatesPage(new(jobId, Offset: 0, Limit: 4));
+        var second = temp.App.ListCandidatesPage(new(jobId, Offset: 4, Limit: 4));
+        var last = temp.App.ListCandidatesPage(new(jobId, Offset: 8, Limit: 4));
+        var past = temp.App.ListCandidatesPage(new(jobId, Offset: 9, Limit: 4));
+
+        Assert.Equal(9, first.Total);
+        Assert.Equal(everything, [.. first.Items.Concat(second.Items).Concat(last.Items).Select(c => c.Id)]);
+        Assert.Equal([4, 4, 1, 0], [first.Items.Count, second.Items.Count, last.Items.Count, past.Items.Count]);
+        Assert.Equal(9, past.Total);
+
+        var spells = temp.App.ListCandidatesPage(new(jobId, Kind: ContentKind.Spell, Offset: 1, Limit: 1));
+        Assert.Equal(2, spells.Total); // the filtered set, not the job
+        Assert.Equal(["Fixture Frost Veil"], spells.Items.Select(c => c.Current.ProposedName));
+
+        // No paging asked for: the first 50 (all nine here).
+        var defaults = temp.App.ListCandidatesPage(new(jobId));
+        Assert.Equal((9, 9), (defaults.Items.Count, defaults.Total));
+    }
+
+    [Fact]
+    public void A_page_range_keeps_candidates_that_touch_it_and_page_is_the_same_as_both_ends()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+
+        Assert.Equal(2, temp.App.ListCandidatesPage(new(jobId, LastPage: 2)).Total);
+        Assert.Equal(5, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4)).Total); // page 4's four and page 5's class
+        Assert.Equal(6, temp.App.ListCandidatesPage(new(jobId, FirstPage: 3, LastPage: 4)).Total);
+        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 6)).Total);
+        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 3)).Total);
+        Assert.Equal(
+            temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 4)).Items.Select(c => c.Id),
+            temp.App.ListCandidatesPage(new(jobId, Page: 4)).Items.Select(c => c.Id));
+        Assert.Equal(4, temp.App.ListCandidates(new(jobId, Page: 4)).Count);
+        // A range plus a kind: both apply.
+        Assert.Equal(1, temp.App.ListCandidatesPage(new(jobId, FirstPage: 3, LastPage: 4, Kind: ContentKind.Feat)).Total);
+    }
+
+    [Fact]
+    public void A_limit_over_200_or_a_bad_offset_is_refused_and_nothing_is_read()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+
+        Assert.Equal(9, temp.App.ListCandidatesPage(new(jobId, Limit: 200)).Items.Count); // 200 is allowed
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 201))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 0))));
+        Assert.Equal("import.offset-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Offset: -1))));
+    }
+
+    [Fact]
+    public void The_candidates_command_returns_items_and_total()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+        Assert.Contains("import.candidates", CommandDispatcher.Commands);
+
+        using var response = System.Text.Json.JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(System.Text.Json.JsonSerializer.Serialize(
+            new { id = "1", command = "import.candidates", payload = new { jobId, kind = "spell", offset = 1, limit = 1 } }, RulesJson.Compact)));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        var data = response.RootElement.GetProperty("result");
+        Assert.Equal(2, data.GetProperty("total").GetInt32());
+        Assert.Equal(1, data.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
     public void A_clean_candidate_passes_the_check_and_becomes_an_inactive_draft_with_reference_effects()
     {
         var (temp, sourceId, jobId) = Imported();

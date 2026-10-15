@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.ImportWorker;
+using TomeStack.ImportWorker.Detection;
 using TomeStack.ImportWorker.Extraction;
 using TomeStack.RulesCore;
 
@@ -450,6 +451,38 @@ public class ImportJobTests
             Assert.Empty(candidate.Current.RulesFamilies);
             Assert.Contains("rulesFamilies", candidate.Current.LowConfidenceFields);
         }
+    }
+
+    [Fact]
+    public void A_job_that_stopped_detecting_early_or_hit_the_candidate_cap_says_so_and_a_normal_job_says_nothing()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+
+        var normal = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        Assert.Null(normal.TruncatedCandidates);
+        Assert.Null(normal.DetectionLimitedFromPage);
+        var json = TomeStack.AppService.Persistence.SqliteStore.Serialize(temp.App.ImportStatus(normal.Id));
+        Assert.DoesNotContain("truncatedCandidates", json, StringComparison.Ordinal); // omitted, like writtenFor
+        Assert.DoesNotContain("detectionLimitedFromPage", json, StringComparison.Ordinal);
+
+        // The candidate cap, made tiny for this run.
+        temp.App.DetectionCandidateCap = 3;
+        var capped = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        Assert.True(capped.TruncatedCandidates);
+        Assert.Null(capped.DetectionLimitedFromPage);
+        Assert.Equal(3, capped.Candidates);
+        Assert.True(temp.App.ImportStatus(capped.Id).TruncatedCandidates); // stored, not only returned
+        Assert.Equal(3, temp.App.ListCandidatesPage(new(capped.Id)).Total);
+
+        // The text budget, made tiny for this run: nothing in pages 2-3 fits, so detection stops before page 2.
+        temp.App.DetectionCandidateCap = CandidateDetector.MaxCandidates;
+        temp.App.DetectionCharBudget = 1;
+        var limited = Settle(temp, temp.App.StartImport(new(sourceId, 2, 3)).Id);
+        Assert.Equal(2, limited.DetectionLimitedFromPage);
+        Assert.Null(limited.TruncatedCandidates);
+        Assert.Equal(2, temp.App.ImportStatus(limited.Id).DetectionLimitedFromPage);
+        Assert.Contains(temp.App.ImportAudit(limited.Id), a => a.Event == "detection-limited");
     }
 
     [Fact]
