@@ -16,11 +16,11 @@
 
 ### Fixed
 
-- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares). Pending candidates that 0.5.0 already found stay in the old reading's list and now ask for a family too; reading the document again makes a new list. An entry already accepted from another reading of the same document is not accepted a second time.
+- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares). Pending candidates that 0.5.0 already found stay in the old reading's list and now ask for a family too, until you save one (also when you edited them in 0.5.0, which never asked); reading the document again makes a new list. An entry already accepted from another reading of the same document is not accepted a second time.
 
 ### Migration
 
-- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
+- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it), and a stored candidate may carry `familiesReviewed` (set when you save a family; absent otherwise; 0.5.0 ignores it). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
 
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 

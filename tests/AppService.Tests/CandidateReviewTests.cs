@@ -241,6 +241,49 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void An_old_armour_row_edited_in_050_still_asks_for_a_family_until_one_is_saved()
+    {
+        // Ruling R29: 0.5.0 never asked about families, so its edit (Edited set, no familiesReviewed) is not an answer.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = AsKeptBy050(temp, Named(temp, jobId, "Fixture Quilted Coat"));
+        var edited050 = coat with { Edited = coat.Candidate with { ProposedName = "Fixture Quilted Coat" } };
+        temp.App.Store.SaveImportCandidate(edited050);
+        Assert.False(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
+
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+
+        // An edit that sends no families is not an answer either.
+        var renamed = temp.App.EditCandidate(new(coat.Id, Summary: "Fixture padding."));
+        Assert.False(renamed.FamiliesReviewed);
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+
+        // Saving a family (even the one it already has) is.
+        var saved = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        Assert.True(saved.FamiliesReviewed);
+        Assert.True(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
+        Assert.DoesNotContain(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
+    }
+
+    [Fact]
+    public void Families_reviewed_is_absent_from_the_stored_json_until_true_and_reads_back_false_when_absent()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var stored = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(stored, RulesJson.Compact);
+        Assert.DoesNotContain("familiesReviewed", json);
+        Assert.False(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!.FamiliesReviewed);
+
+        var reviewed = System.Text.Json.JsonSerializer.Serialize(stored with { FamiliesReviewed = true }, RulesJson.Compact);
+        Assert.Contains("\"familiesReviewed\":true", reviewed);
+        Assert.True(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(reviewed, RulesJson.Compact)!.FamiliesReviewed);
+    }
+
+    [Fact]
     public void A_job_that_recorded_what_the_book_is_written_for_does_not_ask_again()
     {
         var temp = new TempApp();

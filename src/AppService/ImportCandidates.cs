@@ -22,6 +22,12 @@ public sealed record StoredCandidate
     public required Guid JobId { get; init; }
     public required DraftCandidate Candidate { get; init; }
     public DraftCandidate? Edited { get; init; }
+    /// <summary>
+    /// Ruling R29: the reviewer saved a rules family for this candidate (an edit that sent one). Absent in every row stored
+    /// before it existed; omitted from the JSON while false so untouched rows keep their bytes. 0.5.0 ignores it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool FamiliesReviewed { get; init; }
     public CandidateStatus Status { get; init; } = CandidateStatus.Pending;
     /// <summary>The draft revision an accepted candidate became.</summary>
     public ContentReference? Draft { get; init; }
@@ -164,7 +170,8 @@ public sealed partial class TomeStackApp
             LowConfidenceFields = [],
             UnresolvedReferences = [.. current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase) && !IsInstalledName(r, families))],
         };
-        var updated = stored with { Edited = edited, UpdatedAt = _time.GetUtcNow() };
+        // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
+        var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
         _store.InTransaction(() =>
         {
             _store.SaveImportCandidate(updated);
@@ -249,7 +256,7 @@ public sealed partial class TomeStackApp
     /// What "reference only" does not lift. Computed from what is stored, never stored itself (no migration):
     /// no rules family (2026-10-14 item 3; the empty set has its own blocker, so the unsure "rulesFamilies" field is not listed twice);
     /// an armour row or class table kept by a 0.5.0 job on a two-family source, which silently took srd-5.2.1 (ruling R28), until the
-    /// reviewer saves an edit; and an entry another reading of the same document already turned into a draft (ruling R27).
+    /// reviewer saves a family; and an entry another reading of the same document already turned into a draft (ruling R27).
     /// </summary>
     private List<Diagnostic> ProvenanceBlockers(StoredCandidate stored)
     {
@@ -260,7 +267,7 @@ public sealed partial class TomeStackApp
         var job = ImportStatus(stored.JobId);
         if (current.RulesFamilies.Count == 0)
             blockers.Add(new("import.family-needed", "Say which rules family this entry is written for."));
-        else if (job.WrittenFor is null && stored.Edited is null && IsLayoutNeutral(stored.Candidate)
+        else if (job.WrittenFor is null && !stored.FamiliesReviewed && IsLayoutNeutral(stored.Candidate)
             && (_store.FindSource(job.SourceId)?.RulesFamilies.Count ?? 0) > 1)
             blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
 
