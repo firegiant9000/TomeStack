@@ -156,7 +156,11 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
       )}
       {!valid && (
         <p id={pagesHintId} className="hint">
-          {from === '' ? 'Enter a first page.' : 'Check the pages: the last page cannot be before the first.'}
+          {from === ''
+            ? 'Enter a first page.'
+            : !Number.isInteger(first) || first < 1
+              ? 'The first page is 1 or more.'
+              : 'Check the pages: the last page cannot be before the first.'}
         </p>
       )}
       <div className="inline-form">

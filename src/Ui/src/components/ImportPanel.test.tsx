@@ -195,7 +195,22 @@ it('hides every job line\'s studio button while any review is open, so no unsave
   expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
 });
 
-//ITEM2
+it.each(['0', '-2', '1.5'])('says the first page is 1 or more for From page "%s", not the last-page text', async (value) => {
+  const user = await renderPanel(single);
+  await user.type(screen.getByLabelText('From page'), value);
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(pages.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('The first page is 1 or more.');
+});
+
+it('keeps the last-page text for a last page before a valid first page', async () => {
+  const user = await renderPanel(single);
+  await user.type(screen.getByLabelText('From page'), '5');
+  await user.type(screen.getByLabelText('To page (optional)'), '3');
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Check the pages: the last page cannot be before the first.');
+});
+
 it('offers the studio from a finished job that found candidates, and not from one that found none', async () => {
   vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 0)]);
   await renderPanel(both);
