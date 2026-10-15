@@ -144,3 +144,50 @@ it('keeps a blocked Accept focusable, refuses the press, and links the visible r
   }
   expect(client.acceptCandidate).not.toHaveBeenCalled();
 });
+
+// Ruling R26: the studio button must not silently drop an unsaved edit.
+it('holds the studio button, with a linked reason, while the open candidate has an unsaved edit', async () => {
+  const user = userEvent.setup();
+  const onOpenStudio = vi.fn();
+  vi.mocked(client.candidates).mockResolvedValue([detected(['srd-5.1'])]);
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={onOpenStudio} />);
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  expect(studio.getAttribute('aria-disabled')).toBeNull();
+
+  await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
+  const name = await screen.findByLabelText('Name');
+  expect(studio.getAttribute('aria-disabled')).toBeNull(); // opening a candidate is not an edit
+
+  await user.type(name, ' II');
+  expect(studio.getAttribute('aria-disabled')).toBe('true');
+  expect(studio).toHaveProperty('disabled', false);
+  expect(document.getElementById(studio.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Save or undo your edit first.');
+  await user.click(studio);
+  expect(onOpenStudio).not.toHaveBeenCalled();
+
+  // Typing it back is an undo: nothing differs from what is stored.
+  await user.type(name, '{Backspace}{Backspace}{Backspace}');
+  expect(studio.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Save or undo your edit first.')).toBeNull();
+  await user.click(studio);
+  expect(onOpenStudio).toHaveBeenCalledExactlyOnceWith('src-2');
+});
+
+it('counts a changed family, text, effects or kind as an edit, and a saved edit as none', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.candidates).mockResolvedValue([detected(['srd-5.1'])]);
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.editCandidate).mockResolvedValue(detected(['srd-5.1', 'srd-5.2.1']));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  const studio = await screen.findByRole('button', { name: 'Open Testy Both in the studio' });
+  await user.click(screen.getByRole('button', { name: 'Testy Coat' }));
+  const group = await screen.findByRole('group', { name: 'Rules families' });
+
+  await user.click(within(group).getByRole('checkbox', { name: '2024 rules (SRD 5.2.1)' }));
+  expect(studio.getAttribute('aria-disabled')).toBe('true');
+
+  vi.mocked(client.candidates).mockResolvedValue([{ ...detected(['srd-5.1', 'srd-5.2.1']), updatedAt: '2026-10-14T00:01:00Z' }]);
+  await user.click(screen.getByRole('button', { name: 'Save edit' }));
+  await vi.waitFor(() => expect(studio.getAttribute('aria-disabled')).toBeNull());
+});

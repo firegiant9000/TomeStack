@@ -7,7 +7,7 @@ import { client } from '../api/client';
 import type { ImportJob, SourceRecord } from '../api/types';
 import { ImportPanel } from './ImportPanel';
 
-vi.mock('../api/client', () => ({ client: { listImports: vi.fn(), startImport: vi.fn(), resumeImport: vi.fn(), cancelImport: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { listImports: vi.fn(), startImport: vi.fn(), resumeImport: vi.fn(), cancelImport: vi.fn(), candidates: vi.fn() } }));
 
 const both = { id: 'src-2', title: 'Testy Both', rulesFamilies: ['srd-5.1', 'srd-5.2.1'] } as SourceRecord;
 const single = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -160,6 +160,23 @@ it('holds Resume while another job runs: aria-disabled, a linked reason, and the
   expect(document.getElementById(resume.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Reading… — cancel it first or wait.');
   await user.click(resume);
   expect(client.resumeImport).not.toHaveBeenCalled();
+});
+
+it('shows one studio button while a job is under review: the panel\'s own, not also the job line\'s', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3)]);
+  vi.mocked(client.candidates).mockResolvedValue([]);
+  const user = await renderPanel(both);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  expect(buttons).toHaveLength(1);
+  expect(region.contains(buttons[0] ?? null)).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' })); // closing the review brings the job line's back
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+  expect(screen.queryByRole('region', { name: 'Candidates from Testy Both' })).toBeNull();
 });
 
 it('offers the studio from a finished job that found candidates, and not from one that found none', async () => {

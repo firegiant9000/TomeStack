@@ -218,7 +218,8 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
                     Review {job.candidates} candidate{job.candidates === 1 ? '' : 's'}
                   </button>
                 )}
-                {job.status === 'completed' && job.candidates > 0 && (
+                {/* While this job is under review the panel has its own button, which knows about an unsaved edit (ruling R26). */}
+                {job.status === 'completed' && job.candidates > 0 && reviewing !== job.id && (
                   <button type="button" onClick={() => onOpenStudio(source.id)}>
                     Open {source.title} in the studio
                   </button>

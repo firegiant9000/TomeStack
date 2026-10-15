@@ -36,6 +36,8 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [candidates, setCandidates] = useState<StoredCandidate[]>();
   const [selected, setSelected] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const [dirty, setDirty] = useState(false); // the open candidate's form differs from what is stored
+  const dirtyId = `unsaved-${job.id}`;
 
   const load = useCallback(
     () =>
@@ -59,10 +61,23 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       </h5>
       <p className="hint">Accepted entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
       <div className="actions">
-        <button type="button" onClick={() => onOpenStudio(source.id)}>
+        {/* aria-disabled, never `disabled`; leaving would silently drop an unsaved edit (ruling R26). */}
+        <button
+          type="button"
+          aria-disabled={dirty || undefined}
+          aria-describedby={dirty ? dirtyId : undefined}
+          onClick={() => {
+            if (!dirty) onOpenStudio(source.id);
+          }}
+        >
           Open {source.title} in the studio
         </button>
       </div>
+      {dirty && (
+        <p id={dirtyId} className="hint">
+          Save or undo your edit first.
+        </p>
+      )}
       <fieldset>
         <legend>Show</legend>
         <div className="inline-form">
@@ -138,6 +153,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           sourceFamilies={source.rulesFamilies}
           onOpenPage={onOpenPage}
           onError={onError}
+          onDirtyChange={setDirty}
           onChanged={async (text) => {
             onStatus(text);
             const list = await load();
@@ -160,9 +176,11 @@ interface DetailProps {
   onOpenPage: (page: number) => void;
   onError: (error: unknown) => void;
   onChanged: (status: string) => Promise<void>;
+  /** Whether the form differs from what is stored, so the panel can keep the player from leaving with an unsaved edit. */
+  onDirtyChange: (dirty: boolean) => void;
 }
 
-function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged }: DetailProps) {
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
@@ -174,6 +192,21 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const [effectsError, setEffectsError] = useState<string>();
   const [check, setCheck] = useState<CandidateCheck>();
   const pending = stored.status === 'pending';
+
+  const storedFamilies = candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f));
+  const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const dirty =
+    pending &&
+    (name !== candidate.proposedName ||
+      kind !== candidate.proposedKind ||
+      summary !== (candidate.summary ?? '') ||
+      effects !== JSON.stringify(candidate.proposedEffects, null, 2) ||
+      !sameSet(families, storedFamilies) ||
+      dismissed.length > 0);
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false); // the detail goes away (another candidate, a save): nothing is unsaved any more
+  }, [dirty, onDirtyChange]);
 
   // WCAG 2.4.3: choosing a candidate moves focus to its details.
   useEffect(() => heading.current?.focus(), []);
