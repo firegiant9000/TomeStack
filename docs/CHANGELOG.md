@@ -20,7 +20,7 @@
 
 ### Migration
 
-- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it), and a stored candidate may carry `familiesReviewed` (set when you save a family; absent otherwise; 0.5.0 ignores it). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
+- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it), and a stored candidate may carry `familiesReviewed` (set when you save a family; absent otherwise; 0.5.0 does not read it and keeps it unchanged when it saves the row). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
 
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 

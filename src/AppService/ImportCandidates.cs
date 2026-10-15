@@ -24,7 +24,8 @@ public sealed record StoredCandidate
     public DraftCandidate? Edited { get; init; }
     /// <summary>
     /// Ruling R29: the reviewer saved a rules family for this candidate (an edit that sent one). Absent in every row stored
-    /// before it existed; omitted from the JSON while false so untouched rows keep their bytes. 0.5.0 ignores it.
+    /// before it existed; omitted from the JSON while false so untouched rows keep their bytes. 0.5.0 does not read it
+    /// and keeps it unchanged when it saves the row.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool FamiliesReviewed { get; init; }
