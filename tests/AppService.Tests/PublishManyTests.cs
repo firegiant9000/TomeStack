@@ -1,5 +1,6 @@
 using System.Text.Json;
 using TomeStack.RulesCore;
+using Xunit.Abstractions;
 
 namespace TomeStack.AppService.Tests;
 
@@ -9,7 +10,7 @@ namespace TomeStack.AppService.Tests;
 /// set re-read inside the transaction; grants and choice options that pin revisions of what is published are re-pointed.
 /// Original fixtures only.
 /// </summary>
-public class PublishManyTests
+public class PublishManyTests(ITestOutputHelper output)
 {
     private static readonly string[] Families = [RulesFamilies.Srd521];
 
@@ -209,9 +210,12 @@ public class PublishManyTests
         // Review Focus 3: stored order makes the draft the newest even though the content has a published revision.
         using var w = new World();
         var contentId = Guid.NewGuid();
+        // Fixed ids that sort the wrong way: by id the draft (0000…) comes before the published revision (ffff…), so a switch
+        // to the id-ordered ListRevisions() would call the published one the newest and find nothing pending.
         ContentRevision Rev(RevisionStatus status, string effect) => w.New(ContentKind.Feat, "Testy Restored", World.Init(effect)) with
         {
-            ContentId = contentId, RevisionId = Guid.NewGuid(), Status = status,
+            ContentId = contentId, Status = status,
+            RevisionId = status == RevisionStatus.Published ? Guid.Parse("ffffffff-0000-4000-8000-000000000001") : Guid.Parse("00000000-0000-4000-8000-000000000001"),
         };
         w.App.Store.AddRevision(Rev(RevisionStatus.Published, "1"));
         var draft = Rev(RevisionStatus.Draft, "2");
@@ -287,6 +291,134 @@ public class PublishManyTests
         Assert.Equal("content.publish-set-changed", Code(() => w.App.PublishMany(w.Confirmed(a, b))));
         Assert.Equal(count + 1, w.RevisionCount);
         w.App.PublishMany(w.Confirmed(newer, b));
+    }
+
+    [Fact]
+    public void A_dependent_that_would_fail_after_repointing_blocks_the_preview_and_the_publish_writes_nothing()
+    {
+        // Fix round 1 (R50, family scenario): the preview runs the real publish, so it sees what re-pointing breaks.
+        using var w = new World();
+        var f1 = w.Published(w.New(ContentKind.Feature, "Testy Feature", World.Init("1")));
+        var cls = w.Published(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(f1)));
+        var f2 = w.Save(w.Newest(f1.ContentId) with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, RulesFamilies = [RulesFamilies.Srd51] });
+        var count = w.RevisionCount;
+
+        var preview = w.App.PreviewPublishMany([f2.ContentId]);
+
+        Assert.False(preview.CanPublish);
+        var dependent = Assert.Single(preview.Dependents);
+        Assert.Equal("Testy Scout", dependent.Name);
+        Assert.Contains(dependent.Report.Errors, e => e.Code == "validate.reference-family");
+        Assert.Empty(preview.Entries.Single().Report.Errors);
+        Assert.Equal(count, w.RevisionCount); // the dry run left nothing behind
+
+        // Bypassing the preview: the feature is published first, then the class fails, and everything rolls back.
+        var refused = Assert.Throws<AppValidationException>(() => w.App.PublishMany(w.Confirmed(f2)));
+        Assert.Equal("content.validation-failed", refused.Problems[0].Code);
+        Assert.Contains(refused.Problems, p => p.Code == "validate.reference-family");
+        Assert.Equal(count, w.RevisionCount);
+        Assert.Equal(f2, w.Newest(f2.ContentId).Reference);
+        Assert.Equal(RevisionStatus.Draft, w.Newest(f2.ContentId).Status);
+        Assert.Equal(cls, w.Newest(cls.ContentId).Reference);
+    }
+
+    [Fact]
+    public void A_class_and_a_subclass_that_share_a_scale_id_block_the_preview_and_publish_nothing()
+    {
+        using var w = new World();
+        var cls = w.Save(w.New(ContentKind.Class, "Testy Quillmaster", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [], Level = 3 },
+            new ScaleEffect { Id = "scale-1", ScaleId = "ink", Label = "Ink", Values = [.. Enumerable.Repeat(2, 20)] }));
+        var sub = w.Save(w.New(ContentKind.Subclass, "Testy Order of the Margin",
+            new ScaleEffect { Id = "scale-1", ScaleId = "ink", Label = "Ink", Values = [.. Enumerable.Repeat(3, 20)] }) with { ExtendsChoice = new(cls.ContentId, "subclass") });
+        var count = w.RevisionCount;
+
+        var preview = w.App.PreviewPublishMany([sub.ContentId, cls.ContentId]);
+
+        Assert.False(preview.CanPublish);
+        Assert.Contains(preview.Entries.Single(e => e.Name == "Testy Order of the Margin").Report.Errors, e => e.Code == "validate.scale-duplicate");
+        Assert.Equal(count, w.RevisionCount);
+        Assert.Throws<AppValidationException>(() => w.App.PublishMany(w.Confirmed(sub, cls)));
+        Assert.Equal(count, w.RevisionCount);
+        Assert.Equal(RevisionStatus.Draft, w.Newest(cls.ContentId).Status);
+    }
+
+    [Fact]
+    public void A_subclass_publishes_after_the_class_whose_choice_it_extends()
+    {
+        // Fix round 1 (item 2): extendsChoice is an ordering edge. The request lists the subclass first.
+        using var w = new World();
+        var cls = w.Save(w.New(ContentKind.Class, "Testy Quillmaster", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [], Level = 3 }));
+        var sub = w.Save(w.New(ContentKind.Subclass, "Testy Order of the Margin", World.Init("1")) with { ExtendsChoice = new(cls.ContentId, "subclass") });
+
+        var preview = w.App.PreviewPublishMany([sub.ContentId, cls.ContentId]);
+        Assert.True(preview.CanPublish, string.Join("; ", preview.Entries.SelectMany(e => e.Report.Errors).Select(e => e.Code)));
+        Assert.Equal(["Testy Quillmaster", "Testy Order of the Margin"], preview.Entries.Select(e => e.Name));
+
+        var result = w.App.PublishMany(w.Confirmed(sub, cls));
+
+        Assert.Equal(["Testy Quillmaster", "Testy Order of the Margin"], result.Published.Select(p => w.App.Store.FindRevision(p.Published)!.Name));
+    }
+
+    [Fact]
+    public void A_failure_after_a_write_rolls_back_every_write_and_the_choice_extension_cache()
+    {
+        // Fix round 1 (item 3). Order: the class, then its subclass (published), then a failing class that grants the subclass.
+        // Validating that last class asks for the choice extensions, so the cache is filled while the subclass is published
+        // inside the transaction; after the rollback it must not return the subclass.
+        using var w = new World();
+        var cls = w.Save(w.New(ContentKind.Class, "Testy Quillmaster", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [], Level = 3 }));
+        var sub = w.Save(w.New(ContentKind.Subclass, "Testy Order of the Margin", World.Init("1")) with { ExtendsChoice = new(cls.ContentId, "subclass") });
+        var failing = w.Save(w.New(ContentKind.Class, "Testy Broken", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "pick", ChoiceId = "pick", Count = 1, Options = [] }, World.GrantOf(sub), World.Init("1 + + 2")));
+        Assert.Empty(w.App.Store.ChoiceExtensions(cls.ContentId, "subclass")); // warm the cache before the call
+        var count = w.RevisionCount;
+
+        var refused = Assert.Throws<AppValidationException>(() => w.App.PublishMany(w.Confirmed(cls, sub, failing)));
+
+        Assert.Equal("content.validation-failed", refused.Problems[0].Code);
+        Assert.Equal(count, w.RevisionCount);
+        Assert.Equal(cls, w.Newest(cls.ContentId).Reference); // the first entry's newest revision is still its draft
+        Assert.Equal(RevisionStatus.Draft, w.Newest(cls.ContentId).Status);
+        Assert.Empty(w.App.Store.ChoiceExtensions(cls.ContentId, "subclass"));
+    }
+
+    [Fact]
+    public void An_old_draft_of_content_that_is_already_published_is_named_as_such()
+    {
+        // Fix round 1 (item 7): nothing is pending to include, so "include it" would be wrong advice.
+        using var w = new World();
+        var oldDraft = w.Save(w.New(ContentKind.Feature, "Testy Feature", World.Init("1")));
+        w.App.Publish(oldDraft);
+        var cls = w.Save(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(oldDraft)));
+
+        var preview = w.App.PreviewPublishMany([cls.ContentId]);
+
+        Assert.False(preview.CanPublish);
+        var error = Assert.Single(preview.Entries.Single().Report.Errors, e => e.Code == "publish.grants-unpublished");
+        Assert.Equal("'Testy Scout' points at an old draft of 'Testy Feature'; choose its published revision.", error.Message);
+    }
+
+    [Fact]
+    public void Three_hundred_drafts_preview_and_publish_in_one_go()
+    {
+        using var w = new World();
+        var drafts = Enumerable.Range(0, 300).Select(i => w.Save(w.New(ContentKind.Feat, $"Testy Bulk {i:000}", World.Init("1")))).ToList();
+        var ids = drafts.Select(d => d.ContentId).ToList();
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var preview = w.App.PreviewPublishMany(ids);
+        var previewMs = watch.ElapsedMilliseconds;
+        watch.Restart();
+        var result = w.App.PublishMany(new(ids, [.. drafts.Select(d => d.RevisionId)], Confirm: true));
+        var publishMs = watch.ElapsedMilliseconds;
+
+        output.WriteLine($"300 drafts: preview {previewMs} ms, publish {publishMs} ms");
+        Assert.True(preview.CanPublish);
+        Assert.Equal(300, result.Published.Count);
+        Assert.All(ids, id => Assert.Equal(RevisionStatus.Published, w.Newest(id).Status));
     }
 
     [Fact]

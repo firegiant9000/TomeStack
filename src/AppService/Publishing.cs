@@ -102,6 +102,13 @@ public sealed partial class TomeStackApp
     /// </summary>
     public PublishResult Publish(ContentReference draftReference)
     {
+        var (result, draft) = PublishCore(draftReference);
+        return result with { Affected = AffectedCharacters(draft.ContentId) };
+    }
+
+    /// <summary>The publish itself, without the affected-characters scan (which reads every character); a bulk publish skips that scan.</summary>
+    private (PublishResult Result, ContentRevision Draft) PublishCore(ContentReference draftReference)
+    {
         ArgumentNullException.ThrowIfNull(draftReference);
         var draft = _store.FindRevision(draftReference)
             ?? throw new AppValidationException([new("content.not-found", $"Revision {draftReference.RevisionId} is not installed.", draftReference)]);
@@ -123,7 +130,7 @@ public sealed partial class TomeStackApp
         _store.InTransaction(() => _store.AddRevision(published));
         // The report states the version actually written (it can be the draft's own, lower than the requirement when only a
         // spell field target raises it; those were never refused).
-        return new PublishResult(draftReference, published.Reference, report with { RequiredSchemaVersion = published.SchemaVersion }, AffectedCharacters(draft.ContentId));
+        return (new PublishResult(draftReference, published.Reference, report with { RequiredSchemaVersion = published.SchemaVersion }, []), draft);
     }
 
     public IReadOnlyList<ContentRevision> ListRevisions(Guid contentId) => _store.ListRevisions(contentId);
@@ -135,16 +142,31 @@ public sealed partial class TomeStackApp
     {
         public ContentRevision Revision { get; } = revision;
         public bool IsEntry { get; } = isEntry;
+        /// <summary>Errors of the batch itself (<c>publish.*</c>), found before anything runs.</summary>
         public List<Diagnostic> Extra { get; } = [];
-        public int Grants { get; set; }
-        public int Options { get; set; }
+        /// <summary>Validation of the revision as stored; its warnings are shown when the run does not replace them.</summary>
         public ValidationReport Report { get; set; } = null!;
     }
 
-    private sealed record PublishPlan(List<PlanItem> Ordered, List<PlanItem> Blocked, HashSet<Guid> HasPublished, DebugReport? Debug)
+    private sealed record PublishPlan(List<PlanItem> Ordered, List<PlanItem> Blocked, HashSet<Guid> HasPublished, Dictionary<ContentReference, List<DebugFinding>> Findings)
     {
         public IEnumerable<PlanItem> All => Ordered.Concat(Blocked);
+
+        public bool HasCycle => Ordered.Any(i => i.Extra.Any(e => e.Code == "publish.grants-cycle"));
     }
+
+    /// <summary>What running one plan item did (a real publish, or the dry run behind the preview).</summary>
+    private sealed class BatchItem(PlanItem plan)
+    {
+        public PlanItem Plan { get; } = plan;
+        public PublishResult? Result { get; set; }
+        public List<Diagnostic> Errors { get; } = [];
+        public int Grants { get; set; }
+        public int Options { get; set; }
+    }
+
+    /// <summary>Thrown by the preview's dry run to roll its transaction back, and caught outside it.</summary>
+    private sealed class DryRunRollback : Exception;
 
     private static AppValidationException PublishSetChanged() =>
         new([new("content.publish-set-changed", "The drafts waiting to be published are not the ones you reviewed. Nothing was published; look at the list again.")]);
@@ -245,22 +267,27 @@ public sealed partial class TomeStackApp
         }
         while (grew);
 
-        var placeholders = inSet.ToDictionary(id => id, id => new ContentReference(id, Guid.Empty));
-        foreach (var item in items)
+        foreach (var item in items.Where(i => i.IsEntry))
         {
-            (_, item.Grants, item.Options) = RePoint(item.Revision, placeholders);
-            if (!item.IsEntry)
-                continue;
             foreach (var target in NamedContent(item.Revision).Where(t => !inSet.Contains(t.ContentId)).Distinct())
             {
-                if (_store.FindRevision(target) is { Status: RevisionStatus.Draft } outside)
-                    item.Extra.Add(new("publish.grants-unpublished", $"'{item.Revision.Name}' grants or offers '{outside.Name}', a draft that is not in this batch. Include it, or publish it first.", item.Revision.Reference));
+                if (_store.FindRevision(target) is not { Status: RevisionStatus.Draft } outside)
+                    continue;
+                // Nothing pending to include: the content's newest revision is published, so this names an old draft of it.
+                var message = newest.TryGetValue(target.ContentId, out var current) && current.Status == RevisionStatus.Published
+                    ? $"'{item.Revision.Name}' points at an old draft of '{outside.Name}'; choose its published revision."
+                    : $"'{item.Revision.Name}' grants or offers '{outside.Name}', a draft that is not in this batch. Include it, or publish it first.";
+                item.Extra.Add(new("publish.grants-unpublished", message, item.Revision.Reference));
             }
         }
 
-        // Leaves first: what an item grants publishes before it, so its grants can be re-pointed at the published revisions.
+        // Leaves first: what an item grants (or the class whose choice it extends) publishes before it, so its grants can be
+        // re-pointed at the published revisions and its validation sees the parent as published.
         var byId = items.ToDictionary(i => i.Revision.ContentId);
-        var needs = items.ToDictionary(i => i, i => NamedContent(i.Revision).Select(r => r.ContentId).Where(id => id != i.Revision.ContentId && byId.ContainsKey(id)).ToHashSet());
+        var needs = items.ToDictionary(
+            i => i,
+            i => NamedContent(i.Revision).Select(r => r.ContentId).Concat(i.Revision.ExtendsChoice is { } extends ? [extends.ContentId] : [])
+                .Where(id => id != i.Revision.ContentId && byId.ContainsKey(id)).ToHashSet());
         var ordered = new List<PlanItem>();
         var done = new HashSet<Guid>();
         var remaining = new List<PlanItem>(items);
@@ -283,17 +310,56 @@ public sealed partial class TomeStackApp
         }
 
         foreach (var item in ordered.Concat(blocked))
-        {
-            var report = ContentValidator.Validate(item.Revision, _store);
-            item.Report = item.Extra.Count == 0 ? report : report with { Errors = [.. report.Errors, .. item.Extra] };
-        }
-        DebugReport? debug = null;
+            item.Report = ContentValidator.Validate(item.Revision, _store);
+        // The debugger's findings are for display. Its error findings are exactly ContentValidator's errors on the stored
+        // draft (the graph findings are warnings and notes), and the validation that counts is the one `Publish` runs on the
+        // revision it writes, which the dry run and the real run both execute; so errors are not shown from here, or a
+        // problem that re-pointing fixes would be reported and then not happen.
+        var findings = new Dictionary<ContentReference, List<DebugFinding>>();
         if (withFindings)
         {
             var context = newest.Values.Where(r => sources.Contains(r.Provenance.SourceId)).ToList();
-            debug = ContentDebugger.Diagnose([.. ordered.Select(i => i.Revision)], all, _store, context);
+            foreach (var finding in ContentDebugger.Diagnose([.. ordered.Select(i => i.Revision)], all, _store, context).Findings.Where(f => f.Severity != FindingSeverity.Error))
+            {
+                if (!findings.TryGetValue(finding.Content, out var list))
+                    findings[finding.Content] = list = [];
+                list.Add(finding);
+            }
         }
-        return new(ordered, blocked, hasPublished, debug);
+        return new(ordered, blocked, hasPublished, findings);
+    }
+
+    /// <summary>
+    /// Runs the plan: each item in order is saved as a new draft with its grants and options re-pointed at what was just
+    /// published (an entry nothing re-points publishes as it is), then published through <see cref="PublishCore"/>, which
+    /// validates the exact revision it writes. The preview and the real publish run this same body; only the dry run
+    /// catches a refusal (it rolls back anyway), turning it into an error of that item.
+    /// </summary>
+    private List<BatchItem> RunBatch(PublishPlan plan, bool dryRun)
+    {
+        var published = new Dictionary<Guid, ContentReference>();
+        var run = new List<BatchItem>();
+        foreach (var item in plan.Ordered)
+        {
+            var (repointed, grants, options) = RePoint(item.Revision, published);
+            var done = new BatchItem(item) { Grants = grants, Options = options };
+            run.Add(done);
+            try
+            {
+                // Insert-only: anything re-pointed, and every dependent, goes through a new draft.
+                var draft = item.IsEntry && ReferenceEquals(repointed, item.Revision)
+                    ? item.Revision.Reference
+                    : SaveDraft(repointed with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft });
+                var (result, _) = PublishCore(draft);
+                published[item.Revision.ContentId] = result.Published;
+                done.Result = result;
+            }
+            catch (AppValidationException ex) when (dryRun)
+            {
+                done.Errors.AddRange(ex.Problems.Where(p => p.Code != "content.validation-failed").DefaultIfEmpty(ex.Problems[0]));
+            }
+        }
+        return run;
     }
 
     /// <summary>
@@ -303,14 +369,42 @@ public sealed partial class TomeStackApp
     /// </summary>
     public PublishManyPreview PreviewPublishMany(IReadOnlyList<Guid> contentIds)
     {
-        var plan = PlanPublishMany(contentIds, expected: null, withFindings: true);
-        var findings = plan.Debug!.Findings.GroupBy(f => f.Content).ToDictionary(g => g.Key, g => (IReadOnlyList<DebugFinding>)[.. g]);
-        PublishManyEntry Entry(PlanItem item) => new(
-            item.Revision.Reference, item.Revision.Name, item.Revision.Kind, item.Report,
-            findings.GetValueOrDefault(item.Revision.Reference) ?? [],
-            plan.HasPublished.Contains(item.Revision.ContentId),
-            item.Grants + item.Options == 0 ? [] : [new(item.Revision.Reference, item.Revision.Name, item.Grants, item.Options)]);
-        var entries = plan.Ordered.Where(i => i.IsEntry).Select(Entry).ToList();
+        // Ruling R50: the preview runs the real publish (same ordering, re-pointing, SaveDraft and validating Publish) inside
+        // a transaction and rolls it back, so it cannot say "can publish" for something the publish would refuse.
+        PublishPlan? plan = null;
+        List<BatchItem> run = [];
+        try
+        {
+            _store.InTransaction(() =>
+            {
+                plan = PlanPublishMany(contentIds, expected: null, withFindings: true);
+                if (!plan.HasCycle) // a cycle has no order to run in
+                    run = RunBatch(plan, dryRun: true);
+                throw new DryRunRollback();
+            });
+        }
+        catch (DryRunRollback)
+        {
+            // The rollback itself: nothing was written, and the choice-extension cache was reset by InTransaction.
+        }
+        var shown = run.ToDictionary(r => r.Plan);
+        PublishManyEntry Entry(PlanItem item)
+        {
+            shown.TryGetValue(item, out var done);
+            var errors = new List<Diagnostic>(item.Extra);
+            if (done is null)
+                errors.AddRange(item.Report.Errors); // not run (a cycle, or a dependent that is held): what stored validation says
+            else
+                errors.AddRange(done.Errors);
+            var warnings = done?.Result?.Report.Warnings ?? item.Report.Warnings;
+            var report = new ValidationReport(item.Revision.Reference, errors, warnings) { RequiredSchemaVersion = done?.Result?.Report.RequiredSchemaVersion ?? item.Report.RequiredSchemaVersion };
+            return new(
+                item.Revision.Reference, item.Revision.Name, item.Revision.Kind, report,
+                plan!.Findings.TryGetValue(item.Revision.Reference, out var found) ? [.. found] : [],
+                plan.HasPublished.Contains(item.Revision.ContentId),
+                done is null || done.Grants + done.Options == 0 ? [] : [new(item.Revision.Reference, item.Revision.Name, done.Grants, done.Options)]);
+        }
+        var entries = plan!.Ordered.Where(i => i.IsEntry).Select(Entry).ToList();
         var dependents = plan.Ordered.Where(i => !i.IsEntry).Concat(plan.Blocked).Select(Entry).ToList();
         return new(entries, dependents, entries.Concat(dependents).All(e => e.Report.CanPublish));
     }
@@ -332,24 +426,13 @@ public sealed partial class TomeStackApp
         _store.InTransaction(() =>
         {
             var plan = PlanPublishMany(request.ContentIds, request.Expected ?? throw PublishSetChanged(), withFindings: false);
-            var errors = plan.All.SelectMany(i => i.Report.Errors).ToList();
+            var errors = plan.All.SelectMany(i => i.Extra).ToList();
             if (errors.Count > 0)
                 throw new AppValidationException([new("content.validation-failed", $"This batch has {errors.Count} problem(s). Nothing was published."), .. errors]);
-
-            var published = new Dictionary<Guid, ContentReference>();
-            var results = new List<PublishResult>();
-            foreach (var item in plan.Ordered)
-            {
-                var (repointed, _, _) = RePoint(item.Revision, published);
-                // An entry nothing re-points publishes as it is; anything else goes through a new draft, so drafts stay insert-only.
-                var draft = item.IsEntry && ReferenceEquals(repointed, item.Revision)
-                    ? item.Revision.Reference
-                    : SaveDraft(repointed with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft });
-                var one = Publish(draft);
-                published[item.Revision.ContentId] = one.Published;
-                results.Add(one);
-            }
-            result = new(results);
+            // The same body as the preview's dry run. A refusal inside it (Publish validates what it writes) propagates, so
+            // everything done so far rolls back with the transaction.
+            // Affected characters are not scanned here (they read every character per item); the studio does not use them.
+            result = new([.. RunBatch(plan, dryRun: false).Select(r => r.Result!)]);
         });
         return result!;
     }

@@ -458,6 +458,29 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Accept_many_accepts_the_first_of_two_twins_from_two_readings_and_blocks_the_second()
+    {
+        // Fix round 1 (item 6): the accepted identities are read once per document and grow as the request goes (R27).
+        var (temp, sourceId, firstJob) = Imported();
+        using var _t = temp;
+        var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var first = Named(temp, firstJob, "Fixture Ember Lance");
+        var twin = Named(temp, second.Id, "Fixture Ember Lance");
+
+        var result = temp.App.AcceptMany(new([first.Id, twin.Id], Confirm: true));
+
+        Assert.Equal([first.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(["import.already-accepted"], result.Blocked.Single(b => b.CandidateId == twin.Id).Codes);
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(twin.Id)!.Status);
+
+        // Renaming the twin still lifts it (the twin side uses the effective values).
+        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+        Assert.Equal([twin.Id], temp.App.AcceptMany(new([twin.Id], Confirm: true)).Accepted.Select(c => c.Id));
+    }
+
+    [Fact]
     public void Accept_many_writes_the_clean_ones_in_one_go_and_lists_the_blocked_with_their_codes()
     {
         // Item 9, D33: blocked ones are returned, never forced.
