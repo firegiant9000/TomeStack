@@ -267,6 +267,21 @@ public class DetectionTests
     }
 
     [Fact]
+    public void A_heading_feat_with_the_plural_Prerequisites_label_proposes_no_family_under_a_two_family_context()
+    {
+        // Ruling R22: the plural label is the non-SRD marker, in the two-block layout as in the one-block one.
+        var found = DetectBlocks([RulesFamilies.Srd51, RulesFamilies.Srd521],
+            new TextBlock("Fixture Steady Aim", 50, 640, 200, 20, 16, true),
+            new TextBlock("Prerequisites: Wisdom 13 or higher", 50, 610, 200, 12, 10, false),
+            new TextBlock("You steady your fixture aim.", 50, 590, 200, 12, 10, false));
+
+        var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
+        Assert.Empty(feat.RulesFamilies);
+        Assert.Contains("rulesFamilies", feat.LowConfidenceFields);
+        Assert.Contains("Say which rules family this is written for before accepting.", feat.Uncertainties);
+    }
+
+    [Fact]
     public void A_description_paragraph_starting_with_Prerequisites_is_not_a_feat()
     {
         // A plain (not heading) one-line block, then a block that starts with "Prerequisites:". A rule that dropped the

@@ -413,6 +413,8 @@ public static partial class CandidateDetector
             else if (IsHeading(unit, body) && unit.Lines.Length == 1 && i + 1 < units.Count && PrerequisitesLine().Match(units[i + 1].Lines[0]) is { Success: true } following)
             {
                 (name, category, prerequisite, layout) = (TitleCase(unit.Lines[0]), "Feat", following.Groups["p"].Value.Trim(), RulesFamilies.Srd51);
+                // The singular label is the SRD 5.1 layout; the plural is the non-SRD marker (ruling R22), so the family is the reviewer's.
+                oneBlockLayout = units[i + 1].Lines[0].StartsWith("Prerequisites:", StringComparison.Ordinal);
                 descriptionStart = i + 2;
             }
             else if (OneBlockFeat(unit) is { } oneBlock)
