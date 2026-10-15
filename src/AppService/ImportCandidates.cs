@@ -186,9 +186,9 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates a draft entry. Confirm to accept; nothing was changed.")]);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
-        // Even as reference, an entry needs a family: it is the one blocker "reference only" does not lift.
-        if (stored.Current.RulesFamilies.Count == 0)
-            throw new AppValidationException([new("import.family-needed", "Say which rules family this entry is written for. Nothing was changed.")]);
+        // Even as reference, an entry needs a family, and a double acceptance is refused: "reference only" lifts neither.
+        if (ProvenanceBlockers(stored) is [var first, ..])
+            throw new AppValidationException([first with { Message = $"{first.Message} Nothing was changed." }]);
         var check = Check(stored, request.AsReference);
         if (!request.AsReference && check.Blockers.Count > 0)
             throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s) or unresolved reference(s). Edit them, or accept it as reference only."), .. check.Blockers]);
@@ -232,10 +232,8 @@ public sealed partial class TomeStackApp
         var current = stored.Current;
         var draft = DraftOf(stored, asReference);
         var report = ContentValidator.Validate(draft, _store);
-        var blockers = new List<Diagnostic>();
-        // 2026-10-14 item 3: an empty family set has its own blocker, so the unsure "rulesFamilies" field is not listed twice.
-        if (current.RulesFamilies.Count == 0)
-            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for."));
+        var provenance = ProvenanceBlockers(stored);
+        var blockers = new List<Diagnostic>(provenance);
         foreach (var field in current.LowConfidenceFields.Where(f => f != "rulesFamilies" || current.RulesFamilies.Count > 0))
             blockers.Add(new("candidate.low-confidence", $"The detector is unsure of '{field}'. Check it against the page and save your edit."));
         // Messages never quote the PDF's text; the review shows the names from the candidate itself.
@@ -243,8 +241,42 @@ public sealed partial class TomeStackApp
             blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
         return new(stored.Id, report, Dependencies(draft, current), blockers,
             CanAccept: stored.Status == CandidateStatus.Pending && blockers.Count == 0 && report.CanPublish,
-            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && current.RulesFamilies.Count > 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
+            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && provenance.Count == 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
     }
+
+    /// <summary>
+    /// What "reference only" does not lift. Computed from what is stored, never stored itself (no migration):
+    /// no rules family (2026-10-14 item 3; the empty set has its own blocker, so the unsure "rulesFamilies" field is not listed twice);
+    /// an armour row or class table kept by a 0.5.0 job on a two-family source, which silently took srd-5.2.1 (ruling R28), until the
+    /// reviewer saves an edit; and an entry another reading of the same document already turned into a draft (ruling R27).
+    /// </summary>
+    private List<Diagnostic> ProvenanceBlockers(StoredCandidate stored)
+    {
+        var blockers = new List<Diagnostic>();
+        if (stored.Status != CandidateStatus.Pending)
+            return blockers;
+        var current = stored.Current;
+        var job = ImportStatus(stored.JobId);
+        if (current.RulesFamilies.Count == 0)
+            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for."));
+        else if (job.WrittenFor is null && stored.Edited is null && IsLayoutNeutral(stored.Candidate)
+            && (_store.FindSource(job.SourceId)?.RulesFamilies.Count ?? 0) > 1)
+            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
+
+        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+        var identity = Identity(stored.Candidate);
+        var already = _store.ListImportJobs()
+            .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+            .SelectMany(j => _store.ListImportCandidates(j.Id))
+            .Any(c => c.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && Identity(c.Candidate) == identity);
+        if (already)
+            blockers.Add(new("import.already-accepted", "This entry was already accepted from another reading of this document."));
+        return blockers;
+    }
+
+    /// <summary>Armour rows and class tables carry no layout, so the detector cannot tell which rules family they use.</summary>
+    private static bool IsLayoutNeutral(DraftCandidate candidate) =>
+        candidate.ProposedKind == ContentKind.Class || candidate.ProposedEffects.Any(e => e is ArmorEffect);
 
     /// <summary>The draft a candidate becomes: always through the quarantine, so a draft with reference-only effects (ADR-004).</summary>
     private static ContentRevision DraftOf(StoredCandidate stored, bool asReference)

@@ -16,7 +16,7 @@
 
 ### Fixed
 
-- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares). This applies to documents read after upgrading: candidates already found by 0.5.0 keep their family until the document is read again.
+- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares). Pending candidates that 0.5.0 already found stay in the old reading's list and now ask for a family too; reading the document again makes a new list. An entry already accepted from another reading of the same document is not accepted a second time.
 
 ### Migration
 
