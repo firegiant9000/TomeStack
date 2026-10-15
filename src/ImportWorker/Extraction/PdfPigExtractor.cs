@@ -208,11 +208,38 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
         ];
     }
 
-    private static readonly string[] WeightWords = ["Bold", "Black", "Heavy", "Semibold", "Demi"];
+    private static readonly string[] StyleWords = ["Black", "Heavy", "Semibold", "Demi"];
 
-    /// <summary>A font whose name carries a weight word draws bold text: some books name their heading face "Black" or "Demi" rather than "Bold".</summary>
-    internal static bool IsBoldFontName(string? fontName) =>
-        fontName is not null && WeightWords.Any(w => fontName.Contains(w, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// A font draws bold text when its name says "Bold", or carries Black, Heavy, Semibold or Demi as a style token: the
+    /// word starts the part after the last '-', ',' or '+', or sits at a camel-case boundary ("FixtureSansBlack"), and
+    /// ends at the end or before a capital ("DemiItalic"). "Academic" and "Blackadder" are not bold.
+    /// </summary>
+    internal static bool IsBoldFontName(string? fontName)
+    {
+        if (fontName is null)
+            return false;
+        if (fontName.Contains("Bold", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var style = fontName.AsSpan(fontName.AsSpan().LastIndexOfAny('-', ',', '+') + 1);
+        foreach (var word in StyleWords)
+        {
+            for (var from = 0; from <= style.Length - word.Length;)
+            {
+                var found = style[from..].IndexOf(word, StringComparison.OrdinalIgnoreCase);
+                if (found < 0)
+                    break;
+                var start = from + found;
+                var end = start + word.Length;
+                var startsToken = start == 0 || (char.IsUpper(style[start]) && char.IsLower(style[start - 1]));
+                var endsToken = end == style.Length || char.IsUpper(style[end]);
+                if (startsToken && endsToken)
+                    return true;
+                from = start + 1;
+            }
+        }
+        return false;
+    }
 
     /// <summary>
     /// Compatibility forms (ligatures such as "ﬁ") become plain letters, and line breaks inside a block become "\n".

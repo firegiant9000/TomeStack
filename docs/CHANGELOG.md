@@ -8,7 +8,7 @@
 
 ### Changed
 
-- **Better at third-party books:** the PDF import now finds feats whose name and prerequisites share a block, names printed in capitals (shown in title case), and class tables titled in capitals, and it no longer proposes table rows that are prices or sentence fragments. Measured on the SRDs (no drop) and on a third-party book (counts in m4-acceptance.md).
+- **Better at third-party books:** the PDF import now finds feats whose name and prerequisites share a block, spell, feat and class names printed in capitals (shown in title case), and class tables titled in capitals, and it no longer proposes table rows that are prices or sentence fragments. Measured on the SRDs (no drop) and on a third-party book (counts in m4-acceptance.md).
 - **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
 - **The import review says what happens next:** a line above the candidates says that accepted entries are drafts in the Homebrew studio, and a button opens that source in the studio.
 - **Reading a two-family book asks "This book is written for":** 2014 rules, 2024 rules or both, with no default. The Read buttons wait for the answer and say why. A job stores the answer (`writtenFor`, optional; a 0.5.0 job without it uses the source's families).

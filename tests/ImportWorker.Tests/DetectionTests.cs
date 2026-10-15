@@ -230,14 +230,82 @@ public class DetectionTests
     }
 
     [Fact]
+    public void A_one_block_feat_under_a_two_family_context_proposes_no_family()
+    {
+        // Ruling R22: the layout matches neither SRD, so the reviewer says which family the book is written for.
+        var found = DetectBlocks([RulesFamilies.Srd51, RulesFamilies.Srd521],
+            new TextBlock("Fixture Deft Hands\nPrerequisites: Dexterity 13 or higher\nYou handle fixture tools quickly.", 50, 600, 200, 40, 10, false));
+
+        var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
+        Assert.Empty(feat.RulesFamilies);
+        Assert.Contains("rulesFamilies", feat.LowConfidenceFields);
+        Assert.Contains("Say which rules family this is written for before accepting.", feat.Uncertainties);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void A_one_block_feat_under_a_one_family_context_takes_that_family(string family)
+    {
+        var found = DetectBlocks([family],
+            new TextBlock("Fixture Deft Hands\nPrerequisites: Dexterity 13 or higher\nYou handle fixture tools quickly.", 50, 600, 200, 40, 10, false));
+
+        var feat = Assert.Single(found, c => c.ProposedKind == ContentKind.Feat);
+        Assert.Equal([family], feat.RulesFamilies);
+        Assert.DoesNotContain("rulesFamilies", feat.LowConfidenceFields);
+    }
+
+    [Fact]
+    public void A_heading_feat_keeps_the_2014_family_under_a_two_family_context()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51, RulesFamilies.Srd521],
+            new TextBlock("Fixture Steady Aim", 50, 640, 200, 20, 16, true),
+            new TextBlock("Prerequisite: Wisdom 13 or higher", 50, 610, 200, 12, 10, false),
+            new TextBlock("You steady your fixture aim.", 50, 590, 200, 12, 10, false));
+
+        Assert.Equal([RulesFamilies.Srd51], Assert.Single(found, c => c.ProposedKind == ContentKind.Feat).RulesFamilies);
+    }
+
+    [Fact]
     public void A_description_paragraph_starting_with_Prerequisites_is_not_a_feat()
     {
+        // A plain (not heading) one-line block, then a block that starts with "Prerequisites:". A rule that dropped the
+        // heading requirement would take the first block for a feat name.
         var found = DetectBlocks([RulesFamilies.Srd51],
-            new TextBlock("Fixture Knack\nAt 3rd level, you learn a fixture trick that you can use once per rest.", 50, 600, 200, 40, 10, false),
-            new TextBlock("Prerequisites: none are needed for the fixture trick, which anyone may learn at any time.", 50, 550, 200, 30, 10, false),
-            new TextBlock("Fixture Hush\nAt 5th level, you learn a second trick.\nPrerequisites: none are needed for this one either.", 50, 450, 200, 40, 10, false));
+            new TextBlock("Fixture Knack", 50, 600, 200, 12, 10, false),
+            new TextBlock("Prerequisites: Dexterity 13 or higher", 50, 580, 200, 12, 10, false),
+            new TextBlock("Fixture Hush\nAt 5th level, you learn a second trick.", 50, 500, 200, 40, 10, false),
+            new TextBlock("Prerequisites: none are needed for the fixture trick, which anyone may learn at any time.", 50, 450, 200, 30, 10, false),
+            new TextBlock("Fixture Quill\nAt 7th level, you learn a third trick.\nPrerequisites: none are needed for this one either.", 50, 350, 200, 40, 10, false));
 
         Assert.DoesNotContain(found, c => c.ProposedKind == ContentKind.Feat);
+    }
+
+    [Fact]
+    public void A_heading_feat_keeps_a_long_prerequisite_but_a_one_block_feat_caps_it_at_400_characters()
+    {
+        var longText = string.Join(' ', Enumerable.Repeat("a long fixture prerequisite", 12)); // 335 characters
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Fixture Steady Aim", 50, 640, 200, 20, 16, true),
+            new TextBlock($"Prerequisite: {longText} {longText}", 50, 610, 200, 12, 10, false),
+            new TextBlock("You steady your fixture aim.", 50, 590, 200, 12, 10, false),
+            new TextBlock($"Fixture Wide Stance\nPrerequisites: {longText} {longText}\nYou stand wide.", 50, 400, 200, 40, 10, false),
+            new TextBlock($"Fixture Deep Stance\nPrerequisites: {longText}\nYou stand deep.", 50, 300, 200, 40, 10, false));
+
+        Assert.Equal(671,Assert.Single(found, c => c.ProposedName == "Fixture Steady Aim").Fields["prerequisite"].Length);
+        Assert.DoesNotContain(found, c => c.ProposedName == "Fixture Wide Stance");
+        Assert.Single(found, c => c.ProposedName == "Fixture Deep Stance");
+    }
+
+    [Fact]
+    public void A_one_block_feat_in_a_class_section_is_not_also_a_class_feature()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("Class Features", 50, 700, 200, 20, 10, false),
+            new TextBlock("Fixture Gift\nPrerequisites: Fixture Knack, at 3rd level or higher\nYou gain a fixture gift.", 50, 600, 200, 40, 10, false));
+
+        var candidate = Assert.Single(found);
+        Assert.Equal(ContentKind.Feat, candidate.ProposedKind);
     }
 
     [Fact]
@@ -312,10 +380,22 @@ public class DetectionTests
         Assert.Equal("Fixture Warden", Assert.Single(found, c => c.ProposedKind == ContentKind.Class).ProposedName);
     }
 
+    [Fact]
+    public void A_class_table_whose_header_cells_are_lower_case_is_not_read()
+    {
+        var found = DetectBlocks([RulesFamilies.Srd51],
+            new TextBlock("THE FIXTURE WARDEN", 50, 700, 200, 20, 10, false),
+            new TextBlock("level", 50, 660, 40, 10, 10, false),
+            new TextBlock("class features", 150, 660, 100, 10, 10, false),
+            new TextBlock("1st", 50, 640, 40, 10, 10, false), new TextBlock("Fixture Focus", 150, 640, 100, 10, 10, false));
+
+        Assert.DoesNotContain(found, c => c.ProposedKind == ContentKind.Class);
+    }
+
     [Theory]
-    [InlineData("Fixture Hook 5 gp")]                   // a price inside a name
-    [InlineData("Fixture hook, which counts as")]       // a sentence fragment
-    [InlineData("Fixture Hook, a hook")]                // a comma and a lower-case word
+    [InlineData("Fixture Hook 5 gp")]                  // a price inside a name
+    [InlineData("Fixture Big Hook, a fine Tool")]       // a sentence fragment that LooksLikeCellName accepts: only the junk rule drops it
+    [InlineData("Fixture Hook, a hook")]                // a comma and two lower-case words
     public void Item_rows_with_prices_or_sentence_fragments_in_the_name_are_dropped(string name)
     {
         var found = DetectBlocks([RulesFamilies.Srd51],
