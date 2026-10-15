@@ -143,7 +143,7 @@ public sealed partial class TomeStackApp
         var name = request.Name?.Trim() ?? current.ProposedName;
         if (name.Length is < 1 or > 200)
             throw new AppValidationException([new("candidate.name-invalid", "A name has 1 to 200 characters.")]);
-        var families = request.RulesFamilies ?? current.RulesFamilies;
+        IReadOnlyList<string> families = [.. (request.RulesFamilies ?? current.RulesFamilies).Distinct(StringComparer.Ordinal)];
         // 2026-10-14 item 3: none is allowed here (other fields can be saved first); check and accept wait for a family.
         if (families.Any(f => !RulesFamilies.IsKnown(f)))
             throw new AppValidationException([new("candidate.family-invalid", "Choose supported rules families.")]);

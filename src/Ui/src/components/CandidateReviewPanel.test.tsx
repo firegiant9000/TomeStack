@@ -7,7 +7,7 @@ import { client } from '../api/client';
 import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
-vi.mock('../api/client', () => ({ client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn() } }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
 const bothSource = { id: 'src-2', title: 'Testy Both', rulesFamilies: ['srd-5.1', 'srd-5.2.1'] } as SourceRecord;
@@ -115,7 +115,32 @@ it('still saves with no family ticked, and Accept shows the servers reason', asy
   expect(within(group).getAllByRole('checkbox').map((b) => (b as HTMLInputElement).checked)).toEqual([false, false]);
   await screen.findByRole('list', { name: 'Blocks accepting' });
   expect(screen.getByText('Say which rules family this entry is written for.')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Accept as a draft' })).toHaveProperty('disabled', true);
+  expect(screen.getByRole('button', { name: 'Accept as a draft' }).getAttribute('aria-disabled')).toBe('true');
   await user.click(screen.getByRole('button', { name: 'Save edit' }));
   expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ rulesFamilies: [] }));
+});
+
+it('keeps a blocked Accept focusable, refuses the press, and links the visible reason', async () => {
+  vi.mocked(client.acceptCandidate).mockClear();
+  const user = userEvent.setup();
+  await openDetail(
+    [],
+    checkOf({
+      canAccept: false,
+      canAcceptAsReference: false,
+      blockers: [{ code: 'import.family-needed', message: 'Say which rules family this entry is written for.' }],
+    }),
+  );
+  const list = await screen.findByRole('list', { name: 'Blocks accepting' });
+  expect(list.id).not.toBe('');
+  for (const name of ['Accept as a draft', 'Accept as reference']) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toHaveProperty('disabled', false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.getAttribute('aria-describedby')).toBe(list.id);
+    button.focus();
+    await user.click(button);
+    expect(document.activeElement).toBe(button);
+  }
+  expect(client.acceptCandidate).not.toHaveBeenCalled();
 });

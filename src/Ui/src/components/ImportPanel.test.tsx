@@ -54,6 +54,27 @@ it('holds the Read buttons, with a linked reason, until it is answered', async (
   expect(screen.queryByText('Say what the book is written for.')).toBeNull();
 });
 
+it('links each panel to its own reason when two sources are listed', async () => {
+  const other = { ...both, id: 'src-3', title: 'Testy Other' } as SourceRecord;
+  render(
+    <>
+      <ImportPanel source={both} onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />
+      <ImportPanel source={other} onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />
+    </>,
+  );
+  await vi.waitFor(() => expect(client.listImports).toHaveBeenCalledTimes(2));
+  for (const title of ['Testy Both', 'Testy Other']) {
+    const panel = screen.getByRole('region', { name: `Read the text of ${title}` });
+    for (const name of ['Read the whole document', 'Read these pages']) {
+      const id = within(panel).getByRole('button', { name }).getAttribute('aria-describedby') ?? '';
+      const reasons = document.querySelectorAll(`[id="${id}"]`);
+      expect(reasons).toHaveLength(1);
+      expect(panel.contains(reasons[0] ?? null)).toBe(true);
+      expect(reasons[0]?.textContent).toBe('Say what the book is written for.');
+    }
+  }
+});
+
 it('sends the answer with the read', async () => {
   const user = await renderPanel(both);
   await user.click(screen.getByRole('radio', { name: '2014 rules (SRD 5.1)' }));

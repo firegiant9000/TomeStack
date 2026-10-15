@@ -231,6 +231,10 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   }
 
   const headingId = `candidate-${stored.id}`;
+  const blocksId = `blocks-${stored.id}`;
+  const problemsId = `problems-${stored.id}`;
+  // What a blocked Accept points at: the blockers, else the validator's problems; nothing while the check is loading.
+  const reasonId = check ? (check.blockers.length > 0 ? blocksId : check.report.errors.length > 0 ? problemsId : undefined) : undefined;
   return (
     <section aria-labelledby={headingId} className="play-panel">
       <h5 id={headingId} tabIndex={-1} ref={heading}>
@@ -336,14 +340,14 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       {check && (
         <div role="region" aria-label="Check before accepting">
           {check.blockers.length > 0 && (
-            <ul className="warnings" aria-label="Blocks accepting">
+            <ul id={blocksId} className="warnings" aria-label="Blocks accepting">
               {check.blockers.map((b, i) => (
                 <li key={`${b.code}-${i}`}>{b.message}</li>
               ))}
             </ul>
           )}
           {check.report.errors.length > 0 && (
-            <ul className="errors" aria-label="Problems">
+            <ul id={problemsId} className="errors" aria-label="Problems">
               {check.report.errors.map((e, i) => (
                 <li key={`${e.code}-${i}`}>{e.message}</li>
               ))}
@@ -356,10 +360,21 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
 
       {pending && (
         <div className="actions">
-          <button type="button" disabled={!check?.canAccept} onClick={() => accept(false)}>
+          {/* aria-disabled, never `disabled`: a re-check can block a button that has focus (2.4.3); the reason is the visible list. */}
+          <button
+            type="button"
+            aria-disabled={!check?.canAccept || undefined}
+            aria-describedby={!check?.canAccept ? reasonId : undefined}
+            onClick={() => check?.canAccept && accept(false)}
+          >
             Accept as a draft
           </button>
-          <button type="button" disabled={!check?.canAcceptAsReference} onClick={() => accept(true)}>
+          <button
+            type="button"
+            aria-disabled={!check?.canAcceptAsReference || undefined}
+            aria-describedby={!check?.canAcceptAsReference ? reasonId : undefined}
+            onClick={() => check?.canAcceptAsReference && accept(true)}
+          >
             Accept as reference
           </button>
           <button type="button" onClick={ignore}>

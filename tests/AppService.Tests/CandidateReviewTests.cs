@@ -192,6 +192,18 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void A_duplicated_family_list_is_stored_once()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var edited = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51, RulesFamilies.Srd51, RulesFamilies.Srd521, RulesFamilies.Srd51]));
+
+        Assert.Equal([RulesFamilies.Srd51, RulesFamilies.Srd521], edited.Current.RulesFamilies);
+    }
+
+    [Fact]
     public void Accept_waits_for_a_family_on_a_two_family_source()
     {
         // Review Focus 1.

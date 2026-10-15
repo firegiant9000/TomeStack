@@ -56,6 +56,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
   const askFamily = source.rulesFamilies.length > 1;
   const answer = picked?.sourceId === source.id ? picked.value : undefined;
   const needsAnswer = askFamily && answer === undefined;
+  const hintId = `written-for-hint-${source.id}`; // one panel per source on the Sources screen: ids must be unique (4.1.2)
   const writtenFor = askFamily && answer ? (answer === 'both' ? [...source.rulesFamilies] : [answer]) : undefined;
 
   async function start(request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) {
@@ -129,7 +130,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
         <p className="hint">Written for {source.rulesFamilies.map(familyShortName).join(' and ')} (from the source).</p>
       )}
       {needsAnswer && (
-        <p id="written-for-hint" className="hint">
+        <p id={hintId} className="hint">
           Say what the book is written for.
         </p>
       )}
@@ -146,7 +147,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           type="button"
           disabled={!valid || running}
           aria-disabled={needsAnswer || undefined}
-          aria-describedby={needsAnswer ? 'written-for-hint' : undefined}
+          aria-describedby={needsAnswer ? hintId : undefined}
           onClick={() => start({ firstPage: first, lastPage: last ?? first })}
         >
           Read these pages
@@ -155,7 +156,7 @@ export function ImportPanel({ source, onError, onStatus, onOpenStudio }: Props) 
           type="button"
           disabled={running}
           aria-disabled={needsAnswer || undefined}
-          aria-describedby={needsAnswer ? 'written-for-hint' : undefined}
+          aria-describedby={needsAnswer ? hintId : undefined}
           onClick={() => start({ wholeDocument: true })}
         >
           Read the whole document
