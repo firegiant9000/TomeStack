@@ -103,7 +103,9 @@ public class DetectionTests
                 (ContentKind.Spell, "Fixture Ember Lance", 2), (ContentKind.Spell, "Fixture Frost Veil", 2),
                 (ContentKind.Feature, "Fixture Stormcall", 3), (ContentKind.Feat, "Fixture Keen Watcher", 3),
                 (ContentKind.Item, "Fixture Hookblade", 4), (ContentKind.Item, "Fixture Longstaff", 4), (ContentKind.Item, "Fixture Plate Shell", 4), (ContentKind.Item, "Fixture Quilted Coat", 4),
-                (ContentKind.Class, "Fixture Warden", 5), (ContentKind.Class, "Fixture Lamplighter", 7), (ContentKind.Feature, "Fixture Glow", 7),
+                (ContentKind.Class, "Fixture Warden", 5), (ContentKind.Feature, "Fixture Focus", 5), (ContentKind.Feature, "Fixture Resolve", 5), // the last two are stubs of the Warden's table
+                (ContentKind.Class, "Fixture Lamplighter", 7), (ContentKind.Feature, "Fixture Beacon", 7), (ContentKind.Feature, "Fixture Dusk Step", 7), (ContentKind.Feature, "Fixture Final Light", 7),
+                (ContentKind.Feature, "Fixture Glow", 7), (ContentKind.Feature, "Fixture Lantern Rite", 7), (ContentKind.Feature, "Fixture Sconce", 7), (ContentKind.Feature, "Spellcasting", 7), // all but Glow are stubs
             ],
             found.Select(c => (c.ProposedKind, c.ProposedName, c.Page.Start)).OrderBy(c => c.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName));
         Assert.All(found, c =>
@@ -338,8 +340,8 @@ public class DetectionTests
 
         Assert.Equal(ContentKind.Class, warden.ProposedKind);
         Assert.Equal(("Fixture Focus", "Fixture Resolve", "Fixture Stormcall"), (warden.Fields["level 1"], warden.Fields["level 2"], warden.Fields["level 3"]));
-        // Fixture Stormcall is another candidate of the job; the other two are not in the book.
-        Assert.Equal(["Fixture Focus", "Fixture Resolve"], warden.UnresolvedReferences);
+        // Fixture Stormcall is another candidate of the job; the other two are not in the book, so they are stubs (item 11, R54), which resolve the references.
+        Assert.Empty(warden.UnresolvedReferences);
         Assert.Contains("effects", warden.LowConfidenceFields);
     }
 
@@ -369,6 +371,63 @@ public class DetectionTests
         Assert.DoesNotContain("effects", lamplighter.LowConfidenceFields);
         Assert.Equal("Fixture Glow", lamplighter.Fields["level 2"]);
         Assert.Contains("Insight", lamplighter.Fields["skills"], StringComparison.Ordinal);
+    }
+
+    private static async Task<DetectionResult> DetectResult(Func<string, bool>? installed = null)
+    {
+        var pages = new List<DetectionPage>();
+        await foreach (var item in new PdfPigExtractor().ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
+        {
+            if (item is ExtractedPage page)
+                pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
+        }
+        return CandidateDetector.DetectWithLimit(pages, new(Source, [RulesFamilies.Srd51, RulesFamilies.Srd521], installed ?? (_ => false)));
+    }
+
+    [Fact]
+    public async Task A_class_links_each_feature_its_table_names_to_a_detected_feature_or_a_reference_stub()
+    {
+        var result = await DetectResult();
+        var byId = result.Candidates.ToDictionary(c => c.Id);
+        var lamplighter = Named(result.Candidates, "Fixture Lamplighter");
+
+        var links = result.Links.Where(l => l.ClassId == lamplighter.Id).Select(l => (byId[l.FeatureId].ProposedName, l.Level)).OrderBy(l => l.Level).ThenBy(l => l.ProposedName, StringComparer.Ordinal).ToList();
+        Assert.Equal(
+            [("Fixture Lantern Rite", 1), ("Spellcasting", 1), ("Fixture Glow", 2), ("Fixture Beacon", 5), ("Fixture Glow", 7), ("Fixture Sconce", 9), ("Fixture Beacon", 11), ("Fixture Dusk Step", 15), ("Fixture Final Light", 20)],
+            links);
+
+        // Fixture Glow is a block of the book: the link goes to it, not to a stub. The others are stubs of the class page: a name, no effects.
+        var glow = Named(result.Candidates, "Fixture Glow");
+        Assert.Equal(7, glow.Page.Start);
+        Assert.Equal(2, result.Links.Count(l => l.FeatureId == glow.Id));
+        var stubs = result.Links.Where(l => l.ClassId == lamplighter.Id).Select(l => byId[l.FeatureId]).Where(c => c.Id != glow.Id).DistinctBy(c => c.Id).ToList();
+        Assert.Equal(6, stubs.Count);
+        Assert.All(stubs, s =>
+        {
+            Assert.Equal(ContentKind.Feature, s.ProposedKind);
+            Assert.Empty(s.ProposedEffects);
+            Assert.Equal(lamplighter.Page, s.Page);
+            Assert.Empty(s.LowConfidenceFields);
+            Assert.Empty(s.UnresolvedReferences);
+        });
+        // The class's own references now resolve (the stubs are candidates of the job); no ASI or "... feature" placeholder is linked.
+        Assert.Empty(lamplighter.UnresolvedReferences);
+        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is "Ability Score Improvement" or "Fixture Order feature");
+
+        // The Warden's one-line rows link too: Stormcall is a block of the book, Focus and Resolve are stubs.
+        var warden = Named(result.Candidates, "Fixture Warden");
+        Assert.Equal(["Fixture Focus", "Fixture Resolve", "Fixture Stormcall"], result.Links.Where(l => l.ClassId == warden.Id).OrderBy(l => l.Level).Select(l => byId[l.FeatureId].ProposedName));
+        Assert.Empty(warden.UnresolvedReferences);
+    }
+
+    [Fact]
+    public async Task A_feature_name_that_is_installed_gets_no_stub_and_no_link()
+    {
+        var result = await DetectResult(name => name == "Spellcasting");
+
+        var lamplighter = Named(result.Candidates, "Fixture Lamplighter");
+        Assert.DoesNotContain(result.Candidates, c => c.ProposedName == "Spellcasting");
+        Assert.Equal(8, result.Links.Count(l => l.ClassId == lamplighter.Id));
     }
 
     [Fact]

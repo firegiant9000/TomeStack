@@ -14,7 +14,11 @@ public sealed record DetectionContext(Guid SourceId, IReadOnlyList<string> Sourc
 
 /// <param name="Candidates">At most <see cref="CandidateDetector.MaxCandidates"/>, in page order.</param>
 /// <param name="Truncated">More were found than the cap allows.</param>
-public sealed record DetectionResult(IReadOnlyList<DraftCandidate> Candidates, bool Truncated);
+/// <param name="Links">Item 11 (R39, R54): which feature candidate each class candidate grants, at which class level; both ends are in <paramref name="Candidates"/>.</param>
+public sealed record DetectionResult(IReadOnlyList<DraftCandidate> Candidates, bool Truncated, IReadOnlyList<CandidateLink> Links);
+
+/// <summary>A class candidate grants a feature candidate at a class level (a transient detection result; stored as <c>grantsCandidates</c> on the class).</summary>
+public sealed record CandidateLink(Guid ClassId, Guid FeatureId, int Level);
 
 /// <summary>
 /// M4 D3 (SPEC I-01, I-02; ADR-004): deterministic, rule-based detection of SRD-shaped blocks in extracted page text. No
@@ -53,6 +57,7 @@ public static partial class CandidateDetector
         var units = Units(pages, boilerplate);
         var body = BodySize(units);
         var found = new List<DraftCandidate>();
+        var classFeatures = new Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>>();
         cancellationToken.ThrowIfCancellationRequested();
         found.AddRange(ApplySpellLists(Spells(units, context, body).ToList(), SpellListPages(units, body)));
         cancellationToken.ThrowIfCancellationRequested();
@@ -65,7 +70,26 @@ public static partial class CandidateDetector
             var lines = PageLines(page, boilerplate);
             found.AddRange(Weapons(page, lines, context));
             found.AddRange(Armor(page, lines, context));
-            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context));
+            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures));
+        }
+
+        // Item 11 (R54): what each class's Features column names becomes a link to a detected feature, or to a reference stub.
+        var links = new List<CandidateLink>();
+        foreach (var (classId, features) in classFeatures)
+        {
+            var owner = found.First(c => c.Id == classId);
+            foreach (var name in features.SelectMany(f => f.Value.Select(n => (Name: n, Level: f.Key))).Where(f => IsLinkable(f.Name)).GroupBy(f => Key(f.Name)).Select(g => (g.First().Name, Levels: g.Select(x => x.Level).Distinct().Order().ToList())))
+            {
+                var target = found.Where(c => c.ProposedKind == ContentKind.Feature && Key(c.ProposedName) == Key(name.Name)).OrderBy(c => c.Page.Start).FirstOrDefault();
+                if (target is null)
+                {
+                    if (context.IsInstalled(name.Name))
+                        continue; // installed content of that name is resolved elsewhere (an unresolved reference never names it)
+                    target = FeatureStub(owner, name.Name, name.Levels[0], context);
+                    found.Add(target);
+                }
+                links.AddRange(name.Levels.Select(level => new CandidateLink(owner.Id, target.Id, level)));
+            }
         }
 
         // A candidate's references resolve against installed content and the job's other candidates.
@@ -74,7 +98,25 @@ public static partial class CandidateDetector
             .Select(c => c with { UnresolvedReferences = [.. c.UnresolvedReferences.Where(r => !named.Contains(Key(r)) && !context.IsInstalled(r)).Distinct(StringComparer.OrdinalIgnoreCase)] })
             .OrderBy(c => c.Page.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName, StringComparer.Ordinal)
             .ToList();
-        return new([.. ordered.Take(maxCandidates)], ordered.Count > maxCandidates);
+        var taken = ordered.Take(maxCandidates).ToList();
+        var takenIds = taken.Select(c => c.Id).ToHashSet();
+        return new([.. taken], ordered.Count > maxCandidates, [.. links.Where(l => takenIds.Contains(l.ClassId) && takenIds.Contains(l.FeatureId))]);
+    }
+
+    /// <summary>A feature name worth a link: not "Ability Score Improvement" and not a subclass placeholder ("Fixture Order feature").</summary>
+    private static bool IsLinkable(string name) =>
+        !name.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A feature the class table names that no block of the job describes: the name and the class page only, reference.</summary>
+    private static DraftCandidate FeatureStub(DraftCandidate owner, string name, int level, DetectionContext context)
+    {
+        var (families, uncertainties, _) = NeutralFamily(context);
+        uncertainties.Add("Only the name was found, in the class table: add its text by hand, or accept it as reference.");
+        return new DraftCandidate(
+            Guid.NewGuid(), context.SourceId, owner.Page, $"{owner.ProposedName}, level {level}: {name}", ContentKind.Feature, name, families, [], 0.3, uncertainties)
+        {
+            Fields = new Dictionary<string, string> { ["class"] = owner.ProposedName, ["level"] = level.ToString(CultureInfo.InvariantCulture) },
+        };
     }
 
     /// <summary>Case, spacing and apostrophes do not matter when names are compared.</summary>
@@ -842,7 +884,7 @@ public static partial class CandidateDetector
     private static bool IsFeaturesCell(string text) =>
         text.EndsWith("Features", StringComparison.Ordinal) || text.EndsWith("FEATURES", StringComparison.Ordinal);
 
-    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context)
+    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures)
     {
         // "The Bard" (SRD 5.1) or "Bard Features" (SRD 5.2.1); "Class Features" and "Bard Class Features" are section headings.
         var titles = pageUnits.Select(u => u.Lines[0]).Select(t => ClassTableTitle().Match(t)).Where(m => m.Success)
@@ -857,7 +899,7 @@ public static partial class CandidateDetector
         var pageTextLines = lines.Select(l => l.Line).ToList();
         var titleLine = pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
         if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
-            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context)];
+            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context, classFeatures)];
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
         var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
@@ -886,11 +928,11 @@ public static partial class CandidateDetector
         if (byLevel.Count == 0)
             return [];
         var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
-        return [ClassCandidate(page, className, features, null, pageTextLines, context)];
+        return [ClassCandidate(page, className, features, null, pageTextLines, context, classFeatures)];
     }
 
     /// <summary>A class candidate: the Features column by level, plus the effects its page supports (<see cref="ClassProposals"/>).</summary>
-    private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context)
+    private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures)
     {
         var ordered = features.OrderBy(f => f.Key).ToList();
         var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
@@ -908,7 +950,7 @@ public static partial class CandidateDetector
         lowConfidence.AddRange(proposal.LowConfidenceFields);
         if (familyUnsure)
             lowConfidence.Add("rulesFamilies");
-        return new DraftCandidate(
+        var candidate = new DraftCandidate(
             Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt(ordered.Select(f => $"{f.Key}: {string.Join(", ", f.Value)}")),
             ContentKind.Class, className, families, proposal.Effects, Clamp(features.Count >= 3 ? 0.7 : 0.5), uncertainties)
         {
@@ -916,6 +958,8 @@ public static partial class CandidateDetector
             UnresolvedReferences = references,
             LowConfidenceFields = lowConfidence,
         };
+        classFeatures[candidate.Id] = features;
+        return candidate;
     }
 
     // ---- patterns (anchored, with a match timeout) ----
