@@ -63,6 +63,9 @@ public sealed record UpdateReview(
 
 public sealed partial class TomeStackApp
 {
+    /// <summary>Test seam (fix round 1, item 7): runs just before a draft is written, to force a failure inside a transaction.</summary>
+    internal Action<ContentRevision>? BeforeSaveDraft { get; set; }
+
     /// <summary>
     /// Stores an inactive draft (ADR-004). Drafts are insert-only like published revisions, so changing a draft means
     /// saving it under a new revision id. Only a draft can be saved this way; publishing is a separate command.
@@ -84,6 +87,7 @@ public sealed partial class TomeStackApp
         if (ContentValidator.EmptyEntries(revision) is { Count: > 0 } empty)
             throw new AppValidationException(empty);
         var draft = revision.RevisionId == Guid.Empty ? revision with { RevisionId = Guid.NewGuid() } : revision;
+        BeforeSaveDraft?.Invoke(draft);
         try
         {
             _store.InTransaction(() => _store.AddRevision(draft));

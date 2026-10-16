@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TomeStack.ImportWorker;
@@ -102,7 +103,20 @@ public sealed record CandidateCheck(
     IReadOnlyList<CandidateDependency> Dependencies,
     IReadOnlyList<Diagnostic> Blockers,
     bool CanAccept,
-    bool CanAcceptAsReference);
+    bool CanAcceptAsReference)
+{
+    /// <summary>Informational lines that do not block (ruling R66: linked features that are ignored and will not be granted).</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
+    /// <summary>Item 11 (fix round 1): every feature a class grants, by name, at its lowest level, with its review status.</summary>
+    public IReadOnlyList<CandidateLinkSummary> Linked { get; init; } = [];
+}
+
+/// <summary>
+/// A feature a class candidate grants: a linked candidate of the same job (<paramref name="CandidateId"/> and its
+/// <paramref name="Status"/>), or the one installed published feature of that name (<paramref name="Installed"/>, ruling R67).
+/// </summary>
+public sealed record CandidateLinkSummary(Guid? CandidateId, string Name, int Level, CandidateStatus? Status, bool Installed);
 
 /// <param name="Kind">Only this kind; null for every kind.</param>
 /// <param name="MaxConfidence">Only candidates at or below this confidence (the unsure ones first, for example 0.7).</param>
@@ -132,6 +146,9 @@ public sealed partial class TomeStackApp
 
     internal int DetectionCandidateCap { get; set; } = CandidateDetector.MaxCandidates;
 
+    /// <summary>Test seam (fix round 1, item 7): runs after an accept is planned and checked, just before its writes.</summary>
+    internal Action? BeforeAcceptWrites { get; set; }
+
     /// <summary>
     /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
     /// Candidates already reviewed stay; pending ones are replaced. A candidate reviewed in an earlier import of the same
@@ -151,7 +168,10 @@ public sealed partial class TomeStackApp
             .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(families.Contains))
             .Select(r => CandidateDetector.Key(r.Name))
             .ToHashSet(StringComparer.Ordinal);
-        var result = CandidateDetector.DetectWithLimit(pages, new(source.Id, families, name => installed.Contains(CandidateDetector.Key(name))), DetectionCandidateCap, cancellationToken);
+        var features = InstalledFeaturesByName(families, source.Id);
+        var result = CandidateDetector.DetectWithLimit(pages,
+            new(source.Id, families, name => installed.Contains(CandidateDetector.Key(name)), name => features.TryGetValue(CandidateDetector.Key(name), out var matches) && matches.Count == 1),
+            DetectionCandidateCap, cancellationToken);
         var detected = result.Candidates;
 
         static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
@@ -169,18 +189,29 @@ public sealed partial class TomeStackApp
         var freshIds = fresh.Select(c => c.Id).ToHashSet();
         var detectedById = detected.ToDictionary(c => c.Id);
         Guid? Target(Guid detectedId) => freshIds.Contains(detectedId) ? detectedId : kept.TryGetValue(Identity(detectedById[detectedId]), out var existing) ? existing : null;
-        var grants = result.Links
+        var links = result.Links
             .Where(l => freshIds.Contains(l.ClassId))
-            .Select(l => (l.ClassId, Target: Target(l.FeatureId), l.Level))
+            .Select(l => (l.ClassId, l.FeatureId, Target: Target(l.FeatureId), l.Level))
+            .ToList();
+        var grants = links
             .Where(l => l.Target is not null)
             .GroupBy(l => l.ClassId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<CandidateGrant>)[.. g.OrderBy(l => l.Level).Select(l => new CandidateGrant(l.Target!.Value, l.Level))]);
+        // Ruling R68: a link whose feature was reviewed in an earlier import of the document is not dropped silently (and not
+        // linked across jobs): the class says how many, by count (an uncertainty never quotes the document).
+        var earlier = links.Where(l => l.Target is null).GroupBy(l => l.ClassId).ToDictionary(g => g.Key, g => g.Select(l => l.FeatureId).Distinct().Count());
+        static DraftCandidate WithEarlier(DraftCandidate candidate, int count) => count == 0 ? candidate : candidate with
+        {
+            Uncertainties = [.. candidate.Uncertainties, count == 1
+                ? "1 table feature was reviewed in an earlier import and is not linked: add it in the studio."
+                : $"{count} table features were reviewed in an earlier import and are not linked: add them in the studio."],
+        };
         cancellationToken.ThrowIfCancellationRequested();
         _store.InTransaction(() =>
         {
             _store.DeletePendingImportCandidates(job.Id);
             foreach (var candidate in fresh)
-                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = candidate, GrantsCandidates = grants.GetValueOrDefault(candidate.Id), UpdatedAt = now });
+                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = WithEarlier(candidate, earlier.GetValueOrDefault(candidate.Id)), GrantsCandidates = grants.GetValueOrDefault(candidate.Id), UpdatedAt = now });
         });
         // Item 13: the review list says when it is not the whole book. The flags are set each run (a resumed job re-detects).
         return job with
@@ -266,13 +297,18 @@ public sealed partial class TomeStackApp
         if (ClassUnconfirmed(stored, request.AsReference, confirmed) is { } unconfirmed)
             throw new AppValidationException([unconfirmed]);
 
+        BeforeAcceptWrites?.Invoke();
         StoredCandidate? accepted = null;
         // One transaction: a draft never exists without its candidate marked accepted, so a crash cannot lead to a second draft.
         // The linked feature drafts are written first, so the class draft's grants pin drafts that exist (ADR-016).
         _store.InTransaction(() =>
         {
+            // Fix round 1, item 7: the plan read each linked feature's status before the transaction; one reviewed since then
+            // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
+            if (plan.Linked.Any(l => l.Candidate is { } planned && _store.FindImportCandidate(planned.Id)?.Status != planned.Status))
+                throw new AppValidationException([new("candidate.linked-changed", "A feature this class grants was reviewed while it was being accepted. Check the class again; nothing was changed.")]);
             foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
-                WriteAccepted(feature.Candidate, feature.NewDraft!, asReference: false);
+                WriteAccepted(feature.Candidate!, feature.NewDraft!, asReference: false);
             accepted = WriteAccepted(stored, plan.Draft, request.AsReference);
         });
         return accepted!;
@@ -310,51 +346,67 @@ public sealed partial class TomeStackApp
         return new("import.class-unconfirmed", "Confirm the hit die (and the spell slot table, when the class has one) against the page before accepting this class, or accept it as reference only. Nothing was changed.");
     }
 
-    /// <summary>A linked feature candidate of a class, with the draft it will be (or already is) and the reference the class pins.</summary>
-    private sealed record LinkedFeature(StoredCandidate Candidate, int Level, ContentRevision? NewDraft, ContentReference? Pin);
+    /// <summary>
+    /// A feature a class grants, with the draft it will be (or already is) and the reference the class pins: a linked candidate
+    /// of the same job, or (<paramref name="Candidate"/> null) the one installed published feature of that name (ruling R67).
+    /// </summary>
+    private sealed record LinkedFeature(StoredCandidate? Candidate, string Name, int Level, ContentRevision? NewDraft, ContentReference? Pin);
 
     /// <summary>What accepting a candidate would write: the class (or other) draft, and the linked feature drafts it grants.</summary>
     private sealed record AcceptPlan(ContentRevision Draft, IReadOnlyList<LinkedFeature> Linked);
 
     /// <summary>
-    /// The draft of a candidate and, for a class accepted as a draft, its linked features (R55): one already accepted is pinned
-    /// at its draft, a pending one gets a draft built now (written before the class), an ignored one has none. The class's
-    /// grants name each feature once, at the lowest level its table lists it (a feature is granted once).
+    /// The draft of a candidate and, for a class accepted as a draft, the features it grants. A linked candidate already
+    /// accepted is pinned at its content's newest published revision, or its newest draft when none is published (fix round 1,
+    /// item 1: it may have been published or re-drafted since); a pending one gets a draft built now (written before the
+    /// class); an ignored one is not granted (ruling R66). A Features-column name with no linked candidate is granted from the
+    /// one installed published feature of that name in the class's families, outside this source (R67). Each feature is
+    /// granted once, at the lowest level the table lists it.
     /// </summary>
     private AcceptPlan PlanOf(StoredCandidate stored, bool asReference, IReadOnlyCollection<string> confirmed)
     {
         var current = stored.Current;
-        if (asReference || current.ProposedKind != ContentKind.Class || stored.GrantsCandidates is not { Count: > 0 } grants)
-            return new(asReference ? DraftOf(stored, true) : CandidateQuarantine.ToDraftRevision(current, confirmed), []);
+        if (asReference)
+            return new(DraftOf(stored, true), []);
+        var classDraft = CandidateQuarantine.ToDraftRevision(current, confirmed);
+        if (current.ProposedKind != ContentKind.Class)
+            return new(classDraft, []);
         var linked = new List<LinkedFeature>();
-        foreach (var group in grants.GroupBy(g => g.CandidateId))
+        foreach (var group in (stored.GrantsCandidates ?? []).GroupBy(g => g.CandidateId))
         {
             if (_store.FindImportCandidate(group.Key) is not { } feature || feature.JobId != stored.JobId)
                 continue;
             var level = group.Min(g => g.Level);
+            var name = feature.Current.ProposedName;
             // A feature that names no rules family (a stub read from a two-family book) is written for the class's: the reviewer answers once.
             if (feature.Status == CandidateStatus.Pending && feature.Current.RulesFamilies.Count == 0 && current.RulesFamilies.Count > 0)
                 feature = feature with { Edited = feature.Current with { RulesFamilies = current.RulesFamilies }, FamiliesReviewed = true };
-            if (feature.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && feature.Draft is { } pin)
+            if (feature.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && feature.Draft is { } accepted)
             {
-                linked.Add(new(feature, level, null, pin));
+                linked.Add(new(feature, name, level, null, NewestOf(accepted.ContentId) ?? accepted));
             }
             else if (feature.Status == CandidateStatus.Pending)
             {
                 var draft = DraftOf(feature, asReference: false);
-                linked.Add(new(feature, level, draft, draft.Reference));
+                linked.Add(new(feature, name, level, draft, draft.Reference));
             }
             else
             {
-                linked.Add(new(feature, level, null, null)); // ignored: the class cannot be accepted until the reviewer decides
+                linked.Add(new(feature, name, level, null, null)); // ignored: not granted (R66)
             }
         }
-        var classDraft = CandidateQuarantine.ToDraftRevision(current, confirmed);
+        var linkedNames = linked.Select(l => CandidateDetector.Key(l.Name)).ToHashSet(StringComparer.Ordinal);
+        var installed = InstalledFeaturesByName(current.RulesFamilies, current.SourceId);
+        foreach (var (name, level) in TableFeatures(current).Where(f => !linkedNames.Contains(CandidateDetector.Key(f.Name))))
+        {
+            if (installed.TryGetValue(CandidateDetector.Key(name), out var matches) && matches is [var only])
+                linked.Add(new(null, only.Name, level, null, only.Reference));
+        }
         var used = new HashSet<string>(classDraft.Effects.Select(e => e.Id), StringComparer.Ordinal);
         var effects = new List<Effect>(classDraft.Effects);
-        foreach (var feature in linked.Where(l => l.Pin is not null).OrderBy(l => l.Level).ThenBy(l => l.Candidate.Current.ProposedName, StringComparer.Ordinal))
+        foreach (var feature in linked.Where(l => l.Pin is not null).OrderBy(l => l.Level).ThenBy(l => l.Name, StringComparer.Ordinal))
         {
-            var slug = GrantSlug(feature.Candidate.Current.ProposedName);
+            var slug = GrantSlug(feature.Name);
             var id = $"feature-{slug}";
             for (var n = 2; !used.Add(id); n++)
                 id = $"feature-{slug}-{n}";
@@ -362,6 +414,34 @@ public sealed partial class TomeStackApp
         }
         return new(classDraft with { Effects = effects }, linked);
     }
+
+    /// <summary>The newest published revision of a content, or its newest draft when none is published (insertion order).</summary>
+    private ContentReference? NewestOf(Guid contentId)
+    {
+        var revisions = _store.RevisionsOf(contentId).ToList();
+        return (revisions.LastOrDefault(r => r.Status == RevisionStatus.Published) ?? revisions.LastOrDefault())?.Reference;
+    }
+
+    /// <summary>
+    /// R67: the installed published features in these families, outside <paramref name="exceptSource"/> (no cross-job linking
+    /// within a source, R68), by name key: the newest published revision of each content.
+    /// </summary>
+    private Dictionary<string, List<ContentRevision>> InstalledFeaturesByName(IReadOnlyList<string> families, Guid exceptSource) =>
+        _store.ListRevisionsInOrder()
+            .Where(r => r.Kind == ContentKind.Feature && r.Status == RevisionStatus.Published && r.Provenance.SourceId != exceptSource && r.RulesFamilies.Any(families.Contains))
+            .GroupBy(r => r.ContentId).Select(g => g.Last())
+            .GroupBy(r => CandidateDetector.Key(r.Name))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+    /// <summary>The linkable names of a class candidate's Features column (its "level N" fields), each at its lowest level.</summary>
+    private static IEnumerable<(string Name, int Level)> TableFeatures(DraftCandidate candidate) =>
+        candidate.Fields
+            .Select(f => (f.Value, Level: f.Key.StartsWith("level ", StringComparison.Ordinal) && int.TryParse(f.Key["level ".Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var level) ? level : 0))
+            .Where(f => f.Level > 0)
+            .SelectMany(f => f.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(name => (Name: name, f.Level)))
+            .Where(f => CandidateDetector.IsLinkable(f.Name))
+            .GroupBy(f => CandidateDetector.Key(f.Name))
+            .Select(g => g.MinBy(f => f.Level));
 
     private static string GrantSlug(string name)
     {
@@ -477,28 +557,40 @@ public sealed partial class TomeStackApp
         // Messages never quote the PDF's text; the review shows the names from the candidate itself.
         for (var i = 0; i < current.UnresolvedReferences.Count; i++)
             blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
+        // R66: an ignored linked feature is not granted; that is said, not blocked.
+        var ignored = plan.Linked.Count(l => l.Candidate?.Status == CandidateStatus.Ignored);
+        IReadOnlyList<string> notes = ignored switch
+        {
+            0 => [],
+            1 => ["1 linked feature is ignored and will not be granted."],
+            _ => [$"{ignored} linked features are ignored and will not be granted."],
+        };
+        // A class accepted as reference grants nothing, so its check lists what accepting it as a draft would grant.
+        var linkedPlan = asReference && current.ProposedKind == ContentKind.Class ? PlanOf(stored, asReference: false, []) : plan;
         return new(stored.Id, report, Dependencies(draft, current, batch), blockers,
             CanAccept: stored.Status == CandidateStatus.Pending && blockers.Count == 0 && report.CanPublish,
-            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && provenance.Count == 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
+            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && provenance.Count == 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish)
+        {
+            Notes = asReference ? [] : notes,
+            Linked = [.. linkedPlan.Linked.OrderBy(l => l.Level).ThenBy(l => l.Name, StringComparer.Ordinal)
+                .Select(l => new CandidateLinkSummary(l.Candidate?.Id, l.Name, l.Level, l.Candidate?.Status, l.Candidate is null))],
+        };
     }
 
     /// <summary>
-    /// R55: what stops a class from being accepted because of the features it links. Ignored ones block; a pending one that
-    /// would itself be refused blocks with its own codes (the same code once, with a count). Messages never quote the document.
+    /// R55: what stops a class from being accepted because of the features it links: a pending one that would itself be refused
+    /// blocks with its own codes (the same code once, with a count). An ignored one does not (R66). Messages never quote the document.
     /// </summary>
     private List<Diagnostic> LinkedBlockers(AcceptPlan plan)
     {
         var blockers = new List<Diagnostic>();
         if (plan.Linked.Count == 0)
             return blockers;
-        var ignored = plan.Linked.Count(l => l.Candidate.Status == CandidateStatus.Ignored);
-        if (ignored > 0)
-            blockers.Add(new("candidate.linked-ignored", $"{ignored} linked feature(s) are ignored, and a class grants only features that become drafts. Accept this class as reference only."));
         var cache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
         var codes = new Dictionary<string, (int Count, string Message)>(StringComparer.Ordinal);
         foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
         {
-            var check = Check(feature.Candidate, asReference: false, ProvenanceBlockers(feature.Candidate, cache));
+            var check = Check(feature.Candidate!, asReference: false, ProvenanceBlockers(feature.Candidate!, cache));
             var found = check.Blockers.Select(b => (b.Code, b.Message)).ToList();
             if (!check.Report.CanPublish)
                 found.Add(("candidate.validation-failed", "has problems the validator reports."));
