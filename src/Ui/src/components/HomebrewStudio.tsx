@@ -21,6 +21,10 @@ import type {
 } from '../api/types';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
+import { BackgroundBasicsEditor } from './BackgroundBasicsEditor';
+import { SpeciesBasicsEditor } from './SpeciesBasicsEditor';
+import { SpellBasicsEditor } from './SpellBasicsEditor';
+import type { BeforeSave } from './OriginPieces';
 import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
@@ -30,13 +34,30 @@ import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
 import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
 import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
+import {
+  grantOfKind,
+  isBackgroundBasic,
+  isIncreaseChoice,
+  isSkillGrant,
+  isSpeciesBasic,
+  isSpellBasic,
+  knownContent,
+  pinnedDrafts,
+  setSpell,
+  spellOf,
+  tidySpell,
+  type Known,
+} from '../entryBasics';
 
 const emptyId = '00000000-0000-0000-0000-000000000000';
 const authorable: { kind: ContentKind; label: string }[] = [
   { kind: 'class', label: 'class' },
   { kind: 'subclass', label: 'subclass' },
+  { kind: 'species', label: 'species' },
+  { kind: 'background', label: 'background' },
   { kind: 'feature', label: 'feature' },
   { kind: 'feat', label: 'feat' },
+  { kind: 'spell', label: 'spell' },
   { kind: 'item', label: 'item' },
 ];
 
@@ -239,7 +260,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         Homebrew studio
       </h2>
       <p className="hint">
-        Write your own classes, subclasses, features, feats and items. Everything starts as a draft; publishing checks it and creates a
+        Write your own classes, subclasses, species, backgrounds, features, feats, spells and items. Everything starts as a draft; publishing checks it and creates a
         new revision. Characters keep their current revision until you review and apply an update.
       </p>
       <label className="choice">
@@ -463,9 +484,15 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             await loadEntries(source.id);
             onStatus(`Published ${name}.`);
           }}
-          onDraftSaved={async (name) => {
+          onDraftSaved={async (name, pinned, wantedPublish) => {
             await loadEntries(source.id);
-            onStatus(`Saved a draft of ${name}. Drafts never affect characters.`);
+            // Item 12: an entry that points at drafts (a background's ability score options) is published with them, never alone.
+            const together = `${pinned} unpublished draft${pinned === 1 ? '' : 's'}`;
+            onStatus(
+              pinned === 0
+                ? `Saved a draft of ${name}. Drafts never affect characters.`
+                : `Saved a draft of ${name}. It points at ${together}, so ${wantedPublish ? 'it was not published yet: use' : 'publish them together with it using'} "Publish all drafts in this source…".`,
+            );
           }}
         />
       )}
@@ -612,7 +639,8 @@ function EntryEditor(props: {
   onClose: () => void;
   /** The class helper published option features: reload the source's content. */
   onEntriesChanged: () => void;
-  onDraftSaved: (name: string) => void;
+  /** `pinned` counts the unpublished drafts the saved entry points at; `wantedPublish` is whether Publish was pressed. */
+  onDraftSaved: (name: string, pinned: number, wantedPublish: boolean) => void;
   onPublished: (result: PublishResult, name: string) => void;
 }) {
   const [revision, setRevision] = useState<ContentRevision>(props.initial);
@@ -639,13 +667,50 @@ function EntryEditor(props: {
   const { onError } = props;
   const family = props.source.rulesFamilies[0];
 
+  // Item 12: what the species, background and spell editors can pick from (this source, what they made, installed feats), and
+  // the step a background runs before saving (it makes the ability score option features its choice pins).
+  const [made, setMade] = useState<Known[]>([]);
+  const [installed, setInstalled] = useState<ContentOption[]>([]);
+  const beforeSave = useRef<BeforeSave | null>(null);
+  const registerBeforeSave = useCallback((step: BeforeSave | null) => {
+    beforeSave.current = step;
+  }, []);
+  const reportProblem = useCallback(
+    (field: string, problem: string | undefined) =>
+      setProblems((p) => {
+        const rest = Object.fromEntries(Object.entries(p).filter(([key]) => key !== field));
+        return problem ? { ...rest, [field]: problem } : rest;
+      }),
+    [],
+  );
+  const sourceFamilies = props.source.rulesFamilies;
+  useEffect(() => {
+    if (props.initial.kind !== 'background') return;
+    let current = true;
+    Promise.all(sourceFamilies.map((f) => client.listContent(f)))
+      .then((all) => {
+        if (current) setInstalled(all.flat());
+      })
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+  }, [props.initial.kind, sourceFamilies, onError]);
+  const known = knownContent(props.entries, installed, made);
+  const kindOf = (r: ContentReference) => known.find((k) => k.contentId === r.contentId)?.kind;
+  const allRevisions = props.entries.flatMap((e) => e.revisions);
+  const revisionOf = (r: ContentReference) => allRevisions.find((x) => x.revisionId === r.revisionId);
+  const draftIds = new Set([...allRevisions.filter((r) => r.status === 'draft').map((r) => r.revisionId), ...made.filter((m) => m.draft).map((m) => m.reference.revisionId)]);
+  const pins = pinnedDrafts(revision.effects, draftIds);
+
   useEffect(() => heading.current?.focus(), []);
 
   // A debugger finding's "Show" button: focus the rule's fieldset, or the editor's heading when the finding concerns the
   // whole entry or a rule that is no longer there. Runs after the heading focus above, on the first render too.
   function focusRule(effectId: string | undefined) {
     const effect = effectId === undefined ? undefined : revision.effects.find((e) => e.id === effectId);
-    const target = effect && document.getElementById(revision.kind === 'class' && isClassBasic(effect, revision.effects) ? classBasicElementId(effect) : ruleElementId(effect.id));
+    const id = effect && (revision.kind === 'class' && isClassBasic(effect, revision.effects) ? classBasicElementId(effect) : (originElementId(revision, effect, kindOf) ?? ruleElementId(effect.id)));
+    const target = id === undefined ? undefined : document.getElementById(id);
     (target ?? heading.current)?.focus();
   }
   const onFocusRequest = useEffectEvent((effectId: string | undefined) => focusRule(effectId));
@@ -692,7 +757,18 @@ function EntryEditor(props: {
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
   // A class's basics (hit die, saves, prerequisites, choices) have their own editor; the rule list shows the rest.
-  const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !(isClass && isClassBasic(effect, revision.effects)));
+  // Species, background and spell basics have their own editors too (item 12), and each hides exactly the effects it shows.
+  const shownByEditor = (effect: Effect) =>
+    isClass
+      ? isClassBasic(effect, revision.effects)
+      : revision.kind === 'species'
+        ? isSpeciesBasic(effect, revision.effects)
+        : revision.kind === 'background'
+          ? isBackgroundBasic(effect, revision.effects, kindOf)
+          : revision.kind === 'spell'
+            ? isSpellBasic(effect, revision.effects)
+            : false;
+  const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
   function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting') {
     const id = nextId(type);
@@ -717,7 +793,13 @@ function EntryEditor(props: {
     update({ effects: [...revision.effects, effect] });
   }
 
-  const forServer = (r: ContentRevision): ContentRevision => ({ ...r, name: r.name.trim(), summary: r.summary?.trim() || undefined });
+  // A spell always carries its spell data (the form shows a level 1 spell on no list until a field changes), with its text trimmed.
+  const forServer = (r: ContentRevision): ContentRevision => ({
+    ...r,
+    name: r.name.trim(),
+    summary: r.summary?.trim() || undefined,
+    effects: r.kind === 'spell' ? tidySpell(spellOf(r.effects) ? r.effects : setSpell(r.effects, {})) : r.effects,
+  });
 
   async function check() {
     try {
@@ -759,9 +841,14 @@ function EntryEditor(props: {
   async function save(publish: boolean) {
     setBusy(true);
     try {
-      const saved = await client.saveDraft(forServer(revision));
-      if (!publish) {
-        props.onDraftSaved(revision.name);
+      // A background first saves the option features its ability score choice pins (item 12, R48), then itself.
+      const prepared = beforeSave.current ? await beforeSave.current(revision) : { revision, drafts: [] as ContentReference[] };
+      if (prepared.revision !== revision) setRevision(prepared.revision);
+      const saved = await client.saveDraft(forServer(prepared.revision));
+      // Pointing at drafts, it would be published with grants that stay inactive: those publish together, through "Publish all drafts".
+      const pinned = new Set([...prepared.drafts, ...pinnedDrafts(prepared.revision.effects, draftIds)].map((r) => r.revisionId));
+      if (!publish || pinned.size > 0) {
+        props.onDraftSaved(revision.name, pinned.size, publish);
         return;
       }
       props.onPublished(await client.publish(saved), revision.name);
@@ -848,6 +935,28 @@ function EntryEditor(props: {
         />
       )}
 
+      {(revision.kind === 'species' || revision.kind === 'background' || revision.kind === 'spell') &&
+        (() => {
+          const shared = {
+            revision,
+            source: props.source,
+            info: props.info,
+            known,
+            onEffects: (change: (effects: Effect[]) => Effect[]) => setRevision((r) => ({ ...r, effects: change(r.effects) })),
+            onBusy: setClassBusy,
+            onMade: (k: Known) => setMade((m) => [...m, k]),
+            onProblem: reportProblem,
+            onError,
+          };
+          return revision.kind === 'species' ? (
+            <SpeciesBasicsEditor {...shared} />
+          ) : revision.kind === 'background' ? (
+            <BackgroundBasicsEditor {...shared} revisionOf={revisionOf} registerBeforeSave={registerBeforeSave} />
+          ) : (
+            <SpellBasicsEditor {...shared} />
+          );
+        })()}
+
       {listed.map(({ effect, index }, position) => (
         <EffectEditor
           key={effect.id}
@@ -858,12 +967,7 @@ function EntryEditor(props: {
           toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
           grantable={grantable}
           onChange={(e) => setEffect(index, e)}
-          onProblem={(field, problem) =>
-            setProblems((p) => {
-              const rest = Object.fromEntries(Object.entries(p).filter(([key]) => key !== field));
-              return problem ? { ...rest, [field]: problem } : rest;
-            })
-          }
+          onProblem={reportProblem}
           onRemove={() => {
             // Rules that named the removed one no longer do (review fix): a modifier switched by a removed toggle is always
             // on again, and a toggle that spent a removed resource spends nothing.
@@ -1032,7 +1136,15 @@ function EntryEditor(props: {
         <button type="button" onClick={() => save(false)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
           Save draft
         </button>
-        <button type="button" onClick={() => save(true)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
+        {/* Item 12: an entry that points at drafts is held with a visible reason (aria-disabled, so focus stays) and published
+            together with them through "Publish all drafts". */}
+        <button
+          type="button"
+          onClick={() => pins.length === 0 && void save(true)}
+          disabled={busy || classBusy || problemList.length > 0}
+          aria-disabled={pins.length > 0 || undefined}
+          aria-describedby={pins.length > 0 ? 'editor-pins' : 'editor-blocked'}
+        >
           Publish
         </button>
         <button type="button" onClick={props.onClose}>
@@ -1040,6 +1152,11 @@ function EntryEditor(props: {
         </button>
       </div>
       </fieldset>
+      <p id="editor-pins" className="hint">
+        {pins.length > 0
+          ? `This entry points at ${pins.length} unpublished draft${pins.length === 1 ? '' : 's'}. Save it, then use "Publish all drafts in this source…" to publish them together.`
+          : ''}
+      </p>
       <p id="editor-blocked" className="hint" aria-live="polite">
         {classBusy
           ? 'Publishing the skill options…'
@@ -1055,6 +1172,21 @@ const reference = (r: ContentRevision): ContentReference => ({ contentId: r.cont
 
 /** The id of a rule's fieldset in the editor, which a debugger finding focuses. */
 const ruleElementId = (effectId: string) => `rule-${effectId}`;
+
+/** The group of a species, background or spell editor that holds this effect, for the same focus; undefined for any other effect. */
+function originElementId(revision: ContentRevision, effect: Effect, kindOf: (r: ContentReference) => ContentKind | undefined): string | undefined {
+  const effects = revision.effects;
+  if (revision.kind === 'species' && isSpeciesBasic(effect, effects)) {
+    return effect.type === 'modifier' ? 'species-basics-increases' : isSkillGrant(effect, effects) ? 'species-basics-skills' : 'species-basics-traits';
+  }
+  if (revision.kind === 'background' && isBackgroundBasic(effect, effects, kindOf)) {
+    if (isSkillGrant(effect, effects)) return 'background-basics-skills';
+    if (isIncreaseChoice(effect)) return 'background-basics-increases';
+    return (grantOfKind(effects, kindOf, 'feat') as Effect | undefined) === effect ? 'background-basics-feat' : 'background-basics-feature';
+  }
+  if (revision.kind === 'spell' && isSpellBasic(effect, effects)) return 'spell-basics-core';
+  return undefined;
+}
 
 /** Reports a field that does not parse, by name within its effect; `undefined` clears it. */
 type ReportProblem = (field: string, problem: string | undefined) => void;
@@ -1239,6 +1371,7 @@ function EffectEditor(props: {
     restriction: 'Prerequisite',
     scale: 'Class column',
     spellcasting: 'Spellcasting',
+    spell: 'Spell data',
     toggle: 'Toggle',
   };
   const toggles = props.toggles;
