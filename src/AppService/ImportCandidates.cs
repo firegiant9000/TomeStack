@@ -398,13 +398,14 @@ public sealed partial class TomeStackApp
         }
         var linkedNames = linked.Select(l => CandidateDetector.Key(l.Name)).ToHashSet(StringComparer.Ordinal);
         var installed = InstalledFeaturesByName(current.RulesFamilies, current.SourceId);
+        var earlier = ReviewedInEarlierJobs(stored.JobId);
         var unlinked = 0;
         foreach (var (name, level) in TableFeatures(current).Where(f => !linkedNames.Contains(CandidateDetector.Key(f.Name))))
         {
             if (installed.TryGetValue(CandidateDetector.Key(name), out var matches) && matches is [var only])
                 linked.Add(new(null, only.Name, level, null, only.Reference));
-            else
-                unlinked++; // no match, or several, at accept time: not granted, and the check says so
+            else if (!earlier.Contains(CandidateDetector.Key(name)))
+                unlinked++; // no match, or several, at accept time: not granted, and the check says so (R68 names are counted by the class's uncertainty)
         }
         var used = new HashSet<string>(classDraft.Effects.Select(e => e.Id), StringComparer.Ordinal);
         var effects = new List<Effect>(classDraft.Effects);
@@ -417,6 +418,23 @@ public sealed partial class TomeStackApp
             effects.Add(new GrantEffect { Id = id, Grant = GrantKind.Content, Content = feature.Pin, Level = feature.Level, Text = null });
         }
         return new(classDraft with { Effects = effects }, linked, unlinked);
+    }
+
+    /// <summary>
+    /// R68: name keys of the features reviewed in an earlier import of this job's document into its source (as detection
+    /// counts them), which the class's uncertainty already reports.
+    /// </summary>
+    private HashSet<string> ReviewedInEarlierJobs(Guid jobId)
+    {
+        var jobs = _store.ListImportJobs();
+        if (jobs.FirstOrDefault(j => j.Id == jobId) is not { } job)
+            return [];
+        return jobs
+            .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+            .SelectMany(j => _store.ListImportCandidates(j.Id))
+            .Where(c => c.Status != CandidateStatus.Pending && c.Candidate.ProposedKind == ContentKind.Feature)
+            .Select(c => CandidateDetector.Key(c.Candidate.ProposedName))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>The newest published revision of a content, or its newest draft when none is published (insertion order).</summary>
