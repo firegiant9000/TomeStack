@@ -144,8 +144,11 @@ public static partial class CandidateDetector
     ];
 
     /// <summary>The lines at the same height as <paramref name="anchor"/>, left to right.</summary>
-    private static List<TextLine> SameRow(List<(int Page, TextLine Line)> lines, TextLine anchor) =>
-        [.. lines.Select(l => l.Line).Where(l => Math.Abs(l.Y - anchor.Y) <= Math.Max(2.5, anchor.Height * 0.4)).OrderBy(l => l.X)];
+    private static List<TextLine> SameRow(List<(int Page, TextLine Line)> lines, TextLine anchor) => SameRow(lines.Select(l => l.Line), anchor);
+
+    /// <summary>The same rule over bare lines, shared with the class-table reconstruction.</summary>
+    internal static List<TextLine> SameRow(IEnumerable<TextLine> lines, TextLine anchor) =>
+        [.. lines.Where(l => Math.Abs(l.Y - anchor.Y) <= Math.Max(2.5, anchor.Height * 0.4)).OrderBy(l => l.X)];
 
     // ---- text helpers ----
 
