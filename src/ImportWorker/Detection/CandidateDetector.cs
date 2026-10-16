@@ -275,7 +275,11 @@ public static partial class CandidateDetector
 
     // ---- spells ----
 
-    private sealed record SpellHeader(string Name, int Level, string School, bool Ritual, IReadOnlyList<string> Lists, string Family, int HeaderLines);
+    private sealed record SpellHeader(string Name, int Level, string School, bool Ritual, IReadOnlyList<string> Lists, string Family, int HeaderLines)
+    {
+        /// <summary>How many class names in the header could not become a list key.</summary>
+        public int DroppedLists { get; init; }
+    }
 
     private static SpellHeader? ReadSpellHeader(Unit unit)
     {
@@ -288,8 +292,17 @@ public static partial class CandidateDetector
             if (Spell521().Match(header) is { Success: true } modern)
             {
                 var level = modern.Groups["level"].Success ? int.Parse(modern.Groups["level"].Value, CultureInfo.InvariantCulture) : 0;
-                var lists = modern.Groups["lists"].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(c => c.ToLowerInvariant()).ToList();
-                return new(TitleCase(unit.Lines[0]), level, modern.Groups["school"].Value.ToLowerInvariant(), false, lists, RulesFamilies.Srd521, 1 + take);
+                // Each class is a spell list key (the one normaliser, review fix 4); a name that cannot be one is dropped and counted.
+                var lists = new List<string>();
+                var dropped = 0;
+                foreach (var name in modern.Groups["lists"].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (!SpellListKey.TryNormalise(name, out var key))
+                        dropped++;
+                    else if (!lists.Contains(key, StringComparer.Ordinal))
+                        lists.Add(key);
+                }
+                return new(TitleCase(unit.Lines[0]), level, modern.Groups["school"].Value.ToLowerInvariant(), false, lists, RulesFamilies.Srd521, 1 + take) { DroppedLists = dropped };
             }
         }
         if (Spell51().Match(unit.Lines[1]) is { Success: true } old)
@@ -351,6 +364,8 @@ public static partial class CandidateDetector
                 confidence -= 0.2;
                 uncertainties.Add("No description was found after the spell's details.");
             }
+            if (header.DroppedLists > 0)
+                uncertainties.Add($"{header.DroppedLists.ToString(CultureInfo.InvariantCulture)} class list(s) in the spell's header on page {unit.Page.ToString(CultureInfo.InvariantCulture)} could not be read as a list key; add the list by hand.");
             if (header.Lists.Count == 0)
                 uncertainties.Add(NoListsNote);
             if (unit.FromOcr)
@@ -419,9 +434,15 @@ public static partial class CandidateDetector
     private static List<SpellList> SpellListPages(List<Unit> units, double body)
     {
         var lists = new List<SpellList>();
+        // A list can run over to the next page (review fix 3): `current` is carried to the following page and ends at a heading,
+        // a line that is not a name, or a page with no text units before it. Names are credited to the heading's own page.
+        SpellList? current = null;
+        var previousPage = int.MinValue;
         foreach (var page in units.GroupBy(u => u.Page))
         {
-            SpellList? current = null;
+            if (page.Key != previousPage + 1)
+                current = null;
+            previousPage = page.Key;
             var lines = new List<(string Line, bool Heading)>();
             foreach (var unit in page)
                 lines.AddRange(unit.Lines.Select((l, n) => (l, n == 0 && IsHeading(unit, body))));
