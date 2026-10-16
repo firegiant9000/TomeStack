@@ -430,6 +430,83 @@ public class DetectionTests
         Assert.Equal(8, result.Links.Count(l => l.ClassId == lamplighter.Id));
     }
 
+    private static DraftCandidate Fx(ContentKind kind, string name, int page, string? owner = null) =>
+        new(Guid.NewGuid(), Source, new PageRef(page), name, kind, name, [], [], 0.7, [])
+        {
+            Fields = owner is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["class"] = owner },
+        };
+
+    private static (List<DraftCandidate> Found, List<CandidateLink> Links) LinkFixture(List<DraftCandidate> found, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> tables, Func<string, bool>? one = null)
+    {
+        var links = CandidateDetector.LinkClasses(found, tables, new(Source, [RulesFamilies.Srd51], _ => false, one));
+        return (found, links);
+    }
+
+    private static IReadOnlyDictionary<int, IReadOnlyList<string>> Table(params (int Level, string Feature)[] rows) =>
+        rows.ToDictionary(r => r.Level, r => (IReadOnlyList<string>)[r.Feature]);
+
+    [Fact]
+    public void Two_classes_with_a_same_name_feature_each_link_their_own()
+    {
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        var b = Fx(ContentKind.Class, "Fixture Beta", 30);
+        var aRite = Fx(ContentKind.Feature, "Fixture Rite", 11, "Fixture Alpha");
+        var bRite = Fx(ContentKind.Feature, "Fixture Rite", 31, "Fixture Beta");
+        var (_, links) = LinkFixture([a, b, aRite, bRite], new() { [a.Id] = Table((1, "Fixture Rite")), [b.Id] = Table((1, "Fixture Rite")) });
+
+        Assert.Equal(aRite.Id, Assert.Single(links, l => l.ClassId == a.Id).FeatureId);
+        Assert.Equal(bRite.Id, Assert.Single(links, l => l.ClassId == b.Id).FeatureId);
+    }
+
+    [Fact]
+    public void Two_classes_naming_the_same_stub_only_feature_each_get_their_own_stub()
+    {
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        var b = Fx(ContentKind.Class, "Fixture Beta", 30);
+        var (found, links) = LinkFixture([a, b], new() { [a.Id] = Table((2, "Fixture Echo")), [b.Id] = Table((4, "Fixture Echo")) });
+
+        var stubA = found.Single(c => c.Id == Assert.Single(links, l => l.ClassId == a.Id).FeatureId);
+        var stubB = found.Single(c => c.Id == Assert.Single(links, l => l.ClassId == b.Id).FeatureId);
+        Assert.NotEqual(stubA.Id, stubB.Id);
+        Assert.Equal(("Fixture Alpha", "2"), (stubA.Fields["class"], stubA.Fields["level"]));
+        Assert.Equal(("Fixture Beta", "4"), (stubB.Fields["class"], stubB.Fields["level"]));
+    }
+
+    [Fact]
+    public void A_feature_with_no_class_field_links_to_the_class_whose_pages_it_is_on()
+    {
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        var b = Fx(ContentKind.Class, "Fixture Beta", 30);
+        var between = Fx(ContentKind.Feature, "Fixture Spark", 12);
+        var (found, links) = LinkFixture([a, b, between], new() { [a.Id] = Table((1, "Fixture Spark")), [b.Id] = Table((1, "Fixture Spark")) });
+
+        Assert.Equal(between.Id, Assert.Single(links, l => l.ClassId == a.Id).FeatureId);
+        var bTarget = Assert.Single(links, l => l.ClassId == b.Id).FeatureId;
+        Assert.NotEqual(between.Id, bTarget);
+        Assert.Equal("Fixture Beta", found.Single(c => c.Id == bTarget).Fields["class"]);
+    }
+
+    [Fact]
+    public void A_feature_that_names_another_class_is_never_a_target()
+    {
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        var b = Fx(ContentKind.Class, "Fixture Beta", 30);
+        var bOnly = Fx(ContentKind.Feature, "Fixture Spark", 12, "Fixture Beta");
+        var (_, links) = LinkFixture([a, b, bOnly], new() { [a.Id] = Table((1, "Fixture Spark")) });
+
+        Assert.NotEqual(bOnly.Id, Assert.Single(links).FeatureId);
+    }
+
+    [Fact]
+    public void Linking_stops_when_cancelled()
+    {
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.LinkClasses([a], new Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> { [a.Id] = Table((1, "Fixture Echo")) }, new(Source, [RulesFamilies.Srd51], _ => false), cts.Token));
+    }
+
     [Fact]
     public async Task A_two_family_context_proposes_no_family_for_layout_neutral_kinds()
     {
