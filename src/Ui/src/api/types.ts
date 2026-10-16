@@ -1074,6 +1074,22 @@ export type Effect =
       spellsFormula?: string;
       multiclassCaster?: 'full' | 'half' | 'third';
       multiclassCasterTable?: number[];
+    })
+  // Content v5: a spell's own data (level 0 is a cantrip). Item 12: the studio's spell editor writes it.
+  | (EffectBase & {
+      type: 'spell';
+      level: number;
+      school?: string;
+      castingTime?: string;
+      range?: string;
+      components?: string;
+      duration?: string;
+      concentration?: boolean;
+      ritual?: boolean;
+      lists?: string[];
+      attack?: 'none' | 'melee' | 'ranged';
+      save?: SpellcastingAbility;
+      dice?: string;
     });
 
 export interface ChoiceExtension {
