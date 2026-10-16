@@ -176,9 +176,13 @@ public class CandidateReviewTests
         Assert.Empty(edited.Current.UnresolvedReferences); // item 11: the two names are feature stubs of the job now, linked from the class
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
 
+        // Item 11 (R55): the class links Fixture Stormcall, which still names a spell that is not installed; that blocks the class
+        // until the feature is settled (here, as reference). ClassAcceptTests covers the rest of the class accept.
+        Assert.False(temp.App.CheckCandidate(warden.Id).CanAccept);
+        temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
         var check = temp.App.CheckCandidate(warden.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => d.Code)));
-        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true)).Draft!)!;
+        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])).Draft!)!;
         Assert.Equal(("Fixture Warden (edited)", ContentKind.Class), (draft.Name, draft.Kind));
         Assert.Equal(10, draft.Effects.OfType<HitDieEffect>().Single().Die);
     }

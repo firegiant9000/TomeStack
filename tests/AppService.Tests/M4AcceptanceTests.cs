@@ -62,9 +62,9 @@ public class M4AcceptanceTests(ITestOutputHelper output)
         foreach (var first in candidates.GroupBy(c => c.Candidate.ProposedKind).Select(g => g.First()))
         {
             var check = temp.App.CheckCandidate(first.Id);
-            if (check.CanAccept)
+            if (check.CanAccept && first.Candidate.ProposedKind != ContentKind.Class)
                 temp.App.AcceptCandidate(new(first.Id, Confirm: true));
-            else if (check.CanAcceptAsReference)
+            else if (check.CanAcceptAsReference) // a class needs its hit die confirmed (ADR-016); this reviewer confirms nothing
                 temp.App.AcceptCandidate(new(first.Id, AsReference: true, Confirm: true));
         }
         if (candidates.Count > 1 && temp.App.ListCandidates(new(job.Id, Status: CandidateStatus.Pending)).LastOrDefault() is { } last)
