@@ -46,6 +46,12 @@ The base is 10 + Dexterity modifier. Alternatives such as Unarmored Defense are 
 
 All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill) and `speed` (feet; 30 by rules policy until species content carries one): calculated; overridable on Stats; content cannot target them until a content schema version allows it (validation refuses it). A save or skill carries a proficiency mark (none, proficient, expertise).
 
+## Importing a class from a PDF (item 11, D34, ADR-016)
+
+A detected class page becomes a class candidate with proposals. The table (level, proficiency bonus, features, and for a caster cantrips, spells known or prepared and slot columns, or a pact table) is rebuilt from the page's positioned lines. It becomes the class's hit die, saving throws (`save.*` grants), armor and weapon proficiencies, a subclass choice with no options, and, for a caster, a `spellcasting` effect whose spell list key is the class name (marked unsure; saving the candidate settles it). Skills are shown as read and not proposed. The multiclass caster fields are never proposed.
+
+Accepting as a draft needs the hit die confirmed and, when there is one, the slot table; only confirmed effects stay `automatic`. The features the table names are written as drafts first in the same step and the class pins them with one content grant each, at the lowest level the table gives. These grants are automatic because the calculator applies a content grant only when it is; the features' own effects stay reference. A feature the table names that was not found as its own entry becomes a reference stub citing the class page; names already installed (for example "Spellcasting") are not stubbed. Nothing is active until the class and its features are published, which can be done together.
+
 ## Not in scope (M2+)
 
 Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and species speed data. Equipment-based armor class is M2 item 4.

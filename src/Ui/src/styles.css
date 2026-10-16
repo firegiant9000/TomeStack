@@ -172,6 +172,10 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
 /* D32: the standard array and rolled scores are assigned with one select per ability (24px targets, WCAG 2.5.8). */
+/* Item 11 (D34): the class confirmations are 24px targets (WCAG 2.5.8); a wide slot table scrolls inside its own box. */
+.confirm-effects input[type='checkbox'] { width: 1.5rem; height: 1.5rem; margin: 0 0.35rem 0 0; vertical-align: middle; }
+.class-table { overflow-x: auto; }
+.class-table td, .class-table th[scope='row'] { font-variant-numeric: tabular-nums; }
 /* Item 9: the row checkboxes of the review list and the publish table are 24px targets (WCAG 2.5.8). */
 .row-select, .publish-table input[type='checkbox'] { width: 1.5rem; height: 1.5rem; padding: 0; margin: 0 0.25rem 0 0; vertical-align: middle; }
 /* Item 12: the species, background and spell editors in the studio. Checkboxes are 24px targets (WCAG 2.5.8); the groups wrap at any width. */

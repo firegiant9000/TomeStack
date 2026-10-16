@@ -766,3 +766,97 @@ it('a page-range pause that is still running does not fire during a bulk accept'
   expect((screen.getByRole('checkbox', { name: 'Select Testy Item 1' }) as HTMLInputElement).checked).toBe(true);
   await act(async () => finish({ accepted: [], blocked: [] }));
 });
+
+// Item 11 (D34, ADR-016): a detected class page ends in a usable class draft once the reviewer confirms what was read.
+const lamp = (): StoredCandidate => {
+  const base = detected(['srd-5.2.1']);
+  return {
+    ...base,
+    candidate: {
+      ...base.candidate,
+      proposedKind: 'class',
+      proposedName: 'Testy Lamplighter',
+      proposedEffects: [
+        { id: 'hit-die', type: 'hitDie', die: 8, automation: 'reference' },
+        { id: 'spellcasting', type: 'spellcasting', automation: 'reference', slots: [[2], [3], [4, 2]], cantrips: [2, 2, 2], spellsTable: [2, 3, 4] },
+      ],
+    },
+    grantsCandidates: [
+      { candidateId: 'feat-a', level: 1 },
+      { candidateId: 'feat-b', level: 3 },
+      { candidateId: 'feat-b', level: 5 },
+    ],
+  };
+};
+
+const featureOf = (id: string, name: string): StoredCandidate => {
+  const base = detected(['srd-5.2.1']);
+  return { ...base, id, candidate: { ...base.candidate, id, proposedKind: 'feature', proposedName: name } };
+};
+
+async function openClass(check: CandidateCheck = checkOf({})) {
+  vi.mocked(client.candidates).mockImplementation((_job, filter) =>
+    Promise.resolve(filter?.kind === 'feature' ? pageOf([featureOf('feat-a', 'Testy Glow'), featureOf('feat-b', 'Testy Beacon')]) : pageOf([lamp()])),
+  );
+  vi.mocked(client.checkCandidate).mockResolvedValue(check);
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockResolvedValue(lamp());
+  renderPanel(vi.fn(), source);
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Testy Lamplighter' }));
+  await screen.findByRole('heading', { name: 'Candidate: Testy Lamplighter' });
+}
+
+it('shows the slot table with a caption and headers, and Open page beside it', async () => {
+  await openClass();
+  const table = await screen.findByRole('table', { name: 'Spell slots by class level, as read from the page' });
+  expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Class level', 'Cantrips', 'Spells', '1st-level slots', '2nd-level slots']);
+  expect(within(table).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['1', '2', '3']);
+  const row3 = within(table).getByRole('rowheader', { name: '3' }).closest('tr')!;
+  expect(within(row3).getAllByRole('cell').map((c) => c.textContent)).toEqual(['2', '4', '4', '2']);
+  expect(screen.getAllByRole('button', { name: 'Open page 4' })).toHaveLength(1);
+});
+
+it('lists the linked features by name and level', async () => {
+  await openClass();
+  const list = await screen.findByRole('list', { name: 'Linked features' });
+  await screen.findByText('Testy Glow, level 1');
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Testy Glow, level 1', 'Testy Beacon, levels 3, 5']);
+});
+
+it('holds Accept as a draft, with a visible reason, until the hit die and slot table are ticked, and sends what was ticked', async () => {
+  const user = userEvent.setup();
+  await openClass();
+  const accept = await screen.findByRole('button', { name: 'Accept as a draft' });
+  const hit = screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }) as HTMLInputElement;
+  const slots = screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }) as HTMLInputElement;
+  expect([hit.checked, slots.checked]).toEqual([false, false]);
+  expect(accept.getAttribute('aria-disabled')).toBe('true');
+  expect(accept.hasAttribute('disabled')).toBe(false);
+  const reason = document.getElementById(accept.getAttribute('aria-describedby')!)!;
+  expect(reason.textContent).toBe('Confirm the hit die and the spell slot table to accept the class as a draft.');
+
+  accept.focus();
+  await user.click(accept);
+  expect(client.acceptCandidate).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(accept);
+
+  await user.click(hit);
+  expect(document.getElementById(accept.getAttribute('aria-describedby')!)!.textContent).toBe('Confirm the spell slot table to accept the class as a draft.');
+  await user.click(slots);
+  expect(accept.getAttribute('aria-disabled')).toBeNull();
+  await user.click(accept);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+});
+
+it('accepts a class as reference without any confirmation, and sends none', async () => {
+  const user = userEvent.setup();
+  await openClass();
+  await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true);
+});
+
+it('adds no live region for a class', async () => {
+  await openClass();
+  await screen.findByRole('table');
+  expect(document.querySelectorAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
+});
