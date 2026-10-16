@@ -357,6 +357,24 @@ it('R62: a feature or a feat that points at a superseded draft is named, and re-
   expect(latest.effects).toEqual([grant]);
   await user.click(screen.getByRole('button', { name: 'Use the published version of Fixture Shelter' }));
   expect(latest.effects).toEqual([{ ...grant, content: { contentId: 'f1', revisionId: 'f1-pub' } }]);
+  // The pressed button is gone: focus goes to the fieldset's legend and the one polite line says what happened (WCAG 2.4.3, 4.1.3).
+  expect(document.activeElement?.tagName).toBe('LEGEND');
+  expect(document.activeElement?.textContent).toBe('Feature (Fixture Older Rules)');
+  expect(screen.getByText('The feature Fixture Shelter now points at its published version.').getAttribute('aria-live')).toBe('polite');
+});
+
+it('R62: a feat pin at a superseded draft moves focus to the Feat legend and announces it, with no Feature fieldset shown', async () => {
+  const user = userEvent.setup();
+  const older: ContentRevision = { contentId: 't1', revisionId: 't1-old', kind: 'feat', name: 'Fixture Boon', rulesFamilies: ['srd-5.2.1'], provenance: { sourceId: 'src' }, status: 'draft', effects: [] };
+  const newer: ContentRevision = { ...older, revisionId: 't1-pub', status: 'published' };
+  const grant: Effect = { type: 'grant', id: 'feat', grant: 'content', content: { contentId: 't1', revisionId: 't1-old' } };
+  render(<Harness initial={revisionOf(['srd-5.2.1'], [grant])} revisions={[older, newer]} />);
+  expect(screen.queryByRole('group', { name: /^Feature/ })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Use the published version of Fixture Boon' }));
+  expect(latest.effects).toEqual([{ ...grant, content: { contentId: 't1', revisionId: 't1-pub' } }]);
+  expect(document.activeElement?.tagName).toBe('LEGEND');
+  expect(document.activeElement?.textContent).toBe('Feat (Fixture Newer Rules)');
+  expect(screen.getByText('The feat Fixture Boon now points at its published version.').getAttribute('aria-live')).toBe('polite');
 });
 
 it('older rules only: saving leaves the effects alone and makes nothing', async () => {

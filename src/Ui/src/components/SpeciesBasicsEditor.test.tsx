@@ -38,10 +38,18 @@ function Harness(props: {
   onMade?: (k: Known) => void;
   onProblem?: (field: string, problem: string | undefined) => void;
   newerPublished?: (r: ContentReference) => ContentReference | undefined;
+  /** Adds a button that unticks the rules families, as the studio's family boxes do. */
+  untick?: boolean;
 }) {
   const [revision, setRevision] = useState(props.initial);
   props.onChange?.(revision);
   return (
+    <>
+      {props.untick && (
+        <button type="button" onClick={() => setRevision((r) => ({ ...r, rulesFamilies: ['srd-5.2.1'] }))}>
+          Untick older rules
+        </button>
+      )}
     <SpeciesBasicsEditor
       newerPublished={props.newerPublished ?? (() => undefined)}
       revision={revision}
@@ -54,6 +62,7 @@ function Harness(props: {
       onProblem={props.onProblem ?? (() => {})}
       onError={() => {}}
     />
+    </>
   );
 }
 
@@ -213,6 +222,18 @@ it('item 8: accepts 1 to 9, marks anything else invalid with a linked message, b
   expect(strength.getAttribute('aria-invalid')).toBeNull();
   expect(lastFor('species-increase-str')).toEqual(undefined);
   expect(abilityIncreases(latest.effects)).toEqual({ str: 9 });
+});
+
+it('round 2: an invalid increase stops blocking once the fieldset is hidden by unticking the family', async () => {
+  const user = userEvent.setup();
+  const onProblem = vi.fn();
+  const lastFor = (field: string) => onProblem.mock.calls.filter((c) => c[0] === field).at(-1)?.[1];
+  render(<Harness initial={revisionOf(['srd-5.1'])} onProblem={onProblem} untick />);
+  await user.type(screen.getByRole('textbox', { name: 'Strength' }), 'x');
+  expect(lastFor('species-increase-str')).toMatch(/^Strength increase/);
+  await user.click(screen.getByRole('button', { name: 'Untick older rules' }));
+  expect(screen.queryByRole('textbox', { name: 'Strength' })).toBeNull();
+  expect(lastFor('species-increase-str')).toBeUndefined();
 });
 
 it('item 8: typing a minus sign in the middle of an edit keeps the increase and marks the field', async () => {
