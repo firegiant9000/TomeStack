@@ -63,3 +63,23 @@ it('offers Publish all drafts only when a draft is pending, and opens the region
   expect(within(region).getByRole('checkbox', { name: 'Publish Testy Waiting' })).toHaveProperty('checked', true);
   expect(within(region).queryByRole('checkbox', { name: 'Publish Testy Done' })).toBeNull();
 });
+
+// Fix round 1, item 13: another source never shows the open panel or the old source's rows.
+it('closes the publish panel and drops the old rows when the source changes', async () => {
+  const user = userEvent.setup();
+  const draft = { contentId: 'id-w', name: 'Testy Waiting', kind: 'feat', revisions: [], latest: { contentId: 'id-w', revisionId: 'r-w', status: 'draft', effects: [] } } as unknown as StudioEntry;
+  vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [draft] : []));
+  vi.mocked(client.publishManyPreview).mockResolvedValue({ entries: [], dependents: [], canPublish: true });
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  expect(screen.getByRole('region', { name: 'Publish drafts of Testy Alpha' })).toBeTruthy();
+
+  // Hold the new source's rows back: until they arrive the old ones must not be shown.
+  let release: (rows: StudioEntry[]) => void = () => {};
+  vi.mocked(client.contentBySource).mockImplementation((id) => (id === 'b' ? new Promise((resolve) => (release = resolve)) : Promise.resolve([draft])));
+  await user.selectOptions(screen.getByRole('combobox', { name: 'Homebrew source' }), 'b');
+  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  expect(screen.queryByText('Testy Waiting')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull();
+  release([]);
+});

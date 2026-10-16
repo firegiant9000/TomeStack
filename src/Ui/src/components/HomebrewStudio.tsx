@@ -193,9 +193,13 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         onSelect={(id) => {
           setSourceId(id);
           setPublishingAll(false);
+          setEntries([]); // never show another source's rows while this one loads
         }}
         onCreated={async (created) => {
           await loadSources();
+          // The publish panel must not open on, or list, another source's drafts.
+          setPublishingAll(false);
+          setEntries([]);
           setSourceId(created.id);
           onStatus(`Created the homebrew source ${created.title}.`);
         }}
@@ -274,6 +278,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                 // WCAG 2.4.3: the panel is gone, so focus goes back to the button that opened it (or the heading if that is gone too).
                 setTimeout(() => (publishAllButton.current ?? heading.current)?.focus());
               }}
+              onReload={() => loadEntries(source.id)}
               onPublished={async (count) => {
                 await loadEntries(source.id);
                 onStatus(`Published ${count} draft${count === 1 ? '' : 's'}. Characters keep their current revisions until you review an update.`);

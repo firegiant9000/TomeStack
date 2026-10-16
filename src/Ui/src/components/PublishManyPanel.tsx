@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { ContentComparison, ContentKind, ContentReference, PublishManyEntry, PublishManyPreview, SourceRecord } from '../api/types';
 
@@ -20,9 +20,20 @@ interface Props {
   onClose: () => void;
   /** Called once with how many of the ticked drafts were published, so the studio can reload and say so. */
   onPublished: (drafts: number) => void;
+  /** Asks the studio to reload its entries, so `pending` is current after a refusal that says the drafts changed. */
+  onReload: () => Promise<void> | void;
 }
 
 const reasonId = 'publish-many-reason';
+
+/** The service never takes more than this many at once (content.publish-too-many); the panel ticks no more to begin with. */
+const maxAtOnce = 500;
+
+/** How long the ticking must pause before the read-only preview runs (the service reads every revision each time). */
+const previewDelayMs = 300;
+
+/** The specific code of a service refusal (the transport puts it in the first diagnostic). */
+const refusalCode = (error: unknown): string | undefined => (error as { diagnostics?: { code: string }[] } | null)?.diagnostics?.[0]?.code;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -43,10 +54,20 @@ function describeChanges(comparison: ContentComparison): string[] {
  * differences on request. Grants that pin a published draft are re-pointed by the service; this lists them. Nothing here
  * changes a character.
  */
-export function PublishManyPanel({ source, pending, onError, onClose, onPublished }: Props) {
-  const [ticks, setTicks] = useState<string[]>(() => pending.filter((p) => !p.replacesPublished).map((p) => p.contentId));
-  // The preview is of one ticked set; an answer for another set is stale and is not shown.
-  const [answer, setAnswer] = useState<{ key: string; preview?: PublishManyPreview }>();
+export function PublishManyPanel({ source, pending, onError, onClose, onPublished, onReload }: Props) {
+  const [capped] = useState(() => pending.filter((p) => !p.replacesPublished).length > maxAtOnce);
+  const [ticks, setTicks] = useState<string[]>(() =>
+    pending
+      .filter((p) => !p.replacesPublished)
+      .slice(0, maxAtOnce)
+      .map((p) => p.contentId),
+  );
+  // The preview is of one ticked set; an answer for another set is stale and is not shown. `code` is why a preview failed.
+  const [answer, setAnswer] = useState<{ key: string; preview?: PublishManyPreview; code?: string }>();
+  // A refused publish bumps this so the preview runs again for the same ticks.
+  const [refresh, setRefresh] = useState(0);
+  const reportError = useEffectEvent(onError);
+  const reload = useEffectEvent(onReload);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ drafts: number; republished: number }>();
   const [changes, setChanges] = useState<Record<string, string[]>>({});
@@ -68,17 +89,23 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
   useEffect(() => {
     const request = ++latest.current; // a newer tick supersedes any answer still on its way
     if (done || key === '') return;
-    client
-      .publishManyPreview(key.split(','))
-      .then((next) => {
-        if (request === latest.current) setAnswer({ key, preview: next });
-      })
-      .catch((error: unknown) => {
-        if (request !== latest.current) return;
-        setAnswer({ key, preview: undefined });
-        onError(error);
-      });
-  }, [key, done, onError]);
+    // The preview waits for the ticking to pause; until then the button stays held as "checking".
+    const timer = setTimeout(() => {
+      client
+        .publishManyPreview(key.split(','))
+        .then((next) => {
+          if (request === latest.current) setAnswer({ key, preview: next });
+        })
+        .catch((error: unknown) => {
+          if (request !== latest.current) return;
+          const code = refusalCode(error);
+          setAnswer({ key, preview: undefined, code });
+          reportError(error);
+          if (code === 'content.publish-set-changed') void reload();
+        });
+    }, previewDelayMs);
+    return () => clearTimeout(timer);
+  }, [key, done, refresh]);
 
   // Focus follows the result (2.4.3): the form it replaced is gone.
   useEffect(() => {
@@ -91,19 +118,47 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
   const rePointed = shown.flatMap((e) => e.rePointings);
   const byDraft = new Map(preview?.entries.map((e) => [e.draft.contentId, e]));
 
-  const reason = loading
-    ? 'Checking the drafts…'
-    : ticked.length === 0
-      ? 'Tick at least one draft.'
-      : !preview
-        ? 'The drafts could not be checked. Untick one and tick it again to check them again.'
-        : errors.length > 0 || !preview.canPublish
-          ? 'Fix the problems above first, or untick the drafts that have them.'
-          : undefined;
+  const failedReason =
+    answer?.code === 'content.publish-too-many'
+      ? `At most ${maxAtOnce} drafts can be published at once. Untick some, then publish the rest afterwards.`
+      : answer?.code === 'content.publish-set-changed'
+        ? 'The drafts changed after they were listed. The list is being refreshed; check the ticks, then try again.'
+        : 'The drafts could not be checked. Untick one and tick it again to check them again.';
+  const reason = busy
+    ? 'Publishing…'
+    : loading
+      ? 'Checking the drafts…'
+      : ticked.length === 0
+        ? 'Tick at least one draft.'
+        : !preview
+          ? failedReason
+          : errors.length > 0 || !preview.canPublish
+            ? 'Fix the problems above first, or untick the drafts that have them.'
+            : undefined;
+
+  // One polite paragraph, written once per settled preview (WCAG 4.1.3); never a second role=status.
+  const live = done
+    ? ''
+    : loading
+      ? 'Checking the drafts…'
+      : ticked.length === 0
+        ? ''
+        : !preview
+          ? 'The drafts could not be checked; publishing is held.'
+          : errors.length > 0 || !preview.canPublish
+            ? `${plural(errors.length, 'problem', 'problems')}; publishing is held.`
+            : `No problems; ${plural(ticked.length, 'draft', 'drafts')} ready.`;
+
+  const allTicked = pending.length > 0 && pending.every((p) => ticks.includes(p.contentId));
 
   function toggle(id: string) {
     if (busy) return;
     setTicks((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]));
+  }
+
+  function toggleAll() {
+    if (busy) return;
+    setTicks(allTicked ? [] : pending.map((p) => p.contentId));
   }
 
   async function publish() {
@@ -120,6 +175,10 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       onPublished(entries.length);
     } catch (error) {
       onError(error);
+      // The refusal may mean the drafts changed: drop the stale preview, check again, and bring the studio's list up to date.
+      setAnswer(undefined);
+      setRefresh((n) => n + 1);
+      void onReload();
     } finally {
       publishing.current = false;
       setBusy(false);
@@ -143,6 +202,9 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       <h3 id={headingId} tabIndex={-1} ref={heading}>
         Publish drafts of {source.title}
       </h3>
+      <p className="visually-hidden" aria-live="polite">
+        {live}
+      </p>
       {done ? (
         <>
           <p ref={result} tabIndex={-1}>
@@ -162,6 +224,13 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
             Publishing creates permanent revisions, all or none. Review what will be published, then confirm. Entries that already have a published version
             start unticked.
           </p>
+          {capped && <p className="hint">The first {maxAtOnce} drafts are ticked; publish them, then the rest.</p>}
+          <div className="actions">
+            {/* One button whose name swaps, so focus stays on it (2.4.3). */}
+            <button type="button" aria-disabled={busy || undefined} aria-describedby={busy ? reasonId : undefined} onClick={toggleAll}>
+              {allTicked ? 'Untick all' : 'Tick all'}
+            </button>
+          </div>
           <table className="publish-table">
             <caption>Pending drafts in {source.title}</caption>
             <thead>

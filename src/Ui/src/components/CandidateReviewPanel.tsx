@@ -52,11 +52,12 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [filter, setFilter] = useState<CandidateFilter>({ status: 'pending' });
   const [offset, setOffset] = useState(0); // item 13: which of the filtered candidates the list starts at
   const [result, setResult] = useState<CandidatePage>();
-  const [announcement, setAnnouncement] = useState(''); // "Showing 51–100 of 340", set only when the player changes page
+  // The one polite paragraph (WCAG 4.1.3): "Showing 51–100 of 340" on a page turn, "N selected", "Selection cleared".
+  const [announcement, setAnnouncement] = useState('');
   const [selected, setSelected] = useState<string>();
-  // Item 9: the rows ticked for a bulk accept (the open row, `selected`, is a different thing), and what to say about them.
+  // Item 9: the rows ticked for a bulk accept (the open row, `selected`, is a different thing).
   const [ticked, setTicked] = useState<string[]>([]);
-  const [selectionNote, setSelectionNote] = useState('');
+  const clearedByPage = useRef(false); // a page turn dropped ticks: say so in the same message as the new range
   const [skipped, setSkipped] = useState<{ id: string; name: string; reasons: string[] }[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const bulkRunning = useRef(false);
@@ -73,6 +74,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const dirtyId = `unsaved-${job.id}`;
   const rangeId = `range-${job.id}`;
   const noneId = `none-selected-${job.id}`;
+  const bulkId = `accepting-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
   const pendingShown = candidates?.filter((c) => c.status === 'pending') ?? [];
@@ -100,7 +102,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         });
         if (announceNext.current) {
           announceNext.current = false;
-          setAnnouncement(`Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`);
+          const range = `Showing ${offset + 1}–${offset + page.items.length} of ${page.total}`;
+          setAnnouncement(clearedByPage.current ? `${range}. Selection cleared.` : range);
+          clearedByPage.current = false;
         }
         return page.items;
       })
@@ -109,6 +113,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           // A page turn failed: stay on the page that is shown, and announce nothing later.
           announceNext.current = false;
           setOffset(shownOffset.current);
+          // The ticks are gone either way; the range is not announced, so say that alone.
+          if (clearedByPage.current) setAnnouncement('Selection cleared');
+          clearedByPage.current = false;
         }
         throw error;
       });
@@ -123,10 +130,13 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const current = candidates?.find((c) => c.id === selected);
 
   // Ruling R35: paging, the filters and the other rows would silently drop an unsaved edit, so they are held while there is one.
-  const heldProps = { 'aria-disabled': dirty || undefined, 'aria-describedby': dirty ? dirtyId : undefined };
+  // A bulk accept in flight holds them too: a page turn or filter change would move the rows it is about to reload.
+  const held = dirty || bulkBusy;
+  const heldReason = dirty ? dirtyId : bulkBusy ? bulkId : undefined;
+  const heldProps = { 'aria-disabled': held || undefined, 'aria-describedby': heldReason };
 
   function changeFilter(next: CandidateFilter) {
-    if (dirty) return;
+    if (held) return;
     setFilter(next);
     resetToFirstPage();
   }
@@ -143,13 +153,13 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setSkipped([]);
     if (ticked.length === 0) return;
     setTicked([]);
-    setSelectionNote('Selection cleared');
+    setAnnouncement('Selection cleared');
   }
 
   function tick(next: string[]) {
     setTicked(next);
     setSkipped([]);
-    setSelectionNote(`${next.length} selected`);
+    setAnnouncement(`${next.length} selected`);
   }
 
   async function acceptTicked(asReference: boolean) {
@@ -171,7 +181,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map((code) => blockedReasons[code] ?? code) })));
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
-      setSelectionNote(`${stay.length} selected`);
+      setAnnouncement(`${stay.length} selected`);
       await load();
     } catch (error) {
       onError(error);
@@ -185,7 +195,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
   /** The page-range fields show every keystroke at once but reload the list only after a pause (the service reads the whole job each time). */
   function changePageRange(which: 'from' | 'to', text: string) {
-    if (dirty) return;
+    if (held) return;
     const next = { ...rangeFields, [which]: text };
     setRangeFields(next);
     clearTimeout(pageTimer.current);
@@ -201,10 +211,15 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
   function turnPage(direction: -1 | 1) {
     const target = shown + direction * pageSize;
-    if (dirty || target < 0 || target >= total) return;
+    if (held || target < 0 || target >= total) return;
     announceNext.current = true;
     setSelected(undefined);
-    clearTicks();
+    setSkipped([]);
+    if (ticked.length > 0) {
+      // Said with the new range, in one message, once the page has loaded.
+      setTicked([]);
+      clearedByPage.current = true;
+    }
     setOffset(target);
   }
 
@@ -216,7 +231,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const atStart = shown === 0;
   const atEnd = shown + pageSize >= total;
   // A button held at an end points at the range, which says why ("1–50 of 340"); a held edit points at its own reason.
-  const pagingReason = dirty ? dirtyId : atStart || atEnd ? rangeId : undefined;
+  const pagingReason = heldReason ?? (atStart || atEnd ? rangeId : undefined);
 
   return (
     <section aria-label={`Candidates from ${source.title}`} className="play-panel">
@@ -313,17 +328,22 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           Detection stopped before page {job.detectionLimitedFromPage}; read pages {job.detectionLimitedFromPage} on as a range to detect them.
         </p>
       )}
-      <p className="visually-hidden" aria-live="polite">
+      <p className="visually-hidden selection-note" aria-live="polite">
         {announcement}
       </p>
+      {bulkBusy && (
+        <p id={bulkId} className="hint">
+          Accepting the selected candidates…
+        </p>
+      )}
       {candidates && candidates.length === 0 && <p className="hint">No candidates match.</p>}
       {candidates && candidates.length > 0 && (
         <div className="actions">
           {/* aria-disabled, never `disabled`: a held button keeps focus and its place in the tab order. */}
           <button
             type="button"
-            aria-disabled={atStart || dirty || undefined}
-            aria-describedby={atStart || dirty ? pagingReason : undefined}
+            aria-disabled={atStart || held || undefined}
+            aria-describedby={atStart || held ? pagingReason : undefined}
             onClick={() => turnPage(-1)}
           >
             Previous {pageSize}
@@ -333,40 +353,37 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           </span>
           <button
             type="button"
-            aria-disabled={atEnd || dirty || undefined}
-            aria-describedby={atEnd || dirty ? pagingReason : undefined}
+            aria-disabled={atEnd || held || undefined}
+            aria-describedby={atEnd || held ? pagingReason : undefined}
             onClick={() => turnPage(1)}
           >
             Next {pageSize}
           </button>
         </div>
       )}
-      <p className="visually-hidden selection-note" aria-live="polite">
-        {selectionNote}
-      </p>
       {pendingShown.length > 0 && (
         <div className="actions" role="group" aria-label="Accept several at once">
           {/* Item 9, D33: the same checks as accepting one at a time; blocked ones are listed, never forced. aria-disabled, as everywhere here. */}
-          <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyId : undefined} onClick={() => !dirty && tick(pendingShown.map((c) => c.id))}>
+          <button type="button" aria-disabled={held || undefined} aria-describedby={heldReason} onClick={() => !held && tick(pendingShown.map((c) => c.id))}>
             Select the {pendingShown.length} shown
           </button>
           {ticked.length > 0 && (
-            <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyId : undefined} onClick={() => !dirty && clearTicks()}>
+            <button type="button" aria-disabled={held || undefined} aria-describedby={heldReason} onClick={() => !held && clearTicks()}>
               Clear selection
             </button>
           )}
           <button
             type="button"
-            aria-disabled={dirty || ticked.length === 0 || bulkBusy || undefined}
-            aria-describedby={dirty ? dirtyId : ticked.length === 0 ? noneId : undefined}
+            aria-disabled={held || ticked.length === 0 || undefined}
+            aria-describedby={heldReason ?? (ticked.length === 0 ? noneId : undefined)}
             onClick={() => void acceptTicked(false)}
           >
             Accept selected as drafts
           </button>
           <button
             type="button"
-            aria-disabled={dirty || ticked.length === 0 || bulkBusy || undefined}
-            aria-describedby={dirty ? dirtyId : ticked.length === 0 ? noneId : undefined}
+            aria-disabled={held || ticked.length === 0 || undefined}
+            aria-describedby={heldReason ?? (ticked.length === 0 ? noneId : undefined)}
             onClick={() => void acceptTicked(true)}
           >
             Accept selected as reference
@@ -399,9 +416,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
                   className="row-select"
                   aria-label={`Select ${(c.edited ?? c.candidate).proposedName}`}
                   checked={ticked.includes(c.id)}
-                  aria-disabled={dirty || undefined}
-                  aria-describedby={dirty ? dirtyId : undefined}
-                  onChange={() => !dirty && tick(ticked.includes(c.id) ? ticked.filter((id) => id !== c.id) : [...ticked, c.id])}
+                  aria-disabled={held || undefined}
+                  aria-describedby={heldReason}
+                  onChange={() => !held && tick(ticked.includes(c.id) ? ticked.filter((id) => id !== c.id) : [...ticked, c.id])}
                 />
               )}{' '}
               <button
