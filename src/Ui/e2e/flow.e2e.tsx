@@ -987,6 +987,70 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   expect((await client.listContent('srd-5.2.1')).some((o) => o.name === 'Fixture Ember Lance')).toBe(true);
 });
 
+it('adds the wizard list to a fixture spell candidate in bulk, accepts and publishes it, and the builder offers it to a wizard (item 10)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Lists Book', ['srd-5.2.1']);
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Lists Book' })).getByRole('region', { name: 'Read the text of E2E Lists Book' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Lists Book' })).getByRole('button', { name: 'Read the whole document' }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Lists Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Lists Book' });
+  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(9));
+
+  // The fixture spell is level 2, which a level 1 wizard has no slot for; the reviewer lowers it to level 1 first (setup, through the API).
+  const [job] = await client.listImports(source.id);
+  const ember = (await client.candidates(job!.id, { kind: 'spell' })).items.find((c) => c.candidate.proposedName === 'Fixture Ember Lance')!;
+  const effects = ember.candidate.proposedEffects.map((e) => (e.type === 'spell' ? { ...e, level: 1 } : e));
+  await client.editCandidate(ember.id, { effects });
+
+  // Nothing is ticked: the list button is held with its reason.
+  const open = within(panel()).getByRole('button', { name: 'Add to a spell list…' });
+  expect(open.getAttribute('aria-disabled')).toBe('true');
+  await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Ember Lance' }));
+  await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to a spell list…' }));
+  const key = within(panel()).getByRole('combobox', { name: 'Spell list key' });
+  expect(document.activeElement).toBe(key);
+  await user.type(key, ' Wizard');
+  expect(within(panel()).getByText('Saved as: wizard')).toBeTruthy();
+  await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to this list' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Added the spell list wizard to 1 spell/));
+  const stored = (await client.candidates(job!.id, { kind: 'spell' })).items.find((c) => c.id === ember.id)!;
+  const lists = (stored.edited ?? stored.candidate).proposedEffects.flatMap((e) => (e.type === 'spell' ? (e.lists as string[]) : []));
+  expect(lists).toContain('wizard');
+
+  // Accept it as a draft (the bulk button), then publish through the studio panel.
+  const row = within(panel()).getByRole<HTMLInputElement>('checkbox', { name: 'Select Fixture Ember Lance' });
+  if (!row.checked) await user.click(row);
+  const accept = within(panel()).getByRole('button', { name: 'Accept selected as drafts' });
+  await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
+  await user.click(accept);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Accepted 1\./));
+
+  await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Lists Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Lists Book/ }));
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Lists Book' });
+  const publish = await within(region).findByRole('button', { name: 'Publish 1 draft' });
+  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
+  await user.click(publish);
+  await within(region).findByText('Published 1 draft.');
+
+  // The published spell is on the wizard list, so the builder offers it to a wizard.
+  const keys = await client.spellListKeys();
+  expect(keys.find((k) => k.key === 'wizard')!.spells).toBeGreaterThan(0);
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await createCharacter(user, { name: 'E2E Listed Wizard', family: 'srd-5.2.1', cls: /^Wizard/ });
+  const picker = await screen.findByRole('group', { name: /^Spellcasting spells/ }); // the SRD wizard's rule is named "Spellcasting"
+  expect(within(picker).getByRole('checkbox', { name: /^Fixture Ember Lance/ })).toBeTruthy();
+});
+
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
   const user = userEvent.setup();
   render(<App />);
