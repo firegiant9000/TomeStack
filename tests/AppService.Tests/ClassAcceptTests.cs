@@ -329,6 +329,29 @@ public class ClassAcceptTests
     }
 
     [Fact]
+    public void Renaming_a_linked_stub_keeps_it_linked_to_its_table_entry()
+    {
+        // Review fix (item 11, D34): the link was made on the detected name; one installed match published after detection must not add a second grant.
+        var temp = new TempApp();
+        using var _t = temp;
+        var (_, jobId) = ImportedInto(temp);
+        var installed = PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
+        var beacon = Named(temp, jobId, "Fixture Beacon");
+        temp.App.EditCandidate(new(beacon.Id, Name: "Fixture Beacon Renamed"));
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+
+        var check = temp.App.CheckCandidate(lamplighter.Id);
+        Assert.DoesNotContain(check.Notes, n => n.Contains("not linked", StringComparison.Ordinal));
+        var renamed = Assert.Single(check.Linked, l => l.CandidateId == beacon.Id);
+        Assert.Equal("Fixture Beacon Renamed", renamed.Name);
+        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+
+        var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().ToList();
+        Assert.DoesNotContain(grants, g => g.Content == installed.Reference);
+        Assert.Single(grants, g => g.Content is { } c && temp.App.Store.FindRevision(c)!.Name == "Fixture Beacon Renamed");
+    }
+
+    [Fact]
     public void A_table_feature_with_two_installed_matches_at_accept_is_counted_in_a_note()
     {
         var temp = new TempApp();
