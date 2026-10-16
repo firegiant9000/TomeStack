@@ -45,10 +45,16 @@ function echoPreview(all: PendingDraft[]) {
 
 const onClose = vi.fn();
 const onPublished = vi.fn();
+const onReload = vi.fn();
 
 function renderPanel(pending: PendingDraft[]) {
-  return render(<PublishManyPanel source={source} pending={pending} onError={() => {}} onClose={onClose} onPublished={onPublished} />);
+  return render(<PublishManyPanel source={source} pending={pending} onError={() => {}} onClose={onClose} onPublished={onPublished} onReload={onReload} />);
 }
+
+/** A service refusal as the transport delivers it: the specific code is the first diagnostic. */
+const refusal = (code: string) => Object.assign(new Error('refused'), { diagnostics: [{ code, message: 'refused' }] });
+
+const reasonText = (button: HTMLElement) => document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent;
 
 const held = (button: HTMLElement) => button.getAttribute('aria-disabled') === 'true';
 
@@ -58,6 +64,7 @@ beforeEach(() => {
   vi.mocked(client.compare).mockReset();
   onClose.mockClear();
   onPublished.mockClear();
+  onReload.mockReset();
 });
 afterEach(cleanup);
 
@@ -109,6 +116,7 @@ it('holds the publish button while the preview loads', async () => {
   expect(held(button)).toBe(true);
   expect(button).toHaveProperty('disabled', false);
   expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Checking the drafts…');
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1)); // the preview waits out the debounce
   await act(async () => finish(previewOf([entryOf(all[0]!)])));
   expect(held(button)).toBe(false);
 });
@@ -178,4 +186,110 @@ it('shows what a replacing draft changes, from content.compare', async () => {
   await user.click(await screen.findByRole('button', { name: 'Show what changes in Testy Entry 2' }));
   expect(client.compare).toHaveBeenCalledWith({ from: { contentId: 'c2', revisionId: 'p2' }, to: { contentId: 'c2', revisionId: 'd2' } });
   expect(await screen.findByText('changed init: 1 to 2')).toBeTruthy();
+});
+
+// Fix round 1, items 9-12.
+const liveNote = () => document.querySelector('p.visually-hidden[aria-live="polite"]');
+
+it('announces each settled preview once in one polite paragraph that is not a status role (4.1.3)', async () => {
+  const all = [pendingOf(1)];
+  let finish: (p: PublishManyPreview) => void = () => {};
+  vi.mocked(client.publishManyPreview).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  renderPanel(all);
+  expect(liveNote()?.textContent).toBe('Checking the drafts…');
+  expect(screen.queryByRole('status')).toBeNull();
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1));
+  await act(async () => finish(previewOf([entryOf(all[0]!)])));
+  expect(liveNote()?.textContent).toBe('No problems; 1 draft ready.');
+  expect(document.querySelectorAll('[aria-live]')).toHaveLength(1);
+});
+
+it('says how many problems hold publishing', async () => {
+  const all = [pendingOf(1), pendingOf(2)];
+  const bad = { code: 'validate.dice-invalid', message: 'The dice are not valid.' };
+  vi.mocked(client.publishManyPreview).mockResolvedValue(
+    previewOf([entryOf(all[0]!), entryOf(all[1]!, { report: { revision: all[1]!.draft, errors: [bad, bad], warnings: [], canPublish: false } })]),
+  );
+  renderPanel(all);
+  await vi.waitFor(() => expect(liveNote()?.textContent).toBe('2 problems; publishing is held.'));
+});
+
+it('waits for the ticking to pause before it previews', async () => {
+  const user = userEvent.setup();
+  const all = [pendingOf(1), pendingOf(2, true), pendingOf(3, true)];
+  echoPreview(all);
+  renderPanel(all);
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1));
+  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 2' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Publish Testy Entry 3' }));
+  expect(client.publishManyPreview).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(2));
+  expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1', 'c2', 'c3']);
+});
+
+it('ticks or unticks every draft with one button that keeps its place', async () => {
+  const user = userEvent.setup();
+  const all = [pendingOf(1), pendingOf(2, true)];
+  echoPreview(all);
+  renderPanel(all);
+  const toggle = await screen.findByRole('button', { name: 'Tick all' });
+  await user.click(toggle);
+  expect(screen.getAllByRole('checkbox').every((b) => (b as HTMLInputElement).checked)).toBe(true);
+  expect(screen.getByRole('button', { name: 'Untick all' })).toBe(toggle);
+  await user.click(toggle);
+  expect(screen.getAllByRole('checkbox').some((b) => (b as HTMLInputElement).checked)).toBe(false);
+  expect(document.activeElement).toBe(toggle);
+});
+
+it('ticks at most 500 drafts to begin with and says so', async () => {
+  const all = Array.from({ length: 501 }, (_, i) => pendingOf(i + 1));
+  echoPreview(all);
+  renderPanel(all);
+  expect(screen.getByText('The first 500 drafts are ticked; publish them, then the rest.')).toBeTruthy();
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.publishManyPreview).mock.calls[0]![0]).toHaveLength(500);
+  expect(await screen.findByRole('button', { name: 'Publish 500 drafts' })).toBeTruthy();
+});
+
+it('gives the too-many and set-changed refusals their own reasons', async () => {
+  const all = [pendingOf(1)];
+  vi.mocked(client.publishManyPreview).mockRejectedValue(refusal('content.publish-too-many'));
+  const first = renderPanel(all);
+  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  await vi.waitFor(() => expect(reasonText(button)).toBe('At most 500 drafts can be published at once. Untick some, then publish the rest afterwards.'));
+  first.unmount();
+
+  vi.mocked(client.publishManyPreview).mockRejectedValue(refusal('content.publish-set-changed'));
+  renderPanel(all);
+  const again = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  await vi.waitFor(() => expect(reasonText(again)).toBe('The drafts changed after they were listed. The list is being refreshed; check the ticks, then try again.'));
+  expect(onReload).toHaveBeenCalled();
+});
+
+it('clears the stale preview, previews again and reloads the studio after a refused publish', async () => {
+  const user = userEvent.setup();
+  const all = [pendingOf(1)];
+  echoPreview(all);
+  vi.mocked(client.publishMany).mockRejectedValue(refusal('content.publish-set-changed'));
+  renderPanel(all);
+  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  await vi.waitFor(() => expect(held(button)).toBe(false));
+  await user.click(button);
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenCalledTimes(2));
+  expect(onReload).toHaveBeenCalled();
+  expect(onPublished).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(held(screen.getByRole('button', { name: 'Publish 1 draft' }))).toBe(false));
+});
+
+it('links "Publishing…" as the reason while the publish is in flight', async () => {
+  const user = userEvent.setup();
+  const all = [pendingOf(1)];
+  echoPreview(all);
+  vi.mocked(client.publishMany).mockReturnValue(new Promise(() => {}));
+  renderPanel(all);
+  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  await vi.waitFor(() => expect(held(button)).toBe(false));
+  await user.click(button);
+  expect(held(button)).toBe(true);
+  expect(reasonText(button)).toBe('Publishing…');
 });

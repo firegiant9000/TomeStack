@@ -611,7 +611,7 @@ it('clears the selection when the page or a filter changes, announcing it once',
 
   await user.click(screen.getByRole('button', { name: 'Next 50' }));
   await screen.findByRole('button', { name: 'Testy Item 51' });
-  expect(screen.getByText('Selection cleared', { selector: '[aria-live="polite"]' })).toBeTruthy();
+  expect(screen.getByText('Showing 51–100 of 120. Selection cleared.', { selector: '[aria-live="polite"]' })).toBeTruthy();
   expect(screen.getAllByRole('checkbox', { name: /^Select Testy Item / }).some((b) => (b as HTMLInputElement).checked)).toBe(false);
 
   await user.click(screen.getByRole('button', { name: 'Select the 50 shown' }));
@@ -704,4 +704,43 @@ it('holds the checkboxes and bulk buttons while the open candidate has an unsave
   }
   expect(screen.queryByText(/ selected$/)).toBeNull();
   expect(client.acceptCandidates).not.toHaveBeenCalled();
+});
+
+// Fix round 1, items 14 and 15.
+it('holds paging and the filters, with a linked reason, while a bulk accept is in flight', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  vi.mocked(client.acceptCandidates).mockReset();
+  let finish: (value: { accepted: StoredCandidate[]; blocked: [] }) => void = () => {};
+  vi.mocked(client.acceptCandidates).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
+  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+
+  const next = screen.getByRole('button', { name: 'Next 50' });
+  const kind = screen.getByLabelText('Kind');
+  for (const control of [next, kind, screen.getByRole('button', { name: 'Select the 50 shown' }), screen.getByRole('checkbox', { name: 'Select Testy Item 1' })]) {
+    expect(held(control)).toBe(true);
+    expect(document.getElementById(control.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Accepting the selected candidates…');
+  }
+  await user.click(next);
+  await user.selectOptions(kind, 'spell');
+  expect(vi.mocked(client.candidates)).toHaveBeenCalledTimes(calls);
+  expect(screen.getByText('1–50 of 120')).toBeTruthy();
+
+  await act(async () => finish({ accepted: [], blocked: [] }));
+  await vi.waitFor(() => expect(held(screen.getByRole('button', { name: 'Next 50' }))).toBe(false));
+});
+
+it('turning the page with ticks makes one combined announcement in the one polite paragraph', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
+  await user.click(screen.getByRole('button', { name: 'Next 50' }));
+  await screen.findByRole('button', { name: 'Testy Item 51' });
+  expect(pollite().textContent).toBe('Showing 51–100 of 120. Selection cleared.');
+  expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
+  expect(screen.queryByRole('status')).toBeNull();
 });

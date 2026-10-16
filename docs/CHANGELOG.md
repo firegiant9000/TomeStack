@@ -5,7 +5,7 @@
 ### Added
 
 - **Accept many candidates at once:** in the import review, tick rows (or "Select the 50 shown") and choose "Accept selected as drafts" or "Accept selected as reference". Each goes through the same checks as accepting one; the ones that need review are listed with the reason and stay selected, and nothing is forced.
-- **Publish all drafts in a source:** the Homebrew studio's "Publish all drafts in this source…" shows what will be published (problems, what replaces a published version, which grants are re-pointed at the published features) and publishes the ticked drafts in one all-or-nothing step. A repeat press publishes nothing twice.
+- **Publish all drafts in a source:** the Homebrew studio's "Publish all drafts in this source…" shows what will be published (problems, what replaces a published version, which grants are re-pointed at the published features) and publishes the ticked drafts in one all-or-nothing step. A repeat press publishes nothing twice. The check runs after a short pause in ticking, there is one "Tick all" / "Untick all" button, no more than 500 drafts are ticked to begin with, and a refused publish checks again with a fresh list. A screen reader hears one summary per check ("No problems; 3 drafts ready.").
 - **A session-prep guide** (`docs/features/session-prep.md`) for characters built mostly from homebrew.
 - **Roll any dice from the summary:** type something like 2d6+3 under the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
 
