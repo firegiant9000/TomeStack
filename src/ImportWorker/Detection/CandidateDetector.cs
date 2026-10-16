@@ -10,7 +10,11 @@ public sealed record DetectionPage(int Page, string Text, IReadOnlyList<TextBloc
 
 /// <param name="SourceFamilies">The families the source declares; a candidate's family comes from its layout, within these.</param>
 /// <param name="IsInstalled">Whether content of that name is installed (for unresolved references).</param>
-public sealed record DetectionContext(Guid SourceId, IReadOnlyList<string> SourceFamilies, Func<string, bool> IsInstalled);
+/// <param name="IsOneInstalledFeature">
+/// Ruling R67: whether exactly one installed published feature has that name (a class's Features-column name is then granted
+/// from it at accept, not given a stub). Null: <paramref name="IsInstalled"/> decides, as before.
+/// </param>
+public sealed record DetectionContext(Guid SourceId, IReadOnlyList<string> SourceFamilies, Func<string, bool> IsInstalled, Func<string, bool>? IsOneInstalledFeature = null);
 
 /// <param name="Candidates">At most <see cref="CandidateDetector.MaxCandidates"/>, in page order.</param>
 /// <param name="Truncated">More were found than the cap allows.</param>
@@ -70,7 +74,7 @@ public static partial class CandidateDetector
             var lines = PageLines(page, boilerplate);
             found.AddRange(Weapons(page, lines, context));
             found.AddRange(Armor(page, lines, context));
-            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures));
+            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures, () => FollowingText(pages, page, boilerplate), pages.Where(p => p.Page == page.Page - 1).Select(p => PageLines(p, boilerplate)).FirstOrDefault() ?? []));
         }
 
         // Item 11 (R54): what each class's Features column names becomes a link to a detected feature, or to a reference stub.
@@ -83,8 +87,9 @@ public static partial class CandidateDetector
                 var target = found.Where(c => c.ProposedKind == ContentKind.Feature && Key(c.ProposedName) == Key(name.Name)).OrderBy(c => c.Page.Start).FirstOrDefault();
                 if (target is null)
                 {
-                    if (context.IsInstalled(name.Name))
-                        continue; // installed content of that name is resolved elsewhere (an unresolved reference never names it)
+                    // R67: one installed feature of that name is granted from at accept; two, or none, and the name gets a stub (R54).
+                    if (context.IsOneInstalledFeature?.Invoke(name.Name) ?? context.IsInstalled(name.Name))
+                        continue;
                     target = FeatureStub(owner, name.Name, name.Levels[0], context);
                     found.Add(target);
                 }
@@ -104,7 +109,7 @@ public static partial class CandidateDetector
     }
 
     /// <summary>A feature name worth a link: not "Ability Score Improvement" and not a subclass placeholder ("Fixture Order feature").</summary>
-    private static bool IsLinkable(string name) =>
+    public static bool IsLinkable(string name) =>
         !name.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A feature the class table names that no block of the job describes: the name and the class page only, reference.</summary>
@@ -884,7 +889,26 @@ public static partial class CandidateDetector
     private static bool IsFeaturesCell(string text) =>
         text.EndsWith("Features", StringComparison.Ordinal) || text.EndsWith("FEATURES", StringComparison.Ordinal);
 
-    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures)
+    /// <summary>
+    /// The text of the pages that follow a class table page, up to the next class's table (at most four pages): the class's
+    /// feature descriptions, where its spellcasting ability is named (item 11).
+    /// </summary>
+    private static List<string> FollowingText(IReadOnlyList<DetectionPage> pages, DetectionPage page, HashSet<string> boilerplate)
+    {
+        var following = new List<string>();
+        foreach (var next in pages.Where(p => p.Page > page.Page).OrderBy(p => p.Page).Take(4))
+        {
+            var nextLines = PageLines(next, boilerplate);
+            // The next class's table (its "Level" and "Features" header cells) ends this class's text; a heading-shaped prose
+            // line ("The DC equals 8 plus") must not.
+            if (nextLines.Any(l => l.Line.Text.Trim() is "Level" or "LEVEL") && nextLines.Any(l => l.Line.Text.Trim() is "Features" or "FEATURES"))
+                break;
+            following.AddRange(nextLines.Select(l => l.Line.Text));
+        }
+        return following;
+    }
+
+    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, Func<List<string>> followingFor, List<(int Page, TextLine Line)> previous)
     {
         // "The Bard" (SRD 5.1) or "Bard Features" (SRD 5.2.1); "Class Features" and "Bard Class Features" are section headings.
         var titles = pageUnits.Select(u => u.Lines[0]).Select(t => ClassTableTitle().Match(t)).Where(m => m.Success)
@@ -893,13 +917,20 @@ public static partial class CandidateDetector
         if (titles.Count == 0)
             return [];
         var className = titles[0];
+        var following = followingFor();
         var byLevel = new SortedDictionary<int, List<string>>();
 
         // Item 11 (D34): the whole table, read back by position; the legacy readers below stay for layouts it cannot read.
         var pageTextLines = lines.Select(l => l.Line).ToList();
-        var titleLine = pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
+        // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
+        var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
+            ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
         if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
-            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context, classFeatures)];
+            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context, classFeatures, following, previous)];
+        // A cell the running-header rule took for boilerplate (text repeated on many pages) can break the table: read it again whole.
+        var wholePage = page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
+        if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine) is { Complete: true } whole)
+            return [ClassCandidate(page, className, whole.FeaturesByLevel, whole, wholePage, context, classFeatures, following, previous)];
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
         var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
@@ -928,16 +959,16 @@ public static partial class CandidateDetector
         if (byLevel.Count == 0)
             return [];
         var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
-        return [ClassCandidate(page, className, features, null, pageTextLines, context, classFeatures)];
+        return [ClassCandidate(page, className, features, null, pageTextLines, context, classFeatures, following, previous)];
     }
 
     /// <summary>A class candidate: the Features column by level, plus the effects its page supports (<see cref="ClassProposals"/>).</summary>
-    private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures)
+    private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, List<string> following, List<(int Page, TextLine Line)> previous)
     {
         var ordered = features.OrderBy(f => f.Key).ToList();
         var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
         var (families, uncertainties, familyUnsure) = NeutralFamily(context);
-        var proposal = ClassProposals.Propose(className, table, [.. pageTextLines.Select(l => l.Text)], features);
+        var proposal = ClassProposals.Propose(className, table, ClassProposals.LabelledLines(pageTextLines, previous.Select(l => l.Line).ToList(), className), features, following);
         uncertainties.AddRange(proposal.Uncertainties);
         if (table is null)
             uncertainties.Add("The level table could not be read whole: only its features are proposed. Add what is missing by hand, or accept it as reference.");
