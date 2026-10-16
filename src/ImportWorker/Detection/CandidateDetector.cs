@@ -405,7 +405,8 @@ public static partial class CandidateDetector
 
     // ---- spell list pages (item 10) ----
 
-    private const string NoListsNote = "The spell block names no class lists (SRD 5.1 prints them separately); add them to use the spell with a caster.";
+    /// <summary>The uncertainty a spell gets when no list is known; adding a list takes it away.</summary>
+    public const string NoListsNote = "The spell block names no class lists (SRD 5.1 prints them separately); add them to use the spell with a caster.";
 
     /// <summary>One list page: its key, the page of its heading and the <see cref="Key"/>s of the spell names it lists.</summary>
     private sealed record SpellList(string ListKey, int Page, HashSet<string> Names);
