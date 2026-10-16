@@ -78,13 +78,43 @@ public static partial class CandidateDetector
         }
 
         // Item 11 (R54): what each class's Features column names becomes a link to a detected feature, or to a reference stub.
+        var links = LinkClasses(found, classFeatures, context, cancellationToken);
+
+        // A candidate's references resolve against installed content and the job's other candidates.
+        var named = found.Select(c => Key(c.ProposedName)).ToHashSet(StringComparer.Ordinal);
+        var ordered = found
+            .Select(c => c with { UnresolvedReferences = [.. c.UnresolvedReferences.Where(r => !named.Contains(Key(r)) && !context.IsInstalled(r)).Distinct(StringComparer.OrdinalIgnoreCase)] })
+            .OrderBy(c => c.Page.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName, StringComparer.Ordinal)
+            .ToList();
+        var taken = ordered.Take(maxCandidates).ToList();
+        var takenIds = taken.Select(c => c.Id).ToHashSet();
+        return new([.. taken], ordered.Count > maxCandidates, [.. links.Where(l => takenIds.Contains(l.ClassId) && takenIds.Contains(l.FeatureId))]);
+    }
+
+    /// <summary>
+    /// Item 11 (R54, review fix): each class links the features its table names, owner-aware. Target order for a class C at page P with
+    /// the next class table at page N: a detected feature whose class field names C; else the nearest detected feature with no class
+    /// field in [P, N); else (R67) no link when exactly one installed feature has the name; else a stub owned by C. A detected feature
+    /// that names another class is never C's target, and a stub is never shared between classes. New stubs are appended to <paramref name="found"/>.
+    /// </summary>
+    internal static List<CandidateLink> LinkClasses(List<DraftCandidate> found, IReadOnlyDictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, DetectionContext context, CancellationToken cancellationToken = default)
+    {
+        var owners = found.Where(c => c.ProposedKind == ContentKind.Class).ToDictionary(c => c.Id);
+        var classPages = owners.Values.Select(c => c.Page.Start).Distinct().Order().ToList();
+        var detected = found.Where(c => c.ProposedKind == ContentKind.Feature).OrderBy(c => c.Page.Start).ToLookup(c => Key(c.ProposedName));
         var links = new List<CandidateLink>();
         foreach (var (classId, features) in classFeatures)
         {
-            var owner = found.First(c => c.Id == classId);
+            cancellationToken.ThrowIfCancellationRequested();
+            var owner = owners[classId];
+            var classKey = Key(owner.ProposedName);
+            var start = owner.Page.Start;
+            var next = classPages.Where(p => p > start).Select(p => (int?)p).FirstOrDefault();
             foreach (var name in features.SelectMany(f => f.Value.Select(n => (Name: n, Level: f.Key))).Where(f => IsLinkable(f.Name)).GroupBy(f => Key(f.Name)).Select(g => (g.First().Name, Levels: g.Select(x => x.Level).Distinct().Order().ToList())))
             {
-                var target = found.Where(c => c.ProposedKind == ContentKind.Feature && Key(c.ProposedName) == Key(name.Name)).OrderBy(c => c.Page.Start).FirstOrDefault();
+                var candidates = detected[Key(name.Name)].ToList();
+                var target = candidates.FirstOrDefault(c => c.Fields.TryGetValue("class", out var named) && Key(named) == classKey)
+                    ?? candidates.FirstOrDefault(c => !c.Fields.ContainsKey("class") && c.Page.Start >= start && (next is null || c.Page.Start < next));
                 if (target is null)
                 {
                     // R67: one installed feature of that name is granted from at accept; two, or none, and the name gets a stub (R54).
@@ -96,16 +126,7 @@ public static partial class CandidateDetector
                 links.AddRange(name.Levels.Select(level => new CandidateLink(owner.Id, target.Id, level)));
             }
         }
-
-        // A candidate's references resolve against installed content and the job's other candidates.
-        var named = found.Select(c => Key(c.ProposedName)).ToHashSet(StringComparer.Ordinal);
-        var ordered = found
-            .Select(c => c with { UnresolvedReferences = [.. c.UnresolvedReferences.Where(r => !named.Contains(Key(r)) && !context.IsInstalled(r)).Distinct(StringComparer.OrdinalIgnoreCase)] })
-            .OrderBy(c => c.Page.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName, StringComparer.Ordinal)
-            .ToList();
-        var taken = ordered.Take(maxCandidates).ToList();
-        var takenIds = taken.Select(c => c.Id).ToHashSet();
-        return new([.. taken], ordered.Count > maxCandidates, [.. links.Where(l => takenIds.Contains(l.ClassId) && takenIds.Contains(l.FeatureId))]);
+        return links;
     }
 
     /// <summary>A feature name worth a link: not "Ability Score Improvement" and not a subclass placeholder ("Fixture Order feature").</summary>
