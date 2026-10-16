@@ -980,13 +980,17 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in the studio/));
+  const granting = Number(/granting (\d+) features/.exec(screen.getByRole('status').textContent ?? '')![1]);
 
   const entries = await client.contentBySource(source.id);
   const cls = entries.find((e) => e.name === 'Fixture Lamplighter')!;
   expect(entries.length).toBeGreaterThan(3);
   expect(entries.every((e) => e.latest.status === 'draft')).toBe(true);
   expect(cls.latest.effects.find((e) => e.type === 'hitDie')!.automation).toBe('automatic');
-  expect(cls.latest.effects.filter((e) => e.type === 'grant' && e.grant === 'content').length).toBeGreaterThan(3);
+  // The status counts exactly the features the class draft grants.
+  const grants = cls.latest.effects.filter((e) => e.type === 'grant' && e.grant === 'content').length;
+  expect(grants).toBeGreaterThan(3);
+  expect(granting).toBe(grants);
 });
 
 it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {

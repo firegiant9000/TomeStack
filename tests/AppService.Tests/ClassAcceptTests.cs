@@ -381,6 +381,8 @@ public class ClassAcceptTests
         Assert.Contains("2 table features were reviewed in an earlier import and are not linked: add them in the studio.", lamplighter.Current.Uncertainties);
         Assert.Equal(5, lamplighter.GrantsCandidates!.Select(g => g.CandidateId).Distinct().Count());
         Assert.DoesNotContain("table features were reviewed", Named(temp, firstJob, "Fixture Lamplighter").Current.Uncertainties.FirstOrDefault() ?? "", StringComparison.Ordinal);
+        // Fix round 3: the uncertainty already counts them, so the check's "not linked" note does not count them again.
+        Assert.DoesNotContain(temp.App.CheckCandidate(lamplighter.Id).Notes, n => n.Contains("not linked", StringComparison.Ordinal));
     }
 
     [Fact]
