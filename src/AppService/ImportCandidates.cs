@@ -70,7 +70,13 @@ public sealed record CandidateRequest(Guid CandidateId);
 
 /// <param name="AsReference">Accept as a reference-only entry: the text and page without the proposed effects.</param>
 /// <param name="Confirm">Must be true: it creates a draft revision.</param>
-public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false);
+/// <param name="ConfirmedEffectIds">
+/// Item 11 (D34, ADR-016): the ids of the class candidate's proposed effects the reviewer checked against the page (the hit die;
+/// the spell slot table when the class has one; any other). Those keep the automation proposed; every other effect is reference.
+/// A class is not accepted as a draft without its hit die confirmed (<c>import.class-unconfirmed</c>). Only for a class, and not
+/// together with <paramref name="AsReference"/>.
+/// </param>
+public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false, IReadOnlyList<string>? ConfirmedEffectIds = null);
 
 /// <param name="CandidateIds">At most <see cref="TomeStackApp.MaxAcceptMany"/>.</param>
 /// <param name="Confirm">Must be true: it creates draft revisions.</param>
@@ -250,17 +256,119 @@ public sealed partial class TomeStackApp
         var provenance = ProvenanceBlockers(stored); // once: it reads every candidate of every same-document job
         if (provenance is [var first, ..])
             throw new AppValidationException([first with { Message = $"{first.Message} Nothing was changed." }]);
-        var check = Check(stored, request.AsReference, provenance);
+        var confirmed = ConfirmedOf(stored, request.AsReference, request.ConfirmedEffectIds);
+        var plan = PlanOf(stored, request.AsReference, confirmed);
+        var check = Check(stored, request.AsReference, provenance, plan);
         if (!request.AsReference && check.Blockers.Count > 0)
-            throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s) or unresolved reference(s). Edit them, or accept it as reference only."), .. check.Blockers]);
+            throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s), unresolved reference(s) or linked feature(s) to settle. Edit them, or accept it as reference only."), .. check.Blockers]);
         if (!check.Report.CanPublish)
             throw new AppValidationException([new("candidate.validation-failed", $"This candidate has {check.Report.Errors.Count} problem(s)."), .. check.Report.Errors]);
+        if (ClassUnconfirmed(stored, request.AsReference, confirmed) is { } unconfirmed)
+            throw new AppValidationException([unconfirmed]);
 
-        var draft = DraftOf(stored, request.AsReference);
         StoredCandidate? accepted = null;
         // One transaction: a draft never exists without its candidate marked accepted, so a crash cannot lead to a second draft.
-        _store.InTransaction(() => accepted = WriteAccepted(stored, draft, request.AsReference));
+        // The linked feature drafts are written first, so the class draft's grants pin drafts that exist (ADR-016).
+        _store.InTransaction(() =>
+        {
+            foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
+                WriteAccepted(feature.Candidate, feature.NewDraft!, asReference: false);
+            accepted = WriteAccepted(stored, plan.Draft, request.AsReference);
+        });
         return accepted!;
+    }
+
+    /// <summary>
+    /// The confirmed effect ids of an accept, validated: they belong to a class that is accepted as a draft, and each names one
+    /// of its proposed effects. Unknown ids are refused (nothing is silently dropped).
+    /// </summary>
+    private static IReadOnlyCollection<string> ConfirmedOf(StoredCandidate stored, bool asReference, IReadOnlyList<string>? ids)
+    {
+        if (ids is null or { Count: 0 })
+            return [];
+        if (asReference || stored.Current.ProposedKind != ContentKind.Class)
+            throw new AppValidationException([new("candidate.confirm-unsupported", "Only a class accepted as a draft takes confirmed effects. Nothing was changed.")]);
+        var known = CandidateQuarantine.WithTypedEffects(stored.Current).ProposedEffects.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+        if (ids.Any(id => !known.Contains(id)))
+            throw new AppValidationException([new("candidate.confirm-unknown", "A confirmed effect is not one of this candidate's effects. Nothing was changed.")]);
+        return [.. ids.Distinct(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// ADR-016: a class accepted as a draft needs its hit die confirmed, and its spell slot table too when it has one. Without
+    /// them the draft would be a class whose every effect is reference, which is not a usable class.
+    /// </summary>
+    private static Diagnostic? ClassUnconfirmed(StoredCandidate stored, bool asReference, IReadOnlyCollection<string> confirmed)
+    {
+        if (asReference || stored.Current.ProposedKind != ContentKind.Class)
+            return null;
+        var effects = CandidateQuarantine.WithTypedEffects(stored.Current).ProposedEffects;
+        var hitDieConfirmed = effects.OfType<HitDieEffect>().Any(e => confirmed.Contains(e.Id));
+        var slotsConfirmed = effects.OfType<SpellcastingEffect>().All(e => confirmed.Contains(e.Id));
+        if (hitDieConfirmed && slotsConfirmed)
+            return null;
+        return new("import.class-unconfirmed", "Confirm the hit die (and the spell slot table, when the class has one) against the page before accepting this class, or accept it as reference only. Nothing was changed.");
+    }
+
+    /// <summary>A linked feature candidate of a class, with the draft it will be (or already is) and the reference the class pins.</summary>
+    private sealed record LinkedFeature(StoredCandidate Candidate, int Level, ContentRevision? NewDraft, ContentReference? Pin);
+
+    /// <summary>What accepting a candidate would write: the class (or other) draft, and the linked feature drafts it grants.</summary>
+    private sealed record AcceptPlan(ContentRevision Draft, IReadOnlyList<LinkedFeature> Linked);
+
+    /// <summary>
+    /// The draft of a candidate and, for a class accepted as a draft, its linked features (R55): one already accepted is pinned
+    /// at its draft, a pending one gets a draft built now (written before the class), an ignored one has none. The class's
+    /// grants name each feature once, at the lowest level its table lists it (a feature is granted once).
+    /// </summary>
+    private AcceptPlan PlanOf(StoredCandidate stored, bool asReference, IReadOnlyCollection<string> confirmed)
+    {
+        var current = stored.Current;
+        if (asReference || current.ProposedKind != ContentKind.Class || stored.GrantsCandidates is not { Count: > 0 } grants)
+            return new(asReference ? DraftOf(stored, true) : CandidateQuarantine.ToDraftRevision(current, confirmed), []);
+        var linked = new List<LinkedFeature>();
+        foreach (var group in grants.GroupBy(g => g.CandidateId))
+        {
+            if (_store.FindImportCandidate(group.Key) is not { } feature || feature.JobId != stored.JobId)
+                continue;
+            var level = group.Min(g => g.Level);
+            // A feature that names no rules family (a stub read from a two-family book) is written for the class's: the reviewer answers once.
+            if (feature.Status == CandidateStatus.Pending && feature.Current.RulesFamilies.Count == 0 && current.RulesFamilies.Count > 0)
+                feature = feature with { Edited = feature.Current with { RulesFamilies = current.RulesFamilies }, FamiliesReviewed = true };
+            if (feature.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && feature.Draft is { } pin)
+            {
+                linked.Add(new(feature, level, null, pin));
+            }
+            else if (feature.Status == CandidateStatus.Pending)
+            {
+                var draft = DraftOf(feature, asReference: false);
+                linked.Add(new(feature, level, draft, draft.Reference));
+            }
+            else
+            {
+                linked.Add(new(feature, level, null, null)); // ignored: the class cannot be accepted until the reviewer decides
+            }
+        }
+        var classDraft = CandidateQuarantine.ToDraftRevision(current, confirmed);
+        var used = new HashSet<string>(classDraft.Effects.Select(e => e.Id), StringComparer.Ordinal);
+        var effects = new List<Effect>(classDraft.Effects);
+        foreach (var feature in linked.Where(l => l.Pin is not null).OrderBy(l => l.Level).ThenBy(l => l.Candidate.Current.ProposedName, StringComparer.Ordinal))
+        {
+            var slug = GrantSlug(feature.Candidate.Current.ProposedName);
+            var id = $"feature-{slug}";
+            for (var n = 2; !used.Add(id); n++)
+                id = $"feature-{slug}-{n}";
+            effects.Add(new GrantEffect { Id = id, Grant = GrantKind.Content, Content = feature.Pin, Level = feature.Level, Text = null });
+        }
+        return new(classDraft with { Effects = effects }, linked);
+    }
+
+    private static string GrantSlug(string name)
+    {
+        var slug = new string([.. name.ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) ? c : '-')]).Trim('-');
+        while (slug.Contains("--", StringComparison.Ordinal))
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        return slug.Length == 0 ? "feature" : slug.Length > 60 ? slug[..60] : slug;
     }
 
     /// <summary>The writes of one acceptance; call inside the transaction.</summary>
@@ -321,6 +429,10 @@ public sealed partial class TomeStackApp
                         codes.AddRange(check.Blockers.Select(b => b.Code));
                     if (!check.Report.CanPublish)
                         codes.Add("candidate.validation-failed");
+                    // ADR-016: a bulk accept confirms nothing, so a class is never accepted here with every effect reference
+                    // (and never with the features it links left behind); it goes through import.candidate.accept.
+                    if (ClassUnconfirmed(stored, request.AsReference, []) is { } unconfirmed)
+                        codes.Add(unconfirmed.Code);
                 }
                 if (codes.Count > 0)
                 {
@@ -349,21 +461,53 @@ public sealed partial class TomeStackApp
         return ignored;
     }
 
-    private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null)
+    private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null, AcceptPlan? plan = null)
     {
         var current = stored.Current;
-        var draft = DraftOf(stored, asReference);
-        var report = ContentValidator.Validate(draft, _store);
+        plan ??= PlanOf(stored, asReference, []);
+        var draft = plan.Draft;
+        var batch = plan.Linked.Where(l => l.NewDraft is not null).Select(l => l.NewDraft!).ToList();
+        var report = ContentValidator.Validate(draft, _store, batch);
         provenance ??= ProvenanceBlockers(stored);
         var blockers = new List<Diagnostic>(provenance);
+        if (!asReference)
+            blockers.AddRange(LinkedBlockers(plan));
         foreach (var field in current.LowConfidenceFields.Where(f => f != "rulesFamilies" || current.RulesFamilies.Count > 0))
             blockers.Add(new("candidate.low-confidence", $"The detector is unsure of '{field}'. Check it against the page and save your edit."));
         // Messages never quote the PDF's text; the review shows the names from the candidate itself.
         for (var i = 0; i < current.UnresolvedReferences.Count; i++)
             blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
-        return new(stored.Id, report, Dependencies(draft, current), blockers,
+        return new(stored.Id, report, Dependencies(draft, current, batch), blockers,
             CanAccept: stored.Status == CandidateStatus.Pending && blockers.Count == 0 && report.CanPublish,
             CanAcceptAsReference: stored.Status == CandidateStatus.Pending && provenance.Count == 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
+    }
+
+    /// <summary>
+    /// R55: what stops a class from being accepted because of the features it links. Ignored ones block; a pending one that
+    /// would itself be refused blocks with its own codes (the same code once, with a count). Messages never quote the document.
+    /// </summary>
+    private List<Diagnostic> LinkedBlockers(AcceptPlan plan)
+    {
+        var blockers = new List<Diagnostic>();
+        if (plan.Linked.Count == 0)
+            return blockers;
+        var ignored = plan.Linked.Count(l => l.Candidate.Status == CandidateStatus.Ignored);
+        if (ignored > 0)
+            blockers.Add(new("candidate.linked-ignored", $"{ignored} linked feature(s) are ignored, and a class grants only features that become drafts. Accept this class as reference only."));
+        var cache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
+        var codes = new Dictionary<string, (int Count, string Message)>(StringComparer.Ordinal);
+        foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
+        {
+            var check = Check(feature.Candidate, asReference: false, ProvenanceBlockers(feature.Candidate, cache));
+            var found = check.Blockers.Select(b => (b.Code, b.Message)).ToList();
+            if (!check.Report.CanPublish)
+                found.Add(("candidate.validation-failed", "has problems the validator reports."));
+            foreach (var (code, message) in found.DistinctBy(f => f.Code))
+                codes[code] = codes.TryGetValue(code, out var seen) ? (seen.Count + 1, seen.Message) : (1, message);
+        }
+        foreach (var (code, (count, message)) in codes)
+            blockers.Add(new(code, $"{count} linked feature(s): {message}"));
+        return blockers;
     }
 
     /// <summary>
@@ -427,7 +571,7 @@ public sealed partial class TomeStackApp
         return CandidateQuarantine.ToDraftRevision(asReference ? current with { ProposedEffects = [] } : current);
     }
 
-    private List<CandidateDependency> Dependencies(ContentRevision draft, DraftCandidate candidate)
+    private List<CandidateDependency> Dependencies(ContentRevision draft, DraftCandidate candidate, IReadOnlyList<ContentRevision> batch)
     {
         var dependencies = new List<CandidateDependency>();
         var source = _store.FindSource(draft.Provenance.SourceId);
@@ -437,7 +581,7 @@ public sealed partial class TomeStackApp
             .Distinct();
         foreach (var reference in references)
         {
-            var revision = _store.FindRevision(reference);
+            var revision = batch.FirstOrDefault(r => r.Reference == reference) ?? _store.FindRevision(reference); // a linked feature's draft is written with the class
             dependencies.Add(revision is null ? new("missing-content", reference.RevisionId.ToString(), reference) : new("content", revision.Name, reference));
         }
         foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Distinct())
