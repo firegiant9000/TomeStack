@@ -789,15 +789,8 @@ const lamp = (): StoredCandidate => {
   };
 };
 
-const featureOf = (id: string, name: string): StoredCandidate => {
-  const base = detected(['srd-5.2.1']);
-  return { ...base, id, candidate: { ...base.candidate, id, proposedKind: 'feature', proposedName: name } };
-};
-
 async function openClass(check: CandidateCheck = checkOf({})) {
-  vi.mocked(client.candidates).mockImplementation((_job, filter) =>
-    Promise.resolve(filter?.kind === 'feature' ? pageOf([featureOf('feat-a', 'Testy Glow'), featureOf('feat-b', 'Testy Beacon')]) : pageOf([lamp()])),
-  );
+  vi.mocked(client.candidates).mockImplementation(() => Promise.resolve(pageOf([lamp()])));
   vi.mocked(client.checkCandidate).mockResolvedValue(check);
   vi.mocked(client.acceptCandidate).mockReset();
   vi.mocked(client.acceptCandidate).mockResolvedValue(lamp());
@@ -814,13 +807,6 @@ it('shows the slot table with a caption and headers, and Open page beside it', a
   const row3 = within(table).getByRole('rowheader', { name: '3' }).closest('tr')!;
   expect(within(row3).getAllByRole('cell').map((c) => c.textContent)).toEqual(['2', '4', '4', '2']);
   expect(screen.getAllByRole('button', { name: 'Open page 4' })).toHaveLength(1);
-});
-
-it('lists the linked features by name and level', async () => {
-  await openClass();
-  const list = await screen.findByRole('list', { name: 'Linked features' });
-  await screen.findByText('Testy Glow, level 1');
-  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Testy Glow, level 1', 'Testy Beacon, levels 3, 5']);
 });
 
 it('holds Accept as a draft, with a visible reason, until the hit die and slot table are ticked, and sends what was ticked', async () => {
@@ -859,4 +845,172 @@ it('adds no live region for a class', async () => {
   await openClass();
   await screen.findByRole('table');
   expect(document.querySelectorAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
+});
+
+// Task 5 fix round 1. The class with every kind of proposal the detector makes.
+const fullLamp = (): StoredCandidate => {
+  const base = lamp();
+  return {
+    ...base,
+    candidate: {
+      ...base.candidate,
+      proposedEffects: [
+        ...base.candidate.proposedEffects,
+        { id: 'save-wisdom', type: 'grant', grant: 'proficiency', target: 'save.wisdom', automation: 'reference' },
+        { id: 'armor-light', type: 'grant', grant: 'proficiency', target: 'armor.light', automation: 'reference' },
+        { id: 'armor-shield', type: 'grant', grant: 'proficiency', target: 'armor.shield', automation: 'reference' },
+        { id: 'weapon-simple', type: 'grant', grant: 'proficiency', target: 'weapon.simple', automation: 'reference' },
+        { id: 'lamp-subclass', type: 'choice', choiceId: 'lamp-subclass', count: 1, level: 3, automation: 'reference' },
+      ],
+    },
+  };
+};
+
+/** Opens a class whose stored row the test can replace, as a save would. */
+async function openStored(rows: { current: StoredCandidate }, check: CandidateCheck = checkOf({})) {
+  vi.mocked(client.candidates).mockImplementation(() => Promise.resolve(pageOf([rows.current])));
+  vi.mocked(client.checkCandidate).mockResolvedValue(check);
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockResolvedValue(rows.current);
+  renderPanel(vi.fn(), source);
+  await userEvent.setup().click(await screen.findByRole('button', { name: (rows.current.edited ?? rows.current.candidate).proposedName }));
+  await screen.findByRole('heading', { name: `Candidate: ${(rows.current.edited ?? rows.current.candidate).proposedName}` });
+}
+
+// Item 8.
+it('offers one unticked Confirm checkbox per proposed effect, named by it, and sends every ticked id', async () => {
+  const user = userEvent.setup();
+  await openStored({ current: fullLamp() });
+  const group = await screen.findByRole('group', { name: 'Confirm what was read' });
+  const boxes = within(group).getAllByRole('checkbox') as HTMLInputElement[];
+  expect(boxes.map((b) => b.labels?.[0]?.textContent?.trim())).toEqual([
+    'Confirm the hit die, d8',
+    'Confirm the spell slot table',
+    'Confirm the Wisdom saving throw proficiency',
+    'Confirm the light armor proficiency',
+    'Confirm the shield proficiency',
+    'Confirm the simple weapons proficiency',
+    'Confirm the subclass choice at level 3',
+  ]);
+  expect(boxes.every((b) => !b.checked)).toBe(true);
+  expect(boxes.every((b) => b.closest('label')?.className === 'choice')).toBe(true);
+
+  const accept = screen.getByRole('button', { name: 'Accept as a draft' });
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the Wisdom saving throw proficiency' }));
+  expect(accept.getAttribute('aria-disabled')).toBe('true'); // the hold stays on the hit die and slot table
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the shield proficiency' }));
+  expect(accept.getAttribute('aria-disabled')).toBeNull();
+  await user.click(accept);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
+});
+
+// Item 9.
+it('treats a candidate edited into a class as a class', async () => {
+  const user = userEvent.setup();
+  const item = detected(['srd-5.2.1']);
+  const asClass = fullLamp().candidate;
+  await openStored({ current: { ...item, candidate: { ...asClass, proposedKind: 'item' }, edited: asClass } });
+  expect(await screen.findByRole('group', { name: 'Confirm what was read' })).toBeTruthy();
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+});
+
+it('treats a class edited into another kind as that kind', async () => {
+  const user = userEvent.setup();
+  const stored = fullLamp();
+  await openStored({ current: { ...stored, edited: { ...stored.candidate, proposedKind: 'feature' } } });
+  const accept = await screen.findByRole('button', { name: 'Accept as a draft' });
+  expect(screen.queryByRole('group', { name: 'Confirm what was read' })).toBeNull();
+  await vi.waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
+  await user.click(accept);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false);
+});
+
+// Item 10.
+it('explains a class held back from a bulk accept in words, and never shows a code', async () => {
+  const user = userEvent.setup();
+  longList(2);
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={() => {}} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Select the 2 shown' }));
+  vi.mocked(client.acceptCandidates).mockResolvedValue({
+    accepted: [],
+    blocked: [
+      { candidateId: 'cand-1', codes: ['import.class-unconfirmed'] },
+      { candidateId: 'cand-2', codes: ['candidate.some-future-code'] },
+    ],
+  });
+  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  const reasons = await screen.findByRole('list', { name: 'Not accepted' });
+  expect(within(reasons).getByText(/Testy Item 1/).textContent).toContain('is a class: open it, tick the hit die and slot table, and accept it on its own');
+  expect(within(reasons).getByText(/Testy Item 2/).textContent).toContain('was held back by a check: open it to see why');
+  expect(reasons.textContent).not.toMatch(/[a-z]+\.[a-z-]+/);
+});
+
+// Item 11.
+it('lists the linked features the check returns, with installed and ignored ones said, and reads no candidate page for them', async () => {
+  const linked: CandidateCheck['linked'] = [
+    { candidateId: 'feat-a', name: 'Testy Glow', level: 1, status: 'pending', installed: false },
+    { name: 'Testy Spark', level: 2, installed: true },
+    { candidateId: 'feat-b', name: 'Testy Beacon', level: 3, status: 'accepted', installed: false },
+    { candidateId: 'feat-b', name: 'Testy Beacon', level: 5, status: 'accepted', installed: false },
+    { candidateId: 'feat-c', name: 'Testy Dim', level: 4, status: 'ignored', installed: false },
+  ];
+  await openStored({ current: lamp() }, checkOf({ linked, notes: ['1 linked feature is ignored and will not be granted.'] }));
+  const list = await screen.findByRole('list', { name: 'Linked features' });
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+    'Testy Glow, level 1',
+    'Testy Spark, level 2, installed',
+    'Testy Beacon, levels 3, 5, already accepted',
+    'Testy Dim, level 4, ignored: not granted',
+  ]);
+  expect(screen.getByText('1 linked feature is ignored and will not be granted.')).toBeTruthy();
+  expect(vi.mocked(client.candidates).mock.calls.some(([, filter]) => filter?.kind === 'feature')).toBe(false);
+});
+
+// Item 12.
+it('clears the ticks when a saved edit changes the effects, and keeps them when it does not', async () => {
+  const user = userEvent.setup();
+  const rows = { current: lamp() };
+  await openStored(rows);
+  vi.mocked(client.editCandidate).mockImplementation((_id, edit) => {
+    const candidate = { ...rows.current.candidate, proposedName: edit.name ?? rows.current.candidate.proposedName, proposedEffects: (edit.effects ?? []) as DraftCandidate['proposedEffects'] };
+    rows.current = { ...rows.current, edited: candidate, updatedAt: `${rows.current.updatedAt}x` };
+    return Promise.resolve(rows.current);
+  });
+  await user.click(await screen.findByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+
+  // The name changes; the effects do not: the ticks stay.
+  const name = screen.getByLabelText('Name');
+  await user.clear(name);
+  await user.type(name, 'Testy Lantern');
+  await user.click(screen.getByRole('button', { name: 'Save edit' }));
+  await screen.findByRole('heading', { name: 'Candidate: Testy Lantern' });
+  expect((screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }) as HTMLInputElement).checked).toBe(true);
+
+  // The hit die changes: everything is to confirm again.
+  const effects = screen.getByLabelText(/^Proposed effects/) as HTMLTextAreaElement;
+  fireEvent.change(effects, { target: { value: effects.value.replace('"die": 8', '"die": 10') } });
+  await user.click(screen.getByRole('button', { name: 'Save edit' }));
+  const hit = (await screen.findByRole('checkbox', { name: 'Confirm the hit die, d10' })) as HTMLInputElement;
+  expect(hit.checked).toBe(false);
+  expect((screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }) as HTMLInputElement).checked).toBe(false);
+});
+
+// Item 13.
+it('says on a class that the ticked effects become automatic and the others stay reference', async () => {
+  await openStored({ current: lamp() });
+  expect(
+    await screen.findByLabelText('Proposed effects (JSON; on accepting the class as a draft, the ones you tick under Confirm what was read are automatic, the others stay reference)'),
+  ).toBeTruthy();
+});
+
+it('keeps the reference-only label for other kinds', async () => {
+  await openDetail([], checkOf({}));
+  expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in the studio)')).toBeTruthy();
 });
