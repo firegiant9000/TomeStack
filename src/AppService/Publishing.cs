@@ -284,9 +284,16 @@ public sealed partial class TomeStackApp
         // Leaves first: what an item grants (or the class whose choice it extends) publishes before it, so its grants can be
         // re-pointed at the published revisions and its validation sees the parent as published.
         var byId = items.ToDictionary(i => i.Revision.ContentId);
+        // The extends edge is added only when the parent does not already name the child (its choice options or grants): then
+        // the options or grants edge wins, as before, and the pair is not reported as a cycle (R58).
+        IEnumerable<Guid> ExtendsEdge(PlanItem item) =>
+            item.Revision.ExtendsChoice is { } extends
+            && !(byId.TryGetValue(extends.ContentId, out var parent) && NamedContent(parent.Revision).Any(r => r.ContentId == item.Revision.ContentId))
+                ? [extends.ContentId]
+                : [];
         var needs = items.ToDictionary(
             i => i,
-            i => NamedContent(i.Revision).Select(r => r.ContentId).Concat(i.Revision.ExtendsChoice is { } extends ? [extends.ContentId] : [])
+            i => NamedContent(i.Revision).Select(r => r.ContentId).Concat(ExtendsEdge(i))
                 .Where(id => id != i.Revision.ContentId && byId.ContainsKey(id)).ToHashSet());
         var ordered = new List<PlanItem>();
         var done = new HashSet<Guid>();

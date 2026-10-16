@@ -362,6 +362,34 @@ public class PublishManyTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void A_class_whose_choice_already_offers_the_extending_subclass_is_not_a_cycle()
+    {
+        // Fix round 2 (item 3, R58): C offers published subclass S, and S extends C's choice. A new draft of S makes C a dependent
+        // that needs S; the extends edge must not make S need C as well.
+        using var w = new World();
+        var c0 = w.Published(w.New(ContentKind.Class, "Testy Quillmaster", new HitDieEffect { Id = "hit-die", Die = 8 },
+            new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [], Level = 3 }));
+        var s0 = w.Published(w.New(ContentKind.Subclass, "Testy Order of the Margin", World.Init("1")) with { ExtendsChoice = new(c0.ContentId, "subclass") });
+        w.Published(w.App.Store.FindRevision(c0)! with
+        {
+            RevisionId = Guid.Empty, Status = RevisionStatus.Draft,
+            Effects = [new HitDieEffect { Id = "hit-die", Die = 8 }, new ChoiceEffect { Id = "subclass", ChoiceId = "subclass", Count = 1, Options = [s0], Level = 3 }],
+        });
+        var s1 = w.Save(w.App.Store.FindRevision(s0)! with { RevisionId = Guid.Empty, Status = RevisionStatus.Draft });
+
+        var preview = w.App.PreviewPublishMany([s1.ContentId]);
+        Assert.True(preview.CanPublish, string.Join("; ", preview.Entries.Concat(preview.Dependents).SelectMany(e => e.Report.Errors).Select(e => e.Code)));
+        Assert.Equal(["Testy Quillmaster"], preview.Dependents.Select(d => d.Name));
+
+        w.App.PublishMany(w.Confirmed(s1));
+
+        var newSub = w.Newest(s1.ContentId).Reference;
+        var option = w.Newest(c0.ContentId).Effects.OfType<ChoiceEffect>().Single().Options.Single();
+        Assert.Equal(newSub, option);
+        Assert.NotEqual(s0.RevisionId, option.RevisionId);
+    }
+
+    [Fact]
     public void A_failure_after_a_write_rolls_back_every_write_and_the_choice_extension_cache()
     {
         // Fix round 1 (item 3). Order: the class, then its subclass (published), then a failing class that grants the subclass.

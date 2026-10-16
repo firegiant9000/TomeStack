@@ -744,3 +744,25 @@ it('turning the page with ticks makes one combined announcement in the one polit
   expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
   expect(screen.queryByRole('status')).toBeNull();
 });
+
+// Fix round 2, item 4.
+it('a page-range pause that is still running does not fire during a bulk accept', async () => {
+  const user = userEvent.setup();
+  longList(120);
+  vi.mocked(client.acceptCandidates).mockReset();
+  let finish: (value: { accepted: StoredCandidate[]; blocked: [] }) => void = () => {};
+  vi.mocked(client.acceptCandidates).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Select the 50 shown' }));
+  const from = screen.getByLabelText('From page') as HTMLInputElement;
+  fireEvent.change(from, { target: { value: '75' } }); // the 300 ms pause starts
+  await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
+  expect(vi.mocked(client.candidates)).toHaveBeenCalledTimes(calls); // the filter did not change mid-flight
+  expect(from.value).toBe(''); // the field shows the range that is applied
+  expect((screen.getByRole('checkbox', { name: 'Select Testy Item 1' }) as HTMLInputElement).checked).toBe(true);
+  await act(async () => finish({ accepted: [], blocked: [] }));
+});
