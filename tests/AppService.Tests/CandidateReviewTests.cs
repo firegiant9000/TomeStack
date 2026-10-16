@@ -10,6 +10,11 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class CandidateReviewTests
 {
+    /// <summary>The fixture book's candidates: page 2 two, page 3 two, page 4 four, page 5 the Warden, page 7 the Lamplighter and what it names.</summary>
+    private const int PageSevenCandidates = 2;
+
+    private const int ExpectedCandidates = 9 + PageSevenCandidates;
+
     private static (TempApp Temp, Guid SourceId, Guid JobId) Imported()
     {
         var temp = new TempApp();
@@ -31,25 +36,26 @@ public class CandidateReviewTests
         var (temp, _, jobId) = Imported();
         using var _ = temp;
         var everything = temp.App.ListCandidates(new(jobId)).Select(c => c.Id).ToList();
-        Assert.Equal(9, everything.Count);
+        var total = everything.Count;
+        Assert.Equal(ExpectedCandidates, total);
 
         var first = temp.App.ListCandidatesPage(new(jobId, Offset: 0, Limit: 4));
         var second = temp.App.ListCandidatesPage(new(jobId, Offset: 4, Limit: 4));
-        var last = temp.App.ListCandidatesPage(new(jobId, Offset: 8, Limit: 4));
-        var past = temp.App.ListCandidatesPage(new(jobId, Offset: 9, Limit: 4));
+        var third = temp.App.ListCandidatesPage(new(jobId, Offset: 8, Limit: 4));
+        var past = temp.App.ListCandidatesPage(new(jobId, Offset: total, Limit: 4));
 
-        Assert.Equal(9, first.Total);
-        Assert.Equal(everything, [.. first.Items.Concat(second.Items).Concat(last.Items).Select(c => c.Id)]);
-        Assert.Equal([4, 4, 1, 0], [first.Items.Count, second.Items.Count, last.Items.Count, past.Items.Count]);
-        Assert.Equal(9, past.Total);
+        Assert.Equal(total, first.Total);
+        Assert.Equal(everything, [.. first.Items.Concat(second.Items).Concat(third.Items).Select(c => c.Id)]);
+        Assert.Equal([4, 4, total - 8, 0], [first.Items.Count, second.Items.Count, third.Items.Count, past.Items.Count]);
+        Assert.Equal(total, past.Total);
 
         var spells = temp.App.ListCandidatesPage(new(jobId, Kind: ContentKind.Spell, Offset: 1, Limit: 1));
         Assert.Equal(2, spells.Total); // the filtered set, not the job
         Assert.Equal(["Fixture Frost Veil"], spells.Items.Select(c => c.Current.ProposedName));
 
-        // No paging asked for: the first 50 (all nine here).
+        // No paging asked for: the first 50 (all of them here).
         var defaults = temp.App.ListCandidatesPage(new(jobId));
-        Assert.Equal((9, 9), (defaults.Items.Count, defaults.Total));
+        Assert.Equal((total, total), (defaults.Items.Count, defaults.Total));
     }
 
     [Fact]
@@ -59,9 +65,10 @@ public class CandidateReviewTests
         using var _ = temp;
 
         Assert.Equal(2, temp.App.ListCandidatesPage(new(jobId, LastPage: 2)).Total);
-        Assert.Equal(5, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4)).Total); // page 4's four and page 5's class
+        Assert.Equal(ExpectedCandidates - 4, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4)).Total); // all but pages 2 and 3
         Assert.Equal(6, temp.App.ListCandidatesPage(new(jobId, FirstPage: 3, LastPage: 4)).Total);
-        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 6)).Total);
+        Assert.Equal(PageSevenCandidates, temp.App.ListCandidatesPage(new(jobId, FirstPage: 6)).Total); // page 6 has no text; page 7 is the class page
+        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 8)).Total);
         Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 3)).Total);
         Assert.Equal(
             temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 4)).Items.Select(c => c.Id),
@@ -77,7 +84,7 @@ public class CandidateReviewTests
         var (temp, _, jobId) = Imported();
         using var _ = temp;
 
-        Assert.Equal(9, temp.App.ListCandidatesPage(new(jobId, Limit: 200)).Items.Count); // 200 is allowed
+        Assert.Equal(ExpectedCandidates, temp.App.ListCandidatesPage(new(jobId, Limit: 200)).Items.Count); // 200 is allowed
         Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 201))));
         Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 0))));
         Assert.Equal("import.offset-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Offset: -1))));

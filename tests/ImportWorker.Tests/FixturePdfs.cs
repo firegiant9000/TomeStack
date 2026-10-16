@@ -15,7 +15,7 @@ namespace TomeStack.ImportWorker.Tests;
 /// </summary>
 internal static class FixturePdfs
 {
-    public const int ImportPageCount = 6;
+    public const int ImportPageCount = 7;
 
     /// <summary>The committed fixture's path in the test output.</summary>
     public static string ImportPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf");
@@ -120,7 +120,79 @@ internal static class FixturePdfs
         // Page 6: no text layer (only a drawn rectangle), so extraction reports it and OCR may read it.
         builder.AddPage(PageSize.Letter).DrawRectangle(new PdfPoint(72, 500), 200, 100);
 
+        // Page 7: a spellcasting class (item 11, D34): its core traits as lines, a level table with the proficiency bonus,
+        // features, cantrips and nine slot columns, and one of its features as a block of its own.
+        var lamplighter = builder.AddPage(PageSize.Letter);
+        Lines(lamplighter, 60, 740,
+        [
+            ("Fixture Lamplighter", true, 20),
+            B("Hit Dice: 1d6 per lamplighter level"),
+            B("Saving Throws: Wisdom, Charisma"),
+            B("Armor: Light armor"),
+            B("Weapons: Simple weapons"),
+            B("Skills: Choose two from Insight, Investigation, Perception, and Persuasion"),
+            B("Wisdom is your spellcasting ability."), Gap(),
+            H("Fixture Lamplighter Features"),
+        ]);
+        LamplighterTable(lamplighter, regular, bold);
+        Lines(lamplighter, 60, 320,
+        [
+            H("Fixture Glow"),
+            B("Level 2 Fixture Lamplighter Feature"), Gap(),
+            B("You can shed dim light in a 10-foot radius as a bonus action."),
+        ]);
+
         return builder.Build();
+    }
+
+    /// <summary>The Fixture Lamplighter's invented level table: for the tests, which read it back.</summary>
+    internal static class Lamplighter
+    {
+        public static readonly string[] Features =
+        [
+            "Spellcasting, Fixture Lantern Rite", "Fixture Glow", "Fixture Order feature", "Ability Score Improvement", "Fixture Beacon",
+            "Fixture Order feature", "Fixture Glow", "Ability Score Improvement", "Fixture Veil", "Fixture Order feature",
+            "Fixture Beacon", "Ability Score Improvement", "-", "Fixture Order feature", "Fixture Dusk Step",
+            "Ability Score Improvement", "-", "Fixture Order feature", "Ability Score Improvement", "Fixture Final Light",
+        ];
+
+        public static int[] Cantrips { get; } = [.. Enumerable.Range(1, 20).Select(l => 2 + l / 6)];
+
+        /// <summary>Slots by spell level 1-9 for class level 1-20: each spell level opens at class level 2n-1, then gains one every five levels up to four.</summary>
+        public static int[][] Slots { get; } = [.. Enumerable.Range(1, 20).Select(l => Enumerable.Range(1, 9).Select(n => l >= 2 * n - 1 ? 1 + Math.Min(3, (l - (2 * n - 1)) / 5) : 0).ToArray())];
+
+        public static int ProficiencyBonus(int level) => 2 + (level - 1) / 4;
+    }
+
+    private static void LamplighterTable(PdfPageBuilder page, PdfDocumentBuilder.AddedFont regular, PdfDocumentBuilder.AddedFont bold)
+    {
+        const double size = 8;
+        const double pitch = 11;
+        var top = 560.0;
+        void Cell(string text, double x, double y, bool isBold = false) => page.AddText(text, size, new PdfPoint(x, y), isBold ? bold : regular);
+        // Headers over two lines, as the SRDs set them.
+        Cell("Proficiency", 94, top + 2 * pitch, true);
+        Cell("Level", 60, top + pitch, true);
+        Cell("Bonus", 94, top + pitch, true);
+        Cell("Features", 140, top + pitch, true);
+        Cell("Cantrips", 292, top + 2 * pitch, true);
+        Cell("Known", 295, top + pitch, true);
+        string[] ordinals = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th"];
+        for (var n = 0; n < 9; n++)
+            Cell(ordinals[n], 340 + n * 28, top + pitch, true);
+        for (var level = 1; level <= 20; level++)
+        {
+            var y = top - level * pitch + pitch;
+            Cell(level.ToString(System.Globalization.CultureInfo.InvariantCulture), level < 10 ? 64 : 61, y);
+            Cell($"+{Lamplighter.ProficiencyBonus(level)}", 98, y);
+            Cell(Lamplighter.Features[level - 1], 140, y);
+            Cell(Lamplighter.Cantrips[level - 1].ToString(System.Globalization.CultureInfo.InvariantCulture), 303, y);
+            for (var n = 0; n < 9; n++)
+            {
+                var count = Lamplighter.Slots[level - 1][n];
+                Cell(count == 0 ? "-" : count.ToString(System.Globalization.CultureInfo.InvariantCulture), 345 + n * 28, y);
+            }
+        }
     }
 
     /// <summary>A text PDF of <paramref name="pages"/> pages (for the page limit).</summary>

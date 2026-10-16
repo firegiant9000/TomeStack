@@ -87,7 +87,7 @@ public class ImportJobTests
         var started = temp.App.StartImport(new(sourceId, WholeDocument: true));
         var job = Settle(temp, started.Id);
 
-        Assert.Equal((ImportJobStatus.Completed, 6, 6, 0, 1), (job.Status, job.PageCount, job.PagesDone, job.PagesFailed, job.PagesWithoutText));
+        Assert.Equal((ImportJobStatus.Completed, 7, 7, 0, 1), (job.Status, job.PageCount, job.PagesDone, job.PagesFailed, job.PagesWithoutText));
         Assert.Null(job.NextPage);
         var page = temp.App.ImportedPage(new(sourceId, 2));
         Assert.Contains("Fixture Ember Lance", page.Text, StringComparison.Ordinal);
@@ -96,7 +96,7 @@ public class ImportJobTests
 
         var audit = temp.App.ImportAudit(job.Id);
         Assert.Equal(["created", "started", "completed"], audit.Select(a => a.Event));
-        Assert.Equal("6 pages, 0 unreadable, 0 by OCR, 1 without text, 9 candidates", audit[^1].Detail);
+        Assert.Equal("7 pages, 0 unreadable, 0 by OCR, 1 without text, 11 candidates", audit[^1].Detail);
         Assert.All(audit, a => Assert.DoesNotContain("Fixture", a.Detail ?? "", StringComparison.Ordinal));
         // Extraction changes no content: no revision cites the source.
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -113,8 +113,8 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
         var all = temp.App.ListCandidates(new(job.Id));
 
-        Assert.Equal(9, job.Candidates);
-        Assert.Equal(9, all.Count);
+        Assert.Equal(11, job.Candidates);
+        Assert.Equal(11, all.Count);
         Assert.All(all, c => Assert.Equal(CandidateStatus.Pending, c.Status));
         Assert.Equal(["Fixture Ember Lance", "Fixture Frost Veil"], temp.App.ListCandidates(new(job.Id, Kind: ContentKind.Spell)).Select(c => c.Current.ProposedName));
         Assert.Equal(4, temp.App.ListCandidates(new(job.Id, Page: 4)).Count);
@@ -124,7 +124,7 @@ public class ImportJobTests
         Assert.All(all, c => Assert.Equal([RulesFamilies.Srd521], c.Current.RulesFamilies));
 
         // Detecting again (a resumed or re-run job) replaces only what is still pending.
-        Assert.Equal(9, temp.App.ListCandidates(new(job.Id)).Select(c => c.Id).Distinct().Count());
+        Assert.Equal(11, temp.App.ListCandidates(new(job.Id)).Select(c => c.Id).Distinct().Count());
     }
 
     [Fact]
@@ -178,7 +178,7 @@ public class ImportJobTests
         gated.Gate.Release(100);
         var resumed = temp.App.ResumeImport(job.Id);
         var done = Settle(temp, resumed.Id);
-        Assert.Equal((ImportJobStatus.Completed, 6), (done.Status, done.PagesDone));
+        Assert.Equal((ImportJobStatus.Completed, 7), (done.Status, done.PagesDone));
         Assert.Equal(3, gated.Scopes[^1].FirstPage); // it did not read pages 1-2 again
         Assert.Equal(["created", "started", "cancelled", "resumed", "completed"], temp.App.ImportAudit(job.Id).Select(a => a.Event));
         Assert.Equal("import.not-resumable", Assert.Single(Assert.Throws<AppValidationException>(() => temp.App.ResumeImport(job.Id)).Problems).Code);
@@ -385,7 +385,7 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
 
         var all = temp.App.Store.ListImportPagesForDetection(job.Sha256, 1, int.MaxValue, long.MaxValue, out var none);
-        Assert.Equal(6, all.Count);
+        Assert.Equal(7, all.Count);
         Assert.Null(none);
         Assert.All(all, p => Assert.Equal("", p.Text)); // detection never needs the joined text
 
@@ -428,7 +428,7 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true, WrittenFor: [RulesFamilies.Srd51])).Id);
 
         Assert.Equal([RulesFamilies.Srd51], job.WrittenFor);
-        Assert.Equal(9, job.Candidates);
+        Assert.Equal(11, job.Candidates);
         var coat = temp.App.ListCandidates(new(job.Id)).Single(c => c.Candidate.ProposedName == "Fixture Quilted Coat");
         Assert.Equal([RulesFamilies.Srd51], coat.Current.RulesFamilies);
         Assert.Empty(coat.Current.LowConfidenceFields);

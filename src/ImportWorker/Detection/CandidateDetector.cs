@@ -853,6 +853,12 @@ public static partial class CandidateDetector
         var className = titles[0];
         var byLevel = new SortedDictionary<int, List<string>>();
 
+        // Item 11 (D34): the whole table, read back by position; the legacy readers below stay for layouts it cannot read.
+        var pageTextLines = lines.Select(l => l.Line).ToList();
+        var titleLine = pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
+        if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
+            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context)];
+
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
         var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
             && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X));
@@ -879,21 +885,37 @@ public static partial class CandidateDetector
         }
         if (byLevel.Count == 0)
             return [];
-        var features = byLevel.ToDictionary(r => r.Key, r => Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
-        var references = features.Values.SelectMany(f => f).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
+        var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
+        return [ClassCandidate(page, className, features, null, pageTextLines, context)];
+    }
+
+    /// <summary>A class candidate: the Features column by level, plus the effects its page supports (<see cref="ClassProposals"/>).</summary>
+    private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context)
+    {
+        var ordered = features.OrderBy(f => f.Key).ToList();
+        var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
         var (families, uncertainties, familyUnsure) = NeutralFamily(context);
-        uncertainties.Add("A class is proposed from its features table only: add its hit die, proficiencies and grants by hand, or accept it as reference.");
-        return
-        [
-            new DraftCandidate(
-                Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt(features.Select(f => $"{f.Key}: {string.Join(", ", f.Value)}")),
-                ContentKind.Class, className, families, [], Clamp(features.Count >= 3 ? 0.7 : 0.5), uncertainties)
-            {
-                Fields = features.ToDictionary(f => $"level {f.Key}", f => string.Join(", ", f.Value), StringComparer.Ordinal),
-                UnresolvedReferences = references,
-                LowConfidenceFields = familyUnsure ? ["effects", "rulesFamilies"] : ["effects"],
-            },
-        ];
+        var proposal = ClassProposals.Propose(className, table, [.. pageTextLines.Select(l => l.Text)], features);
+        uncertainties.AddRange(proposal.Uncertainties);
+        if (table is null)
+            uncertainties.Add("The level table could not be read whole: only its features are proposed. Add what is missing by hand, or accept it as reference.");
+        var fields = ordered.ToDictionary(f => $"level {f.Key}", f => string.Join(", ", f.Value), StringComparer.Ordinal);
+        foreach (var field in proposal.Fields)
+            fields[field.Key] = field.Value;
+        var lowConfidence = new List<string>();
+        if (proposal.Effects.Count == 0)
+            lowConfidence.Add("effects");
+        lowConfidence.AddRange(proposal.LowConfidenceFields);
+        if (familyUnsure)
+            lowConfidence.Add("rulesFamilies");
+        return new DraftCandidate(
+            Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt(ordered.Select(f => $"{f.Key}: {string.Join(", ", f.Value)}")),
+            ContentKind.Class, className, families, proposal.Effects, Clamp(features.Count >= 3 ? 0.7 : 0.5), uncertainties)
+        {
+            Fields = fields,
+            UnresolvedReferences = references,
+            LowConfidenceFields = lowConfidence,
+        };
     }
 
     // ---- patterns (anchored, with a match timeout) ----

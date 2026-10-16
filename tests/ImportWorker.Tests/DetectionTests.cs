@@ -103,7 +103,7 @@ public class DetectionTests
                 (ContentKind.Spell, "Fixture Ember Lance", 2), (ContentKind.Spell, "Fixture Frost Veil", 2),
                 (ContentKind.Feature, "Fixture Stormcall", 3), (ContentKind.Feat, "Fixture Keen Watcher", 3),
                 (ContentKind.Item, "Fixture Hookblade", 4), (ContentKind.Item, "Fixture Longstaff", 4), (ContentKind.Item, "Fixture Plate Shell", 4), (ContentKind.Item, "Fixture Quilted Coat", 4),
-                (ContentKind.Class, "Fixture Warden", 5),
+                (ContentKind.Class, "Fixture Warden", 5), (ContentKind.Class, "Fixture Lamplighter", 7), (ContentKind.Feature, "Fixture Glow", 7),
             ],
             found.Select(c => (c.ProposedKind, c.ProposedName, c.Page.Start)).OrderBy(c => c.Start).ThenBy(c => c.ProposedKind).ThenBy(c => c.ProposedName));
         Assert.All(found, c =>
@@ -344,13 +344,41 @@ public class DetectionTests
     }
 
     [Fact]
+    public async Task A_class_page_with_its_table_proposes_the_effects_the_page_supports()
+    {
+        var lamplighter = Named(await Detect(), "Fixture Lamplighter");
+
+        Assert.Equal(7, lamplighter.Page.Start);
+        Assert.Equal(["hit-die", "save-wis", "save-cha", "armor-light", "weapon-simple", "fixture-lamplighter-subclass", "spellcasting"], lamplighter.ProposedEffects.Select(e => e.Id));
+        Assert.Equal(6, Assert.IsType<HitDieEffect>(lamplighter.ProposedEffects[0]).Die);
+        var wisdom = Assert.IsType<GrantEffect>(lamplighter.ProposedEffects[1]);
+        Assert.Equal(("save.wis", ClassEntry.StartingClass), (wisdom.Target, wisdom.OnlyAs));
+        Assert.Equal("armor.light", Assert.IsType<GrantEffect>(lamplighter.ProposedEffects[3]).Target);
+        var subclass = Assert.IsType<ChoiceEffect>(lamplighter.ProposedEffects[5]);
+        Assert.Equal((3, 0), (subclass.Level, subclass.Options.Count)); // the first "Fixture Order feature" is at level 3
+
+        // R52: the class's own spellcasting effect, from its table; R53: the spell list is the class name through the one normaliser; R57: no multiclass share.
+        var casting = Assert.IsType<SpellcastingEffect>(lamplighter.ProposedEffects[6]);
+        Assert.Equal((Ability.Wis, SpellPreparation.Prepared, "fixture-lamplighter", SpellSlotKind.SpellSlots), (casting.Ability, casting.Preparation, casting.SpellList, casting.SlotKind));
+        Assert.Equal(FixturePdfs.Lamplighter.Cantrips, casting.Cantrips);
+        Assert.Equal(FixturePdfs.Lamplighter.Slots.Select(r => r.Take(Array.FindLastIndex(r, n => n > 0) + 1).ToArray()), casting.Slots.Select(r => r.ToArray()));
+        Assert.Null(casting.SpellsTable);
+        Assert.Null(casting.MulticlassCaster);
+        Assert.Null(casting.MulticlassCasterTable);
+        Assert.Contains("spellList", lamplighter.LowConfidenceFields);
+        Assert.DoesNotContain("effects", lamplighter.LowConfidenceFields);
+        Assert.Equal("Fixture Glow", lamplighter.Fields["level 2"]);
+        Assert.Contains("Insight", lamplighter.Fields["skills"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_two_family_context_proposes_no_family_for_layout_neutral_kinds()
     {
         // 2026-10-14 item 3: no family under a two-family context (armour rows and class tables carry no layout).
         var found = await Detect();
 
         var neutral = found.Where(c => c.ProposedKind == ContentKind.Class || c.ProposedEffects.Any(e => e is ArmorEffect)).ToList();
-        Assert.Equal(3, neutral.Count);
+        Assert.Equal(4, neutral.Count);
         Assert.All(neutral, c =>
         {
             Assert.Empty(c.RulesFamilies);
@@ -369,7 +397,7 @@ public class DetectionTests
         var found = await Detect(families: [family]);
 
         var neutral = found.Where(c => c.ProposedKind == ContentKind.Class || c.ProposedEffects.Any(e => e is ArmorEffect)).ToList();
-        Assert.Equal(3, neutral.Count);
+        Assert.Equal(4, neutral.Count);
         Assert.All(neutral, c =>
         {
             Assert.Equal([family], c.RulesFamilies);
