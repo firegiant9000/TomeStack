@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CandidateCheck, CandidateFilter, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
 import { familyLabel } from './familyLabels';
+import { SpellListForm } from './SpellListForm';
 
 interface Props {
   job: ImportJob;
@@ -36,7 +37,11 @@ const blockedReasons: Record<string, string> = {
   'candidate.validation-failed': 'has problems the check reports',
   'candidate.already-reviewed': 'was already reviewed',
   'candidate.not-found': 'no longer exists',
+  'spell-list.not-a-spell': 'is not a spell',
+  'spell-list.already-on-list': 'is already on this list',
 };
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const pageText = (page: { start: number; end?: number }) => (page.end && page.end !== page.start ? `pp. ${page.start}–${page.end}` : `p. ${page.start}`);
 
@@ -59,7 +64,11 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const [ticked, setTicked] = useState<string[]>([]);
   const clearedByPage = useRef(false); // a page turn dropped ticks: say so in the same message as the new range
   const [skipped, setSkipped] = useState<{ id: string; name: string; reasons: string[] }[]>([]);
+  const [skippedLabel, setSkippedLabel] = useState<'Not accepted' | 'Not changed'>('Not accepted');
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [busyText, setBusyText] = useState('Accepting the selected candidates…'); // what the bulk action in flight is doing
+  const [listOpen, setListOpen] = useState(false); // item 10: the "Add to spell list" key form
+  const listOpener = useRef<HTMLButtonElement>(null);
   const bulkRunning = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const announceNext = useRef(false);
@@ -74,10 +83,14 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   const dirtyId = `unsaved-${job.id}`;
   const rangeId = `range-${job.id}`;
   const noneId = `none-selected-${job.id}`;
+  const noSpellId = `no-spell-selected-${job.id}`;
   const bulkId = `accepting-${job.id}`;
   const candidates = result?.items;
   const total = result?.total ?? 0;
   const pendingShown = candidates?.filter((c) => c.status === 'pending') ?? [];
+  // Item 10: "Add to spell list…" changes the ticked pending spells only; the button says how many.
+  const tickedSpells = pendingShown.filter((c) => ticked.includes(c.id) && (c.edited ?? c.candidate).proposedKind === 'spell');
+  const spellCount = tickedSpells.length;
 
   const load = useCallback(() => {
     const request = ++latestRequest.current;
@@ -168,6 +181,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     // A page-range pause still running would change the filter and drop the ticks mid-flight: cancel it, and show the applied range.
     clearTimeout(pageTimer.current);
     setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
+    setBusyText('Accepting the selected candidates…');
     setBulkBusy(true);
     try {
       const outcome = await client.acceptCandidates(ticked, asReference);
@@ -181,10 +195,47 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           outcome.accepted.length > 0 ? ' They are drafts in the studio and do nothing until you publish them there.' : ''
         }`,
       );
+      setSkippedLabel('Not accepted');
       setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map((code) => blockedReasons[code] ?? code) })));
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
       setAnnouncement(`${stay.length} selected`);
+      await load();
+    } catch (error) {
+      onError(error);
+    } finally {
+      bulkRunning.current = false;
+      setBulkBusy(false);
+    }
+  }
+
+  /** Item 10 (R43): the key goes into the ticked spells' edits; they stay ticked and pending, so the reviewer can accept them next. */
+  async function addTickedToList(key: string) {
+    if (dirtyRef.current || bulkRunning.current || tickedSpells.length === 0) return;
+    bulkRunning.current = true;
+    clearTimeout(pageTimer.current);
+    setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
+    setBusyText('Adding to the spell list…');
+    setBulkBusy(true);
+    try {
+      const outcome = await client.addCandidatesToSpellList(
+        tickedSpells.map((c) => c.id),
+        key,
+      );
+      const nameOf = (id: string) => {
+        const c = candidates?.find((x) => x.id === id);
+        return c ? (c.edited ?? c.candidate).proposedName : 'A candidate';
+      };
+      const skippedCount = outcome.skipped.length;
+      onStatus(
+        `Added the spell list ${outcome.listKey} to ${plural(outcome.updated.length, 'spell', 'spells')}${skippedCount > 0 ? `; ${skippedCount} skipped` : ''}.${
+          outcome.updated.length > 0 ? ' Accept them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''
+        }`,
+      );
+      setSkippedLabel('Not changed');
+      setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map((code) => blockedReasons[code] ?? code) })));
+      setListOpen(false);
+      listOpener.current?.focus(); // WCAG 2.4.3: the form is gone, so focus goes back to the button that opened it
       await load();
     } catch (error) {
       onError(error);
@@ -336,7 +387,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       </p>
       {bulkBusy && (
         <p id={bulkId} className="hint">
-          Accepting the selected candidates…
+          {busyText}
         </p>
       )}
       {candidates && candidates.length === 0 && <p className="hint">No candidates match.</p>}
@@ -391,6 +442,16 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           >
             Accept selected as reference
           </button>
+          {/* Item 10 (R43): the key goes into the ticked spells' edits, before they are accepted. */}
+          <button
+            type="button"
+            ref={listOpener}
+            aria-disabled={held || spellCount === 0 || undefined}
+            aria-describedby={heldReason ?? (ticked.length === 0 ? noneId : spellCount === 0 ? noSpellId : undefined)}
+            onClick={() => !held && spellCount > 0 && setListOpen(true)}
+          >
+            {spellCount === 0 ? 'Add to a spell list…' : `Add ${plural(spellCount, 'spell', 'spells')} to a spell list…`}
+          </button>
           {ticked.length > 0 ? (
             <span className="hint">{ticked.length} selected</span>
           ) : (
@@ -398,13 +459,32 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
               Select at least one candidate first.
             </span>
           )}
+          {ticked.length > 0 && spellCount === 0 && (
+            <span id={noSpellId} className="hint">
+              Select at least one spell first.
+            </span>
+          )}
         </div>
       )}
+      {listOpen && spellCount > 0 && (
+        <SpellListForm
+          subject={plural(spellCount, 'spell', 'spells')}
+          held={held}
+          heldReasonId={heldReason}
+          onSubmit={addTickedToList}
+          onCancel={() => {
+            setListOpen(false);
+            listOpener.current?.focus();
+          }}
+          onError={onError}
+        />
+      )}
       {skipped.length > 0 && (
-        <ul className="warnings" aria-label="Not accepted">
+        <ul className="warnings" aria-label={skippedLabel}>
           {skipped.map((s) => (
             <li key={s.id}>
-              {s.name}: {s.reasons.join('; ')}. It stays selected; edit it, or accept it as reference only.
+              {s.name}: {s.reasons.join('; ')}.{' '}
+              {skippedLabel === 'Not accepted' ? 'It stays selected; edit it, or accept it as reference only.' : 'It stays selected.'}
             </li>
           ))}
         </ul>

@@ -91,6 +91,15 @@ it('ticks only never-published drafts, and previews exactly the ticked ones', as
   expect(await screen.findByRole('button', { name: 'Publish 1 draft' })).toBeTruthy();
 });
 
+it('ticks the drafts that replace a published version too when asked to (the spell-list add)', async () => {
+  const all = [pendingOf(1), pendingOf(2, true)];
+  echoPreview(all);
+  render(<PublishManyPanel source={source} pending={all} tickAll onError={() => {}} onClose={onClose} onPublished={onPublished} onReload={onReload} />);
+  const second = (await screen.findByRole('checkbox', { name: 'Publish Testy Entry 2' })) as HTMLInputElement;
+  expect(second.checked).toBe(true);
+  await vi.waitFor(() => expect(client.publishManyPreview).toHaveBeenLastCalledWith(['c1', 'c2']));
+});
+
 it('previews again when a tick changes, and holds the button with a reason at none', async () => {
   const user = userEvent.setup();
   const all = [pendingOf(1), pendingOf(2, true)];

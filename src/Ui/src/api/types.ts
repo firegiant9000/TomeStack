@@ -1212,6 +1212,32 @@ export interface AcceptManyResult {
   blocked: BlockedCandidate[];
 }
 
+/** Item 10: what `import.candidate.addToSpellList` did; the skipped carry codes only. */
+export interface CandidateSpellListResult {
+  listKey: string;
+  updated: StoredCandidate[];
+  skipped: BlockedCandidate[];
+}
+
+export interface SkippedContent {
+  contentId: string;
+  codes: string[];
+}
+
+/** Item 10: `content.addToSpellList` saves drafts only (never publishes); `note` says characters keep their recorded revisions. */
+export interface ContentSpellListResult {
+  listKey: string;
+  drafts: ContentReference[];
+  skipped: SkippedContent[];
+  note: string;
+}
+
+/** A spell list key that exists in published content, with how many spells are on it. */
+export interface SpellListKeyCount {
+  key: string;
+  spells: number;
+}
+
 export interface EffectChange {
   effectId: string;
   change: 'added' | 'removed' | 'changed';

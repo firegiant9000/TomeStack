@@ -22,6 +22,11 @@ interface Props {
   onPublished: (drafts: number) => void;
   /** Asks the studio to reload its entries, so `pending` is current after a refusal that says the drafts changed. */
   onReload: () => Promise<void> | void;
+  /**
+   * Item 10 (R44): the studio opens the panel on exactly the drafts a spell-list add just made, so every one starts ticked,
+   * including a spell that already has a published version (the owner just asked for this change). Default: only new content.
+   */
+  tickAll?: boolean;
 }
 
 const reasonId = 'publish-many-reason';
@@ -54,11 +59,11 @@ function describeChanges(comparison: ContentComparison): string[] {
  * differences on request. Grants that pin a published draft are re-pointed by the service; this lists them. Nothing here
  * changes a character.
  */
-export function PublishManyPanel({ source, pending, onError, onClose, onPublished, onReload }: Props) {
-  const [capped] = useState(() => pending.filter((p) => !p.replacesPublished).length > maxAtOnce);
+export function PublishManyPanel({ source, pending, onError, onClose, onPublished, onReload, tickAll }: Props) {
+  const [capped] = useState(() => pending.filter((p) => tickAll || !p.replacesPublished).length > maxAtOnce);
   const [ticks, setTicks] = useState<string[]>(() =>
     pending
-      .filter((p) => !p.replacesPublished)
+      .filter((p) => tickAll || !p.replacesPublished)
       .slice(0, maxAtOnce)
       .map((p) => p.contentId),
   );
