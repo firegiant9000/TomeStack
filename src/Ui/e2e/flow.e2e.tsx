@@ -1051,6 +1051,87 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   expect(within(picker).getByRole('checkbox', { name: /^Fixture Ember Lance/ })).toBeTruthy();
 });
 
+/** Opens the studio on the named homebrew source (item 12 flows). */
+async function openStudioOn(user: ReturnType<typeof userEvent.setup>, title: string) {
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: new RegExp(`^${title}`) })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: new RegExp(`^${title}`) }));
+  await screen.findByRole('heading', { name: `Content in ${title}` });
+}
+
+const newestOf = async (sourceId: string, name: string) => (await client.contentBySource(sourceId)).find((e) => e.name === name)?.latest;
+
+it('authors a species with a Strength increase and a skill in the studio, publishes it, and the builder offers it (item 12)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Folk Book', ['srd-5.1']);
+  await openStudioOn(user, 'E2E Folk Book');
+
+  await user.click(screen.getByRole('button', { name: 'New species' }));
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Folk');
+  await user.type(within(editor()).getByRole('spinbutton', { name: 'Strength' }), '2');
+  await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
+
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await createCharacter(user, { name: 'E2E Folk Child', family: 'srd-5.1', species: /^E2E Folk/ });
+  expect(await screen.findByRole('heading', { name: /^Choices/ })).toBeTruthy();
+});
+
+it('authors a newer-rules background with three ability increases: the option features are drafts, Publish all makes them live, and the builder offers it (item 12)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Wanderer Book', ['srd-5.2.1']);
+  await openStudioOn(user, 'E2E Wanderer Book');
+
+  await user.click(screen.getByRole('button', { name: 'New background' }));
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Wanderer');
+  for (const name of ['Strength', 'Dexterity', 'Constitution']) await user.click(within(editor()).getByRole('checkbox', { name }));
+  await user.click(within(editor()).getByRole('button', { name: 'Save draft' }));
+  await waitFor(async () => expect((await newestOf(source.id, 'E2E Wanderer'))?.status).toBe('draft'));
+  const entries = await client.contentBySource(source.id);
+  expect(entries.filter((e) => e.kind === 'feature' && e.name.startsWith('E2E Wanderer Ability Scores'))).toHaveLength(7);
+
+  // Publishing the background alone is held with a visible reason; the whole source publishes together.
+  const publish = await within(editor()).findByRole('button', { name: 'Publish' });
+  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBe('true'));
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  const region = screen.getByRole('region', { name: 'Publish drafts of E2E Wanderer Book' });
+  const publishAll = await within(region).findByRole('button', { name: 'Publish 8 drafts' });
+  await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBeNull());
+  await user.click(publishAll);
+  await within(region).findByText('Published 8 drafts.');
+  expect((await newestOf(source.id, 'E2E Wanderer'))?.status).toBe('published');
+
+  await user.click(screen.getByRole('button', { name: 'Characters' }));
+  await createCharacter(user, { name: 'E2E Wanderer Child', family: 'srd-5.2.1', background: /^E2E Wanderer/ });
+  expect(await screen.findByRole('heading', { name: /^Choices/ })).toBeTruthy();
+});
+
+it('authors a cantrip on a new spell list in the studio, publishes it, and the list shows in the spell list keys (item 12)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Spark Book', ['srd-5.2.1']);
+  await openStudioOn(user, 'E2E Spark Book');
+
+  await user.click(screen.getByRole('button', { name: 'New spell' }));
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Spark');
+  await user.selectOptions(within(editor()).getByRole('combobox', { name: 'Level' }), '0');
+  await user.type(within(editor()).getByRole('combobox', { name: 'Add a spell list' }), 'E2E Spark List');
+  expect(within(editor()).getByText('Saved as: e2e-spark-list')).toBeTruthy();
+  await user.click(within(editor()).getByRole('button', { name: 'Add list' }));
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await waitFor(async () => expect((await newestOf(source.id, 'E2E Spark'))?.status).toBe('published'));
+
+  const keys = await client.spellListKeys();
+  expect(keys.find((k) => k.key === 'e2e-spark-list')?.spells).toBe(1);
+});
+
 it('shows different allowed content for two campaign profiles, and records a reasoned exception', async () => {
   const user = userEvent.setup();
   render(<App />);
