@@ -29,6 +29,13 @@ public sealed record StoredCandidate
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool FamiliesReviewed { get; init; }
+    /// <summary>
+    /// Item 11 (R39, ADR-016): the feature candidates of this job that a class candidate grants, each at a class level. Omitted
+    /// when there are none, so every row stored before it existed reads as no links and untouched rows keep their bytes; no
+    /// schema version change. 0.5.0 keeps it unchanged as an unknown field when it saves the row.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CandidateGrant>? GrantsCandidates { get; init; }
     public CandidateStatus Status { get; init; } = CandidateStatus.Pending;
     /// <summary>The draft revision an accepted candidate became.</summary>
     public ContentReference? Draft { get; init; }
@@ -41,6 +48,9 @@ public sealed record StoredCandidate
     [JsonIgnore]
     public DraftCandidate Current => Edited ?? Candidate;
 }
+
+/// <summary>A class candidate grants this feature candidate of the same job at this class level (<see cref="StoredCandidate.GrantsCandidates"/>).</summary>
+public sealed record CandidateGrant(Guid CandidateId, int Level);
 
 /// <summary>
 /// M4 D4 <c>import.candidate.edit</c>: the reviewer's version. Absent fields keep the current value. Saving it clears the
@@ -148,12 +158,23 @@ public sealed partial class TomeStackApp
             .ToHashSet();
         var now = _time.GetUtcNow();
         var fresh = detected.Where(c => !reviewed.Contains(Identity(c)) && !reviewedBefore.Contains(Identity(c))).ToList();
+        // Item 11 (R39): a link to a feature this job already reviewed points at the stored one (its draft is pinned at accept).
+        var kept = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).GroupBy(c => Identity(c.Candidate)).ToDictionary(g => g.Key, g => g.First().Id);
+        var freshIds = fresh.Select(c => c.Id).ToHashSet();
+        var detectedById = detected.ToDictionary(c => c.Id);
+        Guid? Target(Guid detectedId) => freshIds.Contains(detectedId) ? detectedId : kept.TryGetValue(Identity(detectedById[detectedId]), out var existing) ? existing : null;
+        var grants = result.Links
+            .Where(l => freshIds.Contains(l.ClassId))
+            .Select(l => (l.ClassId, Target: Target(l.FeatureId), l.Level))
+            .Where(l => l.Target is not null)
+            .GroupBy(l => l.ClassId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<CandidateGrant>)[.. g.OrderBy(l => l.Level).Select(l => new CandidateGrant(l.Target!.Value, l.Level))]);
         cancellationToken.ThrowIfCancellationRequested();
         _store.InTransaction(() =>
         {
             _store.DeletePendingImportCandidates(job.Id);
             foreach (var candidate in fresh)
-                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = candidate, UpdatedAt = now });
+                _store.SaveImportCandidate(new StoredCandidate { Id = candidate.Id, JobId = job.Id, Candidate = candidate, GrantsCandidates = grants.GetValueOrDefault(candidate.Id), UpdatedAt = now });
         });
         // Item 13: the review list says when it is not the whole book. The flags are set each run (a resumed job re-detects).
         return job with

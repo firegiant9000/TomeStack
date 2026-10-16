@@ -93,7 +93,7 @@ public class M4AcceptanceTests(ITestOutputHelper output)
 
         Assert.Null(outcome.Failure);
         Assert.Equal(7, outcome.Pages);
-        Assert.Equal(new Dictionary<ContentKind, int> { [ContentKind.Class] = 2, [ContentKind.Feat] = 1, [ContentKind.Feature] = 2, [ContentKind.Item] = 4, [ContentKind.Spell] = 2 }, outcome.ByKind);
+        Assert.Equal(new Dictionary<ContentKind, int> { [ContentKind.Class] = 2, [ContentKind.Feat] = 1, [ContentKind.Feature] = 9, [ContentKind.Item] = 4, [ContentKind.Spell] = 2 }, outcome.ByKind);
         Assert.Equal(5, outcome.Accepted + outcome.AcceptedAsReference); // one of each kind
         Assert.Equal(1, outcome.Ignored);
         Assert.Equal(0, outcome.ActiveWithoutApproval);

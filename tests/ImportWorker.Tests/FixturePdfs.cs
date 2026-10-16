@@ -151,7 +151,7 @@ internal static class FixturePdfs
         public static readonly string[] Features =
         [
             "Spellcasting, Fixture Lantern Rite", "Fixture Glow", "Fixture Order feature", "Ability Score Improvement", "Fixture Beacon",
-            "Fixture Order feature", "Fixture Glow", "Ability Score Improvement", "Fixture Veil", "Fixture Order feature",
+            "Fixture Order feature", "Fixture Glow", "Ability Score Improvement", "Fixture Sconce", "Fixture Order feature",
             "Fixture Beacon", "Ability Score Improvement", "-", "Fixture Order feature", "Fixture Dusk Step",
             "Ability Score Improvement", "-", "Fixture Order feature", "Ability Score Improvement", "Fixture Final Light",
         ];

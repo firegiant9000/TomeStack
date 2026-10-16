@@ -10,10 +10,14 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class CandidateReviewTests
 {
-    /// <summary>The fixture book's candidates: page 2 two, page 3 two, page 4 four, page 5 the Warden, page 7 the Lamplighter and what it names.</summary>
-    private const int PageSevenCandidates = 2;
+    /// <summary>
+    /// The fixture book's candidates: page 2 two, page 3 two, page 4 four, page 5 the Warden and its two feature stubs, page 7 the
+    /// Lamplighter and the six features its table names that are not installed (Fixture Glow is a block of the book, the other five
+    /// are stubs; "Spellcasting" is installed SRD content, so it gets no stub).
+    /// </summary>
+    private const int PageSevenCandidates = 7;
 
-    private const int ExpectedCandidates = 9 + PageSevenCandidates;
+    private const int ExpectedCandidates = 2 + 2 + 4 + 3 + PageSevenCandidates;
 
     private static (TempApp Temp, Guid SourceId, Guid JobId) Imported()
     {
@@ -39,15 +43,13 @@ public class CandidateReviewTests
         var total = everything.Count;
         Assert.Equal(ExpectedCandidates, total);
 
-        var first = temp.App.ListCandidatesPage(new(jobId, Offset: 0, Limit: 4));
-        var second = temp.App.ListCandidatesPage(new(jobId, Offset: 4, Limit: 4));
-        var third = temp.App.ListCandidatesPage(new(jobId, Offset: 8, Limit: 4));
+        var pages = Enumerable.Range(0, (total + 3) / 4).Select(i => temp.App.ListCandidatesPage(new(jobId, Offset: i * 4, Limit: 4))).ToList();
         var past = temp.App.ListCandidatesPage(new(jobId, Offset: total, Limit: 4));
 
-        Assert.Equal(total, first.Total);
-        Assert.Equal(everything, [.. first.Items.Concat(second.Items).Concat(third.Items).Select(c => c.Id)]);
-        Assert.Equal([4, 4, total - 8, 0], [first.Items.Count, second.Items.Count, third.Items.Count, past.Items.Count]);
-        Assert.Equal(total, past.Total);
+        Assert.Equal(total, pages[0].Total);
+        Assert.Equal(everything, [.. pages.SelectMany(p => p.Items).Select(c => c.Id)]);
+        Assert.Equal([.. Enumerable.Repeat(4, total / 4), .. total % 4 == 0 ? [] : new[] { total % 4 }], pages.Select(p => p.Items.Count));
+        Assert.Equal((0, total), (past.Items.Count, past.Total));
 
         var spells = temp.App.ListCandidatesPage(new(jobId, Kind: ContentKind.Spell, Offset: 1, Limit: 1));
         Assert.Equal(2, spells.Total); // the filtered set, not the job
@@ -161,7 +163,7 @@ public class CandidateReviewTests
     }
 
     [Fact]
-    public void Editing_clears_the_unsure_fields_and_dismissing_a_reference_unblocks_it()
+    public void Editing_clears_the_unsure_fields_and_a_class_whose_names_are_all_linked_can_then_be_accepted()
     {
         var (temp, _, jobId) = Imported();
         using var _t = temp;
@@ -171,11 +173,9 @@ public class CandidateReviewTests
         // 2026-10-14 item 3: a two-family source gives the class no family, so the reviewer sets one.
         var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         Assert.Empty(edited.Current.LowConfidenceFields);
-        Assert.Equal(["Fixture Focus", "Fixture Resolve"], edited.Current.UnresolvedReferences);
+        Assert.Empty(edited.Current.UnresolvedReferences); // item 11: the two names are feature stubs of the job now, linked from the class
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
-        Assert.False(temp.App.CheckCandidate(warden.Id).CanAccept);
 
-        temp.App.EditCandidate(new(warden.Id, DismissReferences: ["fixture focus", "Fixture Resolve"]));
         var check = temp.App.CheckCandidate(warden.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => d.Code)));
         var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true)).Draft!)!;
@@ -362,6 +362,34 @@ public class CandidateReviewTests
         var reviewed = System.Text.Json.JsonSerializer.Serialize(stored with { FamiliesReviewed = true }, RulesJson.Compact);
         Assert.Contains("\"familiesReviewed\":true", reviewed);
         Assert.True(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(reviewed, RulesJson.Compact)!.FamiliesReviewed);
+    }
+
+    [Fact]
+    public void A_class_stores_the_features_it_grants_by_candidate_and_level_and_every_other_row_stores_none()
+    {
+        // Item 11 (R39): grantsCandidates is omitted when empty; a row stored before it existed reads as no links; no version change.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Named(temp, jobId, "Fixture Lamplighter");
+        var all = temp.App.ListCandidates(new(jobId)).ToDictionary(c => c.Id);
+
+        var grants = lamplighter.GrantsCandidates!;
+        Assert.Equal(8, grants.Count); // nine links in the table, less the installed "Spellcasting"
+        Assert.Equal([1, 2, 5, 7, 9, 11, 15, 20], grants.Select(g => g.Level));
+        Assert.All(grants, g => Assert.Equal(ContentKind.Feature, all[g.CandidateId].Candidate.ProposedKind));
+        Assert.Equal(1, StoredCandidate.CurrentSchemaVersion);
+        Assert.Equal(["Fixture Focus", "Fixture Resolve", "Fixture Stormcall"], Named(temp, jobId, "Fixture Warden").GrantsCandidates!.Select(g => all[g.CandidateId].Candidate.ProposedName));
+
+        var json = System.Text.Json.JsonSerializer.Serialize(lamplighter, RulesJson.Compact);
+        Assert.Contains("\"grantsCandidates\":[{\"candidateId\":", json);
+        Assert.Equal(grants, System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!.GrantsCandidates);
+
+        var plain = System.Text.Json.JsonSerializer.Serialize(Named(temp, jobId, "Fixture Quilted Coat"), RulesJson.Compact);
+        Assert.DoesNotContain("grantsCandidates", plain);
+        Assert.Null(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(plain, RulesJson.Compact)!.GrantsCandidates);
+
+        // An edit keeps the links.
+        Assert.Equal(grants, temp.App.EditCandidate(new(lamplighter.Id, Summary: "Edited text.")).GrantsCandidates);
     }
 
     [Fact]
