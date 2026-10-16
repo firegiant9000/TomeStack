@@ -30,9 +30,22 @@ export interface BasicsProps {
  */
 export type BeforeSave = (revision: ContentRevision) => Promise<{ revision: ContentRevision; drafts: ContentReference[] }>;
 
-export interface BackgroundProps extends BasicsProps {
+/**
+ * A grant or option that points at a draft which has since been superseded by a published revision of the same content
+ * (R62): the editors name it and offer "Use the published version", and never re-point it silently.
+ */
+export interface PinProps {
+  /** The newest published revision of the content, when `reference` is an older draft of it. */
+  newerPublished: (reference: ContentReference) => ContentReference | undefined;
+}
+
+export type SpeciesProps = BasicsProps & PinProps;
+
+export interface BackgroundProps extends BasicsProps, PinProps {
   /** The stored revision a reference names (this source's entries), if it is known. */
   revisionOf: (reference: ContentReference) => ContentRevision | undefined;
+  /** The newest stored revision of a content of this source (insertion order), published or not. */
+  newestOf: (contentId: string) => ContentRevision | undefined;
   /** The editor hands the studio its save step (and `null` when it goes away). */
   registerBeforeSave: (step: BeforeSave | null) => void;
 }
@@ -41,6 +54,22 @@ export interface BackgroundProps extends BasicsProps {
 export const familyName = (info: AppInfo, id: RulesFamilyId): string => info.rulesFamilies.find((f) => f.id === id)?.displayName ?? id;
 
 export const joinNames = (names: string[]): string => (names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
+
+/** The note and the per-pin button for a grant that points at a superseded draft (R62). The press changes the form only. */
+export function StalePin(props: { name: string; onUse: () => void }) {
+  const noteId = useId();
+  return (
+    <>
+      <span id={noteId} className="warn">
+        {' '}
+        A newer published version of {props.name} exists.
+      </span>{' '}
+      <button type="button" aria-describedby={noteId} onClick={props.onUse}>
+        Use the published version of {props.name}
+      </button>
+    </>
+  );
+}
 
 /** Skill proficiencies of the entry: a `grant proficiency` on `skill.<x>` each (the bundled species and backgrounds). */
 export function SkillFieldset(props: { id: string; info: AppInfo; effects: Effect[]; onEffects: (update: EffectsUpdate) => void }) {

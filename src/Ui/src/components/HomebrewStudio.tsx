@@ -484,14 +484,18 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             await loadEntries(source.id);
             onStatus(`Published ${name}.`);
           }}
-          onDraftSaved={async (name, pinned, wantedPublish) => {
+          onSuperseded={(name) => {
+            setEditing(undefined);
+            onStatus(`Closed the editor of ${name}: it was published with the other drafts. Open it again to change the published version; edits made after the last save were not kept.`);
+          }}
+          onDraftSaved={async (name, pinned) => {
             await loadEntries(source.id);
-            // Item 12: an entry that points at drafts (a background's ability score options) is published with them, never alone.
+            // Item 12: an entry that points at drafts is best published with them.
             const together = `${pinned} unpublished draft${pinned === 1 ? '' : 's'}`;
             onStatus(
               pinned === 0
                 ? `Saved a draft of ${name}. Drafts never affect characters.`
-                : `Saved a draft of ${name}. It points at ${together}, so ${wantedPublish ? 'it was not published yet: use' : 'publish them together with it using'} "Publish all drafts in this source…".`,
+                : `Saved a draft of ${name}. It points at ${together}; "Publish all drafts in this source…" publishes ${pinned === 1 ? 'it' : 'them'} together and re-points it.`,
             );
           }}
         />
@@ -639,8 +643,10 @@ function EntryEditor(props: {
   onClose: () => void;
   /** The class helper published option features: reload the source's content. */
   onEntriesChanged: () => void;
-  /** `pinned` counts the unpublished drafts the saved entry points at; `wantedPublish` is whether Publish was pressed. */
-  onDraftSaved: (name: string, pinned: number, wantedPublish: boolean) => void;
+  /** `pinned` counts the unpublished drafts the saved entry points at. */
+  onDraftSaved: (name: string, pinned: number) => void;
+  /** "Publish all drafts" published the entry this editor saved: the editor shows a superseded draft and is closed. */
+  onSuperseded: (name: string) => void;
   onPublished: (result: PublishResult, name: string) => void;
 }) {
   const [revision, setRevision] = useState<ContentRevision>(props.initial);
@@ -696,12 +702,37 @@ function EntryEditor(props: {
       current = false;
     };
   }, [props.initial.kind, sourceFamilies, onError]);
-  const known = knownContent(props.entries, installed, made);
+  // A made entry is dropped once this source's entries (reloaded after a save or a publish) list it.
+  const madeLive = made.filter((m) => !props.entries.some((e) => e.contentId === m.contentId));
+  const known = knownContent(props.entries, installed, madeLive);
   const kindOf = (r: ContentReference) => known.find((k) => k.contentId === r.contentId)?.kind;
   const allRevisions = props.entries.flatMap((e) => e.revisions);
   const revisionOf = (r: ContentReference) => allRevisions.find((x) => x.revisionId === r.revisionId);
-  const draftIds = new Set([...allRevisions.filter((r) => r.status === 'draft').map((r) => r.revisionId), ...made.filter((m) => m.draft).map((m) => m.reference.revisionId)]);
-  const pins = pinnedDrafts(revision.effects, draftIds);
+  const draftIds = new Set([...allRevisions.filter((r) => r.status === 'draft').map((r) => r.revisionId), ...madeLive.filter((m) => m.draft).map((m) => m.reference.revisionId)]);
+  const pins = [...new Map(pinnedDrafts(revision.effects, draftIds).map((r) => [r.revisionId, r])).values()];
+
+  /** The newest revision of a content of this source, published or not (insertion order). */
+  const newestOf = (contentId: string) => props.entries.find((e) => e.contentId === contentId)?.revisions.at(-1);
+  /** R62: the newest published revision of a content, when `r` is an older draft of it; otherwise undefined. */
+  const newerPublished = (r: ContentReference): ContentReference | undefined => {
+    const entry = props.entries.find((e) => e.contentId === r.contentId);
+    const at = entry?.revisions.findIndex((x) => x.revisionId === r.revisionId) ?? -1;
+    if (!entry || at < 0 || entry.revisions[at]!.status !== 'draft' || !entry.latestPublished) return undefined;
+    const published = entry.latestPublished;
+    return entry.revisions.findIndex((x) => x.revisionId === published.revisionId) > at ? { contentId: published.contentId, revisionId: published.revisionId } : undefined;
+  };
+
+  // The draft this editor last saved: when "Publish all drafts" later publishes that content, this editor shows a superseded draft.
+  const lastSaved = useRef<ContentReference | undefined>(undefined);
+  const { onSuperseded } = props;
+  useEffect(() => {
+    const saved = lastSaved.current;
+    const entry = props.entries.find((e) => e.contentId === revision.contentId);
+    if (!saved || !entry?.latestPublished) return;
+    const at = entry.revisions.findIndex((x) => x.revisionId === saved.revisionId);
+    const published = entry.latestPublished;
+    if (at >= 0 && entry.revisions.findIndex((x) => x.revisionId === published.revisionId) > at) onSuperseded(revision.name);
+  }, [props.entries, revision.contentId, revision.name, onSuperseded]);
 
   useEffect(() => heading.current?.focus(), []);
 
@@ -845,10 +876,11 @@ function EntryEditor(props: {
       const prepared = beforeSave.current ? await beforeSave.current(revision) : { revision, drafts: [] as ContentReference[] };
       if (prepared.revision !== revision) setRevision(prepared.revision);
       const saved = await client.saveDraft(forServer(prepared.revision));
-      // Pointing at drafts, it would be published with grants that stay inactive: those publish together, through "Publish all drafts".
-      const pinned = new Set([...prepared.drafts, ...pinnedDrafts(prepared.revision.effects, draftIds)].map((r) => r.revisionId));
-      if (!publish || pinned.size > 0) {
-        props.onDraftSaved(revision.name, pinned.size, publish);
+      lastSaved.current = saved;
+      if (!publish) {
+        // An entry that points at drafts is saved as it is; "Publish all drafts" publishes them together and re-points it (R61).
+        const pinned = new Set([...prepared.drafts, ...pinnedDrafts(prepared.revision.effects, draftIds)].map((r) => r.revisionId));
+        props.onDraftSaved(revision.name, pinned.size);
         return;
       }
       props.onPublished(await client.publish(saved), revision.name);
@@ -860,6 +892,7 @@ function EntryEditor(props: {
     }
   }
 
+  const blocked = busy || classBusy || problemList.length > 0;
   const title = `${props.initial.name ? `Edit ${props.initial.name}` : `New ${props.initial.kind}`}`;
   return (
     <section aria-labelledby="editor-heading" className="play-panel">
@@ -949,9 +982,9 @@ function EntryEditor(props: {
             onError,
           };
           return revision.kind === 'species' ? (
-            <SpeciesBasicsEditor {...shared} />
+            <SpeciesBasicsEditor {...shared} newerPublished={newerPublished} />
           ) : revision.kind === 'background' ? (
-            <BackgroundBasicsEditor {...shared} revisionOf={revisionOf} registerBeforeSave={registerBeforeSave} />
+            <BackgroundBasicsEditor {...shared} revisionOf={revisionOf} newestOf={newestOf} newerPublished={newerPublished} registerBeforeSave={registerBeforeSave} />
           ) : (
             <SpellBasicsEditor {...shared} />
           );
@@ -1133,17 +1166,15 @@ function EntryEditor(props: {
         <button type="button" onClick={diagnose} disabled={diagnosing}>
           Find problems
         </button>
-        <button type="button" onClick={() => save(false)} disabled={busy || classBusy || problemList.length > 0} aria-describedby="editor-blocked">
+        {/* aria-disabled with a guarded click, never native `disabled`: focus stays and the reason is linked (WCAG 2.4.3, 4.1.2). */}
+        <button type="button" onClick={() => !blocked && void save(false)} aria-disabled={blocked || undefined} aria-describedby="editor-blocked">
           Save draft
         </button>
-        {/* Item 12: an entry that points at drafts is held with a visible reason (aria-disabled, so focus stays) and published
-            together with them through "Publish all drafts". */}
         <button
           type="button"
-          onClick={() => pins.length === 0 && void save(true)}
-          disabled={busy || classBusy || problemList.length > 0}
-          aria-disabled={pins.length > 0 || undefined}
-          aria-describedby={pins.length > 0 ? 'editor-pins' : 'editor-blocked'}
+          onClick={() => !blocked && void save(true)}
+          aria-disabled={blocked || undefined}
+          aria-describedby={pins.length > 0 ? 'editor-blocked editor-pins' : 'editor-blocked'}
         >
           Publish
         </button>
@@ -1154,13 +1185,15 @@ function EntryEditor(props: {
       </fieldset>
       <p id="editor-pins" className="hint">
         {pins.length > 0
-          ? `This entry points at ${pins.length} unpublished draft${pins.length === 1 ? '' : 's'}. Save it, then use "Publish all drafts in this source…" to publish them together.`
+          ? `Points at ${pins.length} unpublished draft${pins.length === 1 ? '' : 's'}. Publish all drafts publishes ${pins.length === 1 ? 'it' : 'them'} together and re-points this entry.`
           : ''}
       </p>
       <p id="editor-blocked" className="hint" aria-live="polite">
         {classBusy
           ? 'Publishing the skill options…'
-          : problemList.length > 0
+          : busy
+            ? 'Saving…'
+            : problemList.length > 0
             ? `Fix ${problemList.length === 1 ? 'the marked field' : `the ${problemList.length} marked fields`} before saving: ${problemList.join(' ')}`
             : ''}
       </p>
