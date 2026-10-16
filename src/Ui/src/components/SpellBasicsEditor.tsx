@@ -1,12 +1,10 @@
-import { useEffect, useEffectEvent, useId, useState } from 'react';
-import { client } from '../api/client';
-import type { SpellListKeyCount } from '../api/types';
+import { useEffect, useId, useState } from 'react';
 import { schools, setSpell, spellOf, type SpellPatch } from '../entryBasics';
 import { normaliseSpellListKey, spellListKeyProblem } from '../spellListKey';
 import type { BasicsProps } from './OriginPieces';
+import { SpellListKeyInput } from './SpellListKeyInput';
 
 const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'} level`;
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const problemField = 'spell-lists';
 
 /**
@@ -23,32 +21,13 @@ export function SpellBasicsEditor(props: BasicsProps) {
   const school = spell?.school ?? '';
   const set = (patch: SpellPatch) => onEffects((current) => setSpell(current, patch));
 
-  const [keys, setKeys] = useState<SpellListKeyCount[]>([]);
   const [text, setText] = useState('');
-  const dataListId = useId();
-  const previewId = useId();
   const reasonId = useId();
-  const reportError = useEffectEvent(props.onError);
-  useEffect(() => {
-    let current = true;
-    client
-      .spellListKeys()
-      .then((all) => {
-        if (current) setKeys(all);
-      })
-      .catch((error: unknown) => {
-        if (current) reportError(error);
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   const typed = text.trim() !== '';
   const key = normaliseSpellListKey(text);
   const problem = typed ? spellListKeyProblem(text) : undefined;
   const onList = typed && !problem && lists.includes(key);
-  const existing = typed && !problem ? keys.find((k) => k.key === key) : undefined;
   const refusal = !typed ? 'Type a spell list key.' : (problem ?? (onList ? `The spell is already on the list ${key}.` : undefined));
 
   const { onProblem } = props;
@@ -139,39 +118,7 @@ export function SpellBasicsEditor(props: BasicsProps) {
             ))}
           </ul>
         )}
-        <label className="field">
-          Add a spell list
-          <input
-            type="text"
-            list={dataListId}
-            value={text}
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={problem ? true : undefined}
-            aria-describedby={previewId}
-            onChange={(e) => setText(e.target.value)}
-          />
-        </label>
-        <datalist id={dataListId}>
-          {keys.map((k) => (
-            <option key={k.key} value={k.key}>
-              {`${k.key} (${plural(k.spells, 'spell', 'spells')})`}
-            </option>
-          ))}
-        </datalist>
-        <div id={previewId}>
-          {typed && !problem && <p>Saved as: {key}</p>}
-          {problem && <p className="error">{problem}</p>}
-          {existing ? (
-            <p className="hint">
-              {existing.spells === 0
-                ? 'A class uses this list, but no spell is on it yet.'
-                : `A list with this key is already in use by ${plural(existing.spells, 'spell', 'spells')}.`}
-            </p>
-          ) : (
-            typed && !problem && <p className="hint">No list has this key yet. A caster uses it only if its class names exactly this key.</p>
-          )}
-        </div>
+        <SpellListKeyInput label="Add a spell list" text={text} onText={setText} onError={props.onError} showProblem />
         <button
           type="button"
           aria-disabled={refusal !== undefined || undefined}
