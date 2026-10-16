@@ -39,10 +39,27 @@ public class M4AcceptanceTests(ITestOutputHelper output)
     /// <summary>What one import gave, in counts only.</summary>
     private sealed record Outcome(Guid SourceId, int Pages, int Ocr, IReadOnlyDictionary<ContentKind, int> ByKind, int Accepted, int AcceptedAsReference, int Ignored, int Pending, int ActiveWithoutApproval, string? Failure)
     {
+        /// <summary>Item 11 (ADR-016): how many classes carry each kind of proposal, and their links, in counts only.</summary>
+        public string Classes { get; init; } = "";
+
         public string Report() =>
             $"pages {Pages} ({Ocr} by OCR); candidates {ByKind.Values.Sum()} ({string.Join(", ", ByKind.OrderBy(k => k.Key).Select(k => $"{k.Key.ToString().ToLowerInvariant()} {k.Value}"))}); " +
             $"accepted {Accepted}, accepted as reference {AcceptedAsReference}, ignored {Ignored}, pending {Pending}; active without approval: {ActiveWithoutApproval}" +
+            (Classes.Length > 0 ? $"; {Classes}" : "") +
             (Failure is null ? "" : $"; failure {Failure}");
+    }
+
+    /// <summary>Counts only: of the class candidates, how many propose each part, the links they make and the uncertainties they carry.</summary>
+    private static string ClassCounts(IReadOnlyList<StoredCandidate> candidates)
+    {
+        var classes = candidates.Where(c => c.Candidate.ProposedKind == ContentKind.Class).Select(c => (c.Candidate, Links: c.GrantsCandidates ?? [])).ToList();
+        if (classes.Count == 0)
+            return "";
+        int With(Func<Effect, bool> part) => classes.Count(c => c.Candidate.ProposedEffects.Any(part));
+        bool Grant(Effect e, string prefix) => e is GrantEffect { Grant: GrantKind.Proficiency } g && g.Target?.StartsWith(prefix, StringComparison.Ordinal) == true;
+        return $"classes {classes.Count}: hit die {With(e => e is HitDieEffect)}, saves {With(e => Grant(e, "save."))}, armor {With(e => Grant(e, "armor."))}, " +
+            $"weapons {With(e => Grant(e, "weapon."))}, spellcasting {With(e => e is SpellcastingEffect)}, subclass choice {With(e => e is ChoiceEffect)}; " +
+            $"links {classes.Sum(c => c.Links.Select(l => l.CandidateId).Distinct().Count())}; uncertainties {classes.Sum(c => c.Candidate.Uncertainties.Count)}";
     }
 
     /// <summary>
@@ -79,7 +96,7 @@ public class M4AcceptanceTests(ITestOutputHelper output)
             candidates.GroupBy(c => c.Candidate.ProposedKind).ToDictionary(g => g.Key, g => g.Count()),
             reviewed.Count(c => c.Status == CandidateStatus.Accepted), reviewed.Count(c => c.Status == CandidateStatus.AcceptedAsReference),
             reviewed.Count(c => c.Status == CandidateStatus.Ignored), reviewed.Count(c => c.Status == CandidateStatus.Pending),
-            published + active, job.FailureCode);
+            published + active, job.FailureCode) { Classes = ClassCounts(candidates) };
     }
 
     [Fact]
