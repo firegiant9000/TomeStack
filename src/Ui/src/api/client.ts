@@ -169,8 +169,8 @@ export function createClient(transport: Transport) {
     checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
     editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
     /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
-    acceptCandidate: (candidateId: string, asReference: boolean) =>
-      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true }),
+    acceptCandidate: (candidateId: string, asReference: boolean, confirmedEffectIds?: string[]) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
     /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
     acceptCandidates: (candidateIds: string[], asReference: boolean) =>
       call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),

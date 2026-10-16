@@ -928,6 +928,8 @@ export interface StoredCandidate {
   edited?: DraftCandidate;
   status: CandidateStatus;
   draft?: ContentReference;
+  /** Item 11 (D34): on a class, the feature candidates of the same import that it grants, with the class level each is granted at. */
+  grantsCandidates?: { candidateId: string; level: number }[];
   updatedAt: string;
 }
 

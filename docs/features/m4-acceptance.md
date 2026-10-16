@@ -26,6 +26,8 @@ Automated means it runs in the gate (CLAUDE.md): `dotnet test`, `npm run test:e2
 
 > pages 6 (1 by OCR); candidates 9 (class 1, feature 1, feat 1, spell 2, item 4); accepted 3, accepted as reference 2, ignored 1, pending 3; **active without approval: 0**
 
+Re-run 2026-10-16 (item 11 added a seventh page, a class with a spell table, and the features it names): pages 7 (1 by OCR); candidates 18 (class 2, feature 9, feat 1, spell 2, item 4); 5 accepted (one of each kind, the class only as reference because the harness confirms nothing), ignored 1, pending 12; **active without approval: 0**.
+
 Every accepted candidate is a draft, and every effect in it is reference-only.
 
 ### The third-party test PDF (local)
@@ -45,6 +47,8 @@ To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PD
 - **After** the change: spell 116 (recall unchanged, about 84 %), item 66 (3 fewer: rows whose name held a price or read as a sentence), feat 47, class 8, feature 1. The feats and classes are new and their precision is **not reviewed**: the numbers show only that the detector now finds more, not that what it finds is right. Several of the 47 may be other kinds of entry in the same layout.
 - **SRD floors re-run the same day** with both PDFs hash-checked: every floor holds, and every number is the same as before the change (spells 100 % / 100 % on both SRDs; weapons 97.2 % / 100 % (5.1) and 97.4 % / 100 % (5.2.1); armor 100 % / 100 %; classes 83.3 % / 100 %; class features recall 88.2 % (5.1) and 100 % (5.2.1); feats recall 100 % with 1 candidate (5.1) and 17 (5.2.1)). A first draft of the feat rule took the SRDs' Eldritch Invocations for feats (+21 and +23 candidates), and a first draft of the junk-row rule dropped the SRD's "Crossbow, hand" rows (5.1 weapon recall 91.4 %). Both were narrowed until the numbers matched the baseline again.
 - **The gate stays not met.** It needs the owner to review precision on the book (accepted and ignored candidates, kind by kind), which this run does not replace.
+
+**2026-10-16 run (the same third-party book, local, counts only; branch `wave-1`, assisted class import, item 11).** 385 pages, 5 of them by OCR; candidates 332: class 8, feature 95, feat 47, spell 116, item 66 (before: 238, with feature 1). The review sample (the first of each kind, a class only as reference because the harness confirms nothing) gave accepted 3, accepted as reference 2, ignored 1, pending 326; **active without approval: 0**. The 94 new feature candidates are mostly reference stubs for the feature names the class tables list, not features found on their own pages, so they are not detection recall and their precision is **not reviewed**. The gate stays not met.
 
 ## Precision and recall (D3)
 

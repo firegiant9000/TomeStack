@@ -568,6 +568,36 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const [check, setCheck] = useState<CandidateCheck>();
   const pending = stored.status === 'pending';
 
+  // Item 11 (D34, ADR-016): a class is accepted as a draft only once the reviewer has confirmed its hit die and, when it
+  // has one, its spell slot table; the confirmed effects keep their automation, every other proposal stays reference.
+  const isClass = stored.candidate.proposedKind === 'class';
+  const proposed = candidate.proposedEffects as Record<string, unknown>[];
+  const hitDie = proposed.find((e) => e.type === 'hitDie' && typeof e.die === 'number');
+  const casting = proposed.find((e) => e.type === 'spellcasting' && Array.isArray(e.slots));
+  const [confirmHitDie, setConfirmHitDie] = useState(false);
+  const [confirmSlots, setConfirmSlots] = useState(false);
+  const [featureNames, setFeatureNames] = useState<Map<string, string>>();
+  const links = stored.grantsCandidates ?? [];
+  const linkedCount = new Set(links.map((l) => l.candidateId)).size;
+  const missingConfirmations = isClass ? [!hitDie ? 'a hit die' : !confirmHitDie ? 'the hit die' : '', casting && !confirmSlots ? 'the spell slot table' : ''].filter(Boolean) : [];
+  const confirmHeld = pending && missingConfirmations.length > 0;
+  const confirmedIds = [confirmHitDie && hitDie ? String(hitDie.id) : '', confirmSlots && casting ? String(casting.id) : ''].filter(Boolean);
+
+  useEffect(() => {
+    if (links.length === 0) return;
+    let current = true;
+    client
+      .candidates(stored.jobId, { kind: 'feature' }, { limit: 200 })
+      .then((page) => {
+        if (current) setFeatureNames(new Map(page.items.map((c) => [c.id, (c.edited ?? c.candidate).proposedName])));
+      })
+      .catch(onError);
+    return () => {
+      current = false;
+    };
+    // links is derived from stored, which is the key of this component
+  }, [stored.id, stored.jobId, links.length, onError]);
+
   const storedFamilies = candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f));
   const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
   const dirty =
@@ -620,9 +650,10 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
 
   async function accept(asReference: boolean) {
     try {
-      await client.acceptCandidate(stored.id, asReference);
+      await (isClass && !asReference ? client.acceptCandidate(stored.id, false, confirmedIds) : client.acceptCandidate(stored.id, asReference));
+      const alongside = isClass && !asReference && linkedCount > 0 ? ` with ${plural(linkedCount, 'linked feature', 'linked features')}` : '';
       await onChanged(
-        `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''} in the studio. It does nothing until you publish it there.`,
+        `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
       );
     } catch (error) {
       onError(error);
@@ -641,6 +672,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const headingId = `candidate-${stored.id}`;
   const blocksId = `blocks-${stored.id}`;
   const problemsId = `problems-${stored.id}`;
+  const confirmId = `confirm-${stored.id}`;
   // What a blocked Accept points at: the blockers, else the validator's problems; nothing while the check is loading.
   const reasonId = check ? (check.blockers.length > 0 ? blocksId : check.report.errors.length > 0 ? problemsId : undefined) : undefined;
   return (
@@ -652,11 +684,13 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules family yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
       </p>
-      <div className="actions">
-        <button type="button" onClick={() => onOpenPage(candidate.page.start)}>
-          Open page {candidate.page.start}
-        </button>
-      </div>
+      {!casting && (
+        <div className="actions">
+          <button type="button" onClick={() => onOpenPage(candidate.page.start)}>
+            Open page {candidate.page.start}
+          </button>
+        </div>
+      )}
       <figure>
         <figcaption>Excerpt from {pageText(candidate.page)}</figcaption>
         <pre className="excerpt">{candidate.excerpt}</pre>
@@ -697,6 +731,39 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
               Dismiss {r}
             </label>
           ))}
+        </fieldset>
+      )}
+
+      {casting && <SlotTable casting={casting} page={candidate.page.start} onOpenPage={onOpenPage} />}
+      {isClass && links.length > 0 && (
+        <>
+          <h6 id={`linked-${stored.id}`}>Linked features</h6>
+          <p className="hint">Accepting the class as a draft also saves these as drafts, each granted by the class at its level.</p>
+          <ul aria-labelledby={`linked-${stored.id}`}>
+            {linkedFeatures(links, featureNames).map((f) => (
+              <li key={f.id}>
+                {f.name}, {f.levels.length === 1 ? 'level' : 'levels'} {f.levels.join(', ')}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {pending && isClass && (hitDie || casting) && (
+        <fieldset className="confirm-effects">
+          <legend>Confirm what was read</legend>
+          <p className="hint">Unticked, a proposal stays reference only. A class becomes a draft once these are ticked.</p>
+          {hitDie && (
+            <label className="choice">
+              <input type="checkbox" checked={confirmHitDie} onChange={(e) => setConfirmHitDie(e.target.checked)} />
+              Confirm the hit die, d{String(hitDie.die)}
+            </label>
+          )}
+          {casting && (
+            <label className="choice">
+              <input type="checkbox" checked={confirmSlots} onChange={(e) => setConfirmSlots(e.target.checked)} />
+              Confirm the spell slot table
+            </label>
+          )}
         </fieldset>
       )}
 
@@ -766,14 +833,19 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         </div>
       )}
 
+      {confirmHeld && (
+        <p id={confirmId} className="hint">
+          {hitDie ? `Confirm ${missingConfirmations.join(' and ')} to accept the class as a draft.` : 'No hit die was read for this class; add one in the effects, or accept it as reference only.'}
+        </p>
+      )}
       {pending && (
         <div className="actions">
           {/* aria-disabled, never `disabled`: a re-check can block a button that has focus (2.4.3); the reason is the visible list. */}
           <button
             type="button"
-            aria-disabled={!check?.canAccept || undefined}
-            aria-describedby={!check?.canAccept ? reasonId : undefined}
-            onClick={() => check?.canAccept && accept(false)}
+            aria-disabled={!check?.canAccept || confirmHeld || undefined}
+            aria-describedby={[!check?.canAccept ? reasonId : undefined, confirmHeld ? confirmId : undefined].filter(Boolean).join(' ') || undefined}
+            onClick={() => check?.canAccept && !confirmHeld && accept(false)}
           >
             Accept as a draft
           </button>
@@ -791,5 +863,60 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         </div>
       )}
     </section>
+  );
+}
+
+/** The features a class links, one row each (a feature granted at several levels shows them all), named from the job's candidates. */
+function linkedFeatures(links: { candidateId: string; level: number }[], names: Map<string, string> | undefined) {
+  const byId = new Map<string, number[]>();
+  for (const l of links) byId.set(l.candidateId, [...(byId.get(l.candidateId) ?? []), l.level]);
+  return [...byId].map(([id, levels]) => ({ id, name: names?.get(id) ?? 'A feature of this import', levels: [...levels].sort((a, b) => a - b) }));
+}
+
+const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;
+
+/** Item 11: the spell slot table the detector read, to check against the page before it is confirmed. */
+function SlotTable({ casting, page, onOpenPage }: { casting: Record<string, unknown>; page: number; onOpenPage: (page: number) => void }) {
+  const slots = casting.slots as number[][];
+  const cantrips = Array.isArray(casting.cantrips) ? (casting.cantrips as number[]) : undefined;
+  const spells = Array.isArray(casting.spellsTable) ? (casting.spellsTable as number[]) : undefined;
+  const width = Math.max(0, ...slots.map((row) => row.length));
+  return (
+    <div className="class-table">
+      <div className="actions">
+        <button type="button" onClick={() => onOpenPage(page)}>
+          Open page {page}
+        </button>
+      </div>
+      <div role="region" aria-label="Spell slot table, scrollable" tabIndex={0}>
+        <table>
+          <caption>Spell slots by class level, as read from the page</caption>
+          <thead>
+            <tr>
+              <th scope="col">Class level</th>
+              {cantrips && <th scope="col">Cantrips</th>}
+              {spells && <th scope="col">Spells</th>}
+              {Array.from({ length: width }, (_, i) => (
+                <th key={i} scope="col">
+                  {ordinal(i + 1)}-level slots
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((row, level) => (
+              <tr key={level}>
+                <th scope="row">{level + 1}</th>
+                {cantrips && <td>{cantrips[level]}</td>}
+                {spells && <td>{spells[level]}</td>}
+                {Array.from({ length: width }, (_, i) => (
+                  <td key={i}>{row[i] ?? 0}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

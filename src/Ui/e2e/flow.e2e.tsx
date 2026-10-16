@@ -942,6 +942,53 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   expect((await client.contentBySource(source.id)).find((e) => e.name === 'Fixture Keen Watcher')!.latest.status).toBe('published');
 });
 
+it('imports a fixture class: the table is checked, the hit die and slots are confirmed, and the class is saved with its linked features (item 11, D34)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Class Book', ['srd-5.2.1']);
+  const book = readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-import.pdf'));
+  await client.attachPdfData(source.id, 'fixture-import.pdf', book.toString('base64'));
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Sources' }));
+  const reader = () => within(screen.getByRole('listitem', { name: 'E2E Class Book' })).getByRole('region', { name: 'Read the text of E2E Class Book' });
+  await user.click(within(await screen.findByRole('listitem', { name: 'E2E Class Book' })).getByRole('button', { name: 'Read the whole document' }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 18 candidates' }, { timeout: 30000 }));
+  const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Class Book' });
+  await within(reader()).findByRole('region', { name: 'Candidates from E2E Class Book' });
+  await user.selectOptions(within(panel()).getByRole('combobox', { name: 'Kind' }), 'class');
+  await user.click(await within(within(panel()).getByRole('list', { name: 'Candidates' })).findByRole('button', { name: 'Fixture Lamplighter' }));
+  const lamplighter = await within(panel()).findByRole('region', { name: 'Candidate: Fixture Lamplighter' });
+
+  // The slot table and the linked features are on screen to check against the page.
+  const table = await within(lamplighter).findByRole('table', { name: 'Spell slots by class level, as read from the page' });
+  expect(within(table).getAllByRole('rowheader')).toHaveLength(20);
+  expect(within(lamplighter).getByRole('button', { name: 'Open page 7' })).toBeTruthy();
+  const linked = await within(lamplighter).findByRole('list', { name: 'Linked features' });
+  await waitFor(() => expect(within(linked).getAllByRole('listitem').length).toBeGreaterThan(3));
+
+  // The spell list name is the detector's guess: saving the edit settles it. Accept stays held until the confirmations are ticked.
+  await user.click(within(lamplighter).getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved your edit of Fixture Lamplighter/));
+  // The details are rebuilt from the saved edit, and checked again.
+  await waitFor(() => expect(within(panel()).getByRole('region', { name: 'Candidate: Fixture Lamplighter' })).not.toBe(lamplighter));
+  const again = within(panel()).getByRole('region', { name: 'Candidate: Fixture Lamplighter' });
+  await waitFor(() => expect(within(again).getByRole('region', { name: 'Check before accepting' }).textContent).not.toMatch(/unsure/));
+  const accept = within(again).getByRole('button', { name: 'Accept as a draft' });
+  expect(accept.getAttribute('aria-disabled')).toBe('true');
+  await user.click(within(again).getByRole('checkbox', { name: /^Confirm the hit die/ }));
+  await user.click(within(again).getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
+  await user.click(accept);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft with \d+ linked features in the studio/));
+
+  const entries = await client.contentBySource(source.id);
+  const cls = entries.find((e) => e.name === 'Fixture Lamplighter')!;
+  expect(entries.length).toBeGreaterThan(3);
+  expect(entries.every((e) => e.latest.status === 'draft')).toBe(true);
+  expect(cls.latest.effects.find((e) => e.type === 'hitDie')!.automation).toBe('automatic');
+  expect(cls.latest.effects.filter((e) => e.type === 'grant' && e.grant === 'content').length).toBeGreaterThan(3);
+});
+
 it('accepts two fixture candidates in bulk, publishes both through the studio panel, and the builder offers them (item 9, D33)', async () => {
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Bulk Book', ['srd-5.2.1']);
