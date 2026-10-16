@@ -20,6 +20,9 @@ import type {
   PublishManyPreview,
   PublishManyResult,
   AcceptManyResult,
+  CandidateSpellListResult,
+  ContentSpellListResult,
+  SpellListKeyCount,
   SourcePackPreview,
   CampaignPackPreview,
   ExtensionInstallPreview,
@@ -104,6 +107,10 @@ export function createClient(transport: Transport) {
     publishManyPreview: (contentIds: string[]) => call<PublishManyPreview>('content.publishManyPreview', { contentIds }),
     /** Item 9, D33: one transaction; `expected` is the pending draft revision ids the preview showed. Only the panel's button calls this. */
     publishMany: (contentIds: string[], expected: string[]) => call<PublishManyResult>('content.publishMany', { contentIds, expected, confirm: true }),
+    /** Item 10: new drafts (never published) with the list key added; publish them through the previewed publish panel. */
+    addToSpellList: (contentIds: string[], listKey: string) => call<ContentSpellListResult>('content.addToSpellList', { contentIds, listKey }),
+    /** Item 10: every spell list key in published content with its spell count; read only. */
+    spellListKeys: () => call<SpellListKeyCount[]>('content.spellListKeys', {}),
     contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
     affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
     contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
@@ -167,6 +174,9 @@ export function createClient(transport: Transport) {
     /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
     acceptCandidates: (candidateIds: string[], asReference: boolean) =>
       call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),
+    /** Item 10: adds the list key to the spell candidates' edits; other unsure fields stay unsure. */
+    addCandidatesToSpellList: (candidateIds: string[], listKey: string) =>
+      call<CandidateSpellListResult>('import.candidate.addToSpellList', { candidateIds, listKey }),
     ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>

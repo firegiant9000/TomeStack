@@ -24,6 +24,7 @@ import { DebugFindings } from './DebugFindings';
 import { SandboxPanel } from './SandboxPanel';
 import { ComparePanel } from './ComparePanel';
 import { PublishManyPanel, type PendingDraft } from './PublishManyPanel';
+import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
 import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
@@ -37,6 +38,12 @@ const authorable: { kind: ContentKind; label: string }[] = [
   { kind: 'feat', label: 'feat' },
   { kind: 'item', label: 'item' },
 ];
+
+const spellListReasons: Record<string, string> = {
+  'content.not-found': 'was not found',
+  'spell-list.not-a-spell': 'is not a spell',
+  'spell-list.already-on-list': 'is already on this list',
+};
 
 const automationChoices = [
   { value: 'automatic', label: 'Automatic: TomeStack applies it' },
@@ -107,6 +114,42 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
       draft: { contentId: e.latest.contentId, revisionId: e.latest.revisionId },
       latestPublished: e.latestPublished && { contentId: e.latestPublished.contentId, revisionId: e.latestPublished.revisionId },
     }));
+
+  // Item 10 (R44): spell entries can be ticked and added to a spell list; the drafts that makes open in the publish panel.
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [listOpen, setListOpen] = useState(false);
+  const [restrictTo, setRestrictTo] = useState<string[]>();
+  const [notChanged, setNotChanged] = useState<{ name: string; reasons: string[] }[]>([]);
+  const listOpener = useRef<HTMLButtonElement>(null);
+  const tickedSpells = entries.filter((e) => e.kind === 'spell' && ticked.includes(e.contentId));
+  const panelPending = restrictTo ? pendingDrafts.filter((p) => restrictTo.includes(p.contentId)) : pendingDrafts;
+
+  async function addTickedToList(listKey: string) {
+    if (!source || editing || tickedSpells.length === 0) return;
+    const ids = tickedSpells.map((e) => e.contentId);
+    const names = new Map(tickedSpells.map((e) => [e.contentId, e.name]));
+    try {
+      const result = await client.addToSpellList(ids, listKey);
+      await loadEntries(source.id);
+      const made = result.drafts.map((d) => d.contentId);
+      setNotChanged(result.skipped.map((s) => ({ name: names.get(s.contentId) ?? 'A spell', reasons: s.codes.map((c) => spellListReasons[c] ?? 'could not be changed') })));
+      setTicked(result.skipped.map((s) => s.contentId));
+      setListOpen(false);
+      onStatus(
+        made.length === 0
+          ? `No spell was added to the spell list ${result.listKey}; ${result.skipped.length} skipped.`
+          : `Saved ${made.length} draft${made.length === 1 ? '' : 's'} with the spell list ${result.listKey}${result.skipped.length > 0 ? `; ${result.skipped.length} skipped` : ''}. ${result.note} Review the drafts below, then publish them.`,
+      );
+      if (made.length > 0) {
+        setRestrictTo(made);
+        setPublishingAll(true);
+      } else {
+        listOpener.current?.focus();
+      }
+    } catch (error) {
+      onError(error);
+    }
+  }
 
   // Only the newest request's answer is shown: a slow reload of source A must not land under source B.
   const entriesRequest = useRef(0);
@@ -204,6 +247,10 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           // Choosing the source already shown changes nothing (and would not reload, so the rows must stay).
           if (id !== source?.id) {
             setPublishingAll(false);
+            setRestrictTo(undefined);
+            setTicked([]);
+            setListOpen(false);
+            setNotChanged([]);
             setEntries([]); // never show another source's rows while this one loads
           }
           setSourceId(id);
@@ -212,6 +259,10 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           await loadSources();
           // The publish panel must not open on, or list, another source's drafts.
           setPublishingAll(false);
+          setRestrictTo(undefined);
+          setTicked([]);
+          setListOpen(false);
+          setNotChanged([]);
           setEntries([]);
           setSourceId(created.id);
           onStatus(`Created the homebrew source ${created.title}.`);
@@ -228,6 +279,18 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
             <ul className="resources">
               {entries.map((entry) => (
                 <li key={entry.contentId} className="resource">
+                  {entry.kind === 'spell' && (
+                    <input
+                      type="checkbox"
+                      className="row-select"
+                      aria-label={`Select ${entry.name}`}
+                      checked={ticked.includes(entry.contentId)}
+                      onChange={() => {
+                        setTicked((t) => (t.includes(entry.contentId) ? t.filter((x) => x !== entry.contentId) : [...t, entry.contentId]));
+                        setListOpen(false);
+                      }}
+                    />
+                  )}
                   <span className="option-name">{entry.name}</span> <span className="tag">{entry.kind}</span>{' '}
                   <span className="hint">
                     {entry.latest.status === 'published' ? 'published' : entry.latestPublished ? 'published, with a newer draft' : 'draft'} ·{' '}
@@ -275,21 +338,76 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
               </button>
             )}
             {pendingDrafts.length > 0 && (
-              <button type="button" ref={publishAllButton} onClick={() => setPublishingAll(true)}>
+              <button
+                type="button"
+                ref={publishAllButton}
+                onClick={() => {
+                  setRestrictTo(undefined);
+                  setPublishingAll(true);
+                }}
+              >
                 Publish all drafts in this source…
               </button>
             )}
+            {entries.some((e) => e.kind === 'spell') && (
+              <>
+                {/* aria-disabled, never `disabled`: the press is refused in the handler and the reason is visible (2.4.3). */}
+                <button
+                  type="button"
+                  ref={listOpener}
+                  aria-disabled={Boolean(editing) || tickedSpells.length === 0 || undefined}
+                  aria-describedby={editing ? 'spell-list-held' : tickedSpells.length === 0 ? 'spell-list-none' : undefined}
+                  onClick={() => !editing && tickedSpells.length > 0 && setListOpen(true)}
+                >
+                  {tickedSpells.length === 0 ? 'Add to a spell list…' : `Add ${tickedSpells.length} spell${tickedSpells.length === 1 ? '' : 's'} to a spell list…`}
+                </button>
+                {editing ? (
+                  <span id="spell-list-held" className="hint">
+                    Close the open editor first.
+                  </span>
+                ) : tickedSpells.length === 0 ? (
+                  <span id="spell-list-none" className="hint">
+                    Select at least one spell first.
+                  </span>
+                ) : null}
+              </>
+            )}
           </div>
+          {listOpen && tickedSpells.length > 0 && (
+            <SpellListForm
+              subject={`${tickedSpells.length} spell${tickedSpells.length === 1 ? '' : 's'}`}
+              held={Boolean(editing)}
+              heldReasonId="spell-list-held"
+              onSubmit={addTickedToList}
+              onCancel={() => {
+                setListOpen(false);
+                listOpener.current?.focus();
+              }}
+              onError={onError}
+            />
+          )}
+          {notChanged.length > 0 && (
+            <ul className="warnings" aria-label="Not changed">
+              {notChanged.map((s, i) => (
+                <li key={`${s.name}-${i}`}>
+                  {s.name}: {s.reasons.join('; ')}. It stays selected.
+                </li>
+              ))}
+            </ul>
+          )}
           {publishingAll && (
             <PublishManyPanel
-              key={source.id}
+              key={`${source.id}-${restrictTo?.join(',') ?? 'all'}`}
               source={source}
-              pending={pendingDrafts}
+              pending={panelPending}
+              tickAll={restrictTo !== undefined}
               onError={onError}
               onClose={() => {
                 setPublishingAll(false);
                 // WCAG 2.4.3: the panel is gone, so focus goes back to the button that opened it (or the heading if that is gone too).
-                setTimeout(() => (publishAllButton.current ?? heading.current)?.focus());
+                const back = restrictTo ? listOpener.current : publishAllButton.current;
+                setRestrictTo(undefined);
+                setTimeout(() => (back ?? heading.current)?.focus());
               }}
               onReload={() => loadEntries(source.id)}
               onPublished={async (count) => {
