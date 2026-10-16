@@ -9,8 +9,9 @@ public sealed record CandidateSpellListRequest(IReadOnlyList<Guid> CandidateIds,
 
 /// <param name="ListKey">The normalised key that was added.</param>
 /// <param name="Updated">The candidates whose edited version now carries the key.</param>
-/// <param name="Skipped">The rest, with a code each (<c>candidate.not-found</c>, <c>candidate.already-reviewed</c>, <c>spell-list.not-a-spell</c>, <c>spell-list.already-on-list</c>).</param>
-public sealed record CandidateSpellListResult(string ListKey, IReadOnlyList<StoredCandidate> Updated, IReadOnlyList<BlockedCandidate> Skipped);
+/// <param name="Skipped">The rest, with a code each (<c>candidate.not-found</c>, <c>candidate.already-reviewed</c>, <c>spell-list.not-a-spell</c>).</param>
+/// <param name="Notes">Updated candidates that need a word (ruling R59): <c>spell-list.other-lists-unreviewed</c> means other proposed lists are still unsure and the candidate cannot be accepted until they are checked.</param>
+public sealed record CandidateSpellListResult(string ListKey, IReadOnlyList<StoredCandidate> Updated, IReadOnlyList<BlockedCandidate> Skipped, IReadOnlyList<BlockedCandidate> Notes);
 
 /// <param name="ContentIds">At most <see cref="TomeStackApp.MaxPublishMany"/>.</param>
 public sealed record ContentSpellListRequest(IReadOnlyList<Guid> ContentIds, string ListKey);
@@ -47,6 +48,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("import.limit-out-of-range", $"Add 1 to {MaxAcceptMany} candidates to a spell list at a time.")]);
         var updated = new List<StoredCandidate>();
         var skipped = new List<BlockedCandidate>();
+        var notes = new List<BlockedCandidate>();
         _store.InTransaction(() =>
         {
             foreach (var id in ids)
@@ -67,29 +69,32 @@ public sealed partial class TomeStackApp
                     skipped.Add(new(id, ["spell-list.not-a-spell"]));
                     continue;
                 }
-                if (effect.Lists.Contains(key, StringComparer.Ordinal))
-                {
-                    skipped.Add(new(id, ["spell-list.already-on-list"]));
-                    continue;
-                }
-                IReadOnlyList<string> lists = [.. effect.Lists, key];
+                // R59: the reviewer's key confirms the "lists" field only when it is the only key the spell has. A candidate that
+                // also carries other proposed keys (read from a list page) still has them to check, so its mark stays and it
+                // cannot be accepted until the reviewer has looked at them. A key that is already there and is the only one is
+                // a confirmation, not a skip.
+                IReadOnlyList<string> lists = effect.Lists.Contains(key, StringComparer.Ordinal) ? effect.Lists : [.. effect.Lists, key];
+                var onlyThisKey = lists.All(l => string.Equals(l, key, StringComparison.Ordinal));
+                var marked = current.LowConfidenceFields.Contains("lists", StringComparer.Ordinal);
                 var fields = new Dictionary<string, string>(current.Fields, StringComparer.Ordinal) { ["lists"] = string.Join(", ", lists) };
                 var edited = current with
                 {
                     ProposedEffects = [.. current.ProposedEffects.Select(e => ReferenceEquals(e, effect) ? effect with { Lists = lists } : e)],
                     Fields = fields,
-                    LowConfidenceFields = [.. current.LowConfidenceFields.Where(f => f != "lists")],
-                    Uncertainties = [.. current.Uncertainties.Where(u => u != CandidateDetector.NoListsNote)],
+                    LowConfidenceFields = onlyThisKey ? [.. current.LowConfidenceFields.Where(f => f != "lists")] : current.LowConfidenceFields,
+                    Uncertainties = [.. current.Uncertainties.Where(u => u != CandidateDetector.NoListsNote && (!onlyThisKey || !u.StartsWith("Spell list '", StringComparison.Ordinal)))],
                 };
                 var saved = stored with { Edited = edited, UpdatedAt = _time.GetUtcNow() };
                 _store.SaveImportCandidate(saved);
                 updated.Add(saved);
+                if (marked && !onlyThisKey)
+                    notes.Add(new(id, ["spell-list.other-lists-unreviewed"]));
             }
             // Counts only: no name, key or document text (the audit and the error log never quote them).
             foreach (var job in updated.GroupBy(c => c.JobId))
                 _store.AddImportAudit(job.Key, _time.GetUtcNow(), "candidate-edited", $"spell list added to {job.Count()} spell candidates");
         });
-        return new(key, updated, skipped);
+        return new(key, updated, skipped, notes);
     }
 
     /// <summary>
@@ -111,10 +116,19 @@ public sealed partial class TomeStackApp
         {
             foreach (var id in ids)
             {
-                var newest = _store.ListRevisions(id).LastOrDefault(); // insertion order: the last one is the newest
+                var revisions = _store.ListRevisions(id); // insertion order: the last one is the newest
+                var newest = revisions.LastOrDefault();
                 if (newest is null)
                 {
                     skipped.Add(new(id, ["content.not-found"]));
+                    continue;
+                }
+                // R60: a published spell whose newest revision is a draft has unpublished edits of its own. A second draft from it
+                // would carry them into the publish panel, ticked, and "already on this list" would be false when only the draft
+                // has the key. It is left for the author to publish or discard that draft first.
+                if (newest.Kind == ContentKind.Spell && newest.Status == RevisionStatus.Draft && revisions.Any(r => r.Status == RevisionStatus.Published))
+                {
+                    skipped.Add(new(id, ["spell-list.has-unpublished-draft"]));
                     continue;
                 }
                 if (newest.Kind != ContentKind.Spell || newest.Effects.OfType<SpellEffect>().FirstOrDefault() is not { } effect)
@@ -146,14 +160,10 @@ public sealed partial class TomeStackApp
     /// </summary>
     public IReadOnlyList<SpellListKeyCount> SpellListKeys()
     {
-        var newestPublished = new Dictionary<Guid, ContentRevision>();
-        foreach (var revision in _store.ListRevisionsInOrder())
-        {
-            if (revision.Status == RevisionStatus.Published)
-                newestPublished[revision.ContentId] = revision;
-        }
+        // Review fix 5: the store returns only the newest published revision of each content, and only those holding a spell or a
+        // spellcasting effect, so the rest of the library is never read into memory.
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var revision in newestPublished.Values)
+        foreach (var revision in _store.ListNewestPublishedWithEffects([SpellEffect.TypeName, SpellcastingEffect.TypeName]))
         {
             if (revision.Kind == ContentKind.Spell)
             {

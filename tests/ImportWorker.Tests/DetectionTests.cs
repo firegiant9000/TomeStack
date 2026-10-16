@@ -123,7 +123,7 @@ public class DetectionTests
         Assert.Equal([RulesFamilies.Srd521], ember.RulesFamilies);
         var spell = Assert.IsType<SpellEffect>(Assert.Single(ember.ProposedEffects));
         Assert.Equal((2, "evocation", "Action", "60 feet", "V, S", "Instantaneous"), (spell.Level, spell.School, spell.CastingTime, spell.Range, spell.Components, spell.Duration));
-        Assert.Equal(["fixture mage"], spell.Lists);
+        Assert.Equal(["fixture-mage"], spell.Lists); // a header's class list is a normalised key (review fix 4)
         Assert.Equal((SpellAttackKind.Ranged, "3d6", false), (spell.Attack, spell.Dice, spell.Concentration));
         Assert.StartsWith("A lance of fixture flame streaks toward a creature within range.", ember.Summary, StringComparison.Ordinal);
         Assert.Empty(ember.LowConfidenceFields);
@@ -180,7 +180,7 @@ public class DetectionTests
         Assert.Contains("lists", spark.LowConfidenceFields);
 
         var lance = Named(found, "Fixture Ember Lance");
-        Assert.Equal(["fixture mage"], Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists); // not on the page
+        Assert.Equal(["fixture-mage"], Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists); // not on the page
         Assert.DoesNotContain("lists", lance.LowConfidenceFields);
         Assert.DoesNotContain(lance.Uncertainties, u => u.StartsWith("Spell list ", StringComparison.Ordinal));
     }
@@ -208,6 +208,55 @@ public class DetectionTests
         Assert.Equal(["wizard"], Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists);
         Assert.DoesNotContain("lists", lance.LowConfidenceFields);
         Assert.DoesNotContain(lance.Uncertainties, u => u.StartsWith("Spell list ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_list_that_runs_over_to_the_next_page_keeps_its_key_and_cites_the_heading_page()
+    {
+        var found = DetectPages(
+            new DetectionPage(1, "", [Heading("Fixture Spells"), Body(QuickWard, 600), Body(SparkCantrip, 500)], false),
+            new DetectionPage(2, "", [Heading("Fixture Seer Spells"), Body("Cantrips", 650), Body("Fixture Spark", 630)], false),
+            new DetectionPage(3, "", [Body("1st Level", 650), Body("Fixture Quick Ward", 630)], false)); // no heading: the list goes on
+
+        var ward = Named(found, "Fixture Quick Ward");
+        Assert.Equal(["fixture-seer"], Assert.IsType<SpellEffect>(Assert.Single(ward.ProposedEffects)).Lists);
+        Assert.Contains("Spell list 'fixture-seer' was read from page 2; check it.", ward.Uncertainties);
+        Assert.Contains("lists", ward.LowConfidenceFields);
+    }
+
+    [Fact]
+    public void A_new_heading_or_a_page_of_other_text_ends_a_list_that_ran_over()
+    {
+        var found = DetectPages(
+            new DetectionPage(1, "", [Heading("Fixture Spells"), Body(QuickWard, 600), Body(SparkCantrip, 500)], false),
+            new DetectionPage(2, "", [Heading("Fixture Seer Spells"), Body("Cantrips", 650), Body("Fixture Spark", 630)], false),
+            new DetectionPage(3, "", [Heading("Chapter Notes"), Body("Some fixture prose that is not a name at all, and goes on for a while.", 650)], false),
+            new DetectionPage(4, "", [Body("1st Level", 650), Body("Fixture Quick Ward", 630)], false));
+
+        Assert.Empty(Assert.IsType<SpellEffect>(Assert.Single(Named(found, "Fixture Quick Ward").ProposedEffects)).Lists);
+    }
+
+    [Fact]
+    public void A_header_list_that_cannot_be_a_key_is_dropped_with_an_uncertainty_that_names_the_page_only()
+    {
+        var found = DetectPages(new DetectionPage(7, "", [Heading("Fixture Spells"), Body(EmberLance.Replace("Fixture Mage", "Seer's Rite, Wizard", StringComparison.Ordinal))], false));
+
+        var lance = Named(found, "Fixture Ember Lance");
+        Assert.Equal(["wizard"], Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists);
+        var note = Assert.Single(lance.Uncertainties, u => u.Contains("list key", StringComparison.Ordinal));
+        Assert.Contains("page 7", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("Seer", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_header_whose_only_list_cannot_be_a_key_has_no_lists_and_says_so()
+    {
+        var found = DetectPages(new DetectionPage(7, "", [Heading("Fixture Spells"), Body(EmberLance.Replace("Fixture Mage", "Seer's Rite",StringComparison.Ordinal))], false));
+
+        var lance = Named(found, "Fixture Ember Lance");
+        Assert.Empty(Assert.IsType<SpellEffect>(Assert.Single(lance.ProposedEffects)).Lists);
+        Assert.Contains(lance.Uncertainties, u => u.Contains("class lists", StringComparison.Ordinal));
+        Assert.DoesNotContain(lance.Fields.Keys, k => k == "lists");
     }
 
     [Fact]

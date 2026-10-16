@@ -52,7 +52,7 @@ public class SpellListTests
         Assert.NotNull(savedVeil.Edited);
         Assert.DoesNotContain(savedVeil.Current.Uncertainties, u => u.Contains("class lists", StringComparison.Ordinal));
         var savedEmber = temp.App.Store.FindImportCandidate(ember.Id)!;
-        Assert.Equal(["fixture mage", "wizard"], ListsOf(savedEmber));
+        Assert.Equal(["fixture-mage", "wizard"], ListsOf(savedEmber)); // the header's list is a normalised key too (review fix 4)
         Assert.Equal(CandidateStatus.Pending, savedEmber.Status);
         Assert.Empty(Assert.IsType<SpellEffect>(Assert.Single(savedVeil.Candidate.ProposedEffects)).Lists); // the detected proposal never changes
     }
@@ -73,7 +73,7 @@ public class SpellListTests
     }
 
     [Fact]
-    public void Candidates_that_are_not_pending_spells_or_already_on_the_list_are_skipped_with_a_code()
+    public void Candidates_that_are_not_pending_spells_are_skipped_with_a_code_and_a_repeat_is_confirmed_not_skipped()
     {
         var (temp, _, jobId) = Imported();
         using var _t = temp;
@@ -83,6 +83,7 @@ public class SpellListTests
         var ghost = Guid.NewGuid();
         temp.App.IgnoreCandidate(veil.Id);
         temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
+        // R59: the key is already there and every key is it, so the repeat is a confirmation (updated), not a skip.
         var again = temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
 
         var result = temp.App.AddCandidatesToSpellList(new([veil.Id, stormcall.Id, ghost], "wizard"));
@@ -91,9 +92,68 @@ public class SpellListTests
         Assert.Equal(
             [(veil.Id, "candidate.already-reviewed"), (stormcall.Id, "spell-list.not-a-spell"), (ghost, "candidate.not-found")],
             result.Skipped.Select(s => (s.CandidateId, Assert.Single(s.Codes))));
-        Assert.Equal(ember.Id, Assert.Single(again.Skipped).CandidateId);
-        Assert.Equal(["spell-list.already-on-list"], again.Skipped[0].Codes);
+        Assert.Equal(ember.Id, Assert.Single(again.Updated).Id);
+        Assert.Empty(again.Skipped);
+        Assert.Empty(again.Notes);
+        Assert.Equal(["fixture-mage"], ListsOf(temp.App.Store.FindImportCandidate(ember.Id)!));
         Assert.Empty(ListsOf(temp.App.Store.FindImportCandidate(veil.Id)!));
+    }
+
+    /// <summary>A candidate the way the list-page pass leaves it: a proposed key, marked unsure, with the note.</summary>
+    private static StoredCandidate WithProposedKey(TempApp temp, StoredCandidate stored, string key)
+    {
+        var effect = Assert.IsType<SpellEffect>(Assert.Single(stored.Candidate.ProposedEffects));
+        var proposed = stored.Candidate with
+        {
+            ProposedEffects = [effect with { Lists = [key] }],
+            Fields = new Dictionary<string, string>(stored.Candidate.Fields) { ["lists"] = key },
+            LowConfidenceFields = [.. stored.Candidate.LowConfidenceFields, "lists"],
+            Uncertainties = [.. stored.Candidate.Uncertainties, $"Spell list '{key}' was read from page 5; check it."],
+        };
+        var saved = stored with { Candidate = proposed };
+        temp.App.Store.SaveImportCandidate(saved);
+        return saved;
+    }
+
+    [Fact]
+    public void Confirming_the_key_the_detector_proposed_clears_the_mark_so_the_candidate_can_be_accepted()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var veil = WithProposedKey(temp, Named(temp, jobId, "Fixture Frost Veil"), "fixture-seer");
+        Assert.Contains("candidate.low-confidence", temp.App.CheckCandidate(veil.Id).Blockers.Select(b => b.Code));
+
+        var result = temp.App.AddCandidatesToSpellList(new([veil.Id], "Fixture Seer"));
+
+        Assert.Equal(veil.Id, Assert.Single(result.Updated).Id);
+        Assert.Empty(result.Skipped);
+        Assert.Empty(result.Notes);
+        var saved = temp.App.Store.FindImportCandidate(veil.Id)!;
+        Assert.Equal(["fixture-seer"], ListsOf(saved));
+        Assert.DoesNotContain("lists", saved.Current.LowConfidenceFields);
+        Assert.DoesNotContain(temp.App.CheckCandidate(veil.Id).Blockers, b => b.Code == "candidate.low-confidence");
+        Assert.NotNull(temp.App.AcceptCandidate(new(veil.Id, Confirm: true)).Draft);
+    }
+
+    [Fact]
+    public void Adding_another_key_keeps_the_mark_on_the_proposed_one_says_so_and_accepting_stays_blocked()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var veil = WithProposedKey(temp, Named(temp, jobId, "Fixture Frost Veil"), "fixture-seer");
+
+        var result = temp.App.AddCandidatesToSpellList(new([veil.Id], "wizard"));
+
+        Assert.Equal(veil.Id, Assert.Single(result.Updated).Id);
+        Assert.Empty(result.Skipped);
+        var note = Assert.Single(result.Notes);
+        Assert.Equal(veil.Id, note.CandidateId);
+        Assert.Equal(["spell-list.other-lists-unreviewed"], note.Codes);
+        var saved = temp.App.Store.FindImportCandidate(veil.Id)!;
+        Assert.Equal(["fixture-seer", "wizard"], ListsOf(saved));
+        Assert.Contains("lists", saved.Current.LowConfidenceFields);
+        Assert.Contains("candidate.low-confidence", temp.App.CheckCandidate(veil.Id).Blockers.Select(b => b.Code));
+        Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(veil.Id, Confirm: true)));
     }
 
     [Fact]
@@ -185,25 +245,96 @@ public class SpellListTests
     }
 
     [Fact]
-    public void The_newest_revision_by_insertion_order_is_the_one_changed_and_a_key_it_has_is_skipped()
+    public void A_spell_that_was_never_published_starts_from_its_newest_draft_and_a_key_it_has_is_skipped()
     {
         using var temp = new TempApp();
         var source = temp.App.CreateHomebrewSource(new("Fixture Shelf", [RulesFamilies.Srd51]));
-        var published = Published(temp, Spell(source, "Fixture Quick Ward"));
-        // A newer, unpublished draft of the same spell with its own list: the new draft starts from it.
-        var newer = temp.App.SaveDraft(temp.App.Store.FindRevision(published)! with
+        var first = temp.App.SaveDraft(Spell(source, "Fixture Quick Ward"));
+        var newer = temp.App.SaveDraft(temp.App.Store.FindRevision(first)! with
         {
             RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Effects = [new SpellEffect { Id = "spell", Level = 1, Lists = ["fixture-extra"] }],
         });
 
-        var result = temp.App.AddToSpellList(new([published.ContentId], "wizard"));
+        var result = temp.App.AddToSpellList(new([first.ContentId], "wizard"));
 
         Assert.Equal(["fixture-extra", "wizard"], Assert.IsType<SpellEffect>(Assert.Single(temp.App.Store.FindRevision(result.Drafts.Single())!.Effects)).Lists);
         Assert.NotEqual(newer.RevisionId, result.Drafts[0].RevisionId);
 
-        var again = temp.App.AddToSpellList(new([published.ContentId], "wizard"));
+        var again = temp.App.AddToSpellList(new([first.ContentId], "wizard"));
         Assert.Empty(again.Drafts);
         Assert.Equal(["spell-list.already-on-list"], Assert.Single(again.Skipped).Codes);
+    }
+
+    [Fact]
+    public void A_published_spell_with_a_newer_draft_is_skipped_so_the_drafts_other_edits_are_not_published_by_surprise()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Fixture Shelf", [RulesFamilies.Srd51]));
+        var published = Published(temp, Spell(source, "Fixture Quick Ward"));
+        // R60, case 1: the newer draft has other, unreviewed edits (a changed level). A second draft from it would carry them
+        // into the publish panel ticked.
+        temp.App.SaveDraft(temp.App.Store.FindRevision(published)! with
+        {
+            RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Effects = [new SpellEffect { Id = "spell", Level = 3, Lists = ["fixture-extra"] }],
+        });
+        var before = temp.App.Store.ListRevisions().Count;
+
+        var result = temp.App.AddToSpellList(new([published.ContentId], "wizard"));
+
+        Assert.Empty(result.Drafts);
+        Assert.Equal(["spell-list.has-unpublished-draft"], Assert.Single(result.Skipped).Codes);
+        Assert.Equal(before, temp.App.Store.ListRevisions().Count); // no D2
+    }
+
+    [Fact]
+    public void A_key_that_is_only_on_the_newer_draft_does_not_count_as_already_on_the_list()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Fixture Shelf", [RulesFamilies.Srd51]));
+        var published = Published(temp, Spell(source, "Fixture Quick Ward"));
+        temp.App.SaveDraft(temp.App.Store.FindRevision(published)! with
+        {
+            RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Effects = [new SpellEffect { Id = "spell", Level = 1, Lists = ["wizard"] }],
+        });
+
+        // R60, case 2: the published spell is NOT on the list; saying "already on this list" would be false.
+        var result = temp.App.AddToSpellList(new([published.ContentId], "wizard"));
+
+        Assert.Equal(["spell-list.has-unpublished-draft"], Assert.Single(result.Skipped).Codes);
+        Assert.Empty(result.Drafts);
+    }
+
+    [Fact]
+    public void A_mixed_request_with_a_bundled_spell_is_refused_whole_and_the_revision_count_is_unchanged()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Fixture Shelf", [RulesFamilies.Srd51]));
+        var ward = Published(temp, Spell(source, "Fixture Quick Ward"));
+        var bundled = temp.App.Store.ListRevisions().First(r => r.Kind == ContentKind.Spell && r.Status == RevisionStatus.Published && r.Provenance.SourceId != source.Id);
+        var before = temp.App.Store.ListRevisions().Count;
+
+        Assert.Equal("content.source-not-editable", Code(() => temp.App.AddToSpellList(new([ward.ContentId, bundled.ContentId], "fixture-seer"))));
+
+        Assert.Equal(before, temp.App.Store.ListRevisions().Count); // the homebrew spell's draft, made first, was rolled back
+    }
+
+    [Fact]
+    public void The_new_drafts_stored_hash_is_that_of_its_own_json_and_the_published_revision_is_unchanged()
+    {
+        using var temp = new TempApp();
+        var source = temp.App.CreateHomebrewSource(new("Fixture Shelf", [RulesFamilies.Srd51]));
+        var ward = Published(temp, Spell(source, "Fixture Quick Ward"));
+        var publishedRevision = temp.App.Store.ListRevisions(ward.ContentId).Single(r => r.Status == RevisionStatus.Published);
+        var publishedHash = temp.App.Store.RevisionHash(publishedRevision.RevisionId);
+
+        var draft = temp.App.AddToSpellList(new([ward.ContentId], "wizard")).Drafts.Single();
+
+        var stored = temp.App.Store.FindRevision(draft)!;
+        var json = JsonSerializer.Serialize(stored, RulesJson.Compact);
+        var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(json))).ToLowerInvariant();
+        Assert.Equal(expected, temp.App.Store.RevisionHash(draft.RevisionId));
+        Assert.NotEqual(publishedHash, temp.App.Store.RevisionHash(draft.RevisionId));
+        Assert.Equal(publishedHash, temp.App.Store.RevisionHash(publishedRevision.RevisionId));
     }
 
     [Fact]
