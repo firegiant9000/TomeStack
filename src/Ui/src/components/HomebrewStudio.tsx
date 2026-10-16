@@ -124,7 +124,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   // A new run of the panel remounts it; clearing the restriction after a publish must not (it would drop the result).
   const [panelRun, setPanelRun] = useState(0);
   const panelFrom = useRef<'list' | 'all'>('all');
-  const shownSource = useRef<string>();
+  const shownSource = useRef<string | undefined>(undefined);
   useEffect(() => {
     shownSource.current = source?.id;
   });
