@@ -221,6 +221,29 @@ it('R61: a species that grants a draft trait shows the same note', async () => {
   expect(described).toContain('Points at 1 unpublished draft. Publish all drafts publishes it together and re-points this entry.');
 });
 
+it('R64: Publish all drafts is held with a linked reason while the open editor has unsaved changes, and runs again once they are saved', async () => {
+  const user = userEvent.setup();
+  onStatus.mockReset();
+  await newBackgroundWithIncreases(user);
+  await user.click(screen.getByRole('button', { name: 'Save draft' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  const publishAll = await screen.findByRole('button', { name: 'Publish all drafts in this source…' });
+  expect(publishAll.getAttribute('aria-disabled')).toBeNull(); // clean editor: it runs
+
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), ' Two');
+  await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBe('true'));
+  expect(publishAll).toHaveProperty('disabled', false);
+  expect(document.getElementById(publishAll.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Save or close the open editor first.');
+  publishAll.focus();
+  await user.click(publishAll);
+  expect(screen.queryByRole('region', { name: /^Publish drafts of/ })).toBeNull();
+  expect(document.activeElement).toBe(publishAll);
+  expect(screen.getByRole('heading', { name: 'New background' })).toBeTruthy(); // nothing was discarded
+
+  await user.click(screen.getByRole('button', { name: 'Save draft' }));
+  await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBeNull());
+});
+
 it('item 1: once Publish all has published the entry that was saved in the open editor, the editor closes with a status', async () => {
   const user = userEvent.setup();
   onStatus.mockReset();

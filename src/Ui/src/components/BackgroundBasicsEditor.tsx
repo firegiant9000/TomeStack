@@ -50,6 +50,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
   const featGrant = grantOfKind(effects, kindOf, 'feat');
   const [announcement, setAnnouncement] = useState('');
   const featureLegend = useRef<HTMLLegendElement>(null);
+  const featLegend = useRef<HTMLLegendElement>(null);
   const increaseId = useId();
   const errorId = useId();
 
@@ -200,6 +201,8 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
   function repointToPublished(kind: 'feature' | 'feat', newer: ContentReference) {
     onEffects((current) => setKindGrant(current, kindOf, kind, newer, kind));
     setAnnouncement(`The ${kind} ${kind === 'feature' ? featureName : featName} now points at its published version.`);
+    // The pressed button unmounts: focus goes to the owning fieldset's legend (WCAG 2.4.3).
+    (kind === 'feature' ? featureLegend : featLegend).current?.focus();
   }
 
   function pick(kind: 'feature' | 'feat', contentId: string, list: Known[]) {
@@ -212,6 +215,9 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
   return (
     <section aria-labelledby="background-basics-heading" className="effect-editor origin-basics">
       <h4 id="background-basics-heading">Background basics</h4>
+      <p aria-live="polite" className="hint">
+        {announcement}
+      </p>
 
       <SkillFieldset id="background-basics-skills" info={info} effects={effects} onEffects={onEffects} />
 
@@ -220,9 +226,6 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
           <legend ref={featureLegend} tabIndex={-1}>
             {featureFamilies.length > 0 ? `Feature (${joinNames(featureFamilies.map((p) => p.displayName))})` : 'Feature'}
           </legend>
-          <p aria-live="polite" className="hint">
-            {announcement}
-          </p>
           <label className="field">
             Feature granted by the background
             <select value={featureGrant?.content.contentId ?? ''} onChange={(e) => pick('feature', e.target.value, withCurrent(features, featureGrant))}>
@@ -264,7 +267,9 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
 
       {(featFamilies.length > 0 || featGrant) && (
         <fieldset id="background-basics-feat" tabIndex={-1}>
-          <legend>{featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => p.displayName))})` : 'Feat'}</legend>
+          <legend ref={featLegend} tabIndex={-1}>
+            {featFamilies.length > 0 ? `Feat (${joinNames(featFamilies.map((p) => p.displayName))})` : 'Feat'}
+          </legend>
           <label className="field">
             Feat granted by the background
             <select value={featGrant?.content.contentId ?? ''} onChange={(e) => pick('feat', e.target.value, withCurrent(feats, featGrant))}>

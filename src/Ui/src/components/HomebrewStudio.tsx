@@ -99,6 +99,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   }, [initialSourceId]);
   const [entries, setEntries] = useState<StudioEntry[]>([]);
   const [editing, setEditing] = useState<ContentRevision>();
+  /** R64: the open editor holds changes that are not saved; "Publish all drafts" would otherwise discard them. */
+  const [editorDirty, setEditorDirty] = useState(false);
   const [published, setPublished] = useState<{ result: PublishResult; name: string }>();
   const [reviewing, setReviewing] = useState<{ affected: AffectedCharacter; to: ContentReference; name: string }>();
   // M5 slice 2: the debugger's findings for one source, and the rule a "Show" button asked the editor to focus.
@@ -379,18 +381,29 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
               </button>
             )}
             {pendingDrafts.length > 0 && (
-              <button
-                type="button"
-                ref={publishAllButton}
-                onClick={() => {
-                  setRestrictTo(undefined);
-                  panelFrom.current = 'all';
-                  setPanelRun((n) => n + 1);
-                  setPublishingAll(true);
-                }}
-              >
-                Publish all drafts in this source…
-              </button>
+              <>
+                {/* aria-disabled, never `disabled`: the press is refused in the handler and the reason is visible (2.4.3). */}
+                <button
+                  type="button"
+                  ref={publishAllButton}
+                  aria-disabled={editorDirty || undefined}
+                  aria-describedby={editorDirty ? 'publish-all-held' : undefined}
+                  onClick={() => {
+                    if (editorDirty) return;
+                    setRestrictTo(undefined);
+                    panelFrom.current = 'all';
+                    setPanelRun((n) => n + 1);
+                    setPublishingAll(true);
+                  }}
+                >
+                  Publish all drafts in this source…
+                </button>
+                {editorDirty && (
+                  <span id="publish-all-held" className="hint">
+                    Save or close the open editor first.
+                  </span>
+                )}
+              </>
             )}
             {entries.some((e) => e.kind === 'spell') && (
               <>
@@ -476,6 +489,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           focus={focus}
           designFeedback={feedbackOn}
           onError={onError}
+          onDirty={setEditorDirty}
           onClose={() => setEditing(undefined)}
           onEntriesChanged={() => void loadEntries(source.id)}
           onPublished={async (result, name) => {
@@ -641,6 +655,8 @@ function EntryEditor(props: {
   designFeedback: boolean;
   onError: (error: unknown) => void;
   onClose: () => void;
+  /** Whether the form holds changes that are not saved (the studio then holds "Publish all drafts"). */
+  onDirty: (dirty: boolean) => void;
   /** The class helper published option features: reload the source's content. */
   onEntriesChanged: () => void;
   /** `pinned` counts the unpublished drafts the saved entry points at. */
@@ -664,11 +680,19 @@ function EntryEditor(props: {
   const [diagnosing, setDiagnosing] = useState(false);
   const [classChoices, setClassChoices] = useState<ClassChoice[]>([]);
   const [busy, setBusy] = useState(false);
+  // The revision as last saved (or opened): anything else is an unsaved change.
+  const [baseline, setBaseline] = useState(() => JSON.stringify(props.initial));
   // The skill-choice helper publishes its option features; nothing else is saved meanwhile (review fix).
   const [classBusy, setClassBusy] = useState(false);
   // Fields that do not parse (a slot line with a typo, a column without 20 values), by effect id: they block saving.
   const [problems, setProblems] = useState<Record<string, string>>({});
   const problemList = Object.values(problems);
+  const dirty = problemList.length > 0 || JSON.stringify(revision) !== baseline;
+  const { onDirty } = props;
+  useEffect(() => {
+    onDirty(dirty);
+  }, [dirty, onDirty]);
+  useEffect(() => () => onDirty(false), [onDirty]);
   const heading = useRef<HTMLHeadingElement>(null);
   const { onError } = props;
   const family = props.source.rulesFamilies[0];
@@ -877,6 +901,7 @@ function EntryEditor(props: {
       if (prepared.revision !== revision) setRevision(prepared.revision);
       const saved = await client.saveDraft(forServer(prepared.revision));
       lastSaved.current = saved;
+      setBaseline(JSON.stringify(prepared.revision));
       if (!publish) {
         // An entry that points at drafts is saved as it is; "Publish all drafts" publishes them together and re-points it (R61).
         const pinned = new Set([...prepared.drafts, ...pinnedDrafts(prepared.revision.effects, draftIds)].map((r) => r.revisionId));

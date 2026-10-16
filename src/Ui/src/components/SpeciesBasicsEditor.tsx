@@ -29,7 +29,9 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
   // never clamped or dropped silently, and the stored increase stays as it was until the text is valid.
   const [drafts, setDrafts] = useState<Partial<Record<AbilityKey, string>>>({});
   const invalid = abilities.filter(([key]) => drafts[key] !== undefined);
-  const invalidKeys = invalid.map(([key]) => key).join(',');
+  const showIncreases = withIncreases.length > 0 || hasIncreases;
+  // A draft in a hidden fieldset (its family was unticked) cannot be seen or fixed, so it blocks nothing.
+  const invalidKeys = showIncreases ? invalid.map(([key]) => key).join(',') : '';
   const { onProblem } = props;
   useEffect(() => {
     const keys = invalidKeys === '' ? [] : invalidKeys.split(',');
@@ -52,7 +54,7 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
     <section aria-labelledby="species-basics-heading" className="effect-editor origin-basics">
       <h4 id="species-basics-heading">Species basics</h4>
 
-      {(withIncreases.length > 0 || hasIncreases) && (
+      {showIncreases && (
         <fieldset id="species-basics-increases" tabIndex={-1}>
           <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => p.displayName))})` : 'Ability score increases'}</legend>
           <div className="origin-grid">
