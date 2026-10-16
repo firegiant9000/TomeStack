@@ -33,6 +33,14 @@ Tables live in the content, so each SRD class revision states its own progressio
 
 A spell is `kind: spell` content with one `spell` effect: `level` (0 is a cantrip), `school`, `castingTime`, `range`, `components`, `duration`, `concentration`, `ritual`, `lists`, `attack` (`none` / `melee` / `ranged`), `save` and optional `dice`. **A spell is never active content**, so nothing on it changes calculated fields. Validation checks the tables, the level, the dice, and that both types are in a v5 revision (`validate.spellcasting`, `validate.spell-level`, `validate.requires-v5`).
 
+**Spell list keys (tester feedback item 10).** A key is 1 to 60 characters of `a-z`, `0-9` and `-`. The tools normalise what you type: trimmed, lower-cased, runs of spaces turned into one `-` (`RulesCore/SpellListKey.cs`, the one place; the UI mirrors it to preview the result). A caster offers a spell only when the spell's `lists` holds exactly the caster's `spellList` key, so a typo makes a list nobody uses; the key box therefore offers the keys in use. Three commands change `lists` and never anything else:
+
+- `import.candidate.addToSpellList { candidateIds, listKey }` edits pending spell candidates (1 to 200). It adds the key to each candidate's `lists`, clears only that field's "unsure" mark, and skips with a reason a candidate that is not found (`candidate.not-found`), already reviewed (`candidate.already-reviewed`), not a spell (`spell-list.not-a-spell`) or already on the list (`spell-list.already-on-list`). One transaction.
+- `content.addToSpellList { contentIds, listKey }` saves a new draft of each spell (1 to 500) from its newest revision with the key added. It never publishes (a bundled source is refused with `content.source-not-editable`, nothing saved); the same skip codes apply, with `content.not-found`. The studio then opens the publish panel on exactly the drafts it made. The result carries a `note`: characters keep the spell revisions they recorded until each update is reviewed.
+- `content.spellListKeys {}` returns `[{ key, spells }]` from the newest published revision of each spell, plus the keys that classes name even when no spell is on them yet (`spells: 0`). It writes nothing.
+
+`validate.spell-lists` (a warning) reads "Spell 'x' is on no spell list, so no caster can choose it. Add it to a spell list." Error messages and the audit log name ids, keys and counts only, never the spell's text.
+
 Like `armor`, both types are typed only in a revision of schema v5 or newer. In an older revision an effect with the same type name stays unknown, reference-only and byte for byte (ADR-003).
 
 ## Calculation

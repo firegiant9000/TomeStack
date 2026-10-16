@@ -51,20 +51,15 @@ The formula words are `WIS.MOD`, `floor` and `max`, spelled like that.
 
 ## Spells from a book
 
-A caster can use only a spell that names the caster's list. A spell that names none publishes with the warning `validate.spell-lists`, and a caster cannot pick it; add the list in candidate review before accepting. In this release the one place to fix that is **candidate review, before you accept**.
+A caster can use only a spell that names the caster's list. A spell that names none publishes with the warning `validate.spell-lists`, and a caster cannot pick it. "Add to a spell list…" fixes that, in the import review before you accept and in the studio after.
 
-1. Give the class its list: in its spellcasting rule ("Add spellcasting"), set the "Spell list key" to a short key you choose, for example `fixture-list`.
-2. Import the book. A spell comes with its lists only when the PDF prints them. Otherwise its candidate says it names no class lists and to add them.
-3. Open the spell candidate. In "Proposed effects (JSON ...)", find the effect with `"type": "spell"` and add the key to its `"lists"` array:
+1. Give the class its list: in its spellcasting rule ("Add spellcasting"), set the "Spell list key" to a short key you choose, for example `fixture-list`. (For the SRD casters the keys already exist, for example `wizard`.)
+2. Import the book. A spell comes with a list only when the PDF has a "<Name> Spells" list page that names it (the candidate marks that unsure; check it). Otherwise its candidate says it names no class lists.
+3. In the import review, tick the spell candidates and choose "Add N spells to a spell list…". Type the key or pick one from the list (it shows how many spells each already has), and confirm. The key is saved in lower case with hyphens, and the form shows it before you confirm. A candidate that was already accepted is left alone and listed with the reason.
+4. Accept the spells as drafts ("Accept selected as drafts").
+5. In the studio, "Publish all drafts in this source…" and confirm the preview.
 
-   ```
-   "lists": ["fixture-list"]
-   ```
-
-4. Choose "Save edit", check the candidate again, then "Accept as a draft".
-5. Open the source in the studio and "Publish".
-
-A spell that was accepted without a list cannot be fixed in the studio yet. A later wave adds an "Add to spell list" action. Until then, use the sheet's Report a gap for it.
+A spell that was accepted or published without a list: in the studio, tick it and choose "Add N spells to a spell list…". That saves a new draft of each spell with the key and opens the publish panel on exactly those drafts, all ticked; nothing is published until you confirm. Characters keep the spell revisions they recorded until you review an update for each one.
 
 ## Familiars, custom weapons and backstory
 
