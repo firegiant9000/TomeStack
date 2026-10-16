@@ -108,8 +108,18 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
       latestPublished: e.latestPublished && { contentId: e.latestPublished.contentId, revisionId: e.latestPublished.revisionId },
     }));
 
+  // Only the newest request's answer is shown: a slow reload of source A must not land under source B.
+  const entriesRequest = useRef(0);
   const loadEntries = useCallback(
-    (id: string) => client.contentBySource(id).then(setEntries).catch(onError),
+    (id: string) => {
+      const request = ++entriesRequest.current;
+      return client
+        .contentBySource(id)
+        .then((rows) => {
+          if (request === entriesRequest.current) setEntries(rows);
+        })
+        .catch(onError);
+    },
     [onError],
   );
 
@@ -191,9 +201,12 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
         selected={source}
         rulesFamilies={info.rulesFamilies.map((f) => ({ id: f.id, label: f.displayName }))}
         onSelect={(id) => {
+          // Choosing the source already shown changes nothing (and would not reload, so the rows must stay).
+          if (id !== source?.id) {
+            setPublishingAll(false);
+            setEntries([]); // never show another source's rows while this one loads
+          }
           setSourceId(id);
-          setPublishingAll(false);
-          setEntries([]); // never show another source's rows while this one loads
         }}
         onCreated={async (created) => {
           await loadSources();

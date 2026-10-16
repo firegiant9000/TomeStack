@@ -165,6 +165,9 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   async function acceptTicked(asReference: boolean) {
     if (dirty || bulkRunning.current || ticked.length === 0) return;
     bulkRunning.current = true; // a second press while the first is in flight does nothing
+    // A page-range pause still running would change the filter and drop the ticks mid-flight: cancel it, and show the applied range.
+    clearTimeout(pageTimer.current);
+    setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
     setBulkBusy(true);
     try {
       const outcome = await client.acceptCandidates(ticked, asReference);
@@ -200,7 +203,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setRangeFields(next);
     clearTimeout(pageTimer.current);
     pageTimer.current = setTimeout(() => {
-      if (dirtyRef.current) {
+      if (dirtyRef.current || bulkRunning.current) {
         setRangeFields({ from: String(filter.firstPage ?? ''), to: String(filter.lastPage ?? '') });
         return;
       }
