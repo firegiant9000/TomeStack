@@ -396,7 +396,8 @@ public sealed partial class TomeStackApp
                 linked.Add(new(feature, name, level, null, null)); // ignored: not granted (R66)
             }
         }
-        var linkedNames = linked.Select(l => CandidateDetector.Key(l.Name)).ToHashSet(StringComparer.Ordinal);
+        // The link was made on the detected name: a reviewer's rename of the feature must not cut it off from its table entry.
+        var linkedNames = linked.Select(l => CandidateDetector.Key(l.Candidate?.Candidate.ProposedName ?? l.Name)).ToHashSet(StringComparer.Ordinal);
         var installed = InstalledFeaturesByName(current.RulesFamilies, current.SourceId);
         var earlier = ReviewedInEarlierJobs(stored.JobId);
         var unlinked = 0;
