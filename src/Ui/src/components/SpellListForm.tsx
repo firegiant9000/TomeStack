@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
+import { useEffect, useEffectEvent, useId, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type { SpellListKeyCount } from '../api/types';
 import { normaliseSpellListKey, spellListKeyProblem } from '../spellListKey';
@@ -36,6 +36,9 @@ export function SpellListForm({ subject, onSubmit, onCancel, onError, held, held
   // WCAG 2.4.3: opening the form moves focus to its first control.
   useEffect(() => input.current?.focus(), []);
 
+  // The keys are read once when the form opens. `onError` is an effect event, so a parent that passes a new function on each
+  // render (an inline arrow) does not read them again.
+  const reportError = useEffectEvent(onError);
   useEffect(() => {
     let current = true;
     client
@@ -44,12 +47,12 @@ export function SpellListForm({ subject, onSubmit, onCancel, onError, held, held
         if (current) setKeys(all);
       })
       .catch((error: unknown) => {
-        if (current) onError(error);
+        if (current) reportError(error);
       });
     return () => {
       current = false;
     };
-  }, [onError]);
+  }, []);
 
   const key = normaliseSpellListKey(text);
   const problem = spellListKeyProblem(text);

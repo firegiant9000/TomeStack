@@ -96,7 +96,8 @@ it('adds the key to the ticked spells only, reports through the app status, and 
   vi.mocked(client.addCandidatesToSpellList).mockResolvedValue({
     listKey: 'wizard',
     updated: [candidate(1, 'spell')],
-    skipped: [{ candidateId: 'cand-2', codes: ['spell-list.already-on-list'] }],
+    skipped: [{ candidateId: 'cand-2', codes: ['candidate.already-reviewed'] }],
+    notes: [],
   });
   const onStatus = vi.fn();
   renderPanel(onStatus);
@@ -115,10 +116,34 @@ it('adds the key to the ticked spells only, reports through the app status, and 
   await vi.waitFor(() => expect(screen.queryByRole('combobox', { name: 'Spell list key' })).toBeNull()); // the form closed
   expect(document.activeElement).toBe(addButton('Add 2 spells to a spell list…')); // focus is back where it started
   const reasons = screen.getByRole('list', { name: 'Not changed' });
-  expect(within(reasons).getByText(/Testy Spell 2/).textContent).toContain('already on this list');
+  expect(within(reasons).getByText(/Testy Spell 2/).textContent).toContain('was already reviewed');
   expect(vi.mocked(client.candidates).mock.calls.length).toBeGreaterThan(1); // the list was reloaded
   expect(document.querySelectorAll('[aria-live="polite"]')).toHaveLength(1);
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('says, with counts only, how many spells keep other proposed lists to check (R59)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.addCandidatesToSpellList).mockResolvedValue({
+    listKey: 'wizard',
+    updated: [candidate(1, 'spell'), candidate(2, 'spell')],
+    skipped: [],
+    notes: [
+      { candidateId: 'cand-1', codes: ['spell-list.other-lists-unreviewed'] },
+      { candidateId: 'cand-2', codes: ['spell-list.other-lists-unreviewed'] },
+    ],
+  });
+  const onStatus = vi.fn();
+  renderPanel(onStatus);
+  await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
+  await user.click(addButton('Add 2 spells to a spell list…'));
+  await user.type(screen.getByRole('combobox', { name: 'Spell list key' }), 'wizard');
+  await user.click(screen.getByRole('button', { name: 'Add 2 spells to this list' }));
+
+  await vi.waitFor(() => expect(onStatus).toHaveBeenCalled());
+  const text = onStatus.mock.calls.at(-1)![0] as string;
+  expect(text).toContain('2 spells keep other proposed lists to check.');
+  expect(text).not.toContain('Testy'); // counts only, never a name
 });
 
 it('holds the list button with a linked reason while an edit is unsaved', async () => {
@@ -155,7 +180,7 @@ it('holds the form confirm if an edit starts after the form opened', async () =>
 
 it('holds paging and the filters while the add is in flight, and the accept buttons with them', async () => {
   const user = userEvent.setup();
-  let finish: (value: { listKey: string; updated: StoredCandidate[]; skipped: [] }) => void = () => {};
+  let finish: (value: { listKey: string; updated: StoredCandidate[]; skipped: []; notes: [] }) => void = () => {};
   vi.mocked(client.addCandidatesToSpellList).mockReturnValue(new Promise((resolve) => (finish = resolve)));
   renderPanel();
   await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
@@ -167,7 +192,7 @@ it('holds paging and the filters while the add is in flight, and the accept butt
   expect(held(kind)).toBe(true);
   expect(reasonOf(kind)).toBe('Adding to the spell list…');
   expect(held(addButton('Accept selected as drafts'))).toBe(true);
-  await act(async () => finish({ listKey: 'wizard', updated: [candidate(1, 'spell'), candidate(2, 'spell')], skipped: [] }));
+  await act(async () => finish({ listKey: 'wizard', updated: [candidate(1, 'spell'), candidate(2, 'spell')], skipped: [], notes: [] }));
   await vi.waitFor(() => expect(held(screen.getByLabelText('Kind'))).toBe(false));
 });
 

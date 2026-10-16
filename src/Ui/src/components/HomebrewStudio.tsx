@@ -7,6 +7,7 @@ import type {
   ContentOption,
   ContentReference,
   ContentRevision,
+  ContentSpellListResult,
   ContentTreeView,
   DebugFinding,
   DebugReport,
@@ -43,6 +44,7 @@ const spellListReasons: Record<string, string> = {
   'content.not-found': 'was not found',
   'spell-list.not-a-spell': 'is not a spell',
   'spell-list.already-on-list': 'is already on this list',
+  'spell-list.has-unpublished-draft': 'has an unpublished draft; publish or discard it first',
 };
 
 const automationChoices = [
@@ -119,6 +121,13 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
   const [ticked, setTicked] = useState<string[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [restrictTo, setRestrictTo] = useState<string[]>();
+  // A new run of the panel remounts it; clearing the restriction after a publish must not (it would drop the result).
+  const [panelRun, setPanelRun] = useState(0);
+  const panelFrom = useRef<'list' | 'all'>('all');
+  const shownSource = useRef<string>();
+  useEffect(() => {
+    shownSource.current = source?.id;
+  });
   const [notChanged, setNotChanged] = useState<{ name: string; reasons: string[] }[]>([]);
   const listOpener = useRef<HTMLButtonElement>(null);
   const tickedSpells = entries.filter((e) => e.kind === 'spell' && ticked.includes(e.contentId));
@@ -128,26 +137,37 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
     if (!source || editing || tickedSpells.length === 0) return;
     const ids = tickedSpells.map((e) => e.contentId);
     const names = new Map(tickedSpells.map((e) => [e.contentId, e.name]));
+    const sourceId = source.id;
+    let result: ContentSpellListResult;
     try {
-      const result = await client.addToSpellList(ids, listKey);
-      await loadEntries(source.id);
-      const made = result.drafts.map((d) => d.contentId);
-      setNotChanged(result.skipped.map((s) => ({ name: names.get(s.contentId) ?? 'A spell', reasons: s.codes.map((c) => spellListReasons[c] ?? 'could not be changed') })));
-      setTicked(result.skipped.map((s) => s.contentId));
-      setListOpen(false);
-      onStatus(
-        made.length === 0
-          ? `No spell was added to the spell list ${result.listKey}; ${result.skipped.length} skipped.`
-          : `Saved ${made.length} draft${made.length === 1 ? '' : 's'} with the spell list ${result.listKey}${result.skipped.length > 0 ? `; ${result.skipped.length} skipped` : ''}. ${result.note} Review the drafts below, then publish them.`,
-      );
-      if (made.length > 0) {
-        setRestrictTo(made);
-        setPublishingAll(true);
-      } else {
-        listOpener.current?.focus();
-      }
+      result = await client.addToSpellList(ids, listKey);
     } catch (error) {
       onError(error);
+      return;
+    }
+    // The service has committed. The result is shown at once, before the reload, so a slow or failed reload cannot hide it; it is
+    // ignored only when another source is on screen now (its rows and ticks are not these).
+    if (shownSource.current !== sourceId) return;
+    const made = result.drafts.map((d) => d.contentId);
+    setNotChanged(result.skipped.map((s) => ({ name: names.get(s.contentId) ?? 'A spell', reasons: s.codes.map((c) => spellListReasons[c] ?? 'could not be changed') })));
+    setTicked(result.skipped.map((s) => s.contentId));
+    setListOpen(false);
+    onStatus(
+      made.length === 0
+        ? `No spell was added to the spell list ${result.listKey}; ${result.skipped.length} skipped.`
+        : `Saved ${made.length} draft${made.length === 1 ? '' : 's'} with the spell list ${result.listKey}${result.skipped.length > 0 ? `; ${result.skipped.length} skipped` : ''}. ${result.note} Review the drafts below, then publish them.`,
+    );
+    if (made.length > 0) setRestrictTo(made);
+    else listOpener.current?.focus();
+    try {
+      await loadEntries(sourceId);
+    } catch (error) {
+      onError(error); // the drafts are saved; only the list on screen is out of date
+    }
+    if (made.length > 0 && shownSource.current === sourceId) {
+      panelFrom.current = 'list';
+      setPanelRun((n) => n + 1);
+      setPublishingAll(true);
     }
   }
 
@@ -343,6 +363,8 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
                 ref={publishAllButton}
                 onClick={() => {
                   setRestrictTo(undefined);
+                  panelFrom.current = 'all';
+                  setPanelRun((n) => n + 1);
                   setPublishingAll(true);
                 }}
               >
@@ -397,7 +419,7 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
           )}
           {publishingAll && (
             <PublishManyPanel
-              key={`${source.id}-${restrictTo?.join(',') ?? 'all'}`}
+              key={`${source.id}-${panelRun}`}
               source={source}
               pending={panelPending}
               tickAll={restrictTo !== undefined}
@@ -405,12 +427,13 @@ export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Pro
               onClose={() => {
                 setPublishingAll(false);
                 // WCAG 2.4.3: the panel is gone, so focus goes back to the button that opened it (or the heading if that is gone too).
-                const back = restrictTo ? listOpener.current : publishAllButton.current;
+                const back = panelFrom.current === 'list' ? listOpener.current : publishAllButton.current;
                 setRestrictTo(undefined);
                 setTimeout(() => (back ?? heading.current)?.focus());
               }}
               onReload={() => loadEntries(source.id)}
               onPublished={async (count) => {
+                setRestrictTo(undefined); // review fix 10: the restriction ends with the publish (the key does not change, so the result stays)
                 await loadEntries(source.id);
                 onStatus(`Published ${count} draft${count === 1 ? '' : 's'}. Characters keep their current revisions until you review an update.`);
               }}
