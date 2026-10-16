@@ -38,7 +38,6 @@ const blockedReasons: Record<string, string> = {
   'candidate.already-reviewed': 'was already reviewed',
   'candidate.not-found': 'no longer exists',
   'spell-list.not-a-spell': 'is not a spell',
-  'spell-list.already-on-list': 'is already on this list',
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -227,10 +226,11 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         return c ? (c.edited ?? c.candidate).proposedName : 'A candidate';
       };
       const skippedCount = outcome.skipped.length;
+      const unchecked = outcome.notes.filter((n) => n.codes.includes('spell-list.other-lists-unreviewed')).length; // counts only (R59)
       onStatus(
         `Added the spell list ${outcome.listKey} to ${plural(outcome.updated.length, 'spell', 'spells')}${skippedCount > 0 ? `; ${skippedCount} skipped` : ''}.${
-          outcome.updated.length > 0 ? ' Accept them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''
-        }`,
+          unchecked > 0 ? ` ${unchecked} ${unchecked === 1 ? 'spell keeps' : 'spells keep'} other proposed lists to check.` : ''
+        }${outcome.updated.length > 0 ? ' Accept them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''}`,
       );
       setSkippedLabel('Not changed');
       setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map((code) => blockedReasons[code] ?? code) })));

@@ -1217,6 +1217,8 @@ export interface CandidateSpellListResult {
   listKey: string;
   updated: StoredCandidate[];
   skipped: BlockedCandidate[];
+  /** Updated candidates that need a word: `spell-list.other-lists-unreviewed` means other proposed lists are still to check (R59). */
+  notes: BlockedCandidate[];
 }
 
 export interface SkippedContent {

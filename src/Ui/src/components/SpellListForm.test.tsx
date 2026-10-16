@@ -101,6 +101,18 @@ it('ignores a second press while the first is in flight', async () => {
   await act(async () => finish());
 });
 
+it('reads the keys once even when the parent passes a new onError on every render', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.spellListKeys).mockClear();
+  const view = render(<SpellListForm subject="2 spells" onSubmit={vi.fn()} onCancel={vi.fn()} onError={() => {}} />);
+  await vi.waitFor(() => expect(document.querySelectorAll('datalist option')).toHaveLength(2));
+  await user.type(screen.getByRole('combobox', { name: 'Spell list key' }), 'wiz');
+  view.rerender(<SpellListForm subject="2 spells" onSubmit={vi.fn()} onCancel={vi.fn()} onError={() => {}} />);
+  view.rerender(<SpellListForm subject="3 spells" onSubmit={vi.fn()} onCancel={vi.fn()} onError={() => {}} />);
+  expect(client.spellListKeys).toHaveBeenCalledTimes(1);
+  expect((screen.getByRole('combobox', { name: 'Spell list key' }) as HTMLInputElement).value).toBe('wiz');
+});
+
 it('cancels, and reports a failed key list without blocking the form', async () => {
   const user = userEvent.setup();
   vi.mocked(client.spellListKeys).mockImplementation(() => Promise.reject(new Error('no')));
