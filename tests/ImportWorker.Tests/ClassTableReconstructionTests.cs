@@ -311,6 +311,31 @@ public class ClassTableReconstructionTests
     }
 
     [Fact]
+    public async Task The_fixture_books_Lamplighter_page_reads_back_from_the_real_extraction()
+    {
+        var pages = new List<ExtractedPage>();
+        await foreach (var item in new Extraction.PdfPigExtractor().ExtractAsync(FixturePdfs.ImportPath, PageScope.WholeDocument, CancellationToken.None))
+        {
+            if (item is ExtractedPage page)
+                pages.Add(page);
+        }
+        var lines = pages.Single(p => p.PageNumber == 7).Blocks!.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).ToList();
+
+        var table = ClassTableReconstruction.Reconstruct(lines, "Fixture Lamplighter Features");
+
+        Assert.NotNull(table);
+        Assert.True(table.Complete);
+        Assert.Equal(Enumerable.Range(1, 20).Select(FixturePdfs.Lamplighter.ProficiencyBonus), table.Numbers(ClassColumnRole.ProficiencyBonus));
+        Assert.Equal(FixturePdfs.Lamplighter.Cantrips, table.Numbers(ClassColumnRole.Cantrips));
+        Assert.Equal(FixturePdfs.Lamplighter.Slots.Select(row => row.Reverse().SkipWhile(c => c == 0).Reverse().ToArray()), table.Slots()!.Select(r => r.ToArray()));
+        for (var level = 1; level <= 20; level++)
+        {
+            var expected = FixturePdfs.Lamplighter.Features[level - 1] == "-" ? [] : ClassTableReconstruction.SplitFeatures(FixturePdfs.Lamplighter.Features[level - 1]);
+            Assert.Equal(expected, table.FeaturesByLevel.TryGetValue(level, out var names) ? names : []);
+        }
+    }
+
+    [Fact]
     public void A_page_without_a_table_gives_null_and_garbage_never_throws()
     {
         Assert.Null(ClassTableReconstruction.Reconstruct([], "Fixture Lamplighter Features"));

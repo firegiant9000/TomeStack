@@ -110,7 +110,7 @@ public class ExtractionTests
     public async Task A_page_scope_extracts_only_its_pages_and_clips_to_the_document()
     {
         var pages = (await Extract(FixturePdfs.ImportPath, new(4, 99))).OfType<ExtractedPage>().Select(p => p.PageNumber);
-        Assert.Equal([4, 5, 6], pages);
+        Assert.Equal([4, 5, 6, 7], pages);
     }
 
     [Fact]

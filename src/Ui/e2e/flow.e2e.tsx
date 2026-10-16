@@ -861,9 +861,9 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Grimoire' })).getByRole('button', { name: 'Read the whole document' }));
   // M4 stays experimental until a real third-party PDF and the SRD measurements pass (ROADMAP M4).
   expect(within(reader()).getByRole('heading', { name: /Read the text and find candidates Experimental/ })).toBeTruthy();
-  const reviewButton = await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 });
-  // Page 6 has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
-  expect(within(reader()).getByText(/whole document: completed, 6 pages read, (1 by OCR, )?1 without text, 9 candidates\./)).toBeTruthy();
+  const reviewButton = await within(reader()).findByRole('button', { name: 'Review 11 candidates' }, { timeout: 30000 });
+  // Page 6 (of 7) has no text layer: the worker tries Windows OCR where a language is installed, and finds nothing either way.
+  expect(within(reader()).getByText(/whole document: completed, 7 pages read, (1 by OCR, )?1 without text, 11 candidates\./)).toBeTruthy();
 
   // SPEC I-03: the read text is searchable within this source.
   await user.type(within(reader()).getByRole('textbox', { name: 'Search the text of E2E Grimoire' }), 'hookblade');
@@ -874,7 +874,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Grimoire' });
   const list = () => within(panel()).getByRole('list', { name: 'Candidates' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Grimoire' });
-  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(9));
+  await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(11));
   const kind = within(panel()).getByRole('combobox', { name: 'Kind' });
   const detail = (name: string) => within(panel()).findByRole('region', { name: `Candidate: ${name}` });
 
@@ -952,10 +952,10 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   await user.click(await screen.findByRole('button', { name: 'Sources' }));
   const reader = () => within(screen.getByRole('listitem', { name: 'E2E Bulk Book' })).getByRole('region', { name: 'Read the text of E2E Bulk Book' });
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Bulk Book' })).getByRole('button', { name: 'Read the whole document' }));
-  await user.click(await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 11 candidates' }, { timeout: 30000 }));
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Bulk Book' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Bulk Book' });
-  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(9));
+  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(11));
 
   // Nothing is selected yet: the bulk buttons are held with their reason.
   const bulk = within(panel()).getByRole('button', { name: 'Accept selected as drafts' });
@@ -997,10 +997,10 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   await user.click(await screen.findByRole('button', { name: 'Sources' }));
   const reader = () => within(screen.getByRole('listitem', { name: 'E2E Lists Book' })).getByRole('region', { name: 'Read the text of E2E Lists Book' });
   await user.click(within(await screen.findByRole('listitem', { name: 'E2E Lists Book' })).getByRole('button', { name: 'Read the whole document' }));
-  await user.click(await within(reader()).findByRole('button', { name: 'Review 9 candidates' }, { timeout: 30000 }));
+  await user.click(await within(reader()).findByRole('button', { name: 'Review 11 candidates' }, { timeout: 30000 }));
   const panel = () => within(reader()).getByRole('region', { name: 'Candidates from E2E Lists Book' });
   await within(reader()).findByRole('region', { name: 'Candidates from E2E Lists Book' });
-  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(9));
+  await waitFor(() => expect(within(within(panel()).getByRole('list', { name: 'Candidates' })).getAllByRole('listitem')).toHaveLength(11));
 
   // The fixture spell is level 2, which a level 1 wizard has no slot for; the reviewer lowers it to level 1 first (setup, through the API).
   const [job] = await client.listImports(source.id);
