@@ -12,10 +12,10 @@ public class CandidateReviewTests
 {
     /// <summary>
     /// The fixture book's candidates: page 2 two, page 3 two, page 4 four, page 5 the Warden and its two feature stubs, page 7 the
-    /// Lamplighter and the six features its table names that are not installed (Fixture Glow is a block of the book, the other five
-    /// are stubs; "Spellcasting" is installed SRD content, so it gets no stub).
+    /// Lamplighter and the seven features its table names (Fixture Glow is a block of the book, the other six are stubs; the SRD
+    /// installs several features named "Spellcasting", so it is not one installed feature and gets a stub too, R67).
     /// </summary>
-    private const int PageSevenCandidates = 7;
+    private const int PageSevenCandidates = 8;
 
     private const int ExpectedCandidates = 2 + 2 + 4 + 3 + PageSevenCandidates;
 
@@ -378,8 +378,8 @@ public class CandidateReviewTests
         var all = temp.App.ListCandidates(new(jobId)).ToDictionary(c => c.Id);
 
         var grants = lamplighter.GrantsCandidates!;
-        Assert.Equal(8, grants.Count); // nine links in the table, less the installed "Spellcasting"
-        Assert.Equal([1, 2, 5, 7, 9, 11, 15, 20], grants.Select(g => g.Level));
+        Assert.Equal(9, grants.Count); // nine links in the table; "Spellcasting" is installed more than once, so it is a stub (R67)
+        Assert.Equal([1, 1, 2, 5, 7, 9, 11, 15, 20], grants.Select(g => g.Level));
         Assert.All(grants, g => Assert.Equal(ContentKind.Feature, all[g.CandidateId].Candidate.ProposedKind));
         Assert.Equal(1, StoredCandidate.CurrentSchemaVersion);
         Assert.Equal(["Fixture Focus", "Fixture Resolve", "Fixture Stormcall"], Named(temp, jobId, "Fixture Warden").GrantsCandidates!.Select(g => all[g.CandidateId].Candidate.ProposedName));
