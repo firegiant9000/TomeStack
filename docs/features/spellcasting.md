@@ -96,4 +96,4 @@ Each caster has a search box, "Search {caster} spells by name", in two places: i
 - Casting Pact Magic slots for another class's spells, and the reverse (SRD "Pact Magic" under multiclassing): the pools stay separate on the sheet, and the player picks which slot to spend.
 - A third caster in the SRD content (neither SRD bundles one; `third` is for homebrew).
 - Upcast damage, cantrip scaling, spell components and material costs, and concentration tracking (text only).
-- Spell authoring in the homebrew studio. Homebrew spells can be imported as content v5 revisions.
+- A spell's attack kind, saving throw and dice have no form fields in the homebrew studio (a stored value is kept as it is). Everything else about a spell is authored there ("New spell", [homebrew-studio.md](homebrew-studio.md)); homebrew spells can also be imported as content v5 revisions.

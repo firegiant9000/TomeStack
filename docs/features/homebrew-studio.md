@@ -10,7 +10,7 @@ UI: `src/Ui/src/components/HomebrewStudio.tsx`, `UpdateReviewPanel.tsx`. Service
 
 ## Guided authoring
 
-The studio authors classes (since M5, below), subclasses, features, feats and items. Every control writes a declarative effect (ADR-003); nothing runs code (SPEC Q-02):
+The studio authors classes (since M5, below), species, backgrounds and spells (item 12, below), subclasses, features, feats and items. Every control writes a declarative effect (ADR-003); nothing runs code (SPEC Q-02):
 
 | Control | Effect |
 | --- | --- |
@@ -23,6 +23,16 @@ The studio authors classes (since M5, below), subclasses, features, feats and it
 | Description only | A revision with no effects is a **reference-only** feature: its text is kept and shown, and the sheet says "reference only" |
 
 Every effect has an automation setting (automatic, assisted, reference only) and its own text. **Check** validates the unsaved revision (`content.validate`), **Save draft** stores it (`content.saveDraft`; drafts are insert-only, so each save is a new revision id), and **Publish** saves and publishes it (`content.publish` validates again and refuses on any error). Editing published content starts a new draft of the same content id.
+
+## Species, backgrounds and spells (tester feedback item 12; SPEC I-04)
+
+"New species", "New background" and "New spell" open the same entry editor as "New class", with a guided section above the rule list (`SpeciesBasicsEditor`, `BackgroundBasicsEditor`, `SpellBasicsEditor` beside `ClassBasicsEditor`). Each writes ordinary effects, so nothing here needs a new field or schema version; the rule list shows only the effects the section does not cover, and a stored value the form cannot show (an unknown spell school, a grant with a level) is kept as it is. The rules family's **policy** decides what is offered (`abilityIncreaseSource`, `backgroundGrantsFeat`), never its name. An entry that targets both families shows both behaviours, each under the family's display name.
+
+- **Species:** ability increases (`modifier` bonus on `ability.<x>.score`), skills (`grant proficiency` on `skill.<x>`) and traits. A trait is a `grant content` of a feature: pick one of this source's features or make one with "New feature" (it is saved as a draft and added). Speed is not offered: set it on the character's Stats until species speed arrives (content v10). Under the newer rules the calculator ignores a species' increases and says so (`policy.ability-increase-source`).
+- **Background:** skills, plus a feature (policy: no feat from a background) or a feat (policy: a background grants a feat), and under the newer rules three picked abilities. The three picks are saved as the bundled backgrounds save them: a `choice` (`<name>-ability-scores`, count 1) whose seven options are feature drafts named "<name> Ability Scores: Strength +2, Dexterity +1", each a bonus on two ability scores. Saving makes the missing option drafts first and then the background pinning them (an unchanged pick makes none, and an identical option already in the source is reused). Because a published background must not point at drafts, its **Publish** button is held (`aria-disabled`, with a linked reason) while it pins drafts, and the status says to use **Publish all drafts in this source…**, which publishes the options and the background together and re-points the pins. Renaming a background leaves its old option features in the source as unused drafts.
+- **Spell:** one `spell` effect (content v5): level (cantrip to 9th), school, ritual, concentration, casting time, range, components, duration, the spell text and spell lists. The list box is item 10's: the key is normalised and previewed ("Saved as: …"), the keys in use are offered with their spell counts, and a key that was typed but not added blocks saving with a reason that names the field. A spell on no list is allowed (no caster can choose it, and the form says so). The attack kind, saving throw and dice have no fields yet; stored values are kept.
+
+Tests: Vitest per editor and `HomebrewStudioOrigins`, e2e (one flow per editor), `HomebrewOriginTests` (publish and calculate per kind, both families, the `PublishMany` re-pointing) and `OriginEditorShapeTests` (the policy decides which increases count).
 
 ## A class of your own (M5 slice 1b, ADR-010)
 
