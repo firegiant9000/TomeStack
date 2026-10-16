@@ -146,6 +146,65 @@ public class SrdClassTableTests(ITestOutputHelper output)
         Assert.True(failures.Count == 0, string.Join("; ", failures)); // counts only, never names
     }
 
+    /// <summary>
+    /// Fix round 1, item 6: what the proposals read from each SRD class page, counts only (which of the six parts were proposed
+    /// for how many classes, and for the classes that miss one, how many). The SRD classes are the layouts the rules were written
+    /// against, so these are floors, not a claim about other books.
+    /// </summary>
+    [SrdPdfFact]
+    public async Task The_class_proposals_are_measured_on_both_SRDs()
+    {
+        var failures = new List<string>();
+        foreach (var (family, file, _, version) in Pdfs)
+        {
+            var pages = new List<DetectionPage>();
+            await foreach (var item in new PdfPigExtractor().ExtractAsync(Path.Combine(Folder!, file), PageScope.WholeDocument, CancellationToken.None))
+            {
+                if (item is ExtractedPage page)
+                    pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
+            }
+            var classes = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false)).Where(c => c.ProposedKind == ContentKind.Class).OrderBy(c => c.Page.Start).ToList();
+            var packs = new[] { $"srd-{version}-classes.json", $"srd-{version}-fighter.json" }.Select(f => TomeStackApp.LoadBundledPack($"TomeStack.Content.{f}")).ToList();
+            var packCasting = packs.SelectMany(p => p.Revisions).GroupBy(r => r.ContentId).Select(g => g.Last())
+                .SelectMany(r => r.Effects.OfType<SpellcastingEffect>()).GroupBy(e => e.SpellList).ToDictionary(g => g.Key, g => g.First().Ability);
+            int hit = 0, saves = 0, armor = 0, armorNone = 0, weapons = 0, weaponsQualified = 0, skills = 0, casting = 0, slotTables = 0, unexplained = 0, abilityRight = 0;
+            foreach (var c in classes)
+            {
+                bool Has(string prefix) => c.ProposedEffects.Any(e => e.Id.StartsWith(prefix, StringComparison.Ordinal));
+                bool Noted(string text) => c.Uncertainties.Any(u => u.Contains(text, StringComparison.OrdinalIgnoreCase));
+                var row = new System.Text.StringBuilder();
+                row.Append(Has("hit-die") ? 'H' : '-');
+                if (Has("hit-die")) hit++;
+                row.Append(Has("save-") ? 'S' : Noted("saving throw") ? 's' : '?');
+                if (Has("save-")) saves++; else if (!Noted("saving throw")) unexplained++;
+                // No armor proposed and no note: the page read "None".
+                row.Append(Has("armor-") ? 'A' : Noted("armor proficiencies") ? 'a' : '0');
+                if (Has("armor-")) armor++; else if (!Noted("armor proficiencies")) armorNone++;
+                row.Append(Has("weapon-") ? 'W' : Noted("condition") ? 'q' : Noted("weapon") ? 'w' : '?');
+                if (Has("weapon-")) weapons++; else if (Noted("condition")) weaponsQualified++; else if (!Noted("weapon")) unexplained++;
+                row.Append(c.Fields.ContainsKey("skills") ? 'K' : '-');
+                if (c.Fields.ContainsKey("skills")) skills++;
+                var slotTable = Noted("spell slot table");
+                row.Append(Has("spellcasting") ? 'C' : slotTable ? 'c' : '-');
+                if (c.ProposedEffects.OfType<SpellcastingEffect>().FirstOrDefault() is { } proposed)
+                {
+                    casting++;
+                    if (packCasting.TryGetValue(c.ProposedName.ToLowerInvariant(), out var truth) && truth == proposed.Ability)
+                        abilityRight++;
+                }
+                if (Has("spellcasting") || slotTable) slotTables++;
+                // Diagnostics for SRD pages only (CC-BY text, console only): the class and the parts read, never stored.
+                output.WriteLine($"  {version} {c.ProposedName}: {row} [{string.Join(' ', c.ProposedEffects.Select(e => e.Id).Where(i => i.StartsWith("weapon-", StringComparison.Ordinal) || i.StartsWith("armor-", StringComparison.Ordinal)))}]");
+            }
+            output.WriteLine($"{version}: classes {classes.Count}; proposed hit die {hit}, saves {saves}, armor {armor} (+{armorNone} read as none), weapons {weapons} (+{weaponsQualified} qualified, not proposed), "
+                + $"skills shown {skills}, spellcasting {casting} of {slotTables} with a slot table (ability as the pack {abilityRight}/{casting}); a missing saves/weapons part with no uncertainty: {unexplained}");
+            if (hit != classes.Count) failures.Add($"{version} hit die {hit}/{classes.Count}");
+            if (abilityRight != casting) failures.Add($"{version} spellcasting ability {abilityRight}/{casting}");
+            if (unexplained != 0) failures.Add($"{version} {unexplained} missing parts with no uncertainty");
+        }
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
     /// <summary>The table names a feature with a qualifier ("Rage (2 dice)") or in the plural where the pack does not.</summary>
     private static bool SameFeature(string tableName, string packName)
     {
