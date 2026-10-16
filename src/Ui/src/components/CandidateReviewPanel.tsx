@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CandidateCheck, CandidateFilter, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
 
@@ -38,7 +38,12 @@ const blockedReasons: Record<string, string> = {
   'candidate.already-reviewed': 'was already reviewed',
   'candidate.not-found': 'no longer exists',
   'spell-list.not-a-spell': 'is not a spell',
+  'import.class-unconfirmed': 'is a class: open it, tick the hit die and slot table, and accept it on its own',
+  'candidate.linked-changed': 'had a linked feature reviewed while it was being accepted: check it again',
 };
+
+/** A code this screen does not know yet still reads as words (WCAG 3.3.1), never as the code. */
+const reasonOf = (code: string) => blockedReasons[code] ?? 'was held back by a check: open it to see why';
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -140,6 +145,8 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
   useEffect(() => () => clearTimeout(pageTimer.current), []);
 
   const current = candidates?.find((c) => c.id === selected);
+  // Item 12: a save remounts the detail; the class's confirm ticks outlive it while the effects they confirmed are unchanged.
+  const confirmTicks = useRef(new Map<string, ConfirmTicks>());
 
   // Ruling R35: paging, the filters and the other rows would silently drop an unsaved edit, so they are held while there is one.
   // A bulk accept in flight holds them too: a page turn or filter change would move the rows it is about to reload.
@@ -195,7 +202,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         }`,
       );
       setSkippedLabel('Not accepted');
-      setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map((code) => blockedReasons[code] ?? code) })));
+      setSkipped(outcome.blocked.map((b) => ({ id: b.candidateId, name: nameOf(b.candidateId), reasons: b.codes.map(reasonOf) })));
       const stay = outcome.blocked.map((b) => b.candidateId);
       setTicked(stay);
       setAnnouncement(`${stay.length} selected`);
@@ -233,7 +240,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         }${outcome.updated.length > 0 ? ' Accept them to make drafts; nothing reaches a character until you publish the drafts in the studio.' : ''}`,
       );
       setSkippedLabel('Not changed');
-      setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map((code) => blockedReasons[code] ?? code) })));
+      setSkipped(outcome.skipped.map((s) => ({ id: s.candidateId, name: nameOf(s.candidateId), reasons: s.codes.map(reasonOf) })));
       setListOpen(false);
       listOpener.current?.focus(); // WCAG 2.4.3: the form is gone, so focus goes back to the button that opened it
       await load();
@@ -529,6 +536,8 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           onOpenPage={onOpenPage}
           onError={onError}
           onDirtyChange={setDirty}
+          confirmed={confirmTicks.current.get(current.id)}
+          onConfirmedChange={(ticks) => confirmTicks.current.set(current.id, ticks)}
           onChanged={async (text) => {
             onStatus(text);
             const list = await load();
@@ -553,9 +562,18 @@ interface DetailProps {
   onChanged: (status: string) => Promise<void>;
   /** Whether the form differs from what is stored, so the panel can keep the player from leaving with an unsaved edit. */
   onDirtyChange: (dirty: boolean) => void;
+  /** Item 12: the confirm ticks from before a save, with the effects they were made on. */
+  confirmed: ConfirmTicks | undefined;
+  onConfirmedChange: (ticks: ConfirmTicks) => void;
 }
 
-function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange }: DetailProps) {
+/** The effect ids a reviewer ticked, and the stored effects (as JSON) they were ticked against. */
+interface ConfirmTicks {
+  effects: string;
+  ids: string[];
+}
+
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, confirmed: remembered, onConfirmedChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
@@ -569,34 +587,28 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const pending = stored.status === 'pending';
 
   // Item 11 (D34, ADR-016): a class is accepted as a draft only once the reviewer has confirmed its hit die and, when it
-  // has one, its spell slot table; the confirmed effects keep their automation, every other proposal stays reference.
-  const isClass = stored.candidate.proposedKind === 'class';
+  // has one, its spell slot table; each proposed effect has its own tick, the ticked ones keep their automation and every
+  // other proposal stays reference. The kind is the edited one, as the service reads it.
+  const isClass = candidate.proposedKind === 'class';
   const proposed = candidate.proposedEffects as Record<string, unknown>[];
+  const confirmable = proposed.filter((e): e is Record<string, unknown> & { id: string } => typeof e.id === 'string');
   const hitDie = proposed.find((e) => e.type === 'hitDie' && typeof e.die === 'number');
   const casting = proposed.find((e) => e.type === 'spellcasting' && Array.isArray(e.slots));
-  const [confirmHitDie, setConfirmHitDie] = useState(false);
-  const [confirmSlots, setConfirmSlots] = useState(false);
-  const [featureNames, setFeatureNames] = useState<Map<string, string>>();
-  const links = stored.grantsCandidates ?? [];
-  const linkedCount = new Set(links.map((l) => l.candidateId)).size;
-  const missingConfirmations = isClass ? [!hitDie ? 'a hit die' : !confirmHitDie ? 'the hit die' : '', casting && !confirmSlots ? 'the spell slot table' : ''].filter(Boolean) : [];
+  const effectsKey = JSON.stringify(candidate.proposedEffects);
+  // Item 12: ticks made before a save stay only when the save left the effects as they were.
+  const [confirmed, setConfirmed] = useState<string[]>(remembered?.effects === effectsKey ? remembered.ids : []);
+  const isConfirmed = (effect: Record<string, unknown> | undefined) => effect !== undefined && confirmed.includes(String(effect.id));
+  const linked = check?.linked ?? [];
+  const linkedCount = linkedRows(linked).filter((f) => f.status !== 'ignored').length;
+  const missingConfirmations = isClass ? [!hitDie ? 'a hit die' : !isConfirmed(hitDie) ? 'the hit die' : '', casting && !isConfirmed(casting) ? 'the spell slot table' : ''].filter(Boolean) : [];
   const confirmHeld = pending && missingConfirmations.length > 0;
-  const confirmedIds = [confirmHitDie && hitDie ? String(hitDie.id) : '', confirmSlots && casting ? String(casting.id) : ''].filter(Boolean);
+  const confirmedIds = confirmable.map((e) => e.id).filter((id) => confirmed.includes(id));
 
-  useEffect(() => {
-    if (links.length === 0) return;
-    let current = true;
-    client
-      .candidates(stored.jobId, { kind: 'feature' }, { limit: 200 })
-      .then((page) => {
-        if (current) setFeatureNames(new Map(page.items.map((c) => [c.id, (c.edited ?? c.candidate).proposedName])));
-      })
-      .catch(onError);
-    return () => {
-      current = false;
-    };
-    // links is derived from stored, which is the key of this component
-  }, [stored.id, stored.jobId, links.length, onError]);
+  function toggleConfirmed(id: string, on: boolean) {
+    const ids = on ? [...confirmed, id] : confirmed.filter((x) => x !== id);
+    setConfirmed(ids);
+    onConfirmedChange({ effects: effectsKey, ids });
+  }
 
   const storedFamilies = candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f));
   const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
@@ -735,35 +747,35 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       )}
 
       {casting && <SlotTable casting={casting} page={candidate.page.start} onOpenPage={onOpenPage} />}
-      {isClass && links.length > 0 && (
+      {isClass && linked.length > 0 && (
         <>
           <h6 id={`linked-${stored.id}`}>Linked features</h6>
-          <p className="hint">Accepting the class as a draft also saves these as drafts, each granted by the class at its level.</p>
+          <p className="hint">
+            Accepting the class as a draft also saves the features still to review as drafts, each granted by the class at its level. An installed or already accepted
+            feature is granted as it is; an ignored one is not granted.
+          </p>
           <ul aria-labelledby={`linked-${stored.id}`}>
-            {linkedFeatures(links, featureNames).map((f) => (
-              <li key={f.id}>
+            {linkedRows(linked).map((f) => (
+              <li key={f.key}>
                 {f.name}, {f.levels.length === 1 ? 'level' : 'levels'} {f.levels.join(', ')}
+                {f.installed ? ', installed' : f.status === 'ignored' ? ', ignored: not granted' : f.status === 'accepted' || f.status === 'acceptedAsReference' ? ', already accepted' : ''}
               </li>
             ))}
           </ul>
         </>
       )}
-      {pending && isClass && (hitDie || casting) && (
+      {pending && isClass && confirmable.length > 0 && (
         <fieldset className="confirm-effects">
           <legend>Confirm what was read</legend>
-          <p className="hint">Unticked, a proposal stays reference only. A class becomes a draft once these are ticked.</p>
-          {hitDie && (
-            <label className="choice">
-              <input type="checkbox" checked={confirmHitDie} onChange={(e) => setConfirmHitDie(e.target.checked)} />
-              Confirm the hit die, d{String(hitDie.die)}
+          <p className="hint">
+            Tick each proposal you have checked against the page. Unticked, a proposal stays reference only. The class becomes a draft once its hit die{casting ? ' and spell slot table are' : ' is'} ticked.
+          </p>
+          {confirmable.map((effect) => (
+            <label key={effect.id} className="choice">
+              <input type="checkbox" checked={confirmed.includes(effect.id)} onChange={(e) => toggleConfirmed(effect.id, e.target.checked)} />
+              Confirm {effectLabel(effect)}
             </label>
-          )}
-          {casting && (
-            <label className="choice">
-              <input type="checkbox" checked={confirmSlots} onChange={(e) => setConfirmSlots(e.target.checked)} />
-              Confirm the spell slot table
-            </label>
-          )}
+          ))}
         </fieldset>
       )}
 
@@ -802,7 +814,9 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
             <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={20000} />
           </label>
           <label className="field">
-            Proposed effects (JSON; they stay reference-only until you change them in the studio)
+            {isClass
+              ? 'Proposed effects (JSON; on accepting the class as a draft, the ones you tick under Confirm what was read are automatic, the others stay reference)'
+              : 'Proposed effects (JSON; they stay reference-only until you change them in the studio)'}
             <textarea value={effects} onChange={(e) => setEffects(e.target.value)} rows={6} spellCheck={false} />
           </label>
           {effectsError && <p className="error">{effectsError}</p>}
@@ -828,7 +842,12 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
               ))}
             </ul>
           )}
-          <p className="hint">Depends on: {check.dependencies.map((d) => `${d.name}${d.kind === 'missing-content' || d.kind === 'unresolved-name' ? ' (missing)' : ''}`).join(', ')}</p>
+          {(check.notes ?? []).map((note) => (
+            <p key={note} className="hint">
+              {note}
+            </p>
+          ))}
+          <p className="hint">Depends on:{check.dependencies.map((d) => `${d.name}${d.kind === 'missing-content' || d.kind === 'unresolved-name' ? ' (missing)' : ''}`).join(', ')}</p>
           {check.canAccept && <p>No problems found: it can be accepted as a draft.</p>}
         </div>
       )}
@@ -866,11 +885,42 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   );
 }
 
-/** The features a class links, one row each (a feature granted at several levels shows them all), named from the job's candidates. */
-function linkedFeatures(links: { candidateId: string; level: number }[], names: Map<string, string> | undefined) {
-  const byId = new Map<string, number[]>();
-  for (const l of links) byId.set(l.candidateId, [...(byId.get(l.candidateId) ?? []), l.level]);
-  return [...byId].map(([id, levels]) => ({ id, name: names?.get(id) ?? 'A feature of this import', levels: [...levels].sort((a, b) => a - b) }));
+/**
+ * The features a class links, one row each (a feature granted at several levels shows them all), as the service's check names
+ * them: every link, however many features the import has.
+ */
+function linkedRows(linked: CandidateLinkSummary[]) {
+  const rows = new Map<string, { key: string; name: string; levels: number[]; status?: CandidateStatus; installed: boolean }>();
+  for (const l of linked) {
+    const key = l.candidateId ?? `installed:${l.name}`;
+    const row = rows.get(key) ?? { key, name: l.name, levels: [], status: l.status, installed: l.installed };
+    row.levels.push(l.level);
+    rows.set(key, row);
+  }
+  return [...rows.values()].map((r) => ({ ...r, levels: [...r.levels].sort((a, b) => a - b) }));
+}
+
+const abilityNames: Record<string, string> = {
+  strength: 'Strength',
+  dexterity: 'Dexterity',
+  constitution: 'Constitution',
+  intelligence: 'Intelligence',
+  wisdom: 'Wisdom',
+  charisma: 'Charisma',
+};
+
+/** Item 8: what a Confirm tick names, from the effect's own fields (the detector's proposals; anything else by its id). */
+function effectLabel(effect: Record<string, unknown> & { id: string }) {
+  if (effect.type === 'hitDie' && typeof effect.die === 'number') return `the hit die, d${effect.die}`;
+  if (effect.type === 'spellcasting' && Array.isArray(effect.slots)) return 'the spell slot table';
+  if (effect.type === 'grant' && effect.grant === 'proficiency' && typeof effect.target === 'string') {
+    const [area, key = ''] = effect.target.split('.');
+    if (area === 'save' && abilityNames[key]) return `the ${abilityNames[key]} saving throw proficiency`;
+    if (area === 'armor') return key === 'shield' ? 'the shield proficiency' : `the ${key} armor proficiency`;
+    if (area === 'weapon') return `the ${key} weapons proficiency`;
+  }
+  if (effect.type === 'choice' && typeof effect.level === 'number') return `the ${effect.id.endsWith('-subclass') ? 'subclass ' : ''}choice at level ${effect.level}`;
+  return `the effect ${effect.id}`;
 }
 
 const ordinal = (n: number) => `${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}`;

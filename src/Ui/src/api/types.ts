@@ -946,6 +946,19 @@ export interface CandidateCheck {
   blockers: Diagnostic[];
   canAccept: boolean;
   canAcceptAsReference: boolean;
+  /** Task 5 (R66): what accepting will leave out, said rather than blocked. */
+  notes?: string[];
+  /** Task 5: on a class, every feature its table links, by level then name. */
+  linked?: CandidateLinkSummary[];
+}
+
+/** One feature a class links: a candidate of this import (with its status), or one installed feature (R67). */
+export interface CandidateLinkSummary {
+  candidateId?: string;
+  name: string;
+  level: number;
+  status?: CandidateStatus;
+  installed: boolean;
 }
 
 export interface CandidateFilter {
