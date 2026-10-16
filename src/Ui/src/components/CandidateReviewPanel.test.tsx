@@ -971,6 +971,41 @@ it('lists the linked features the check returns, with installed and ignored ones
   expect(vi.mocked(client.candidates).mock.calls.some(([, filter]) => filter?.kind === 'feature')).toBe(false);
 });
 
+// Task 5 fix round 2.
+it('writes Depends on with a space, and shows the check notes, counts only', async () => {
+  await openStored(
+    { current: lamp() },
+    checkOf({
+      dependencies: [{ kind: 'content', name: 'Testy Glow' }],
+      notes: ['2 table features are not linked and will not be granted; add them in the studio.'],
+    }),
+  );
+  expect(await screen.findByText('2 table features are not linked and will not be granted; add them in the studio.')).toBeTruthy();
+  expect(screen.getByText(/^Depends on:/).textContent).toBe('Depends on: Testy Glow');
+});
+
+it('says a class is accepted granting only the linked features that are granted, not the ignored ones', async () => {
+  const user = userEvent.setup();
+  const linked: CandidateCheck['linked'] = [
+    { candidateId: 'feat-a', name: 'Testy Glow', level: 1, status: 'pending', installed: false },
+    { name: 'Testy Spark', level: 2, installed: true },
+    { candidateId: 'feat-c', name: 'Testy Dim', level: 4, status: 'ignored', installed: false },
+  ];
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockImplementation(() => Promise.resolve(pageOf([lamp()])));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({ linked }));
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockResolvedValue(lamp());
+  render(<CandidateReviewPanel job={job} source={source} onError={() => {}} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Lamplighter' }));
+  await screen.findByRole('list', { name: 'Linked features' });
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+  await vi.waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(onStatus.mock.calls[0]?.[0]).toMatch(/^Testy Lamplighter is now a draft granting 2 features in the studio\./);
+});
+
 // Item 12.
 it('clears the ticks when a saved edit changes the effects, and keeps them when it does not', async () => {
   const user = userEvent.setup();

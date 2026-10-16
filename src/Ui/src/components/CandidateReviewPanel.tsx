@@ -663,7 +663,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   async function accept(asReference: boolean) {
     try {
       await (isClass && !asReference ? client.acceptCandidate(stored.id, false, confirmedIds) : client.acceptCandidate(stored.id, asReference));
-      const alongside = isClass && !asReference && linkedCount > 0 ? ` with ${plural(linkedCount, 'linked feature', 'linked features')}` : '';
+      const alongside = isClass && !asReference && linkedCount > 0 ? ` granting ${plural(linkedCount, 'feature', 'features')}` : '';
       await onChanged(
         `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
       );
@@ -847,7 +847,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
               {note}
             </p>
           ))}
-          <p className="hint">Depends on:{check.dependencies.map((d) => `${d.name}${d.kind === 'missing-content' || d.kind === 'unresolved-name' ? ' (missing)' : ''}`).join(', ')}</p>
+          <p className="hint">Depends on: {check.dependencies.map((d) => `${d.name}${d.kind === 'missing-content' || d.kind === 'unresolved-name' ? ' (missing)' : ''}`).join(', ')}</p>
           {check.canAccept && <p>No problems found: it can be accepted as a draft.</p>}
         </div>
       )}

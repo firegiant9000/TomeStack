@@ -353,7 +353,8 @@ public sealed partial class TomeStackApp
     private sealed record LinkedFeature(StoredCandidate? Candidate, string Name, int Level, ContentRevision? NewDraft, ContentReference? Pin);
 
     /// <summary>What accepting a candidate would write: the class (or other) draft, and the linked feature drafts it grants.</summary>
-    private sealed record AcceptPlan(ContentRevision Draft, IReadOnlyList<LinkedFeature> Linked);
+    /// <param name="Unlinked">Features-column names neither linked to a candidate nor pinned to one installed match: not granted, counted in a note.</param>
+    private sealed record AcceptPlan(ContentRevision Draft, IReadOnlyList<LinkedFeature> Linked, int Unlinked = 0);
 
     /// <summary>
     /// The draft of a candidate and, for a class accepted as a draft, the features it grants. A linked candidate already
@@ -397,10 +398,13 @@ public sealed partial class TomeStackApp
         }
         var linkedNames = linked.Select(l => CandidateDetector.Key(l.Name)).ToHashSet(StringComparer.Ordinal);
         var installed = InstalledFeaturesByName(current.RulesFamilies, current.SourceId);
+        var unlinked = 0;
         foreach (var (name, level) in TableFeatures(current).Where(f => !linkedNames.Contains(CandidateDetector.Key(f.Name))))
         {
             if (installed.TryGetValue(CandidateDetector.Key(name), out var matches) && matches is [var only])
                 linked.Add(new(null, only.Name, level, null, only.Reference));
+            else
+                unlinked++; // no match, or several, at accept time: not granted, and the check says so
         }
         var used = new HashSet<string>(classDraft.Effects.Select(e => e.Id), StringComparer.Ordinal);
         var effects = new List<Effect>(classDraft.Effects);
@@ -412,7 +416,7 @@ public sealed partial class TomeStackApp
                 id = $"feature-{slug}-{n}";
             effects.Add(new GrantEffect { Id = id, Grant = GrantKind.Content, Content = feature.Pin, Level = feature.Level, Text = null });
         }
-        return new(classDraft with { Effects = effects }, linked);
+        return new(classDraft with { Effects = effects }, linked, unlinked);
     }
 
     /// <summary>The newest published revision of a content, or its newest draft when none is published (insertion order).</summary>
@@ -559,12 +563,12 @@ public sealed partial class TomeStackApp
             blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
         // R66: an ignored linked feature is not granted; that is said, not blocked.
         var ignored = plan.Linked.Count(l => l.Candidate?.Status == CandidateStatus.Ignored);
-        IReadOnlyList<string> notes = ignored switch
-        {
-            0 => [],
-            1 => ["1 linked feature is ignored and will not be granted."],
-            _ => [$"{ignored} linked features are ignored and will not be granted."],
-        };
+        var notes = new List<string>();
+        if (ignored > 0)
+            notes.Add(ignored == 1 ? "1 linked feature is ignored and will not be granted." : $"{ignored} linked features are ignored and will not be granted.");
+        // Fix round 2: a table feature with no link and no single installed match is counted, never named.
+        if (plan.Unlinked > 0)
+            notes.Add(plan.Unlinked == 1 ? "1 table feature is not linked and will not be granted; add it in the studio." : $"{plan.Unlinked} table features are not linked and will not be granted; add them in the studio.");
         // A class accepted as reference grants nothing, so its check lists what accepting it as a draft would grant.
         var linkedPlan = asReference && current.ProposedKind == ContentKind.Class ? PlanOf(stored, asReference: false, []) : plan;
         return new(stored.Id, report, Dependencies(draft, current, batch), blockers,

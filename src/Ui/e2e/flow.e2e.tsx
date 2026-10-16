@@ -979,7 +979,7 @@ it('imports a fixture class: the table is checked, the hit die and slots are con
   await user.click(within(again).getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft with \d+ linked features in the studio/));
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Lamplighter is now a draft granting \d+ features in the studio/));
 
   const entries = await client.contentBySource(source.id);
   const cls = entries.find((e) => e.name === 'Fixture Lamplighter')!;

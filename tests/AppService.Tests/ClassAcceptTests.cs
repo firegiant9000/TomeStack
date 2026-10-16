@@ -307,6 +307,56 @@ public class ClassAcceptTests
     }
 
     [Fact]
+    public void A_table_feature_whose_installed_match_no_longer_applies_at_accept_is_counted_in_a_note_and_not_granted()
+    {
+        // Fix round 2, item 1: detection linked it to the one installed match; the reviewer then changed the class's families.
+        var temp = new TempApp();
+        using var _t = temp;
+        var installed = PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
+        var (_, jobId) = ImportedInto(temp);
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+        Assert.DoesNotContain(temp.App.CheckCandidate(lamplighter.Id).Notes, n => n.Contains("not linked", StringComparison.Ordinal));
+
+        // The API refuses families outside the source's, so the changed family is written to the store directly.
+        var stored = temp.App.Store.FindImportCandidate(lamplighter.Id)!;
+        temp.App.Store.SaveImportCandidate(stored with { Edited = stored.Current with { RulesFamilies = [RulesFamilies.Srd51] } });
+        var check = temp.App.CheckCandidate(lamplighter.Id);
+        Assert.Contains("1 table feature is not linked and will not be granted; add it in the studio.", check.Notes);
+        Assert.DoesNotContain(check.Notes, n => n.Contains("Beacon", StringComparison.Ordinal));
+        // The check's plan does not pin it either (the accept itself is refused here: the other grants are srd-5.2.1; the next test accepts).
+        Assert.DoesNotContain(check.Linked, l => l.Name == "Fixture Beacon");
+        Assert.NotNull(installed);
+    }
+
+    [Fact]
+    public void A_table_feature_with_two_installed_matches_at_accept_is_counted_in_a_note()
+    {
+        var temp = new TempApp();
+        using var _t = temp;
+        var one = PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
+        var (_, jobId) = ImportedInto(temp);
+        var two = PublishedFeature(temp, "Test Other Book", "Fixture Beacon"); // published after detection
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+
+        var check = temp.App.CheckCandidate(lamplighter.Id);
+        Assert.Contains("1 table feature is not linked and will not be granted; add it in the studio.", check.Notes);
+        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var pins = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Select(g => g.Content).ToList();
+        Assert.DoesNotContain(one.Reference, pins);
+        Assert.DoesNotContain(two.Reference, pins);
+    }
+
+    [Fact]
+    public void The_normal_one_match_case_has_no_unlinked_note()
+    {
+        var temp = new TempApp();
+        using var _t = temp;
+        PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
+        var (_, jobId) = ImportedInto(temp);
+        Assert.DoesNotContain(temp.App.CheckCandidate(Reviewed(temp, jobId, "Fixture Lamplighter").Id).Notes, n => n.Contains("not linked", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void A_table_name_that_matches_no_installed_feature_becomes_a_stub()
     {
         var (temp, _, jobId) = Imported();
