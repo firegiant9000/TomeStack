@@ -54,7 +54,7 @@ public static partial class CandidateDetector
         var body = BodySize(units);
         var found = new List<DraftCandidate>();
         cancellationToken.ThrowIfCancellationRequested();
-        found.AddRange(Spells(units, context, body));
+        found.AddRange(ApplySpellLists(Spells(units, context, body).ToList(), SpellListPages(units, body)));
         cancellationToken.ThrowIfCancellationRequested();
         found.AddRange(Feats(units, context, body));
         cancellationToken.ThrowIfCancellationRequested();
@@ -352,7 +352,7 @@ public static partial class CandidateDetector
                 uncertainties.Add("No description was found after the spell's details.");
             }
             if (header.Lists.Count == 0)
-                uncertainties.Add("The spell block names no class lists (SRD 5.1 prints them separately); add them to use the spell with a caster.");
+                uncertainties.Add(NoListsNote);
             if (unit.FromOcr)
             {
                 confidence -= 0.15;
@@ -401,6 +401,89 @@ public static partial class CandidateDetector
                 Summary = text.Length == 0 ? null : text,
             };
         }
+    }
+
+    // ---- spell list pages (item 10) ----
+
+    private const string NoListsNote = "The spell block names no class lists (SRD 5.1 prints them separately); add them to use the spell with a caster.";
+
+    /// <summary>One list page: its key, the page of its heading and the <see cref="Key"/>s of the spell names it lists.</summary>
+    private sealed record SpellList(string ListKey, int Page, HashSet<string> Names);
+
+    /// <summary>
+    /// A heading "&lt;Name&gt; Spells" (any case) whose next line is a level group ("Cantrips", "1st Level"), then name lines
+    /// under the level groups, until a heading, a line that cannot be a name, or the page ends. A name that cannot become a
+    /// list key proposes nothing. Lines are read, never kept: only keys and names (compared, not stored) leave this pass.
+    /// </summary>
+    private static List<SpellList> SpellListPages(List<Unit> units, double body)
+    {
+        var lists = new List<SpellList>();
+        foreach (var page in units.GroupBy(u => u.Page))
+        {
+            SpellList? current = null;
+            var lines = new List<(string Line, bool Heading)>();
+            foreach (var unit in page)
+                lines.AddRange(unit.Lines.Select((l, n) => (l, n == 0 && IsHeading(unit, body))));
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var (line, heading) = lines[i];
+                if (SpellListHeading().Match(line) is { Success: true } listHeading && i + 1 < lines.Count && SpellLevelGroup().IsMatch(lines[i + 1].Line))
+                {
+                    current = SpellListKey.TryNormalise(listHeading.Groups["name"].Value, out var key) ? new SpellList(key, page.Key, []) : null;
+                    if (current is not null)
+                        lists.Add(current);
+                    continue;
+                }
+                if (current is null || SpellLevelGroup().IsMatch(line))
+                    continue;
+                if (heading || !LooksLikeName(line))
+                    current = null;
+                else
+                    current.Names.Add(Key(line));
+            }
+        }
+        return lists;
+    }
+
+    /// <summary>The list pages' keys, added (once each) to the spell candidates they name, as an unsure field citing the page.</summary>
+    private static List<DraftCandidate> ApplySpellLists(List<DraftCandidate> spells, List<SpellList> lists)
+    {
+        if (lists.Count == 0)
+            return spells;
+        var result = new List<DraftCandidate>(spells.Count);
+        foreach (var candidate in spells)
+        {
+            var effect = candidate.ProposedEffects.OfType<SpellEffect>().FirstOrDefault();
+            var name = Key(candidate.ProposedName);
+            if (effect is null)
+            {
+                result.Add(candidate);
+                continue;
+            }
+            var keys = effect.Lists.ToList();
+            var notes = new List<string>();
+            foreach (var list in lists.Where(l => l.Names.Contains(name)))
+            {
+                if (keys.Contains(list.ListKey, StringComparer.Ordinal))
+                    continue;
+                keys.Add(list.ListKey);
+                notes.Add($"Spell list '{list.ListKey}' was read from page {list.Page.ToString(CultureInfo.InvariantCulture)}; check it.");
+            }
+            if (notes.Count == 0)
+            {
+                result.Add(candidate);
+                continue;
+            }
+            var fields = new Dictionary<string, string>(candidate.Fields, StringComparer.Ordinal) { ["lists"] = string.Join(", ", keys) };
+            result.Add(candidate with
+            {
+                ProposedEffects = [.. candidate.ProposedEffects.Select(e => ReferenceEquals(e, effect) ? effect with { Lists = keys } : e)],
+                Uncertainties = [.. candidate.Uncertainties.Where(u => u != NoListsNote), .. notes],
+                Fields = fields,
+                LowConfidenceFields = candidate.LowConfidenceFields.Contains("lists", StringComparer.Ordinal) ? candidate.LowConfidenceFields : [.. candidate.LowConfidenceFields, "lists"],
+            });
+        }
+        return result;
     }
 
     // ---- feats ----
@@ -828,6 +911,12 @@ public static partial class CandidateDetector
 
     [GeneratedRegex(@"\bthe (?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4}) spell\b", RegexOptions.None, 100)]
     private static partial Regex NamedSpell();
+
+    [GeneratedRegex(@"^(?<name>\p{L}[\p{L}\p{N}'’ -]{0,48}?) Spells$", RegexOptions.IgnoreCase, 100)]
+    private static partial Regex SpellListHeading();
+
+    [GeneratedRegex(@"^(?:Cantrips|\d(?:st|nd|rd|th) Level)\b", RegexOptions.IgnoreCase, 100)]
+    private static partial Regex SpellLevelGroup();
 
     [GeneratedRegex(@"^(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)$", RegexOptions.None, 100)]
     private static partial Regex WeaponDamageCell();

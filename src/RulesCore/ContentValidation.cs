@@ -337,7 +337,7 @@ public static class ContentValidator
                     if (spell.Level is < 0 or > SpellcastingEffect.MaxSpellLevel)
                         Error("validate.spell-level", $"Spell '{spell.Id}' level {spell.Level} must be 0 (cantrip) to {SpellcastingEffect.MaxSpellLevel}.", spell.Id);
                     if (spell.Lists.Count == 0 || spell.Lists.Any(string.IsNullOrWhiteSpace))
-                        Warn("validate.spell-lists", $"Spell '{spell.Id}' is on no spell list; casters can record it only by hand.", spell.Id);
+                        Warn("validate.spell-lists", $"Spell '{spell.Id}' is on no spell list, so no caster can choose it. Add it to a spell list.", spell.Id);
                     if (spell.Dice is { } dice && !DiceExpression.TryParse(dice, out _, out var spellDiceError))
                         Error("validate.dice-invalid", $"Spell '{spell.Id}' dice '{dice}': {spellDiceError!.Message} ({spellDiceError.Code})", spell.Id);
                     if (revision.Kind != ContentKind.Spell)
