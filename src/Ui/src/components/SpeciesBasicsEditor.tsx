@@ -1,7 +1,7 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { abilities } from '../classBasics';
-import { abilityIncreases, addContentGrant, contentGrants, removeContentGrant, setAbilityIncrease } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, type BasicsProps } from './OriginPieces';
+import { abilityIncreases, addContentGrant, contentGrants, removeContentGrant, setAbilityIncrease, type AbilityKey } from '../entryBasics';
+import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
 
 /**
  * Tester feedback item 12: the parts of a species that need no formula, written as the effects the bundled packs use
@@ -10,7 +10,7 @@ import { familyName, joinNames, NewFeatureForm, SkillFieldset, type BasicsProps 
  * ability increases comes from the family's policy in the app info, never from its name. Every other effect of the species
  * stays in the studio's rule list.
  */
-export function SpeciesBasicsEditor(props: BasicsProps) {
+export function SpeciesBasicsEditor(props: SpeciesProps) {
   const { revision, info, onEffects } = props;
   const effects = revision.effects;
   const policies = revision.rulesFamilies.flatMap((id) => info.rulesFamilies.filter((p) => p.id === id));
@@ -23,6 +23,26 @@ export function SpeciesBasicsEditor(props: BasicsProps) {
   const [pick, setPick] = useState('');
   const legend = useRef<HTMLLegendElement>(null);
   const pickReason = useId();
+  const idBase = useId();
+
+  // Text that is not an increase (a 12, a minus sign typed first) is kept as typed, marked invalid and blocks saving: it is
+  // never clamped or dropped silently, and the stored increase stays as it was until the text is valid.
+  const [drafts, setDrafts] = useState<Partial<Record<AbilityKey, string>>>({});
+  const invalid = abilities.filter(([key]) => drafts[key] !== undefined);
+  const invalidKeys = invalid.map(([key]) => key).join(',');
+  const { onProblem } = props;
+  useEffect(() => {
+    const keys = invalidKeys === '' ? [] : invalidKeys.split(',');
+    for (const [key, label] of abilities) {
+      onProblem(`species-increase-${key}`, keys.includes(key) ? `${label} increase: a whole number from 1 to 9, or empty for none.` : undefined);
+    }
+  }, [invalidKeys, onProblem]);
+  useEffect(
+    () => () => {
+      for (const [key] of abilities) onProblem(`species-increase-${key}`, undefined);
+    },
+    [onProblem],
+  );
 
   const granted = new Set(traits.map((t) => t.content.contentId));
   const features = props.known.filter((k) => k.own && k.kind === 'feature' && k.contentId !== revision.contentId && !granted.has(k.contentId));
@@ -37,19 +57,32 @@ export function SpeciesBasicsEditor(props: BasicsProps) {
           <legend>{withIncreases.length > 0 ? `Ability score increases (${joinNames(withIncreases.map((p) => p.displayName))})` : 'Ability score increases'}</legend>
           <div className="origin-grid">
             {abilities.map(([key, label]) => (
-              <label key={key} className="field">
-                {label}
+              <div key={key} className="field">
+                <label htmlFor={`${idBase}-${key}`}>{label}</label>
                 <input
-                  type="number"
-                  min={0}
-                  max={4}
-                  value={increases[key] ?? ''}
+                  id={`${idBase}-${key}`}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={drafts[key] ?? increases[key] ?? ''}
+                  aria-invalid={drafts[key] !== undefined ? true : undefined}
+                  aria-describedby={drafts[key] !== undefined ? `${idBase}-${key}-error` : undefined}
                   onChange={(e) => {
-                    const amount = e.target.value === '' ? undefined : Math.min(4, Math.max(0, Math.trunc(Number(e.target.value)) || 0));
-                    onEffects((current) => setAbilityIncrease(current, key, amount));
+                    const text = e.target.value;
+                    if (text === '' || /^[1-9]$/.test(text)) {
+                      setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== key)));
+                      onEffects((current) => setAbilityIncrease(current, key, text === '' ? undefined : Number(text)));
+                    } else {
+                      setDrafts((d) => ({ ...d, [key]: text }));
+                    }
                   }}
                 />
-              </label>
+                {drafts[key] !== undefined && (
+                  <span id={`${idBase}-${key}-error`} className="error">
+                    {label}: an increase is a whole number from 1 to 9, or empty for none.
+                  </span>
+                )}
+              </div>
             ))}
           </div>
           {withIncreases.length === 0 && (
@@ -83,10 +116,21 @@ export function SpeciesBasicsEditor(props: BasicsProps) {
             {traits.map((t) => {
               const known = props.known.find((k) => k.contentId === t.content.contentId);
               const name = known?.name ?? 'Content that is not installed';
+              const newer = props.newerPublished(t.content);
               return (
                 <li key={t.id}>
                   <span className="option-name">{name}</span>
-                  {known?.draft && <span className="hint"> (draft)</span>}{' '}
+                  {known?.draft && !newer && <span className="hint"> (draft)</span>}
+                  {newer && (
+                    <StalePin
+                      name={name}
+                      onUse={() => {
+                        onEffects((current) => current.map((e) => (e.id === t.id && e.type === 'grant' ? { ...e, content: newer } : e)));
+                        setAnnouncement(`The trait ${name} now points at its published version.`);
+                        legend.current?.focus();
+                      }}
+                    />
+                  )}{' '}
                   <button
                     type="button"
                     onClick={() => {

@@ -204,8 +204,9 @@ export function increaseOptions(backgroundName: string, picked: AbilityKey[]): I
   return options;
 }
 
-export function increaseChoice(backgroundName: string, options: ContentReference[]): Choice {
-  const id = increaseChoiceId(backgroundName);
+/** The choice a background offers. `keepChoiceId` is the stored id of an existing choice: characters' picks are keyed by it (R63). */
+export function increaseChoice(backgroundName: string, options: ContentReference[], keepChoiceId?: string): Choice {
+  const id = keepChoiceId ?? increaseChoiceId(backgroundName);
   return {
     type: 'choice',
     id,

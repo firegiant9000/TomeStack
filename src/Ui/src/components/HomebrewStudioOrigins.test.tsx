@@ -19,6 +19,7 @@ vi.mock('../api/client', () => ({
     spellListKeys: vi.fn(),
     publishManyPreview: vi.fn(),
     listCharacters: vi.fn(),
+    publishMany: vi.fn(),
   },
 }));
 
@@ -44,6 +45,7 @@ function entriesNow(): StudioEntry[] {
     kind: revisions[0]!.kind as ContentKind,
     revisions,
     latest: revisions.at(-1)!,
+    latestPublished: revisions.filter((r) => r.status === 'published').at(-1),
   }));
 }
 
@@ -86,7 +88,7 @@ it('a new species: increases and skills are saved as effects, and the rule list 
   await user.click(await screen.findByRole('button', { name: 'New species' }));
   expect(screen.getByRole('heading', { name: 'New species' })).toBeTruthy();
   await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Fixture Folk');
-  await user.type(screen.getByRole('spinbutton', { name: 'Strength' }), '2');
+  await user.type(screen.getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(screen.getByRole('checkbox', { name: 'Athletics' }));
   expect(screen.queryByRole('group', { name: /^Rule \d/ })).toBeNull(); // nothing listed as a loose rule
   await user.click(screen.getByRole('button', { name: 'Save draft' }));
@@ -118,15 +120,26 @@ it('a new spell starts as a level 1 spell and saves trimmed text with its lists'
   expect(revision.effects).toEqual([{ type: 'spell', id: 'spell', level: 0, concentration: false, ritual: false, lists: ['fixture-list'], range: '30 feet' }]);
 });
 
-it('a typed spell list key that was not added blocks Save draft and says why', async () => {
+it('a typed spell list key that was not added blocks Save draft with aria-disabled, a linked reason, and kept focus', async () => {
   const user = userEvent.setup();
   render_();
   await user.click(await screen.findByRole('button', { name: 'New spell' }));
   await user.type(screen.getByRole('combobox', { name: 'Add a spell list' }), 'wizard');
   const save = screen.getByRole('button', { name: 'Save draft' });
-  expect(save).toHaveProperty('disabled', true);
-  expect(screen.getByText(/Spell lists: add the typed list key with Add list, or clear it\./)).toBeTruthy();
+  expect(save.getAttribute('aria-disabled')).toBe('true');
+  expect(save).toHaveProperty('disabled', false); // never native disabled: it stays focusable
+  const reason = document.getElementById(save.getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toMatch(/Spell lists: add the typed list key with Add list, or clear it\./);
+  const publish = screen.getByRole('button', { name: 'Publish' });
+  expect(publish.getAttribute('aria-disabled')).toBe('true');
+  expect(publish).toHaveProperty('disabled', false);
+  expect((publish.getAttribute('aria-describedby') ?? '').split(' ')).toContain(save.getAttribute('aria-describedby'));
+  save.focus();
+  await user.click(save);
+  await user.click(publish);
   expect(client.saveDraft).not.toHaveBeenCalled();
+  expect(client.publish).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(publish); // the pressed button keeps focus
 });
 
 it('a 2014 background saves a feature grant and no increases; a 2024 one has no feature picker', async () => {
@@ -166,19 +179,19 @@ it('a 2024 background: saving makes the seven option drafts first, then the back
   expect(onStatus.mock.calls.at(-1)![0]).toContain('Publish all drafts in this source');
 });
 
-it('Publish for a background that pins drafts saves it but publishes nothing, and says what to do', async () => {
+it('R61: Publish for a background that pins drafts works as the service does: it saves the options, then publishes the background', async () => {
   const user = userEvent.setup();
   onStatus.mockReset();
+  vi.mocked(client.publish).mockResolvedValue({ published: { contentId: 'bg', revisionId: 'bg-pub' }, report: { revision: { contentId: 'bg', revisionId: 'bg-pub' }, errors: [], warnings: [], canPublish: true }, affected: [] } as never);
   await newBackgroundWithIncreases(user);
   await user.click(screen.getByRole('button', { name: 'Publish' }));
 
   await waitFor(() => expect(client.saveDraft).toHaveBeenCalledTimes(8));
-  expect(client.publish).not.toHaveBeenCalled();
-  await waitFor(() => expect(onStatus).toHaveBeenCalled());
-  expect(onStatus.mock.calls.at(-1)![0]).toContain('not published');
+  await waitFor(() => expect(client.publish).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Published Fixture Wanderer.'));
 });
 
-it('once the drafts are known, Publish is held with a linked reason and focus is kept', async () => {
+it('R61: a background that points at drafts shows a linked, non-blocking note beside Publish and Publish stays available', async () => {
   const user = userEvent.setup();
   onStatus.mockReset();
   await newBackgroundWithIncreases(user);
@@ -186,12 +199,54 @@ it('once the drafts are known, Publish is held with a linked reason and focus is
   await waitFor(() => expect(onStatus).toHaveBeenCalled());
 
   const publish = await screen.findByRole('button', { name: 'Publish' });
-  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBe('true'));
-  const reason = document.getElementById(publish.getAttribute('aria-describedby') ?? '');
-  expect(reason?.textContent).toContain('points at 7 unpublished drafts');
-  publish.focus();
-  await user.click(publish);
-  expect(client.publish).not.toHaveBeenCalled();
-  expect(document.activeElement).toBe(publish);
+  const note = 'Points at 7 unpublished drafts. Publish all drafts publishes them together and re-points this entry.';
+  await waitFor(() => {
+    const described = (publish.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
+    expect(described).toContain(note);
+  });
+  expect(publish.getAttribute('aria-disabled')).toBeNull();
+  expect(publish).toHaveProperty('disabled', false);
   expect(within(document.body).queryAllByRole('status')).toHaveLength(0);
+});
+
+it('R61: a species that grants a draft trait shows the same note', async () => {
+  const user = userEvent.setup();
+  saved.push({ contentId: 'trait-c', revisionId: 'trait-r', kind: 'feature', name: 'Fixture Keen Senses', rulesFamilies: ['srd-5.1'], provenance: { sourceId: 'src' }, status: 'draft', effects: [] } as ContentRevision);
+  render_();
+  await user.click(await screen.findByRole('button', { name: 'New species' }));
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Add an existing feature as a trait' }), 'Fixture Keen Senses (draft)');
+  await user.click(screen.getByRole('button', { name: 'Add trait' }));
+  const publish = screen.getByRole('button', { name: 'Publish' });
+  const described = (publish.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
+  expect(described).toContain('Points at 1 unpublished draft. Publish all drafts publishes it together and re-points this entry.');
+});
+
+it('item 1: once Publish all has published the entry that was saved in the open editor, the editor closes with a status', async () => {
+  const user = userEvent.setup();
+  onStatus.mockReset();
+  vi.mocked(client.publishMany).mockImplementation(() => {
+    // The service published every pending draft: a published revision follows each saved draft.
+    const drafts = [...saved];
+    for (const d of drafts) saved.push({ ...d, revisionId: `${d.revisionId}-pub`, status: 'published' } as ContentRevision);
+    return Promise.resolve({ published: [] });
+  });
+  await newBackgroundWithIncreases(user);
+  await user.click(screen.getByRole('button', { name: 'Save draft' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalled());
+  expect(screen.getByRole('heading', { name: 'New background' })).toBeTruthy();
+
+  await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
+  vi.mocked(client.publishManyPreview).mockImplementation((ids) =>
+    Promise.resolve({
+      entries: ids.map((id) => ({ draft: { contentId: id, revisionId: saved.find((r) => r.contentId === id)!.revisionId }, name: 'x', kind: 'feature', report: { revision: { contentId: id, revisionId: 'r' }, errors: [], warnings: [], canPublish: true }, findings: [], replacesPublished: false, rePointings: [] })),
+      dependents: [],
+      canPublish: true,
+    } as never),
+  );
+  const publishAll = await screen.findByRole('button', { name: 'Publish 8 drafts' }, { timeout: 5000 });
+  await waitFor(() => expect(publishAll.getAttribute('aria-disabled')).toBeNull(), { timeout: 5000 });
+  await user.click(publishAll);
+
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'New background' })).toBeNull());
+  expect(onStatus.mock.calls.at(-1)![0]).toContain('Closed the editor of Fixture Wanderer');
 });

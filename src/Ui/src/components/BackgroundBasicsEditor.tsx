@@ -5,7 +5,6 @@ import { abilities } from '../classBasics';
 import {
   grantOfKind,
   increaseChoice,
-  increaseChoiceId,
   increaseOptions,
   isIncreaseChoice,
   keysOfOptions,
@@ -15,7 +14,7 @@ import {
   type IncreaseOption,
   type Known,
 } from '../entryBasics';
-import { familyName, joinNames, NewFeatureForm, SkillFieldset, type BackgroundProps } from './OriginPieces';
+import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type BackgroundProps } from './OriginPieces';
 
 const problemField = 'background-increases';
 const words = ['no abilities', 'one', 'two', 'three', 'four', 'five', 'six'];
@@ -68,6 +67,7 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
   }
   const read = readKeys(choice);
   const [picked, setPicked] = useState<AbilityKey[] | null>(null);
+  const [leftBehind, setLeftBehind] = useState(0);
   const shown = picked ?? read ?? [];
   const usesIncreases = increaseFamilies.length > 0;
   const showIncreases = usesIncreases || choice !== undefined;
@@ -109,19 +109,21 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
     if (keys.length !== 3 || rev.name.trim() === '') return unchanged; // the marked field blocks saving before this point
     const wanted = increaseOptions(rev.name, keys);
     const sameKeys = currentKeys !== null && currentKeys.length === keys.length && currentKeys.every((k) => keys.includes(k));
-    if (current && current.choiceId === increaseChoiceId(rev.name) && current.options.length === wanted.length && sameKeys) return unchanged;
+    const covers = (r: ContentRevision) => rev.rulesFamilies.every((f) => r.rulesFamilies.includes(f));
+    const newest = (contentId: string) => props.newestOf(contentId) ?? [...madeRevisions.values()].filter((r) => r.contentId === contentId).at(-1);
 
-    const refs: ContentReference[] = [];
-    const drafts: ContentReference[] = [];
-    for (const option of wanted) {
-      const reuse = reusable(option);
-      if (reuse) {
-        refs.push(reuse.reference);
-        if (reuse.draft) drafts.push(reuse.reference);
-        continue;
+    // The options the choice has now, by what they raise: with the same three abilities they are kept as the same contents (R63).
+    const own = new Map<string, ContentReference>();
+    if (current && sameKeys) {
+      for (const o of current.options) {
+        const r = revisionOf(o);
+        if (r) own.set(signature(r.effects), o);
       }
-      const reference = await client.saveDraft({
-        contentId: crypto.randomUUID(),
+    }
+
+    const save = async (contentId: string, option: IncreaseOption): Promise<ContentReference> => {
+      const stored: ContentRevision = {
+        contentId,
         revisionId: '00000000-0000-0000-0000-000000000000',
         kind: 'feature',
         name: option.name,
@@ -129,23 +131,48 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
         provenance: { sourceId: props.source.id },
         status: 'draft',
         effects: option.effects,
-      });
-      const made: ContentRevision = {
-        contentId: reference.contentId,
-        revisionId: reference.revisionId,
-        kind: 'feature',
-        name: option.name,
-        rulesFamilies: [...rev.rulesFamilies],
-        provenance: { sourceId: props.source.id },
-        status: 'draft',
-        effects: option.effects,
       };
+      const reference = await client.saveDraft(stored);
+      const made: ContentRevision = { ...stored, contentId: reference.contentId, revisionId: reference.revisionId };
       setMadeRevisions((all) => new Map(all).set(made.revisionId, made));
+      return reference;
+    };
+
+    const refs: ContentReference[] = [];
+    const drafts: ContentReference[] = [];
+    for (const option of wanted) {
+      const mine = own.get(signature(option.effects));
+      if (mine) {
+        // Point at the newest revision when it already says this (also moves a pin off a superseded draft); else a new revision of it.
+        const latestRevision = newest(mine.contentId);
+        if (latestRevision && latestRevision.name === option.name && signature(latestRevision.effects) === signature(option.effects) && covers(latestRevision)) {
+          const reference = { contentId: latestRevision.contentId, revisionId: latestRevision.revisionId };
+          refs.push(reference);
+          if (latestRevision.status === 'draft') drafts.push(reference);
+        } else {
+          const reference = await save(mine.contentId, option);
+          refs.push(reference);
+          drafts.push(reference);
+        }
+        continue;
+      }
+      const reuse = reusable(option);
+      if (reuse) {
+        refs.push(reuse.reference);
+        if (reuse.draft) drafts.push(reuse.reference);
+        continue;
+      }
+      const reference = await save(crypto.randomUUID(), option);
       props.onMade({ contentId: reference.contentId, name: option.name, kind: 'feature', reference, draft: true, own: true });
       refs.push(reference);
       drafts.push(reference);
     }
-    return { revision: { ...rev, effects: setIncreaseChoice(rev.effects, increaseChoice(rev.name, refs)) }, drafts };
+
+    const unchangedOptions = current !== undefined && sameKeys && current.options.length === refs.length && current.options.every((o, i) => o.revisionId === refs[i]!.revisionId);
+    if (unchangedOptions) return unchanged;
+    const stay = current ? current.options.filter((o) => !refs.some((r) => r.contentId === o.contentId)).length : 0;
+    setLeftBehind(stay);
+    return { revision: { ...rev, effects: setIncreaseChoice(rev.effects, increaseChoice(rev.name, refs, current?.choiceId)) }, drafts };
   };
   const { registerBeforeSave } = props;
   useEffect(() => {
@@ -163,6 +190,17 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
     return k ? [...list, k] : list;
   };
   const label = (k: Known) => `${k.name}${k.draft ? ' (draft)' : ''}`;
+
+  const nameOf = (g?: { content?: ContentReference }) => props.known.find((k) => k.contentId === g?.content?.contentId)?.name ?? 'this content';
+  const featureName = nameOf(featureGrant);
+  const featName = nameOf(featGrant);
+  const featureNewer = featureGrant && props.newerPublished(featureGrant.content);
+  const featNewer = featGrant && props.newerPublished(featGrant.content);
+  /** R62: the author asked for the published version of a pinned draft; nothing re-points without this press. */
+  function repointToPublished(kind: 'feature' | 'feat', newer: ContentReference) {
+    onEffects((current) => setKindGrant(current, kindOf, kind, newer, kind));
+    setAnnouncement(`The ${kind} ${kind === 'feature' ? featureName : featName} now points at its published version.`);
+  }
 
   function pick(kind: 'feature' | 'feat', contentId: string, list: Known[]) {
     const chosen = list.find((k) => k.contentId === contentId);
@@ -196,6 +234,11 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
               ))}
             </select>
           </label>
+          {featureNewer && (
+            <p>
+              <StalePin name={featureName} onUse={() => repointToPublished('feature', featureNewer)} />
+            </p>
+          )}
           <NewFeatureForm
             label="Feature"
             source={props.source}
@@ -233,6 +276,11 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
               ))}
             </select>
           </label>
+          {featNewer && (
+            <p>
+              <StalePin name={featName} onUse={() => repointToPublished('feat', featNewer)} />
+            </p>
+          )}
           <p className="hint">The feats of this source and the published feats installed for these rules. Make a new feat with New feat.</p>
         </fieldset>
       )}
@@ -261,6 +309,13 @@ export function BackgroundBasicsEditor(props: BackgroundProps) {
           {problem && (
             <p id={errorId} className="error">
               {problem.visible}
+            </p>
+          )}
+          {leftBehind > 0 && (
+            <p className="hint">
+              {leftBehind === 1
+                ? '1 old option entry stays in this source; it is no longer offered by this background.'
+                : `${leftBehind} old option entries stay in this source; they are no longer offered by this background.`}
             </p>
           )}
           {!usesIncreases && <p className="warn">These increases are ignored in {joinNames(otherFamilies.map((p) => p.displayName))}.</p>}

@@ -1073,7 +1073,7 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   await user.click(screen.getByRole('button', { name: 'New species' }));
   const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Folk');
-  await user.type(within(editor()).getByRole('spinbutton', { name: 'Strength' }), '2');
+  await user.type(within(editor()).getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
   await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
@@ -1097,9 +1097,12 @@ it('authors a newer-rules background with three ability increases: the option fe
   const entries = await client.contentBySource(source.id);
   expect(entries.filter((e) => e.kind === 'feature' && e.name.startsWith('E2E Wanderer Ability Scores'))).toHaveLength(7);
 
-  // Publishing the background alone is held with a visible reason; the whole source publishes together.
+  // R61: Publish is not held; a linked note says the entry points at drafts and that Publish all publishes them together.
   const publish = await within(editor()).findByRole('button', { name: 'Publish' });
-  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBe('true'));
+  await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
+  const note = document.getElementById('editor-pins');
+  expect(note?.textContent).toBe('Points at 7 unpublished drafts. Publish all drafts publishes them together and re-points this entry.');
+  expect((publish.getAttribute('aria-describedby') ?? '').split(' ')).toContain('editor-pins');
   await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
   const region = screen.getByRole('region', { name: 'Publish drafts of E2E Wanderer Book' });
   const publishAll = await within(region).findByRole('button', { name: 'Publish 8 drafts' });
@@ -1107,6 +1110,8 @@ it('authors a newer-rules background with three ability increases: the option fe
   await user.click(publishAll);
   await within(region).findByText('Published 8 drafts.');
   expect((await newestOf(source.id, 'E2E Wanderer'))?.status).toBe('published');
+  // The open editor showed the superseded draft: it closes with a status instead of saving over the published version.
+  await waitFor(() => expect(screen.queryByRole('region', { name: /^New |^Edit / })).toBeNull());
 
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   await createCharacter(user, { name: 'E2E Wanderer Child', family: 'srd-5.2.1', background: /^E2E Wanderer/ });

@@ -64,6 +64,14 @@ function Harness(props: { initial: ContentRevision; known?: Known[]; revisions?:
       info={info}
       known={all}
       revisionOf={(r: ContentReference) => props.revisions?.find((x) => x.revisionId === r.revisionId)}
+      newestOf={(contentId: string) => props.revisions?.filter((x) => x.contentId === contentId).at(-1)}
+      newerPublished={(r: ContentReference) => {
+        const list = props.revisions?.filter((x) => x.contentId === r.contentId) ?? [];
+        const at = list.findIndex((x) => x.revisionId === r.revisionId);
+        if (at < 0 || list[at]!.status !== 'draft') return undefined;
+        const later = list.slice(at + 1).filter((x) => x.status === 'published').at(-1);
+        return later && { contentId: later.contentId, revisionId: later.revisionId };
+      }}
       onEffects={(update) => setRevision((r) => ({ ...r, effects: update(r.effects) }))}
       onBusy={() => {}}
       onMade={(k) => setMade((m) => [...m, k])}
@@ -77,7 +85,11 @@ function Harness(props: { initial: ContentRevision; known?: Known[]; revisions?:
 beforeEach(() => {
   let n = 0;
   vi.mocked(client.saveDraft).mockReset();
-  vi.mocked(client.saveDraft).mockImplementation(() => Promise.resolve({ contentId: `opt-c${++n}`, revisionId: `opt-r${n}` }));
+  // A new content (a minted UUID) gets opt-c<n>; a new revision of an existing content keeps its content id.
+  vi.mocked(client.saveDraft).mockImplementation((r) => {
+    n++;
+    return Promise.resolve(/^[0-9a-f-]{36}$/.test(r.contentId) ? { contentId: `opt-c${n}`, revisionId: `opt-r${n}` } : { contentId: r.contentId, revisionId: `${r.contentId}-new${n}` });
+  });
 });
 afterEach(cleanup);
 
@@ -260,19 +272,91 @@ it('unticking all three removes the choice on save; an untouched unreadable choi
   expect(result.revision.effects.find(isIncreaseChoice)).toEqual(choice);
 });
 
-it('renaming the background remakes the options under the new name', async () => {
-  const options = increaseOptions('Fixture Wanderer', ['str', 'dex', 'con']);
-  const revisions: ContentRevision[] = options.map((o, i) => ({
-    contentId: `c${i}`, revisionId: `r${i}`, kind: 'feature', name: o.name, rulesFamilies: ['srd-5.2.1'], provenance: { sourceId: 'src' }, status: 'published', effects: o.effects,
+/** The seven stored option features of a background, as the editor would have saved them (R63 tests). */
+function storedOptions(name: string, keys: ('str' | 'dex' | 'con' | 'int' | 'wis' | 'cha')[], families: RulesFamilyId[], status: 'draft' | 'published' = 'published'): ContentRevision[] {
+  return increaseOptions(name, keys).map((o, i) => ({
+    contentId: `c${i}`, revisionId: `r${i}`, kind: 'feature', name: o.name, rulesFamilies: families, provenance: { sourceId: 'src' }, status, effects: o.effects,
   }));
-  const choice = increaseChoice('Fixture Wanderer', revisions.map((r) => ({ contentId: r.contentId, revisionId: r.revisionId })));
-  render(<Harness initial={revisionOf(['srd-5.2.1'], [choice], 'Fixture Traveller')} revisions={revisions} />);
+}
+const refsOf = (revisions: ContentRevision[]): ContentReference[] => revisions.map((r) => ({ contentId: r.contentId, revisionId: r.revisionId }));
+const knownOf = (revisions: ContentRevision[]): Known[] => revisions.map((r) => known(r.contentId, r.name, 'feature', { reference: { contentId: r.contentId, revisionId: r.revisionId }, draft: r.status === 'draft' }));
+
+it('R63: renaming keeps the choice id and the option content ids, and saves new revisions of the same options under the new names', async () => {
+  const revisions = storedOptions('Fixture Wanderer', ['str', 'dex', 'con'], ['srd-5.2.1']);
+  const choice = increaseChoice('Fixture Wanderer', refsOf(revisions));
+  render(<Harness initial={revisionOf(['srd-5.2.1'], [choice], 'Fixture Traveller')} revisions={revisions} known={knownOf(revisions)} />);
   let result!: Awaited<ReturnType<BeforeSave>>;
   await act(async () => {
     result = await hook.current!(latest);
   });
-  expect(vi.mocked(client.saveDraft).mock.calls[0]![0].name).toBe('Fixture Traveller Ability Scores: Strength +2, Dexterity +1');
-  expect(result.revision.effects.find(isIncreaseChoice)!.choiceId).toBe('fixture-traveller-ability-scores');
+  const saved = vi.mocked(client.saveDraft).mock.calls.map((c) => c[0]);
+  expect(saved).toHaveLength(7);
+  expect(saved.map((s) => s.contentId)).toEqual(revisions.map((r) => r.contentId));
+  expect(saved[0]!.name).toBe('Fixture Traveller Ability Scores: Strength +2, Dexterity +1');
+  const next = result.revision.effects.find(isIncreaseChoice)!;
+  expect(next.choiceId).toBe('fixture-wanderer-ability-scores'); // characters that chose from it keep their choice
+  expect(next.options.map((o) => o.contentId)).toEqual(revisions.map((r) => r.contentId));
+  expect(next.options.every((o, i) => o.revisionId !== revisions[i]!.revisionId)).toBe(true);
+  expect(result.drafts).toHaveLength(7);
+  expect(screen.queryByText(/old option entr/)).toBeNull();
+});
+
+it('R63: picking other abilities makes the new options and says how many old ones stay behind', async () => {
+  const user = userEvent.setup();
+  const revisions = storedOptions('Fixture Wanderer', ['str', 'dex', 'con'], ['srd-5.2.1']);
+  const choice = increaseChoice('Fixture Wanderer', refsOf(revisions));
+  render(<Harness initial={revisionOf(['srd-5.2.1'], [choice])} revisions={revisions} known={knownOf(revisions)} />);
+  await tick(user, 'Constitution', 'Wisdom');
+  let result!: Awaited<ReturnType<BeforeSave>>;
+  await act(async () => {
+    result = await hook.current!(latest);
+  });
+  // Strength and Dexterity pair up exactly as before (2 reused); 5 options are new; 5 old ones are no longer offered.
+  expect(vi.mocked(client.saveDraft)).toHaveBeenCalledTimes(5);
+  expect(result.revision.effects.find(isIncreaseChoice)!.options).toHaveLength(7);
+  expect(await screen.findByText('5 old option entries stay in this source; they are no longer offered by this background.')).toBeTruthy();
+});
+
+it('item 1: an option that points at a superseded draft is re-pointed at the published revision on save, not left as it was', async () => {
+  const published = storedOptions('Fixture Wanderer', ['str', 'dex', 'con'], ['srd-5.2.1']);
+  const olderDraft = { ...published[0]!, revisionId: 'r0-old', status: 'draft' as const };
+  const revisions = [olderDraft, ...published];
+  const options = refsOf(published);
+  options[0] = { contentId: 'c0', revisionId: 'r0-old' };
+  const choice = increaseChoice('Fixture Wanderer', options);
+  render(<Harness initial={revisionOf(['srd-5.2.1'], [choice])} revisions={revisions} known={knownOf(published)} />);
+  let result!: Awaited<ReturnType<BeforeSave>>;
+  await act(async () => {
+    result = await hook.current!(latest);
+  });
+  expect(client.saveDraft).not.toHaveBeenCalled();
+  expect(result.revision.effects.find(isIncreaseChoice)!.options[0]).toEqual({ contentId: 'c0', revisionId: 'r0' });
+  expect(result.drafts).toEqual([]);
+});
+
+it('item 1: adding a rules family to the background saves the options again for both families', async () => {
+  const revisions = storedOptions('Fixture Wanderer', ['str', 'dex', 'con'], ['srd-5.2.1']);
+  const choice = increaseChoice('Fixture Wanderer', refsOf(revisions));
+  render(<Harness initial={revisionOf(['srd-5.2.1', 'srd-5.1'], [choice])} revisions={revisions} known={knownOf(revisions)} />);
+  await act(async () => {
+    await hook.current!(latest);
+  });
+  const saved = vi.mocked(client.saveDraft).mock.calls.map((c) => c[0]);
+  expect(saved).toHaveLength(7);
+  expect(saved.every((s) => s.rulesFamilies.includes('srd-5.1') && s.rulesFamilies.includes('srd-5.2.1'))).toBe(true);
+  expect(saved.map((s) => s.contentId)).toEqual(revisions.map((r) => r.contentId));
+});
+
+it('R62: a feature or a feat that points at a superseded draft is named, and re-pointed only by its own button', async () => {
+  const user = userEvent.setup();
+  const older: ContentRevision = { contentId: 'f1', revisionId: 'f1-old', kind: 'feature', name: 'Fixture Shelter', rulesFamilies: ['srd-5.1'], provenance: { sourceId: 'src' }, status: 'draft', effects: [] };
+  const newer: ContentRevision = { ...older, revisionId: 'f1-pub', status: 'published' };
+  const grant: Effect = { type: 'grant', id: 'feature', grant: 'content', content: { contentId: 'f1', revisionId: 'f1-old' } };
+  render(<Harness initial={revisionOf(['srd-5.1'], [grant])} revisions={[older, newer]} />);
+  expect(screen.getByText('A newer published version of Fixture Shelter exists.')).toBeTruthy();
+  expect(latest.effects).toEqual([grant]);
+  await user.click(screen.getByRole('button', { name: 'Use the published version of Fixture Shelter' }));
+  expect(latest.effects).toEqual([{ ...grant, content: { contentId: 'f1', revisionId: 'f1-pub' } }]);
 });
 
 it('older rules only: saving leaves the effects alone and makes nothing', async () => {

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { AppInfo, ContentRevision, Effect, RulesFamilyId, SourceRecord } from '../api/types';
+import type { AppInfo, ContentReference, ContentRevision, Effect, RulesFamilyId, SourceRecord } from '../api/types';
 import { abilityIncreases, skillGrants, type Known } from '../entryBasics';
 import { SpeciesBasicsEditor } from './SpeciesBasicsEditor';
 
@@ -31,11 +31,19 @@ function revisionOf(families: RulesFamilyId[], effects: Effect[] = []): ContentR
 }
 
 /** Holds the revision the way the studio does, applying each update to the latest effects. */
-function Harness(props: { initial: ContentRevision; known?: Known[]; onChange?: (r: ContentRevision) => void; onMade?: (k: Known) => void; onProblem?: () => void }) {
+function Harness(props: {
+  initial: ContentRevision;
+  known?: Known[];
+  onChange?: (r: ContentRevision) => void;
+  onMade?: (k: Known) => void;
+  onProblem?: (field: string, problem: string | undefined) => void;
+  newerPublished?: (r: ContentReference) => ContentReference | undefined;
+}) {
   const [revision, setRevision] = useState(props.initial);
   props.onChange?.(revision);
   return (
     <SpeciesBasicsEditor
+      newerPublished={props.newerPublished ?? (() => undefined)}
       revision={revision}
       source={source}
       info={info}
@@ -59,36 +67,36 @@ it('older rules: shows ability increases as number fields and writes one bonus m
   const user = userEvent.setup();
   render(<Harness initial={revisionOf(['srd-5.1'])} onChange={(r) => (latest = r)} />);
   const group = screen.getByRole('group', { name: /Ability score increases/ });
-  expect(within(group).getByRole('spinbutton', { name: 'Strength' })).toBeTruthy();
-  expect(within(group).getByRole('spinbutton', { name: 'Charisma' })).toBeTruthy();
+  expect(within(group).getByRole('textbox', { name: 'Strength' })).toBeTruthy();
+  expect(within(group).getByRole('textbox', { name: 'Charisma' })).toBeTruthy();
   expect(screen.queryByText(/ability increases come from the background/)).toBeNull();
 
-  await user.type(within(group).getByRole('spinbutton', { name: 'Strength' }), '2');
-  await user.type(within(group).getByRole('spinbutton', { name: 'Charisma' }), '1');
+  await user.type(within(group).getByRole('textbox', { name: 'Strength' }), '2');
+  await user.type(within(group).getByRole('textbox', { name: 'Charisma' }), '1');
   expect(abilityIncreases(latest.effects)).toEqual({ str: 2, cha: 1 });
   expect(latest.effects[0]).toMatchObject({ type: 'modifier', operation: 'bonus', target: 'ability.str.score', value: '2' });
 
-  await user.clear(within(group).getByRole('spinbutton', { name: 'Strength' }));
+  await user.clear(within(group).getByRole('textbox', { name: 'Strength' }));
   expect(abilityIncreases(latest.effects)).toEqual({ cha: 1 });
 });
 
 it('newer rules: no increase fields, and it says where the increases come from', () => {
   render(<Harness initial={revisionOf(['srd-5.2.1'])} />);
-  expect(screen.queryByRole('spinbutton', { name: 'Strength' })).toBeNull();
+  expect(screen.queryByRole('textbox', { name: 'Strength' })).toBeNull();
   expect(screen.getByText('In Fixture Newer Rules, ability increases come from the background.')).toBeTruthy();
 });
 
 it('a species for both families shows both behaviours, each labelled by the family name', () => {
   render(<Harness initial={revisionOf(['srd-5.1', 'srd-5.2.1'])} />);
   const group = screen.getByRole('group', { name: 'Ability score increases (Fixture Older Rules)' });
-  expect(within(group).getByRole('spinbutton', { name: 'Wisdom' })).toBeTruthy();
+  expect(within(group).getByRole('textbox', { name: 'Wisdom' })).toBeTruthy();
   expect(screen.getByText('In Fixture Newer Rules, ability increases come from the background.')).toBeTruthy();
 });
 
 it('keeps showing increases that exist when no ticked family uses them, and says they are ignored', () => {
   const increase: Effect = { type: 'modifier', id: 'a', operation: 'bonus', target: 'ability.dex.score', value: '2' };
   render(<Harness initial={revisionOf(['srd-5.2.1'], [increase])} />);
-  expect(screen.getByRole('spinbutton', { name: 'Dexterity' })).toHaveProperty('value', '2');
+  expect(screen.getByRole('textbox', { name: 'Dexterity' })).toHaveProperty('value', '2');
   expect(screen.getByText(/ignored in Fixture Newer Rules/)).toBeTruthy();
 });
 
@@ -99,7 +107,7 @@ it('reads an existing species back: values, skills and traits by name', () => {
     { type: 'grant', id: 't', grant: 'content', content: trait.reference },
   ];
   render(<Harness initial={revisionOf(['srd-5.1'], effects)} />);
-  expect(screen.getByRole('spinbutton', { name: 'Constitution' })).toHaveProperty('value', '2');
+  expect(screen.getByRole('textbox', { name: 'Constitution' })).toHaveProperty('value', '2');
   expect(screen.getByRole('checkbox', { name: 'Stealth' })).toHaveProperty('checked', true);
   expect(screen.getByRole('checkbox', { name: 'Athletics' })).toHaveProperty('checked', false);
   const traits = screen.getByRole('list', { name: 'Traits' });
@@ -179,6 +187,63 @@ it('refuses "Create trait" until it has a name, with a linked reason', async () 
   expect(document.getElementById(create.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Name the feature first.');
   await user.click(create);
   expect(client.saveDraft).not.toHaveBeenCalled();
+});
+
+it('item 8: accepts 1 to 9, marks anything else invalid with a linked message, blocks saving, and never clamps', async () => {
+  const user = userEvent.setup();
+  const onProblem = vi.fn();
+  const lastFor = (field: string) => onProblem.mock.calls.filter((c) => c[0] === field).at(-1)?.[1];
+  render(<Harness initial={revisionOf(['srd-5.1'])} onChange={(r) => (latest = r)} onProblem={onProblem} />);
+  const strength = screen.getByRole('textbox', { name: 'Strength' });
+  await user.type(strength, '7');
+  expect(abilityIncreases(latest.effects)).toEqual({ str: 7 });
+  expect(strength.getAttribute('aria-invalid')).toBeNull();
+
+  await user.clear(strength);
+  await user.type(strength, '12');
+  expect(strength).toHaveProperty('value', '12'); // shown as typed, not clamped
+  expect(strength.getAttribute('aria-invalid')).toBe('true');
+  const message = document.getElementById(strength.getAttribute('aria-describedby') ?? '');
+  expect(message?.textContent).toBe('Strength: an increase is a whole number from 1 to 9, or empty for none.');
+  expect(lastFor('species-increase-str')).toEqual('Strength increase: a whole number from 1 to 9, or empty for none.');
+  expect(abilityIncreases(latest.effects)).toEqual({ str: 1 }); // the last valid text was "1"; "12" changed nothing
+
+  await user.clear(strength);
+  await user.type(strength, '9');
+  expect(strength.getAttribute('aria-invalid')).toBeNull();
+  expect(lastFor('species-increase-str')).toEqual(undefined);
+  expect(abilityIncreases(latest.effects)).toEqual({ str: 9 });
+});
+
+it('item 8: typing a minus sign in the middle of an edit keeps the increase and marks the field', async () => {
+  const user = userEvent.setup();
+  const effects: Effect[] = [{ type: 'modifier', id: 'a', operation: 'bonus', target: 'ability.str.score', value: '2' }];
+  render(<Harness initial={revisionOf(['srd-5.1'], effects)} onChange={(r) => (latest = r)} />);
+  const strength = screen.getByRole('textbox', { name: 'Strength' });
+  await user.type(strength, '-');
+  expect(abilityIncreases(latest.effects)).toEqual({ str: 2 });
+  expect(strength.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('R62: a trait that points at a superseded draft says so, and only the per-trait button re-points it', async () => {
+  const user = userEvent.setup();
+  const published: ContentReference = { contentId: 'f1', revisionId: 'f1-published' };
+  const effects: Effect[] = [{ type: 'grant', id: 't', grant: 'content', content: { contentId: 'f1', revisionId: 'f1-old-draft' } }];
+  render(
+    <Harness
+      initial={revisionOf(['srd-5.1'], effects)}
+      onChange={(r) => (latest = r)}
+      newerPublished={(r) => (r.revisionId === 'f1-old-draft' ? published : undefined)}
+    />,
+  );
+  expect(screen.getByText('A newer published version of Fixture Keen Senses exists.')).toBeTruthy();
+  expect(latest.effects).toEqual(effects); // nothing re-pointed silently
+
+  const use = screen.getByRole('button', { name: 'Use the published version of Fixture Keen Senses' });
+  expect(use.getAttribute('aria-describedby')).toBeTruthy();
+  await user.click(use);
+  expect(latest.effects).toEqual([{ type: 'grant', id: 't', grant: 'content', content: published }]);
+  expect(screen.queryByText(/A newer published version/)).toBeNull();
 });
 
 it('has no inline style and no second status region', () => {
