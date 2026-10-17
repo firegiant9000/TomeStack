@@ -47,9 +47,13 @@ internal static class AppVersionStamp
         if (schema is 0 || schema > latestSchemaVersion)
             return; // nothing stored yet, or a newer data folder that the store refuses untouched
         var copy = CopyPath(databasePath, stamped is null ? $"pre-{Format(current)}" : Format(stamped));
-        File.Delete(copy);
-        using var target = new SqliteConnection($"Data Source={copy};Pooling=False");
-        probe.BackupDatabase(target);
+        if (File.Exists(copy))
+            return; // a retry after a launch that failed: the first copy is the one from before the new build wrote anything
+        var partial = copy + ".tmp"; // complete or absent: a crash mid-copy must not leave a half file under the real name
+        File.Delete(partial);
+        using (var target = new SqliteConnection($"Data Source={partial};Pooling=False"))
+            probe.BackupDatabase(target);
+        File.Move(partial, copy);
     }
 
     /// <summary>Records <paramref name="appVersion"/> after a successful open, unless the stamp is already that version or a newer one.</summary>
@@ -59,8 +63,15 @@ internal static class AppVersionStamp
             return;
         var path = Path.Combine(dataDirectory, FileName);
         var temporary = path + ".tmp";
-        File.WriteAllText(temporary, Format(current) + "\n");
-        File.Move(temporary, path, overwrite: true);
+        try
+        {
+            File.WriteAllText(temporary, Format(current) + "\n");
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporary); // nothing to delete after a successful move; a failed move leaves no stray file
+        }
     }
 
     private static Version? Read(string dataDirectory)

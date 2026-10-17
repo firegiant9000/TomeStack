@@ -179,6 +179,42 @@ public class AppVersionCopyTests
     }
 
     [Fact]
+    public void A_retry_after_a_failed_launch_keeps_the_first_copy()
+    {
+        var directory = NewDirectory();
+        using (Open(directory, "0.5.0", save: true)) { }
+        File.Delete(Stamp(directory));
+        using (Open(directory, "0.6.0")) { }
+        var copy = Path.Combine(directory, "tomestack.db.app-pre-0.6.0.bak");
+        Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;"));
+
+        // The new build ran, wrote more, and the launch failed before the stamp was kept: the next launch finds no stamp again.
+        using (var app = Open(directory, "0.6.0"))
+            app.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier.json"));
+        File.Delete(Stamp(directory));
+        using (Open(directory, "0.6.0")) { }
+
+        Assert.Equal(["tomestack.db.app-pre-0.6.0.bak"], Copies(directory));
+        Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;")); // still what the old build left
+        Assert.Equal(2, Scalar(Path.Combine(directory, TomeStackApp.DatabaseFileName), "SELECT COUNT(*) FROM characters;"));
+        Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim());
+    }
+
+    [Fact]
+    public void A_stamp_that_cannot_be_written_does_not_stop_the_app_opening_and_is_logged()
+    {
+        var directory = NewDirectory();
+        Directory.CreateDirectory(Stamp(directory)); // a directory where the file goes: the move onto it fails
+
+        using (var app = Open(directory, "0.6.0", save: true))
+            Assert.Single(app.ListCharacters());
+
+        var log = File.ReadAllText(Path.Combine(directory, "logs", FileErrorLog.FileName));
+        Assert.Contains("app.version-stamp", log, StringComparison.Ordinal);
+        Assert.False(File.Exists(Stamp(directory) + ".tmp")); // no leftover temporary file
+    }
+
+    [Fact]
     public void The_real_app_version_is_the_assembly_version()
     {
         using var temp = new TempApp();

@@ -119,7 +119,15 @@ public sealed partial class TomeStackApp : IDisposable
                 app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
             }
             AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
-            AppVersionStamp.Write(dataDirectory, version); // only after a successful open
+            try
+            {
+                AppVersionStamp.Write(dataDirectory, version); // only after a successful open
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The app is open and usable; the next launch only repeats the check (and keeps the first copy). Never block on it.
+                app.ErrorLog.Record(FileErrorLog.NewCorrelationId(), "app.version-stamp", ex);
+            }
             return app;
         }
         catch

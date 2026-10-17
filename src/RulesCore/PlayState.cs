@@ -150,6 +150,8 @@ public sealed record PlayState
         {
             if (companions.Any(c => c is null || c.Current is < 0 or > MaxHitPoints || c.Temporary is < 0 or > MaxHitPoints))
                 yield return new("play.companion-invalid", $"A companion's current and temporary hit points must be between 0 and {MaxHitPoints}.");
+            if (companions.Any(c => c is not null && c.Id == Guid.Empty))
+                yield return new("play.companion-id-missing", "A companion's hit points are recorded without the companion's id.");
             if (companions.OfType<CompanionPlay>().GroupBy(c => c.Id).Any(g => g.Count() > 1))
                 yield return new("play.companion-duplicate", "A companion's hit points are recorded more than once.");
         }

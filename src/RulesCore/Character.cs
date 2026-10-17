@@ -30,21 +30,29 @@ public sealed record Character
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
 
-    /// <summary>Bounds on the v9 data (untrusted input, SPEC Q-02): modest, about 100,000 characters in all.</summary>
+    // Bounds on the v9 data (untrusted input, SPEC Q-02). The ruled budget is about 100,000 characters in all; the maxima add up to:
+    //   details      13 texts x 2,000                                   = 26,000
+    //                2 lists x 30 entries x 80                          =  4,800
+    //   items        50 x (name 80 + note 200)                          = 14,000
+    //   attacks      30 x (name 80 + dice 40 + type 80 + note 200 = 400) = 12,000
+    //   companions   10 x (name 80 + kind 80 + speed 80 + note 200
+    //                      + 5 attacks x 400)                          = 24,400
+    //                                                           total   = 81,200
+    // (equipment ids and charges, XP, defences and ids add a few thousand more). A test keeps the sum at or under 100,000.
     public const int MaxDetailText = 2_000;
     public const int MaxDetailListEntries = 30;
     public const int MaxDetailListEntryLength = 80;
-    public const int MaxCustomItems = 100;
-    public const int MaxName = 120;
-    public const int MaxShortNote = 500;
+    public const int MaxCustomItems = 50;
+    public const int MaxName = 80;
+    public const int MaxShortNote = 200;
     public const int MaxCustomAttacks = 30;
     public const int MaxCompanions = 10;
-    public const int MaxCompanionAttacks = 10;
+    public const int MaxCompanionAttacks = 5;
     public const int MinToHit = -20;
     public const int MaxToHit = 30;
     public const int MaxXp = 1_000_000;
     public const int MaxDamageTypeLength = 80;
-    public const int MaxCompanionTextLength = 120;
+    public const int MaxCompanionTextLength = 80;
     public const int MaxCompanionSpeedLength = 80;
     public const int MaxCompanionArmorClass = 50;
 
@@ -292,6 +300,8 @@ public sealed record Character
             problems.Add(new("character.xp-out-of-range", $"Experience points must be between 0 and {MaxXp}."));
         foreach (var (entry, number) in Equipment.Select((e, i) => (e, i + 1)).Where(p => p.e.ChargesSpent is < 0 or > EquipmentEntry.MaxChargesSpent))
             problems.Add(new("character.equipment-charges-out-of-range", $"Charges spent on equipment entry {number} must be between 0 and {EquipmentEntry.MaxChargesSpent}.", entry.Item));
+        if (Equipment.Any(e => e.Id == Guid.Empty))
+            problems.Add(new("character.equipment-id-missing", "An equipment entry has an empty id; leave the id out or give it a real one."));
         if (Equipment.Where(e => e.Id is not null).GroupBy(e => e.Id).Any(g => g.Count() > 1))
             problems.Add(new("character.equipment-id-duplicate", "Two equipment entries share an id."));
 
@@ -325,6 +335,8 @@ public sealed record Character
                     if (item.Quantity is < 1 or > EquipmentEntry.MaxQuantity)
                         problems.Add(new("character.custom-item-quantity", $"The quantity of custom item {number} must be between 1 and {EquipmentEntry.MaxQuantity}."));
                 }
+                if (items.Any(c => c.Id == Guid.Empty))
+                    problems.Add(new("character.custom-item-id-missing", "A custom item has no id."));
                 if (items.GroupBy(c => c.Id).Any(g => g.Count() > 1))
                     problems.Add(new("character.custom-item-duplicate", "Two custom items share an id."));
             }
@@ -370,6 +382,8 @@ public sealed record Character
                             ValidateAttacks(companionAttacks, $"Companion {number} attack", problems);
                     }
                 }
+                if (companions.Any(c => c.Id == Guid.Empty))
+                    problems.Add(new("character.companion-id-missing", "A companion has no id."));
                 if (companions.GroupBy(c => c.Id).Any(g => g.Count() > 1))
                     problems.Add(new("character.companion-duplicate", "Two companions share an id."));
             }
@@ -394,6 +408,8 @@ public sealed record Character
             if (attack.Damage is not null && !DiceExpression.TryParse(attack.Damage, out _, out _))
                 problems.Add(new("character.custom-attack-damage-invalid", $"The damage of {label.ToLowerInvariant()} {number} must be dice such as 1d8+3 (at most {DiceLimits.MaxLength} characters, {DiceLimits.MaxDice} dice, {DiceLimits.MaxSides} sides)."));
         }
+        if (attacks.Any(a => a.Id == Guid.Empty))
+            problems.Add(new("character.custom-attack-id-missing", $"A {label.ToLowerInvariant()} has no id."));
         if (attacks.GroupBy(a => a.Id).Any(g => g.Count() > 1))
             problems.Add(new("character.custom-attack-duplicate", $"Two {label.ToLowerInvariant()}s share an id."));
     }
@@ -464,10 +480,18 @@ public sealed record CrossFamilyException(ContentReference Content, string Reaso
 /// <summary>
 /// One item carried: an exact pin to the item revision, whether it is equipped (worn or held), and how many. Schema v9 (D42) adds
 /// <paramref name="Id"/> (names this entry, for a later change to find it), <paramref name="Attuned"/> and <paramref name="ChargesSpent"/>
-/// (recorded as the player says; never calculated). All three are null until set.
+/// (recorded as the player says; never calculated). All three are null until set. "Not attuned" (false) and "no charges spent" (0)
+/// are the same as unset, so they are stored as null and do not make the character v9; readers treat null as false and 0.
 /// </summary>
 public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1, Guid? Id = null, bool? Attuned = null, int? ChargesSpent = null)
 {
+    private readonly bool? _attuned = Attuned == false ? null : Attuned;
+    private readonly int? _chargesSpent = ChargesSpent == 0 ? null : ChargesSpent;
+
+    public bool? Attuned { get => _attuned; init => _attuned = value == false ? null : value; }
+
+    public int? ChargesSpent { get => _chargesSpent; init => _chargesSpent = value == 0 ? null : value; }
+
     public const int MaxQuantity = 9_999;
     public const int MaxChargesSpent = 1_000;
 }

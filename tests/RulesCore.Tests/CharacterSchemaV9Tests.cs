@@ -136,13 +136,70 @@ public class CharacterSchemaV9Tests
             "companions" => plain with { Companions = [Companion()] },
             "xp" => plain with { Xp = 0 },
             "equipmentId" => plain with { Equipment = [new(Fixtures.Spark, Id: Id(1))] },
-            "equipmentAttuned" => plain with { Equipment = [new(Fixtures.Spark, Attuned: false)] },
-            "equipmentCharges" => plain with { Equipment = [new(Fixtures.Spark, ChargesSpent: 0)] },
+            "equipmentAttuned" => plain with { Equipment = [new(Fixtures.Spark, Attuned: true)] },
+            "equipmentCharges" => plain with { Equipment = [new(Fixtures.Spark, ChargesSpent: 1)] },
             "companionPlay" => plain with { Play = plain.Play with { Companions = [new(Id(1), null, 0)] } },
             _ => throw new ArgumentOutOfRangeException(nameof(field)),
         };
         Assert.Equal(9, character.SchemaVersion);
         Assert.Contains("\"schemaVersion\":9", Write(character), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Attuned_false_and_zero_charges_spent_are_the_same_as_absent_so_the_character_stays_v8()
+    {
+        var plain = V8() with { Equipment = [new(Fixtures.Spark)] };
+        var off = plain with { Equipment = [new(Fixtures.Spark, Attuned: false, ChargesSpent: 0)] };
+        Assert.Null(off.Equipment[0].Attuned);
+        Assert.Null(off.Equipment[0].ChargesSpent);
+        Assert.Equal(8, off.SchemaVersion);
+        var written = Write(off);
+        Assert.Contains("\"schemaVersion\":8", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("attuned", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("chargesSpent", written, StringComparison.Ordinal);
+        Assert.Equal(Write(plain), written);
+
+        // Read from JSON the same way (a v9 file written by a build that kept the "off" values).
+        var read = Read(Write(plain).Replace("\"quantity\":1", "\"quantity\":1,\"attuned\":false,\"chargesSpent\":0", StringComparison.Ordinal));
+        Assert.Equal(8, read.SchemaVersion);
+        Assert.Equal(Write(plain), Write(read));
+
+        // Turning attunement on writes 9; so do spent charges; turning it off again returns to 8.
+        var on = plain with { Equipment = [plain.Equipment[0] with { Attuned = true }] };
+        Assert.Equal(9, on.SchemaVersion);
+        Assert.Contains("\"attuned\":true", Write(on), StringComparison.Ordinal);
+        Assert.Equal(9, (plain with { Equipment = [plain.Equipment[0] with { ChargesSpent = 2 }] }).SchemaVersion);
+        Assert.Equal(8, (on with { Equipment = [on.Equipment[0] with { Attuned = false }] }).SchemaVersion);
+    }
+
+    [Fact]
+    public void An_empty_id_is_refused_wherever_an_id_names_an_entry()
+    {
+        var baseline = V8();
+        AssertRefused("character.custom-item-id-missing", baseline with { CustomItems = [new(Guid.Empty, "Fixture rope", 1, null, false)] }, "item");
+        AssertRefused("character.custom-attack-id-missing", baseline with { CustomAttacks = [new(Guid.Empty, "Fixture strike", 1, null, null, null)] }, "attack");
+        AssertRefused("character.companion-id-missing", baseline with { Companions = [Companion() with { Id = Guid.Empty }] }, "companion");
+        AssertRefused("character.custom-attack-id-missing", baseline with { Companions = [Companion() with { Attacks = [new(Guid.Empty, "Fixture bite", 1, null, null, null)] }] }, "companion attack");
+        AssertRefused("character.equipment-id-missing", baseline with { Equipment = [new(Fixtures.Spark, Id: Guid.Empty)] }, "equipment");
+        AssertRefused("play.companion-id-missing", baseline with { Companions = [Companion()], Play = baseline.Play with { Companions = [new(Guid.Empty, null, 0)] } }, "companion play");
+
+        // A missing id in JSON deserialises to the empty id, so it is refused the same way.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(Write(V9()))!;
+        node["customItems"]![0]!.AsObject().Remove("id");
+        Assert.Contains("character.custom-item-id-missing", Codes(Read(node.ToJsonString())));
+    }
+
+    [Fact]
+    public void The_v9_maxima_add_up_to_the_ruled_budget_of_about_100_000_characters()
+    {
+        var attack = Character.MaxName + DiceLimits.MaxLength + Character.MaxDamageTypeLength + Character.MaxShortNote;
+        var companion = Character.MaxName + Character.MaxCompanionTextLength + Character.MaxCompanionSpeedLength + Character.MaxShortNote + (Character.MaxCompanionAttacks * attack);
+        var total = (13 * Character.MaxDetailText)
+            + (2 * Character.MaxDetailListEntries * Character.MaxDetailListEntryLength)
+            + (Character.MaxCustomItems * (Character.MaxName + Character.MaxShortNote))
+            + (Character.MaxCustomAttacks * attack)
+            + (Character.MaxCompanions * companion);
+        Assert.InRange(total, 1, 100_000);
     }
 
     [Fact]
@@ -222,11 +279,11 @@ public class CharacterSchemaV9Tests
             Alignment: Text(2000), PersonalityTraits: Text(2000), Ideals: Text(2000), Bonds: Text(2000), Flaws: Text(2000), Backstory: Text(2000), AlliesAndOrganisations: Text(2000),
             Appearance: new(Text(2000), Text(2000), Text(2000), Text(2000), Text(2000), Text(2000)),
             Languages: [.. Enumerable.Range(0, 30).Select(_ => Text(80))], ToolsAndOther: [.. Enumerable.Range(0, 30).Select(_ => Text(80))]);
-        var companions = Enumerable.Range(0, 10).Select(i => new Companion(Id(100 + i), Text(120), Text(120), 50, 10_000, Text(80), [.. Enumerable.Range(0, 10).Select(a => Attack(1000 + (i * 10) + a, Text(120), 30, "8d100+1000", Text(80), Text(500)))], Text(500))).ToList();
+        var companions = Enumerable.Range(0, 10).Select(i => new Companion(Id(100 + i), Text(80), Text(80), 50, 10_000, Text(80), [.. Enumerable.Range(0, 5).Select(a => Attack(1000 + (i * 10) + a, Text(80), 30, "8d100+1000", Text(80), Text(200)))], Text(200))).ToList();
         var character = V8() with
         {
             Details = details,
-            CustomItems = [.. Enumerable.Range(0, 100).Select(i => Item(i + 1, Text(120), 9_999, Text(500)))],
+            CustomItems = [.. Enumerable.Range(0, 50).Select(i => Item(i + 1, Text(80), 9_999, Text(200)))],
             CustomAttacks = [.. Enumerable.Range(0, 30).Select(i => Attack(i + 1, toHit: i == 0 ? -20 : 30))],
             DamageDefences = [.. DamageTypes.All.Select(t => new DamageDefence(t, DamageDefenceKind.Resistance))],
             Companions = companions,
@@ -262,10 +319,10 @@ public class CharacterSchemaV9Tests
     public void Each_custom_item_bound_is_refused_with_its_own_code()
     {
         var baseline = V8();
-        AssertRefused("character.custom-items-too-many", baseline with { CustomItems = [.. Enumerable.Range(1, 101).Select(i => Item(i))] }, "101 items");
-        AssertRefused("character.custom-item-name-invalid", baseline with { CustomItems = [Item(name: Text(121))] }, "long name");
+        AssertRefused("character.custom-items-too-many", baseline with { CustomItems = [.. Enumerable.Range(1, 51).Select(i => Item(i))] }, "51 items");
+        AssertRefused("character.custom-item-name-invalid", baseline with { CustomItems = [Item(name: Text(81))] }, "long name");
         AssertRefused("character.custom-item-name-invalid", baseline with { CustomItems = [Item(name: " ")] }, "blank name");
-        AssertRefused("character.custom-item-note-too-long", baseline with { CustomItems = [Item(note: Text(501))] }, "long note");
+        AssertRefused("character.custom-item-note-too-long", baseline with { CustomItems = [Item(note: Text(201))] }, "long note");
         AssertRefused("character.custom-item-quantity", baseline with { CustomItems = [Item(quantity: 0)] }, "quantity 0");
         AssertRefused("character.custom-item-quantity", baseline with { CustomItems = [Item(quantity: 10_000)] }, "quantity 10000");
         AssertRefused("character.custom-item-duplicate", baseline with { CustomItems = [Item(1), Item(1)] }, "duplicate id");
@@ -277,8 +334,8 @@ public class CharacterSchemaV9Tests
         var baseline = V8();
         AssertRefused("character.custom-attacks-too-many", baseline with { CustomAttacks = [.. Enumerable.Range(1, 31).Select(i => Attack(i))] }, "31 attacks");
         AssertRefused("character.custom-attack-name-invalid", baseline with { CustomAttacks = [Attack(name: "")] }, "blank name");
-        AssertRefused("character.custom-attack-name-invalid", baseline with { CustomAttacks = [Attack(name: Text(121))] }, "long name");
-        AssertRefused("character.custom-attack-note-too-long", baseline with { CustomAttacks = [Attack(note: Text(501))] }, "long note");
+        AssertRefused("character.custom-attack-name-invalid", baseline with { CustomAttacks = [Attack(name: Text(81))] }, "long name");
+        AssertRefused("character.custom-attack-note-too-long", baseline with { CustomAttacks = [Attack(note: Text(201))] }, "long note");
         AssertRefused("character.custom-attack-type-too-long", baseline with { CustomAttacks = [Attack(type: Text(81))] }, "long type");
         AssertRefused("character.custom-attack-to-hit-out-of-range", baseline with { CustomAttacks = [Attack(toHit: -21)] }, "to hit -21");
         AssertRefused("character.custom-attack-to-hit-out-of-range", baseline with { CustomAttacks = [Attack(toHit: 31)] }, "to hit 31");
@@ -306,15 +363,15 @@ public class CharacterSchemaV9Tests
         var baseline = V8();
         AssertRefused("character.companions-too-many", baseline with { Companions = [.. Enumerable.Range(1, 11).Select(i => Companion(i))] }, "11 companions");
         AssertRefused("character.companion-name-invalid", baseline with { Companions = [Companion(name: "")] }, "blank name");
-        AssertRefused("character.companion-name-invalid", baseline with { Companions = [Companion(name: Text(121))] }, "long name");
-        AssertRefused("character.companion-text-too-long", baseline with { Companions = [Companion() with { Kind = Text(121) }] }, "long kind");
+        AssertRefused("character.companion-name-invalid", baseline with { Companions = [Companion(name: Text(81))] }, "long name");
+        AssertRefused("character.companion-text-too-long", baseline with { Companions = [Companion() with { Kind = Text(81) }] }, "long kind");
         AssertRefused("character.companion-text-too-long", baseline with { Companions = [Companion() with { Speed = Text(81) }] }, "long speed");
-        AssertRefused("character.companion-text-too-long", baseline with { Companions = [Companion() with { Note = Text(501) }] }, "long note");
+        AssertRefused("character.companion-text-too-long", baseline with { Companions = [Companion() with { Note = Text(201) }] }, "long note");
         AssertRefused("character.companion-armor-class-out-of-range", baseline with { Companions = [Companion() with { ArmorClass = 51 }] }, "AC 51");
         AssertRefused("character.companion-armor-class-out-of-range", baseline with { Companions = [Companion() with { ArmorClass = -1 }] }, "AC -1");
         AssertRefused("character.companion-hit-points-out-of-range", baseline with { Companions = [Companion(hitPointMaximum: -1)] }, "hp -1");
         AssertRefused("character.companion-hit-points-out-of-range", baseline with { Companions = [Companion(hitPointMaximum: 10_001)] }, "hp 10001");
-        AssertRefused("character.companion-attacks-too-many", baseline with { Companions = [Companion() with { Attacks = [.. Enumerable.Range(1, 11).Select(i => Attack(i))] }] }, "11 attacks");
+        AssertRefused("character.companion-attacks-too-many", baseline with { Companions = [Companion() with { Attacks = [.. Enumerable.Range(1, 6).Select(i => Attack(i))] }] }, "6 attacks");
         AssertRefused("character.custom-attack-to-hit-out-of-range", baseline with { Companions = [Companion() with { Attacks = [Attack(toHit: 40)] }] }, "companion attack to hit");
         AssertRefused("character.custom-attack-damage-invalid", baseline with { Companions = [Companion() with { Attacks = [Attack(damage: "x")] }] }, "companion attack damage");
         AssertRefused("character.companion-duplicate", baseline with { Companions = [Companion(1), Companion(1)] }, "duplicate id");
