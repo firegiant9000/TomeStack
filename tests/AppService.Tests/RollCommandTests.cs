@@ -196,7 +196,11 @@ public class RollCommandTests
         Assert.Equal(("custom.attack", "Testy Sling attack"), (advantage.Provenance!.RollId, advantage.Provenance.Label));
         Assert.Null(advantage.Provenance.Content);
         Assert.Null(advantage.Provenance.SourceId);
-        Assert.Equal(disadvantage.Dice.Min(d => d.Value), Assert.Single(disadvantage.Dice, d => d.Kept).Value);
+        var lowest = Assert.Single(disadvantage.Dice, d => d.Kept);
+        Assert.Equal(disadvantage.Dice.Min(d => d.Value), lowest.Value);
+        var lowModifier = Assert.Single(disadvantage.Modifiers);
+        Assert.Equal(("Testy Sling to hit", 5), (lowModifier.Label, lowModifier.Amount));
+        Assert.Equal(lowest.Value + 5, disadvantage.Total);
     }
 
     [Fact]
@@ -213,6 +217,8 @@ public class RollCommandTests
         Assert.Equal(2, normal.ExpressionConstant);
         Assert.Equal(2, critical.Dice.Count);
         Assert.Equal(1, critical.Dice.Count(d => d.FromCritical));
+        Assert.Equal(2, critical.ExpressionConstant); // the flat part is not doubled
+        Assert.Equal(critical.DiceTotal + 2, critical.Total);
         Assert.Equal(("custom.damage", "Testy Sling damage (bludgeoning)"), (critical.Provenance!.RollId, critical.Provenance.Label));
     }
 
@@ -257,7 +263,7 @@ public class RollCommandTests
         Assert.Equal("roll.ambiguous", Assert.Single(refused.Problems).Code);
     }
 
-    private static readonly Guid HomebrewSource =Guid.Parse("7c000000-0000-4000-8000-000000000b01");
+    private static readonly Guid HomebrewSource = Guid.Parse("7c000000-0000-4000-8000-000000000b01");
 
     /// <summary>The Berserker 3 with Strength 8 and a pinned homebrew feat whose roll has the bonus formula <paramref name="bonus"/> (content v8).</summary>
     private static (TempApp Temp, Guid Id, ContentReference Feat) WithBonusRoll(string bonus)

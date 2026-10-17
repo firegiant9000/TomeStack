@@ -396,7 +396,7 @@ export function ActionsPanel({
   view: CharacterView;
   roll: (target: RollTarget) => void;
   act: Act;
-  /** The summary's advantage / disadvantage choice. Used by the character's own attacks' attack rolls (item 18). */
+  /** The summary's advantage / disadvantage choice. Used by the attack rolls of weapons and of the character's own attacks (R93); damage is always normal. */
   rollMode?: RollMode;
 }) {
   const [critical, setCritical] = useState(false);
@@ -444,7 +444,7 @@ export function ActionsPanel({
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
               {groupAttacks.map((attack) => (
-                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} roll={roll} />
+                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} rollMode={rollMode} roll={roll} />
               ))}
               {groupCustom.map((attack) => (
                 <li key={attack.id} className="feature">
@@ -481,7 +481,7 @@ export function ActionsPanel({
   );
 }
 
-function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical: boolean; roll: (target: RollTarget) => void }) {
+function AttackItem({ attack, critical, rollMode, roll }: { attack: AttackEntry; critical: boolean; rollMode: RollMode; roll: (target: RollTarget) => void }) {
   return (
     <li className="feature">
       <details>
@@ -511,7 +511,7 @@ function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical:
           </ul>
         )}
       </details>
-      <button type="button" onClick={() => roll({ weapon: attack.item })}>
+      <button type="button" onClick={() => roll({ weapon: attack.item, mode: rollMode })}>
         Roll {attack.name} attack
       </button>
       <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, critical })}>

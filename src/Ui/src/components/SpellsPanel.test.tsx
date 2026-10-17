@@ -57,6 +57,19 @@ it('disables the button for the spell being concentrated on and sends startConce
   expect(act).toHaveBeenCalledWith({ action: 'startConcentration', contentId: ref(11).contentId });
 });
 
+it('sends the chosen mode with a spell attack roll and none with its dice (R93)', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const v = view();
+  const caster = v.sheet.spellcasting![0]!;
+  caster.spells = [{ ...spell(20, 'Fixture Bolt', 0, false), attack: 'ranged', dice: '1d10' }];
+  render(<SpellsPanel view={v} act={() => {}} roll={roll} rollMode="advantage" onSave={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Bolt attack' }));
+  expect(roll).toHaveBeenLastCalledWith({ spell: ref(20), spellAttack: true, mode: 'advantage' });
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Bolt (1d10)' }));
+  expect(roll).toHaveBeenLastCalledWith({ spell: ref(20) });
+});
+
 it('filters a caster’s spells by name, keeps the Prepared and Concentrate names of the rows shown, and says how many (D30)', async () => {
   const user = userEvent.setup();
   panel(view());

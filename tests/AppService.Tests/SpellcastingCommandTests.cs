@@ -61,6 +61,20 @@ public class SpellcastingCommandTests
     }
 
     [Fact]
+    public void A_spell_attack_roll_follows_advantage_and_disadvantage()
+    {
+        var (temp, id) = Wizardly();
+        using var _ = temp;
+
+        var advantage = temp.App.Roll(new(id, Spell: Spark, SpellAttack: true, Mode: RollMode.Advantage));
+        var disadvantage = temp.App.Roll(new(id, Spell: Spark, SpellAttack: true, Mode: RollMode.Disadvantage));
+
+        Assert.Equal(advantage.Dice.Max(d => d.Value), Assert.Single(advantage.Dice, d => d.Kept).Value);
+        Assert.Equal(disadvantage.Dice.Min(d => d.Value), Assert.Single(disadvantage.Dice, d => d.Kept).Value);
+        Assert.Equal((2, 2), (advantage.Dice.Count, disadvantage.Dice.Count));
+    }
+
+    [Fact]
     public void Spell_rolls_use_the_caster_attack_bonus_and_change_nothing()
     {
         var (temp, id) = Wizardly();

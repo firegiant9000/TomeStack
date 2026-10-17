@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
+import type { Ability, Character, CharacterView, PlayAction, RollMode, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
@@ -26,11 +26,14 @@ export function SpellsPanel({
   view,
   act,
   roll,
+  rollMode = 'normal',
   onSave,
 }: {
   view: CharacterView;
   act: Act;
   roll: (target: RollTarget) => void;
+  /** The summary's advantage / disadvantage choice, sent with spell attack rolls (R93); spell dice are always normal. */
+  rollMode?: RollMode;
   /** Saves a changed spell list (preparing is a choice, not play state). */
   onSave: (character: Character) => void;
 }) {
@@ -145,7 +148,7 @@ export function SpellsPanel({
                     </label>
                   )}
                   {spell.attack !== 'none' && (
-                    <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true })}>
+                    <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true, mode: rollMode })}>
                       Roll {spell.name} attack
                     </button>
                   )}

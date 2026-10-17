@@ -251,3 +251,51 @@ it('removes an attack and lands focus on a control that exists', async () => {
   expect(latest.character.customAttacks ?? []).toEqual([]);
   expect(within(screen.getByRole('region', { name: 'Your own attacks' })).getByText('No attacks of your own yet.')).toBeTruthy();
 });
+
+// Fix round 1: Remove must never drop focus to <body>, whichever controls are on screen.
+const panels = [
+  { which: 'items', two: () => ({ customItems: [rope, lamp] }), key: 'customItems', editA: 'Edit Testy Rope', removeB: 'Remove Testy Lamp', removeA: 'Remove Testy Rope', add: 'Add an item of your own', heading: 'Your own items' },
+  { which: 'attacks', two: () => ({ customAttacks: [sling, poke] }), key: 'customAttacks', editA: 'Edit Testy Sling', removeB: 'Remove Testy Poke', removeA: 'Remove Testy Sling', add: 'Add an attack of your own', heading: 'Your own attacks' },
+] as const;
+
+for (const p of panels) {
+  it(`${p.which}: removing another row while one is being edited keeps focus in the open form`, async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={view(p.two())} which={p.which} />);
+    await user.click(screen.getByRole('button', { name: p.editA }));
+    await user.click(screen.getByRole('button', { name: p.removeB }));
+    await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledOnce());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it(`${p.which}: removing the only row while the Add form is open keeps focus in the form`, async () => {
+    const user = userEvent.setup();
+    const one = p.which === 'items' ? { customItems: [rope] } : { customAttacks: [sling] };
+    render(<Harness initial={view(one)} which={p.which} />);
+    await user.click(screen.getByRole('button', { name: p.add }));
+    await user.click(screen.getByRole('button', { name: p.which === 'items' ? 'Remove Testy Rope' : 'Remove Testy Sling' }));
+    await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledOnce());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it(`${p.which}: Remove is held with a linked reason while a save is in flight, and a press is refused`, async () => {
+    const user = userEvent.setup();
+    let finish: () => void = () => {};
+    vi.mocked(client.saveCharacter).mockImplementationOnce(
+      (c) => new Promise<CharacterView>((resolve) => (finish = () => resolve(view(c as Partial<Character>)))),
+    );
+    render(<Harness initial={view(p.two())} which={p.which} />);
+    await user.click(screen.getByRole('button', { name: p.removeA }));
+    const other = screen.getByRole('button', { name: p.removeB });
+    expect(other.getAttribute('aria-disabled')).toBe('true');
+    expect(other.hasAttribute('disabled')).toBe(false);
+    expect(document.getElementById(other.getAttribute('aria-describedby')!)?.textContent).toBe('Wait for the current change to finish.');
+    await user.click(other);
+    expect(client.saveCharacter).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    await waitFor(() => expect(latest.character[p.key]).toHaveLength(1));
+    expect(screen.getByRole('button', { name: p.removeB }).getAttribute('aria-disabled')).toBeNull();
+  });
+}

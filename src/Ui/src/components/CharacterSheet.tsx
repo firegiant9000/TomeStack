@@ -657,6 +657,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             view={view}
             act={act}
             roll={roll}
+            rollMode={rollMode}
             onSave={(changed) =>
               client
                 .saveCharacter(changed)

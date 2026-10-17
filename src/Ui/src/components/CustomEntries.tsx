@@ -41,6 +41,8 @@ interface FieldRefusal {
 interface Config<T extends { id: string; name: string }, D extends Draft> {
   /** Element ids start with this. */
   prefix: string;
+  /** The section heading (focusable), the last place focus can fall back to. */
+  headingId: string;
   /** "item" or "attack", for the sentences. */
   noun: string;
   entries: T[];
@@ -77,6 +79,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
   const [seeded, setSeeded] = useState('');
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<FieldRefusal>();
+  const [removing, setRemoving] = useState(false);
   const running = useRef(false);
   const draftNow = useRef(draft);
   // A request is a new object each time, so asking for the same control twice still focuses it. It is served after the render
@@ -87,9 +90,14 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
   useEffect(() => {
     draftNow.current = draft;
   });
+  const { prefix, headingId } = config;
   useEffect(() => {
-    if (focusRequest) document.getElementById(focusRequest.id)?.focus();
-  }, [focusRequest]);
+    if (!focusRequest) return;
+    // The asked-for control may not be on screen (its row is hidden by an open form, or Add is hidden while the New form is open):
+    // fall back to the open form's Name box, then Add, then the section heading, so focus never drops to <body>.
+    const target = [focusRequest.id, `${prefix}-name`, `${prefix}-add`, headingId].map((id) => document.getElementById(id)).find((el) => el !== null);
+    target?.focus();
+  }, [focusRequest, prefix, headingId]);
 
   const stored = editing && !editing.isNew ? entries.find((e) => e.id === editing.id) : undefined;
   if (editing && !editing.isNew) {
@@ -113,9 +121,12 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
   const baseline = editing?.isNew === false && stored ? draftOf(stored) : undefined;
   const changed = baseline ? JSON.stringify(draft) !== JSON.stringify(baseline) : true;
   const invalid = Object.keys(errors).length > 0;
+  const busy = saving || removing;
   const reason = saving
     ? `Saving the ${config.noun}…`
-    : invalid
+    : removing
+      ? 'Removing…'
+      : invalid
       ? 'Save is held until the fields marked above are fixed.'
       : incomplete
         ? `Save is held until the ${config.noun} has a name.`
@@ -181,8 +192,9 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
   }
 
   async function remove(entry: T) {
-    if (running.current) return;
+    if (running.current) return; // the Remove buttons are held with their reason; this press is refused
     running.current = true;
+    setRemoving(true);
     const index = entries.findIndex((e) => e.id === entry.id);
     const neighbour = entries[index + 1] ?? entries[index - 1];
     try {
@@ -195,6 +207,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
       config.onError(error);
     }
     running.current = false;
+    setRemoving(false);
   }
 
   const set = (key: string) => (value: string | boolean) => {
@@ -202,7 +215,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
     if (refusal?.field === key) setRefusal(undefined);
   };
 
-  return { editing, draft, errors, reason, saving, refusal, atCap, rowId, begin, cancel, save, remove, set };
+  return { editing, draft, errors, reason, saving, busy, refusal, atCap, rowId, begin, cancel, save, remove, set };
 }
 
 function TextBox({
@@ -322,6 +335,7 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
   const entries: CustomItem[] = character.customItems ?? [];
   const editor = useEntryEditor<CustomItem, ItemDraft>({
     prefix: 'own-item',
+    headingId: 'own-items-heading',
     noun: 'item',
     entries,
     cap: maxCustomItems,
@@ -349,7 +363,7 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
 
   return (
     <section aria-labelledby="own-items-heading" className="play-panel">
-      <h3 id="own-items-heading">Your own items</h3>
+      <h3 id="own-items-heading" tabIndex={-1}>Your own items</h3>
       <p className="hint">Things you carry that are not in the rules content. They never count toward Armor Class or any calculation.</p>
       {entries.length === 0 && !editing && <p className="hint">No items of your own yet.</p>}
       {(entries.length > 0 || editing?.isNew) && (
@@ -370,7 +384,7 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
                     <button id={editor.rowId(item.id)} type="button" onClick={() => editor.begin(item)}>
                       Edit {item.name}
                     </button>
-                    <button type="button" onClick={() => void editor.remove(item)}>
+                    <button type="button" aria-disabled={editor.busy || undefined} aria-describedby={editor.busy ? 'own-item-busy' : undefined} onClick={() => void editor.remove(item)}>
                       Remove {item.name}
                     </button>
                   </span>
@@ -380,6 +394,11 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
           ))}
           {editing?.isNew && <li className="resource">{form('New item')}</li>}
         </ul>
+      )}
+      {editor.busy && (
+        <p id="own-item-busy" className="hint">
+          Wait for the current change to finish.
+        </p>
       )}
       {!editing?.isNew && (
         <AddButton prefix="own-item" label="Add an item of your own" atCap={editor.atCap} capText={`You can keep up to ${maxCustomItems} items of your own.`} onClick={() => editor.begin()} />
@@ -394,6 +413,7 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props
   const entries: CustomAttack[] = character.customAttacks ?? [];
   const editor = useEntryEditor<CustomAttack, AttackDraft>({
     prefix: 'own-attack',
+    headingId: 'own-attacks-heading',
     noun: 'attack',
     entries,
     cap: maxCustomAttacks,
@@ -458,7 +478,7 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props
 
   return (
     <section aria-labelledby="own-attacks-heading" className="play-panel">
-      <h3 id="own-attacks-heading">Your own attacks</h3>
+      <h3 id="own-attacks-heading" tabIndex={-1}>Your own attacks</h3>
       <p className="hint">
         Attacks you type in, such as a weapon the rules content does not list. Roll them on Play. Nothing here is calculated.
       </p>
@@ -479,7 +499,7 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props
                     <button id={editor.rowId(attack.id)} type="button" onClick={() => editor.begin(attack)}>
                       Edit {attack.name}
                     </button>
-                    <button type="button" onClick={() => void editor.remove(attack)}>
+                    <button type="button" aria-disabled={editor.busy || undefined} aria-describedby={editor.busy ? 'own-attack-busy' : undefined} onClick={() => void editor.remove(attack)}>
                       Remove {attack.name}
                     </button>
                   </span>
@@ -489,6 +509,11 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props
           ))}
           {editing?.isNew && <li className="resource">{form('New attack')}</li>}
         </ul>
+      )}
+      {editor.busy && (
+        <p id="own-attack-busy" className="hint">
+          Wait for the current change to finish.
+        </p>
       )}
       {!editing?.isNew && (
         <AddButton prefix="own-attack" label="Add an attack of your own" atCap={editor.atCap} capText={`You can keep up to ${maxCustomAttacks} attacks of your own.`} onClick={() => editor.begin()} />

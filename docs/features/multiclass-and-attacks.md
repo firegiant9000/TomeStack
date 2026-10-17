@@ -38,7 +38,7 @@ Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 **Proficiency not recorded:** when no active content grants any weapon proficiency (for example a class published before weapons existed, such as the M1 SRD Barbarian revisions), the attack is **assisted**: no proficiency bonus, and `attack.proficiency-unknown` says to add it by hand. When some proficiencies are recorded but not this one, the attack is automatic with `attack.not-proficient`.
 
-**Rolls:** `roll { weapon, damage?, versatile?, mode, critical }` rolls the attack (d20 + to hit, with advantage or disadvantage) or the damage (critical doubles the dice). Rolling changes nothing.
+**Rolls:** `roll { weapon, damage?, versatile?, mode, critical }` rolls the attack (d20 + to hit, with advantage or disadvantage; Play sends the page's Advantage / Disadvantage choice with weapon, spell and own-attack attack rolls, never with damage) or the damage (critical doubles the dice). Rolling changes nothing.
 
 ## Your own attacks (character schema v9, item 18, D42)
 

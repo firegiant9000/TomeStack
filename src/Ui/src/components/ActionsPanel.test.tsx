@@ -42,6 +42,18 @@ it('rolls the attack under the chosen mode and the damage with the critical box,
   expect(roll).toHaveBeenLastCalledWith({ customAttack: 'a1', damage: true, critical: true });
 });
 
+it('sends the chosen mode with a weapon attack roll and none with its damage (R93)', async () => {
+  const roll = vi.fn();
+  const item = { contentId: 'c-needle', revisionId: 'r-needle' };
+  const weapon = { item, name: 'Fixture Needle', toHit: 5, damage: '1d4+3', damageType: 'piercing', automation: 'automatic', category: 'martial', attack: 'melee', properties: [], trace: [], warnings: [] };
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [weapon], toggles: [], features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={roll} act={() => {}} rollMode="disadvantage" />);
+  await userEvent.click(screen.getByRole('button', { name: 'Roll Fixture Needle attack' }));
+  expect(roll).toHaveBeenLastCalledWith({ weapon: item, mode: 'disadvantage' });
+  await userEvent.click(screen.getByRole('button', { name: /^Roll Fixture Needle damage/ }));
+  expect(roll).toHaveBeenLastCalledWith({ weapon: item, damage: true, critical: false });
+});
+
 it('offers a damage button only for an attack that has damage, and each Roll name matches one button', () => {
   render_([sling, poke]);
   expect(screen.queryByRole('button', { name: 'Roll Testy Poke damage' })).toBeNull();
