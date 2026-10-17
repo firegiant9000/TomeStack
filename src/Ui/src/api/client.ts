@@ -296,7 +296,7 @@ export function createClient(transport: Transport) {
     /** The proposed character for the chosen family, campaign and answers; writes nothing. */
     ddbPreview: (request: DdbPreviewRequest) => call<DdbPreview>('ddb.preview', request),
     /** Only the summary's "Create character" button calls this. */
-    ddbApply: (request: DdbPreviewRequest) => call<DdbApplyResult>('ddb.apply', { ...request, confirm: true }),
+    ddbApply: (request: DdbPreviewRequest, publishClass = false) => call<DdbApplyResult>('ddb.apply', { ...request, confirm: true, publishClass }),
     /** Cancel at any step: drops the read sheet. */
     ddbDiscard: (token: string) => call<{ discarded: boolean }>('ddb.discard', { token }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----

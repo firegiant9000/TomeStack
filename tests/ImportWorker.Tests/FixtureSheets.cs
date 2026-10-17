@@ -99,6 +99,25 @@ internal static class FixtureSheets
 
     public static byte[] SheetWotc2014() => Write(FieldsWotc2014, pages: 3);
 
+    /// <summary>The committed stub-class fixture's path in the test output (item 15, D35).</summary>
+    public static string TinkererCommittedPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-tinkerer-sheet.pdf");
+
+    /// <summary>
+    /// "Testy Tinker" on the fillable 2014 sheet with one class TomeStack does not have, the invented "Fixture Tinkerer" 3
+    /// (hit dice total 3d8, the Strength save ticked). The e2e flow creates a homebrew class from it.
+    /// </summary>
+    public static IReadOnlyList<FormSpec> FieldsTinkerer { get; } =
+    [
+        .. FieldsWotc2014.Select(f => f.Name switch
+        {
+            "ClassLevel" => f with { Text = "Fixture Tinkerer LVL 3" },
+            "CharacterName" => f with { Text = "Testy Tinker" },
+            _ => f,
+        }),
+    ];
+
+    public static byte[] SheetTinkerer() => Write(FieldsTinkerer, pages: 3);
+
     private static List<FormSpec> WotcCharacter()
     {
         var fields = new List<FormSpec>();

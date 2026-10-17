@@ -48,6 +48,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [answers, setAnswers] = useState<ChoiceSelection[]>([]);
   const [includePlayState, setIncludePlayState] = useState(false);
   const [equipMatched, setEquipMatched] = useState(true);
+  /** D35: the class row to create a homebrew class for; part of the preview request. */
+  const [createClassRow, setCreateClassRow] = useState<string>();
+  /** D35: publish the created class with the character. Off by default; sent with Create only, never part of the preview. */
+  const [publishClass, setPublishClass] = useState(false);
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
@@ -102,6 +106,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           includePlayState,
           answers,
           equipMatched,
+          createClassRow,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -117,6 +122,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         setPreview(next);
         setPreviewFor(requestKey);
         setPreviewError(undefined);
+        // A class that can no longer be created (the family changed what is installed, or its hit die is not readable) is let go.
+        if (request.createClassRow && !next.stub) setCreateClassRow(undefined);
         // An answer stays while its choice is still offered (answered ones stay listed); a changed match that takes the
         // choice away drops it, so it cannot re-add an option the user since left out.
         setAnswers((all) => {
@@ -168,6 +175,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     setResolutions({});
     setNumbers({});
     setAnswers([]);
+    setCreateClassRow(undefined);
+    setPublishClass(false);
     setPreview(undefined);
     setPreviewFor(undefined);
   }
@@ -184,7 +193,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (!request || created || applying) return;
     try {
       setApplying(true);
-      const result = await client.ddbApply(request);
+      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined);
       live.current = undefined; // spent
       setCreated(true);
       await onCreated(result.characterId, result);
@@ -236,6 +245,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
               setCampaignId(undefined); // campaigns belong to one family; the select only lists the new family's
               setResolutions({});
               setAnswers([]);
+              setCreateClassRow(undefined);
               setPreview(undefined);
               setPreviewFor(undefined);
             }}
@@ -254,6 +264,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             campaignId={campaignId}
             resolutions={resolutions}
             answers={answers}
+            createClassRow={createClassRow}
+            onCreateClassRow={setCreateClassRow}
             onResolve={(resolution) => {
               // A new class match makes an earlier pick for that class's subclass row stale (its choice may differ).
               setResolutions((all) => {
@@ -278,7 +290,15 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         )}
         {step === 4 && <DdbNumbersStep preview={preview} numbers={effectiveNumbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} preset={numberPreset} />}
         {step === 5 && (
-          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
+          <DdbSummaryStep
+            preview={preview}
+            family={family}
+            suggested={read?.suggestedFamily}
+            includePlayState={includePlayState}
+            onIncludePlayState={setIncludePlayState}
+            publishClass={publishClass}
+            onPublishClass={setPublishClass}
+          />
         )}
       </section>
       <p aria-live="polite" className="hint">

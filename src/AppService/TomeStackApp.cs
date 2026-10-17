@@ -323,14 +323,15 @@ public sealed partial class TomeStackApp : IDisposable
     /// The character with one choice answered (or cleared), after the checks <see cref="Choose"/> documents. Shared by
     /// <see cref="Choose"/> (saved) and <see cref="PreviewChoice"/> (a builder draft, never saved).
     /// </summary>
-    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull)
+    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull, IContentCatalog? catalog = null)
     {
+        catalog ??= _store;
         var selected = selectedOrNull ?? [];
         if (source is null || selected.Any(o => o is null))
             throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
         var request = (Source: source, ChoiceId: choiceId);
         var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
-        var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
+        var offered = CharacterCalculator.Calculate(without, catalog).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
             ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
 
         var problems = new List<Diagnostic>();
@@ -352,7 +353,7 @@ public sealed partial class TomeStackApp : IDisposable
         var recorded = character.Choices.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)?.Selected ?? [];
         foreach (var option in selected.Where(o => offered.Options.Contains(o) && !recorded.Contains(o)))
         {
-            var revision = _store.FindRevision(option);
+            var revision = catalog.FindRevision(option);
             if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))
                 problems.Add(new("choice.option-unavailable", $"Option {revision?.Name ?? option.RevisionId.ToString()} is not a published revision for {character.RulesFamily}.", option));
         }

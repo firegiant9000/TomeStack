@@ -1707,6 +1707,26 @@ export interface DdbPreviewRequest {
   answers?: ChoiceSelection[];
   /** D16g: create matched weapons and armour equipped. */
   equipMatched?: boolean;
+  /** D35: the row id of the one class the sheet names that TomeStack lacks, to be created as a minimal homebrew class. */
+  createClassRow?: string;
+}
+
+/** D35: a class the sheet names that is not installed, and whether a stub can be created for it. `note` is null when it can. */
+export interface StubOffer {
+  rowId: string;
+  name: string;
+  hitDie?: number | null;
+  note?: 'stub.hit-die-missing' | 'stub.hit-die-unreadable' | 'stub.one-per-import' | null;
+}
+
+/** D35: the stub class in full, as reviewed before it is created. `saves` are ability keys (`str` to `cha`). */
+export interface StubClassReview {
+  rowId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  hitDie: number;
+  saves: string[];
+  sourceTitle: string;
 }
 
 /** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */
@@ -1719,6 +1739,10 @@ export interface DdbPreview {
   report: DdbReport;
   diagnostics: Diagnostic[];
   canApply: boolean;
+  /** One offer per unmatched class row (D35). */
+  stubOffers?: StubOffer[] | null;
+  /** Set when the previewed request asked for a class to be created. */
+  stub?: StubClassReview | null;
 }
 
 export interface DdbApplyResult {
@@ -1727,4 +1751,6 @@ export interface DdbApplyResult {
   gapNotes: number;
   gapNotesNotStored: number;
   report: DdbReport;
+  /** The created class's content id, when one was created. */
+  createdClass?: string | null;
 }

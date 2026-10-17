@@ -420,6 +420,23 @@ public class FormReaderTests
     }
 
     [Fact]
+    public void The_committed_tinkerer_fixture_sheet_has_exactly_the_generators_fields()
+    {
+        // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-tinkerer-sheet.pdf): the fillable
+        // 2014 fixture with a class TomeStack does not have, for the stub-class e2e flow (item 15).
+        var generated = FixtureSheets.SheetTinkerer();
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-tinkerer-sheet.pdf"), generated);
+        }
+        Assert.Equal(Read(generated), AcroFormReader.Read(FixtureSheets.TinkererCommittedPath, Sheet, FormLimits.Default));
+        Assert.Equal(generated, File.ReadAllBytes(FixtureSheets.TinkererCommittedPath));
+    }
+
+    [Fact]
     public void A_file_that_is_not_a_pdf_is_pdf_not_a_pdf()
     {
         Assert.Equal("pdf.not-a-pdf", Refused("Fixture: not a PDF"u8.ToArray()).Code);

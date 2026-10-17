@@ -2486,6 +2486,84 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
 });
 
+// ---- item 15 (D35): a class the sheet names that TomeStack does not have, offered as a homebrew class ----
+// The generated sheet names the invented "Fixture Tinkerer" 3 with hit dice 3d8; no installed content has it.
+
+const tinkererSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-tinkerer-sheet.pdf'));
+
+async function readTinkererSheet(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([tinkererSheet()], 'fixture-tinkerer-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Tinkerer 3', {}, { timeout: 30000 })).toBeTruthy();
+}
+
+async function nextWhenReady(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const next = await screen.findByRole<HTMLButtonElement>('button', { name });
+  await waitFor(() => expect(next.disabled).toBe(false));
+  await user.click(next);
+}
+
+it('creates a draft homebrew class from an uninstalled class, leaves Publish it unticked and the character gets nothing from it', async () => {
+  const user = userEvent.setup();
+  const before = new Set((await client.listCharacters()).map((c) => c.id));
+  render(<App />);
+  await startDdbImport(user);
+  await readTinkererSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  const box = await within(matches).findByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ });
+  expect(box.getAttribute('aria-disabled')).toBeNull();
+  await user.click(box);
+  await waitFor(() => expect(within(matches).getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await waitFor(() => expect(within(matches).getByText(/A homebrew class is created for it/)).toBeTruthy());
+
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const stub = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  for (const text of ['Fixture Tinkerer', 'd8', 'Strength', 'Characters imported from sheets']) expect(stub.textContent).toContain(text);
+  expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio.');
+
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  await screen.findByRole('article', { name: 'Testy Tinker' });
+  const created = (await client.listCharacters()).find((c) => !before.has(c.id) && c.name === 'Testy Tinker')!;
+  const view = await client.getCharacter(created.id);
+  expect(view.sheet.diagnostics.map((d) => d.code)).toContain('content.unpublished');
+  const source = (await client.listSources()).find((s) => s.title === 'Characters imported from sheets')!;
+  expect(source.importDerived).toBe(true);
+  expect(source.redistributable).toBe(false);
+});
+
+it('cancelling after choosing to create a homebrew class writes nothing: no character, no source', async () => {
+  const user = userEvent.setup();
+  const characters = (await client.listCharacters()).map((c) => c.id).sort();
+  const sources = (await client.listSources()).map((s) => s.id).sort();
+  render(<App />);
+  await startDdbImport(user);
+  await readTinkererSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  await user.click(await within(matches).findByRole('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ }));
+  await waitFor(() => expect(within(matches).getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  await screen.findByRole('region', { name: 'Homebrew class to create' });
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  await expectStatus(/Import cancelled\. Nothing was saved\./);
+  expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(characters);
+  expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
+  expect(await client.listContent('srd-5.1')).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Fixture Tinkerer' })]));
+});
+
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
   const user = userEvent.setup();
   const { unmount } = render(<App />);

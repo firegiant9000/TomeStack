@@ -102,7 +102,8 @@ public static partial class DdbParser
                 hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable) + spentFromTotal.Unreadable),
             DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins, Coin()), StringComparer.Ordinal),
             lines.Count == 0 ? null : lines,
-            texts);
+            texts,
+            sheet.Text("play.hitDice.total", applyPattern: false));
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];
