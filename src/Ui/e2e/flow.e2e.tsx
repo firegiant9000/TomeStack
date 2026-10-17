@@ -1794,7 +1794,7 @@ it('adds an attack of your own on Inventory, rolls it on Play with advantage, an
   await user.type(within(items()).getByRole('textbox', { name: 'Name' }), 'Testy Rope');
   await user.click(within(items()).getByRole('button', { name: 'Save item' }));
   await expectStatus(/^Added Testy Rope\.$/);
-  expect(document.activeElement).toBe(within(items()).getByRole('button', { name: 'Edit Testy Rope' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(items()).getByRole('button', { name: 'Edit Testy Rope' }))); // focus can land a tick after the status text
 
   const own = () => screen.getByRole('region', { name: 'Your own attacks' });
   await user.click(within(own()).getByRole('button', { name: 'Add an attack of your own' }));

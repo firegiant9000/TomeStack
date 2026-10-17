@@ -19,6 +19,12 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
   return (
     <>
       <dl>
+        {report.layoutName && (
+          <>
+            <dt>Layout read</dt>
+            <dd>{report.layoutName}</dd>
+          </>
+        )}
         <dt>Name</dt>
         <dd>{character.name}</dd>
         <dt>Classes</dt>

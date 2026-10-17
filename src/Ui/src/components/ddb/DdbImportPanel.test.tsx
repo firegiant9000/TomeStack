@@ -531,6 +531,33 @@ it('titles the import as a character sheet import and names the layout it read i
   expect(screen.queryByText('wotc-2014')).toBeNull();
 });
 
+it.each([
+  ['D&D Beyond 2014', 'D&D Beyond 2014'],
+  ['the fillable 2014 sheet', 'the fillable 2014 sheet'],
+])('names the layout %s in the summary step', (layoutName, shown) => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep
+      family="srd-5.1"
+      suggested="srd-5.1"
+      includePlayState={false}
+      onIncludePlayState={vi.fn()}
+      preview={{ ...base, report: { ...base.report, layoutName } }}
+    />,
+  );
+
+  expect(screen.getByText('Layout read').nextElementSibling?.textContent).toBe(shown);
+});
+
+it('leaves the layout row out of the summary when the build sends no layout name', () => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep family="srd-5.1" suggested="srd-5.1" includePlayState={false} onIncludePlayState={vi.fn()} preview={{ ...base, report: { ...base.report, layoutName: undefined } }} />,
+  );
+
+  expect(screen.queryByText('Layout read')).toBeNull();
+});
+
 it('shows the report lines of the summary step, and nothing when the sheet gave none', () => {
   const base = preview(true);
   const props = { family: 'srd-5.1' as const, suggested: 'srd-5.1' as const, includePlayState: false, onIncludePlayState: vi.fn() };
