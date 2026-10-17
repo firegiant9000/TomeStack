@@ -540,5 +540,14 @@ public class PublishManyTests(ITestOutputHelper output)
 
         using var again = Send("content.publishMany", new { contentIds = new[] { a.ContentId }, expected = new[] { a.RevisionId }, confirm = true });
         Assert.Equal("content.publish-set-changed", again.RootElement.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
+
+        // Task 6 item 3 through the real dispatcher: a content-id → revision-id map is read, and a dependent the preview
+        // listed that is not planned now refuses; the empty map ("expect none") publishes.
+        var b = w.Save(w.New(ContentKind.Feat, "Testy Beta", World.Init("1")));
+        var stray = new Dictionary<string, Guid> { [Guid.NewGuid().ToString()] = Guid.NewGuid() };
+        using var changed = Send("content.publishMany", new { contentIds = new[] { b.ContentId }, expected = new[] { b.RevisionId }, expectedDependents = stray, confirm = true });
+        Assert.Equal("content.publish-set-changed", changed.RootElement.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
+        using var none = Send("content.publishMany", new { contentIds = new[] { b.ContentId }, expected = new[] { b.RevisionId }, expectedDependents = new Dictionary<string, Guid>(), confirm = true });
+        Assert.True(none.RootElement.GetProperty("ok").GetBoolean());
     }
 }
