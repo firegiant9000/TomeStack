@@ -14,6 +14,7 @@
 
 ### Changed
 
+- **A caster without spell slots says so:** spellcasting is proposed only from a class table's spell slot columns. When a class's table has none but its text mentions spellcasting, the class candidate now says "add spellcasting by hand if it casts spells", so it no longer imports silently with no spellcasting.
 - **Better at third-party books:** the PDF import now finds feats whose name and prerequisites share a block, spell, feat and class names printed in capitals (shown in title case), and class tables titled in capitals, and it no longer proposes table rows that are prices or sentence fragments. Measured on the SRDs (no drop) and on a third-party book (counts in m4-acceptance.md).
 - **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
 - **The import review says what happens next:** a line above the candidates says that accepted entries are drafts in the Homebrew studio, and a button opens that source in the studio.

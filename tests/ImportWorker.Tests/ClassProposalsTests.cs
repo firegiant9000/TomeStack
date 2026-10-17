@@ -98,4 +98,51 @@ public class ClassProposalsTests
         Assert.Equal(["save-wis", "save-cha"], Ids(p).Where(i => i.StartsWith("save-", StringComparison.Ordinal)));
     }
 
+    /// <summary>A whole level table with no spell slot columns: Level, Features and an invented "Glow Dice" column.</summary>
+    private static ClassTable SlotlessTable() => new(
+        [new("Level", ClassColumnRole.Level, 0, 60), new("Features", ClassColumnRole.Features, 0, 90), new("Glow Dice", ClassColumnRole.Other, 0, 200)],
+        [.. Enumerable.Range(1, 20).Select(level => new ClassTableRow(level, [$"{level}", "—", $"{1 + level / 5}"], []))]);
+
+    private const string SlotlessNote = "The class mentions spellcasting, but its table has no spell slot columns: add spellcasting by hand if it casts spells.";
+
+    [Fact]
+    public void A_class_that_mentions_spellcasting_without_slot_columns_says_to_add_it_by_hand()
+    {
+        var p = ClassProposals.Propose("Fixture Tester", SlotlessTable(), ["Hit Die: d8", "Glowcasting", "You learn to cast spells by spending glow dice."], NoFeatures, ["Spellcasting Focus: a lantern."]);
+        Assert.DoesNotContain(p.Effects, e => e is SpellcastingEffect);
+        Assert.Contains(SlotlessNote, p.Uncertainties);
+    }
+
+    [Fact]
+    public void The_class_pages_own_mention_of_spellcasting_is_enough_for_the_note()
+    {
+        var p = ClassProposals.Propose("Fixture Tester", SlotlessTable(), ["Hit Die: d8", "Spellcasting", "You cast spells by spending glow dice."], NoFeatures);
+        Assert.Contains(SlotlessNote, p.Uncertainties);
+    }
+
+    [Fact]
+    public void A_table_with_slot_columns_carries_no_slotless_note()
+    {
+        var table = new ClassTable(
+            [new("Level", ClassColumnRole.Level, 0, 60), new("Features", ClassColumnRole.Features, 0, 90), new("1st", ClassColumnRole.SpellSlot, 1, 200)],
+            [.. Enumerable.Range(1, 20).Select(level => new ClassTableRow(level, [$"{level}", "—", "2"], []))]);
+        var p = ClassProposals.Propose("Fixture Tester", table, ["Hit Die: d8", "Spellcasting", "Wisdom is your spellcasting ability."], NoFeatures);
+        Assert.Contains(p.Effects, e => e is SpellcastingEffect);
+        Assert.DoesNotContain(SlotlessNote, p.Uncertainties);
+    }
+
+    [Fact]
+    public void A_slotless_class_that_never_mentions_spellcasting_carries_no_spellcasting_note()
+    {
+        var p = ClassProposals.Propose("Fixture Tester", SlotlessTable(), ["Hit Die: d10", "You hit things with a lantern."], NoFeatures);
+        Assert.DoesNotContain(p.Uncertainties, u => u.Contains("spellcasting", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_class_with_no_table_read_carries_no_slotless_note()
+    {
+        // With no table, the detector's own "could not be read whole" uncertainty already asks for a hand check.
+        var p = ClassProposals.Propose("Fixture Tester", null, ["Spellcasting", "Wisdom is your spellcasting ability."], NoFeatures);
+        Assert.DoesNotContain(SlotlessNote, p.Uncertainties);
+    }
 }

@@ -128,8 +128,12 @@ public static partial class ClassProposals
             uncertainties.Add("The subclass choice is proposed with no options: subclasses extend it.");
         }
 
+        IReadOnlyList<string> castingText = followingText is { Count: > 0 } ? [.. pageText, .. followingText] : pageText;
         if (table is not null && table.HasSlotColumns)
-            ProposeSpellcasting(key, table, followingText is { Count: > 0 } ? [.. pageText, .. followingText] : pageText, effects, uncertainties, lowConfidence);
+            ProposeSpellcasting(key, table, castingText, effects, uncertainties, lowConfidence);
+        else if (table is not null && castingText.Any(l => l.Contains("spellcasting", StringComparison.OrdinalIgnoreCase)))
+            // Spellcasting is proposed from slots only; a caster with another table shape (a highest spell level, a pool) is the reviewer's.
+            uncertainties.Add("The class mentions spellcasting, but its table has no spell slot columns: add spellcasting by hand if it casts spells.");
 
         return new(effects, uncertainties, lowConfidence, fields);
     }
