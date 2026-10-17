@@ -84,6 +84,59 @@ public class SchemaTests
             Assert.Contains(location, errors, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_v9_schema_bounds_equal_the_character_constants()
+    {
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", "character.v9.schema.json")))!;
+        var properties = schema["properties"]!;
+        var defs = schema["$defs"]!;
+        var item = properties["customItems"]!["items"]!["properties"]!;
+        var companion = properties["companions"]!["items"]!["properties"]!;
+        var attack = defs["customAttack"]!["properties"]!;
+
+        (string Where, int? Actual, int Expected)[] bounds =
+        [
+            ("details text", defs["detailText"]!["maxLength"]!.GetValue<int>(), Character.MaxDetailText),
+            ("details list entries", defs["shortList"]!["maxItems"]!.GetValue<int>(), Character.MaxDetailListEntries),
+            ("details list entry length", defs["shortList"]!["items"]!["maxLength"]!.GetValue<int>(), Character.MaxDetailListEntryLength),
+            ("customItems", properties["customItems"]!["maxItems"]!.GetValue<int>(), Character.MaxCustomItems),
+            ("item name", item["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("item note", item["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("item quantity", item["quantity"]!["maximum"]!.GetValue<int>(), EquipmentEntry.MaxQuantity),
+            ("customAttacks", properties["customAttacks"]!["maxItems"]!.GetValue<int>(), Character.MaxCustomAttacks),
+            ("attack name", attack["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("attack note", attack["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("attack type", attack["damageType"]!["maxLength"]!.GetValue<int>(), Character.MaxDamageTypeLength),
+            ("attack damage", attack["damage"]!["maxLength"]!.GetValue<int>(), DiceLimits.MaxLength),
+            ("attack to hit min", attack["toHit"]!["minimum"]!.GetValue<int>(), Character.MinToHit),
+            ("attack to hit max", attack["toHit"]!["maximum"]!.GetValue<int>(), Character.MaxToHit),
+            ("damageDefences", properties["damageDefences"]!["maxItems"]!.GetValue<int>(), DamageTypes.All.Count * Enum.GetValues<DamageDefenceKind>().Length),
+            ("companions", properties["companions"]!["maxItems"]!.GetValue<int>(), Character.MaxCompanions),
+            ("companion name", companion["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("companion kind", companion["kind"]!["maxLength"]!.GetValue<int>(), Character.MaxCompanionTextLength),
+            ("companion speed", companion["speed"]!["maxLength"]!.GetValue<int>(), Character.MaxCompanionSpeedLength),
+            ("companion note", companion["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("companion armor class", companion["armorClass"]!["maximum"]!.GetValue<int>(), Character.MaxCompanionArmorClass),
+            ("companion hit points", companion["hitPointMaximum"]!["maximum"]!.GetValue<int>(), PlayState.MaxHitPoints),
+            ("companion attacks", companion["attacks"]!["maxItems"]!.GetValue<int>(), Character.MaxCompanionAttacks),
+            ("xp", properties["xp"]!["maximum"]!.GetValue<int>(), Character.MaxXp),
+        ];
+        foreach (var (where, actual, expected) in bounds)
+            Assert.True(actual == expected, $"{where}: the schema says {actual}, the code says {expected}");
+        Assert.Equal(DamageTypes.All, properties["damageDefences"]!["items"]!["properties"]!["type"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void The_v9_schema_refuses_the_empty_id_like_the_code_does()
+    {
+        var node = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "characters", "srd521-courier-v9.json")))!;
+        node["customItems"]![0]!["id"] = Guid.Empty.ToString();
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+
+        Assert.Contains("/customItems/0/id", Validate("character", document.RootElement), StringComparison.Ordinal);
+    }
+
     /// <summary>Test fixture packs and the bundled SRD packs.</summary>
     public static TheoryData<string> PackFixtures() =>
     [

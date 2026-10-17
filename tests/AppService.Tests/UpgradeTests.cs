@@ -257,7 +257,7 @@ public class UpgradeTests
 
         foreach (var (id, bytes) in stored)
             Assert.Equal(bytes, Text(database, $"SELECT json FROM characters WHERE id = '{id:D}';")); // v8, and the bytes 0.5.0 wrote
-        var copy = Path.Combine(directory, $"tomestack.db.app-pre-{AppVersionStamp.CurrentVersion}.bak");
+        var copy = Path.Combine(directory, $"tomestack.db.app-pre-{AppVersionStamp.CurrentVersion}-to-{AppVersionStamp.CurrentVersion}.bak");
         Assert.True(File.Exists(copy), "the one-time app-version copy was not written");
         Assert.Equal([Path.GetFileName(copy)], Directory.GetFiles(directory, "*.bak").Select(Path.GetFileName)); // and no schema copy: the schema is unchanged
         Assert.Equal(2, Scalar(copy, "SELECT COUNT(*) FROM characters;"));

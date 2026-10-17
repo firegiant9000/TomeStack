@@ -6,14 +6,15 @@ namespace TomeStack.AppService.Persistence;
 /// <summary>
 /// R75, R76: the one-time copy of the database a newer build takes the first time it opens a data folder an older build used.
 /// A stamp file in the data folder (<see cref="FileName"/>, one line: the version that last opened it) says which. When the database
-/// exists and the stamp is missing or older, the copy <c>tomestack.db.app-&lt;version&gt;.bak</c> is made before anything writes
-/// (before <c>BackupBeforeUpgrade</c> and the migrations), so the player can go back to the build they came from. Copies are never
-/// pruned and may be deleted by hand.
+/// exists and the stamp is missing or older, the copy <c>tomestack.db.app-&lt;from&gt;-to-&lt;to&gt;.bak</c> is made before anything
+/// writes (before <c>BackupBeforeUpgrade</c> and the migrations), so the player can go back to the build they came from. Copies are
+/// never pruned and may be deleted by hand.
 /// </summary>
 /// <remarks>
-/// <c>&lt;version&gt;</c> is the version being left: the stamp's. A folder with no stamp (0.5.0 and older wrote none) is named
-/// <c>pre-&lt;this version&gt;</c> instead, for example <c>tomestack.db.app-pre-0.6.0.bak</c>. A new folder is stamped and not copied; a
-/// stamp from a newer version is neither copied for nor downgraded. Versions compare numerically (major.minor.patch).
+/// <c>&lt;from&gt;</c> is the version being left: the stamp's. A folder with no stamp (0.5.0 and older wrote none) uses
+/// <c>pre-&lt;this version&gt;</c> instead, for example <c>tomestack.db.app-pre-0.6.0-to-0.6.0.bak</c>. The copy is skipped only when that
+/// exact file exists (a retried launch). A new folder is stamped and not copied; a stamp from a newer version is neither copied for nor
+/// downgraded. An unreadable stamp counts as missing. Versions compare numerically (major.minor.patch).
 /// </remarks>
 internal static class AppVersionStamp
 {
@@ -22,8 +23,12 @@ internal static class AppVersionStamp
     /// <summary>The running build's version, as <see cref="TomeStackApp.GetInfo"/> reports it.</summary>
     public static string CurrentVersion => typeof(AppVersionStamp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-    /// <summary>The copy of <paramref name="databasePath"/> taken when leaving <paramref name="token"/> (a version, or <c>pre-</c> and one).</summary>
-    public static string CopyPath(string databasePath, string token) => $"{databasePath}.app-{token}.bak";
+    /// <summary>
+    /// The copy of <paramref name="databasePath"/> taken when <paramref name="target"/> first opens a folder last opened by
+    /// <paramref name="left"/> (a version, or <c>pre-</c> and one). Naming both ends (R87) means a stamp that could not be updated cannot
+    /// make a later version skip its own copy.
+    /// </summary>
+    public static string CopyPath(string databasePath, string left, string target) => $"{databasePath}.app-{left}-to-{target}.bak";
 
     /// <summary>
     /// Takes the copy when due. Call it before the database opens, with the data folder locked. Uses SQLite's online backup, never a file
@@ -46,9 +51,9 @@ internal static class AppVersionStamp
         }
         if (schema is 0 || schema > latestSchemaVersion)
             return; // nothing stored yet, or a newer data folder that the store refuses untouched
-        var copy = CopyPath(databasePath, stamped is null ? $"pre-{Format(current)}" : Format(stamped));
+        var copy = CopyPath(databasePath, stamped is null ? $"pre-{Format(current)}" : Format(stamped), Format(current));
         if (File.Exists(copy))
-            return; // a retry after a launch that failed: the first copy is the one from before the new build wrote anything
+            return; // a retry of this very step after a failed launch: the first copy is from before this build wrote anything
         var partial = copy + ".tmp"; // complete or absent: a crash mid-copy must not leave a half file under the real name
         File.Delete(partial);
         using (var target = new SqliteConnection($"Data Source={partial};Pooling=False"))
@@ -70,7 +75,14 @@ internal static class AppVersionStamp
         }
         finally
         {
-            File.Delete(temporary); // nothing to delete after a successful move; a failed move leaves no stray file
+            try
+            {
+                File.Delete(temporary); // nothing to delete after a successful move; a failed move leaves no stray file
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // best effort; the original failure is the one that matters
+            }
         }
     }
 
@@ -84,9 +96,9 @@ internal static class AppVersionStamp
             using var reader = new StreamReader(path);
             return Parse(reader.ReadLine());
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            return null; // an unreadable stamp counts as a missing one (R88)
         }
     }
 

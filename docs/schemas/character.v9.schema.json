@@ -50,16 +50,16 @@
       "description": "Character schema v9 (D42): items that are not content (gear from a sheet, trinkets). Never calculated.",
       "type": "array",
       "minItems": 1,
-      "maxItems": 100,
+      "maxItems": 50,
       "items": {
         "type": "object",
         "required": ["id", "name", "quantity", "equipped"],
         "additionalProperties": false,
         "properties": {
           "id": { "$ref": "#/$defs/uuid" },
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
           "quantity": { "type": "integer", "minimum": 1, "maximum": 9999 },
-          "note": { "type": "string", "maxLength": 500 },
+          "note": { "type": "string", "maxLength": 200 },
           "equipped": { "type": "boolean" }
         }
       }
@@ -97,13 +97,13 @@
         "additionalProperties": false,
         "properties": {
           "id": { "$ref": "#/$defs/uuid" },
-          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
-          "kind": { "type": "string", "maxLength": 120 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "kind": { "type": "string", "maxLength": 80 },
           "armorClass": { "type": "integer", "minimum": 0, "maximum": 50 },
           "hitPointMaximum": { "type": "integer", "minimum": 0, "maximum": 10000 },
           "speed": { "type": "string", "maxLength": 80 },
-          "attacks": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/customAttack" } },
-          "note": { "type": "string", "maxLength": 500 }
+          "attacks": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "$ref": "#/$defs/customAttack" } },
+          "note": { "type": "string", "maxLength": 200 }
         }
       }
     },
@@ -590,7 +590,8 @@
   "$defs": {
     "uuid": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "not": { "const": "00000000-0000-0000-0000-000000000000" }
     },
     "detailText": {
       "type": "string",
@@ -609,11 +610,11 @@
       "additionalProperties": false,
       "properties": {
         "id": { "$ref": "#/$defs/uuid" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
         "toHit": { "type": "integer", "minimum": -20, "maximum": 30 },
         "damage": { "type": "string", "maxLength": 40 },
         "damageType": { "type": "string", "maxLength": 80 },
-        "note": { "type": "string", "maxLength": 500 }
+        "note": { "type": "string", "maxLength": 200 }
       }
     },
     "score": {

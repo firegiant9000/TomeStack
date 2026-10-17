@@ -6,7 +6,7 @@ namespace TomeStack.AppService.Tests;
 
 /// <summary>
 /// R75, R76: the first time a newer build opens a data folder an older build used, it takes one copy of the database
-/// (<c>tomestack.db.app-&lt;version&gt;.bak</c>, named for the version being left) before anything writes, so a release the player does
+/// (<c>tomestack.db.app-&lt;from&gt;-to-&lt;to&gt;.bak</c>, named for the version being left and the one opening it) before anything writes, so a release the player does
 /// not like can be backed out of. A stamp file records the version; copies are never pruned.
 /// </summary>
 public class AppVersionCopyTests
@@ -67,7 +67,7 @@ public class AppVersionCopyTests
         using (Open(directory, "0.6.0")) { }
 
         var copy = Assert.Single(Copies(directory));
-        Assert.Equal("tomestack.db.app-pre-0.6.0.bak", copy);
+        Assert.Equal("tomestack.db.app-pre-0.6.0-to-0.6.0.bak", copy);
         Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim());
         var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
         Assert.Equal(1, Scalar(Path.Combine(directory, copy), "SELECT COUNT(*) FROM characters;"));
@@ -89,11 +89,11 @@ public class AppVersionCopyTests
 
         using (Open(directory, "0.6.0", save: true)) { }
 
-        Assert.Equal(["tomestack.db.app-0.5.0.bak"], Copies(directory));
+        Assert.Equal(["tomestack.db.app-0.5.0-to-0.6.0.bak"], Copies(directory));
         Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim());
 
         using (Open(directory, "0.7.0")) { }
-        Assert.Equal(["tomestack.db.app-0.5.0.bak", "tomestack.db.app-0.6.0.bak"], Copies(directory)); // never pruned (R76)
+        Assert.Equal(["tomestack.db.app-0.5.0-to-0.6.0.bak", "tomestack.db.app-0.6.0-to-0.7.0.bak"], Copies(directory)); // never pruned (R76)
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class AppVersionCopyTests
 
         using (Open(directory, "0.10.0")) { } // "0.10.0" sorts before "0.9.0" as text
 
-        Assert.Equal(["tomestack.db.app-0.9.0.bak"], Copies(directory));
+        Assert.Equal(["tomestack.db.app-0.9.0-to-0.10.0.bak"], Copies(directory));
         Assert.Equal("0.10.0", File.ReadAllText(Stamp(directory)).Trim());
     }
 
@@ -129,7 +129,7 @@ public class AppVersionCopyTests
 
         using (Open(directory, "0.6.0")) { }
 
-        Assert.Equal(["tomestack.db.app-pre-0.6.0.bak"], Copies(directory));
+        Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak"], Copies(directory));
         Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim());
     }
 
@@ -151,8 +151,8 @@ public class AppVersionCopyTests
 
         using (Open(crashed, "0.6.0")) { }
 
-        Assert.Equal(["tomestack.db.app-pre-0.6.0.bak", "tomestack.db.v9.bak"], Copies(crashed));
-        var copy = Path.Combine(crashed, "tomestack.db.app-pre-0.6.0.bak");
+        Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak", "tomestack.db.v9.bak"], Copies(crashed));
+        var copy = Path.Combine(crashed, "tomestack.db.app-pre-0.6.0-to-0.6.0.bak");
         Assert.Equal(9, Scalar(copy, "PRAGMA user_version;")); // before any migration ran
         Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;")); // WAL data included (a BackupDatabase copy, not a file copy)
     }
@@ -185,7 +185,7 @@ public class AppVersionCopyTests
         using (Open(directory, "0.5.0", save: true)) { }
         File.Delete(Stamp(directory));
         using (Open(directory, "0.6.0")) { }
-        var copy = Path.Combine(directory, "tomestack.db.app-pre-0.6.0.bak");
+        var copy = Path.Combine(directory, "tomestack.db.app-pre-0.6.0-to-0.6.0.bak");
         Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;"));
 
         // The new build ran, wrote more, and the launch failed before the stamp was kept: the next launch finds no stamp again.
@@ -194,7 +194,7 @@ public class AppVersionCopyTests
         File.Delete(Stamp(directory));
         using (Open(directory, "0.6.0")) { }
 
-        Assert.Equal(["tomestack.db.app-pre-0.6.0.bak"], Copies(directory));
+        Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak"], Copies(directory));
         Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;")); // still what the old build left
         Assert.Equal(2, Scalar(Path.Combine(directory, TomeStackApp.DatabaseFileName), "SELECT COUNT(*) FROM characters;"));
         Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim());
@@ -212,6 +212,76 @@ public class AppVersionCopyTests
         var log = File.ReadAllText(Path.Combine(directory, "logs", FileErrorLog.FileName));
         Assert.Contains("app.version-stamp", log, StringComparison.Ordinal);
         Assert.False(File.Exists(Stamp(directory) + ".tmp")); // no leftover temporary file
+    }
+
+    [Fact]
+    public void A_stamp_that_keeps_failing_to_update_does_not_make_a_later_version_skip_its_copy()
+    {
+        var directory = NewDirectory();
+        using (Open(directory, "0.6.0", save: true)) { }
+        Directory.CreateDirectory(Stamp(directory) + ".tmp"); // the stamp can no longer be rewritten: the temporary file cannot be created
+
+        using (Open(directory, "0.7.0")) { }
+        Assert.Equal("0.6.0", File.ReadAllText(Stamp(directory)).Trim()); // still the old stamp
+        using (Open(directory, "0.8.0")) { }
+
+        Assert.Equal(["tomestack.db.app-0.6.0-to-0.7.0.bak", "tomestack.db.app-0.6.0-to-0.8.0.bak"], Copies(directory));
+        Assert.Equal(1, Scalar(Path.Combine(directory, "tomestack.db.app-0.6.0-to-0.8.0.bak"), "SELECT COUNT(*) FROM characters;"));
+    }
+
+    [Fact]
+    public void A_stamp_that_is_denied_to_the_reader_counts_as_missing_and_does_not_stop_the_app_opening()
+    {
+        var directory = NewDirectory();
+        using (Open(directory, "0.5.0", save: true)) { }
+        var info = new FileInfo(Stamp(directory));
+        var user = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+        var deny = new System.Security.AccessControl.FileSystemAccessRule(user, System.Security.AccessControl.FileSystemRights.ReadData, System.Security.AccessControl.AccessControlType.Deny);
+        var security = info.GetAccessControl();
+        security.AddAccessRule(deny);
+        info.SetAccessControl(security);
+        try
+        {
+            using (Open(directory, "0.6.0")) { }
+
+            Assert.Equal(["tomestack.db.app-pre-0.6.0-to-0.6.0.bak"], Copies(directory)); // unreadable = missing
+        }
+        finally
+        {
+            security = info.GetAccessControl();
+            security.RemoveAccessRule(deny);
+            info.SetAccessControl(security);
+        }
+    }
+
+    [Fact]
+    public void A_stale_temporary_file_from_a_crashed_copy_is_replaced_and_the_copy_completes()
+    {
+        var directory = NewDirectory();
+        using (Open(directory, "0.5.0", save: true)) { }
+        File.Delete(Stamp(directory));
+        var copy = Path.Combine(directory, "tomestack.db.app-pre-0.6.0-to-0.6.0.bak");
+        File.WriteAllText(copy + ".tmp", "half a copy");
+
+        using (Open(directory, "0.6.0")) { }
+
+        Assert.False(File.Exists(copy + ".tmp"));
+        Assert.Equal(1, Scalar(copy, "SELECT COUNT(*) FROM characters;"));
+    }
+
+    [Fact]
+    public void A_copy_that_fails_leaves_nothing_under_the_final_name_and_stops_the_open()
+    {
+        var directory = NewDirectory();
+        using (Open(directory, "0.5.0", save: true)) { }
+        File.Delete(Stamp(directory));
+        var copy = Path.Combine(directory, "tomestack.db.app-pre-0.6.0-to-0.6.0.bak");
+        Directory.CreateDirectory(copy + ".tmp"); // the copy cannot be started
+
+        Assert.ThrowsAny<Exception>(() => Open(directory, "0.6.0"));
+
+        Assert.False(File.Exists(copy));
+        Assert.False(File.Exists(Stamp(directory))); // the failed open wrote no stamp
     }
 
     [Fact]
