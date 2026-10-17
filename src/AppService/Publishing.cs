@@ -31,7 +31,11 @@ public sealed record PublishManyPreview(IReadOnlyList<PublishManyEntry> Entries,
 /// <param name="ContentIds">The content to publish.</param>
 /// <param name="Expected">The pending draft revision ids the user saw in the preview; must equal the pending set exactly.</param>
 /// <param name="Confirm">Must be true.</param>
-public sealed record PublishManyRequest(IReadOnlyList<Guid> ContentIds, IReadOnlyList<Guid> Expected, bool Confirm);
+/// <param name="ExpectedDependents">
+/// The dependents the preview showed (content id to the newest revision id). When present, the dependents planned inside the
+/// transaction must equal them exactly (none added, none removed, none with a newer revision); absent (an older caller), they are not compared.
+/// </param>
+public sealed record PublishManyRequest(IReadOnlyList<Guid> ContentIds, IReadOnlyList<Guid> Expected, bool Confirm, IReadOnlyDictionary<Guid, Guid>? ExpectedDependents = null);
 
 public sealed record PublishManyResult(IReadOnlyList<PublishResult> Published);
 
@@ -214,9 +218,11 @@ public sealed partial class TomeStackApp
     /// cannot disagree. Pending is per content id: its newest revision in stored order is a draft. A content id with nothing
     /// pending, or a pending set unlike <paramref name="expected"/>, is <c>content.publish-set-changed</c>. Dependents are
     /// content of the same source whose newest revision grants or offers a revision of anything published here, followed
-    /// transitively; a dependent with a draft the request did not name is an error and is never swept in (ruling R41).
+    /// transitively; a dependent with a draft the request did not name is an error and is never swept in (ruling R41). When
+    /// <paramref name="expectedDependents"/> is given, the dependents must equal it (content id to newest revision id), or it is
+    /// <c>content.publish-set-changed</c> too.
     /// </summary>
-    private PublishPlan PlanPublishMany(IReadOnlyList<Guid>? contentIds, IReadOnlyList<Guid>? expected, bool withFindings)
+    private PublishPlan PlanPublishMany(IReadOnlyList<Guid>? contentIds, IReadOnlyList<Guid>? expected, bool withFindings, IReadOnlyDictionary<Guid, Guid>? expectedDependents = null)
     {
         var requested = (contentIds ?? []).Distinct().ToList();
         if (requested.Count == 0)
@@ -270,6 +276,14 @@ public sealed partial class TomeStackApp
             }
         }
         while (grew);
+
+        // The dependents the preview showed were confirmed with the drafts (ADR-004): added, removed or newer ones are a changed set.
+        if (expectedDependents is not null)
+        {
+            var planned = items.Where(i => !i.IsEntry).Concat(blocked).ToDictionary(i => i.Revision.ContentId, i => i.Revision.RevisionId);
+            if (planned.Count != expectedDependents.Count || planned.Any(p => !expectedDependents.TryGetValue(p.Key, out var revisionId) || revisionId != p.Value))
+                throw PublishSetChanged();
+        }
 
         foreach (var item in items.Where(i => i.IsEntry))
         {
@@ -436,7 +450,7 @@ public sealed partial class TomeStackApp
         PublishManyResult? result = null;
         _store.InTransaction(() =>
         {
-            var plan = PlanPublishMany(request.ContentIds, request.Expected ?? throw PublishSetChanged(), withFindings: false);
+            var plan = PlanPublishMany(request.ContentIds, request.Expected ?? throw PublishSetChanged(), withFindings: false, request.ExpectedDependents);
             var errors = plan.All.SelectMany(i => i.Extra).ToList();
             if (errors.Count > 0)
                 throw new AppValidationException([new("content.validation-failed", $"This batch has {errors.Count} problem(s). Nothing was published."), .. errors]);

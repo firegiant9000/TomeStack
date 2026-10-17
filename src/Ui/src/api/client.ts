@@ -106,7 +106,9 @@ export function createClient(transport: Transport) {
     /** Item 9, D33: what publishing these contents' pending drafts would do, with re-pointed dependents; writes nothing. */
     publishManyPreview: (contentIds: string[]) => call<PublishManyPreview>('content.publishManyPreview', { contentIds }),
     /** Item 9, D33: one transaction; `expected` is the pending draft revision ids the preview showed. Only the panel's button calls this. */
-    publishMany: (contentIds: string[], expected: string[]) => call<PublishManyResult>('content.publishMany', { contentIds, expected, confirm: true }),
+    /** `expectedDependents` is the preview's dependents (content id to newest revision id); a change since is refused as `content.publish-set-changed`. */
+    publishMany: (contentIds: string[], expected: string[], expectedDependents?: Record<string, string>) =>
+      call<PublishManyResult>('content.publishMany', { contentIds, expected, expectedDependents, confirm: true }),
     /** Item 10: new drafts (never published) with the list key added; publish them through the previewed publish panel. */
     addToSpellList: (contentIds: string[], listKey: string) => call<ContentSpellListResult>('content.addToSpellList', { contentIds, listKey }),
     /** Item 10: every spell list key in published content with its spell count; read only. */
