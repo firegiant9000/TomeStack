@@ -167,6 +167,15 @@ article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; 
 fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .field { display: grid; gap: 0.2rem; font-weight: 500; }
+/* Item 17 (D36): the Details form on Notes. Boxes fill their column and the appearance fields wrap at any width (reflow at 400%, WCAG 1.4.10). */
+.details-form fieldset { min-width: 0; margin: var(--space-3) 0 0; display: grid; gap: var(--space-3); }
+.details-form textarea, .details-form input[type='text'] { width: 100%; max-width: 100%; box-sizing: border-box; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.details-form textarea { resize: vertical; }
+.details-form [aria-invalid='true'] { border: 2px solid var(--error); }
+.details-form .field p { margin: 0; overflow-wrap: anywhere; }
+.details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr)); gap: var(--space-3) var(--space-4); }
+.print-details dt { font-weight: 600; }
+.print-details dd { margin: 0 0 0.4rem; white-space: pre-line; }
 .choice { display: block; padding: 0.15rem 0; }
 .source-decision { margin: 0.75rem 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -92,6 +92,28 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void The_restore_preview_names_the_detail_fields_that_differ_and_never_quotes_their_text()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")
+            with { Details = new(Alignment: "Fixture-old-alignment", Languages: ["Fixture-old-tongue"]) }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "with details"));
+
+        var same = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Null(same.DetailsChange);
+
+        temp.App.SaveCharacter(saved with { Details = new(Alignment: "Fixture-new-alignment", Appearance: new(Hair: "Fixture-new-hair"), Languages: ["Fixture-old-tongue"]) });
+        var changed = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Equal(["alignment", "hair"], changed.DetailsChange);
+        Assert.DoesNotContain("Fixture-", string.Join(' ', changed.DetailsChange!), StringComparison.Ordinal);
+
+        temp.App.SaveCharacter(saved with { Details = null });
+        Assert.Equal(["alignment", "languages"], temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).DetailsChange);
+        var restored = temp.App.RestoreSnapshot(new(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).Token, Confirm: true)).View.Character.Details;
+        Assert.Equal(JsonSerializer.Serialize(saved.Details, RulesJson.Options), JsonSerializer.Serialize(restored, RulesJson.Options)); // semantics unchanged: details roll back
+    }
+
+    [Fact]
     public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
     {
         using var temp = new TempApp();

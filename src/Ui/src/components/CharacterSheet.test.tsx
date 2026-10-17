@@ -346,6 +346,60 @@ it('keeps typed text in the gap note box when switching tabs and back', async ()
   expect((within(screen.getByRole('form', { name: 'New gap note' })).getByRole('textbox', { name: /^What was missing or wrong/ }) as HTMLTextAreaElement).value).toBe('Fixture draft: the rule text is unclear');
 });
 
+const withDetails = (details: NonNullable<Character['details']>): CharacterView => {
+  const v = view();
+  return { ...v, character: { ...v.character, schemaVersion: 9, details } };
+};
+
+it('puts the Details form on Notes after session notes and gap notes, with no new tab', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
+  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  const panel = screen.getByRole('tabpanel', { name: 'Notes' });
+  expect(within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent?.replace(/: \d+ open$/, ''))).toEqual(['Session notes', 'Gap notes', 'Details']);
+  expect(within(panel).getByRole('form', { name: 'Details' })).toBeTruthy();
+});
+
+it('keeps text typed in the Details form when switching tabs and back', async () => {
+  const user = userEvent.setup();
+  renderSheet(view());
+  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  await user.type(within(screen.getByRole('form', { name: 'Details' })).getByRole('textbox', { name: 'Alignment' }), 'Fixture draft alignment');
+  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  expect(screen.queryByRole('form', { name: 'Details' })).toBeNull();
+  await user.click(screen.getByRole('tab', { name: 'Notes' }));
+  const form = screen.getByRole('form', { name: 'Details' });
+  expect((within(form).getByRole('textbox', { name: 'Alignment' }) as HTMLInputElement).value).toBe('Fixture draft alignment');
+  expect(within(form).getByRole('button', { name: 'Save details' }).getAttribute('aria-disabled')).toBeNull();
+});
+
+it('shows Languages and Tools read-only on Stats with a link into Details, and nothing when both are empty', async () => {
+  const user = userEvent.setup();
+  renderSheet(view(), 'stats');
+  expect(screen.queryByRole('button', { name: /Edit in Notes/ })).toBeNull();
+  expect(screen.queryByRole('list', { name: 'Languages' })).toBeNull();
+  cleanup();
+  renderSheet(withDetails({ alignment: 'Fixture neutral', languages: ['Fixture tongue', 'Fixture signs'] }), 'stats');
+  expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(expect.arrayContaining(['Fixture tongue', 'Fixture signs']));
+  expect(within(screen.getByRole('list', { name: 'Languages' })).getAllByRole('listitem')).toHaveLength(2);
+  expect(screen.queryByRole('list', { name: 'Tools and other' })).toBeNull(); // an empty list shows nothing
+  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
+  expect(screen.getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
+});
+
+it('the Stats link moves focus to the Details heading every time, even when Notes is already the remembered tab', async () => {
+  const user = userEvent.setup();
+  renderSheet(withDetails({ toolsAndOther: ['Fixture kit'] }), 'stats');
+  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
+  await user.click(screen.getByRole('tab', { name: 'Stats' }));
+  expect(within(screen.getByRole('list', { name: 'Tools and other' })).getAllByRole('listitem')).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'Edit in Notes → Details' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Details' })));
+});
+
 it('opens on the remembered tab, and an explicit initialTab wins over it', () => {
   localStorage.setItem('tomestack.sheetTab.fixture-2', 'stats');
   renderSheet(view());

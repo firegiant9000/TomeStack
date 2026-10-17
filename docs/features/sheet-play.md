@@ -81,6 +81,17 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 - **Concentration** (D19): the Spells tab offers "Concentrate on {spell}" for prepared concentration spells (disabled while concentrating on that spell). The Play tab then shows "Concentration: {spell}" with the Constitution save roll ("Roll Constitution saving throw", which changes nothing) and the two confirmed outcomes, "Kept concentration" and "End concentration". After damage the heading adds ", Constitution saving throw DC {n} pending". A long rest's preview lists the end of concentration (untick it to keep it); damage that drops hit points to 0, or setting hit points to 0, ends it at once. The stored spell name is at most 200 characters (`play.concentration-invalid`; also `maxLength` in the character schema); a longer content name is clipped to 200 when concentration starts, never refused.
 - The hit points panel shows the hit dice left and an "Inspiration" / "Heroic Inspiration" checkbox, and the summary has the same checkbox and one-point hit-point buttons.
 
+## Details, languages and tools (item 17, D36)
+
+The Notes tab ends with a form named "Details" (after Session notes and Gap notes; no new tab), saved with the character in `details` (character schema v9). Never calculated.
+
+- **Fields (R86):** Personality (alignment, personality traits, ideals, bonds, flaws), Appearance (age, height, weight, eyes, skin, hair), Background story (backstory, allies and organisations), and Languages and tools (two lists, "Languages" and "Tools and other", one entry per line; blank lines are ignored, entries are trimmed).
+- **Limits:** each text at most 2,000 characters; each list at most 30 entries of at most 80 characters (the service refuses more with the `character.details-*` codes). The form checks first. A text over the limit, a list line over 80 characters (named by line number) or more than 30 entries is a linked error (`aria-invalid`, `aria-describedby`); nothing is cut or dropped. Under 200 characters left, a hint says how many remain.
+- **Save (R77):** "Save details" is `aria-disabled` (never natively disabled) with a linked reason ("Nothing has changed yet.", "Save is held until the fields marked above are fixed.", "Saving the details…"). A press while held does nothing, and after a save the button keeps focus. The status says "Details saved." Clearing every field saves no `details`, so a character with no other v9 data is written as schema 8 again.
+- **Other saves keep them:** every save sends the whole loaded character, so details (and the other v9 fields the UI does not edit yet) survive a save from any other panel.
+- **Stats** lists the languages and the tools read-only, with an "Edit in Notes → Details" button that opens Notes and focuses the Details heading. Nothing shows while both lists are empty.
+- **Where they go:** a share package keeps the details (D36) and still drops session notes and gap notes; a personal backup keeps everything. The sheet JSON and Foundry exports carry no details (Q17). A snapshot keeps them, and its restore preview names the detail fields it would change (never their text). The print preview prints them only when "Include details" is ticked ([printable-backup.md](printable-backup.md)).
+
 ## Not in this slice
 
 Conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

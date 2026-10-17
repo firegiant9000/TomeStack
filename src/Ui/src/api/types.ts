@@ -61,6 +61,18 @@ export interface Character {
   notes?: { id: string; date: string; text: string; createdAt: string }[];
   /** Spells known or prepared, per caster (character schema v6, D04). */
   spells?: KnownSpell[];
+  /** Character schema v9 (D42): personality, appearance, backstory, languages and tools. Absent while every field is empty. */
+  details?: CharacterDetails;
+  /** Character schema v9 (D42): carried things that are not content. Never calculated. */
+  customItems?: CustomItem[];
+  /** Character schema v9 (D42): attacks recorded by hand. Never calculated. */
+  customAttacks?: CustomAttack[];
+  /** Character schema v9 (D42): damage resistances, immunities and vulnerabilities (a reminder only). */
+  damageDefences?: DamageDefence[];
+  /** Character schema v9 (D42): familiars, mounts and the like. */
+  companions?: Companion[];
+  /** Character schema v9 (D42): experience points as the player records them. */
+  xp?: number;
   updatedAt: string;
   /** SPEC C-08: set while archived. Only `character.archive` / `character.unarchive` change it; a save keeps it. */
   archivedAt?: string;
@@ -72,6 +84,75 @@ export interface EquipmentEntry {
   item: ContentReference;
   equipped: boolean;
   quantity: number;
+  /** Character schema v9: names this entry. */
+  id?: string;
+  /** Character schema v9: absent means not attuned. */
+  attuned?: boolean;
+  /** Character schema v9: absent means none spent. */
+  chargesSpent?: number;
+}
+
+/** Character schema v9 (D42): how the character looks, as free text. */
+export interface CharacterAppearance {
+  age?: string;
+  height?: string;
+  weight?: string;
+  eyes?: string;
+  skin?: string;
+  hair?: string;
+}
+
+/** Character schema v9 (D42): the Details page. Each text is at most 2,000 characters; each list at most 30 entries of 80. */
+export interface CharacterDetails {
+  alignment?: string;
+  personalityTraits?: string;
+  ideals?: string;
+  bonds?: string;
+  flaws?: string;
+  appearance?: CharacterAppearance;
+  backstory?: string;
+  alliesAndOrganisations?: string;
+  languages?: string[];
+  toolsAndOther?: string[];
+}
+
+export interface CustomItem {
+  id: string;
+  name: string;
+  quantity: number;
+  note?: string;
+  equipped: boolean;
+}
+
+export interface CustomAttack {
+  id: string;
+  name: string;
+  toHit: number;
+  damage?: string;
+  damageType?: string;
+  note?: string;
+}
+
+export interface DamageDefence {
+  type: string;
+  kind: 'resistance' | 'immunity' | 'vulnerability';
+}
+
+export interface Companion {
+  id: string;
+  name: string;
+  kind?: string;
+  armorClass?: number;
+  hitPointMaximum: number;
+  speed?: string;
+  attacks?: CustomAttack[];
+  note?: string;
+}
+
+export interface CompanionPlay {
+  id: string;
+  current?: number | null;
+  temporary: number;
 }
 
 export interface ClassLevel {
@@ -315,6 +396,8 @@ export interface PlayState {
   inspiration?: boolean;
   /** Character schema v8 (D19): the concentration spell and a pending Constitution save DC after damage. */
   concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
+  /** Character schema v9 (D42): current and temporary hit points per companion. */
+  companions?: CompanionPlay[];
 }
 
 export type PlayActionKind =
@@ -1359,6 +1442,8 @@ export interface RestorePreview {
   /** Set only when the restore changes the coins (they roll back with the snapshot): the coins now, and the coins it brings back. */
   currencyNow?: Currency;
   currencyAfter?: Currency;
+  /** Names of the detail fields (such as "alignment") the restore changes; never their text. Set only when some differ (D36). */
+  detailsChange?: string[];
 }
 
 export interface RestoreResult {

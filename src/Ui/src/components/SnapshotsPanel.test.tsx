@@ -43,6 +43,14 @@ it('names the coins the restore brings back and the coins now', async () => {
   expect(region.textContent).toContain('Coins go back to 3 gp, 12 sp (now 40 gp).');
 });
 
+it('names the detail fields the restore changes, and says nothing about details when none differ', async () => {
+  const region = await openPreview(preview({ detailsChange: ['alignment', 'languages'] }));
+  expect(region.textContent).toContain('Details go back to the snapshot too: alignment, languages.');
+  cleanup();
+  const quiet = await openPreview(preview({}));
+  expect(quiet.textContent).not.toContain('Details go back');
+});
+
 it('names a snapshot with an empty label by its reason, never by an empty name (carry 5)', async () => {
   vi.mocked(client.snapshots).mockResolvedValue({ items: [{ ...snapshot, label: '', reason: 'beforeRestore' }], hasMore: false });
   vi.mocked(client.restorePreview).mockResolvedValue(preview({}));

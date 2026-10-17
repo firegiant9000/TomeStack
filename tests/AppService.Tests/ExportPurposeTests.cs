@@ -1,5 +1,7 @@
+using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using TomeStack.AppService.Exports;
 using TomeStack.AppService.Packages;
 using TomeStack.RulesCore;
 
@@ -173,6 +175,78 @@ public class ExportPurposeTests
 
         Assert.False(preview.CanApply);
         Assert.Contains(preview.Errors, e => e.Code == "package.invalid-json");
+    }
+
+    private static readonly CharacterDetails FixtureDetails = new(
+        Alignment: "Fixture-detail-alignment",
+        Backstory: "Fixture-detail-backstory",
+        Appearance: new(Eyes: "Fixture-detail-eyes"),
+        Languages: ["Fixture-detail-tongue"],
+        ToolsAndOther: ["Fixture-detail-kit"]);
+
+    /// <summary>Details hold lists, which records compare by reference: compare what they serialise to.</summary>
+    private static string AsJson(CharacterDetails? details) => JsonSerializer.Serialize(details, RulesJson.Options);
+
+    private static Character ReadPackageCharacter(byte[] package, Guid id)
+    {
+        using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+        using var reader = new StreamReader(zip.GetEntry($"characters/{id:D}.json")!.Open());
+        return JsonSerializer.Deserialize<Character>(reader.ReadToEnd(), RulesJson.Options)!;
+    }
+
+    private static Guid SaveCharacterWithDetailsAndNotes(TempApp app)
+    {
+        var note = new SessionNote(Guid.NewGuid(), new DateOnly(2026, 10, 6), "Fixture session text.", DateTimeOffset.Parse("2026-10-06T20:00:00Z"));
+        var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        return app.App.SaveCharacter(character with { Details = FixtureDetails, Notes = [note] }).Character.Id;
+    }
+
+    [Fact]
+    public void A_share_keeps_the_details_and_leaves_the_session_notes_out_and_a_backup_keeps_both()
+    {
+        using var origin = new TempApp();
+        var id = SaveCharacterWithDetailsAndNotes(origin);
+
+        var shared = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Share).Content, id);
+        Assert.Equal(AsJson(FixtureDetails), AsJson(shared.Details)); // D36: the details travel
+        Assert.Empty(shared.Notes); // D22: the journal does not
+        Assert.Equal(Character.CurrentSchemaVersion, shared.SchemaVersion);
+
+        var backup = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Backup).Content, id);
+        Assert.Equal(AsJson(FixtureDetails), AsJson(backup.Details));
+        Assert.Single(backup.Notes);
+    }
+
+    [Fact]
+    public void A_shared_character_arrives_with_its_details_and_without_the_senders_notes()
+    {
+        using var origin = new TempApp();
+        var id = SaveCharacterWithDetailsAndNotes(origin);
+        var package = origin.App.ExportCharacters([id], ExportPurpose.Share).Content;
+
+        using var destination = new TempApp();
+        destination.App.ApplyImport(package);
+
+        var arrived = destination.App.GetCharacter(id).Character;
+        Assert.Equal(AsJson(FixtureDetails), AsJson(arrived.Details));
+        Assert.Empty(arrived.Notes);
+    }
+
+    [Theory]
+    [InlineData(SheetPurpose.Share)]
+    [InlineData(SheetPurpose.Personal)]
+    public void The_sheet_export_and_the_Foundry_export_carry_no_details(SheetPurpose purpose)
+    {
+        using var origin = new TempApp();
+        var id = SaveCharacterWithDetailsAndNotes(origin);
+
+        foreach (var target in new[] { SheetJson.Target, FoundryDnd5e.Target })
+        {
+            var preview = origin.App.PreviewVttExport(id, target, purpose);
+            var text = System.Text.Encoding.UTF8.GetString(origin.App.VttExportOutput(preview.Token).Bytes);
+            Assert.DoesNotContain("Fixture-detail", text, StringComparison.Ordinal); // Q17: details stay out
+            Assert.DoesNotContain("Fixture session text", text, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

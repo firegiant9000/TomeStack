@@ -19,6 +19,7 @@ import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
+import { DetailsPanel } from './DetailsPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
@@ -301,6 +302,17 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   useEffect(() => {
     if (gapFocus > 0) gapText.current?.focus();
   }, [gapFocus]);
+  // Item 17: Stats lists languages and tools read-only; its link opens Notes and focuses the Details heading. A counter, like
+  // the gap focus, so a second press moves focus again.
+  const [detailsFocus, setDetailsFocus] = useState(0);
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (detailsFocus > 0) detailsHeading.current?.focus();
+  }, [detailsFocus]);
+  function editDetails() {
+    setTab('notes');
+    setDetailsFocus((n) => n + 1);
+  }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -471,6 +483,19 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <FieldCard key={field.field} value={field} labels={labels} onOverride={changeOverride} onRoll={(f) => roll({ field: f, mode: rollMode })} onReportGap={(f) => reportGap(gapAboutField(f))} />
         ))}
       </section>
+    );
+
+  // Item 17: a read-only list of the details' languages or tools; nothing when it is empty.
+  const detailList = (id: string, title: string, entries: readonly string[] = []) =>
+    entries.length === 0 ? null : (
+      <div>
+        <h4 id={`${id}-heading`}>{title}</h4>
+        <ul aria-labelledby={`${id}-heading`}>
+          {entries.map((entry, index) => (
+            <li key={`${index}-${entry}`}>{entry}</li>
+          ))}
+        </ul>
+      </div>
     );
 
   return (
@@ -659,11 +684,22 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             sheet.fields.filter((f) => group.match(f.field)),
           ),
         )}
+        {((character.details?.languages ?? []).length > 0 || (character.details?.toolsAndOther ?? []).length > 0) && (
+          <section aria-labelledby="stats-details-heading" className="field-group">
+            <h3 id="stats-details-heading">Languages and tools</h3>
+            {detailList('stats-languages', 'Languages', character.details?.languages)}
+            {detailList('stats-tools', 'Tools and other', character.details?.toolsAndOther)}
+            <button type="button" onClick={editDetails}>
+              Edit in Notes → Details
+            </button>
+          </section>
+        )}
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
         <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
+        <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>

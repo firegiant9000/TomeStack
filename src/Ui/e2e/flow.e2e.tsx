@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, inject, it, vi } from 'vitest';
-import { zip } from './zip';
+import { readZipEntry, zip } from './zip';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
@@ -94,6 +94,23 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
   await within(sheet).findByText('Private session note for the share test.');
 
+  // Item 17, D36: the Details form on Notes. Save is held until something changes; the details then show on Stats.
+  const detailsForm = within(sheet).getByRole('form', { name: 'Details' });
+  const saveDetails = within(detailsForm).getByRole('button', { name: 'Save details' });
+  expect(saveDetails.getAttribute('aria-disabled')).toBe('true');
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Alignment' }), 'E2E neutral');
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Languages' }), 'E2E tongue{Enter}E2E signs');
+  expect(saveDetails.getAttribute('aria-disabled')).toBeNull();
+  await user.click(saveDetails);
+  await expectStatus(/Details saved/);
+  expect(saveDetails.getAttribute('aria-disabled')).toBe('true'); // nothing differs now
+  expect(document.activeElement).toBe(saveDetails); // focus stays on the button
+  await openTab(user, sheet, 'Stats');
+  expect(within(within(sheet).getByRole('list', { name: 'Languages' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['E2E tongue', 'E2E signs']);
+  await user.click(within(sheet).getByRole('button', { name: 'Edit in Notes → Details' }));
+  expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { name: 'Details' })));
+
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await openTab(user, sheet, 'Manage');
   await user.click(screen.getByRole('button', { name: 'Export package' }));
@@ -109,6 +126,14 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
+  // D36 in the files themselves: the backup holds the details and the journal; the share keeps the details and drops the journal.
+  const characterEntry = /^characters\/.+\.json$/;
+  const backupCharacter = readZipEntry(bytesOf(base64), characterEntry)!;
+  expect(backupCharacter).toContain('E2E tongue');
+  expect(backupCharacter).toContain('Private session note for the share test.');
+  const sharedCharacter = readZipEntry(bytesOf(vi.mocked(downloadBase64).mock.calls[1]![1]), characterEntry)!;
+  expect(sharedCharacter).toContain('E2E tongue');
+  expect(sharedCharacter).not.toContain('Private session note for the share test.');
 
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });
@@ -1886,6 +1911,10 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the print test.');
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
   await within(sheet).findByText('Private session note for the print test.');
+  const detailsForm = within(sheet).getByRole('form', { name: 'Details' });
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Backstory' }), 'Private backstory for the print test.');
+  await user.click(within(detailsForm).getByRole('button', { name: 'Save details' }));
+  await expectStatus(/Details saved/);
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
@@ -1905,6 +1934,12 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(preview.textContent).not.toContain('Private session note for the print test.');
   await user.click(within(preview).getByRole('checkbox', { name: 'Include session notes (private)' }));
   expect(await within(preview).findByText(/Private session note for the print test\./)).toBeTruthy();
+  // Details have their own tick, unticked by default.
+  const includeDetails = within(preview).getByRole<HTMLInputElement>('checkbox', { name: /^Include details/ });
+  expect(includeDetails.checked).toBe(false);
+  expect(preview.textContent).not.toContain('Private backstory for the print test.');
+  await user.click(includeDetails);
+  expect(await within(preview).findByText(/Private backstory for the print test\./)).toBeTruthy();
 
   await user.click(within(preview).getByRole('button', { name: 'Print…' }));
   expect(print).toHaveBeenCalledTimes(1);
