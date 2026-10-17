@@ -31,7 +31,7 @@ export function HomePanel({ characters, onOpen, onNew, canCreate, focusOnMount =
       </h2>
       {active.length === 0 ? (
         <>
-          <p className="hint">No characters yet. Create one, or import a package or a D&amp;D Beyond sheet from the sidebar.</p>
+          <p className="hint">No characters yet. Create one, or import a package or a character sheet from the sidebar.</p>
           <button type="button" disabled={!canCreate} onClick={onNew}>
             Create a character
           </button>

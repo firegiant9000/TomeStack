@@ -288,7 +288,7 @@ export function createClient(transport: Transport) {
     /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices, campaignChoices }),
-    // ---- character import from a D&D Beyond PDF sheet: read once, preview, then one confirmed create ----
+    // ---- character import from a character sheet PDF (D&D Beyond export or the fillable 2014 sheet): read once, preview, then one confirmed create ----
     /** Native Open dialog in the shell; the path never reaches the page. `unsupported` elsewhere. No timeout: it waits for the dialog and the worker. */
     ddbRead: () => call<DdbReadResult>('ddb.read', {}, { timeoutMs: null }),
     /** Browser development and e2e: the chosen file's bytes, read once and not kept. No timeout, as for `ddbRead`. */

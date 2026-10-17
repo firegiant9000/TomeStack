@@ -7,6 +7,7 @@ import { client } from '../../api/client';
 import { TomeStackError } from '../../api/transport';
 import type { DdbPreview, DdbReadResult, MatchRow, RulesFamilyPolicy } from '../../api/types';
 import { DdbImportPanel } from './DdbImportPanel';
+import { DdbSummaryStep } from './DdbSummaryStep';
 
 vi.mock('../../api/client', () => ({
   client: {
@@ -211,7 +212,7 @@ it('falls back to a file input when the host has no dialog', async () => {
   renderPanel();
 
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
-  await user.upload(screen.getByLabelText('D&D Beyond PDF file'), new File([new Uint8Array([37, 80, 68, 70])], 'fixture.pdf', { type: 'application/pdf' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([new Uint8Array([37, 80, 68, 70])], 'fixture.pdf', { type: 'application/pdf' }));
 
   await waitFor(() => expect(client.ddbReadData).toHaveBeenCalledWith('fixture.pdf', 'JVBERg=='));
   expect(await screen.findByRole('button', { name: 'Next: rules' })).toBeTruthy();
@@ -511,4 +512,34 @@ it('discards the token of a read that resolves after Cancel', async () => {
 
   pending.resolve(read);
   await waitFor(() => expect(client.ddbDiscard).toHaveBeenCalledWith('fixture-token'));
+});
+
+// ---- item 14: one entry for D&D Beyond exports and the fillable 2014 sheet ----
+
+it('titles the import as a character sheet import and names the layout it read in words', async () => {
+  vi.mocked(client.ddbRead).mockResolvedValue({ ...read, layout: 'wotc-2014', layoutName: 'the fillable 2014 sheet' });
+  const user = userEvent.setup();
+  renderPanel();
+
+  expect(screen.getByRole('heading', { name: 'Import a character sheet (PDF)', hidden: true })).toBeTruthy();
+  expect(screen.getByText(/Choose a character sheet PDF/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+
+  const layout = (await screen.findByText('Layout')).nextElementSibling;
+  expect(layout?.textContent).toBe('the fillable 2014 sheet');
+  // The id is the fallback for a build that sends no name.
+  expect(screen.queryByText('wotc-2014')).toBeNull();
+});
+
+it('shows the report lines of the summary step, and nothing when the sheet gave none', () => {
+  const base = preview(true);
+  const props = { family: 'srd-5.1' as const, suggested: 'srd-5.1' as const, includePlayState: false, onIncludePlayState: vi.fn() };
+  const { rerender } = render(<DdbSummaryStep {...props} preview={base} />);
+  expect(screen.queryByRole('heading', { name: 'From reading the sheet' })).toBeNull();
+
+  const lines = ['Backstory was cut to 20,000 characters.', 'Weapon row 3: the attack bonus could not be read, so the row is in the import note only.'];
+  rerender(<DdbSummaryStep {...props} preview={{ ...base, report: { ...base.report, layoutName: 'the fillable 2014 sheet', lines } }} />);
+
+  const section = screen.getByRole('region', { name: 'From reading the sheet' });
+  expect(within(section).getAllByRole('listitem').map((li) => li.textContent)).toEqual(lines);
 });

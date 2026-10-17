@@ -1588,7 +1588,7 @@ export interface LibraryRestoreResult {
   warnings: Diagnostic[];
 }
 
-// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md) ----
+// ---- character import from a character sheet PDF: a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md) ----
 
 export interface DdbSummary {
   /** The character's name as read; shown, never logged. */
@@ -1605,6 +1605,8 @@ export interface DdbReadResult {
   chosen?: boolean;
   token: string;
   layout: string;
+  /** The layout in words ("D&D Beyond 2014", "the fillable 2014 sheet"); the id in `layout` is the fallback. */
+  layoutName?: string;
   suggestedFamily?: RulesFamilyId;
   summary: DdbSummary;
 }
@@ -1688,6 +1690,10 @@ export interface DdbReport {
   notBroughtOver: string[];
   sameNameExists: boolean;
   familyMismatch: boolean;
+  /** The layout in words, as in `DdbReadResult.layoutName`. */
+  layoutName?: string;
+  /** Lines from reading and importing the sheet's free text (a field cut short, a weapon row left empty): labels and counts only, never the sheet's text. */
+  lines?: string[];
 }
 
 export interface DdbPreviewRequest {

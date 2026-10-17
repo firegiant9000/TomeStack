@@ -44,15 +44,15 @@ export function DdbChooseStep({ read, onRead, onError }: Props) {
   return (
     <>
       <p>
-        Export the character sheet from D&amp;D Beyond as a PDF, then choose it here. TomeStack reads its form fields once, in
-        the import worker, and keeps nothing of the file.
+        Choose a character sheet PDF: an export from D&amp;D Beyond, or the fillable 2014 character sheet filled in on a computer.
+        TomeStack reads its form fields once, in the import worker, and keeps nothing of the file.
       </p>
       {/* Release checklist item 1 (owner, 2026-10-12): the name only describes the file; no affiliation is implied. */}
       <p className="hint">TomeStack is not affiliated with D&amp;D Beyond or Wizards of the Coast.</p>
       <button type="button" onClick={choose}>
         Choose PDF…
       </button>
-      <input ref={fileInput} type="file" accept=".pdf" hidden onChange={fromBrowser} aria-label="D&D Beyond PDF file" />
+      <input ref={fileInput} type="file" accept=".pdf" hidden onChange={fromBrowser} aria-label="Character sheet PDF file" />
       {read && (
         <dl className="ddb-read">
           <dt>Character</dt>
@@ -64,7 +64,7 @@ export function DdbChooseStep({ read, onRead, onError }: Props) {
             {read.summary.features} features, {read.summary.spells} spells, {read.summary.items} items
           </dd>
           <dt>Layout</dt>
-          <dd>{read.layout}</dd>
+          <dd>{read.layoutName || read.layout}</dd>
         </dl>
       )}
     </>

@@ -207,7 +207,7 @@ export function App() {
           </button>
           <button
             type="button"
-            title="Package import is for TomeStack .zip files. For a D&D Beyond character, use Import from D&D Beyond PDF."
+            title="Package import is for TomeStack .zip files. For a character sheet PDF, use Import a character sheet (PDF)."
             onClick={() => fileInput.current?.click()}
           >
             Import package…
@@ -222,7 +222,7 @@ export function App() {
               setScreen({ kind: 'ddb-import' });
             }}
           >
-            Import from D&amp;D Beyond PDF…
+            Import a character sheet (PDF)…
           </button>
           <button
             type="button"
@@ -424,7 +424,7 @@ export function App() {
               setMessage({
                 tone: 'status',
                 text:
-                  `Character created from the D&D Beyond sheet: ${result.overrides} override(s), ${result.gapNotes} gap note(s).` +
+                  `Character created from the character sheet: ${result.overrides} override(s), ${result.gapNotes} gap note(s).` +
                   (result.gapNotesNotStored > 0 ? ` ${result.gapNotesNotStored} more items were not noted: the character's note limit was reached.` : ''),
               });
             }}

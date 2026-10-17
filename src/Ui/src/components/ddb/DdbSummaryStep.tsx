@@ -45,6 +45,16 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           {report.leftOut > 0 && <li>{report.leftOut} items you left out</li>}
         </ul>
       </section>
+      {report.lines && report.lines.length > 0 && (
+        <section aria-labelledby="ddb-report-lines">
+          <h4 id="ddb-report-lines">From reading the sheet</h4>
+          <ul>
+            {report.lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      )}
       {report.familyMismatch && suggested && family && (
         <p role="note" className="warn">
           The sheet looks like {suggested} rules; this character uses {family}.

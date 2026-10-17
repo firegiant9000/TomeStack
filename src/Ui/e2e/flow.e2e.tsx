@@ -2366,21 +2366,23 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Archive…' })));
 });
 
-// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md S4) ----
+// ---- character import from a character sheet PDF: a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md S4, item 14) ----
 // The committed sheet is invented: "Testy McFixture", an original fixture Arcanist 3 / Chanter 2 whose spell "Fixture Veil"
 // is on both casters' lists. The DevHost has no Open dialog, so the file input sends the bytes (ddb.readData).
 
 const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
 
 async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
-  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import from D&D Beyond PDF…' });
+  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import a character sheet (PDF)…' });
   await waitFor(() => expect(start.disabled).toBe(false));
   await user.click(start);
 }
 
+const wotcSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-wotc-sheet.pdf'));
+
 async function readDdbSheet(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
-  await user.upload(screen.getByLabelText('D&D Beyond PDF file'), new File([ddbSheet()], 'fixture-ddb-sheet.pdf', { type: 'application/pdf' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([ddbSheet()], 'fixture-ddb-sheet.pdf', { type: 'application/pdf' }));
   expect(await screen.findByText('Fixture Arcanist 3 / Fixture Chanter 2', {}, { timeout: 30000 })).toBeTruthy();
 }
 
@@ -2423,11 +2425,41 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the D&D Beyond sheet: 3 override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: 3 override\(s\), \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   await openTab(user, sheet, 'Stats');
   expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
+});
+
+it('imports the fillable 2014 sheet through the same entry: the layout is named, prose lands in session notes and the details fill', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([wotcSheet()], 'fixture-wotc-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Arcanist 3', {}, { timeout: 30000 })).toBeTruthy();
+  expect(screen.getByText('the fillable 2014 sheet')).toBeTruthy();
+
+  const nextStep = async (name: string) => {
+    const next = await screen.findByRole<HTMLButtonElement>('button', { name });
+    await waitFor(() => expect(next.disabled).toBe(false));
+    await user.click(next);
+  };
+  await nextStep('Next: rules');
+  await nextStep('Next: matches');
+  await nextStep('Next: numbers');
+  await nextStep('Next: summary');
+  expect(await screen.findByRole('region', { name: 'Not brought over' })).toBeTruthy();
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet: \d+ override\(s\), \d+ gap note\(s\)/);
+  const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
+  await openTab(user, sheet, 'Notes');
+  expect(await within(sheet).findByText(/Testy backstory\./)).toBeTruthy();
+  expect(within(within(sheet).getByRole('form', { name: 'Details' })).getByRole<HTMLInputElement>('textbox', { name: 'Alignment' }).value).toBe('Fixture Neutral');
 });
 
 it('cancelling the D&D Beyond import at each step leaves the character list unchanged', async () => {

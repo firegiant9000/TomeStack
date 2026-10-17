@@ -33,7 +33,7 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const titles: Record<Step, string> = { 1: 'Choose the sheet', 2: 'Rules and campaign', 3: 'Matches', 4: 'Numbers', 5: 'Create' };
 
 /**
- * Character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md "Flow"): a step view, not a modal. Every step
+ * Character import from a character sheet PDF, a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md "Flow"): a step view, not a modal. Every step
  * can go back; Cancel at any step sends `ddb.discard` and writes nothing. Only "Create character" writes. Each step is a
  * labelled region, and focus moves to its heading on every step change.
  */
@@ -201,7 +201,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   return (
     <section className="ddb-import" aria-labelledby="ddb-import-title">
       <h2 id="ddb-import-title" className="visually-hidden">
-        Import from D&amp;D Beyond PDF
+        Import a character sheet (PDF)
       </h2>
       <p className="hint">
         Step {step} of 5. Nothing is saved until you choose “Create character”. The PDF is read once and not kept.
