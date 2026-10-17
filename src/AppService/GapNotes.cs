@@ -176,7 +176,7 @@ public sealed partial class TomeStackApp
         _store.InTransaction(() => _store.DeleteGapNote(request.Id));
     }
 
-    /// <summary>The text of every import note (never a value from the sheet: the label names the item).</summary>
+    /// <summary>The text of every import note from a D&amp;D Beyond sheet (never a value from the sheet: the label names the item); another layout words its own (<c>LayoutMap.ImportGapNoteText</c>).</summary>
     public const string ImportNoteText = "Not brought over from the D&D Beyond sheet: TomeStack had no match or no place for it.";
 
     /// <summary>
@@ -184,7 +184,7 @@ public sealed partial class TomeStackApp
     /// transaction (the caller's). At most <see cref="GapNote.MaxNotesPerCharacter"/> notes per character are kept; the rest
     /// are counted by the caller, not stored. Labels are cut to <see cref="GapNote.MaxLabelLength"/>. Returns how many were stored.
     /// </summary>
-    internal int AddImportGapNotes(Guid characterId, IReadOnlyList<string> labels)
+    internal int AddImportGapNotes(Guid characterId, IReadOnlyList<string> labels, string? text = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         var room = Math.Max(0, GapNote.MaxNotesPerCharacter - _store.ListGapNotes(characterId).Count);
@@ -199,7 +199,7 @@ public sealed partial class TomeStackApp
                 SchemaVersion = GapNote.ImportTargetSchemaVersion,
                 CharacterId = characterId,
                 Target = new(GapTargetKind.Import, Label: trimmed[..Math.Min(trimmed.Length, GapNote.MaxLabelLength)]),
-                Text = ImportNoteText,
+                Text = text ?? ImportNoteText,
                 CreatedAt = now,
                 UpdatedAt = now,
             });

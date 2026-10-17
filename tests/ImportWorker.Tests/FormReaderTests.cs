@@ -226,7 +226,8 @@ public class FormReaderTests
     {
         var refused = Refused(FixturePdfs.Pages(2));
         Assert.Equal("ddb.no-form-fields", refused.Code);
-        Assert.Contains("Export the sheet again", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.", refused.Message);
+        Assert.DoesNotContain("Beyond", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

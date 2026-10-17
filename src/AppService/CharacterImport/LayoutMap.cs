@@ -29,7 +29,7 @@ public sealed record SplitRule(string Semantic, string Separator, string? ItemPa
 /// <paramref name="ClipFields"/> (item 14, R78) are free-text field names, each also in <paramref name="Fields"/>, whose value is
 /// cut to the worker's per-value limit instead of refusing the read; the worker is given the union over all layouts.
 /// <paramref name="DisplayName"/> names the layout in the report ("D&amp;D Beyond 2014", "the fillable 2014 sheet");
-/// <paramref name="ImportedOverrideReason"/> and <paramref name="ImportFieldNoteText"/> are the texts a kept or noted number gets.
+/// <paramref name="ImportedOverrideReason"/> and <paramref name="ImportFieldNoteText"/> are the texts a kept or noted number gets; <paramref name="ImportGapNoteText"/> is the text of every import gap note (an item with no match or no place).
 /// </summary>
 public sealed record LayoutMap(
     string Id,
@@ -44,7 +44,8 @@ public sealed record LayoutMap(
     IReadOnlyList<string>? ClipFields = null,
     string DisplayName = "",
     string ImportedOverrideReason = "Imported from D&D Beyond",
-    string ImportFieldNoteText = "The D&D Beyond sheet showed a different number here when this character was imported.");
+    string ImportFieldNoteText = "The D&D Beyond sheet showed a different number here when this character was imported.",
+    string ImportGapNoteText = "Not brought over from the D&D Beyond sheet: TomeStack had no match or no place for it.");
 
 /// <summary>The semantic fields a map may name.</summary>
 public static class DdbSemantics

@@ -36,10 +36,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (XP) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (900) >>
 endobj
 13 0 obj
-<< /Type /Annot /Subtype /Widget /T (STR) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (16) >>
+<< /Type /Annot /Subtype /Widget /T (STRmod) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (16) >>
 endobj
 14 0 obj
-<< /Type /Annot /Subtype /Widget /T (STRmod) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (+3) >>
+<< /Type /Annot /Subtype /Widget /T (STR) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (+3) >>
 endobj
 15 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Strength) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (+3) >>
@@ -48,10 +48,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (Check Box 11) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Btn /V /Yes /AS /Yes /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 17 0 obj
-<< /Type /Annot /Subtype /Widget /T (DEX) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (14) >>
+<< /Type /Annot /Subtype /Widget /T (DEXmod ) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (14) >>
 endobj
 18 0 obj
-<< /Type /Annot /Subtype /Widget /T (DEXmod ) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (+2) >>
+<< /Type /Annot /Subtype /Widget /T (DEX) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Tx /V (+2) >>
 endobj
 19 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Dexterity) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (+2) >>
@@ -60,10 +60,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (Check Box 18) /P 3 0 R /Rect [250 600 290 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 21 0 obj
-<< /Type /Annot /Subtype /Widget /T (CON) /P 3 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (15) >>
+<< /Type /Annot /Subtype /Widget /T (CONmod) /P 3 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (15) >>
 endobj
 22 0 obj
-<< /Type /Annot /Subtype /Widget /T (CONmod) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (+2) >>
+<< /Type /Annot /Subtype /Widget /T (CON) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Tx /V (+2) >>
 endobj
 23 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Constitution) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (+2) >>
@@ -72,10 +72,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (Check Box 19) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 25 0 obj
-<< /Type /Annot /Subtype /Widget /T (INT) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (10) >>
+<< /Type /Annot /Subtype /Widget /T (INTmod) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (10) >>
 endobj
 26 0 obj
-<< /Type /Annot /Subtype /Widget /T (INTmod) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (+0) >>
+<< /Type /Annot /Subtype /Widget /T (INT) /P 3 0 R /Rect [50 600 90 620] /F 4 /FT /Tx /V (+0) >>
 endobj
 27 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Intelligence) /P 3 0 R /Rect [100 600 140 620] /F 4 /FT /Tx /V (+0) >>
@@ -84,10 +84,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (Check Box 20) /P 3 0 R /Rect [150 600 190 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 29 0 obj
-<< /Type /Annot /Subtype /Widget /T (WIS) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (12) >>
+<< /Type /Annot /Subtype /Widget /T (WISmod) /P 3 0 R /Rect [200 600 240 620] /F 4 /FT /Tx /V (12) >>
 endobj
 30 0 obj
-<< /Type /Annot /Subtype /Widget /T (WISmod) /P 3 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (+1) >>
+<< /Type /Annot /Subtype /Widget /T (WIS) /P 3 0 R /Rect [250 600 290 620] /F 4 /FT /Tx /V (+1) >>
 endobj
 31 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Wisdom) /P 3 0 R /Rect [300 600 340 620] /F 4 /FT /Tx /V (+1) >>
@@ -96,10 +96,10 @@ endobj
 << /Type /Annot /Subtype /Widget /T (Check Box 21) /P 3 0 R /Rect [350 600 390 620] /F 4 /FT /Btn /V /Off /AS /Off /AP << /N << /Yes 0 0 R /Off 0 0 R >> >> >>
 endobj
 33 0 obj
-<< /Type /Annot /Subtype /Widget /T (CHA) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (8) >>
+<< /Type /Annot /Subtype /Widget /T (CHamod) /P 3 0 R /Rect [400 600 440 620] /F 4 /FT /Tx /V (8) >>
 endobj
 34 0 obj
-<< /Type /Annot /Subtype /Widget /T (CHamod) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (-1) >>
+<< /Type /Annot /Subtype /Widget /T (CHA) /P 3 0 R /Rect [450 600 490 620] /F 4 /FT /Tx /V (-1) >>
 endobj
 35 0 obj
 << /Type /Annot /Subtype /Widget /T (ST Charisma) /P 3 0 R /Rect [500 600 540 620] /F 4 /FT /Tx /V (-1) >>
@@ -381,27 +381,27 @@ xref
 0000002820 00000 n 
 0000002954 00000 n 
 0000003069 00000 n 
-0000003184 00000 n 
+0000003187 00000 n 
 0000003302 00000 n 
 0000003425 00000 n 
 0000003598 00000 n 
-0000003713 00000 n 
+0000003717 00000 n 
 0000003832 00000 n 
 0000003956 00000 n 
 0000004131 00000 n 
-0000004246 00000 n 
+0000004249 00000 n 
 0000004364 00000 n 
 0000004491 00000 n 
 0000004666 00000 n 
-0000004781 00000 n 
+0000004784 00000 n 
 0000004897 00000 n 
 0000005024 00000 n 
 0000005199 00000 n 
-0000005314 00000 n 
+0000005317 00000 n 
 0000005432 00000 n 
 0000005553 00000 n 
 0000005728 00000 n 
-0000005842 00000 n 
+0000005845 00000 n 
 0000005960 00000 n 
 0000006083 00000 n 
 0000006256 00000 n 

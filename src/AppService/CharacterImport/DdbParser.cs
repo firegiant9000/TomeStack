@@ -73,6 +73,9 @@ public static partial class DdbParser
         if (spentFromTotal.Spent is { } fromTotal)
             spent.Add(fromTotal);
         var texts = sheet.Texts(lines);
+        // The order of the form's six death-save boxes is read from their numbers, not confirmed against a filled sheet.
+        if (sheet.AnyDeathBoxTicked())
+            lines.Add("Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.");
         return new DdbSheet(
             map.Id,
             map.SuggestedFamily,
@@ -377,10 +380,12 @@ public static partial class DdbParser
         };
 
         /// <summary>
-        /// An ability score. A layout with a modifier box beside the score (the fillable sheet) gets the swap guard: the score
+        /// An ability score. A layout with a modifier box beside the score (the fillable sheet, whose map follows the owner's
+        /// sheet, where the form names the two boxes the other way round from their labels, R95) gets the swap guard: the score
         /// is read from the box that holds it when the other holds its modifier, and a pair that disagrees is unreadable. A
-        /// number with a sign is a modifier, never a score; a lone unsigned number is a score from 10 up (a lone 4 could be
-        /// either, so it is unreadable). Reading the score from the modifier box adds a report line.
+        /// number with a sign is a modifier, never a score. A lone unsigned 1 to 30 in the score slot is the score (R97); a lone
+        /// value in the modifier slot is the score only when it is unsigned and 11 to 30. Reading the score from the modifier
+        /// box adds a report line.
         /// </summary>
         public Read<int> Score(Ability ability, List<string> lines)
         {
@@ -406,9 +411,11 @@ public static partial class DdbParser
                 }
                 return Read<int>.Unreadable;
             }
-            if (s is { } only && !only.HasSign && only.Number is >= 10 and <= 30)
+            // R97: a lone box. In the score slot an unsigned 1 to 30 is the score; in the modifier slot only an unsigned 11 to 30
+            // is (a modifier tops out at 10), and the report says so. Anything else is unreadable, never a guess.
+            if (s is { } only && !only.HasSign && only.Number is >= 1 and <= 30)
                 return Read<int>.Ok(only.Number);
-            if (m is { } lone && !lone.HasSign && lone.Number is >= 10 and <= 30)
+            if (m is { } lone && !lone.HasSign && lone.Number is >= 11 and <= 30)
             {
                 lines.Add($"{AbilityNames[ability]} was read from the modifier box.");
                 return Read<int>.Ok(lone.Number);
@@ -454,6 +461,13 @@ public static partial class DdbParser
                 return Read<int>.Unreadable;
             return Read<int>.Ok(reads.Count(r => r is { Status: ReadStatus.Ok, Value: true }));
         }
+
+        /// <summary>True when the layout has death-save boxes and any is ticked.</summary>
+        public bool AnyDeathBoxTicked() =>
+            new[] { "play.deathSuccesses", "play.deathFailures" }
+                .SelectMany(s => Enumerable.Range(1, DdbSemantics.DeathBoxes).Select(i => $"{s}.{i}"))
+                .Where(values.ContainsKey)
+                .Any(box => Bool(box) is { Status: ReadStatus.Ok, Value: true });
 
         /// <summary>
         /// Spent hit dice from the sheet's "total" and "left" boxes (R: spent is the total less what is left). Nothing is

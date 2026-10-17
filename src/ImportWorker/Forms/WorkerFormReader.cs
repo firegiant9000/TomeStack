@@ -71,7 +71,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         "pdf.encrypted" => "The PDF is encrypted. Remove the password in another program, then import it again.",
         "pdf.unreadable" => "The PDF could not be read. It may be damaged, or open in another program.",
         "pdf.too-many-pages" => $"The PDF has more than {_limits.MaxPages} pages, the most that can be read.",
-        "ddb.no-form-fields" => "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.",
+        "ddb.no-form-fields" => "This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.",
         "ddb.too-many-fields" => $"The PDF has more than {_form.MaxFields} form fields.",
         "ddb.value-too-long" => $"The form fields hold more text than can be read (at most {_form.MaxValueChars} characters in one, {_form.MaxTotalValueChars} in all).",
         _ => null,

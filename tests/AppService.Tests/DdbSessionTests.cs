@@ -269,7 +269,7 @@ public class DdbSessionTests
         var read = Dispatch(new CommandDispatcher(temp.App, host: host), "ddb.read", new { });
         Assert.True(read.GetProperty("ok").GetBoolean(), read.ToString());
         Assert.Equal("ddb-2014", read.GetProperty("result").GetProperty("layout").GetString());
-        Assert.Equal((".pdf"), Assert.Single(host.Asked).Extension);
+        Assert.Equal(("Character sheet", ".pdf"), Assert.Single(host.Asked)); // neutral: the dialog also opens the fillable 2014 sheet
 
         var cancelled = Dispatch(new CommandDispatcher(temp.App, host: new OpenDialogHost(null)), "ddb.read", new { });
         Assert.False(cancelled.GetProperty("result").GetProperty("chosen").GetBoolean());

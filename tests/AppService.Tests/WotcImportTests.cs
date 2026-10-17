@@ -211,6 +211,26 @@ public class WotcImportTests
     }
 
     [Fact]
+    public void A_regex_timeout_in_proficiencies_keeps_what_was_read_and_counts_the_unread_remainder_into_the_note()
+    {
+        var lines = new List<string>();
+        var overflow = new List<string>();
+        var read = Read<string>.Ok("Languages: Common, Fixture Tongue\nTools: Fixture Kit\nFixture Trigger\n\nFixture Last");
+
+        // The seam stands in for a pattern that times out on the third line.
+        var (languages, tools) = ImportExtras.Proficiencies(read, lines, overflow,
+            line => line.Contains("Trigger", StringComparison.Ordinal) ? throw new System.Text.RegularExpressions.RegexMatchTimeoutException() : ExtrasPatterns.ProficiencyLabel().Match(line));
+
+        Assert.Equal(["Common", "Fixture Tongue"], languages);
+        Assert.Equal(["Fixture Kit"], tools);
+        Assert.Equal(["2 proficiency or language lines could not be read and are in the import note."], lines);
+        var note = Assert.Single(overflow);
+        Assert.Contains("Fixture Trigger", note, StringComparison.Ordinal);
+        Assert.Contains("Fixture Last", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("Fixture Kit", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_short_detail_over_the_text_limit_goes_to_the_note_instead_of_failing_the_character()
     {
         var extras = Extras(With(Wotc(), "Hair", new string('H', Character.MaxDetailText + 1)));
@@ -321,6 +341,25 @@ public class WotcImportTests
     }
 
     [Fact]
+    public void A_wotc_import_never_says_Beyond_in_its_gap_notes_report_or_stored_character()
+    {
+        using var h = new DdbHarness { Fields = Wotc() };
+        var token = h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
+
+        var applied = h.Temp.App.ApplyDdbImport(Apply(token, [new(FieldIds.ArmorClass, NumberAction.KeepSheet), new(FieldIds.HitPoints, NumberAction.Note)]));
+
+        var notes = h.Temp.App.ListGapNotes(applied.CharacterId);
+        var imports = notes.Where(n => n.Target.Kind == GapTargetKind.Import).ToList();
+        Assert.NotEmpty(imports); // the invented class, species and background have no match
+        Assert.All(imports, n => Assert.Equal("Not brought over from the character sheet: TomeStack had no match or no place for it.", n.Text));
+        var everything = string.Join('\n',
+            notes.Select(n => n.Text),
+            System.Text.Json.JsonSerializer.Serialize(applied.Report),
+            System.Text.Json.JsonSerializer.Serialize(h.Temp.App.GetCharacter(applied.CharacterId).Character));
+        Assert.DoesNotContain("Beyond", everything, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Play_state_brings_the_death_saves_and_spent_hit_dice()
     {
         using var h = new DdbHarness { Fields = Wotc() };
@@ -335,7 +374,7 @@ public class WotcImportTests
     [Fact]
     public void The_report_carries_the_swap_clip_and_row_lines_with_labels_and_counts_only()
     {
-        var fields = With(With(Wotc(), "STR", "+3"), "STRmod", "16");
+        var fields = With(With(Wotc(), "STRmod", "+3"), "STR", "16"); // a sheet filled the other way round from the owner's (R95)
         fields = [.. Row(fields, 3, "Testy Sling", "oops", "1d4").Select(f => f.Name == "Backstory" ? f with { Clipped = true } : f)];
         using var h = new DdbHarness { Fields = fields };
         var token = h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
@@ -343,7 +382,12 @@ public class WotcImportTests
         var applied = h.Temp.App.ApplyDdbImport(Apply(token));
 
         Assert.Equal(
-            ["Strength was read from the modifier box.", "Backstory was cut to 20,000 characters.", "Weapon row 3: the attack bonus could not be read, so the row is in the import note only."],
+            [
+                "Strength was read from the modifier box.",
+                "Backstory was cut to 20,000 characters.",
+                "Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.",
+                "Weapon row 3: the attack bonus could not be read, so the row is in the import note only.",
+            ],
             applied.Report.Lines);
         Assert.DoesNotContain("Testy Sling", string.Join(' ', applied.Report.Lines!), StringComparison.Ordinal);
     }

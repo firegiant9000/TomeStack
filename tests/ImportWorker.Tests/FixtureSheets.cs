@@ -54,8 +54,9 @@ internal static class FixtureSheets
     public static class Wotc
     {
         public static readonly string[] AbilityKeys = ["str", "dex", "con", "int", "wis", "cha"];
-        public static readonly string[] Scores = ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
-        public static readonly string[] Mods = ["STRmod", "DEXmod ", "CONmod", "INTmod", "WISmod", "CHamod"];
+        // R95: on the owner's sheet the form names its boxes the other way round: "STR" holds the modifier and "STRmod" the score.
+        public static readonly string[] Scores = ["STRmod", "DEXmod ", "CONmod", "INTmod", "WISmod", "CHamod"];
+        public static readonly string[] Mods = ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
         public static readonly string[] SaveBoxes = ["Check Box 11", "Check Box 18", "Check Box 19", "Check Box 20", "Check Box 21", "Check Box 22"];
         public static readonly string[] SaveBonuses = ["ST Strength", "ST Dexterity", "ST Constitution", "ST Intelligence", "ST Wisdom", "ST Charisma"];
         public static readonly string[] DeathSuccessBoxes = ["Check Box 12", "Check Box 13", "Check Box 14"];

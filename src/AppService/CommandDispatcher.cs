@@ -263,7 +263,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null || !host.CanOpenFiles)
             throw new AppValidationException([new("host.unsupported", "Choosing a character sheet needs the desktop app's Open dialog.")], "unsupported");
-        var path = host.ChooseOpenFile("D&D Beyond character sheet", ".pdf");
+        var path = host.ChooseOpenFile("Character sheet", ".pdf");
         if (path is null)
             return new { chosen = false };
         var read = app.ReadDdbSheet(path);

@@ -196,7 +196,7 @@ public sealed partial class TomeStackApp
             // The few noted differences first, so the import notes (counted past the limit, not stored) never crowd them out.
             foreach (var field in noted)
                 AddGapNote(new(character.Id, new(GapTargetKind.Field, FieldId: field), MapOf(sheet)?.ImportFieldNoteText ?? ImportFieldNoteText)); // refused: everything rolls back
-            importNotes = AddImportGapNotes(character.Id, labels);
+            importNotes = AddImportGapNotes(character.Id, labels, MapOf(sheet)?.ImportGapNoteText);
         });
         DdbSessions.Take(request.Token);
         return new DdbApplyResult(character.Id, character.Overrides.Count, importNotes + noted.Count, labels.Count - importNotes, proposal.Report);

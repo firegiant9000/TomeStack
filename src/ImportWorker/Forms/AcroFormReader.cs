@@ -199,7 +199,7 @@ public static class AcroFormReader
     };
 
     private static ExtractionException NoForm() =>
-        new("ddb.no-form-fields", "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.");
+        new("ddb.no-form-fields", "This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.");
 
     /// <summary>
     /// The terminal fields in document order with their full names, walked without recursion (a hostile file can nest

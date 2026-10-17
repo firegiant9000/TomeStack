@@ -225,6 +225,7 @@ public class WorkerProcessTests
 
         var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker).ReadAsync(file.Path, CancellationToken.None));
         Assert.Equal("ddb.no-form-fields", refused.Code);
+        Assert.Equal("This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.", refused.Message);
     }
 
     [Fact]

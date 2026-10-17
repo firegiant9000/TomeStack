@@ -220,40 +220,59 @@ public sealed record ImportExtras(
 
     // ---- languages and tools ----
 
-    private static (List<string>? Languages, List<string>? Tools) Proficiencies(Read<string> read, List<string> lines, List<string> overflow)
+    /// <param name="labelMatch">How a line is tested for a "Languages:" or "Tools:" label; a seam so a pattern timeout can be tested.</param>
+    internal static (List<string>? Languages, List<string>? Tools) Proficiencies(Read<string> read, List<string> lines, List<string> overflow, Func<string, Match>? labelMatch = null)
     {
         if (read.Status != ReadStatus.Ok)
             return (null, null);
+        labelMatch ??= l => ExtrasPatterns.ProficiencyLabel().Match(l);
         var languages = new List<string>();
         var tools = new List<string>();
         var left = new List<string>();
+        var unread = new List<string>();
         var current = tools;
-        try
+        var all = read.Value!.Split('\n');
+        for (var i = 0; i < all.Length; i++)
         {
-            foreach (var raw in read.Value!.Split('\n'))
+            var line = all[i].Trim();
+            var target = current;
+            var entries = new List<string>();
+            try
             {
-                var line = raw.Trim();
                 var content = line;
-                if (ExtrasPatterns.ProficiencyLabel().Match(line) is { Success: true } label)
+                if (labelMatch(line) is { Success: true } label)
                 {
-                    current = label.Groups["label"].Value.StartsWith("lang", StringComparison.OrdinalIgnoreCase) ? languages : tools;
+                    target = label.Groups["label"].Value.StartsWith("lang", StringComparison.OrdinalIgnoreCase) ? languages : tools;
                     content = label.Groups["rest"].Value;
                 }
                 foreach (var part in content.Split([',', ';']))
                 {
                     var entry = ExtrasPatterns.Bullet().Replace(part.Trim(), "").Trim();
-                    if (entry.Length == 0)
-                        continue;
-                    if (entry.Length > Character.MaxDetailListEntryLength || current.Count >= Character.MaxDetailListEntries)
-                        left.Add(entry);
-                    else
-                        current.Add(entry);
+                    if (entry.Length > 0)
+                        entries.Add(entry);
                 }
             }
+            catch (RegexMatchTimeoutException)
+            {
+                // Lines read so far are kept; this one and the rest are not guessed at: they go to the note, counted.
+                unread = [.. all[i..].Select(l => l.Trim()).Where(l => l.Length > 0)];
+                break;
+            }
+            current = target;
+            foreach (var entry in entries)
+            {
+                if (entry.Length > Character.MaxDetailListEntryLength || current.Count >= Character.MaxDetailListEntries)
+                    left.Add(entry);
+                else
+                    current.Add(entry);
+            }
         }
-        catch (RegexMatchTimeoutException)
+        if (unread.Count > 0)
         {
-            // Entries read so far are kept; the rest of the text is not guessed at.
+            lines.Add(unread.Count == 1
+                ? "1 proficiency or language line could not be read and is in the import note."
+                : $"{unread.Count.ToString(CultureInfo.InvariantCulture)} proficiency or language lines could not be read and are in the import note.");
+            overflow.Add("Proficiency and language lines not read:\n" + string.Join('\n', unread));
         }
         if (left.Count > 0)
         {

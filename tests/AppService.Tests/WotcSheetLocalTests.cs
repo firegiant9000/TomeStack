@@ -81,7 +81,7 @@ public class WotcSheetLocalTests(ITestOutputHelper output)
 
             output.WriteLine(
                 $"{label}: fields {N(fields.Count)}; mapped names {N(plain.Count)}, absent from the form {N(missingNames)}; values read {N(statuses.Count(s => s == ReadStatus.Ok))}, blank {N(statuses.Count(s => s == ReadStatus.Missing))}, unreadable {N(unreadable)}; "
-                + $"clipped {N(sheet.Lines?.Count(l => l.Contains("was cut to", StringComparison.Ordinal)) ?? 0)}; report lines {N(extras.Lines.Count + (sheet.Lines?.Count ?? 0))}; "
+                + $"clipped {N(sheet.Lines?.Count(l => l.Contains("was cut to", StringComparison.Ordinal)) ?? 0)}; swap lines {N(sheet.Lines?.Count(l => l.Contains("modifier box", StringComparison.Ordinal)) ?? 0)}; report lines {N(extras.Lines.Count + (sheet.Lines?.Count ?? 0))}; "
                 + $"attacks {N(extras.Attacks.Count)}, items {N(extras.Items.Count)}, notes {N(extras.Notes.Count)}, languages {N(extras.Details?.Languages?.Count ?? 0)}, tools {N(extras.Details?.ToolsAndOther?.Count ?? 0)}");
 
             // The report lines are labels and counts by construction (the tests pin it), so they are safe to show.

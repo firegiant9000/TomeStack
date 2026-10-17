@@ -38,6 +38,11 @@ public class WotcLayoutTests
         Assert.Equal("the fillable 2014 sheet", map.DisplayName);
         Assert.Equal("D&D Beyond 2014", LayoutMaps.All.Single(m => m.Id == "ddb-2014").DisplayName);
         Assert.Equal("Imported from D&D Beyond", LayoutMaps.All.Single(m => m.Id == "ddb-2014").ImportedOverrideReason);
+        // Item 14 fix 1: each layout words its import gap notes; the D&D Beyond ones stay exactly as they were.
+        Assert.Equal("Not brought over from the character sheet: TomeStack had no match or no place for it.", map.ImportGapNoteText);
+        Assert.All(LayoutMaps.All.Where(m => m.Id.StartsWith("ddb-", StringComparison.Ordinal)),
+            m => Assert.Equal("Not brought over from the D&D Beyond sheet: TomeStack had no match or no place for it.", m.ImportGapNoteText));
+        Assert.Equal("Not brought over from the D&D Beyond sheet: TomeStack had no match or no place for it.", TomeStackApp.ImportNoteText);
     }
 
     [Fact]
@@ -91,7 +96,7 @@ public class WotcLayoutTests
         Assert.Equal("Fixture Quickfoot", sheet.Species.Value);
         Assert.Equal("Fixture Archivist", sheet.Background.Value);
         Assert.Equal([16, 14, 15, 10, 12, 8], Enum.GetValues<Ability>().Select(a => sheet.Abilities[a].Value));
-        Assert.Empty(sheet.Lines ?? []);
+        Assert.Equal([DeathLine], sheet.Lines); // the fixture ticks some death-save boxes and nothing else needs a line
         Assert.Equal([true, false, false, false, false, false], Enum.GetValues<Ability>().Select(a => sheet.SaveProficient[a].Value));
         Assert.Equal(["athletics"], sheet.SkillProficient.Where(s => s.Value.Value).Select(s => s.Key));
         Assert.Equal(18, sheet.SkillProficient.Count(s => s.Value.Status == ReadStatus.Ok));
@@ -156,11 +161,29 @@ public class WotcLayoutTests
         Assert.Equal((3, 1), (play.DeathSuccesses.Value, play.DeathFailures.Value));
     }
 
+    private const string DeathLine = "Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.";
+
+    [Fact]
+    public void A_ticked_death_save_box_adds_one_check_them_line_and_no_tick_adds_none()
+    {
+        var plain = Wotc().Select(f => f.Type == "checkbox" ? f with { Checked = false } : f).ToList();
+        Assert.Null(Parse(plain).Lines);
+
+        foreach (var box in FixtureSheets.Wotc.DeathSuccessBoxes.Concat(FixtureSheets.Wotc.DeathFailureBoxes))
+            Assert.Equal([DeathLine], Parse(Ticked(plain, box, true)).Lines);
+
+        // One line however many are ticked, and only for this layout.
+        var all = FixtureSheets.Wotc.DeathSuccessBoxes.Concat(FixtureSheets.Wotc.DeathFailureBoxes).Aggregate(plain, (f, box) => Ticked(f, box, true));
+        Assert.Equal([DeathLine], Parse(all).Lines);
+        Assert.DoesNotContain(DeathLine, Parse(DdbParserTests.Fields(FixtureSheets.Fields2014)).Lines ?? []);
+    }
+
     // ---- the swap guard (Review Focus 2) ----
 
     private static DdbSheet Abilities(string score, string mod, out List<FormField> fields)
     {
-        fields = With(With(Wotc(), "STR", score), "STRmod", mod);
+        // R95: on the owner's sheet the form's "STRmod" box holds the score and "STR" the modifier.
+        fields = With(With(Wotc(), "STRmod", score), "STR", mod);
         return Parse(fields);
     }
 
@@ -175,6 +198,14 @@ public class WotcLayoutTests
     [InlineData("10", "0", 10, false)]
     [InlineData("18", "", 18, false)] // a score-only box
     [InlineData("", "18", 18, true)] // only the modifier box holds the score
+    // R97: a lone unsigned 1 to 30 in the score slot is the score, with no line.
+    [InlineData("4", "", 4, false)]
+    [InlineData("1", "", 1, false)]
+    [InlineData("30", "", 30, false)]
+    [InlineData("10", "  ", 10, false)]
+    // R97: a lone value in the modifier slot is the score only when unsigned and 11 to 30, with the line.
+    [InlineData("", "11", 11, true)]
+    [InlineData("", "30", 30, true)]
     public void The_swap_guard_reads_the_score_from_whichever_box_holds_it(string score, string mod, int expected, bool fromModifier)
     {
         var sheet = Abilities(score, mod, out _);
@@ -188,8 +219,14 @@ public class WotcLayoutTests
     [InlineData("18", "+5")] // the two disagree
     [InlineData("18", "12")]
     [InlineData("+4", "")] // a modifier alone is not a score
-    [InlineData("4", "")] // 4 alone could be either
+    [InlineData("0", "")] // R97: outside 1 to 30
+    [InlineData("31", "")]
     [InlineData("", "+4")]
+    [InlineData("", "4")] // R97: a lone value in the modifier slot under 11 is a modifier or a guess, never a score
+    [InlineData("", "10")]
+    [InlineData("", "0")]
+    [InlineData("", "31")]
+    [InlineData("", "-3")]
     [InlineData("31", "+10")]
     [InlineData("abc", "+4")]
     public void The_swap_guard_refuses_boxes_that_disagree_and_never_reads_a_modifier_as_a_score(string score, string mod)
@@ -204,7 +241,7 @@ public class WotcLayoutTests
     [Fact]
     public void All_six_scores_in_the_modifier_boxes_give_one_report_line_not_six()
     {
-        // The owner's own sheet names its boxes the other way round on every row.
+        // A sheet filled the other way round from the owner's (R95): the guard still reads it, with one collapsed line.
         var fields = Wotc();
         string[] mods = ["+3", "+2", "+2", "+0", "+1", "-1"];
         string[] scores = ["16", "14", "15", "10", "12", "8"];
@@ -214,7 +251,7 @@ public class WotcLayoutTests
         var sheet = Parse(fields);
 
         Assert.Equal([16, 14, 15, 10, 12, 8], Enum.GetValues<Ability>().Select(a => sheet.Abilities[a].Value));
-        Assert.Equal(["All six ability scores were read from the modifier boxes."], sheet.Lines);
+        Assert.Equal(["All six ability scores were read from the modifier boxes.", DeathLine], sheet.Lines);
     }
 
     [Fact]
@@ -280,7 +317,7 @@ public class WotcLayoutTests
 
         var sheet = Parse(fields);
 
-        Assert.Equal(["Backstory was cut to 20,000 characters."], sheet.Lines);
+        Assert.Equal(["Backstory was cut to 20,000 characters.", DeathLine], sheet.Lines);
         Assert.Equal(20_000, sheet.Texts!.Prose["backstory"].Value!.Length);
         Assert.DoesNotContain("BBBB", string.Join(' ', sheet.Lines!), StringComparison.Ordinal);
     }
@@ -307,7 +344,7 @@ public class WotcLayoutTests
         var sheet = Parse([.. fields]);
 
         Assert.Equal(20_000, sheet.Texts!.Prose["backstory"].Value!.Length);
-        Assert.Equal(["Backstory was cut to 20,000 characters."], sheet.Lines);
+        Assert.Equal(["Backstory was cut to 20,000 characters.", DeathLine], sheet.Lines);
 
         var plain = FixtureSheets.FieldsWotc2014.Select(s => s.Name == "CharacterName" ? s with { Text = long25 } : s).ToList();
         using var other = FixturePdfs.Write(FormPdfWriter.Write(plain, pages: 3));
