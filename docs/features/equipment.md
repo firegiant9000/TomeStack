@@ -10,6 +10,10 @@ Rules core: `ArmorEffect` in `src/RulesCore/Effects.cs`, and `AddArmor` plus the
 
 The sheet's **Equipment** panel adds an item from the character's rules family, equips and unequips it, and removes it. Each change is saved with the character. Inventory says how many carried items are not equipped, and that a weapon must be equipped to list its attack and armor to set the Armor Class. A D&D Beyond 2014 import creates every item unequipped (`ddb-pdf-import.md`).
 
+## Your own items (character schema v9, item 18, D42)
+
+`customItems: [{ id, name, quantity, note?, equipped }]` are things carried that are not content (gear copied from a paper sheet). **They never affect a calculation:** `equipped` is a reminder, not a pin, and an item of your own gives no Armor Class and no attack. Limits (`Character` in RulesCore, mirrored in the form with linked errors; the service stays the authority): at most 50 items, a name of 1 to 80 characters, a note of at most 200, quantity 1 to 9,999, a unique non-empty id (the UI makes it with `crypto.randomUUID()`). Inventory lists them in "Your own items", after the equipment list, with add, edit and remove (no confirmation; a character save is not undoable, since Undo covers play changes only) and says in one line that they never count toward Armor Class or any calculation. Code: `src/Ui/src/components/CustomEntries.tsx`, `customModel.ts`; tests: `CustomEntries.test.tsx`, the e2e test "adds an attack of your own on Inventory…".
+
 ## The `armor` effect
 
 `{ type: "armor", id, category: light | medium | heavy | shield, armorClass, dexterityCap? }` on an item, in a **content schema v4** revision. In a v2 or v3 revision an `armor` effect stays unknown, reference-only and byte for byte, because 0.2.0 stored it that way; typing it would change its hash and its meaning (ADR-003 "Content schema v4"). Validation refuses armor below v4 (`validate.requires-v4`). Older builds keep it as an unknown, reference-only effect. The rules are the same in both SRDs:

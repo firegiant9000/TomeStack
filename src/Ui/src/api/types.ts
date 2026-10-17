@@ -521,6 +521,8 @@ export interface RollTarget {
   weapon?: ContentReference;
   damage?: boolean;
   versatile?: boolean;
+  /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
+  customAttack?: string;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */

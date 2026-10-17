@@ -1777,6 +1777,56 @@ it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions
   expect(within(reactions).getByRole('button', { name: 'Roll Riposte damage (1d6)' })).toBeTruthy();
 });
 
+it('adds an attack of your own on Inventory, rolls it on Play with advantage, and the roll shows in Last roll (item 18)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await createCharacter(user, { name: 'E2E Sling', scores: {}, cls: /^Fixture Duelist/ });
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const hero = await screen.findByRole('article', { name: 'E2E Sling' });
+
+  // Inventory: an item and an attack of your own. Neither changes a calculation.
+  await openTab(user, hero, 'Inventory');
+  const armorClass = summaryValue(hero, 'Armor Class');
+  const items = () => screen.getByRole('region', { name: 'Your own items' });
+  await user.click(within(items()).getByRole('button', { name: 'Add an item of your own' }));
+  await user.type(within(items()).getByRole('textbox', { name: 'Name' }), 'Testy Rope');
+  await user.click(within(items()).getByRole('button', { name: 'Save item' }));
+  await expectStatus(/^Added Testy Rope\.$/);
+  expect(document.activeElement).toBe(within(items()).getByRole('button', { name: 'Edit Testy Rope' }));
+
+  const own = () => screen.getByRole('region', { name: 'Your own attacks' });
+  await user.click(within(own()).getByRole('button', { name: 'Add an attack of your own' }));
+  await user.type(within(own()).getByRole('textbox', { name: 'Name' }), 'Testy Sling');
+  await user.clear(within(own()).getByRole('spinbutton', { name: 'To hit bonus' }));
+  await user.type(within(own()).getByRole('spinbutton', { name: 'To hit bonus' }), '5');
+  // The dice engine's own message for bad damage, linked to the field; nothing is saved.
+  const damage = within(own()).getByRole('textbox', { name: 'Damage (optional)' });
+  await user.type(damage, '5');
+  await user.click(within(own()).getByRole('button', { name: 'Save attack' }));
+  await waitFor(() => expect(damage.getAttribute('aria-invalid')).toBe('true'));
+  expect(document.getElementById(damage.getAttribute('aria-describedby')!.split(' ').at(-1)!)?.textContent).toMatch(/dice/i);
+  await user.clear(damage);
+  await user.type(damage, '1d6+2');
+  await user.selectOptions(within(own()).getByRole('combobox', { name: 'Damage type (optional)' }), 'Bludgeoning');
+  await user.click(within(own()).getByRole('button', { name: 'Save attack' }));
+  await expectStatus(/^Added Testy Sling\.$/);
+  expect(summaryValue(hero, 'Armor Class')).toBe(armorClass);
+
+  // Play: the attack is listed (the panel shows for a character with only custom attacks) and rolled with advantage.
+  await openTab(user, hero, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  expect(within(actions()).getAllByRole('button', { name: 'Roll Testy Sling attack' })).toHaveLength(1);
+  await user.click(screen.getByRole('radio', { name: 'Advantage' }));
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Sling attack: \d+ \(1d20, advantage\)/));
+  expect(lastRoll.textContent).toMatch(/Testy Sling to hit \+5/);
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling damage' }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Sling damage \(bludgeoning\): \d+ \(1d6\+2\)/));
+});
+
 it('switches a toggled effect on and off, spends a chosen amount, and a long rest proposes the toggle off', async () => {
   // M3 B2 (content v6) with the original fixture feat "Fixture Radiant Stance": a stance (+2 AC, spends 1 radiance) and a
   // variable-cost surge. PB 2 at level 1, so 2 radiance.

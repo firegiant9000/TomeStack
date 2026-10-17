@@ -9,7 +9,8 @@ namespace TomeStack.AppService;
 /// throw (<paramref name="DeathSave"/>: a d20 with no modifier), or one of the character's spells (<paramref name="Spell"/>:
 /// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice), or an
 /// equipped weapon (<paramref name="Weapon"/>: its attack roll, or its damage when <paramref name="Damage"/>, two-handed
-/// when <paramref name="Versatile"/>).
+/// when <paramref name="Versatile"/>), or one of the character's own hand-typed attacks (<paramref name="CustomAttack"/>:
+/// d20 plus its typed to-hit, or its damage dice when <paramref name="Damage"/>).
 /// </summary>
 public sealed record RollCommand(
     Guid CharacterId,
@@ -24,7 +25,8 @@ public sealed record RollCommand(
     bool SpellAttack = false,
     ContentReference? Weapon = null,
     bool Damage = false,
-    bool Versatile = false);
+    bool Versatile = false,
+    Guid? CustomAttack = null);
 
 public sealed partial class TomeStackApp
 {
@@ -45,10 +47,28 @@ public sealed partial class TomeStackApp
 
         RollRequest request;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
-            + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0);
+            + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
+            + (command.CustomAttack is not null ? 1 : 0);
         if (targets > 1)
-            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell or a weapon.")]);
-        if (command.Weapon is { } weaponReference)
+            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell, a weapon or your own attack.")]);
+        if (command.CustomAttack is { } customId)
+        {
+            // Hand-typed attacks (D42): the name goes only into the provenance label; no message below quotes it.
+            var custom = character.CustomAttacks?.FirstOrDefault(a => a.Id == customId)
+                ?? throw new AppValidationException([new("roll.custom-attack-unknown", "This character has no such attack of their own.")]);
+            if (!command.Damage)
+            {
+                request = new RollRequest("1d20", command.Mode, false, [new RollModifier($"{custom.Name} to hit", custom.ToHit)],
+                    new RollProvenance("custom.attack", $"{custom.Name} attack"));
+            }
+            else
+            {
+                var dice = custom.Damage ?? throw new AppValidationException([new("roll.custom-attack-no-damage", "This attack has no damage dice to roll.")]);
+                var label = string.IsNullOrWhiteSpace(custom.DamageType) ? $"{custom.Name} damage" : $"{custom.Name} damage ({custom.DamageType})";
+                request = new RollRequest(dice, RollMode.Normal, command.Critical, [], new RollProvenance("custom.damage", label));
+            }
+        }
+        else if (command.Weapon is { } weaponReference)
         {
             var attack = sheet.Attacks?.FirstOrDefault(a => a.Item == weaponReference)
                 ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);

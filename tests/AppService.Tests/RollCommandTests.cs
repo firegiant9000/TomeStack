@@ -161,7 +161,103 @@ public class RollCommandTests
         Assert.Equal("initiative", result.GetProperty("provenance").GetProperty("rollId").GetString());
     }
 
-    private static readonly Guid HomebrewSource = Guid.Parse("7c000000-0000-4000-8000-000000000b01");
+    private static readonly Guid SlingId = Guid.Parse("c0c00000-0000-4000-8000-000000000a01");
+    private static readonly Guid PlainId = Guid.Parse("c0c00000-0000-4000-8000-000000000a02");
+    private const string Marker = "ZQXMARKERZQX";
+
+    private static (TempApp Temp, Guid Id) WithCustomAttacks(string name = "Testy Sling")
+    {
+        var (temp, id) = Berserker3();
+        var character = temp.App.Store.FindCharacter(id)! with
+        {
+            CustomAttacks = [new(SlingId, name, 5, "1d6+2", "bludgeoning", null), new(PlainId, "Testy Poke", -1, null, null, null)],
+        };
+        temp.App.SaveCharacter(character);
+        return (temp, id);
+    }
+
+    [Fact]
+    public void A_custom_attack_rolls_d20_plus_its_typed_to_hit_under_advantage_and_disadvantage()
+    {
+        var (temp, id) = WithCustomAttacks();
+        using var _ = temp;
+
+        var advantage = temp.App.Roll(new RollCommand(id, CustomAttack: SlingId, Mode: RollMode.Advantage));
+        var disadvantage = temp.App.Roll(new RollCommand(id, CustomAttack: SlingId, Mode: RollMode.Disadvantage));
+
+        Assert.Equal("1d20", advantage.Formula);
+        Assert.Equal(2, advantage.Dice.Count);
+        var kept = Assert.Single(advantage.Dice, d => d.Kept);
+        Assert.Equal(advantage.Dice.Max(d => d.Value), kept.Value);
+        var modifier = Assert.Single(advantage.Modifiers);
+        Assert.Equal(("Testy Sling to hit", 5), (modifier.Label, modifier.Amount));
+        Assert.Null(modifier.Origin);
+        Assert.Equal(kept.Value + 5, advantage.Total);
+        Assert.Equal(("custom.attack", "Testy Sling attack"), (advantage.Provenance!.RollId, advantage.Provenance.Label));
+        Assert.Null(advantage.Provenance.Content);
+        Assert.Null(advantage.Provenance.SourceId);
+        Assert.Equal(disadvantage.Dice.Min(d => d.Value), Assert.Single(disadvantage.Dice, d => d.Kept).Value);
+    }
+
+    [Fact]
+    public void A_custom_attack_damage_rolls_its_dice_and_a_critical_doubles_them()
+    {
+        var (temp, id) = WithCustomAttacks();
+        using var _ = temp;
+
+        var normal = temp.App.Roll(new RollCommand(id, CustomAttack: SlingId, Damage: true));
+        var critical = temp.App.Roll(new RollCommand(id, CustomAttack: SlingId, Damage: true, Critical: true));
+
+        Assert.Equal("1d6+2", normal.Formula);
+        Assert.Single(normal.Dice);
+        Assert.Equal(2, normal.ExpressionConstant);
+        Assert.Equal(2, critical.Dice.Count);
+        Assert.Equal(1, critical.Dice.Count(d => d.FromCritical));
+        Assert.Equal(("custom.damage", "Testy Sling damage (bludgeoning)"), (critical.Provenance!.RollId, critical.Provenance.Label));
+    }
+
+    [Fact]
+    public void A_custom_attack_without_a_damage_type_labels_its_damage_without_parentheses()
+    {
+        var (temp, id) = WithCustomAttacks();
+        using var _ = temp;
+        var character = temp.App.Store.FindCharacter(id)! with { CustomAttacks = [new(SlingId, "Testy Sling", 0, "1d4", null, null)] };
+        temp.App.SaveCharacter(character);
+
+        Assert.Equal("Testy Sling damage", temp.App.Roll(new RollCommand(id, CustomAttack: SlingId, Damage: true)).Provenance!.Label);
+    }
+
+    [Fact]
+    public void Custom_attack_refusals_never_quote_the_name()
+    {
+        var (temp, id) = WithCustomAttacks(Marker);
+        using var _ = temp;
+        AppValidationException Refused(RollCommand command) => Assert.Throws<AppValidationException>(() => temp.App.Roll(command));
+
+        var unknown = Refused(new(id, CustomAttack: Guid.NewGuid()));
+        var noDamage = Refused(new(id, CustomAttack: PlainId, Damage: true));
+        var ambiguous = Refused(new(id, Field: FieldIds.Initiative, CustomAttack: SlingId));
+
+        Assert.Equal("roll.custom-attack-unknown", Assert.Single(unknown.Problems).Code);
+        Assert.Equal("roll.custom-attack-no-damage", Assert.Single(noDamage.Problems).Code);
+        Assert.Equal("roll.ambiguous", Assert.Single(ambiguous.Problems).Code);
+        Assert.Contains("your own attack", ambiguous.Problems[0].Message);
+        foreach (var error in new[] { unknown, noDamage, ambiguous })
+            Assert.DoesNotContain(Marker, JsonSerializer.Serialize(error.Problems, RulesJson.Compact) + error);
+    }
+
+    [Fact]
+    public void A_custom_attack_with_a_weapon_is_ambiguous()
+    {
+        var (temp, id) = WithCustomAttacks();
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, Weapon: Srd(99), CustomAttack: SlingId)));
+
+        Assert.Equal("roll.ambiguous", Assert.Single(refused.Problems).Code);
+    }
+
+    private static readonly Guid HomebrewSource =Guid.Parse("7c000000-0000-4000-8000-000000000b01");
 
     /// <summary>The Berserker 3 with Strength 8 and a pinned homebrew feat whose roll has the bonus formula <paramref name="bonus"/> (content v8).</summary>
     private static (TempApp Temp, Guid Id, ContentReference Feat) WithBonusRoll(string bonus)

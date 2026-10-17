@@ -40,6 +40,12 @@ Each **equipped** weapon gives an entry in `sheet.attacks`:
 
 **Rolls:** `roll { weapon, damage?, versatile?, mode, critical }` rolls the attack (d20 + to hit, with advantage or disadvantage) or the damage (critical doubles the dice). Rolling changes nothing.
 
+## Your own attacks (character schema v9, item 18, D42)
+
+`customAttacks: [{ id, name, toHit, damage?, damageType?, note? }]` are attacks the player types in (a weapon the content does not list). Nothing is calculated: `toHit` is the typed bonus (−20 to +30), `damage` is null or a dice expression within the dice limits (a flat "5" is refused), and `damageType` is null or one of the thirteen SRD damage types. At most 30, a name of 1 to 80, a note of at most 200, unique non-empty ids. They are edited on Inventory ("Your own attacks"); the damage box shows the dice engine's own message (the `dice.roll` command, as the dice box does) and saves nothing until the dice are valid.
+
+**Rolls:** `roll { customAttack, damage?, mode, critical }` rolls `1d20` under `mode` with one modifier "{name} to hit" (the typed bonus, no origin), or the `damage` dice under normal mode with `critical` doubling them. The record's provenance is `custom.attack` / `custom.damage`, labelled "{name} attack" / "{name} damage ({type})" (the type only when set), with no content or source. An unknown id is `roll.custom-attack-unknown` and a damage roll with no damage is `roll.custom-attack-no-damage`; neither message quotes the name, which goes only into the label. `customAttack` counts toward `roll.ambiguous` like the other targets. On Play, "Attacks and actions" lists each one under "Actions" with "Roll {name} attack" (using the summary's advantage / disadvantage choice) and, when it has damage, "Roll {name} damage" (with the "Critical hit" box). The panel shows even when the character has no weapon attack, roll or toggle.
+
 ## Actions grouped (SPEC C-04)
 
 `roll` effects may declare `activation: action | bonusAction | reaction | other`. The sheet's **Attacks and actions** panel lists weapon attacks under "Actions", and every feature roll under its activation group ("Other" when none is declared), with the "Critical hit" toggle. A roll that names a resource still spends nothing; "Spend" is offered in the roll's record (`sheet-play.md`). The features list keeps each feature's text, source and "Open page".

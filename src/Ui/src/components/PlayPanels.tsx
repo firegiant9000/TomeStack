@@ -387,14 +387,26 @@ const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
  * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
  * a roll that names a resource offers "Spend" in its record.
  */
-export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (target: RollTarget) => void; act: Act }) {
+export function ActionsPanel({
+  view,
+  roll,
+  act,
+  rollMode = 'normal',
+}: {
+  view: CharacterView;
+  roll: (target: RollTarget) => void;
+  act: Act;
+  /** The summary's advantage / disadvantage choice. Used by the character's own attacks' attack rolls (item 18). */
+  rollMode?: RollMode;
+}) {
   const [critical, setCritical] = useState(false);
   const attacks = view.sheet.attacks ?? [];
+  const customAttacks = view.character.customAttacks ?? [];
   const toggles = view.sheet.toggles ?? [];
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
     feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
   );
-  if (attacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
+  if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
@@ -424,14 +436,30 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
       </label>
       {activationGroups.map(({ key, title }) => {
         const groupAttacks = key === 'action' ? attacks : [];
+        const groupCustom = key === 'action' ? customAttacks : [];
         const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
-        if (groupAttacks.length === 0 && groupRolls.length === 0) return null;
+        if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
               {groupAttacks.map((attack) => (
                 <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} roll={roll} />
+              ))}
+              {groupCustom.map((attack) => (
+                <li key={attack.id} className="feature">
+                  <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit
+                  {attack.damage ? `, ${attack.damage}${attack.damageType ? ` ${attack.damageType}` : ''}` : ''}
+                  {attack.note ? <span className="hint"> · {attack.note}</span> : null}{' '}
+                  <button type="button" onClick={() => roll({ customAttack: attack.id, mode: rollMode })}>
+                    Roll {attack.name} attack
+                  </button>
+                  {attack.damage && (
+                    <button type="button" onClick={() => roll({ customAttack: attack.id, damage: true, critical })}>
+                      Roll {attack.name} damage
+                    </button>
+                  )}
+                </li>
               ))}
               {groupRolls.map(({ feature, effect }) => (
                 <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">

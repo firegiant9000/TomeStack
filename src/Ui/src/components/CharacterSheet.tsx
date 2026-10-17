@@ -17,6 +17,7 @@ import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
 import { DetailsPanel } from './DetailsPanel';
@@ -646,7 +647,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} />
         </div>
       </TabPanel>
 
@@ -669,6 +670,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
         <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
+        <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+        <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
         <CurrencyPanel view={view} onChanged={onChanged} onError={onError} />
       </TabPanel>
 
