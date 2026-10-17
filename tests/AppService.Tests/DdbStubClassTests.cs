@@ -192,7 +192,7 @@ public class DdbStubClassTests
     }
 
     [Fact]
-    public void A_campaign_that_does_not_allow_the_stub_source_shows_the_campaign_note_and_still_creates_the_class()
+    public void A_campaign_that_does_not_allow_the_stub_source_gives_the_created_row_the_campaign_note_in_the_preview()
     {
         using var h = new DdbHarness();
         var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Test Table", RulesFamily = RulesFamilies.Srd51, AllowedSources = [Guid.Parse("52500000-0000-4000-8000-000000000001")] });

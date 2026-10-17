@@ -706,6 +706,78 @@ it('puts Publish it back to unticked whenever the created class is cleared or ch
   expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(false);
 });
 
+/** A second, ambiguous class row whose choice decides the stub's hit die: the first candidate leaves d8, the second makes d10. */
+function twoClassStubPreview(request: { createClassRow?: string; resolutions?: { rowId: string; chosen?: { contentId: string } }[] }): DdbPreview {
+  const base = stubPreview(wantsStub(request));
+  const picked = (request.resolutions ?? []).find((r) => r.rowId === 'class:1');
+  const second: MatchRow = {
+    rowId: 'class:1',
+    kind: 'class',
+    label: 'Fixture Arcanist 2',
+    status: picked ? 'matched' : 'choose',
+    candidates: [candidate(5, 'Fixture Arcanist'), candidate(6, 'Fixture Arcanist')],
+  };
+  const d10 = picked?.chosen?.contentId === ref(6).contentId;
+  return { ...base, matches: [...base.matches, second], stub: base.stub ? { ...base.stub, hitDie: d10 ? 10 : 8 } : null };
+}
+
+async function backToMatches(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
+  await user.click(screen.getByRole('button', { name: 'Back' })); // matches
+}
+
+async function forwardToSummary(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+}
+
+it('puts Publish it back to unticked when another class row changes the hit die of the reviewed class', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+
+  await backToMatches(user);
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1'); // d8 becomes d10
+  await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
+  await forwardToSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(section.textContent).toContain('d10');
+  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(false);
+});
+
+it('keeps Publish it as the user set it when a change elsewhere leaves the reviewed class identical', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+
+  await backToMatches(user);
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '0'); // still d8
+  await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
+  await forwardToSummary(user);
+
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(true);
+});
+
+it('says on the summary that the created class lives in a source that is never shared, and how to share one (D35)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(section.textContent).toContain('It lives in a source that is never shared, so your later work on it cannot be shared or moved; to share your own version, make a new class.');
+});
+
 it('Cancel with a class chosen discards the sheet and never applies', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));

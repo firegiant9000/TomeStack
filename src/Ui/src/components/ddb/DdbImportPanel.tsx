@@ -52,6 +52,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [createClassRow, setCreateClassRow] = useState<string>();
   /** D35: publish the created class with the character. Off by default; sent with Create only, never part of the preview. */
   const [publishClass, setPublishClass] = useState(false);
+  /** The stub content `publishClass` was last reconciled with; see `stubKey`. */
+  const [publishKey, setPublishKey] = useState('');
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
@@ -154,6 +156,13 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     // requestKey stands for the request's content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, requestKey, retry]);
+  // D35 consent: "Publish it" belongs to the exact class that was reviewed. Whatever the cause (a resolution elsewhere, a family
+  // change, a new preview), once the stub's content differs the tick is gone and must be given again.
+  const stubKey = preview?.stub ? JSON.stringify([preview.stub.rowId, preview.stub.name, preview.stub.rulesFamily, preview.stub.hitDie, preview.stub.saves]) : '';
+  if (publishKey !== stubKey) {
+    setPublishKey(stubKey);
+    setPublishClass(false);
+  }
   const failed = previewError?.key === requestKey ? previewError : undefined;
   const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
