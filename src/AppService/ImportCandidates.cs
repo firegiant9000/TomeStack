@@ -22,6 +22,13 @@ public sealed record StoredCandidate
     public required Guid JobId { get; init; }
     public required DraftCandidate Candidate { get; init; }
     public DraftCandidate? Edited { get; init; }
+    /// <summary>
+    /// Ruling R29: the reviewer saved a rules family for this candidate (an edit that sent one). Absent in every row stored
+    /// before it existed; omitted from the JSON while false so untouched rows keep their bytes. 0.5.0 does not read it
+    /// and keeps it unchanged when it saves the row.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool FamiliesReviewed { get; init; }
     public CandidateStatus Status { get; init; } = CandidateStatus.Pending;
     /// <summary>The draft revision an accepted candidate became.</summary>
     public ContentReference? Draft { get; init; }
@@ -99,11 +106,12 @@ public sealed partial class TomeStackApp
         if (stoppedBefore is { } page)
             _store.AddImportAudit(job.Id, _time.GetUtcNow(), "detection-limited", $"pages {job.FirstPage}-{page - 1} detected; import pages {page} on as a range to detect them");
         var pages = stored.Where(p => p.Error is null).Select(p => new DetectionPage(p.Page, "", p.Blocks, p.FromOcr)).ToList();
+        var families = job.WrittenFor ?? source.RulesFamilies; // 2026-10-14 item 3: what the reviewer said the book is written for
         var installed = _store.ListRevisions()
-            .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(source.RulesFamilies.Contains))
+            .Where(r => r.Status == RevisionStatus.Published && r.RulesFamilies.Any(families.Contains))
             .Select(r => CandidateDetector.Key(r.Name))
             .ToHashSet(StringComparer.Ordinal);
-        var detected = CandidateDetector.Detect(pages, new(source.Id, source.RulesFamilies, name => installed.Contains(CandidateDetector.Key(name))), cancellationToken);
+        var detected = CandidateDetector.Detect(pages, new(source.Id, families, name => installed.Contains(CandidateDetector.Key(name))), cancellationToken);
 
         static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
         var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).Select(c => Identity(c.Candidate)).ToHashSet();
@@ -142,9 +150,13 @@ public sealed partial class TomeStackApp
         var name = request.Name?.Trim() ?? current.ProposedName;
         if (name.Length is < 1 or > 200)
             throw new AppValidationException([new("candidate.name-invalid", "A name has 1 to 200 characters.")]);
-        var families = request.RulesFamilies ?? current.RulesFamilies;
-        if (families.Count == 0 || families.Any(f => !RulesFamilies.IsKnown(f)))
-            throw new AppValidationException([new("candidate.family-invalid", "Choose at least one supported rules family.")]);
+        IReadOnlyList<string> families = [.. (request.RulesFamilies ?? current.RulesFamilies).Distinct(StringComparer.Ordinal)];
+        // 2026-10-14 item 3: none is allowed here (other fields can be saved first); check and accept wait for a family.
+        if (families.Any(f => !RulesFamilies.IsKnown(f)))
+            throw new AppValidationException([new("candidate.family-invalid", "Choose supported rules families.")]);
+        var sourceFamilies = _store.FindSource(ImportStatus(stored.JobId).SourceId)?.RulesFamilies ?? [];
+        if (families.Any(f => !sourceFamilies.Contains(f)))
+            throw new AppValidationException([new("import.family-not-in-source", $"A candidate can only be written for the families its source declares ({string.Join(", ", sourceFamilies)}).")]);
         var summary = request.Summary ?? current.Summary;
         if (summary is { Length: > 20_000 })
             throw new AppValidationException([new("candidate.summary-too-long", "The text has at most 20,000 characters.")]);
@@ -159,7 +171,8 @@ public sealed partial class TomeStackApp
             LowConfidenceFields = [],
             UnresolvedReferences = [.. current.UnresolvedReferences.Where(r => !dismissed.Contains(r, StringComparer.OrdinalIgnoreCase) && !IsInstalledName(r, families))],
         };
-        var updated = stored with { Edited = edited, UpdatedAt = _time.GetUtcNow() };
+        // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
+        var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
         _store.InTransaction(() =>
         {
             _store.SaveImportCandidate(updated);
@@ -181,7 +194,11 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates a draft entry. Confirm to accept; nothing was changed.")]);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
-        var check = Check(stored, request.AsReference);
+        // Even as reference, an entry needs a family, and a double acceptance is refused: "reference only" lifts neither.
+        var provenance = ProvenanceBlockers(stored); // once: it reads every candidate of every same-document job
+        if (provenance is [var first, ..])
+            throw new AppValidationException([first with { Message = $"{first.Message} Nothing was changed." }]);
+        var check = Check(stored, request.AsReference, provenance);
         if (!request.AsReference && check.Blockers.Count > 0)
             throw new AppValidationException([new("candidate.needs-review", $"This candidate has {check.Blockers.Count} unsure field(s) or unresolved reference(s). Edit them, or accept it as reference only."), .. check.Blockers]);
         if (!check.Report.CanPublish)
@@ -219,21 +236,56 @@ public sealed partial class TomeStackApp
         return ignored;
     }
 
-    private CandidateCheck Check(StoredCandidate stored, bool asReference)
+    private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null)
     {
         var current = stored.Current;
         var draft = DraftOf(stored, asReference);
         var report = ContentValidator.Validate(draft, _store);
-        var blockers = new List<Diagnostic>();
-        foreach (var field in current.LowConfidenceFields)
+        provenance ??= ProvenanceBlockers(stored);
+        var blockers = new List<Diagnostic>(provenance);
+        foreach (var field in current.LowConfidenceFields.Where(f => f != "rulesFamilies" || current.RulesFamilies.Count > 0))
             blockers.Add(new("candidate.low-confidence", $"The detector is unsure of '{field}'. Check it against the page and save your edit."));
         // Messages never quote the PDF's text; the review shows the names from the candidate itself.
         for (var i = 0; i < current.UnresolvedReferences.Count; i++)
             blockers.Add(new("candidate.unresolved-reference", $"Reference {i + 1} of {current.UnresolvedReferences.Count} is neither installed nor another candidate. Install or import it, or dismiss the reference."));
         return new(stored.Id, report, Dependencies(draft, current), blockers,
             CanAccept: stored.Status == CandidateStatus.Pending && blockers.Count == 0 && report.CanPublish,
-            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
+            CanAcceptAsReference: stored.Status == CandidateStatus.Pending && provenance.Count == 0 && ContentValidator.Validate(DraftOf(stored, asReference: true), _store).CanPublish);
     }
+
+    /// <summary>
+    /// What "reference only" does not lift. Computed from what is stored, never stored itself (no migration):
+    /// no rules family (2026-10-14 item 3; the empty set has its own blocker, so the unsure "rulesFamilies" field is not listed twice);
+    /// an armour row or class table kept by a 0.5.0 job on a two-family source, which silently took srd-5.2.1 (ruling R28), until the
+    /// reviewer saves a family; and an entry another reading of the same document already turned into a draft (ruling R27).
+    /// </summary>
+    private List<Diagnostic> ProvenanceBlockers(StoredCandidate stored)
+    {
+        var blockers = new List<Diagnostic>();
+        if (stored.Status != CandidateStatus.Pending)
+            return blockers;
+        var current = stored.Current;
+        var job = ImportStatus(stored.JobId);
+        if (current.RulesFamilies.Count == 0)
+            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for."));
+        else if (job.WrittenFor is null && !stored.FamiliesReviewed && IsLayoutNeutral(stored.Candidate)
+            && (_store.FindSource(job.SourceId)?.RulesFamilies.Count ?? 0) > 1)
+            blockers.Add(new("import.family-needed", "Say which rules family this entry is written for. It was read before TomeStack asked."));
+
+        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+        var identity = Identity(current); // the effective values: renaming a twin is how a deliberate second copy is made (R27)
+        var already = _store.ListImportJobs()
+            .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
+            .SelectMany(j => _store.ListImportCandidates(j.Id))
+            .Any(c => c.Status is CandidateStatus.Accepted or CandidateStatus.AcceptedAsReference && Identity(c.Candidate) == identity);
+        if (already)
+            blockers.Add(new("import.already-accepted", "This entry was already accepted from another reading of this document."));
+        return blockers;
+    }
+
+    /// <summary>Armour rows and class tables carry no layout, so the detector cannot tell which rules family they use.</summary>
+    private static bool IsLayoutNeutral(DraftCandidate candidate) =>
+        candidate.ProposedKind == ContentKind.Class || candidate.ProposedEffects.Any(e => e is ArmorEffect);
 
     /// <summary>The draft a candidate becomes: always through the quarantine, so a draft with reference-only effects (ADR-004).</summary>
     private static ContentRevision DraftOf(StoredCandidate stored, bool asReference)

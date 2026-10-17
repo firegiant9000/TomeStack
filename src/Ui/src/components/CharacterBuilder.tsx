@@ -500,15 +500,39 @@ function ScoresStep(props: {
 /** The options of one kind the character's rules family can use (D31); what a campaign disallows stays listed, disabled (P-01). */
 const ofKind = (options: Shown[], kind: ContentKind) => options.filter((o) => o.kind === kind && visible(o));
 
-/** With one option or none installed, say where more come from, so a short list does not look like a fault. */
-function fewHint(count: number, one: string, many: string, loaded: boolean, policy?: RulesFamilyPolicy) {
-  // Not while the listing is loading or after it failed: "0 species are installed" would be false then.
-  if (count > 1 || !policy || !loaded) return null;
+/**
+ * Item 1: why a pick step may look short, in plain text. With one option or none installed, say where more come from;
+ * then, only when there are any, how many entries are still drafts and how many are written for the other family.
+ * Counts only, never names, and no links (R18: leaving the builder would discard the unsaved draft).
+ * Nothing while the listing is loading or after it failed: "0 species are installed" would be false then.
+ */
+function missingHint(one: string, many: string, count: number, missing: Missing, loaded: boolean, policy?: RulesFamilyPolicy) {
+  if (!policy || !loaded) return null;
+  const phrase = (n: number) => `${n} ${n === 1 ? one : many} ${n === 1 ? 'is' : 'are'}`;
   return (
-    <p className="hint">
-      {count} {count === 1 ? one : many} {count === 1 ? 'is' : 'are'} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
-    </p>
+    <>
+      {count <= 1 && (
+        <p className="hint">
+          {phrase(count)} installed for {policy.displayName}. More can come from the homebrew studio or a content pack.
+        </p>
+      )}
+      {missing.drafts > 0 && <p className="hint">{phrase(missing.drafts)} drafts in the Homebrew studio: publish them there to use them.</p>}
+      {missing.otherFamily > 0 && (
+        <p className="hint">
+          {phrase(missing.otherFamily)} written for {missing.otherFamilyName} only.
+        </p>
+      )}
+    </>
   );
+}
+
+/** Item 1: entries of one kind the builder hides, by reason. */
+interface Missing {
+  /** No published revision (a draft in the studio). */
+  drafts: number;
+  /** Published, but written for the other rules family. */
+  otherFamily: number;
+  otherFamilyName: string;
 }
 
 interface PickStepProps {
@@ -517,6 +541,8 @@ interface PickStepProps {
   options: Shown[];
   /** The listing for the current rules family and campaign has arrived. */
   loaded: boolean;
+  /** Item 1: what the builder hides for each kind; draft counts are 0 until they arrive (a failure shows no draft line). */
+  missing: (kind: ContentKind) => Missing;
   /** R41: the names among these picks that need a campaign exception reason which is not given (now). */
   reasonNames: (refs: (ContentReference | undefined)[]) => string[];
   onChange: (basics: Basics) => void;
@@ -533,7 +559,7 @@ function SpeciesStep(props: PickStepProps) {
     <StepForm label="Species" next="Next: class" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick legend="Species" name="species" options={list} value={basics.species} onChange={(species) => onChange({ ...basics, species })} />
-      {fewHint(list.length, 'species', 'species', props.loaded, props.policy)}
+      {missingHint('species', 'species', list.length, props.missing('species'), props.loaded, props.policy)}
     </StepForm>
   );
 }
@@ -541,16 +567,18 @@ function SpeciesStep(props: PickStepProps) {
 function ClassStep(props: PickStepProps) {
   const { basics, options, onChange } = props;
   const hint = reasonHint(props.reasonNames([basics.startingClass]));
+  const list = ofKind(options, 'class');
   return (
     <StepForm label="Class" next="Next: background" nextDisabled={!!hint} nextHint={hint} onNext={props.onNext} onBack={props.onBack} onCancel={props.onCancel}>
       <p className="hint">Every option shows its source and rules family.</p>
       <SinglePick
         legend="Class (level 1)"
         name="startingClass"
-        options={ofKind(options, 'class')}
+        options={list}
         value={basics.startingClass}
         onChange={(startingClass) => onChange({ ...basics, startingClass })}
       />
+      {missingHint('class', 'classes', list.length, props.missing('class'), props.loaded, props.policy)}
     </StepForm>
   );
 }
@@ -581,7 +609,7 @@ function BackgroundStep(props: PickStepProps) {
         value={basics.background}
         onChange={(background) => onChange({ ...basics, background })}
       />
-      {fewHint(list.length, 'background', 'backgrounds', props.loaded, props.policy)}
+      {missingHint('background', 'backgrounds', list.length, props.missing('background'), props.loaded, props.policy)}
 
       <details>
         <summary>Other content ({basics.other.length} selected)</summary>
@@ -980,6 +1008,8 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const [listed, setListed] = useState<ContentOption[]>([]);
   // Which rules family and campaign `listed` belongs to; until it matches, options are still loading.
   const [listedFor, setListedFor] = useState<string>();
+  // Item 1: how many entries per kind are still drafts, and the family they were counted for. A failure leaves it unset: the counts are only a hint.
+  const [drafts, setDrafts] = useState<{ family: string; counts: Partial<Record<ContentKind, number>> }>();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignsState, setCampaignsState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [outside, setOutside] = useState({ allow: false, reason: '' });
@@ -1051,6 +1081,12 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
         });
       })
       .catch(fail);
+    client
+      .draftCounts(family)
+      .then((counts) => {
+        if (current) setDrafts({ family, counts });
+      })
+      .catch(() => {}); // a hint only: no draft line, and no error banner
     return () => {
       current = false;
     };
@@ -1218,7 +1254,14 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
   const next = () => setStep(createSteps[Math.min(at + 1, createSteps.length - 1)]!);
   const policy = rulesFamilies.find((f) => f.id === basics.rulesFamily);
   const optionsLoaded = listedFor === `${family}|${campaignId ?? ''}`;
-  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, reasonNames, onChange: setBasics, onBack: back, onCancel };
+  const otherFamily = rulesFamilies.find((f) => f.id !== family);
+  const missing = (kind: ContentKind): Missing => ({
+    drafts: drafts?.family === family ? (drafts.counts[kind] ?? 0) : 0,
+    // Distinct content, not revisions; campaign-blocked options stay listed with their reason (P-01), so they are not counted.
+    otherFamily: new Set(listed.filter((o) => o.kind === kind && !o.compatible && !o.superseded).map((o) => o.reference.contentId)).size,
+    otherFamilyName: otherFamily?.displayName ?? 'the other rules family',
+  });
+  const pickProps = { basics, policy, options: pickable, loaded: optionsLoaded, missing, reasonNames, onChange: setBasics, onBack: back, onCancel };
 
   const title =
     mode.kind === 'create' ? 'New character' : mode.kind === 'levelUp' ? `Level up ${mode.view.character.name}` : `Choices for ${mode.view.character.name}`;

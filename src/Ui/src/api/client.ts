@@ -13,6 +13,7 @@ import type {
   StoredCandidate,
   DetachPreview,
   OpenPageOutcome,
+  ContentKind,
   ContentRevision,
   PublishResult,
   SourcePackPreview,
@@ -81,6 +82,8 @@ export function createClient(transport: Transport) {
     info: () => call<AppInfo>('app.info'),
     /** With a campaign, every option says whether the campaign allows its source (SPEC P-01). */
     listContent: (rulesFamily: RulesFamilyId, campaignId?: string) => call<ContentOption[]>('content.list', { rulesFamily, campaignId }),
+    /** Item 1: entries of each kind in the family with no published revision (counts only). */
+    draftCounts: (rulesFamily: RulesFamilyId) => call<Partial<Record<ContentKind, number>>>('content.draftCounts', { rulesFamily }),
     listCampaigns: () => call<Campaign[]>('campaign.list'),
     /** Creates (empty id) or updates a campaign profile. */
     saveCampaign: (campaign: Campaign) => call<Campaign>('campaign.save', campaign),
@@ -136,7 +139,7 @@ export function createClient(transport: Transport) {
     importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
       call<ContentRevision>('source.importPages', { sourceId, ...request }),
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
-    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) =>
+    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A session-prep guide** (`docs/features/session-prep.md`) for characters built mostly from homebrew.
+- **Roll any dice from the summary:** type something like 2d6+3 under the d20 mode and choose Roll dice. The result shows under Last roll like any other roll; nothing is saved.
+
+### Changed
+
+- **Better at third-party books:** the PDF import now finds feats whose name and prerequisites share a block, spell, feat and class names printed in capitals (shown in title case), and class tables titled in capitals, and it no longer proposes table rows that are prices or sentence fragments. Measured on the SRDs (no drop) and on a third-party book (counts in m4-acceptance.md).
+- **The builder says why a class, species or background is missing:** it counts entries that are still drafts in the Homebrew studio, and entries written only for the other rules family, without naming them.
+- **The import review says what happens next:** a line above the candidates says that accepted entries are drafts in the Homebrew studio, and a button opens that source in the studio.
+- **Reading a two-family book asks "This book is written for":** 2014 rules, 2024 rules or both, with no default. The Read buttons wait for the answer and say why. A job stores the answer (`writtenFor`, optional; a 0.5.0 job without it uses the source's families).
+
+### Fixed
+
+- **A book's armour and class tables no longer default to the 2024 rules:** when a source is written for both families, TomeStack asks what the book is written for when you read it, and an entry it cannot place waits for you to choose its family. You can now change a candidate's rules families in review (only to families the source declares). Pending candidates that 0.5.0 already found stay in the old reading's list and now ask for a family too, until you save one (also when you edited them in 0.5.0, which never asked); reading the document again makes a new list. An entry already accepted from another reading of the same document is not accepted a second time.
+
+### Migration
+
+- Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it), and a stored candidate may carry `familiesReviewed` (set when you save a family; absent otherwise; 0.5.0 does not read it and keeps it unchanged when it saves the row). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
+
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 
 Everything built since 0.4.0, listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print).

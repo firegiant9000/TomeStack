@@ -1,5 +1,6 @@
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
+import { DiceBox } from './DiceBox';
 import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
 
@@ -25,6 +26,8 @@ interface Props {
   act: (action: PlayAction) => void;
   /** Rolls a d20 test for a field id (for example `ability.str.mod`) in the current mode. */
   onRoll: (field: string) => void;
+  /** Rolls typed dice (item 8); rejects with the engine's refusal, which the box shows. */
+  onRollDice: (formula: string) => Promise<void>;
   /** True when the sheet offers a Spells tab; the hint names it only then. */
   spellsTab?: boolean;
 }
@@ -35,7 +38,7 @@ interface Props {
  * `getByRole` and confuse screen readers). Traces and overrides stay on the field cards (Stats, Spells). An overridden
  * value says so in text (WCAG 1.4.1). The d20 roll mode and the last roll live here so they are reachable from every tab.
  */
-export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onRoll, spellsTab = false }: Props) {
+export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, act, onRoll, onRollDice, spellsTab = false }: Props) {
   const { character, sheet } = view;
   const field = (id: string): DerivedValue | undefined => sheet.fields.find((f) => f.field === id);
   const show = (id: string): string => {
@@ -162,7 +165,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           </div>
         )}
       </dl>
-      <RollModePicker mode={rollMode} onChange={onRollMode} />
+      <div className="roll-controls">
+        <RollModePicker mode={rollMode} onChange={onRollMode} />
+        <DiceBox onRoll={onRollDice} />
+      </div>
       <p className="hint">
         {spellsTab
           ? 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; an attack or feature on Play; or a spell on Spells.'

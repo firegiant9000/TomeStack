@@ -87,7 +87,8 @@ public class CandidateReviewTests
         var warden = Named(temp, jobId, "Fixture Warden");
         Assert.Contains(temp.App.CheckCandidate(warden.Id).Blockers, b => b.Code == "candidate.low-confidence");
 
-        var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
+        // 2026-10-14 item 3: a two-family source gives the class no family, so the reviewer sets one.
+        var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         Assert.Empty(edited.Current.LowConfidenceFields);
         Assert.Equal(["Fixture Focus", "Fixture Resolve"], edited.Current.UnresolvedReferences);
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
@@ -166,5 +167,219 @@ public class CandidateReviewTests
         Assert.Equal("candidate.family-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, RulesFamilies: ["srd-9"]))));
         Assert.Equal("candidate.summary-too-long", Code(() => temp.App.EditCandidate(new(veil.Id, Summary: new string('x', 20_001)))));
         Assert.Equal("candidate.not-found", Code(() => temp.App.CheckCandidate(Guid.NewGuid())));
+    }
+
+    [Fact]
+    public void An_edit_naming_a_family_the_source_does_not_declare_is_refused_and_nothing_is_saved()
+    {
+        // Review Focus 4: a stale or hostile client sends the command directly.
+        var temp = new TempApp();
+        using var _t = temp;
+        var source = temp.App.CreateHomebrewSource(new("Test One Family Book", [RulesFamilies.Srd51]));
+        temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
+        var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var coat = Named(temp, job.Id, "Fixture Quilted Coat");
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
+
+        Assert.Equal("import.family-not-in-source", refused.Problems[0].Code);
+        Assert.All(refused.Problems, p => Assert.DoesNotContain("Fixture", p.Message, StringComparison.Ordinal));
+        var after = Named(temp, job.Id, "Fixture Quilted Coat");
+        Assert.Null(after.Edited);
+        Assert.Equal([RulesFamilies.Srd51], after.Current.RulesFamilies);
+        Assert.Equal("Fixture Quilted Coat", after.Current.ProposedName);
+    }
+
+    [Fact]
+    public void A_duplicated_family_list_is_stored_once()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var edited = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51, RulesFamilies.Srd51, RulesFamilies.Srd521, RulesFamilies.Srd51]));
+
+        Assert.Equal([RulesFamilies.Srd51, RulesFamilies.Srd521], edited.Current.RulesFamilies);
+    }
+
+    /// <summary>A 0.5.0 job's armour row: it was stored with a silent srd-5.2.1 on a two-family source (ruling R28).</summary>
+    private static StoredCandidate AsKeptBy050(TempApp temp, StoredCandidate stored)
+    {
+        var old = stored with { Candidate = stored.Candidate with { RulesFamilies = [RulesFamilies.Srd521], LowConfidenceFields = [], Uncertainties = [] } };
+        temp.App.Store.SaveImportCandidate(old);
+        return old;
+    }
+
+    [Fact]
+    public void An_old_jobs_pending_armour_and_class_table_ask_for_a_family_again()
+    {
+        var (temp, _, jobId) = Imported(); // no writtenFor, like a 0.5.0 job, on a two-family source
+        using var _t = temp;
+        var coat = AsKeptBy050(temp, Named(temp, jobId, "Fixture Quilted Coat"));
+        var warden = AsKeptBy050(temp, Named(temp, jobId, "Fixture Warden"));
+        Assert.Equal([RulesFamilies.Srd521], coat.Current.RulesFamilies);
+
+        foreach (var old in new[] { coat, warden })
+        {
+            var check = temp.App.CheckCandidate(old.Id);
+            Assert.Contains(check.Blockers, b => b.Code == "import.family-needed");
+            Assert.False(check.CanAccept);
+            Assert.False(check.CanAcceptAsReference);
+            Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(old.Id, Confirm: true))));
+            Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(old.Id, AsReference: true, Confirm: true))));
+        }
+
+        // A layout-decided kind in the same job is not asked: its family came from the page.
+        Assert.DoesNotContain(temp.App.CheckCandidate(Named(temp, jobId, "Fixture Ember Lance").Id).Blockers, b => b.Code == "import.family-needed");
+
+        // Saving an edit is the reviewer's answer.
+        temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        var ready = temp.App.CheckCandidate(coat.Id);
+        Assert.DoesNotContain(ready.Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
+    }
+
+    [Fact]
+    public void An_old_armour_row_edited_in_050_still_asks_for_a_family_until_one_is_saved()
+    {
+        // Ruling R29: 0.5.0 never asked about families, so its edit (Edited set, no familiesReviewed) is not an answer.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = AsKeptBy050(temp, Named(temp, jobId, "Fixture Quilted Coat"));
+        var edited050 = coat with { Edited = coat.Candidate with { ProposedName = "Fixture Quilted Coat" } };
+        temp.App.Store.SaveImportCandidate(edited050);
+        Assert.False(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
+
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+
+        // An edit that sends no families is not an answer either.
+        var renamed = temp.App.EditCandidate(new(coat.Id, Summary: "Fixture padding."));
+        Assert.False(renamed.FamiliesReviewed);
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+
+        // Saving a family (even the one it already has) is.
+        var saved = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        Assert.True(saved.FamiliesReviewed);
+        Assert.True(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
+        Assert.DoesNotContain(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
+    }
+
+    [Fact]
+    public void Families_reviewed_is_absent_from_the_stored_json_until_true_and_reads_back_false_when_absent()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var stored = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var json = System.Text.Json.JsonSerializer.Serialize(stored, RulesJson.Compact);
+        Assert.DoesNotContain("familiesReviewed", json);
+        Assert.False(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!.FamiliesReviewed);
+
+        var reviewed = System.Text.Json.JsonSerializer.Serialize(stored with { FamiliesReviewed = true }, RulesJson.Compact);
+        Assert.Contains("\"familiesReviewed\":true", reviewed);
+        Assert.True(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(reviewed, RulesJson.Compact)!.FamiliesReviewed);
+    }
+
+    [Fact]
+    public void A_job_that_recorded_what_the_book_is_written_for_does_not_ask_again()
+    {
+        var temp = new TempApp();
+        using var _t = temp;
+        var source = temp.App.CreateHomebrewSource(new("Test Review Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
+        temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
+        var job = temp.App.StartImport(new(source.Id, WholeDocument: true, WrittenFor: [RulesFamilies.Srd521]));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var coat = Named(temp, job.Id, "Fixture Quilted Coat");
+
+        Assert.Equal([RulesFamilies.Srd521], coat.Current.RulesFamilies);
+        var check = temp.App.CheckCandidate(coat.Id);
+        Assert.DoesNotContain(check.Blockers, b => b.Code == "import.family-needed");
+        Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => d.Code)));
+    }
+
+    [Fact]
+    public void An_entry_accepted_from_another_reading_of_the_same_document_is_not_accepted_twice()
+    {
+        var (temp, sourceId, firstJob) = Imported();
+        using var _t = temp;
+        var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var ember = Named(temp, firstJob, "Fixture Ember Lance");
+        var again = Named(temp, second.Id, "Fixture Ember Lance");
+        var stormcall = Named(temp, firstJob, "Fixture Stormcall");
+        var stormAgain = Named(temp, second.Id, "Fixture Stormcall");
+        Assert.True(temp.App.CheckCandidate(again.Id).CanAccept);
+
+        temp.App.AcceptCandidate(new(ember.Id, Confirm: true));
+        temp.App.AcceptCandidate(new(stormcall.Id, AsReference: true, Confirm: true)); // a reference counts too
+
+        foreach (var twin in new[] { again, stormAgain })
+        {
+            var check = temp.App.CheckCandidate(twin.Id);
+            Assert.False(check.CanAccept);
+            Assert.False(check.CanAcceptAsReference);
+            var blocker = Assert.Single(check.Blockers, b => b.Code == "import.already-accepted");
+            Assert.Equal("This entry was already accepted from another reading of this document.", blocker.Message);
+            Assert.Equal("import.already-accepted", Code(() => temp.App.AcceptCandidate(new(twin.Id, Confirm: true))));
+            Assert.Equal("import.already-accepted", Code(() => temp.App.AcceptCandidate(new(twin.Id, AsReference: true, Confirm: true))));
+        }
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
+
+        // Nothing stored changed: the other reading's candidates are still pending, and ignoring one is still allowed.
+        Assert.Equal(CandidateStatus.Pending, Named(temp, second.Id, "Fixture Ember Lance").Status);
+        Assert.Equal(CandidateStatus.Ignored, temp.App.IgnoreCandidate(again.Id).Status);
+    }
+
+    [Fact]
+    public void Renaming_a_twin_lifts_the_already_accepted_blocker_for_a_deliberate_second_copy()
+    {
+        var (temp, sourceId, firstJob) = Imported();
+        using var _t = temp;
+        var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.App.AcceptCandidate(new(Named(temp, firstJob, "Fixture Ember Lance").Id, Confirm: true));
+        var twin = Named(temp, second.Id, "Fixture Ember Lance");
+        Assert.Contains(temp.App.CheckCandidate(twin.Id).Blockers, b => b.Code == "import.already-accepted");
+
+        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+
+        var check = temp.App.CheckCandidate(twin.Id);
+        Assert.DoesNotContain(check.Blockers, b => b.Code == "import.already-accepted");
+        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(twin.Id, Confirm: true)).Status);
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance Copy"));
+    }
+
+    [Fact]
+    public void Accept_waits_for_a_family_on_a_two_family_source()
+    {
+        // Review Focus 1.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+        Assert.Empty(coat.Current.RulesFamilies);
+
+        var check = temp.App.CheckCandidate(coat.Id);
+        Assert.False(check.CanAccept);
+        Assert.Contains(check.Blockers, b => b.Code == "import.family-needed");
+        Assert.False(check.CanAcceptAsReference); // a reference entry needs a family too
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true))));
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true)));
+        Assert.Equal("import.family-needed", refused.Problems[0].Code);
+
+        // Saving an edit that leaves the family empty is allowed (other fields can be fixed first); accept still waits.
+        var renamed = temp.App.EditCandidate(new(coat.Id, Name: "Fixture Quilted Coat", RulesFamilies: []));
+        Assert.Empty(renamed.Current.RulesFamilies);
+        Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
+        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+
+        temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51]));
+        var ready = temp.App.CheckCandidate(coat.Id);
+        Assert.True(ready.CanAccept, string.Join("; ", ready.Blockers.Concat(ready.Report.Errors).Select(d => d.Code)));
+        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
+        Assert.Equal([RulesFamilies.Srd51], draft.RulesFamilies);
     }
 }

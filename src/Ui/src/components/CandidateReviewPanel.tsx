@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CandidateCheck, CandidateFilter, CandidateStatus, ContentKind, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
+import type { CandidateCheck, CandidateFilter, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
+import { familyLabel } from './familyLabels';
 
 interface Props {
   job: ImportJob;
@@ -8,6 +9,7 @@ interface Props {
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
   onOpenPage: (page: number) => void;
+  onOpenStudio: (sourceId: string) => void;
 }
 
 const kinds: ContentKind[] = ['spell', 'feat', 'feature', 'item', 'class', 'subclass', 'species', 'background'];
@@ -29,11 +31,13 @@ const percent = (confidence: number) => `${Math.round(confidence * 100)} %`;
  * effects. Accept makes a draft (validated first, ADR-004); Accept as reference keeps the text and page only; Ignore sets
  * it aside. Publishing is the homebrew studio's, with its own validation. Confidence is a hint, never permission.
  */
-export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPage }: Props) {
+export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPage, onOpenStudio }: Props) {
   const [filter, setFilter] = useState<CandidateFilter>({ status: 'pending' });
   const [candidates, setCandidates] = useState<StoredCandidate[]>();
   const [selected, setSelected] = useState<string>();
   const heading = useRef<HTMLHeadingElement>(null);
+  const [dirty, setDirty] = useState(false); // the open candidate's form differs from what is stored
+  const dirtyId = `unsaved-${job.id}`;
 
   const load = useCallback(
     () =>
@@ -55,6 +59,25 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       <h5 ref={heading} tabIndex={-1}>
         Candidates from {source.title}
       </h5>
+      <p className="hint">Accepted entries are drafts in the Homebrew studio under {source.title}. Publish them there to use them in the builder.</p>
+      <div className="actions">
+        {/* aria-disabled, never `disabled`; leaving would silently drop an unsaved edit (ruling R26). */}
+        <button
+          type="button"
+          aria-disabled={dirty || undefined}
+          aria-describedby={dirty ? dirtyId : undefined}
+          onClick={() => {
+            if (!dirty) onOpenStudio(source.id);
+          }}
+        >
+          Open {source.title} in the studio
+        </button>
+      </div>
+      {dirty && (
+        <p id={dirtyId} className="hint">
+          Save or undo your edit first.
+        </p>
+      )}
       <fieldset>
         <legend>Show</legend>
         <div className="inline-form">
@@ -127,8 +150,10 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
         <CandidateDetail
           key={`${current.id}-${current.updatedAt}`}
           stored={current}
+          sourceFamilies={source.rulesFamilies}
           onOpenPage={onOpenPage}
           onError={onError}
+          onDirtyChange={setDirty}
           onChanged={async (text) => {
             onStatus(text);
             const list = await load();
@@ -146,15 +171,20 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
 
 interface DetailProps {
   stored: StoredCandidate;
+  /** Items 3 and 4: a candidate can only be written for the families its source declares. */
+  sourceFamilies: RulesFamilyId[];
   onOpenPage: (page: number) => void;
   onError: (error: unknown) => void;
   onChanged: (status: string) => Promise<void>;
+  /** Whether the form differs from what is stored, so the panel can keep the player from leaving with an unsaved edit. */
+  onDirtyChange: (dirty: boolean) => void;
 }
 
-function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps) {
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
+  const [families, setFamilies] = useState<RulesFamilyId[]>(candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f)));
   const [kind, setKind] = useState<ContentKind>(candidate.proposedKind);
   const [summary, setSummary] = useState(candidate.summary ?? '');
   const [effects, setEffects] = useState(JSON.stringify(candidate.proposedEffects, null, 2));
@@ -162,6 +192,21 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
   const [effectsError, setEffectsError] = useState<string>();
   const [check, setCheck] = useState<CandidateCheck>();
   const pending = stored.status === 'pending';
+
+  const storedFamilies = candidate.rulesFamilies.filter((f) => sourceFamilies.includes(f));
+  const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const dirty =
+    pending &&
+    (name !== candidate.proposedName ||
+      kind !== candidate.proposedKind ||
+      summary !== (candidate.summary ?? '') ||
+      effects !== JSON.stringify(candidate.proposedEffects, null, 2) ||
+      !sameSet(families, storedFamilies) ||
+      dismissed.length > 0);
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false); // the detail goes away (another candidate, a save): nothing is unsaved any more
+  }, [dirty, onDirtyChange]);
 
   // WCAG 2.4.3: choosing a candidate moves focus to its details.
   useEffect(() => heading.current?.focus(), []);
@@ -191,7 +236,7 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
     }
     setEffectsError(undefined);
     try {
-      await client.editCandidate(stored.id, { name, kind, summary, effects: parsed, dismissReferences: dismissed });
+      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed });
       await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
     } catch (error) {
       onError(error);
@@ -219,13 +264,17 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
   }
 
   const headingId = `candidate-${stored.id}`;
+  const blocksId = `blocks-${stored.id}`;
+  const problemsId = `problems-${stored.id}`;
+  // What a blocked Accept points at: the blockers, else the validator's problems; nothing while the check is loading.
+  const reasonId = check ? (check.blockers.length > 0 ? blocksId : check.report.errors.length > 0 ? problemsId : undefined) : undefined;
   return (
     <section aria-labelledby={headingId} className="play-panel">
       <h5 id={headingId} tabIndex={-1} ref={heading}>
         Candidate: {candidate.proposedName}
       </h5>
       <p className="hint">
-        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.join(', ')} · confidence {percent(candidate.confidence)} (a hint, not a
+        {candidate.proposedKind} · {pageText(candidate.page)} · {candidate.rulesFamilies.length > 0 ? candidate.rulesFamilies.join(', ') : 'no rules family yet'} · confidence {percent(candidate.confidence)} (a hint, not a
         check) · {statusLabels[stored.status]}
       </p>
       <div className="actions">
@@ -293,6 +342,19 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
               ))}
             </select>
           </label>
+          <fieldset>
+            <legend>Rules families</legend>
+            {sourceFamilies.map((f) => (
+              <label key={f} className="choice">
+                <input
+                  type="checkbox"
+                  checked={families.includes(f)}
+                  onChange={() => setFamilies(families.includes(f) ? families.filter((x) => x !== f) : [...families, f])}
+                />
+                {familyLabel(f)}
+              </label>
+            ))}
+          </fieldset>
           <label className="field">
             Text
             <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={20000} />
@@ -311,14 +373,14 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
       {check && (
         <div role="region" aria-label="Check before accepting">
           {check.blockers.length > 0 && (
-            <ul className="warnings" aria-label="Blocks accepting">
+            <ul id={blocksId} className="warnings" aria-label="Blocks accepting">
               {check.blockers.map((b, i) => (
                 <li key={`${b.code}-${i}`}>{b.message}</li>
               ))}
             </ul>
           )}
           {check.report.errors.length > 0 && (
-            <ul className="errors" aria-label="Problems">
+            <ul id={problemsId} className="errors" aria-label="Problems">
               {check.report.errors.map((e, i) => (
                 <li key={`${e.code}-${i}`}>{e.message}</li>
               ))}
@@ -331,10 +393,21 @@ function CandidateDetail({ stored, onOpenPage, onError, onChanged }: DetailProps
 
       {pending && (
         <div className="actions">
-          <button type="button" disabled={!check?.canAccept} onClick={() => accept(false)}>
+          {/* aria-disabled, never `disabled`: a re-check can block a button that has focus (2.4.3); the reason is the visible list. */}
+          <button
+            type="button"
+            aria-disabled={!check?.canAccept || undefined}
+            aria-describedby={!check?.canAccept ? reasonId : undefined}
+            onClick={() => check?.canAccept && accept(false)}
+          >
             Accept as a draft
           </button>
-          <button type="button" disabled={!check?.canAcceptAsReference} onClick={() => accept(true)}>
+          <button
+            type="button"
+            aria-disabled={!check?.canAcceptAsReference || undefined}
+            aria-describedby={!check?.canAcceptAsReference ? reasonId : undefined}
+            onClick={() => check?.canAcceptAsReference && accept(true)}
+          >
             Accept as reference
           </button>
           <button type="button" onClick={ignore}>

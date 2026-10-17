@@ -888,12 +888,14 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   expect(ember.querySelector('dl[aria-label="What was read"]')!.textContent).toMatch(/level2schoolevocationcastingtimeAction/);
   await user.click(within(ember).getByRole('button', { name: 'Open page 2' }));
   expect((await screen.findByRole('alert')).textContent).toMatch(/needs the TomeStack desktop app/);
-  const acceptEmber = within(ember).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
-  await waitFor(() => expect(acceptEmber.disabled).toBe(false));
+  const acceptEmber = within(ember).getByRole('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptEmber.getAttribute('aria-disabled')).toBeNull());
   await user.click(acceptEmber);
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Ember Lance is now a draft in the studio/));
   // It left the "to review" list with its details, so focus goes back to the list (WCAG 2.4.3).
   await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('heading', { name: 'Candidates from E2E Grimoire' })));
+  // The review says what happens next and offers the studio (item 2); the flow below still goes by the sidebar.
+  expect(within(panel()).getByRole('button', { name: 'Open E2E Grimoire in the studio' })).toBeTruthy();
 
   // Ignore the other spell.
   await user.click(await within(list()).findByRole('button', { name: 'Fixture Frost Veil' }));
@@ -906,7 +908,7 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   const stormcall = await detail('Fixture Stormcall');
   expect(within(within(stormcall).getByRole('group', { name: 'Unresolved references' })).getByRole('checkbox', { name: 'Dismiss Fixture Thunder Word' })).toBeTruthy();
   await within(stormcall).findByRole('list', { name: 'Blocks accepting' });
-  expect(within(stormcall).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' }).disabled).toBe(true);
+  expect(within(stormcall).getByRole('button', { name: 'Accept as a draft' }).getAttribute('aria-disabled')).toBe('true');
   await user.click(within(stormcall).getByRole('button', { name: 'Accept as reference' }));
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Stormcall is now a draft reference entry/));
 
@@ -914,8 +916,8 @@ it('reads the fixture PDF, reviews its candidates, and publishes an accepted one
   await user.selectOptions(kind, 'feat');
   await user.click(await within(list()).findByRole('button', { name: 'Fixture Keen Watcher' }));
   const feat = await detail('Fixture Keen Watcher');
-  const acceptFeat = within(feat).getByRole<HTMLButtonElement>('button', { name: 'Accept as a draft' });
-  await waitFor(() => expect(acceptFeat.disabled).toBe(false));
+  const acceptFeat = within(feat).getByRole('button', { name: 'Accept as a draft' });
+  await waitFor(() => expect(acceptFeat.getAttribute('aria-disabled')).toBeNull());
   await user.click(acceptFeat);
   await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Fixture Keen Watcher is now a draft/));
 

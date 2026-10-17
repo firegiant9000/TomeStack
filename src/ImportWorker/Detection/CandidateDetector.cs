@@ -171,6 +171,41 @@ public static partial class CandidateDetector
 
     private static readonly HashSet<string> SmallWords = new(StringComparer.Ordinal) { "of", "the", "and", "a", "an", "to", "in", "on", "with", "for", "or" };
 
+    /// <summary>
+    /// A name printed in capitals ("FIXTURE BLADE OF DUSK") becomes title case ("Fixture Blade of Dusk"), with small words in
+    /// lower case after the first. A name with any lower-case letter, or with fewer than three letters, is returned as it is.
+    /// </summary>
+    private static string TitleCase(string name)
+    {
+        var letters = 0;
+        foreach (var c in name)
+        {
+            if (char.IsLower(c))
+                return name;
+            if (char.IsLetter(c))
+                letters++;
+        }
+        if (letters < 3)
+            return name;
+        var text = new StringBuilder(name.Length);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var c = name[i];
+            var startsWord = i == 0 || !(char.IsLetter(name[i - 1]) || name[i - 1] is '\'' or '’');
+            text.Append(startsWord ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
+        }
+        var words = text.ToString().Split(' ');
+        for (var i = 1; i < words.Length; i++)
+        {
+            if (SmallWords.Contains(words[i].ToLowerInvariant()))
+                words[i] = words[i].ToLowerInvariant();
+        }
+        return string.Join(' ', words);
+    }
+
+    /// <summary>A price inside an item name or a sentence fragment ("…, which counts as") is a table cell misread as a name.</summary>
+    private static bool IsJunkItemName(string name) => JunkItemName().IsMatch(name);
+
     /// <summary>A heading-like line: a name whose words (apart from small ones) all start with a capital letter.</summary>
     private static bool IsTitleCase(string line) =>
         LooksLikeName(line) && line.Split(' ', StringSplitOptions.RemoveEmptyEntries).All(w => SmallWords.Contains(w) || char.IsUpper(w[0]) || !char.IsLetter(w[0]));
@@ -186,8 +221,17 @@ public static partial class CandidateDetector
     {
         if (context.SourceFamilies.Contains(layout))
             return ([layout], []);
-        return (context.SourceFamilies, [$"The layout looks like {layout}, which this source does not declare; the source's families are used."]);
+        return (context.SourceFamilies, [$"The layout looks like {layout}, which is outside the families this reading is for; those families are used."]);
     }
+
+    /// <summary>
+    /// 2026-10-14 item 3: a layout-neutral kind (armour rows, class tables) takes the context's family when there is one.
+    /// With two, the reviewer says which: no family is proposed, and the field is marked unsure.
+    /// </summary>
+    private static (IReadOnlyList<string> Families, List<string> Notes, bool Unsure) NeutralFamily(DetectionContext context) =>
+        context.SourceFamilies.Count == 1
+            ? ([context.SourceFamilies[0]], [], false)
+            : ([], ["Say which rules family this is written for before accepting."], true);
 
     /// <summary>The description after a header: the following blocks until the next header or heading, at most 80 lines.</summary>
     private static List<string> Description(List<Unit> units, int start, double body, Func<Unit, bool> isHeader, out int endPage)
@@ -235,13 +279,13 @@ public static partial class CandidateDetector
             {
                 var level = modern.Groups["level"].Success ? int.Parse(modern.Groups["level"].Value, CultureInfo.InvariantCulture) : 0;
                 var lists = modern.Groups["lists"].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(c => c.ToLowerInvariant()).ToList();
-                return new(unit.Lines[0], level, modern.Groups["school"].Value.ToLowerInvariant(), false, lists, RulesFamilies.Srd521, 1 + take);
+                return new(TitleCase(unit.Lines[0]), level, modern.Groups["school"].Value.ToLowerInvariant(), false, lists, RulesFamilies.Srd521, 1 + take);
             }
         }
         if (Spell51().Match(unit.Lines[1]) is { Success: true } old)
         {
             var level = old.Groups["level"].Success ? int.Parse(old.Groups["level"].Value, CultureInfo.InvariantCulture) : 0;
-            return new(unit.Lines[0], level, old.Groups["school"].Value.ToLowerInvariant(), old.Groups["ritual"].Success, [], RulesFamilies.Srd51, 2);
+            return new(TitleCase(unit.Lines[0]), level, old.Groups["school"].Value.ToLowerInvariant(), old.Groups["ritual"].Success, [], RulesFamilies.Srd51, 2);
         }
         return null;
     }
@@ -360,21 +404,49 @@ public static partial class CandidateDetector
             string? prerequisite;
             string layout;
             var descriptionStart = i + 1;
+            var oneBlockLayout = false;
+            IEnumerable<string> ownRest = [];
             if (unit.Lines.Length >= 2 && LooksLikeName(unit.Lines[0]) && Feat521().Match(string.Join(' ', unit.Lines.Skip(1))) is { Success: true } modern)
             {
-                (name, category, prerequisite, layout) = (unit.Lines[0], modern.Groups["category"].Value, modern.Groups["prerequisite"].Success ? modern.Groups["prerequisite"].Value : null, RulesFamilies.Srd521);
+                (name, category, prerequisite, layout) = (TitleCase(unit.Lines[0]), modern.Groups["category"].Value, modern.Groups["prerequisite"].Success ? modern.Groups["prerequisite"].Value : null, RulesFamilies.Srd521);
             }
-            else if (IsHeading(unit, body) && unit.Lines.Length == 1 && i + 1 < units.Count && units[i + 1].Lines[0].StartsWith("Prerequisite:", StringComparison.Ordinal))
+            else if (IsHeading(unit, body) && unit.Lines.Length == 1 && i + 1 < units.Count && PrerequisitesLine().Match(units[i + 1].Lines[0]) is { Success: true } following)
             {
-                (name, category, prerequisite, layout) = (unit.Lines[0], "Feat", units[i + 1].Lines[0]["Prerequisite:".Length..].Trim(), RulesFamilies.Srd51);
+                (name, category, prerequisite, layout) = (TitleCase(unit.Lines[0]), "Feat", following.Groups["p"].Value.Trim(), RulesFamilies.Srd51);
+                // The singular label is the SRD 5.1 layout; the plural is the non-SRD marker (ruling R22), so the family is the reviewer's.
+                oneBlockLayout = units[i + 1].Lines[0].StartsWith("Prerequisites:", StringComparison.Ordinal);
                 descriptionStart = i + 2;
+            }
+            else if (OneBlockFeat(unit) is { } oneBlock)
+            {
+                // A third-party layout: the name, then "Prerequisites: …", then the description, all in one block.
+                // It matches neither SRD layout, so its family is the reviewer's to give (ruling R22).
+                (name, category, prerequisite, layout) = (TitleCase(unit.Lines[0]), "Feat", oneBlock.Groups["p"].Value.Trim(), RulesFamilies.Srd51);
+                oneBlockLayout = true;
+                ownRest = unit.Lines.Skip(2);
             }
             else
                 continue;
 
             var description = Description(units, descriptionStart, body, u => IsFeatHeader(u) || ReadSpellHeader(u) is not null || FeatureHeader(u) is not null, out var endPage);
+            var excerptLines = unit.Lines.Concat(description).ToList();
+            var own = ownRest.ToList();
+            if (own.Count > 0 && description.Count > 0)
+                own.Add("");
+            description = [.. own, .. description];
             var text = Paragraphs(description);
-            var (families, uncertainties) = Family(layout, context);
+            IReadOnlyList<string> families;
+            List<string> uncertainties;
+            var low = new List<string>();
+            if (oneBlockLayout)
+            {
+                var (neutral, notes, unsure) = NeutralFamily(context);
+                (families, uncertainties) = (neutral, notes);
+                if (unsure)
+                    low.Add("rulesFamilies");
+            }
+            else
+                (families, uncertainties) = Family(layout, context);
             var effects = new List<Effect>();
             foreach (Match bonus in Bonus().Matches(text))
             {
@@ -386,7 +458,6 @@ public static partial class CandidateDetector
                 if (CharacterCalculator.Skills.FirstOrDefault(s => s.Label.Equals(skill.Groups["skill"].Value, StringComparison.OrdinalIgnoreCase)) is { Key: { } key })
                     effects.Add(new GrantEffect { Id = $"skill-{key}", Grant = GrantKind.Proficiency, Target = FieldIds.Skill(key) });
             }
-            var low = new List<string>();
             if (text.Contains("choice", StringComparison.OrdinalIgnoreCase) || text.Contains("choose", StringComparison.OrdinalIgnoreCase))
             {
                 uncertainties.Add("The feat offers a choice; the proposed effects cover only what is fixed.");
@@ -401,7 +472,7 @@ public static partial class CandidateDetector
             if (prerequisite is not null)
                 fields["prerequisite"] = prerequisite;
             yield return new DraftCandidate(
-                Guid.NewGuid(), context.SourceId, new PageRef(unit.Page, endPage > unit.Page ? endPage : null), Excerpt(unit.Lines.Concat(description)),
+                Guid.NewGuid(), context.SourceId, new PageRef(unit.Page, endPage > unit.Page ? endPage : null), Excerpt(excerptLines),
                 ContentKind.Feat, name, families, effects, Clamp(text.Length == 0 ? 0.6 : 0.85), uncertainties)
             {
                 Fields = fields,
@@ -413,7 +484,17 @@ public static partial class CandidateDetector
     }
 
     private static bool IsFeatHeader(Unit unit) =>
-        unit.Lines.Length >= 2 && LooksLikeName(unit.Lines[0]) && Feat521().IsMatch(string.Join(' ', unit.Lines.Skip(1)));
+        unit.Lines.Length >= 2 && ((LooksLikeName(unit.Lines[0]) && Feat521().IsMatch(string.Join(' ', unit.Lines.Skip(1)))) || OneBlockFeat(unit) is not null);
+
+    /// <summary>
+    /// A block whose first line is a name and whose second line is the plural "Prerequisites: …" (the singular form heads
+    /// option lists such as the SRDs' Eldritch Invocations, which are not feats). A body paragraph that merely starts
+    /// with "Prerequisites:" has no name line above it in its block, so it is never a feat on its own. The prerequisite
+    /// may be at most 400 characters.
+    /// </summary>
+    private static Match? OneBlockFeat(Unit unit) =>
+        unit.Lines.Length >= 2 && unit.Lines[1].StartsWith("Prerequisites:", StringComparison.Ordinal) && LooksLikeName(unit.Lines[0])
+            && PrerequisitesLine().Match(unit.Lines[1]) is { Success: true, Groups: var groups } m && groups["p"].Length <= 400 ? m : null;
 
     // ---- class features ----
 
@@ -424,7 +505,7 @@ public static partial class CandidateDetector
         if (LevelFeature().Match(unit.Lines[0]) is { Success: true } modern)
             return new(modern.Groups["name"].Value.Trim(), int.Parse(modern.Groups["level"].Value, CultureInfo.InvariantCulture), null, RulesFamilies.Srd521, [.. unit.Lines.Skip(1)]);
         if (unit.Lines.Length >= 2 && LooksLikeName(unit.Lines[0]) && OwnedFeature().Match(unit.Lines[1]) is { Success: true } owned)
-            return new(unit.Lines[0], int.Parse(owned.Groups["level"].Value, CultureInfo.InvariantCulture), owned.Groups["owner"].Value, RulesFamilies.Srd521, [.. unit.Lines.Skip(2)]);
+            return new(TitleCase(unit.Lines[0]), int.Parse(owned.Groups["level"].Value, CultureInfo.InvariantCulture), owned.Groups["owner"].Value, RulesFamilies.Srd521, [.. unit.Lines.Skip(2)]);
         return null;
     }
 
@@ -446,11 +527,14 @@ public static partial class CandidateDetector
             else if (unit.Block.FontSize >= body * 1.8)
                 inClassSection = false;
 
+            if (OneBlockFeat(unit) is not null)
+                continue; // a feat (Feats), not also a class feature
+
             var start = FeatureHeader(unit);
             var descriptionStart = i + 1;
             var levelUnknown = false;
             if (start is null && IsHeading(unit, body) && unit.Lines.Length == 1 && LooksLikeName(unit.Lines[0]) && !SectionHeadings.Contains(unit.Lines[0])
-                && !unit.Lines[0].StartsWith("The ", StringComparison.Ordinal) && i + 1 < units.Count) // "The Bard" titles a class table
+                && !unit.Lines[0].StartsWith("The ", StringComparison.OrdinalIgnoreCase) && i + 1 < units.Count) // "The Bard" titles a class table
             {
                 // SRD 5.1: a bold heading whose first sentence gives the level ("Starting at 2nd level, …"), or any such
                 // heading inside a "Class Features" section (a level-1 feature does not say its level).
@@ -524,7 +608,7 @@ public static partial class CandidateDetector
             }
             else
                 continue;
-            if (!LooksLikeCellName(name) || name.Contains("Weapons", StringComparison.Ordinal))
+            if (!LooksLikeCellName(name) || name.Contains("Weapons", StringComparison.Ordinal) || IsJunkItemName(name))
                 continue;
 
             var category = CategoryAbove(lines, line, WeaponSection());
@@ -602,7 +686,7 @@ public static partial class CandidateDetector
             }
             else
                 continue;
-            if (!LooksLikeName(name) || name.Contains("Armor Class", StringComparison.Ordinal))
+            if (!LooksLikeName(name) || name.Contains("Armor Class", StringComparison.Ordinal) || IsJunkItemName(name))
                 continue;
             var section = CategoryAbove(lines, line, ArmorCategoryLine());
             var shield = ac.StartsWith('+');
@@ -618,8 +702,10 @@ public static partial class CandidateDetector
                 uncertainties.Add("No 'Light', 'Medium' or 'Heavy Armor' heading was found above the row; the category comes from the Armor Class column.");
                 low.Add("category");
             }
-            var (families, familyNotes) = Family(context.SourceFamilies.Count == 1 ? context.SourceFamilies[0] : RulesFamilies.Srd521, context);
+            var (families, familyNotes, familyUnsure) = NeutralFamily(context);
             uncertainties.AddRange(familyNotes);
+            if (familyUnsure)
+                low.Add("rulesFamilies");
             yield return new DraftCandidate(
                 Guid.NewGuid(), context.SourceId, new PageRef(page.Page), Excerpt([string.Join("  ", SameRow(lines, line).Select(c => c.Text))]),
                 ContentKind.Item, name, families,
@@ -634,11 +720,15 @@ public static partial class CandidateDetector
 
     // ---- class feature tables ----
 
+    /// <summary>The table's last header cell: "Features" or "Class Features" in Title case, or in all capitals; not lower case.</summary>
+    private static bool IsFeaturesCell(string text) =>
+        text.EndsWith("Features", StringComparison.Ordinal) || text.EndsWith("FEATURES", StringComparison.Ordinal);
+
     private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context)
     {
         // "The Bard" (SRD 5.1) or "Bard Features" (SRD 5.2.1); "Class Features" and "Bard Class Features" are section headings.
         var titles = pageUnits.Select(u => u.Lines[0]).Select(t => ClassTableTitle().Match(t)).Where(m => m.Success)
-            .Select(m => m.Groups["name"].Value.Trim()).Select(n => n.EndsWith(" Class", StringComparison.Ordinal) ? n[..^" Class".Length] : n)
+            .Select(m => TitleCase(m.Groups["name"].Value.Trim())).Select(n => n.EndsWith(" Class", StringComparison.Ordinal) ? n[..^" Class".Length] : n)
             .Where(n => n.Length > 0 && n != "Class").ToList();
         if (titles.Count == 0)
             return [];
@@ -646,12 +736,12 @@ public static partial class CandidateDetector
         var byLevel = new SortedDictionary<int, List<string>>();
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
-        var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text == "Level" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20)
-            && SameRow(lines, l).Any(c => c.Text.EndsWith("Features", StringComparison.Ordinal) && c.X > l.X));
+        var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
+            && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X));
         if (header is not null)
         {
             // Columns: rows are keyed by the level column; wrapped feature lines belong to the row just above them.
-            var featuresHeader = SameRow(lines, header).First(c => c.Text.EndsWith("Features", StringComparison.Ordinal) && c.X > header.X);
+            var featuresHeader = SameRow(lines, header).First(c => IsFeaturesCell(c.Text) && c.X > header.X);
             var levels = lines.Select(l => l.Line).Where(l => Math.Abs(l.X - header.X) < 15 && l.Y < header.Y && LevelCell().IsMatch(l.Text)).OrderByDescending(l => l.Y).ToList();
             foreach (var cell in lines.Select(l => l.Line).Where(l => l.X >= featuresHeader.X - 5 && l.X < featuresHeader.X + 150 && l.Y < header.Y))
             {
@@ -673,7 +763,7 @@ public static partial class CandidateDetector
             return [];
         var features = byLevel.ToDictionary(r => r.Key, r => Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
         var references = features.Values.SelectMany(f => f).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
-        var (families, uncertainties) = Family(context.SourceFamilies.Count == 1 ? context.SourceFamilies[0] : RulesFamilies.Srd521, context);
+        var (families, uncertainties, familyUnsure) = NeutralFamily(context);
         uncertainties.Add("A class is proposed from its features table only: add its hit die, proficiencies and grants by hand, or accept it as reference.");
         return
         [
@@ -683,7 +773,7 @@ public static partial class CandidateDetector
             {
                 Fields = features.ToDictionary(f => $"level {f.Key}", f => string.Join(", ", f.Value), StringComparer.Ordinal),
                 UnresolvedReferences = references,
-                LowConfidenceFields = ["effects"],
+                LowConfidenceFields = familyUnsure ? ["effects", "rulesFamilies"] : ["effects"],
             },
         ];
     }
@@ -762,8 +852,19 @@ public static partial class CandidateDetector
     [GeneratedRegex(@"^(?:Light|Medium|Heavy) Armor\b|^Shield\b", RegexOptions.None, 100)]
     private static partial Regex ArmorCategoryLine();
 
-    [GeneratedRegex(@"^(?:The (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) Features)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:(?:The|THE) (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) (?:Features|FEATURES))$", RegexOptions.None, 100)]
     private static partial Regex ClassTableTitle();
+
+    /// <summary>A feat's prerequisite line: "Prerequisite: …" or "Prerequisites: …".</summary>
+    [GeneratedRegex(@"^Prerequisites?:\s*(?<p>.+)$", RegexOptions.None, 100)]
+    private static partial Regex PrerequisitesLine();
+
+    /// <summary>
+    /// An item name that holds a price ("5 gp") or continues as a sentence (", which counts as": a comma, then two or more
+    /// lower-case words). One word after the comma stays a name: the SRD's "Crossbow, hand".
+    /// </summary>
+    [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, 100)]
+    private static partial Regex JunkItemName();
 
     [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
     private static partial Regex LevelCell();

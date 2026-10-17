@@ -47,6 +47,8 @@ interface Props {
   info: AppInfo;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  /** Opened from the import review: show this source (if it is a homebrew one) and take focus (WCAG 2.4.3). */
+  initialSourceId?: string;
 }
 
 /**
@@ -55,9 +57,15 @@ interface Props {
  * control writes a declarative effect (ADR-003), and publishing validates again. No character changes until its own
  * reviewed update.
  */
-export function HomebrewStudio({ info, onError, onStatus }: Props) {
+export function HomebrewStudio({ info, onError, onStatus, initialSourceId }: Props) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [sourceId, setSourceId] = useState('');
+  // An unknown id falls back to the first source below, as an empty id does.
+  const [sourceId, setSourceId] = useState(initialSourceId ?? '');
+  const heading = useRef<HTMLHeadingElement>(null);
+  // From the sidebar the button keeps focus; arriving from another screen (its button is gone) the heading takes it.
+  useEffect(() => {
+    if (initialSourceId) heading.current?.focus();
+  }, [initialSourceId]);
   const [entries, setEntries] = useState<StudioEntry[]>([]);
   const [editing, setEditing] = useState<ContentRevision>();
   const [published, setPublished] = useState<{ result: PublishResult; name: string }>();
@@ -139,7 +147,9 @@ export function HomebrewStudio({ info, onError, onStatus }: Props) {
 
   return (
     <section className="panel" aria-labelledby="studio-heading">
-      <h2 id="studio-heading">Homebrew studio</h2>
+      <h2 id="studio-heading" tabIndex={-1} ref={heading}>
+        Homebrew studio
+      </h2>
       <p className="hint">
         Write your own classes, subclasses, features, feats and items. Everything starts as a draft; publishing checks it and creates a
         new revision. Characters keep their current revision until you review and apply an update.
