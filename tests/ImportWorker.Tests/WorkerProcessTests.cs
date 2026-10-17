@@ -236,6 +236,35 @@ public class WorkerProcessTests
     }
 
     [Fact]
+    public async Task A_formFields_request_carries_the_clip_names_to_the_worker_which_cuts_the_value()
+    {
+        // R78: the worker reads before any layout is recognised, so the clip names travel in the form limits.
+        var form = new FormLimits { MaxValueChars = 20, ClipFields = ["fixture.prose"] };
+        using var file = FixturePdfs.Write(FormPdfWriter.Write([new("fixture.prose", new string('F', 30)), new("fixture.other", "Testy")]));
+
+        var fields = await new WorkerFormReader(Worker, form: form).ReadAsync(file.Path, CancellationToken.None);
+
+        Assert.Equal((20, true), (fields[0].Value!.Length, fields[0].Clipped));
+        Assert.False(fields[1].Clipped);
+    }
+
+    [Theory]
+    [InlineData("fixture.plain", 21, false)] // over the limit, not a clip name
+    [InlineData("fixture.prose", 21, false)] // a clip name, but the worker did not cut it
+    [InlineData("fixture.plain", 20, true)] // flagged as cut, but not a clip name
+    public async Task A_formFields_worker_that_breaks_the_clip_contract_is_a_protocol_error(string name, int length, bool clipped)
+    {
+        var form = new FormLimits { MaxFields = 1, MaxValueChars = 20, ClipFields = ["fixture.prose"] };
+        var field = $"{{\"name\":\"{name}\",\"type\":\"text\",\"value\":\"{new string('F', length)}\"{(clipped ? ",\"clipped\":true" : "")}}}";
+        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", $"{{\"type\":\"fields\",\"fields\":[{field}]}}", "{\"type\":\"done\"}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, form: form).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal("worker.protocol", refused.Code);
+    }
+
+    [Fact]
     public async Task An_unknown_request_kind_is_a_bad_request()
     {
         using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));

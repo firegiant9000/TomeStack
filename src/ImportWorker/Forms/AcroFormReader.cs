@@ -43,7 +43,7 @@ public static class AcroFormReader
             var fields = new List<FormField>(pending.Count);
             foreach (var (_, readField) in pending)
             {
-                var read = readField();
+                var read = form.Clip(readField());
                 total += form.Chars(read) ?? throw TooLong(form);
                 if (total > form.MaxTotalValueChars)
                     throw new ExtractionException("ddb.value-too-long", $"The form fields hold more than {form.MaxTotalValueChars} characters in total.");

@@ -87,7 +87,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         {
             // JSON can send null where the record says it cannot.
             if (field?.Name is null || field.Type is null || !Types.Contains(field.Type) || field.Page is < 1 || field.Page > _limits.MaxPages
-                || field.Selected?.Any(s => s is null) == true || _form.Chars(field) is not { } chars)
+                || field.Selected?.Any(s => s is null) == true || !_form.ClipFlagHolds(field) || _form.Chars(field) is not { } chars)
                 return false;
             total += chars;
         }
