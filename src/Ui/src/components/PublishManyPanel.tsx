@@ -175,6 +175,8 @@ export function PublishManyPanel({ source, pending, onError, onClose, onPublishe
       const outcome = await client.publishMany(
         entries.map((e) => e.draft.contentId),
         entries.map((e) => e.draft.revisionId),
+        // The dependents the preview showed are part of what was confirmed.
+        Object.fromEntries(preview.dependents.map((d) => [d.draft.contentId, d.draft.revisionId])),
       );
       setDone({ drafts: entries.length, republished: Math.max(0, outcome.published.length - entries.length) });
       onPublished(entries.length);

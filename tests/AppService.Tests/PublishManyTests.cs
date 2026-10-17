@@ -293,6 +293,71 @@ public class PublishManyTests(ITestOutputHelper output)
         w.App.PublishMany(w.Confirmed(newer, b));
     }
 
+    private static PublishManyRequest Pinned(PublishManyRequest request, PublishManyPreview preview) =>
+        request with { ExpectedDependents = preview.Dependents.ToDictionary(d => d.Draft.ContentId, d => d.Draft.RevisionId) };
+
+    [Fact]
+    public void A_dependent_published_after_the_preview_refuses_the_confirmed_publish_and_writes_nothing()
+    {
+        // Review fix (item 9, D33): the dependents the preview showed are part of what was confirmed.
+        using var w = new World();
+        var leaf = w.Save(w.New(ContentKind.Feature, "Testy Leaf", World.Init("1")));
+        w.Published(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(leaf)));
+        var preview = w.App.PreviewPublishMany([leaf.ContentId]);
+        Assert.Single(preview.Dependents);
+        w.Published(w.New(ContentKind.Class, "Testy Ranger", new HitDieEffect { Id = "hit-die", Die = 10 }, World.GrantOf(leaf))); // a new dependent, after the preview
+        var count = w.RevisionCount;
+
+        Assert.Equal("content.publish-set-changed", Code(() => w.App.PublishMany(Pinned(w.Confirmed(leaf), preview))));
+
+        Assert.Equal(count, w.RevisionCount);
+        Assert.Equal(RevisionStatus.Draft, w.Newest(leaf.ContentId).Status);
+    }
+
+    [Fact]
+    public void A_dependent_with_a_newer_revision_since_the_preview_refuses_the_confirmed_publish()
+    {
+        using var w = new World();
+        var leaf = w.Save(w.New(ContentKind.Feature, "Testy Leaf", World.Init("1")));
+        var cls = w.Published(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(leaf)));
+        var preview = w.App.PreviewPublishMany([leaf.ContentId]);
+        w.Published(w.Newest(cls.ContentId) with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Summary = "Testy later edit" });
+        var count = w.RevisionCount;
+
+        Assert.Equal("content.publish-set-changed", Code(() => w.App.PublishMany(Pinned(w.Confirmed(leaf), preview))));
+
+        Assert.Equal(count, w.RevisionCount);
+    }
+
+    [Fact]
+    public void The_previews_dependents_unchanged_publish_and_a_request_without_them_keeps_the_old_behaviour()
+    {
+        using var w = new World();
+        var leaf = w.Save(w.New(ContentKind.Feature, "Testy Leaf", World.Init("1")));
+        w.Published(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(leaf)));
+        var preview = w.App.PreviewPublishMany([leaf.ContentId]);
+
+        var result = w.App.PublishMany(Pinned(w.Confirmed(leaf), preview));
+        Assert.Equal(2, result.Published.Count);
+
+        var other = w.Save(w.New(ContentKind.Feature, "Testy Other", World.Init("2")));
+        w.Published(w.New(ContentKind.Class, "Testy Warden", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(other)));
+        w.Published(w.New(ContentKind.Class, "Testy Keeper", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(other)));
+        Assert.Equal(3, w.App.PublishMany(w.Confirmed(other)).Published.Count); // no ExpectedDependents: not compared
+    }
+
+    [Fact]
+    public void A_preview_with_no_dependents_pins_none_and_a_dependent_added_later_refuses()
+    {
+        using var w = new World();
+        var leaf = w.Save(w.New(ContentKind.Feature, "Testy Leaf", World.Init("1")));
+        var preview = w.App.PreviewPublishMany([leaf.ContentId]);
+        Assert.Empty(preview.Dependents);
+        w.Published(w.New(ContentKind.Class, "Testy Scout", new HitDieEffect { Id = "hit-die", Die = 8 }, World.GrantOf(leaf)));
+
+        Assert.Equal("content.publish-set-changed", Code(() => w.App.PublishMany(Pinned(w.Confirmed(leaf), preview))));
+    }
+
     [Fact]
     public void A_dependent_that_would_fail_after_repointing_blocks_the_preview_and_the_publish_writes_nothing()
     {

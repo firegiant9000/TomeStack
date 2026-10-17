@@ -174,12 +174,27 @@ it('publishes the ticked ids with their pending revision ids, ignores a second p
   await user.click(button);
   await user.click(button);
 
-  expect(client.publishMany).toHaveBeenCalledExactlyOnceWith(['c1', 'c3'], ['d1', 'd3']);
+  expect(client.publishMany).toHaveBeenCalledExactlyOnceWith(['c1', 'c3'], ['d1', 'd3'], {});
   await act(async () => finish({ published: [] }));
   const result = await screen.findByText('Published 2 drafts.');
   expect(document.activeElement).toBe(result);
   expect(result.getAttribute('role')).toBeNull(); // the app has the one role=status
   expect(onPublished).toHaveBeenCalledExactlyOnceWith(2);
+});
+
+it('sends the dependents the preview returned, as content id to revision id', async () => {
+  const user = userEvent.setup();
+  const all = [pendingOf(1)];
+  const dependent = entryOf({ ...pendingOf(9, true), name: 'Testy Class' });
+  vi.mocked(client.publishManyPreview).mockResolvedValue(previewOf([entryOf(all[0]!)], { dependents: [dependent, entryOf(pendingOf(8))] }));
+  vi.mocked(client.publishMany).mockResolvedValue({ published: [] });
+  renderPanel(all);
+  const button = await screen.findByRole('button', { name: 'Publish 1 draft' });
+  await vi.waitFor(() => expect(held(button)).toBe(false));
+
+  await user.click(button);
+
+  expect(client.publishMany).toHaveBeenCalledExactlyOnceWith(['c1'], ['d1'], { c9: 'd9', c8: 'd8' });
 });
 
 it('shows what a replacing draft changes, from content.compare', async () => {
