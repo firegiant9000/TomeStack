@@ -660,6 +660,24 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<ContentRevision> ListRevisionsInOrder() =>
         Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY rowid;");
 
+    /// <summary>
+    /// The newest published revision (insertion order) of each content, but only those whose stored JSON holds an effect of one of
+    /// <paramref name="effectTypes"/>. The newest-per-content choice and the status are made in SQL (the status column), and only
+    /// the matching rows are deserialized, in insertion order; the compact JSON writes an effect's type as <c>"type":"name"</c>.
+    /// </summary>
+    public IReadOnlyList<ContentRevision> ListNewestPublishedWithEffects(IReadOnlyList<string> effectTypes)
+    {
+        ArgumentNullException.ThrowIfNull(effectTypes);
+        if (effectTypes.Count == 0)
+            return [];
+        var clause = string.Join(" OR ", effectTypes.Select((_, i) => $"json LIKE $t{i}"));
+        var parameters = effectTypes.Select((t, i) => ($"$t{i}", (object)$"%\"type\":\"{t}\"%")).ToArray();
+        return Query<ContentRevision>(
+            "SELECT json FROM content_revisions WHERE rowid IN (SELECT MAX(rowid) FROM content_revisions WHERE status = 'Published' GROUP BY content_id) " +
+            $"AND ({clause}) ORDER BY rowid;",
+            parameters);
+    }
+
     public IReadOnlyList<ContentRevision> ListRevisions() =>
         Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY content_id, revision_id;");
 

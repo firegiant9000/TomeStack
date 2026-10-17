@@ -10,6 +10,15 @@ namespace TomeStack.AppService.Tests;
 /// </summary>
 public class CandidateReviewTests
 {
+    /// <summary>
+    /// The fixture book's candidates: page 2 two, page 3 two, page 4 four, page 5 the Warden and its two feature stubs, page 7 the
+    /// Lamplighter and the seven features its table names (Fixture Glow is a block of the book, the other six are stubs; the SRD
+    /// installs several features named "Spellcasting", so it is not one installed feature and gets a stub too, R67).
+    /// </summary>
+    private const int PageSevenCandidates = 8;
+
+    private const int ExpectedCandidates = 2 + 2 + 4 + 3 + PageSevenCandidates;
+
     private static (TempApp Temp, Guid SourceId, Guid JobId) Imported()
     {
         var temp = new TempApp();
@@ -24,6 +33,80 @@ public class CandidateReviewTests
         temp.App.ListCandidates(new(jobId)).Single(c => c.Candidate.ProposedName == name);
 
     private static string Code(Action action) => Assert.Throws<AppValidationException>(action).Problems[0].Code;
+
+    [Fact]
+    public void The_list_pages_in_page_then_name_order_and_the_total_counts_the_filtered_set()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+        var everything = temp.App.ListCandidates(new(jobId)).Select(c => c.Id).ToList();
+        var total = everything.Count;
+        Assert.Equal(ExpectedCandidates, total);
+
+        var pages = Enumerable.Range(0, (total + 3) / 4).Select(i => temp.App.ListCandidatesPage(new(jobId, Offset: i * 4, Limit: 4))).ToList();
+        var past = temp.App.ListCandidatesPage(new(jobId, Offset: total, Limit: 4));
+
+        Assert.Equal(total, pages[0].Total);
+        Assert.Equal(everything, [.. pages.SelectMany(p => p.Items).Select(c => c.Id)]);
+        Assert.Equal([.. Enumerable.Repeat(4, total / 4), .. total % 4 == 0 ? [] : new[] { total % 4 }], pages.Select(p => p.Items.Count));
+        Assert.Equal((0, total), (past.Items.Count, past.Total));
+
+        var spells = temp.App.ListCandidatesPage(new(jobId, Kind: ContentKind.Spell, Offset: 1, Limit: 1));
+        Assert.Equal(2, spells.Total); // the filtered set, not the job
+        Assert.Equal(["Fixture Frost Veil"], spells.Items.Select(c => c.Current.ProposedName));
+
+        // No paging asked for: the first 50 (all of them here).
+        var defaults = temp.App.ListCandidatesPage(new(jobId));
+        Assert.Equal((total, total), (defaults.Items.Count, defaults.Total));
+    }
+
+    [Fact]
+    public void A_page_range_keeps_candidates_that_touch_it_and_page_is_the_same_as_both_ends()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+
+        Assert.Equal(2, temp.App.ListCandidatesPage(new(jobId, LastPage: 2)).Total);
+        Assert.Equal(ExpectedCandidates - 4, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4)).Total); // all but pages 2 and 3
+        Assert.Equal(6, temp.App.ListCandidatesPage(new(jobId, FirstPage: 3, LastPage: 4)).Total);
+        Assert.Equal(PageSevenCandidates, temp.App.ListCandidatesPage(new(jobId, FirstPage: 6)).Total); // page 6 has no text; page 7 is the class page
+        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 8)).Total);
+        Assert.Equal(0, temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 3)).Total);
+        Assert.Equal(
+            temp.App.ListCandidatesPage(new(jobId, FirstPage: 4, LastPage: 4)).Items.Select(c => c.Id),
+            temp.App.ListCandidatesPage(new(jobId, Page: 4)).Items.Select(c => c.Id));
+        Assert.Equal(4, temp.App.ListCandidates(new(jobId, Page: 4)).Count);
+        // A range plus a kind: both apply.
+        Assert.Equal(1, temp.App.ListCandidatesPage(new(jobId, FirstPage: 3, LastPage: 4, Kind: ContentKind.Feat)).Total);
+    }
+
+    [Fact]
+    public void A_limit_over_200_or_a_bad_offset_is_refused_and_nothing_is_read()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+
+        Assert.Equal(ExpectedCandidates, temp.App.ListCandidatesPage(new(jobId, Limit: 200)).Items.Count); // 200 is allowed
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 201))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Limit: 0))));
+        Assert.Equal("import.offset-out-of-range", Code(() => temp.App.ListCandidatesPage(new(jobId, Offset: -1))));
+    }
+
+    [Fact]
+    public void The_candidates_command_returns_items_and_total()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _ = temp;
+        Assert.Contains("import.candidates", CommandDispatcher.Commands);
+
+        using var response = System.Text.Json.JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(System.Text.Json.JsonSerializer.Serialize(
+            new { id = "1", command = "import.candidates", payload = new { jobId, kind = "spell", offset = 1, limit = 1 } }, RulesJson.Compact)));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        var data = response.RootElement.GetProperty("result");
+        Assert.Equal(2, data.GetProperty("total").GetInt32());
+        Assert.Equal(1, data.GetProperty("items").GetArrayLength());
+    }
 
     [Fact]
     public void A_clean_candidate_passes_the_check_and_becomes_an_inactive_draft_with_reference_effects()
@@ -80,7 +163,7 @@ public class CandidateReviewTests
     }
 
     [Fact]
-    public void Editing_clears_the_unsure_fields_and_dismissing_a_reference_unblocks_it()
+    public void Editing_clears_the_unsure_fields_and_a_class_whose_names_are_all_linked_can_then_be_accepted()
     {
         var (temp, _, jobId) = Imported();
         using var _t = temp;
@@ -90,14 +173,16 @@ public class CandidateReviewTests
         // 2026-10-14 item 3: a two-family source gives the class no family, so the reviewer sets one.
         var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         Assert.Empty(edited.Current.LowConfidenceFields);
-        Assert.Equal(["Fixture Focus", "Fixture Resolve"], edited.Current.UnresolvedReferences);
+        Assert.Empty(edited.Current.UnresolvedReferences); // item 11: the two names are feature stubs of the job now, linked from the class
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
-        Assert.False(temp.App.CheckCandidate(warden.Id).CanAccept);
 
-        temp.App.EditCandidate(new(warden.Id, DismissReferences: ["fixture focus", "Fixture Resolve"]));
+        // Item 11 (R55): the class links Fixture Stormcall, which still names a spell that is not installed; that blocks the class
+        // until the feature is settled (here, as reference). ClassAcceptTests covers the rest of the class accept.
+        Assert.False(temp.App.CheckCandidate(warden.Id).CanAccept);
+        temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
         var check = temp.App.CheckCandidate(warden.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => d.Code)));
-        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true)).Draft!)!;
+        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])).Draft!)!;
         Assert.Equal(("Fixture Warden (edited)", ContentKind.Class), (draft.Name, draft.Kind));
         Assert.Equal(10, draft.Effects.OfType<HitDieEffect>().Single().Die);
     }
@@ -284,6 +369,34 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void A_class_stores_the_features_it_grants_by_candidate_and_level_and_every_other_row_stores_none()
+    {
+        // Item 11 (R39): grantsCandidates is omitted when empty; a row stored before it existed reads as no links; no version change.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Named(temp, jobId, "Fixture Lamplighter");
+        var all = temp.App.ListCandidates(new(jobId)).ToDictionary(c => c.Id);
+
+        var grants = lamplighter.GrantsCandidates!;
+        Assert.Equal(9, grants.Count); // nine links in the table; "Spellcasting" is installed more than once, so it is a stub (R67)
+        Assert.Equal([1, 1, 2, 5, 7, 9, 11, 15, 20], grants.Select(g => g.Level));
+        Assert.All(grants, g => Assert.Equal(ContentKind.Feature, all[g.CandidateId].Candidate.ProposedKind));
+        Assert.Equal(1, StoredCandidate.CurrentSchemaVersion);
+        Assert.Equal(["Fixture Focus", "Fixture Resolve", "Fixture Stormcall"], Named(temp, jobId, "Fixture Warden").GrantsCandidates!.Select(g => all[g.CandidateId].Candidate.ProposedName));
+
+        var json = System.Text.Json.JsonSerializer.Serialize(lamplighter, RulesJson.Compact);
+        Assert.Contains("\"grantsCandidates\":[{\"candidateId\":", json);
+        Assert.Equal(grants, System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!.GrantsCandidates);
+
+        var plain = System.Text.Json.JsonSerializer.Serialize(Named(temp, jobId, "Fixture Quilted Coat"), RulesJson.Compact);
+        Assert.DoesNotContain("grantsCandidates", plain);
+        Assert.Null(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(plain, RulesJson.Compact)!.GrantsCandidates);
+
+        // An edit keeps the links.
+        Assert.Equal(grants, temp.App.EditCandidate(new(lamplighter.Id, Summary: "Edited text.")).GrantsCandidates);
+    }
+
+    [Fact]
     public void A_job_that_recorded_what_the_book_is_written_for_does_not_ask_again()
     {
         var temp = new TempApp();
@@ -381,5 +494,115 @@ public class CandidateReviewTests
         Assert.True(ready.CanAccept, string.Join("; ", ready.Blockers.Concat(ready.Report.Errors).Select(d => d.Code)));
         var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
         Assert.Equal([RulesFamilies.Srd51], draft.RulesFamilies);
+    }
+
+    [Fact]
+    public void Accept_many_accepts_the_first_of_two_twins_from_two_readings_and_blocks_the_second()
+    {
+        // Fix round 1 (item 6): the accepted identities are read once per document and grow as the request goes (R27).
+        var (temp, sourceId, firstJob) = Imported();
+        using var _t = temp;
+        var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
+        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        var first = Named(temp, firstJob, "Fixture Ember Lance");
+        var twin = Named(temp, second.Id, "Fixture Ember Lance");
+
+        var result = temp.App.AcceptMany(new([first.Id, twin.Id], Confirm: true));
+
+        Assert.Equal([first.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(["import.already-accepted"], result.Blocked.Single(b => b.CandidateId == twin.Id).Codes);
+        Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(twin.Id)!.Status);
+
+        // Renaming the twin still lifts it (the twin side uses the effective values).
+        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+        Assert.Equal([twin.Id], temp.App.AcceptMany(new([twin.Id], Confirm: true)).Accepted.Select(c => c.Id));
+    }
+
+    [Fact]
+    public void Accept_many_writes_the_clean_ones_in_one_go_and_lists_the_blocked_with_their_codes()
+    {
+        // Item 9, D33: blocked ones are returned, never forced.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var stormcall = Named(temp, jobId, "Fixture Stormcall"); // an unresolved reference
+        var coat = Named(temp, jobId, "Fixture Quilted Coat"); // no family
+        var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
+
+        var result = temp.App.AcceptMany(new([ember.Id, stormcall.Id, coat.Id, ember.Id], AsReference: false, Confirm: true));
+
+        Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(CandidateStatus.Accepted, result.Accepted[0].Status);
+        Assert.Equal(drafts + 1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+        Assert.Equal([stormcall.Id, coat.Id], result.Blocked.Select(b => b.CandidateId));
+        Assert.Contains("candidate.unresolved-reference", result.Blocked[0].Codes);
+        Assert.Contains("import.family-needed", result.Blocked[1].Codes);
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(stormcall.Id)!.Status);
+        Assert.Equal(CandidateStatus.Accepted, temp.App.Store.FindImportCandidate(ember.Id)!.Status);
+        Assert.True(temp.App.Store.FindSource(temp.App.Store.FindRevision(result.Accepted[0].Draft!)!.Provenance.SourceId)!.ImportDerived);
+
+        // Asking again: the accepted one is now blocked as already reviewed, nothing is duplicated.
+        var again = temp.App.AcceptMany(new([ember.Id], AsReference: false, Confirm: true));
+        Assert.Empty(again.Accepted);
+        Assert.Equal(["candidate.already-reviewed"], again.Blocked.Single().Codes);
+        Assert.Equal(drafts + 1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+    }
+
+    [Fact]
+    public void Accept_many_as_reference_lifts_the_review_blockers_but_not_the_provenance_ones()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var stormcall = Named(temp, jobId, "Fixture Stormcall");
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+
+        var result = temp.App.AcceptMany(new([stormcall.Id, coat.Id], AsReference: true, Confirm: true));
+
+        Assert.Equal([stormcall.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(CandidateStatus.AcceptedAsReference, result.Accepted[0].Status);
+        Assert.Empty(temp.App.Store.FindRevision(result.Accepted[0].Draft!)!.Effects);
+        Assert.Equal(["import.family-needed"], result.Blocked.Single().Codes);
+    }
+
+    [Fact]
+    public void Accept_many_needs_the_confirmation_a_list_and_at_most_200_and_writes_nothing_otherwise()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
+
+        Assert.Equal("candidate.confirmation-required", Code(() => temp.App.AcceptMany(new([ember.Id]))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([.. Enumerable.Range(0, 201).Select(_ => Guid.NewGuid())], Confirm: true))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([], Confirm: true))));
+        Assert.Equal(drafts, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
+        Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(ember.Id)!.Status);
+
+        // A candidate that does not exist is blocked, not thrown: the rest still go through.
+        var ghost = Guid.NewGuid();
+        var result = temp.App.AcceptMany(new([ghost, ember.Id], Confirm: true));
+        Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
+        Assert.Equal(["candidate.not-found"], result.Blocked.Single().Codes);
+    }
+
+    [Fact]
+    public void The_accept_many_command_returns_accepted_and_blocked()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        Assert.Contains("import.candidate.acceptMany", CommandDispatcher.Commands);
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var stormcall = Named(temp, jobId, "Fixture Stormcall");
+
+        using var response = System.Text.Json.JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(System.Text.Json.JsonSerializer.Serialize(
+            new { id = "1", command = "import.candidate.acceptMany", payload = new { candidateIds = new[] { ember.Id, stormcall.Id }, asReference = false, confirm = true } }, RulesJson.Compact)));
+
+        Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+        var data = response.RootElement.GetProperty("result");
+        Assert.Equal(1, data.GetProperty("accepted").GetArrayLength());
+        var blocked = data.GetProperty("blocked");
+        Assert.Equal(stormcall.Id, blocked[0].GetProperty("candidateId").GetGuid());
+        Assert.Equal("candidate.unresolved-reference", blocked[0].GetProperty("codes")[0].GetString());
     }
 }

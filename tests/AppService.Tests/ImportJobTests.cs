@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using TomeStack.AppService.Packages;
 using TomeStack.ImportWorker;
+using TomeStack.ImportWorker.Detection;
 using TomeStack.ImportWorker.Extraction;
 using TomeStack.RulesCore;
 
@@ -86,7 +87,7 @@ public class ImportJobTests
         var started = temp.App.StartImport(new(sourceId, WholeDocument: true));
         var job = Settle(temp, started.Id);
 
-        Assert.Equal((ImportJobStatus.Completed, 6, 6, 0, 1), (job.Status, job.PageCount, job.PagesDone, job.PagesFailed, job.PagesWithoutText));
+        Assert.Equal((ImportJobStatus.Completed, 7, 7, 0, 1), (job.Status, job.PageCount, job.PagesDone, job.PagesFailed, job.PagesWithoutText));
         Assert.Null(job.NextPage);
         var page = temp.App.ImportedPage(new(sourceId, 2));
         Assert.Contains("Fixture Ember Lance", page.Text, StringComparison.Ordinal);
@@ -95,7 +96,7 @@ public class ImportJobTests
 
         var audit = temp.App.ImportAudit(job.Id);
         Assert.Equal(["created", "started", "completed"], audit.Select(a => a.Event));
-        Assert.Equal("6 pages, 0 unreadable, 0 by OCR, 1 without text, 9 candidates", audit[^1].Detail);
+        Assert.Equal("7 pages, 0 unreadable, 0 by OCR, 1 without text, 19 candidates", audit[^1].Detail);
         Assert.All(audit, a => Assert.DoesNotContain("Fixture", a.Detail ?? "", StringComparison.Ordinal));
         // Extraction changes no content: no revision cites the source.
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -112,8 +113,8 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
         var all = temp.App.ListCandidates(new(job.Id));
 
-        Assert.Equal(9, job.Candidates);
-        Assert.Equal(9, all.Count);
+        Assert.Equal(19, job.Candidates);
+        Assert.Equal(19, all.Count);
         Assert.All(all, c => Assert.Equal(CandidateStatus.Pending, c.Status));
         Assert.Equal(["Fixture Ember Lance", "Fixture Frost Veil"], temp.App.ListCandidates(new(job.Id, Kind: ContentKind.Spell)).Select(c => c.Current.ProposedName));
         Assert.Equal(4, temp.App.ListCandidates(new(job.Id, Page: 4)).Count);
@@ -123,7 +124,7 @@ public class ImportJobTests
         Assert.All(all, c => Assert.Equal([RulesFamilies.Srd521], c.Current.RulesFamilies));
 
         // Detecting again (a resumed or re-run job) replaces only what is still pending.
-        Assert.Equal(9, temp.App.ListCandidates(new(job.Id)).Select(c => c.Id).Distinct().Count());
+        Assert.Equal(19, temp.App.ListCandidates(new(job.Id)).Select(c => c.Id).Distinct().Count());
     }
 
     [Fact]
@@ -177,7 +178,7 @@ public class ImportJobTests
         gated.Gate.Release(100);
         var resumed = temp.App.ResumeImport(job.Id);
         var done = Settle(temp, resumed.Id);
-        Assert.Equal((ImportJobStatus.Completed, 6), (done.Status, done.PagesDone));
+        Assert.Equal((ImportJobStatus.Completed, 7), (done.Status, done.PagesDone));
         Assert.Equal(3, gated.Scopes[^1].FirstPage); // it did not read pages 1-2 again
         Assert.Equal(["created", "started", "cancelled", "resumed", "completed"], temp.App.ImportAudit(job.Id).Select(a => a.Event));
         Assert.Equal("import.not-resumable", Assert.Single(Assert.Throws<AppValidationException>(() => temp.App.ResumeImport(job.Id)).Problems).Code);
@@ -384,7 +385,7 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
 
         var all = temp.App.Store.ListImportPagesForDetection(job.Sha256, 1, int.MaxValue, long.MaxValue, out var none);
-        Assert.Equal(6, all.Count);
+        Assert.Equal(7, all.Count);
         Assert.Null(none);
         Assert.All(all, p => Assert.Equal("", p.Text)); // detection never needs the joined text
 
@@ -427,7 +428,7 @@ public class ImportJobTests
         var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true, WrittenFor: [RulesFamilies.Srd51])).Id);
 
         Assert.Equal([RulesFamilies.Srd51], job.WrittenFor);
-        Assert.Equal(9, job.Candidates);
+        Assert.Equal(19, job.Candidates);
         var coat = temp.App.ListCandidates(new(job.Id)).Single(c => c.Candidate.ProposedName == "Fixture Quilted Coat");
         Assert.Equal([RulesFamilies.Srd51], coat.Current.RulesFamilies);
         Assert.Empty(coat.Current.LowConfidenceFields);
@@ -450,6 +451,38 @@ public class ImportJobTests
             Assert.Empty(candidate.Current.RulesFamilies);
             Assert.Contains("rulesFamilies", candidate.Current.LowConfidenceFields);
         }
+    }
+
+    [Fact]
+    public void A_job_that_stopped_detecting_early_or_hit_the_candidate_cap_says_so_and_a_normal_job_says_nothing()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+
+        var normal = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        Assert.Null(normal.TruncatedCandidates);
+        Assert.Null(normal.DetectionLimitedFromPage);
+        var json = TomeStack.AppService.Persistence.SqliteStore.Serialize(temp.App.ImportStatus(normal.Id));
+        Assert.DoesNotContain("truncatedCandidates", json, StringComparison.Ordinal); // omitted, like writtenFor
+        Assert.DoesNotContain("detectionLimitedFromPage", json, StringComparison.Ordinal);
+
+        // The candidate cap, made tiny for this run.
+        temp.App.DetectionCandidateCap = 3;
+        var capped = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        Assert.True(capped.TruncatedCandidates);
+        Assert.Null(capped.DetectionLimitedFromPage);
+        Assert.Equal(3, capped.Candidates);
+        Assert.True(temp.App.ImportStatus(capped.Id).TruncatedCandidates); // stored, not only returned
+        Assert.Equal(3, temp.App.ListCandidatesPage(new(capped.Id)).Total);
+
+        // The text budget, made tiny for this run: nothing in pages 2-3 fits, so detection stops before page 2.
+        temp.App.DetectionCandidateCap = CandidateDetector.MaxCandidates;
+        temp.App.DetectionCharBudget = 1;
+        var limited = Settle(temp, temp.App.StartImport(new(sourceId, 2, 3)).Id);
+        Assert.Equal(2, limited.DetectionLimitedFromPage);
+        Assert.Null(limited.TruncatedCandidates);
+        Assert.Equal(2, temp.App.ImportStatus(limited.Id).DetectionLimitedFromPage);
+        Assert.Contains(temp.App.ImportAudit(limited.Id), a => a.Event == "detection-limited");
     }
 
     [Fact]

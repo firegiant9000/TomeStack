@@ -887,6 +887,10 @@ export interface ImportJob {
   failureCode?: string;
   failureMessage?: string;
   candidates: number;
+  /** More candidates were found than the list keeps (5,000); absent otherwise. */
+  truncatedCandidates?: boolean;
+  /** Detection stopped for size before this page; absent otherwise. */
+  detectionLimitedFromPage?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -924,6 +928,8 @@ export interface StoredCandidate {
   edited?: DraftCandidate;
   status: CandidateStatus;
   draft?: ContentReference;
+  /** Item 11 (D34): on a class, the feature candidates of the same import that it grants, with the class level each is granted at. */
+  grantsCandidates?: { candidateId: string; level: number }[];
   updatedAt: string;
 }
 
@@ -940,14 +946,36 @@ export interface CandidateCheck {
   blockers: Diagnostic[];
   canAccept: boolean;
   canAcceptAsReference: boolean;
+  /** Task 5 (R66): what accepting will leave out, said rather than blocked. */
+  notes?: string[];
+  /** Task 5: on a class, every feature its table links, by level then name. */
+  linked?: CandidateLinkSummary[];
+}
+
+/** One feature a class links: a candidate of this import (with its status), or one installed feature (R67). */
+export interface CandidateLinkSummary {
+  candidateId?: string;
+  name: string;
+  level: number;
+  status?: CandidateStatus;
+  installed: boolean;
 }
 
 export interface CandidateFilter {
-  page?: number;
+  /** Only candidates that reach this page or later. */
+  firstPage?: number;
+  /** Only candidates that start on or before this page. */
+  lastPage?: number;
   kind?: ContentKind;
   minConfidence?: number;
   maxConfidence?: number;
   status?: CandidateStatus;
+}
+
+/** One page of a job's filtered candidates; `total` counts the whole filtered set. */
+export interface CandidatePage {
+  items: StoredCandidate[];
+  total: number;
 }
 
 export interface CandidateEdit {
@@ -1061,6 +1089,22 @@ export type Effect =
       spellsFormula?: string;
       multiclassCaster?: 'full' | 'half' | 'third';
       multiclassCasterTable?: number[];
+    })
+  // Content v5: a spell's own data (level 0 is a cantrip). Item 12: the studio's spell editor writes it.
+  | (EffectBase & {
+      type: 'spell';
+      level: number;
+      school?: string;
+      castingTime?: string;
+      range?: string;
+      components?: string;
+      duration?: string;
+      concentration?: boolean;
+      ritual?: boolean;
+      lists?: string[];
+      attack?: 'none' | 'melee' | 'ranged';
+      save?: SpellcastingAbility;
+      dice?: string;
     });
 
 export interface ChoiceExtension {
@@ -1157,6 +1201,74 @@ export interface PublishResult {
   published: ContentReference;
   report: ValidationReport;
   affected: AffectedCharacter[];
+}
+
+/** Item 9: grants and choice options of one content that move to the revisions published in the same batch. */
+export interface RePointing {
+  dependent: ContentReference;
+  dependentName: string;
+  grantsMoved: number;
+  optionsMoved: number;
+}
+
+/** One content of a bulk publish: its pending draft (or, for a dependent, its newest revision), validation and findings. */
+export interface PublishManyEntry {
+  draft: ContentReference;
+  name: string;
+  kind: ContentKind;
+  report: ValidationReport;
+  findings: DebugFinding[];
+  replacesPublished: boolean;
+  rePointings: RePointing[];
+}
+
+export interface PublishManyPreview {
+  entries: PublishManyEntry[];
+  dependents: PublishManyEntry[];
+  canPublish: boolean;
+}
+
+export interface PublishManyResult {
+  published: PublishResult[];
+}
+
+/** Item 9: a candidate bulk accept skipped, with the diagnostic codes (never text from the document). */
+export interface BlockedCandidate {
+  candidateId: string;
+  codes: string[];
+}
+
+export interface AcceptManyResult {
+  accepted: StoredCandidate[];
+  blocked: BlockedCandidate[];
+}
+
+/** Item 10: what `import.candidate.addToSpellList` did; the skipped carry codes only. */
+export interface CandidateSpellListResult {
+  listKey: string;
+  updated: StoredCandidate[];
+  skipped: BlockedCandidate[];
+  /** Updated candidates that need a word: `spell-list.other-lists-unreviewed` means other proposed lists are still to check (R59). */
+  notes: BlockedCandidate[];
+}
+
+export interface SkippedContent {
+  contentId: string;
+  codes: string[];
+}
+
+/** Item 10: `content.addToSpellList` saves drafts only (never publishes); `note` says characters keep their recorded revisions. */
+export interface ContentSpellListResult {
+  listKey: string;
+  drafts: ContentReference[];
+  skipped: SkippedContent[];
+  note: string;
+}
+
+/** A spell list key that exists in published content, with how many spells are on it. */
+export interface SpellListKeyCount {
+  key: string;
+  spells: number;
 }
 
 export interface EffectChange {
