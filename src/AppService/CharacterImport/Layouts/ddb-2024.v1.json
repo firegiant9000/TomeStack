@@ -2,6 +2,7 @@
   "id": "ddb-2024",
   "version": 1,
   "suggestedFamily": "srd-5.2.1",
+  "displayName": "D&D Beyond 2024",
   "unverified": true,
   "required": [
     "fixture.2024.name",

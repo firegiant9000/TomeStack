@@ -94,8 +94,32 @@ public sealed record DdbSheet(
     IReadOnlyList<Read<string>> Features,
     IReadOnlyDictionary<string, Read<int>> Numbers,
     DdbPlay Play,
-    IReadOnlyDictionary<string, Read<int>> Currency)
+    IReadOnlyDictionary<string, Read<int>> Currency,
+    IReadOnlyList<string>? Lines = null,
+    DdbTexts? Texts = null)
 {
     public override string ToString() =>
         $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, Numbers = {Numbers.Count} }}";
+}
+
+/// <summary>One weapon row of the fillable sheet, as the text the player typed (R83 splits it later).</summary>
+public sealed record WeaponRow(Read<string> Name, Read<string> ToHit, Read<string> Damage)
+{
+    public override string ToString() => $"WeaponRow {{ Name = {Name.Status}, ToHit = {ToHit.Status}, Damage = {Damage.Status} }}";
+}
+
+/// <summary>
+/// The free text of the fillable 2014 sheet (item 14): short <see cref="Details"/> (keyed <c>alignment</c>, <c>age</c>, <c>height</c>,
+/// <c>weight</c>, <c>eyes</c>, <c>skin</c>, <c>hair</c>), <see cref="Prose"/> for session notes (keyed as <see cref="DdbSemantics.Prose"/>),
+/// the weapon rows, and the equipment and proficiency texts. Only the keys the layout maps are present; line breaks are
+/// <c>\n</c>. <c>ToString</c> prints counts only.
+/// </summary>
+public sealed record DdbTexts(
+    IReadOnlyDictionary<string, Read<string>> Details,
+    IReadOnlyDictionary<string, Read<string>> Prose,
+    IReadOnlyList<WeaponRow> Weapons,
+    Read<string> Equipment,
+    Read<string> LanguagesAndTools)
+{
+    public override string ToString() => $"DdbTexts {{ Details = {Details.Count}, Prose = {Prose.Count}, Weapons = {Weapons.Count} }}";
 }

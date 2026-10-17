@@ -20,7 +20,8 @@ public sealed partial class TomeStackApp
 
     private IFormReader? _formReader;
 
-    private IFormReader FormReader => _formReader ??= new WorkerFormReader(Path.Combine(AppContext.BaseDirectory, WorkerFileName));
+    // The worker reads before any layout is recognised, so it is told the union of every layout's free-text field names (R78).
+    private IFormReader FormReader => _formReader ??= new WorkerFormReader(Path.Combine(AppContext.BaseDirectory, WorkerFileName), form: LayoutMaps.FormLimits);
 
     private ImportSessions? _ddbSessions;
 
@@ -47,14 +48,15 @@ public sealed partial class TomeStackApp
         }
 
         var map = DdbParser.Recognise(fields)
-            ?? throw Refused("ddb.layout-unknown", $"This PDF's {fields.Count} form field{(fields.Count == 1 ? "" : "s")} do not match a known D&D Beyond sheet layout.");
+            ?? throw Refused("ddb.layout-unknown", $"This PDF's {fields.Count} form field{(fields.Count == 1 ? "" : "s")} do not match a known character sheet layout.");
         var sheet = DdbParser.Parse(map, fields);
         var token = DdbSessions.Add(sheet);
         var classes = sheet.Classes.Status == ReadStatus.Ok
             ? string.Join(" / ", sheet.Classes.Value!.Select(c => $"{c.Name} {c.Level}{(c.Subclass is null ? "" : $" ({c.Subclass})")}"))
             : "";
         return new DdbReadResult(token, map.Id, map.SuggestedFamily,
-            new DdbSummary(sheet.Name.Value ?? "", classes, sheet.Features.Count, sheet.Spells.Count, sheet.Items.Count));
+            new DdbSummary(sheet.Name.Value ?? "", classes, sheet.Features.Count, sheet.Spells.Count, sheet.Items.Count),
+            LayoutMaps.NameOf(map.Id));
     }
 
     /// <summary>
@@ -106,7 +108,7 @@ public sealed partial class TomeStackApp
     /// purse is never zeroed silently: no coins come over and it is listed); speed and passive Perception are numbers now,
     /// compared when the layout maps them and the value reads, and listed otherwise (unmapped, blank or unreadable).
     /// </summary>
-    private static IEnumerable<string> NotBroughtOver(DdbSheet sheet)
+    private static IEnumerable<string> NotBroughtOver(DdbSheet sheet, ImportExtras extras)
     {
         if (!CurrencyBroughtOver(sheet))
             yield return "currency";
@@ -114,9 +116,12 @@ public sealed partial class TomeStackApp
             yield return "speed";
         if (!NumberRead(sheet, FieldIds.Passive("perception")))
             yield return "passivePerception";
-        foreach (var code in AlwaysNotBroughtOver)
+        // Item 14: what the fillable sheet's free text brought over is not listed as left out.
+        foreach (var code in AlwaysNotBroughtOver.Where(c => !extras.Brought.Contains(c)))
             yield return code;
     }
+
+    private static LayoutMap? MapOf(DdbSheet sheet) => LayoutMaps.All.FirstOrDefault(m => m.Id == sheet.Layout);
 
     private static bool NumberRead(DdbSheet sheet, string field) => sheet.Numbers.TryGetValue(field, out var read) && read.Status == ReadStatus.Ok;
 
@@ -190,7 +195,7 @@ public sealed partial class TomeStackApp
             SaveCharacter(character);
             // The few noted differences first, so the import notes (counted past the limit, not stored) never crowd them out.
             foreach (var field in noted)
-                AddGapNote(new(character.Id, new(GapTargetKind.Field, FieldId: field), ImportFieldNoteText)); // refused: everything rolls back
+                AddGapNote(new(character.Id, new(GapTargetKind.Field, FieldId: field), MapOf(sheet)?.ImportFieldNoteText ?? ImportFieldNoteText)); // refused: everything rolls back
             importNotes = AddImportGapNotes(character.Id, labels);
         });
         DdbSessions.Take(request.Token);
@@ -204,6 +209,8 @@ public sealed partial class TomeStackApp
         static Character Levelled(Character c) => c.Classes.Count > 0 ? c with { Level = c.Classes.Sum(l => l.Level) } : c;
         CharacterSheet Calculate(Character c) => CharacterCalculator.Calculate(Levelled(c), _store);
 
+        var now = _time.GetUtcNow();
+        var extras = ImportExtras.Build(sheet, DateOnly.FromDateTime(now.LocalDateTime), now);
         var start = new Character
         {
             Id = id,
@@ -212,6 +219,10 @@ public sealed partial class TomeStackApp
             BaseAbilities = new(AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase, AbilitySolver.DefaultBase),
             CampaignId = request.CampaignId,
             Currency = CurrencyFrom(sheet),
+            Details = extras.Details,
+            CustomItems = extras.Items,
+            CustomAttacks = extras.Attacks,
+            Notes = extras.Notes,
         };
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
             (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected), _store.FindRevision, request.EquipMatched);
@@ -258,7 +269,7 @@ public sealed partial class TomeStackApp
         var kept = (request.NumberChoices ?? []).Where(n => n?.Action == NumberAction.KeepSheet).Select(n => n.Field).ToHashSet(StringComparer.Ordinal);
         character = character with
         {
-            Overrides = [.. comparison.Where(n => n.Differs && kept.Contains(n.Field)).Select(n => new FieldOverride(n.Field, n.Sheet!.Value, ImportedOverrideReason))],
+            Overrides = [.. comparison.Where(n => n.Differs && kept.Contains(n.Field)).Select(n => new FieldOverride(n.Field, n.Sheet!.Value, MapOf(sheet)?.ImportedOverrideReason ?? ImportedOverrideReason))],
         };
 
         var valid = true;
@@ -283,9 +294,11 @@ public sealed partial class TomeStackApp
             Count(MatchStatus.NoPlace),
             Count(MatchStatus.Unreadable),
             Count(MatchStatus.LeftOut),
-            [.. NotBroughtOver(sheet), .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
+            [.. NotBroughtOver(sheet, extras), .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
-            sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily);
+            sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily,
+            LayoutMaps.NameOf(sheet.Layout),
+            [.. sheet.Lines ?? [], .. extras.Lines]);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
         // A choice the user answered stays listed once it is full, so step 3 can still change the answer; a refused answer
         // does not keep a choice the sheet filled listed (its diagnostic says why).
@@ -344,7 +357,9 @@ public sealed record NumberChoice(string Field, NumberAction Action);
 public sealed record NumberRow(string Field, string Label, int? Sheet, int Calculated, bool Differs);
 
 /// <param name="NotBroughtOver">Codes of what the import leaves out by design (<c>currency</c>, <c>speed</c>, <c>playState</c> unless asked, …).</param>
-public sealed record DdbReport(int Matched, int Chosen, int NotFound, int NoPlace, int Unreadable, int LeftOut, IReadOnlyList<string> NotBroughtOver, bool SameNameExists, bool FamilyMismatch);
+/// <param name="LayoutName">The layout in words ("D&amp;D Beyond 2014", "the fillable 2014 sheet"), for the report and the step titles.</param>
+/// <param name="Lines">Report lines from reading and importing the sheet's free text (a field cut short, an ability read from the other box, a weapon row's damage left empty): labels and counts only, never the sheet's text.</param>
+public sealed record DdbReport(int Matched, int Chosen, int NotFound, int NoPlace, int Unreadable, int LeftOut, IReadOnlyList<string> NotBroughtOver, bool SameNameExists, bool FamilyMismatch, string LayoutName = "", IReadOnlyList<string>? Lines = null);
 
 /// <param name="Character">The proposed character (a new id), as <c>ddb.apply</c> would save it. Nothing is stored.</param>
 /// <param name="OpenChoices">Choices the draft offers that the sheet did not settle, and those the user answered (so the answer can change); the builder can answer them later.</param>
@@ -374,4 +389,5 @@ public sealed record DdbApplyResult(Guid CharacterId, int Overrides, int GapNote
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>
 public sealed record DdbSummary(string Name, string ClassText, int Features, int Spells, int Items);
 
-public sealed record DdbReadResult(Guid Token, string Layout, string? SuggestedFamily, DdbSummary Summary);
+/// <param name="LayoutName">The layout in words, as <see cref="DdbReport.LayoutName"/>.</param>
+public sealed record DdbReadResult(Guid Token, string Layout, string? SuggestedFamily, DdbSummary Summary, string LayoutName = "");

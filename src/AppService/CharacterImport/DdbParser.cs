@@ -21,10 +21,10 @@ public static partial class DdbParser
     /// </summary>
     public const int MaxListItems = 1_000;
 
-    /// <summary>The layout whose required field names are all present (the one with the most, if several), or null.</summary>
     /// <summary>
-    /// The layout whose required field names are all present: the one with the most, if several. Two or more tied for the
-    /// most are ambiguous, and none is picked (null), rather than one chosen by the order the maps happen to load in.
+    /// The layout whose required field names are all present, or null (R72). When several match, the one with the most
+    /// required names wins only if its set holds every other match's whole set; otherwise the sheet is ambiguous (a doctored
+    /// file with two layouts' names) and none is picked, rather than one chosen by the order the maps happen to load in.
     /// </summary>
     public static LayoutMap? Recognise(IReadOnlyList<FormField> fields) => Recognise(fields, LayoutMaps.All);
 
@@ -38,7 +38,11 @@ public static partial class DdbParser
             return null;
         var most = present.Max(m => m.Required.Count);
         var best = present.Where(m => m.Required.Count == most).ToList();
-        return best.Count == 1 ? best[0] : null;
+        if (best.Count != 1)
+            return null;
+        var winner = best[0];
+        var held = winner.Required.ToHashSet(StringComparer.Ordinal);
+        return present.All(m => ReferenceEquals(m, winner) || (m.Required.Count < most && m.Required.All(held.Contains))) ? winner : null;
     }
 
     public static DdbSheet Parse(LayoutMap map, IReadOnlyList<FormField> fields)
@@ -56,6 +60,19 @@ public static partial class DdbParser
         var features = sheet.ListItems("features"); // S0: feats can sit in a section of the features text
         var hitDice = DdbSemantics.HitDice.Select(d => (Die: d, Read: sheet.Int($"play.hitDiceSpent.d{d}", 0, 20))).ToList();
         var slots = Enumerable.Range(1, 9).Select(l => (Level: l, Read: sheet.Int($"play.spellSlotsSpent.{l}", 0, 99))).ToList();
+        var lines = new List<string>();
+        var abilities = Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Score(a, lines));
+        // The fillable sheet's boxes may be named the other way round on every row: one line says so, not six.
+        if (lines.Count == Enum.GetValues<Ability>().Length && lines.All(l => l.EndsWith(" was read from the modifier box.", StringComparison.Ordinal)))
+        {
+            lines.Clear();
+            lines.Add("All six ability scores were read from the modifier boxes.");
+        }
+        var spentFromTotal = sheet.HitDiceFromTotal();
+        var spent = hitDice.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new DieSpent(x.Die, x.Read.Value)).ToList();
+        if (spentFromTotal.Spent is { } fromTotal)
+            spent.Add(fromTotal);
+        var texts = sheet.Texts(lines);
         return new DdbSheet(
             map.Id,
             map.SuggestedFamily,
@@ -63,7 +80,7 @@ public static partial class DdbParser
             sheet.Classes(),
             sheet.Text("species"),
             sheet.Text("background"),
-            Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Int($"abilities.{FieldIds.Key(a)}", 1, 30)),
+            abilities,
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Bool($"saves.{FieldIds.Key(a)}.proficient")),
             CharacterCalculator.Skills.ToDictionary(s => s.Key, s => sheet.Bool($"skills.{s.Key}.proficient"), StringComparer.Ordinal),
             SheetReader.Capped([.. sheet.List("feats"), .. features.Feats]), // one list, one cap, wherever the feats came from
@@ -74,20 +91,33 @@ public static partial class DdbParser
             new DdbPlay(
                 sheet.Int("play.currentHitPoints", 0, 9_999),
                 sheet.Int("play.temporaryHitPoints", 0, 9_999),
-                [.. hitDice.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new DieSpent(x.Die, x.Read.Value))],
-                sheet.Int("play.deathSuccesses", 0, 3),
-                sheet.Int("play.deathFailures", 0, 3),
+                spent,
+                sheet.Deaths("play.deathSuccesses"),
+                sheet.Deaths("play.deathFailures"),
                 sheet.Bool("play.inspiration"),
                 [.. slots.Where(x => x.Read.Status == ReadStatus.Ok).Select(x => new SlotsSpent(x.Level, x.Read.Value))],
-                hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable)),
-            DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins, Coin()), StringComparer.Ordinal));
+                hitDice.Count(x => x.Read.Status == ReadStatus.Unreadable) + slots.Count(x => x.Read.Status == ReadStatus.Unreadable) + spentFromTotal.Unreadable),
+            DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins, Coin()), StringComparer.Ordinal),
+            lines.Count == 0 ? null : lines,
+            texts);
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];
 
-    /// <summary>One class part: a name, a level from 1 to 20, and an optional subclass in parentheses (unverified shape, S0).</summary>
-    [GeneratedRegex(@"^(?<name>[^/\d]{1,60}?)\s+(?<level>[1-9]|1[0-9]|20)(?:\s*\((?<sub>[^()]{1,60})\))?$", RegexOptions.None, 100)]
+    /// <summary>
+    /// One class part: a name, a level from 1 to 20 (written bare, or after "LVL" or "Level", as the fillable sheet's owners
+    /// write it), and an optional subclass in parentheses (unverified shape, S0).
+    /// </summary>
+    [GeneratedRegex(@"^(?<name>[^/\d]{1,60}?)\s+(?:(?:[Ll][Vv][Ll]|[Ll][Ee][Vv][Ee][Ll])\.?\s*)?(?<level>[1-9]|1[0-9]|20)(?:\s*\((?<sub>[^()]{1,60})\))?$", RegexOptions.None, 100)]
     private static partial Regex ClassPart();
+
+    /// <summary>A hit dice total: a count and one die size ("3d8").</summary>
+    [GeneratedRegex(@"^(?<count>[0-9]{1,2})\s*[dD]\s*(?<die>6|8|10|12)$", RegexOptions.None, 100)]
+    private static partial Regex DiceTotal();
+
+    /// <summary>Hit dice left: a count, with the die size optional ("2d8", "2").</summary>
+    [GeneratedRegex(@"^(?<count>[0-9]{1,2})(?:\s*[dD]\s*(?<die>[0-9]{1,2}))?$", RegexOptions.None, 100)]
+    private static partial Regex DiceLeft();
 
     /// <summary>A signed whole number: a plus, a hyphen or a minus sign, then at most five digits.</summary>
     [GeneratedRegex(@"^(?<sign>[+\-−]?)\s*(?<digits>[0-9]{1,5})$", RegexOptions.None, 100)]
@@ -279,7 +309,16 @@ public static partial class DdbParser
             if (text.Status != ReadStatus.Ok)
                 return new(default, text.Status);
             var part = values["classLevels"].Rule.Pattern is { } pattern ? compiled.Patterns[pattern] : ClassPart();
-            var parts = Split(text.Value!, "classLevels", "/");
+            var strict = ReadClasses(Split(text.Value!, "classLevels", "/"), part);
+            if (strict is not null)
+                return strict.Value;
+            // Players of the fillable sheet separate classes with a comma as often as a slash: try that when the slash split fails.
+            return ReadClasses(CommaSplit(text.Value!), part) ?? Read<IReadOnlyList<ClassText>>.Unreadable;
+        }
+
+        /// <summary>Null when a part does not read (so the caller may try another split); unreadable as a whole when the levels do not add up.</summary>
+        private static Read<IReadOnlyList<ClassText>>? ReadClasses(string[] parts, Regex part)
+        {
             if (parts.Length > 20)
                 return Read<IReadOnlyList<ClassText>>.Unreadable;
             var classes = new List<ClassText>(parts.Length);
@@ -289,20 +328,188 @@ public static partial class DdbParser
                 {
                     var match = part.Match(item);
                     if (!match.Success || !int.TryParse(match.Groups["level"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var level) || level is < 1 or > 20)
-                        return Read<IReadOnlyList<ClassText>>.Unreadable;
+                        return null;
                     var name = match.Groups["name"].Value.Trim();
                     if (name.Length == 0)
-                        return Read<IReadOnlyList<ClassText>>.Unreadable;
+                        return null;
                     var sub = match.Groups["sub"] is { Success: true } group && group.Value.Trim() is { Length: > 0 } s ? s : null;
                     classes.Add(new ClassText(name, level, sub));
                 }
             }
             catch (RegexMatchTimeoutException)
             {
-                return Read<IReadOnlyList<ClassText>>.Unreadable;
+                return null;
             }
             var total = classes.Sum(c => c.Level);
             return total is >= 1 and <= 20 ? Read<IReadOnlyList<ClassText>>.Ok(classes) : Read<IReadOnlyList<ClassText>>.Unreadable;
+        }
+
+        /// <summary>The text split on slashes and on commas outside parentheses.</summary>
+        private static string[] CommaSplit(string text)
+        {
+            var parts = new List<string>();
+            var depth = 0;
+            var start = 0;
+            for (var i = 0; i < text.Length; i++)
+            {
+                switch (text[i])
+                {
+                    case '(':
+                        depth++;
+                        break;
+                    case ')':
+                        depth = Math.Max(0, depth - 1);
+                        break;
+                    case '/' or ',' when depth == 0:
+                        parts.Add(text[start..i].Trim());
+                        start = i + 1;
+                        break;
+                }
+            }
+            parts.Add(text[start..].Trim());
+            return [.. parts];
+        }
+
+        private static readonly Dictionary<Ability, string> AbilityNames = new()
+        {
+            [Ability.Str] = "Strength", [Ability.Dex] = "Dexterity", [Ability.Con] = "Constitution",
+            [Ability.Int] = "Intelligence", [Ability.Wis] = "Wisdom", [Ability.Cha] = "Charisma",
+        };
+
+        /// <summary>
+        /// An ability score. A layout with a modifier box beside the score (the fillable sheet) gets the swap guard: the score
+        /// is read from the box that holds it when the other holds its modifier, and a pair that disagrees is unreadable. A
+        /// number with a sign is a modifier, never a score; a lone unsigned number is a score from 10 up (a lone 4 could be
+        /// either, so it is unreadable). Reading the score from the modifier box adds a report line.
+        /// </summary>
+        public Read<int> Score(Ability ability, List<string> lines)
+        {
+            var key = FieldIds.Key(ability);
+            if (!values.ContainsKey($"abilityMods.{key}"))
+                return Int($"abilities.{key}", 1, 30);
+            var score = Raw($"abilities.{key}");
+            var mod = Raw($"abilityMods.{key}");
+            if (score is null && mod is null)
+                return Read<int>.Missing;
+            var s = score is null ? null : Signed(score);
+            var m = mod is null ? null : Signed(mod);
+            if ((score is not null && s is null) || (mod is not null && m is null))
+                return Read<int>.Unreadable;
+            if (s is { } sv && m is { } mv)
+            {
+                if (!sv.HasSign && sv.Number is >= 1 and <= 30 && Modifier(sv.Number) == mv.Number)
+                    return Read<int>.Ok(sv.Number);
+                if (!mv.HasSign && mv.Number is >= 1 and <= 30 && Modifier(mv.Number) == sv.Number)
+                {
+                    lines.Add($"{AbilityNames[ability]} was read from the modifier box.");
+                    return Read<int>.Ok(mv.Number);
+                }
+                return Read<int>.Unreadable;
+            }
+            if (s is { } only && !only.HasSign && only.Number is >= 10 and <= 30)
+                return Read<int>.Ok(only.Number);
+            if (m is { } lone && !lone.HasSign && lone.Number is >= 10 and <= 30)
+            {
+                lines.Add($"{AbilityNames[ability]} was read from the modifier box.");
+                return Read<int>.Ok(lone.Number);
+            }
+            return Read<int>.Unreadable;
+        }
+
+        private static int Modifier(int score) => (score - 10) >> 1; // floor division
+
+        /// <summary>The trimmed text of a field, or null when it is blank or the map has no such field.</summary>
+        private string? Raw(string semantic) =>
+            values.TryGetValue(semantic, out var hit) && !string.IsNullOrWhiteSpace(hit.Field.Value) ? hit.Field.Value.Trim() : null;
+
+        /// <summary>A whole number and whether it carried a sign; null when it is not one.</summary>
+        private static (int Number, bool HasSign)? Signed(string text)
+        {
+            try
+            {
+                var match = Number().Match(text);
+                if (!match.Success)
+                    return null;
+                var number = int.Parse(match.Groups["digits"].Value, NumberStyles.None, CultureInfo.InvariantCulture);
+                var sign = match.Groups["sign"].Value;
+                return (sign is "-" or "−" ? -number : number, sign.Length > 0);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Death saves: a layout with one box per save (<c>play.deathSuccesses.1</c> to <c>.3</c>) counts the ticked ones; an
+        /// unreadable box makes the count unreadable; otherwise the layout's own count field is read.
+        /// </summary>
+        public Read<int> Deaths(string semantic)
+        {
+            var boxes = Enumerable.Range(1, DdbSemantics.DeathBoxes).Select(i => $"{semantic}.{i}").Where(values.ContainsKey).ToList();
+            if (boxes.Count == 0)
+                return Int(semantic, 0, 3);
+            var reads = boxes.Select(Bool).ToList();
+            if (reads.Any(r => r.Status == ReadStatus.Unreadable))
+                return Read<int>.Unreadable;
+            return Read<int>.Ok(reads.Count(r => r is { Status: ReadStatus.Ok, Value: true }));
+        }
+
+        /// <summary>
+        /// Spent hit dice from the sheet's "total" and "left" boxes (R: spent is the total less what is left). Nothing is
+        /// guessed: a total that is not one die size, a left count above the total, or another die is one unreadable field.
+        /// A blank left box is nothing read.
+        /// </summary>
+        public (DieSpent? Spent, int Unreadable) HitDiceFromTotal()
+        {
+            var total = Raw("play.hitDice.total");
+            var left = Raw("play.hitDice.remaining");
+            if (total is null && left is null)
+                return (null, 0);
+            if (left is null)
+                return (null, 0);
+            try
+            {
+                var t = total is null ? null : DiceTotal().Match(total);
+                var l = DiceLeft().Match(left);
+                if (t is not { Success: true } || !l.Success)
+                    return (null, 1);
+                var die = int.Parse(t.Groups["die"].Value, NumberStyles.None, CultureInfo.InvariantCulture);
+                if (l.Groups["die"] is { Success: true } leftDie && int.Parse(leftDie.Value, NumberStyles.None, CultureInfo.InvariantCulture) != die)
+                    return (null, 1);
+                var count = int.Parse(t.Groups["count"].Value, NumberStyles.None, CultureInfo.InvariantCulture);
+                var remaining = int.Parse(l.Groups["count"].Value, NumberStyles.None, CultureInfo.InvariantCulture);
+                return remaining > count || count > 20 ? (null, 1) : (new DieSpent(die, count - remaining), 0);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return (null, 1);
+            }
+        }
+
+        /// <summary>The fillable sheet's free text (null for a layout that maps none), with a report line for each field cut short (R78).</summary>
+        public DdbTexts? Texts(List<string> lines)
+        {
+            if (!values.Keys.Any(k => k.StartsWith("details.", StringComparison.Ordinal) || k.StartsWith("prose.", StringComparison.Ordinal)
+                    || k.StartsWith("weapons.", StringComparison.Ordinal) || k is "equipmentText" or "languagesAndTools"))
+                return null;
+            Read<string> Block(string semantic)
+            {
+                var read = Text(semantic, applyPattern: false);
+                return read.Status == ReadStatus.Ok ? Read<string>.Ok(read.Value!.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')) : read;
+            }
+            var details = DdbSemantics.Details.Where(values.ContainsKey).ToDictionary(
+                s => s["details.".Length..].Replace("appearance.", "", StringComparison.Ordinal), s => Block(s), StringComparer.Ordinal);
+            var prose = DdbSemantics.Prose.Keys.Where(k => values.ContainsKey($"prose.{k}")).ToDictionary(k => k, k => Block($"prose.{k}"), StringComparer.Ordinal);
+            var weapons = Enumerable.Range(1, DdbSemantics.WeaponRows).Select(r => new WeaponRow(Text($"weapons.{r}.name"), Text($"weapons.{r}.toHit"), Text($"weapons.{r}.damage"))).ToList();
+            var cut = $"{FormLimits.Default.MaxValueChars.ToString("N0", CultureInfo.InvariantCulture)}";
+            foreach (var (key, title) in DdbSemantics.Prose.Select(p => ($"prose.{p.Key}", p.Value)).Concat(
+                [("languagesAndTools", DdbSemantics.TextTitles["languagesAndTools"]), ("equipmentText", DdbSemantics.TextTitles["equipmentText"])]))
+            {
+                if (values.TryGetValue(key, out var hit) && hit.Field.Clipped)
+                    lines.Add($"{title} was cut to {cut} characters.");
+            }
+            return new DdbTexts(details, prose, values.Keys.Any(k => k.StartsWith("weapons.", StringComparison.Ordinal)) ? weapons : [], Block("equipmentText"), Block("languagesAndTools"));
         }
 
         public IEnumerable<Read<SpellText>> SpellRows()
