@@ -31,7 +31,7 @@ internal sealed record StubWrite(ContentRevision Draft, SourceRecord Source);
 /// The planner's stub request: which row the user asked to create (null for none), the rules family and the source the
 /// class would live in, and the callback that lets the calculation see the in-memory draft (<see cref="ImportCatalog"/>).
 /// </summary>
-internal sealed record StubRequest(string? RowId, string Family, SourceRecord Source, Action<ContentRevision> Created);
+internal sealed record StubRequest(string? RowId, string Family, SourceRecord Source, Action<ContentRevision> Created, bool? AllowedInCampaign = null);
 
 /// <summary>The stub class: its source, its content, and the hit die rule. Pure; nothing here stores anything.</summary>
 internal static partial class StubClasses

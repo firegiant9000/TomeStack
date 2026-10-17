@@ -166,6 +166,81 @@ public class DdbStubClassTests
     }
 
     [Fact]
+    public void Publishing_the_draft_in_the_studio_offers_an_update_and_accepting_it_activates_the_class_for_the_character()
+    {
+        using var h = new DdbHarness();
+        var result = h.Temp.App.ApplyDdbImport(Apply(Read(h, Sheet()), Row0, publish: false));
+        var draft = Assert.Single(h.Temp.App.ListRevisions(result.CreatedClass!.Value));
+        Assert.Empty(h.Temp.App.AvailableUpdates(result.CharacterId)); // a draft offers nothing
+
+        var published = h.Temp.App.PublishMany(new PublishManyRequest([draft.ContentId], [draft.RevisionId], Confirm: true));
+
+        // R102: the character still points at the draft until it accepts the offered update (characters opt in).
+        Assert.Contains(h.Temp.App.GetCharacter(result.CharacterId).Sheet.Diagnostics, d => d.Code == "content.unpublished");
+        var offer = Assert.Single(h.Temp.App.AvailableUpdates(result.CharacterId));
+        Assert.Equal(draft.Reference, offer.From);
+        Assert.Equal(h.Temp.App.ListRevisions(draft.ContentId).Last(r => r.Status == RevisionStatus.Published).Reference, offer.To);
+        Assert.Equal(offer.To, Assert.Single(published.Published).Published);
+        Assert.NotEmpty(h.Temp.App.ReviewUpdate(result.CharacterId, offer.From, offer.To).Fields);
+
+        var updated = h.Temp.App.ApplyUpdate(result.CharacterId, offer.From, offer.To, confirm: true);
+
+        Assert.DoesNotContain(updated.Sheet.Diagnostics, d => d.Code == "content.unpublished");
+        Assert.True(updated.Sheet.Field(FieldIds.HitPoints).Value > 0);
+        Assert.Contains(updated.Sheet.Field(FieldIds.Save(Ability.Str)).Trace, t => t.Operation == "add");
+        Assert.Empty(h.Temp.App.AvailableUpdates(result.CharacterId));
+    }
+
+    [Fact]
+    public void A_campaign_that_does_not_allow_the_stub_source_shows_the_campaign_note_and_still_creates_the_class()
+    {
+        using var h = new DdbHarness();
+        var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Test Table", RulesFamily = RulesFamilies.Srd51, AllowedSources = [Guid.Parse("52500000-0000-4000-8000-000000000001")] });
+
+        var preview = h.Temp.App.PreviewDdbImport(Preview(Read(h, Sheet()), Row0) with { CampaignId = campaign.Id });
+
+        var row = preview.Matches.Single(m => m.RowId == Row0);
+        Assert.Equal((MatchStatus.Matched, "campaign.source-not-allowed"), (row.Status, row.Note));
+        Assert.False(row.Chosen!.AllowedInCampaign);
+        Assert.NotNull(preview.Stub);
+    }
+
+    [Fact]
+    public void A_backup_export_and_the_library_backup_carry_the_stub_by_design()
+    {
+        using var h = new DdbHarness();
+        var before = h.Temp.App.PreviewLibraryBackup();
+        var (id, source, _) = Created(h);
+
+        var export = h.Temp.App.ExportCharacters([id], ExportPurpose.Backup);
+        Assert.Contains(export.Manifest.Notices, n => n.SourceId == source.Id);
+        Assert.DoesNotContain(export.Manifest.Omitted, o => o.SourceId == source.Id);
+        Assert.DoesNotContain(h.Temp.App.PreviewExport([id], ExportPurpose.Backup).Omitted, o => o.SourceId == source.Id);
+
+        using var file = new MemoryStream();
+        var contents = h.Temp.App.WriteLibraryBackup(file).Contents;
+        Assert.Equal(
+            (before.Sources + 1, before.PublishedRevisions + 1, before.DraftRevisions + 1, before.Characters + 1),
+            (contents.Sources, contents.PublishedRevisions, contents.DraftRevisions, contents.Characters));
+    }
+
+    [Fact]
+    public void A_second_import_for_another_rules_family_reuses_the_import_derived_source_and_adds_the_family()
+    {
+        using var h = new DdbHarness();
+        var first = h.Temp.App.ApplyDdbImport(Apply(Read(h, Sheet()), Row0));
+        var sourceId = h.Temp.App.ListRevisions(first.CreatedClass!.Value).Single().Provenance.SourceId;
+
+        var second = h.Temp.App.ApplyDdbImport(Apply(Read(h, Sheet()), Row0, family: RulesFamilies.Srd521));
+
+        Assert.Equal(sourceId, h.Temp.App.ListRevisions(second.CreatedClass!.Value).Single().Provenance.SourceId);
+        var sources = h.Temp.App.Store.ListSources().Where(s => s.Title == "Characters imported from sheets").ToList();
+        var only = Assert.Single(sources);
+        Assert.Equal((true, false), (only.ImportDerived, only.Redistributable));
+        Assert.Equal([RulesFamilies.Srd51, RulesFamilies.Srd521], only.RulesFamilies.Order());
+    }
+
+    [Fact]
     public void A_failure_after_the_draft_and_the_publish_rolls_everything_back_and_keeps_the_token()
     {
         using var h = new DdbHarness();

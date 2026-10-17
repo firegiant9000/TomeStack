@@ -2524,7 +2524,7 @@ it('creates a draft homebrew class from an uninstalled class, leaves Publish it 
   const stub = await screen.findByRole('region', { name: 'Homebrew class to create' });
   for (const text of ['Fixture Tinkerer', 'd8', 'Strength', 'Characters imported from sheets']) expect(stub.textContent).toContain(text);
   expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
-  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio.');
+  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
 
   const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
   await waitFor(() => expect(create.disabled).toBe(false));
@@ -2561,7 +2561,8 @@ it('cancelling after choosing to create a homebrew class writes nothing: no char
   await expectStatus(/Import cancelled\. Nothing was saved\./);
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(characters);
   expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
-  expect(await client.listContent('srd-5.1')).not.toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Fixture Tinkerer' })]));
+  // No draft check here: no client call lists drafts without a content id, and listContent shows published content only.
+  // DdbStubClassTests (cancel at every step) counts sources, revisions, characters and notes.
 });
 
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {

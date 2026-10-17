@@ -261,7 +261,8 @@ public sealed partial class TomeStackApp
         };
         var planner = new ImportPlanner(start, options, request.Resolutions ?? [], Calculate,
             (c, source, choiceId, selected) => WithChoice(Levelled(c), source, choiceId, selected, catalog), catalog.FindRevision, request.EquipMatched,
-            new StubRequest(request.CreateClassRow, request.RulesFamily, stubSource, draft => catalog.Use(draft, stubSource)));
+            new StubRequest(request.CreateClassRow, request.RulesFamily, stubSource, draft => catalog.Use(draft, stubSource),
+                request.CampaignId is { } campaignId ? _store.FindCampaign(campaignId)?.AllowedSources.Contains(stubSource.Id) : null));
         planner.Plan(sheet);
         var diagnostics = new List<Diagnostic>();
         var answered = planner.Character;

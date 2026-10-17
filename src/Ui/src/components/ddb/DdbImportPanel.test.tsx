@@ -664,7 +664,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
   for (const part of ['Fixture Tinkerer', 'srd-5.1', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
   const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
   expect(publish.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio.');
+  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
@@ -683,6 +683,27 @@ it('sends publishClass true once Publish it is ticked, and the draft line goes a
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(true);
+});
+
+it('puts Publish it back to unticked whenever the created class is cleared or chosen again', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
+  await user.click(screen.getByRole('button', { name: 'Back' })); // matches
+  await user.click(await screen.findByRole('checkbox', { name: /Create a homebrew class/ })); // clear it
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(false));
+  await user.click(screen.getByRole('checkbox', { name: /Create a homebrew class/ })); // choose it again
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(false);
 });
 
 it('Cancel with a class chosen discards the sheet and never applies', async () => {

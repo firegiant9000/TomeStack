@@ -65,7 +65,7 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
       </fieldset>
       {kindOrder.map((kind) => {
         const rows = preview.matches
-          .filter((r) => r.kind === kind && (shows(r.status) || r.note === 'stub.created')) // the created class stays listed so its box keeps focus
+          .filter((r) => r.kind === kind && (shows(r.status) || r.rowId === preview.stub?.rowId)) // the created class stays listed so its box keeps focus
           .sort((a, b) => Number(b.status === 'choose') - Number(a.status === 'choose'));
         if (rows.length === 0) return null;
         return (
@@ -88,6 +88,7 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
                   resolution={resolutions[row.rowId]}
                   offer={preview.stubOffers?.find((o) => o.rowId === row.rowId)}
                   creating={createClassRow === row.rowId}
+                  created={preview.stub?.rowId === row.rowId}
                   onResolve={onResolve}
                   onClear={onClear}
                   onCreateClassRow={onCreateClassRow}
@@ -121,6 +122,7 @@ function Row({
   resolution,
   offer,
   creating,
+  created,
   onResolve,
   onClear,
   onCreateClassRow,
@@ -130,12 +132,13 @@ function Row({
   resolution?: Resolution;
   offer?: StubOffer;
   creating: boolean;
+  /** The preview created the class for this row (its note may be the campaign's instead of `stub.created`). */
+  created: boolean;
   onResolve: (resolution: Resolution) => void;
   onClear: (rowId: string) => void;
   onCreateClassRow: (rowId?: string) => void;
 }) {
   const headerId = `ddb-row-${row.rowId.replaceAll(':', '-')}`;
-  const created = row.note === 'stub.created';
   // D35: a class row nothing matched may be created as a homebrew class. When it cannot be (no readable hit die, or another
   // row already creates one, R100) the box stays focusable with aria-disabled and its reason linked, not hidden.
   const reason = offer?.note ? stubReasons[offer.note] : undefined;

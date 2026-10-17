@@ -55,14 +55,17 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             <dt>Saved in</dt>
             <dd>{preview.stub.sourceTitle}, a source that is never shared</dd>
           </dl>
-          <p className="hint">The class has only a hit die and saving throws. Add features, spells and proficiencies in the studio.</p>
+          <p className="hint">
+            The class has only a hit die and saving throws. Add features, spells and proficiencies in the studio. It lives in a source that is never shared,
+            so your later work on it cannot be shared or moved; to share your own version, make a new class.
+          </p>
           <label>
             <input type="checkbox" checked={publishClass} onChange={(e) => onPublishClass(e.target.checked)} /> Publish it
           </label>
           <p role="note">
             {publishClass
               ? 'The class is published with the character, so its hit die and saving throws count now.'
-              : 'The class is a draft: the character gets nothing from it until you publish it in the studio.'}
+              : 'The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.'}
           </p>
         </section>
       )}

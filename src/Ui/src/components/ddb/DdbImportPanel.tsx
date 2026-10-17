@@ -123,7 +123,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         setPreviewFor(requestKey);
         setPreviewError(undefined);
         // A class that can no longer be created (the family changed what is installed, or its hit die is not readable) is let go.
-        if (request.createClassRow && !next.stub) setCreateClassRow(undefined);
+        if (request.createClassRow && !next.stub) {
+          setCreateClassRow(undefined);
+          setPublishClass(false);
+        }
         // An answer stays while its choice is still offered (answered ones stay listed); a changed match that takes the
         // choice away drops it, so it cannot re-add an option the user since left out.
         setAnswers((all) => {
@@ -246,6 +249,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
               setResolutions({});
               setAnswers([]);
               setCreateClassRow(undefined);
+              setPublishClass(false);
               setPreview(undefined);
               setPreviewFor(undefined);
             }}
@@ -265,7 +269,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             resolutions={resolutions}
             answers={answers}
             createClassRow={createClassRow}
-            onCreateClassRow={setCreateClassRow}
+            onCreateClassRow={(rowId) => {
+              setCreateClassRow(rowId);
+              setPublishClass(false); // a cleared or changed class starts again unpublished
+            }}
             onResolve={(resolution) => {
               // A new class match makes an earlier pick for that class's subclass row stale (its choice may differ).
               setResolutions((all) => {

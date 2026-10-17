@@ -140,10 +140,11 @@ internal sealed class ImportPlanner
         {
             if (stubReference is not null && part.RowId == _stub.RowId && part.Status == MatchStatus.NotFound)
             {
-                var candidate = new MatchCandidate(stubReference, StubRevision!.Name, _stub.Source.Title, [_stub.Family], null, new(PlacementKind.Class));
+                var candidate = new MatchCandidate(stubReference, StubRevision!.Name, _stub.Source.Title, [_stub.Family], _stub.AllowedInCampaign, new(PlacementKind.Class));
                 order.Add(new(stubReference, part.Text.Level));
                 _classes[part.Index] = stubReference;
-                _rows.Add(new(part.RowId, MatchKind.Class, $"{part.Text.Name} {part.Text.Level}", MatchStatus.Matched, [candidate], candidate, "stub.created"));
+                // Like any candidate, a source the campaign does not allow shows the campaign note.
+                _rows.Add(new(part.RowId, MatchKind.Class, $"{part.Text.Name} {part.Text.Level}", MatchStatus.Matched, [candidate], candidate, CampaignNote(candidate) ?? "stub.created"));
                 continue;
             }
             if (part.Status == MatchStatus.Matched)
