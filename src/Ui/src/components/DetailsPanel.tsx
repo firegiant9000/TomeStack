@@ -131,6 +131,7 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
     event.preventDefault();
     if (held || running.current) return; // aria-disabled with its reason shown, so this press is refused openly
     running.current = true;
+    const submitted = draft; // what this press sends; anything typed after it is not in the save
     setSaving(true);
     let saved: CharacterView | undefined;
     try {
@@ -144,7 +145,8 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
       // Show what the service stored (trimmed), so the draft is never left holding raw whitespace that reads as an edit later.
       const answer = toDraft(saved.character.details);
       setSeeded(JSON.stringify(answer));
-      setDraft(answer);
+      // Fields edited while the save ran keep their typed text; the rest take the answer.
+      setDraft((current) => Object.fromEntries(keys.map((k) => [k, normalised(k, current[k]) === normalised(k, submitted[k]) ? answer[k] : current[k]])) as Draft);
       onChanged(saved);
       onStatus('Details saved.');
     }

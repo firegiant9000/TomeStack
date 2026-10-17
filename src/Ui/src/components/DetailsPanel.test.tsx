@@ -187,16 +187,42 @@ it('ignores a second press while a save runs', async () => {
   const user = userEvent.setup();
   let finish: (v: CharacterView) => void = () => {};
   vi.mocked(client.saveCharacter).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-  const { form, save } = setup();
+  const onChanged = vi.fn();
+  const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  const form = screen.getByRole('form', { name: 'Details' });
+  const save = within(form).getByRole('button', { name: 'Save details' });
   await user.type(within(form).getByRole('textbox', { name: 'Hair' }), 'Fixture auburn');
   await user.click(save);
   await user.click(save);
   expect(client.saveCharacter).toHaveBeenCalledTimes(1);
   expect(held(save)).toBe(true);
   expect(reasonOf(save)).toMatch(/saving/i);
-  finish(viewOf({ details: { appearance: { hair: 'Fixture auburn' } } }));
-  // The saving reason clears once the save finishes (this harness never hands the saved view back, so the form re-seeds to the old stored one).
-  await waitFor(() => expect(reasonOf(save)).not.toMatch(/saving/i));
+  const savedView = viewOf({ details: { appearance: { hair: 'Fixture auburn' } } });
+  finish(savedView);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(savedView));
+  rerender(<DetailsPanel view={savedView} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  expect(within(form).getByRole<HTMLInputElement>('textbox', { name: 'Hair' }).value).toBe('Fixture auburn');
+  expect(reasonOf(save)).toMatch(/nothing.*changed/i); // the result was applied: stored now equals the form
+});
+
+it('keeps text typed while a save is in flight, in another field and in the submitted one', async () => {
+  const user = userEvent.setup();
+  let finish: (v: CharacterView) => void = () => {};
+  vi.mocked(client.saveCharacter).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const onChanged = vi.fn();
+  const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  const form = screen.getByRole('form', { name: 'Details' });
+  await user.type(within(form).getByRole('textbox', { name: 'Ideals' }), 'A');
+  await user.click(within(form).getByRole('button', { name: 'Save details' }));
+  await user.type(within(form).getByRole('textbox', { name: 'Bonds' }), 'Fixture bond');
+  await user.type(within(form).getByRole('textbox', { name: 'Ideals' }), 'B'); // the submitted field, edited too
+  const savedView = viewOf({ details: { ideals: 'A' } });
+  finish(savedView);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(savedView));
+  rerender(<DetailsPanel view={savedView} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Bonds' }).value).toBe('Fixture bond');
+  expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: 'Ideals' }).value).toBe('AB');
+  expect(held(within(form).getByRole('button', { name: 'Save details' }))).toBe(false);
 });
 
 // A draft saved with surrounding whitespace is stored trimmed; it must still count as untouched, so a later restore or import shows.
