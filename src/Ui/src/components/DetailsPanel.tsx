@@ -12,6 +12,7 @@ import {
   maxListEntries,
   maxListEntry,
   personalityFields,
+  readList,
   textProblem,
   toDraft,
   type Draft,
@@ -37,6 +38,9 @@ interface Props {
 const nearLimit = 200;
 
 const keys: DraftKey[] = [...[...personalityFields, ...appearanceFields, ...backgroundFields].map((f) => f.key), ...listFields.map((f) => f.key)];
+
+const listKeys: DraftKey[] = listFields.map((f) => f.key);
+const normalised = (key: DraftKey, text: string) => (listKeys.includes(key) ? readList(text).entries.join('\n') : text.trim());
 
 function DetailText({ field, value, onChange }: { field: TextField; value: string; onChange: (text: string) => void }) {
   const id = `details-${field.key}`;
@@ -109,7 +113,8 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
   if (seeded !== storedKey) {
     const previous = JSON.parse(seeded) as Draft;
     setSeeded(storedKey);
-    setDraft(Object.fromEntries(keys.map((k) => [k, draft[k] === previous[k] ? stored[k] : draft[k]])) as Draft);
+    // Equivalent text (trimmed, blank list lines dropped) counts as untouched: the service stores it normalised.
+    setDraft(Object.fromEntries(keys.map((k) => [k, normalised(k, draft[k]) === normalised(k, previous[k]) ? stored[k] : draft[k]])) as Draft);
   }
   const [saving, setSaving] = useState(false);
   const running = useRef(false);
@@ -136,6 +141,10 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
     running.current = false;
     setSaving(false);
     if (saved) {
+      // Show what the service stored (trimmed), so the draft is never left holding raw whitespace that reads as an edit later.
+      const answer = toDraft(saved.character.details);
+      setSeeded(JSON.stringify(answer));
+      setDraft(answer);
       onChanged(saved);
       onStatus('Details saved.');
     }

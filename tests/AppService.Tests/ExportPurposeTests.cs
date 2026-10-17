@@ -179,10 +179,22 @@ public class ExportPurposeTests
 
     private static readonly CharacterDetails FixtureDetails = new(
         Alignment: "Fixture-detail-alignment",
+        PersonalityTraits: "Fixture-detail-traits",
+        Ideals: "Fixture-detail-ideals",
+        Bonds: "Fixture-detail-bonds",
+        Flaws: "Fixture-detail-flaws",
+        Appearance: new("Fixture-detail-age", "Fixture-detail-height", "Fixture-detail-weight", "Fixture-detail-eyes", "Fixture-detail-skin", "Fixture-detail-hair"),
         Backstory: "Fixture-detail-backstory",
-        Appearance: new(Eyes: "Fixture-detail-eyes"),
+        AlliesAndOrganisations: "Fixture-detail-allies",
         Languages: ["Fixture-detail-tongue"],
         ToolsAndOther: ["Fixture-detail-kit"]);
+
+    private static string PackageCharacterText(byte[] package, Guid id)
+    {
+        using var zip = new ZipArchive(new MemoryStream(package), ZipArchiveMode.Read);
+        using var reader = new StreamReader(zip.GetEntry($"characters/{id:D}.json")!.Open());
+        return reader.ReadToEnd();
+    }
 
     /// <summary>Details hold lists, which records compare by reference: compare what they serialise to.</summary>
     private static string AsJson(CharacterDetails? details) => JsonSerializer.Serialize(details, RulesJson.Options);
@@ -239,6 +251,11 @@ public class ExportPurposeTests
     {
         using var origin = new TempApp();
         var id = SaveCharacterWithDetailsAndNotes(origin);
+
+        // Non-vacuous: the same markers are in this character's backup, so their absence below means the exports leave them out.
+        var backupText = PackageCharacterText(origin.App.ExportCharacters([id], ExportPurpose.Backup).Content, id);
+        foreach (var marker in new[] { "alignment", "traits", "ideals", "bonds", "flaws", "age", "height", "weight", "eyes", "skin", "hair", "backstory", "allies", "tongue", "kit" })
+            Assert.Contains($"Fixture-detail-{marker}", backupText, StringComparison.Ordinal);
 
         foreach (var target in new[] { SheetJson.Target, FoundryDnd5e.Target })
         {

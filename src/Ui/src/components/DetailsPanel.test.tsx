@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
-import type { Character, CharacterSheet, CharacterView } from '../api/types';
+import type { Character, CharacterDetails, CharacterSheet, CharacterView } from '../api/types';
 import { DetailsPanel } from './DetailsPanel';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn() } }));
@@ -194,8 +194,30 @@ it('ignores a second press while a save runs', async () => {
   expect(client.saveCharacter).toHaveBeenCalledTimes(1);
   expect(held(save)).toBe(true);
   expect(reasonOf(save)).toMatch(/saving/i);
-  finish(viewOf());
-  await waitFor(() => expect(held(save)).toBe(false));
+  finish(viewOf({ details: { appearance: { hair: 'Fixture auburn' } } }));
+  // The saving reason clears once the save finishes (this harness never hands the saved view back, so the form re-seeds to the old stored one).
+  await waitFor(() => expect(reasonOf(save)).not.toMatch(/saving/i));
+});
+
+// A draft saved with surrounding whitespace is stored trimmed; it must still count as untouched, so a later restore or import shows.
+it.each([
+  ['a list line with a trailing Enter', 'Languages', 'Fixture tongue{Enter}', { languages: ['Fixture tongue'] }, { languages: ['Fixture other'] }, 'Fixture other'],
+  ['a text field with surrounding spaces', 'Ideals', '  Fixture ideal  ', { ideals: 'Fixture ideal' }, { ideals: 'Fixture changed' }, 'Fixture changed'],
+] as [string, string, string, CharacterDetails, CharacterDetails, string][])('after saving %s, a later change from elsewhere shows and Save is held', async (_name, label, typed, savedDetails, laterDetails, shown) => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  const form = screen.getByRole('form', { name: 'Details' });
+  const box = within(form).getByRole<HTMLTextAreaElement>('textbox', { name: label });
+  await user.type(box, typed);
+  const savedView = viewOf({ details: savedDetails });
+  vi.mocked(client.saveCharacter).mockResolvedValue(savedView);
+  await user.click(within(form).getByRole('button', { name: 'Save details' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(savedView));
+  rerender(<DetailsPanel view={savedView} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  rerender(<DetailsPanel view={viewOf({ details: laterDetails })} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
+  expect(within(form).getByRole<HTMLTextAreaElement>('textbox', { name: label }).value).toBe(shown);
+  expect(held(within(form).getByRole('button', { name: 'Save details' }))).toBe(true);
 });
 
 it('takes a saved change from elsewhere into fields the user has not edited, and keeps the ones being edited', async () => {
