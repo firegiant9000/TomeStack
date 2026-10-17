@@ -356,6 +356,10 @@ internal static class Generators
         from temporary in Gen.Choose(0, 20)
         from updated in Gen.Choose(0, 1_000_000)
         from archived in OptionalValue(Gen.Choose(0, 1_000_000))
+        // Schema v9 fields, mostly absent: a character is written as v8 unless one of them is set (R73).
+        from xp in OptionalValue(Gen.Choose(0, Character.MaxXp))
+        from alignment in Optional(Names)
+        from attuned in OptionalValue(Gen.Elements(true, false))
         // A field this build does not know: it round-trips through Character.Extensions.
         from extra in Optional(Keys)
         from extraNumber in Gen.Choose(-1000, 1000)
@@ -369,7 +373,9 @@ internal static class Generators
             BaseAbilities = new(scores[0], scores[1], scores[2], scores[3], scores[4], scores[5]),
             Pins = pins,
             Overrides = overrides,
-            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i]))],
+            Equipment = [.. items.Select((item, i) => new EquipmentEntry(item, equipped[i], quantity[i], Attuned: i == 0 ? attuned : null))],
+            Xp = xp,
+            Details = alignment is null ? null : new(Alignment: alignment),
             Spells = [.. spells.Select((s, i) => new KnownSpell(caster, s, i % 2 == 0))],
             CrossFamilyExceptions = exception is null || pins.Count == 0 ? [] : [new CrossFamilyException(pins[0], exception)],
             Play = new() { Inspiration = inspiration, TemporaryHitPoints = temporary },

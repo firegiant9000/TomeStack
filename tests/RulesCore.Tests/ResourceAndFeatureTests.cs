@@ -124,7 +124,7 @@ public class ResourceAndFeatureTests
 
         var character = JsonSerializer.Deserialize<Character>(json, RulesJson.Options)!;
 
-        Assert.Equal(Character.CurrentSchemaVersion, character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
         Assert.Equal(new PlayState().CurrentHitPoints, character.Play.CurrentHitPoints);
         Assert.Empty(character.Play.Resources);
         Assert.Empty(character.Validate());
@@ -139,7 +139,7 @@ public class ResourceAndFeatureTests
 
         var character = JsonSerializer.Deserialize<Character>(json, RulesJson.Options)!;
 
-        Assert.Equal(Character.CurrentSchemaVersion, character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
         Assert.Equal((7, 1), (character.Play.CurrentHitPoints, character.Play.Exhaustion));
         Assert.Equal((0, new DeathSaves(), false), (character.Play.HitDiceSpent.Count, character.Play.DeathSaves, character.Play.Inspiration));
         Assert.Equal((0, 0, 0), (character.Spells.Count, character.Play.SpellSlotsSpent.Count, character.Play.PactSlotsSpent));

@@ -316,7 +316,7 @@ public class PlayCommandTests
         Assert.Equal(2, stored.Character.Play.Exhaustion);
         Assert.True(stored.Character.Play.Inspiration);
         Assert.Equal([new HitDiceUse(12, 1)], stored.Character.Play.HitDiceSpent);
-        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, stored.Character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
 
         using var destination = new TempApp();
         destination.App.ApplyImport(temp.App.ExportCharacters([id]).Content);

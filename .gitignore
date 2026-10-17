@@ -19,6 +19,7 @@ src/Ui/dist/
 *.db-wal
 *.db-shm
 *.db.v*.bak
+*.db.app-*.bak
 smoke-result.json
 errors.log
 errors.log.1

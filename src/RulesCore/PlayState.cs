@@ -64,6 +64,14 @@ public sealed record PlayState
     /// </summary>
     public Concentration? Concentration { get; init; }
 
+    private IReadOnlyList<CompanionPlay>? _companions;
+
+    /// <summary>
+    /// Character schema v9 (D42): current and temporary hit points per <see cref="Character.Companions"/> entry. Null while none is
+    /// recorded (an empty list is normalised to null, R74, so it does not make the character v9).
+    /// </summary>
+    public IReadOnlyList<CompanionPlay>? Companions { get => _companions; init => _companions = Character.NullIfEmpty(value); }
+
     public bool IsOn(Guid contentId, string toggleId) => Toggles.Any(t => t.ContentId == contentId && t.ToggleId == toggleId);
 
     public int SlotsSpentOf(int level) => SpellSlotsSpent.LastOrDefault(s => s.Level == level)?.Spent ?? 0;
@@ -138,6 +146,13 @@ public sealed record PlayState
             yield return new("play.death-saves-out-of-range", $"Death saving throw successes and failures must each be between 0 and {DeathSaves.Maximum}.");
         if (Concentration is { } con && (string.IsNullOrWhiteSpace(con.Name) || con.Name.Length > MaxConcentrationNameLength || con.PendingSaveDc is < 10 or > MaxConcentrationSaveDc))
             yield return new("play.concentration-invalid", $"Concentration needs the spell's name (at most {MaxConcentrationNameLength} characters), and a pending save DC between 10 and 100.");
+        if (Companions is { } companions)
+        {
+            if (companions.Any(c => c is null || c.Current is < 0 or > MaxHitPoints || c.Temporary is < 0 or > MaxHitPoints))
+                yield return new("play.companion-invalid", $"A companion's current and temporary hit points must be between 0 and {MaxHitPoints}.");
+            if (companions.OfType<CompanionPlay>().GroupBy(c => c.Id).Any(g => g.Count() > 1))
+                yield return new("play.companion-duplicate", "A companion's hit points are recorded more than once.");
+        }
     }
 }
 

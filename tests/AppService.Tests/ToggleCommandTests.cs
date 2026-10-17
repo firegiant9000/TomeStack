@@ -77,7 +77,7 @@ public class ToggleCommandTests
 
         var stored = temp.App.GetCharacter(id);
         Assert.Equal([new ActiveToggle(Stance.ContentId, "stance")], stored.Character.Play.Toggles);
-        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, stored.Character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
         using var clean = new TempApp();
         clean.App.ApplyImport(temp.App.ExportCharacters([id]).Content);
         Assert.True(clean.App.GetCharacter(id).Sheet.Toggles!.Single().On);

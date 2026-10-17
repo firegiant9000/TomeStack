@@ -44,7 +44,7 @@ public sealed partial class TomeStackApp
         // character the app accepted can always be backed up and restored (session notes in a script the JSON encoder escapes
         // and long free-text fields are what can get there).
         if (problems.Count == 0 && Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(character, RulesJson.Options)) + 1 > PackageService.MaxEntryBytes)
-            problems.Add(new("character.too-large", $"This character would be larger than a backup can hold ({PackageService.MaxEntryBytes / (1024 * 1024)} MB). Shorten its session notes or other long text."));
+            problems.Add(new("character.too-large", $"This character would be larger than a backup can hold ({PackageService.MaxEntryBytes / (1024 * 1024)} MB). Shorten the long text it holds (its journal, backstory and other details)."));
         if (problems.Count > 0)
             throw new AppValidationException(problems);
         return character;

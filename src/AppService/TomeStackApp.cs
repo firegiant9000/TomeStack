@@ -80,8 +80,9 @@ public sealed partial class TomeStackApp : IDisposable
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
     /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
+    /// <param name="appVersion">The version to stamp the data folder with (R75); the running build's, unless a test says otherwise.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -89,6 +90,9 @@ public sealed partial class TomeStackApp : IDisposable
         TomeStackApp? app = null;
         try
         {
+            // R75: the one-time copy for the build being left, before anything (BackupBeforeUpgrade, a migration, seeding) writes.
+            var version = appVersion ?? AppVersionStamp.CurrentVersion;
+            AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
             app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
@@ -115,6 +119,7 @@ public sealed partial class TomeStackApp : IDisposable
                 app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
             }
             AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
+            AppVersionStamp.Write(dataDirectory, version); // only after a successful open
             return app;
         }
         catch
@@ -151,7 +156,7 @@ public sealed partial class TomeStackApp : IDisposable
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), folderName);
 
     public AppInfo GetInfo() => new(
-        typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+        AppVersionStamp.CurrentVersion,
         _store.SchemaVersion,
         RulesFamilies.All,
         _warnings,
@@ -263,14 +268,23 @@ public sealed partial class TomeStackApp : IDisposable
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
     /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
     /// <c>character.unarchive</c> change it. Currency and session notes (v8) are ordinary saved fields: the payload wins,
-    /// as for equipment and overrides.
+    /// as for equipment and overrides. The one change to the kept play state: hit points recorded for a companion (v9) that the
+    /// payload no longer has go with it, so removing a companion is never refused for the hit points it leaves behind.
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
         return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
-            ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt }
+            ? character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt }
             : character with { ArchivedAt = null }); // a save never creates an archived character
+    }
+
+    private static PlayState WithoutOrphanedCompanionPlay(PlayState play, Character payload)
+    {
+        if (play.Companions is not { } recorded)
+            return play;
+        var remaining = recorded.Where(p => payload.Companions?.Any(c => c?.Id == p.Id) ?? false).ToList();
+        return remaining.Count == recorded.Count ? play : play with { Companions = remaining };
     }
 
     /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>

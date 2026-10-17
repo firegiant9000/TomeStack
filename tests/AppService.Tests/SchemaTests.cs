@@ -62,6 +62,28 @@ public class SchemaTests
         AssertValid("character", document.RootElement, file);
     }
 
+    [Fact]
+    public void The_v9_schema_is_not_vacuous()
+    {
+        var node = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "characters", "srd521-courier-v9.json")))!;
+        node["xp"] = -1;
+        node["details"]!["alignment"] = new string('x', 2001);
+        var languages = new JsonArray();
+        for (var i = 0; i < 31; i++)
+            languages.Add("x");
+        node["details"]!["languages"] = languages;
+        node["damageDefences"]![0]!["type"] = "sonic";
+        node["customAttacks"]![0]!["toHit"] = 99;
+        node["companions"]![0]!["hitPointMaximum"] = 10_001;
+        node["play"]!["companions"]![0]!["temporary"] = -1;
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        var errors = Validate("character", document.RootElement);
+
+        foreach (var location in new[] { "/xp", "/details/alignment", "/details/languages", "/damageDefences/0/type", "/customAttacks/0/toHit", "/companions/0/hitPointMaximum", "/play/companions/0/temporary" })
+            Assert.Contains(location, errors, StringComparison.Ordinal);
+    }
+
     /// <summary>Test fixture packs and the bundled SRD packs.</summary>
     public static TheoryData<string> PackFixtures() =>
     [

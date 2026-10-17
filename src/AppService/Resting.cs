@@ -70,9 +70,9 @@ public sealed partial class TomeStackApp
         return (character, RestPlanner.ShortRest(character, sheet, hitDice));
     }
 
-    private static string Basis(Character character, RestPlan plan)
-    {
-        var text = JsonSerializer.Serialize(character, RulesJson.Compact) + "\n" + JsonSerializer.Serialize(plan, RulesJson.Compact);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-    }
+    private static string Basis(Character character, RestPlan plan) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(BasisText(character, plan))));
+
+    /// <summary>What the rest token hashes: the character as stored (its computed schema version included) and the plan.</summary>
+    internal static string BasisText(Character character, RestPlan plan) =>
+        JsonSerializer.Serialize(character, RulesJson.Compact) + "\n" + JsonSerializer.Serialize(plan, RulesJson.Compact);
 }
