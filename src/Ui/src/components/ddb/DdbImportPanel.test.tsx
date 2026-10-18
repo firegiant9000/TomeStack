@@ -668,7 +668,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
-  expect(vi.mocked(client.ddbApply).mock.calls[0]).toEqual([expect.objectContaining({ createClassRow: 'class:0' }), false]);
+  expect(vi.mocked(client.ddbApply).mock.calls[0]).toEqual([expect.objectContaining({ createClassRow: 'class:0' }), false, false]);
 });
 
 it('sends publishClass true once Publish it is ticked, and the draft line goes away', async () => {
@@ -834,4 +834,93 @@ it('Cancel with a class chosen discards the sheet and never applies', async () =
   expect(client.ddbDiscard).toHaveBeenCalledWith('fixture-token');
   expect(client.ddbApply).not.toHaveBeenCalled();
   expect(onCancel).toHaveBeenCalled();
+});
+
+// ---- Item 16 (D16(c)): reference drafts for unmatched feats and features ----
+
+function draftInfo(index: number, kind: 'feat' | 'feature' = 'feature') {
+  return { rowId: `${kind}:${index}`, kind, name: `Fixture Knack ${index}`, firstLine: `Fixture first line ${index}.`, length: 40 };
+}
+
+/** A summary-ready preview that also lists `count` reference drafts. */
+function draftsPreview(count: number, offset = 0): DdbPreview {
+  return { ...stubPreview(true), referenceDrafts: Array.from({ length: count }, (_, i) => draftInfo(i + offset)) };
+}
+
+it('lists the reference drafts on the summary with an unticked Publish tick, the first 10 and "and N more"', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(13));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(within(section).getAllByRole('listitem')).toHaveLength(11);
+  expect(section.textContent).toContain('Fixture Knack 0');
+  expect(section.textContent).toContain('Fixture first line 0.');
+  expect(section.textContent).not.toContain('Fixture Knack 10');
+  expect(section.textContent).toContain('and 3 more');
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 13 reference drafts' });
+  expect(tick.checked).toBe(false);
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+});
+
+it('shows no reference section when the import has no drafts', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+
+  await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(screen.queryByRole('region', { name: 'Reference drafts' })).toBeNull();
+});
+
+it('sends publishReferences true only once the tick is given, and false otherwise', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toBe(true);
+});
+
+it('sends publishReferences false when the tick is left alone', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' });
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toBe(false);
+});
+
+it('puts the reference tick back to unticked when the set of drafts shown changes, and keeps focus on the tick', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => draftsPreview(request.includePlayState ? 3 : 2));
+  renderPanel();
+  await toStubSummary(user);
+
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  await user.click(tick);
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' }).checked).toBe(true);
+  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  expect(changed.checked).toBe(false);
+});
+
+it('uses the singular for one reference draft', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(1));
+  renderPanel();
+  await toStubSummary(user);
+
+  expect(await screen.findByRole('checkbox', { name: 'Publish this reference draft' })).toBeTruthy();
 });

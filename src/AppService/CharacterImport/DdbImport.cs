@@ -167,11 +167,12 @@ public sealed partial class TomeStackApp
             throw Refused("ddb.confirmation-required", "Creating the character needs confirmation.");
         var sheet = DdbSessions.Peek(request.Token)
             ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
-        var (proposal, stub) = ProposeDdb(sheet,
+        var (proposal, writes) = ProposeDdb(sheet,
             new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched, request.CreateClassRow),
             Guid.NewGuid());
         // Item 15: a class asked for that is not offered (its die cannot be read, another row already creates one, or it is
         // installed after all) is refused with a code, not guessed at. The message never names the class.
+        var stub = writes.Stub;
         if (request.CreateClassRow is not null && stub is null)
             throw Refused("ddb.class-not-offered", "A class cannot be created for that line of the sheet. Choose it again in the matches step, or leave it out.");
 
@@ -199,17 +200,28 @@ public sealed partial class TomeStackApp
         var importNotes = 0;
         _store.InTransaction(() =>
         {
-            // D35: the source, the stub draft, the optional publish, then the character, in this one transaction: any refusal
-            // below rolls the source, the class and the character back together.
+            // D35, item 16: the source, the stub draft, the reference drafts, the optional publishes, then the character, in this
+            // one transaction: any refusal below rolls the source, the drafts, the publishes and the character back together.
+            if (stub is not null || writes.References.Count > 0)
+                _store.UpsertSource(writes.Source);
             if (stub is not null)
             {
-                _store.UpsertSource(stub.Source);
                 SaveDraft(stub.Draft);
                 if (request.PublishClass)
                 {
                     var published = PublishMany(new PublishManyRequest([stub.Draft.ContentId], [stub.Draft.RevisionId], Confirm: true)).Published.Single().Published;
                     character = character.ReplaceReference(stub.Draft.Reference, published);
                 }
+            }
+            foreach (var reference in writes.References)
+                SaveDraft(reference);
+            if (request.PublishReferences && writes.References.Count > 0)
+            {
+                var published = PublishMany(new PublishManyRequest([.. writes.References.Select(r => r.ContentId)], [.. writes.References.Select(r => r.RevisionId)], Confirm: true)).Published;
+                // R105: a published feat is linked as a pin (where a matched standalone feat goes); a feature has no place on the
+                // character, so it stays reference content in the studio and its gap note stays the character's link to it.
+                var pins = published.Where(p => writes.References.Any(r => r.Reference == p.Draft && r.Kind == ContentKind.Feat)).Select(p => p.Published);
+                character = character with { Pins = [.. character.Pins, .. pins] };
             }
             SaveCharacter(character);
             // The few noted differences first, so the import notes (counted past the limit, not stored) never crowd them out.
@@ -218,7 +230,8 @@ public sealed partial class TomeStackApp
             importNotes = AddImportGapNotes(character.Id, labels, MapOf(sheet)?.ImportGapNoteText);
         });
         DdbSessions.Take(request.Token);
-        return new DdbApplyResult(character.Id, character.Overrides.Count, importNotes + noted.Count, labels.Count - importNotes, proposal.Report, stub?.Draft.ContentId);
+        return new DdbApplyResult(character.Id, character.Overrides.Count, importNotes + noted.Count, labels.Count - importNotes, proposal.Report, stub?.Draft.ContentId,
+            writes.References.Count > 0 ? [.. writes.References.Select(r => r.ContentId)] : null);
     }
 
     /// <summary>The source stub classes live in: the stored one (one for the data folder), else a new in-memory record the apply stores.</summary>
@@ -236,7 +249,7 @@ public sealed partial class TomeStackApp
     /// stub class as if it were published, with its not-yet-stored source; nothing is written. <c>Stub</c> is set when the
     /// user chose to create the class and the sheet settled its die.
     /// </summary>
-    internal (DdbPreview Preview, StubWrite? Stub) ProposeDdb(DdbSheet sheet, DdbPreviewRequest request, Guid id)
+    internal (DdbPreview Preview, ImportWrites Writes) ProposeDdb(DdbSheet sheet, DdbPreviewRequest request, Guid id)
     {
         var options = ListContent(request.RulesFamily, request.CampaignId).Where(o => o.Compatible && !o.Superseded).ToList();
         var catalog = new ImportCatalog(_store);
@@ -323,6 +336,8 @@ public sealed partial class TomeStackApp
         diagnostics.AddRange(final.Diagnostics);
 
         var rows = planner.Rows;
+        // Item 16: the unmatched feats and features that carry text become reference drafts in the same source as the stub.
+        var references = ReferenceDrafts.Build(sheet, rows, request.RulesFamily, stubSource.Id);
         int Count(MatchStatus status) => rows.Count(r => r.Status == status);
         var report = new DdbReport(
             Count(MatchStatus.Matched) - planner.ChosenByUser,
@@ -335,13 +350,14 @@ public sealed partial class TomeStackApp
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily,
             LayoutMaps.NameOf(sheet.Layout),
-            [.. sheet.Lines ?? [], .. extras.Lines, .. planner.Lines]);
+            [.. sheet.Lines ?? [], .. extras.Lines, .. planner.Lines, .. references.Lines]);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
         // A choice the user answered stays listed once it is full, so step 3 can still change the answer; a refused answer
         // does not keep a choice the sheet filled listed (its diagnostic says why).
         var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || accepted.Contains((c.Source, c.ChoiceId))).ToList();
         var write = planner.StubRevision is { } draft ? new StubWrite(draft, stubSource) : null;
-        return (new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply, planner.StubOffers, planner.StubReview), write);
+        return (new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply, planner.StubOffers, planner.StubReview,
+            references.Info.Count > 0 ? references.Info : null), new ImportWrites(write, stubSource, references.Drafts));
     }
 
     /// <summary>D16d: only what <see cref="PlayState"/> has and the layout read.</summary>
@@ -412,18 +428,20 @@ public sealed record DdbPreview(
     IReadOnlyList<Diagnostic> Diagnostics,
     bool CanApply,
     IReadOnlyList<StubOffer>? StubOffers = null,
-    StubClassReview? Stub = null);
+    StubClassReview? Stub = null,
+    IReadOnlyList<ReferenceDraftInfo>? ReferenceDrafts = null);
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
 /// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped. Defaults to true, as the UI's checkbox does; a caller that omits it gets the guess.</param>
 public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false);
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>
-public sealed record DdbApplyResult(Guid CharacterId, int Overrides, int GapNotes, int GapNotesNotStored, DdbReport Report, Guid? CreatedClass = null);
+/// <param name="ReferenceDrafts">Item 16: the content ids of the reference drafts written, in the order the summary listed them; null when none.</param>
+public sealed record DdbApplyResult(Guid CharacterId, int Overrides, int GapNotes, int GapNotesNotStored, DdbReport Report, Guid? CreatedClass = null, IReadOnlyList<Guid>? ReferenceDrafts = null);
 
 /// <param name="Name">The character's name as read (shown to the user only, never logged).</param>
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>

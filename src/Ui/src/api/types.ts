@@ -1729,6 +1729,15 @@ export interface StubClassReview {
   sourceTitle: string;
 }
 
+/** Item 16 (D16(c)): one reference draft the import would write (name and description only). `firstLine` is the description's first line. */
+export interface ReferenceDraftInfo {
+  rowId: string;
+  kind: 'feat' | 'feature';
+  name: string;
+  firstLine: string;
+  length: number;
+}
+
 /** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */
 export interface DdbPreview {
   character: Character;
@@ -1743,6 +1752,8 @@ export interface DdbPreview {
   stubOffers?: StubOffer[] | null;
   /** Set when the previewed request asked for a class to be created. */
   stub?: StubClassReview | null;
+  /** The reference drafts for unmatched feats and features that carry text (item 16); absent when there are none. */
+  referenceDrafts?: ReferenceDraftInfo[] | null;
 }
 
 export interface DdbApplyResult {
@@ -1753,4 +1764,6 @@ export interface DdbApplyResult {
   report: DdbReport;
   /** The created class's content id, when one was created. */
   createdClass?: string | null;
+  /** The content ids of the reference drafts written, when any were. */
+  referenceDrafts?: string[] | null;
 }

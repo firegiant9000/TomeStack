@@ -28,6 +28,12 @@ public sealed record StubClassReview(string RowId, string Name, string RulesFami
 internal sealed record StubWrite(ContentRevision Draft, SourceRecord Source);
 
 /// <summary>
+/// Everything <c>ddb.apply</c> writes besides the character (D35, item 16): the stub class, the one import-derived source
+/// both live in (stored only when one of them is written), and the reference drafts.
+/// </summary>
+internal sealed record ImportWrites(StubWrite? Stub, SourceRecord Source, IReadOnlyList<ContentRevision> References);
+
+/// <summary>
 /// The planner's stub request: which row the user asked to create (null for none), the rules family and the source the
 /// class would live in, and the callback that lets the calculation see the in-memory draft (<see cref="ImportCatalog"/>).
 /// </summary>

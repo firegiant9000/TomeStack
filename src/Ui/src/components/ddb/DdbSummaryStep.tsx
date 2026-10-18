@@ -10,14 +10,21 @@ interface Props {
   /** D35: publish the created class with the character (off by default). */
   publishClass: boolean;
   onPublishClass: (publish: boolean) => void;
+  /** Item 16: publish the reference drafts with the character (off by default). */
+  publishReferences?: boolean;
+  onPublishReferences?: (publish: boolean) => void;
 }
 
+/** How many reference drafts the summary lists before "and N more". */
+const shownDrafts = 10;
+
 /** Step 5: what will be created and what will not, before the one write. */
-export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, publishClass, onPublishClass }: Props) {
+export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, publishClass, onPublishClass, publishReferences = false, onPublishReferences }: Props) {
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
   const waiting = matches.filter((m) => m.status === 'choose').length;
+  const drafts = preview.referenceDrafts ?? [];
   const classes = matches.filter((m) => m.kind === 'class' && m.status === 'matched').map((m) => m.label);
   return (
     <>
@@ -66,6 +73,28 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             {publishClass
               ? 'The class is published with the character, so its hit die and saving throws count now.'
               : 'The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.'}
+          </p>
+        </section>
+      )}
+      {drafts.length > 0 && (
+        <section aria-labelledby="ddb-reference-drafts">
+          <h4 id="ddb-reference-drafts">Reference drafts</h4>
+          <ul>
+            {drafts.slice(0, shownDrafts).map((d) => (
+              <li key={d.rowId}>
+                <strong>{d.name}</strong>
+                {d.firstLine && <> — {d.firstLine}</>}
+              </li>
+            ))}
+            {drafts.length > shownDrafts && <li>and {drafts.length - shownDrafts} more</li>}
+          </ul>
+          <label>
+            <input type="checkbox" checked={publishReferences} onChange={(e) => onPublishReferences?.(e.target.checked)} />{' '}
+            {drafts.length === 1 ? 'Publish this reference draft' : `Publish these ${drafts.length} reference drafts`}
+          </label>
+          <p role="note">
+            They hold a name and a description only, no mechanics. Features are kept as reference content in the studio; the gap notes stay on the
+            character. {publishReferences ? 'Published feats are pinned on the character.' : 'Left unticked, they stay drafts in the studio.'}
           </p>
         </section>
       )}

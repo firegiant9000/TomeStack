@@ -103,7 +103,8 @@ public static partial class DdbParser
             DdbSemantics.Coins.Where(c => values.ContainsKey($"currency.{c}")).ToDictionary(c => c, c => sheet.Int($"currency.{c}", 0, Currency.MaxCoins, Coin()), StringComparer.Ordinal),
             lines.Count == 0 ? null : lines,
             texts,
-            sheet.Text("play.hitDice.total", applyPattern: false));
+            sheet.Text("play.hitDice.total", applyPattern: false),
+            features.Texts.Count == 0 ? null : features.Texts);
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];
@@ -252,22 +253,35 @@ public static partial class DdbParser
         /// each split on the map's separator for it (one item when it has none). With the split's patterns, a heading line
         /// starts a section, which carries on into the next numbered field (the fields are one text cut into boxes), only
         /// lines the item pattern matches are items, and items in the feats section are returned apart (<paramref name="semantic"/>
-        /// <c>features</c> only). Each list keeps at most <see cref="MaxListItems"/> items.
+        /// <c>features</c> only). Each list keeps at most <see cref="MaxListItems"/> items. Item 16 (R104): the lines the item
+        /// pattern skips are the description of the item before them, up to the next item or heading (and carrying on into the
+        /// next numbered field); <paramref name="Texts"/> holds each description that is not blank.
         /// </summary>
-        public (List<Read<string>> Items, List<Read<string>> Feats) ListItems(string semantic)
+        public (List<Read<string>> Items, List<Read<string>> Feats, List<FeatureText> Texts) ListItems(string semantic)
         {
             var items = new List<Read<string>>();
             var feats = new List<Read<string>>();
+            var described = new List<FeatureText>();
             var split = compiled.Map.Splits.FirstOrDefault(s => s.Semantic == semantic);
             var texts = new List<Read<string>> { Text(semantic) };
             texts.AddRange(Rows(semantic).Select(n => Text($"{semantic}[{n}]")));
             string? section = null;
+            (string Name, FeatureKind Kind)? current = null;
+            var under = new List<string>();
+            void Flush()
+            {
+                if (current is { } open && string.Join('\n', under).Trim() is { Length: > 0 } body)
+                    described.Add(new(open.Name, open.Kind, body));
+                current = null;
+                under.Clear();
+            }
             foreach (var text in texts)
             {
                 if (text.Status == ReadStatus.Missing)
                     continue;
                 if (text.Status == ReadStatus.Unreadable)
                 {
+                    Flush();
                     items.Add(Read<string>.Unreadable);
                     continue;
                 }
@@ -277,6 +291,7 @@ public static partial class DdbParser
                     {
                         if (split?.SectionHeading is { } heading && compiled.Patterns[heading].Match(line) is { Success: true } start)
                         {
+                            Flush();
                             section = start.Groups["section"].Value.Trim();
                             continue;
                         }
@@ -285,21 +300,30 @@ public static partial class DdbParser
                         {
                             var match = compiled.Patterns[itemPattern].Match(line);
                             if (!match.Success)
+                            {
+                                if (current is not null)
+                                    under.Add(line);
                                 continue;
+                            }
                             item = match.Groups["value"].Value.Trim();
                         }
+                        Flush();
                         if (item.Length == 0)
                             continue;
                         var inFeats = split?.FeatsSection is { } featsSection && section is not null && compiled.Patterns[featsSection].IsMatch(section);
                         (inFeats ? feats : items).Add(Read<string>.Ok(item));
+                        if (split?.ItemPattern is not null)
+                            current = (item, inFeats ? FeatureKind.Feat : FeatureKind.Feature);
                     }
                 }
                 catch (RegexMatchTimeoutException)
                 {
+                    Flush();
                     items.Add(Read<string>.Unreadable);
                 }
             }
-            return (Capped(items), Capped(feats));
+            Flush();
+            return (Capped(items), Capped(feats), described.Count <= MaxListItems ? described : described.GetRange(0, MaxListItems));
         }
 
         /// <summary>At most <see cref="MaxListItems"/> items, then one unreadable item for the rest.</summary>

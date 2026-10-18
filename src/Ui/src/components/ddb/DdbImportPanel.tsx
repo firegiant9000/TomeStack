@@ -54,6 +54,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [publishClass, setPublishClass] = useState(false);
   /** The stub content `publishClass` was last reconciled with; see `stubKey`. */
   const [publishKey, setPublishKey] = useState('');
+  /** Item 16: publish the reference drafts with the character. Off by default; sent with Create only. */
+  const [publishReferences, setPublishReferences] = useState(false);
+  /** The set of drafts `publishReferences` was last reconciled with; see `referencesKey`. */
+  const [referencesKey, setReferencesKey] = useState('');
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
@@ -163,6 +167,12 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     setPublishKey(stubKey);
     setPublishClass(false);
   }
+  // Item 16 consent: "Publish these reference drafts" belongs to the exact set shown. When the set changes the tick is gone.
+  const referencesNow = preview?.referenceDrafts?.length ? JSON.stringify(preview.referenceDrafts.map((d) => [d.rowId, d.kind, d.name, d.length])) : '';
+  if (referencesKey !== referencesNow) {
+    setReferencesKey(referencesNow);
+    setPublishReferences(false);
+  }
   const failed = previewError?.key === requestKey ? previewError : undefined;
   const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
@@ -191,6 +201,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     setAnswers([]);
     setCreateClassRow(undefined);
     setPublishClass(false);
+    setPublishReferences(false);
     setPreview(undefined);
     setPreviewFor(undefined);
   }
@@ -207,7 +218,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (!request || created || applying) return;
     try {
       setApplying(true);
-      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined);
+      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '');
       live.current = undefined; // spent
       setCreated(true);
       await onCreated(result.characterId, result);
@@ -316,6 +327,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             onIncludePlayState={setIncludePlayState}
             publishClass={publishClass}
             onPublishClass={setPublishClass}
+            publishReferences={publishReferences}
+            onPublishReferences={setPublishReferences}
           />
         )}
       </section>

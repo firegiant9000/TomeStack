@@ -38,8 +38,18 @@ public class DdbStubClassTests
     private static DdbApplyRequest Apply(Guid token, string? create = null, bool publish = false, string family = RulesFamilies.Srd51) =>
         new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, PublishClass: publish);
 
-    private static (int Sources, int Revisions, int Characters, int Notes) Counts(DdbHarness h) =>
+    internal static (int Sources, int Revisions, int Characters, int Notes) Counts(DdbHarness h) =>
         (h.Temp.App.Store.ListSources().Count, h.Temp.App.Store.ListRevisions().Count, h.Temp.App.ListCharacters().Count, h.Temp.App.ListAllGapNotes().Count);
+
+    /// <summary>A SQLite trigger that refuses every character insert: the last write of <c>ddb.apply</c>, so everything before it must roll back.</summary>
+    internal static void RefuseCharacterInserts(DdbHarness h)
+    {
+        using var connection = new SqliteConnection($"Data Source={h.Temp.App.Store.DatabasePath};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "CREATE TRIGGER fixture_refuse_characters BEFORE INSERT ON characters BEGIN SELECT RAISE(ABORT, 'fixture refusal'); END;";
+        command.ExecuteNonQuery();
+    }
 
     private static Guid Read(DdbHarness h, List<FormField> fields)
     {
@@ -210,17 +220,17 @@ public class DdbStubClassTests
     {
         using var h = new DdbHarness();
         var before = h.Temp.App.PreviewLibraryBackup();
-        var (id, source, _) = Created(h);
+        var (id, source, _, referenceCharacter, _) = Created(h);
 
-        var export = h.Temp.App.ExportCharacters([id], ExportPurpose.Backup);
+        var export = h.Temp.App.ExportCharacters([id, referenceCharacter], ExportPurpose.Backup);
         Assert.Contains(export.Manifest.Notices, n => n.SourceId == source.Id);
         Assert.DoesNotContain(export.Manifest.Omitted, o => o.SourceId == source.Id);
-        Assert.DoesNotContain(h.Temp.App.PreviewExport([id], ExportPurpose.Backup).Omitted, o => o.SourceId == source.Id);
+        Assert.DoesNotContain(h.Temp.App.PreviewExport([id, referenceCharacter], ExportPurpose.Backup).Omitted, o => o.SourceId == source.Id);
 
         using var file = new MemoryStream();
         var contents = h.Temp.App.WriteLibraryBackup(file).Contents;
         Assert.Equal(
-            (before.Sources + 1, before.PublishedRevisions + 1, before.DraftRevisions + 1, before.Characters + 1),
+            (before.Sources + 1, before.PublishedRevisions + 1 + 3, before.DraftRevisions + 1 + 3, before.Characters + 2), // the stub, the three reference drafts, two characters
             (contents.Sources, contents.PublishedRevisions, contents.DraftRevisions, contents.Characters));
     }
 
@@ -246,13 +256,7 @@ public class DdbStubClassTests
         using var h = new DdbHarness();
         var before = Counts(h);
         var token = Read(h, Sheet());
-        using (var connection = new SqliteConnection($"Data Source={h.Temp.App.Store.DatabasePath};Pooling=False"))
-        {
-            connection.Open();
-            using var command = connection.CreateCommand();
-            command.CommandText = "CREATE TRIGGER fixture_refuse_characters BEFORE INSERT ON characters BEGIN SELECT RAISE(ABORT, 'fixture refusal'); END;";
-            command.ExecuteNonQuery();
-        }
+        RefuseCharacterInserts(h);
 
         Assert.Throws<SqliteException>(() => h.Temp.App.ApplyDdbImport(Apply(token, Row0, publish: true)));
 
@@ -401,34 +405,56 @@ public class DdbStubClassTests
 
     // ---- every outbound path refuses or omits the source and the stub ----
 
-    /// <summary>Applies the sheet with the stub published and returns the character and the stub's source.</summary>
-    private static (Guid CharacterId, SourceRecord Source, ContentRevision Published) Created(DdbHarness h)
+    /// <summary>
+    /// Applies the sheet with the stub published, then (item 16) a second sheet whose unmatched feat and features become
+    /// published reference drafts in the same source, the feat linked to a second character. Returns both characters, the
+    /// source, the stub, and the reference drafts: every outbound test holds with both kinds of content present.
+    /// </summary>
+    private static (Guid CharacterId, SourceRecord Source, ContentRevision Published, Guid ReferenceCharacterId, IReadOnlyList<ContentRevision> References) Created(DdbHarness h)
     {
         var result = h.Temp.App.ApplyDdbImport(Apply(Read(h, Sheet()), Row0, publish: true));
         var published = h.Temp.App.ListRevisions(result.CreatedClass!.Value).Last();
-        return (result.CharacterId, h.Temp.App.Store.FindSource(published.Provenance.SourceId)!, published);
+        var references = h.Temp.App.ApplyDdbImport(new(Read(h, DdbReferenceDraftTests.Fields(h, DdbReferenceDraftTests.Block())), RulesFamilies.Srd521, null, [], [], false, Confirm: true, PublishReferences: true));
+        var drafts = references.ReferenceDrafts!.Select(id => h.Temp.App.ListRevisions(id).Last()).ToList();
+        Assert.All(drafts, d => Assert.Equal(published.Provenance.SourceId, d.Provenance.SourceId)); // one import-derived source
+        Assert.Equal(3, drafts.Count);
+        return (result.CharacterId, h.Temp.App.Store.FindSource(published.Provenance.SourceId)!, published, references.CharacterId, drafts);
+    }
+
+    /// <summary>No reference draft's id, name or text is in what leaves the machine.</summary>
+    private static void AssertNoReferenceDrafts(string outbound, IEnumerable<ContentRevision> references)
+    {
+        foreach (var reference in references)
+        {
+            Assert.DoesNotContain(reference.RevisionId.ToString("D"), outbound, StringComparison.Ordinal);
+            Assert.DoesNotContain(reference.ContentId.ToString("D"), outbound, StringComparison.Ordinal);
+            Assert.DoesNotContain(reference.Name, outbound, StringComparison.Ordinal);
+            Assert.DoesNotContain(reference.Summary!.Split('\n')[0], outbound, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
-    public void Outbound_character_share_package_omits_the_stub_and_lists_it_as_left_out()
+    public void Outbound_character_share_package_omits_the_stub_and_the_reference_drafts_and_lists_them_as_left_out()
     {
         using var h = new DdbHarness();
-        var (id, source, published) = Created(h);
+        var (id, source, published, referenceCharacter, references) = Created(h);
 
-        var preview = h.Temp.App.PreviewExport([id], ExportPurpose.Share);
-        var export = h.Temp.App.ExportCharacters([id], ExportPurpose.Share);
+        var preview = h.Temp.App.PreviewExport([id, referenceCharacter], ExportPurpose.Share);
+        var export = h.Temp.App.ExportCharacters([id, referenceCharacter], ExportPurpose.Share);
 
         Assert.Contains(preview.Omitted, o => o.SourceId == source.Id);
-        Assert.Contains(export.Manifest.Omitted, o => o.SourceId == source.Id && o.Revisions.Any(r => r.Reference == published.Reference));
+        var feat = references.Single(r => r.Kind == ContentKind.Feat);
+        Assert.Contains(export.Manifest.Omitted, o => o.SourceId == source.Id && o.Revisions.Any(r => r.Reference == published.Reference) && o.Revisions.Any(r => r.Reference == feat.Reference));
         Assert.DoesNotContain(export.Manifest.Notices, s => s.SourceId == source.Id);
         Assert.DoesNotContain(Encoding.UTF8.GetString(export.Content), published.RevisionId.ToString("D"), StringComparison.Ordinal);
+        AssertNoReferenceDrafts(Encoding.UTF8.GetString(export.Content), references);
     }
 
     [Fact]
     public void Outbound_source_pack_refuses_the_import_derived_source()
     {
         using var h = new DdbHarness();
-        var (_, source, _) = Created(h);
+        var (_, source, _, _, _) = Created(h);
 
         var codes = Assert.Throws<PackageException>(() => h.Temp.App.ExportSourcePack([source.Id])).Errors.Select(e => e.Code);
 
@@ -440,7 +466,7 @@ public class DdbStubClassTests
     public void Outbound_mark_as_shareable_refuses_the_import_derived_source()
     {
         using var h = new DdbHarness();
-        var (_, source, _) = Created(h);
+        var (_, source, _, _, _) = Created(h);
 
         var refused = Assert.Throws<AppValidationException>(() => h.Temp.App.SetShareable(new(source.Id, true, ConfirmOwnWork: true)));
 
@@ -452,7 +478,7 @@ public class DdbStubClassTests
     public void Outbound_campaign_pack_leaves_out_the_import_derived_source_and_carries_none_of_its_content()
     {
         using var h = new DdbHarness();
-        var (_, source, published) = Created(h);
+        var (_, source, published, _, references) = Created(h);
         var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Test Tinker Table", RulesFamily = RulesFamilies.Srd51, AllowedSources = [source.Id] });
 
         var preview = h.Temp.App.PreviewCampaignPack(campaign.Id);
@@ -462,6 +488,7 @@ public class DdbStubClassTests
         var pack = h.Temp.App.ExportCampaignPack(campaign.Id);
         Assert.Contains(pack.Manifest.Omitted, o => o.SourceId == source.Id && o.Revisions.Count == 0);
         Assert.DoesNotContain(Encoding.UTF8.GetString(pack.Content), published.RevisionId.ToString("D"), StringComparison.Ordinal);
+        AssertNoReferenceDrafts(Encoding.UTF8.GetString(pack.Content), references);
     }
 
     [Theory]
@@ -472,7 +499,7 @@ public class DdbStubClassTests
     public void Outbound_sheet_and_foundry_exports_drop_the_stub_even_for_a_personal_copy(string target, SheetPurpose purpose)
     {
         using var h = new DdbHarness();
-        var (id, source, _) = Created(h);
+        var (id, source, _, referenceCharacter, references) = Created(h);
 
         var preview = h.Temp.App.PreviewVttExport(id, target, purpose);
         var text = Encoding.UTF8.GetString(h.Temp.App.VttExportOutput(preview.Token).Bytes);
@@ -480,5 +507,11 @@ public class DdbStubClassTests
         Assert.Contains(preview.Dropped, d => d.Source == source.Title);
         Assert.Contains(preview.Notices, n => n.Title == source.Title && n.TotalsOnly);
         Assert.DoesNotContain(Tinkerer, text, StringComparison.Ordinal);
+
+        // The character the reference feat is linked to: the feat is dropped by name and source, never exported.
+        var withFeat = h.Temp.App.PreviewVttExport(referenceCharacter, target, purpose);
+        var featText = Encoding.UTF8.GetString(h.Temp.App.VttExportOutput(withFeat.Token).Bytes);
+        Assert.Contains(withFeat.Dropped, d => d.Source == source.Title);
+        AssertNoReferenceDrafts(featText, references);
     }
 }
