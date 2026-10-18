@@ -44,9 +44,14 @@ public static class TextSheetParser
     /// <param name="budget">The total time allowed; tests pass a shorter one.</param>
     public static TextParse Parse(string text, TimeSpan? budget = null)
     {
-        ArgumentNullException.ThrowIfNull(text);
-        var limit = budget ?? Budget;
         var clock = Stopwatch.StartNew();
+        return Parse(text, budget ?? Budget, () => clock.Elapsed);
+    }
+
+    /// <param name="elapsed">The time spent so far; a seam so a timeout part-way through a parse can be tested.</param>
+    internal static TextParse Parse(string text, TimeSpan limit, Func<TimeSpan> elapsed)
+    {
+        ArgumentNullException.ThrowIfNull(text);
         if (text.Length > MaxChars)
             return Refuse("ddb.text-too-large", $"The text is {Count(text.Length)} characters; the limit is {Count(MaxChars)}. Nothing was read.");
         var total = CountLines(text);
@@ -59,7 +64,7 @@ public static class TextSheetParser
         var reader = new Reader();
         for (var i = 0; i < lines.Count; i++)
         {
-            if (clock.Elapsed >= limit)
+            if (elapsed() >= limit)
                 return Refuse("ddb.text-timeout", $"Reading took longer than {limit.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} seconds, after {Count(i)} of {Count(total)} lines. Nothing was kept.");
             reader.Line(i + 1, lines[i]);
         }
@@ -334,8 +339,10 @@ public static class TextSheetParser
             {
                 Handle(no, clean, afterBlank);
             }
-            catch (RegexMatchTimeoutException)
+            catch (Exception ex) when (ex is RegexMatchTimeoutException or KeyNotFoundException or ArgumentException or FormatException or OverflowException or InvalidOperationException or IndexOutOfRangeException)
             {
+                // Total by construction: whatever a line does to a pattern or a lookup (a timeout, or case folding that matches a
+                // word the tables do not hold), it is listed as not read. The exception text can carry the line, so it is dropped.
                 Close();
                 Unread(no, clean);
             }
@@ -374,9 +381,12 @@ public static class TextSheetParser
             }
 
             // A description line indented under an open feat or feature belongs to it, whatever it looks like.
-            if (_open is not null && hashes == 0 && indent >= 2 && _section is Section.Feats or Section.Features)
+            if ((_open is not null || _dropped) && hashes == 0 && indent >= 2 && _section is Section.Feats or Section.Features)
             {
-                _open.Lines.Add(plain);
+                if (_open is null)
+                    _beyondCap++;
+                else
+                    _open.Lines.Add(plain);
                 return;
             }
 
@@ -421,7 +431,10 @@ public static class TextSheetParser
             if (NumLabel.Match(bare) is { Success: true } numbered)
             {
                 Close();
-                Apply(no, clean, Labels[Canon(numbered.Groups["l"].Value)], numbered.Groups["v"].Value.Trim());
+                if (Labels.TryGetValue(Canon(numbered.Groups["l"].Value), out var numberedLabel))
+                    Apply(no, clean, numberedLabel, numbered.Groups["v"].Value.Trim());
+                else
+                    Unread(no, clean);
                 return;
             }
 
@@ -472,6 +485,7 @@ public static class TextSheetParser
             Close();
             _section = section;
             _sectionHashes = hashes;
+            _listFilled = false;
         }
 
         // ---- labels ----
@@ -590,7 +604,11 @@ public static class TextSheetParser
             var bad = false;
             foreach (Match m in AbilityOne.Matches(bare))
             {
-                var ability = AbilityWords[m.Groups["a"].Value.ToLowerInvariant()];
+                if (!AbilityWords.TryGetValue(m.Groups["a"].Value.ToLowerInvariant(), out var ability))
+                {
+                    bad = true;
+                    continue;
+                }
                 var score = int.Parse(m.Groups["s"].Value, NumberStyles.None, CultureInfo.InvariantCulture);
                 if (score is < 1 or > 30 || _abilities.ContainsKey(ability))
                 {
@@ -603,8 +621,7 @@ public static class TextSheetParser
             {
                 foreach (Match m in AbilityOne.Matches(bare))
                 {
-                    var ability = AbilityWords[m.Groups["a"].Value.ToLowerInvariant()];
-                    if (!_abilities.ContainsKey(ability))
+                    if (AbilityWords.TryGetValue(m.Groups["a"].Value.ToLowerInvariant(), out var ability) && !_abilities.ContainsKey(ability))
                         _abilities[ability] = Read<int>.Unreadable;
                 }
                 Unread(no, clean);
@@ -622,6 +639,13 @@ public static class TextSheetParser
 
         private bool SetCoin(int no, string clean, string coin, string digits, bool listed = true)
         {
+            if (!DdbSemantics.Coins.Contains(coin))
+            {
+                // Case folding can match a word that is no coin ("5 ſp"): nothing is stored under it.
+                if (listed)
+                    Unread(no, clean);
+                return false;
+            }
             if (!_currency.ContainsKey(coin) && int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var amount) && amount <= Currency.MaxCoins)
             {
                 _currency[coin] = Read<int>.Ok(amount);
@@ -647,10 +671,21 @@ public static class TextSheetParser
                     Unread(no, clean);
                     break;
                 default:
+                    // A list that already has entries ends at a blank line followed by a line with no list marker: that is prose.
+                    if (afterBlank && !bulleted && _listFilled)
+                    {
+                        _section = Section.None;
+                        _listFilled = false;
+                        Unread(no, clean);
+                        break;
+                    }
                     List(no, clean, _section, bare);
+                    _listFilled = true;
                     break;
             }
         }
+
+        private bool _listFilled;
 
         /// <summary>The entries of one list line under (or after) a heading; a line with an entry that cannot be one is not read, whole.</summary>
         private void List(int no, string clean, Section section, string content)
@@ -764,9 +799,12 @@ public static class TextSheetParser
                 AddItem(named, description.Length > 0 ? description : null);
                 return;
             }
-            if (_open is not null && !afterBlank)
+            if ((_open is not null || _dropped) && !afterBlank)
             {
-                _open.Lines.Add(plain);
+                if (_open is null)
+                    _beyondCap++;
+                else
+                    _open.Lines.Add(plain);
                 return;
             }
             var names = Entries(bare, [',']);
@@ -813,6 +851,8 @@ public static class TextSheetParser
             {
                 if (list.Count == DdbParser.MaxListItems)
                     list.Add(Read<string>.Unreadable);
+                _beyondCap++;
+                _dropped = true; // its continuation lines are skipped too, not taken as new names
                 return;
             }
             var open = new OpenItem(kind, name, list.Count);
@@ -832,7 +872,13 @@ public static class TextSheetParser
                     _texts.Add(new FeatureText(open.Name, open.Kind, body, open.Index));
             }
             _open = null;
+            _dropped = false;
         }
+
+        /// <summary>True while the entry being read was dropped for the list cap; its lines are counted and skipped.</summary>
+        private bool _dropped;
+
+        private int _beyondCap;
 
         // ---- the sheet ----
 
@@ -843,6 +889,8 @@ public static class TextSheetParser
             var lines = new List<string>();
             if (_longLines > 0)
                 lines.Add($"{_longLines.ToString("N0", CultureInfo.InvariantCulture)} line{(_longLines == 1 ? " was" : "s were")} longer than {MaxLineChars.ToString("N0", CultureInfo.InvariantCulture)} characters and {(_longLines == 1 ? "was" : "were")} not read.");
+            if (_beyondCap > 0)
+                lines.Add($"{_beyondCap.ToString("N0", CultureInfo.InvariantCulture)} line{(_beyondCap == 1 ? " was" : "s were")} beyond the {DdbParser.MaxListItems.ToString("N0", CultureInfo.InvariantCulture)}-entry limit of the feats and features lists and {(_beyondCap == 1 ? "was" : "were")} not read.");
             lines.AddRange(_notes);
 
             var abilities = Enum.GetValues<Ability>().ToDictionary(a => a, a => _abilities.TryGetValue(a, out var read) ? read : Read<int>.Missing);

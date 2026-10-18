@@ -523,6 +523,75 @@ public class TextSheetParserTests(ITestOutputHelper output)
         Assert.DoesNotContain("Secret", result.Refusal.Message, StringComparison.Ordinal);
     }
 
+    // ---- fix round 1 ----
+
+    [Theory]
+    [InlineData("ſtr 10")] // long s folds to s under IgnoreCase, but is no ability word
+    [InlineData("ſpeed 30")]
+    [InlineData("5 ſp")]
+    [InlineData("AC 15\nſpeed: 30 ft.")]
+    public void Case_folding_lookalikes_end_as_not_read_lines_and_never_throw(string text)
+    {
+        var sheet = Parse(text);
+
+        Assert.NotEmpty(sheet.NotRead!);
+        Assert.DoesNotContain(sheet.Currency, c => c.Key.Contains('ſ', StringComparison.Ordinal));
+        Assert.Equal(ReadStatus.Missing, sheet.Abilities[Ability.Str].Status);
+        Assert.False(sheet.Numbers.ContainsKey(FieldIds.Speed));
+    }
+
+    [Fact]
+    public void A_kelvin_sign_is_read_like_a_k_or_not_read_but_never_throws()
+    {
+        var sheet = Parse(Lines("SKills: Stealth", "Kelvin 5"));
+
+        Assert.True(sheet.SkillProficient["stealth"].Value);
+        Assert.Equal([2], sheet.NotRead!.Select(n => n.Line));
+    }
+
+    [Fact]
+    public void A_language_with_a_comma_inside_brackets_stays_one_entry_through_the_importer()
+    {
+        var sheet = Parse("Languages: Common (old, regional), Fixture Tongue");
+        var lines = new List<string>();
+
+        var (languages, _) = ImportExtras.Proficiencies(sheet.Texts!.LanguagesAndTools, lines, []);
+
+        Assert.Equal(["Common (old, regional)", "Fixture Tongue"], languages);
+    }
+
+    [Fact]
+    public void Prose_after_a_blank_line_ends_a_list_and_is_not_read_but_a_bullet_after_a_blank_line_stays()
+    {
+        var sheet = Parse(Lines("Equipment", "Fixture Rope", "Fixture Torch", "", "- Fixture Pouch", "", "The party met an invented stranger.", "Fixture Flint"));
+
+        Assert.Equal(Lines("Fixture Rope", "Fixture Torch", "Fixture Pouch"), sheet.Texts!.Equipment.Value);
+        Assert.Equal([7, 8], sheet.NotRead!.Select(n => n.Line));
+    }
+
+    [Fact]
+    public void Description_lines_of_entries_past_the_limit_are_skipped_and_counted()
+    {
+        var text = string.Join('\n', Enumerable.Range(0, DdbParser.MaxListItems + 3).Select(i => $"Fixture Knack {i}\n  An invented description {i}\n").Prepend("Features"));
+
+        var sheet = Parse(text);
+
+        Assert.Equal(DdbParser.MaxListItems + 1, sheet.Features.Count); // the cap plus one unreadable placeholder
+        Assert.Contains(sheet.Lines!, l => l.Contains("6 lines", StringComparison.Ordinal) && l.Contains("not read", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_timeout_part_way_through_discards_the_earlier_lines()
+    {
+        var ticks = 0;
+        var result = TextSheetParser.Parse(Lines("Name: Secret Fixture", "Class: Fixture Arcanist 3", "STR 10", "Fixture loose"), TimeSpan.FromSeconds(2), () => ++ticks <= 2 ? TimeSpan.Zero : TimeSpan.FromSeconds(3));
+
+        Assert.Null(result.Sheet);
+        Assert.Equal("ddb.text-timeout", result.Refusal!.Code);
+        Assert.Contains("after 2 of 4 lines", result.Refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Secret", result.Refusal.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Text_with_nothing_in_it_is_refused()
     {

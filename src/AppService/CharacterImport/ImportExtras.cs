@@ -257,7 +257,7 @@ public sealed record ImportExtras(
                     target = label.Groups["label"].Value.StartsWith("lang", StringComparison.OrdinalIgnoreCase) ? languages : tools;
                     content = label.Groups["rest"].Value;
                 }
-                foreach (var part in content.Split([',', ';']))
+                foreach (var part in SplitOutsideBrackets(content))
                 {
                     var entry = ExtrasPatterns.Bullet().Replace(part.Trim(), "").Trim();
                     if (entry.Length > 0)
@@ -294,6 +294,32 @@ public sealed record ImportExtras(
             overflow.Add("Language and tool entries not added to the lists:\n" + string.Join('\n', left));
         }
         return (languages.Count > 0 ? languages : null, tools.Count > 0 ? tools : null);
+    }
+
+    /// <summary>Splits a list line on commas and semicolons that are not inside brackets, so "Common (old, regional)" stays one entry.</summary>
+    private static List<string> SplitOutsideBrackets(string content)
+    {
+        var parts = new List<string>();
+        var depth = 0;
+        var start = 0;
+        for (var i = 0; i < content.Length; i++)
+        {
+            switch (content[i])
+            {
+                case '(' or '[':
+                    depth++;
+                    break;
+                case ')' or ']':
+                    depth = Math.Max(0, depth - 1);
+                    break;
+                case ',' or ';' when depth == 0:
+                    parts.Add(content[start..i]);
+                    start = i + 1;
+                    break;
+            }
+        }
+        parts.Add(content[start..]);
+        return parts;
     }
 
     // ---- details ----

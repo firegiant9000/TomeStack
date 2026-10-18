@@ -21,6 +21,7 @@ public class TextSheetParserPropertyTests
         "# Title", "## Spells", "### Fixture Knack", "**Class:** Fixture A 1", "__Species__: Fixture B", "- item", "* item", "1. item", "• item", "  indented",
         "15gp 3sp", "Gold: 5", "99999999 gp", "Fixture Knack: a description", "Fixture Knack:", "(", ")", ",,,;;;", "(((", "[[[", ":", "::", "---", "***",
         "Languages: a, b", "Tools:", "Proficiencies", "Backstory:", "a, b, c, d, e, f", "x".PadRight(2_100, 'x'), "\U0001F600", "\ud800", "\udc00",
+        "ſtr 10", "ſpeed 30", "5 ſp", "ſp: 5", "Kelvin 5", "SKills: Stealth", "ſtr: 10 Kon 12", "Hſ: 5",
     ];
 
     private static Gen<string> Chars { get; } =
