@@ -166,6 +166,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const failed = previewError?.key === requestKey ? previewError : undefined;
   const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
+  /** The shown preview does not answer the current choices (still loading, or the re-preview failed): nothing may move on or apply from it. */
+  const stale = step >= 3 && request !== undefined && previewFor !== requestKey;
 
   /** A changed match drops every answer that holds one of that row's options: it was made with the earlier match. */
   function dropAnswersHolding(rowId: string) {
@@ -327,12 +329,12 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           </button>
         )}
         {step < 5 && (
-          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || loading)} onClick={() => setStep((s) => (s + 1) as Step)}>
+          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || stale)} onClick={() => setStep((s) => (s + 1) as Step)}>
             {step === 1 ? 'Next: rules' : step === 2 ? 'Next: matches' : step === 3 ? 'Next: numbers' : 'Next: summary'}
           </button>
         )}
         {step === 5 && (
-          <button type="button" disabled={busy || created || !preview?.canApply} onClick={create}>
+          <button type="button" disabled={busy || stale || created || !preview?.canApply} onClick={create}>
             Create character
           </button>
         )}

@@ -768,6 +768,50 @@ it('keeps Publish it as the user set it when a change elsewhere leaves the revie
   expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(true);
 });
 
+it('holds Next while the shown preview is not for the current choices, also after a failed re-preview, and a retry frees it', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return twoClassStubPreview(request);
+  });
+  renderPanel();
+  await toStubSummary(user);
+  await backToMatches(user);
+  failing = true;
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1');
+
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Fixture preview failed.');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(true);
+
+  failing = false;
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+});
+
+it('holds Create after a failed re-preview on the summary, never applies, and a retry frees it', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return twoClassStubPreview(request);
+  });
+  renderPanel();
+  await toStubSummary(user);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+
+  failing = true;
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  const alert = await screen.findByRole('alert');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  expect(client.ddbApply).not.toHaveBeenCalled();
+
+  failing = false;
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+});
+
 it('says on the summary that the created class lives in a source that is never shared, and how to share one (D35)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
