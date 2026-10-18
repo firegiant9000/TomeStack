@@ -17,7 +17,21 @@ internal static class LocalDrivePath
         && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/'
         && Path.IsPathFullyQualified(path)
         && !path.Contains("..", StringComparison.Ordinal)
+        && path.IndexOf(':', 2) < 0                      // an alternate data stream (file.txt:name.pdf) or a second drive
+        && !path[3..].Split('\\', '/').Any(IsReservedDeviceName)
         && path.EndsWith(extension, StringComparison.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> DeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    /// <summary>Windows treats <c>CON</c>, <c>nul.txt</c> and <c>COM1.anything</c> as a device, in any folder, so the name before the first dot decides.</summary>
+    private static bool IsReservedDeviceName(string segment)
+    {
+        var dot = segment.IndexOf('.', StringComparison.Ordinal);
+        return DeviceNames.Contains((dot < 0 ? segment : segment[..dot]).TrimEnd(' '));
+    }
 
     /// <summary>Refuses a path <see cref="IsSafe"/> does not allow, with a code and a message that name no path.</summary>
     public static void Require(string? path, string extension)

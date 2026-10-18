@@ -33,9 +33,18 @@ public sealed partial class TomeStackApp
     public DdbReadResult ReadDdbSheet(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
+        LocalDrivePath.Require(path, ".pdf"); // R116: the one place a dialog path reaches the worker; no caller can skip it
+        return ReadDdbSheetAt(path);
+    }
+
+    /// <summary>The read itself, for a path the rule has passed or the app made (the <c>ddb.readData</c> copy under its own tmp folder).</summary>
+    private DdbReadResult ReadDdbSheetAt(string path)
+    {
         IReadOnlyList<FormField> fields;
         try
         {
+            // No cancellation reaches this synchronous command (the dispatcher passes no token), and the worker's own limits bound the
+            // wait (30 s), so CancellationToken.None and a blocking wait are safe here: the read does not capture a context.
             fields = FormReader.ReadAsync(path, CancellationToken.None).GetAwaiter().GetResult();
         }
         catch (ExtractionException ex) when (ex.Code == NoFormCode)
@@ -95,6 +104,7 @@ public sealed partial class TomeStackApp
         var warnings = new HashSet<string>(StringComparer.Ordinal);
         var pageCount = 0;
         var unreadable = 0;
+        var blank = 0;
         try
         {
             ReadPages().GetAwaiter().GetResult();
@@ -119,12 +129,16 @@ public sealed partial class TomeStackApp
                     case ExtractedPage page:
                         pages.Add(page.Text);
                         warnings.UnionWith(page.Warnings ?? []);
+                        if (page.Text.All(char.IsWhiteSpace) || page.Warnings?.Any(w => w is "page.no-text" or "ocr.unavailable") == true)
+                            blank++;
                         break;
                 }
             }
         }
 
         var read = pages.Count + unreadable;
+        if (read > 0 && unreadable == read)
+            throw Refused("pdf.unreadable", $"None of the {Count(read)} page{(read == 1 ? "" : "s")} read could be read. The PDF may be damaged. Nothing was read.");
         if (warnings.Contains("page.text-truncated") || warnings.Contains("page.blocks-truncated"))
             throw Refused("ddb.text-too-large", $"A page of the PDF holds more text than can be read (the limit is {Count(WorkerFormReader.DefaultLimits.MaxTextPerPage)} characters a page). Nothing was read.");
         var text = string.Join("\n\n", pages);
@@ -143,6 +157,9 @@ public sealed partial class TomeStackApp
         var skipped = Math.Max(0, pageCount - MaxTextPdfPages);
         if (skipped > 0)
             notes.Add($"{Count(skipped)} page{(skipped == 1 ? "" : "s")} after the first {MaxTextPdfPages} {(skipped == 1 ? "was" : "were")} not read.");
+        // Pages that read without error but held no text (blank, or a scan with no OCR): counted, never named.
+        if (blank > 0)
+            notes.Add($"{Count(blank)} page{(blank == 1 ? "" : "s")} had no readable text and {(blank == 1 ? "was" : "were")} not read.");
         if (unreadable > 0)
             notes.Add($"{Count(unreadable)} page{(unreadable == 1 ? "" : "s")} could not be read.");
         return Hold(sheet with { LayoutName = PdfTextLayoutName, Lines = notes.Count > 0 ? notes : sheet.Lines });
@@ -150,11 +167,25 @@ public sealed partial class TomeStackApp
 
     private static string Count(int n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>A worker failure is <c>ddb.read-failed</c> with its code; any other extraction code (the PDF's own) is kept. Neither quotes the document.</summary>
-    private static AppValidationException Failed(ExtractionException ex) =>
-        ex.Code.StartsWith("worker.", StringComparison.Ordinal)
+    /// <summary>The codes the app itself raises when the worker process fails (timeout, crash, a message over its limit): safe to show.</summary>
+    private static readonly HashSet<string> AppRaisedWorkerCodes = new(StringComparer.Ordinal)
+    {
+        "worker.missing", "worker.crashed", "worker.protocol", "worker.failed", "worker.limits", "worker.timeout", "worker.page-timeout", "worker.message-too-large", "worker.memory",
+    };
+
+    /// <summary>
+    /// The child is untrusted, so neither its code nor its message is forwarded as sent. A code the reader can raise keeps that code
+    /// with the app's own message (the allowlist the form reader uses); any other is <c>ddb.read-failed</c>, which names the code only
+    /// when the app itself raises it. No child text is interpolated anywhere.
+    /// </summary>
+    private static AppValidationException Failed(ExtractionException ex)
+    {
+        if (WorkerFormReader.KnownMessage(ex.Code, WorkerFormReader.DefaultLimits, LayoutMaps.FormLimits) is { } known)
+            return Refused(ex.Code, known);
+        return AppRaisedWorkerCodes.Contains(ex.Code)
             ? Refused("ddb.read-failed", $"The sheet could not be read ({ex.Code}). Nothing was kept.")
-            : Refused(ex.Code, ex.Message);
+            : Refused("ddb.read-failed", "The sheet could not be read. Nothing was kept.");
+    }
 
     /// <summary>The layout in words: "text from the PDF" for a PDF's text, else the layout's own name.</summary>
     private static string LayoutNameOf(DdbSheet sheet) => sheet.LayoutName ?? LayoutMaps.NameOf(sheet.Layout);
@@ -188,7 +219,7 @@ public sealed partial class TomeStackApp
         try
         {
             File.WriteAllBytes(path, data);
-            return ReadDdbSheet(path);
+            return ReadDdbSheetAt(path);
         }
         finally
         {

@@ -127,8 +127,41 @@ public class HostServicesTests
     [InlineData(@"\\fixture-server\share\sheet.pdf", ".pdf", false)]
     [InlineData(@"\\?\C:\fixture\sheet.pdf", ".pdf", false)]
     [InlineData(null, ".pdf", false)]
+    [InlineData(@"C:\fixture\notes.txt:s.pdf", ".pdf", false)]      // an alternate data stream
+    [InlineData(@"C:\fixture\sheet.pdf:stream.pdf", ".pdf", false)]
+    [InlineData(@"C:\fixture\CON.pdf", ".pdf", false)]              // reserved device names, with or without an extension
+    [InlineData(@"C:\fixture\nul.pdf", ".pdf", false)]
+    [InlineData(@"C:\fixture\Com1.pdf", ".pdf", false)]
+    [InlineData(@"C:\fixture\LPT9.PDF", ".pdf", false)]
+    [InlineData(@"C:\fixture\aux.txt.pdf", ".pdf", false)]
+    [InlineData(@"C:\CON\sheet.pdf", ".pdf", false)]
+    [InlineData(@"C:\fixture\console.pdf", ".pdf", true)]
+    [InlineData(@"C:\fixture\COM10.pdf", ".pdf", true)]
     public void The_local_drive_rule_takes_the_extension_as_a_parameter(string? path, string extension, bool expected) =>
         Assert.Equal(expected, LocalDrivePath.IsSafe(path, extension));
+
+    [Fact]
+    public void ReadDdbSheet_itself_refuses_a_path_that_is_not_local_so_no_caller_can_bypass_the_rule()
+    {
+        var reader = new FakeFormReader([]);
+        using var temp = new TempApp(formReader: reader);
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.ReadDdbSheet(@"\\fixture-server\share\sheet.pdf"));
+
+        Assert.Equal("pdf.path-not-local", refused.Code);
+        Assert.Empty(reader.Paths);
+    }
+
+    [Fact]
+    public void The_readData_temporary_copy_skips_the_rule_by_going_through_its_own_entry()
+    {
+        var reader = new FakeFormReader(DdbParserTests.Fields(FixtureSheets.Fields2014));
+        using var temp = new TempApp(formReader: reader);
+
+        temp.App.ReadDdbSheetData("sheet.pdf", [1, 2, 3]);
+
+        Assert.StartsWith(Path.Combine(temp.Directory, "tmp"), Assert.Single(reader.Paths), StringComparison.OrdinalIgnoreCase);
+    }
 
     [Fact]
     public void A_full_local_pdf_path_is_read_by_ddb_read()

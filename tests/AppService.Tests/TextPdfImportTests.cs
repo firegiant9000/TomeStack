@@ -47,6 +47,79 @@ public class TextPdfImportTests
         }
     }
 
+    /// <summary>An extractor that reports exactly these pages.</summary>
+    private sealed class ScriptedExtractor(params ExtractedPage[] pages) : IDocumentExtractor
+    {
+        public async IAsyncEnumerable<ExtractionEvent> ExtractAsync(string path, PageScope scope, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return new DocumentOpened(pages.Length);
+            foreach (var page in pages)
+                yield return page;
+        }
+    }
+
+    /// <summary>An extractor that fails with the code and message a compromised child could send.</summary>
+    private sealed class ChildErrorExtractor(string code, string message) : IDocumentExtractor
+    {
+        public async IAsyncEnumerable<ExtractionEvent> ExtractAsync(string path, PageScope scope, [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return new DocumentOpened(1);
+            throw new ExtractionException(code, message);
+        }
+    }
+
+    [Theory]
+    [InlineData("fixture.made-up")]
+    [InlineData("worker.fixture-made-up")]
+    [InlineData("pdf.encrypted")]
+    [InlineData("worker.bad-request")]
+    public void A_child_error_keeps_only_a_known_code_with_the_apps_own_message_and_never_the_childs_text(string code)
+    {
+        using var temp = new TempApp(extractor: new ChildErrorExtractor(code, $"{Marker} child text"), formReader: NoForm());
+
+        var refused = Refused(() => temp.App.ReadDdbSheet("C:/fixture/sheet.pdf"));
+
+        Assert.Equal(code is "pdf.encrypted" or "worker.bad-request" ? code : "ddb.read-failed", refused.Code);
+        Assert.DoesNotContain("Secret", refused.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Secret", JsonSerializer.Serialize(refused.Problems), StringComparison.Ordinal);
+        Assert.DoesNotContain("made-up", refused.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pages_with_no_text_are_counted_in_a_report_line_without_naming_anything()
+    {
+        using var temp = new TempApp(extractor: new PagesExtractor(3, SheetText, ""), formReader: NoForm());
+
+        var read = temp.App.ReadDdbSheet("C:/fixture/sheet.pdf");
+
+        var preview = temp.App.PreviewDdbImport(new DdbPreviewRequest(read.Token, RulesFamilies.Srd51, null, null, null, false));
+        Assert.Contains("1 page had no readable text and was not read.", preview.Report.Lines!);
+    }
+
+    [Fact]
+    public void A_page_the_worker_could_not_read_is_counted_and_the_rest_still_import()
+    {
+        using var temp = new TempApp(extractor: new ScriptedExtractor(new ExtractedPage(1, SheetText, false), new ExtractedPage(2, "", false, Error: "page.unreadable")), formReader: NoForm());
+
+        var read = temp.App.ReadDdbSheet("C:/fixture/sheet.pdf");
+
+        var preview = temp.App.PreviewDdbImport(new DdbPreviewRequest(read.Token, RulesFamilies.Srd51, null, null, null, false));
+        Assert.Contains("1 page could not be read.", preview.Report.Lines!);
+    }
+
+    [Fact]
+    public void When_every_page_failed_to_read_the_refusal_is_pdf_unreadable_not_a_scan_message()
+    {
+        using var temp = new TempApp(extractor: new ScriptedExtractor(new ExtractedPage(1, "", false, Error: "page.unreadable"), new ExtractedPage(2, "", false, Error: "page.unreadable")), formReader: NoForm());
+
+        var refused = Refused(() => temp.App.ReadDdbSheet("C:/fixture/sheet.pdf"));
+
+        Assert.Equal("pdf.unreadable", refused.Code);
+        Assert.DoesNotContain("scan", refused.Problems.Single().Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string SheetText => string.Join("\n", FixturePdfs.TextSheetPages[0]);
 
     private static AppValidationException Refused(Func<object> read) => Assert.Throws<AppValidationException>(read);
