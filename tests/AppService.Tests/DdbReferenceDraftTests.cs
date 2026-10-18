@@ -60,6 +60,10 @@ public class DdbReferenceDraftTests
     private static DdbApplyRequest Apply(Guid token, bool publish = false) =>
         new(token, RulesFamilies.Srd521, null, [], [], false, Confirm: true, PublishReferences: publish);
 
+    /// <summary>The apply with the publish tick on, carrying the row ids the preview showed (the consent token, R106 round).</summary>
+    private static DdbApplyRequest Publishing(DdbHarness h, Guid token) =>
+        Apply(token, publish: true) with { ExpectedReferences = [.. h.Temp.App.PreviewDdbImport(Preview(token)).ReferenceDrafts?.Select(d => d.RowId) ?? []] };
+
     private static ContentRevision Latest(DdbHarness h, Guid contentId) => h.Temp.App.ListRevisions(contentId).Last();
 
     private static string Many(int count, int length = 20) =>
@@ -201,7 +205,7 @@ public class DdbReferenceDraftTests
     {
         using var h = new DdbHarness();
 
-        var result = h.Temp.App.ApplyDdbImport(Apply(Read(h), publish: true));
+        var result = h.Temp.App.ApplyDdbImport(Publishing(h, Read(h)));
 
         var all = result.ReferenceDrafts!.Select(id => h.Temp.App.ListRevisions(id)).ToList();
         Assert.All(all, revisions => Assert.Equal([RevisionStatus.Draft, RevisionStatus.Published], revisions.Select(r => r.Status)));
@@ -223,7 +227,7 @@ public class DdbReferenceDraftTests
         using var h = new DdbHarness();
         var token = Read(h, $"=== FIXTURE FEATURES ===\n* {Knack} • FX 1\n{KnackText}");
 
-        var result = h.Temp.App.ApplyDdbImport(Apply(token, publish: true));
+        var result = h.Temp.App.ApplyDdbImport(Publishing(h, token));
 
         Assert.Equal(RevisionStatus.Published, Latest(h, Assert.Single(result.ReferenceDrafts!)).Status);
         Assert.Empty(h.Temp.App.GetCharacter(result.CharacterId).Character.Pins);
@@ -233,7 +237,7 @@ public class DdbReferenceDraftTests
     public void A_later_edit_of_a_linked_feat_is_adopted_only_through_the_reviewed_update()
     {
         using var h = new DdbHarness();
-        var result = h.Temp.App.ApplyDdbImport(Apply(Read(h), publish: true));
+        var result = h.Temp.App.ApplyDdbImport(Publishing(h, Read(h)));
         var feat = result.ReferenceDrafts!.Select(id => Latest(h, id)).Single(r => r.Kind == ContentKind.Feat);
         Assert.Empty(h.Temp.App.AvailableUpdates(result.CharacterId));
 
@@ -252,7 +256,7 @@ public class DdbReferenceDraftTests
         using var h = new DdbHarness();
 
         h.Temp.App.ApplyDdbImport(Apply(Read(h)));
-        h.Temp.App.ApplyDdbImport(Apply(Read(h), publish: true));
+        h.Temp.App.ApplyDdbImport(Publishing(h, Read(h, Many(2))));
 
         Assert.Single(h.Temp.App.Store.ListSources(), s => s.ImportDerived == true);
     }
@@ -320,7 +324,7 @@ public class DdbReferenceDraftTests
         var token = Read(h);
         DdbStubClassTests.RefuseCharacterInserts(h);
 
-        Assert.Throws<SqliteException>(() => h.Temp.App.ApplyDdbImport(Apply(token, publish: true)));
+        Assert.Throws<SqliteException>(() => h.Temp.App.ApplyDdbImport(Publishing(h, token)));
 
         Assert.Equal(before, DdbStubClassTests.Counts(h)); // no source, no draft, no published revision, no character
         Assert.NotNull(h.Temp.App.DdbSessions.Peek(token));
@@ -343,5 +347,133 @@ public class DdbReferenceDraftTests
             + string.Join("\n", preview.Report.Lines ?? []);
         Assert.DoesNotContain("Fixture", said, StringComparison.Ordinal);
         Assert.DoesNotContain("invented", said, StringComparison.Ordinal);
+    }
+
+    // ---- fix round 1 ----
+
+    private static int Revisions(DdbHarness h) => h.Temp.App.Store.ListRevisions().Count;
+
+    [Fact]
+    public void Importing_the_same_sheet_twice_adds_no_second_draft_and_the_report_counts_them_without_names()
+    {
+        using var h = new DdbHarness();
+        h.Temp.App.ApplyDdbImport(Apply(Read(h)));
+        var revisions = Revisions(h);
+
+        var token = Read(h);
+        var preview = h.Temp.App.PreviewDdbImport(Preview(token));
+        var second = h.Temp.App.ApplyDdbImport(Apply(token));
+
+        Assert.Empty(preview.ReferenceDrafts ?? []);
+        Assert.Null(second.ReferenceDrafts);
+        Assert.Equal(revisions, Revisions(h));
+        Assert.Contains("3 features already had reference drafts and were not added again.", preview.Report.Lines!);
+        Assert.DoesNotContain(preview.Report.Lines!, l => l.Contains("Fixture", StringComparison.Ordinal));
+        Assert.Equal(4, h.Temp.App.ListGapNotes(second.CharacterId).Count(n => n.Target.Kind == GapTargetKind.Import)); // the gap notes stay
+    }
+
+    [Fact]
+    public void A_published_copy_counts_too_and_the_name_is_compared_without_case()
+    {
+        using var h = new DdbHarness();
+        h.Temp.App.ApplyDdbImport(Publishing(h, Read(h)));
+        var revisions = Revisions(h);
+
+        var shouting = Block().Replace(Knack, Knack.ToUpperInvariant(), StringComparison.Ordinal);
+        var preview = h.Temp.App.PreviewDdbImport(Preview(Read(h, shouting)));
+
+        Assert.Empty(preview.ReferenceDrafts ?? []);
+        Assert.Equal(revisions, Revisions(h));
+        // The published feat now matches as installed content, so it is not a candidate; the two features are counted, one by its upper-case spelling.
+        Assert.Contains("2 features already had reference drafts and were not added again.", preview.Report.Lines!);
+    }
+
+    [Fact]
+    public void One_already_there_leaves_the_new_ones_and_the_line_says_one_feature()
+    {
+        using var h = new DdbHarness();
+        h.Temp.App.ApplyDdbImport(Apply(Read(h, $"=== FIXTURE FEATURES ===\n* {Knack} • FX 1\n{KnackText}")));
+
+        var preview = h.Temp.App.PreviewDdbImport(Preview(Read(h)));
+
+        Assert.Equal([Wayfarer, QuietKnack], preview.ReferenceDrafts!.Select(d => d.Name).Order(StringComparer.Ordinal).Reverse());
+        Assert.Contains("1 feature already had a reference draft and was not added again.", preview.Report.Lines!);
+    }
+
+    [Fact]
+    public void A_name_is_cut_to_200_characters_at_a_code_point_in_the_draft_and_in_the_listing()
+    {
+        using var h = new DdbHarness();
+        var name = new string('n', 199) + "\U0001F600" + "tail"; // the pair would straddle the cut
+        var token = Read(h, $"=== FIXTURE FEATURES ===\n* {name} • FX 1\nAn invented line.");
+
+        var info = Assert.Single(h.Temp.App.PreviewDdbImport(Preview(token)).ReferenceDrafts!);
+        var written = Latest(h, Assert.Single(h.Temp.App.ApplyDdbImport(Apply(token)).ReferenceDrafts!));
+
+        Assert.Equal(199, info.Name.Length);
+        Assert.Equal(info.Name, written.Name);
+        Assert.False(char.IsSurrogate(written.Name[^1]));
+    }
+
+    [Fact]
+    public void A_text_belongs_to_its_own_row_when_two_entries_share_a_name_and_the_first_is_left_out()
+    {
+        using var h = new DdbHarness();
+        var token = Read(h, $"=== FIXTURE FEATURES ===\n* {Knack} • FX 1\nThe first invented text.\n* {Knack} • FX 1\nThe second invented text.");
+
+        var preview = h.Temp.App.PreviewDdbImport(Preview(token) with { Resolutions = [new("feature:0", null, true)] });
+
+        var info = Assert.Single(preview.ReferenceDrafts!);
+        Assert.Equal(("feature:1", "The second invented text."), (info.RowId, info.FirstLine));
+        var written = Latest(h, Assert.Single(h.Temp.App.ApplyDdbImport(Apply(token) with { Resolutions = [new("feature:0", null, true)] }).ReferenceDrafts!));
+        Assert.Equal("The second invented text.", written.Summary);
+    }
+
+    [Fact]
+    public void Publishing_refuses_when_the_drafts_are_not_the_ones_shown_and_writes_nothing()
+    {
+        using var h = new DdbHarness();
+        var before = DdbStubClassTests.Counts(h);
+        var token = Read(h);
+
+        var changed = Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(token, publish: true) with { ExpectedReferences = ["feature:0"] }));
+        var missing = Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(token, publish: true)));
+
+        Assert.Equal("ddb.references-changed", changed.Code);
+        Assert.Equal("ddb.references-changed", missing.Code);
+        Assert.DoesNotContain("Fixture", changed.Message + string.Join("", changed.Problems.Select(p => p.Message)), StringComparison.Ordinal);
+        Assert.Equal(before, DdbStubClassTests.Counts(h));
+        Assert.NotNull(h.Temp.App.DdbSessions.Peek(token)); // the token is kept
+    }
+
+    [Fact]
+    public void Publishing_accepts_the_shown_set_in_any_order_and_unticked_needs_no_token()
+    {
+        using var h = new DdbHarness();
+        var token = Read(h);
+        var shown = h.Temp.App.PreviewDdbImport(Preview(token)).ReferenceDrafts!.Select(d => d.RowId).Reverse().ToList();
+
+        var result = h.Temp.App.ApplyDdbImport(Apply(token, publish: true) with { ExpectedReferences = shown });
+
+        Assert.Equal(3, result.ReferenceDrafts!.Count);
+        Assert.NotNull(h.Temp.App.ApplyDdbImport(Apply(Read(h, Many(1)))).ReferenceDrafts);
+    }
+
+    [Fact]
+    public void A_campaign_that_does_not_allow_the_source_is_told_before_create_and_the_feat_is_still_pinned()
+    {
+        using var h = new DdbHarness();
+        var campaign = h.Temp.App.SaveCampaign(new() { Id = Guid.Empty, Name = "Fixture Table", RulesFamily = RulesFamilies.Srd521, AllowedSources = [Guid.Parse("52500000-0000-4000-8000-000000000001")] });
+        var token = Read(h);
+
+        var preview = h.Temp.App.PreviewDdbImport(Preview(token) with { CampaignId = campaign.Id });
+        var none = h.Temp.App.PreviewDdbImport(Preview(token));
+        var featuresOnly = h.Temp.App.PreviewDdbImport(Preview(Read(h, $"=== FIXTURE FEATURES ===\n* {Knack} • FX 1\n{KnackText}")) with { CampaignId = campaign.Id });
+        var result = h.Temp.App.ApplyDdbImport(Publishing(h, token) with { CampaignId = campaign.Id });
+
+        Assert.Equal("campaign.source-not-allowed", preview.ReferenceNote);
+        Assert.Null(none.ReferenceNote); // no campaign
+        Assert.Null(featuresOnly.ReferenceNote); // nothing would be pinned
+        Assert.Single(h.Temp.App.GetCharacter(result.CharacterId).Character.Pins); // pinning is not skipped
     }
 }

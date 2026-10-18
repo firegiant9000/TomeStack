@@ -2386,6 +2386,69 @@ async function readDdbSheet(user: ReturnType<typeof userEvent.setup>) {
   expect(await screen.findByText('Fixture Arcanist 3 / Fixture Chanter 2', {}, { timeout: 30000 })).toBeTruthy();
 }
 
+// ---- item 16 (D16(c)): unmatched features that carry text become reference drafts ----
+
+async function toDdbSummary(user: ReturnType<typeof userEvent.setup>) {
+  await startDdbImport(user);
+  await readDdbSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  const veil = await within(matches).findByRole('combobox', { name: 'Match for Fixture Veil' });
+  await user.selectOptions(veil, '1'); // the option labels are the same for both casters once a character exists, so pick by position
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+}
+
+/** Every revision (drafts too) in the import-derived source, from the call the studio uses; 0 while the source does not exist yet. */
+async function importSourceRevisions(): Promise<number> {
+  const source = (await client.listSources()).find((s) => s.title === 'Characters imported from sheets');
+  return source ? (await client.contentBySource(source.id)).reduce((n, entry) => n + entry.revisions.length, 0) : 0;
+}
+
+// These two run before any other test imports this sheet: the service does not draft an entry the import-derived source holds
+// already (R106), so the drafts exist only for the first import of the sheet.
+it('Cancel at the summary writes no reference drafts and no source', async () => {
+  const user = userEvent.setup();
+  const sources = (await client.listSources()).map((s) => s.id).sort();
+  const revisions = await importSourceRevisions();
+  render(<App />);
+  await toDdbSummary(user);
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  await user.click(within(section).getByRole('checkbox', { name: /^Publish these \d+ reference drafts$/ }));
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  await expectStatus(/Import cancelled\. Nothing was saved\./);
+  expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
+  expect(await importSourceRevisions()).toBe(revisions);
+});
+
+it('lists the unmatched features with text as reference drafts, unticked by default, and publishing them makes them studio content', async () => {
+  const user = userEvent.setup();
+  const revisions = await importSourceRevisions();
+  render(<App />);
+  await toDdbSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(section.textContent).toContain('Fixture Steady Breath');
+  expect(section.textContent).toContain('An invented line of fixture description.');
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Publish these \d+ reference drafts$/ });
+  expect(tick.checked).toBe(false);
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(false);
+
+  await user.click(tick);
+  expect(document.activeElement).toBe(tick);
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(true);
+  expect(await importSourceRevisions()).toBeGreaterThan(revisions);
+});
+
 it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an override and creates the character', async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -2430,57 +2493,6 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   await openTab(user, sheet, 'Stats');
   expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
-});
-
-// ---- item 16 (D16(c)): unmatched features that carry text become reference drafts ----
-
-async function toDdbSummary(user: ReturnType<typeof userEvent.setup>) {
-  await startDdbImport(user);
-  await readDdbSheet(user);
-  await nextWhenReady(user, 'Next: rules');
-  await nextWhenReady(user, 'Next: matches');
-  const matches = await screen.findByRole('region', { name: 'Matches' });
-  const veil = await within(matches).findByRole('combobox', { name: 'Match for Fixture Veil' });
-  await user.selectOptions(veil, '1'); // the option labels are the same for both casters once a character exists, so pick by position
-  await nextWhenReady(user, 'Next: numbers');
-  await nextWhenReady(user, 'Next: summary');
-}
-
-it('lists the unmatched features with text as reference drafts, unticked by default, and publishing them makes them studio content', async () => {
-  const user = userEvent.setup();
-  render(<App />);
-  await toDdbSummary(user);
-
-  const section = await screen.findByRole('region', { name: 'Reference drafts' });
-  expect(section.textContent).toContain('Fixture Steady Breath');
-  expect(section.textContent).toContain('An invented line of fixture description.');
-  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Publish these \d+ reference drafts$/ });
-  expect(tick.checked).toBe(false);
-  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
-  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(false);
-
-  await user.click(tick);
-  expect(document.activeElement).toBe(tick);
-  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
-  await waitFor(() => expect(create.disabled).toBe(false));
-  await user.click(create);
-
-  await expectStatus(/Character created from the character sheet/);
-  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(true);
-});
-
-it('Cancel at the summary writes no reference drafts', async () => {
-  const user = userEvent.setup();
-  const sources = (await client.listSources()).map((s) => s.id).sort();
-  render(<App />);
-  await toDdbSummary(user);
-  const section = await screen.findByRole('region', { name: 'Reference drafts' });
-  await user.click(within(section).getByRole('checkbox', { name: /^Publish these \d+ reference drafts$/ }));
-
-  await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-  await expectStatus(/Import cancelled\. Nothing was saved\./);
-  expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
 });
 
 it('imports the fillable 2014 sheet through the same entry: the layout is named, prose lands in session notes and the details fill', async () => {

@@ -7,9 +7,11 @@ public enum FeatureKind { Feat, Feature }
 /// Item 16 (R104): the description a sheet gives under one feat or feature, kept apart from the names
 /// (<see cref="DdbSheet.Feats"/> and <see cref="DdbSheet.Features"/> are unchanged). Neutral on purpose: a text parser fills the same list
 /// later. <paramref name="Text"/> is the lines under the entry, joined with <c>\n</c> and trimmed; an entry with none has no record.
+/// <paramref name="Index"/> is the entry's position in its list (<see cref="DdbSheet.Features"/> or <see cref="DdbSheet.Feats"/> by
+/// kind), which is the number in its match row (<c>feature:2</c>), so a text is matched to its row by position, never by name.
 /// </summary>
 /// <remarks>The name and the text are the sheet's own words, so <c>ToString</c> prints the kind and the length only.</remarks>
-public sealed record FeatureText(string Name, FeatureKind Kind, string Text)
+public sealed record FeatureText(string Name, FeatureKind Kind, string Text, int Index)
 {
     public override string ToString() => $"FeatureText {{ Kind = {Kind}, Length = {Text.Length} }}";
 }

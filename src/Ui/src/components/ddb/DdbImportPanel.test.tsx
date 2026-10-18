@@ -884,7 +884,31 @@ it('sends publishReferences true only once the tick is given, and false otherwis
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
-  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toBe(true);
+  // the consent token: the row ids the summary showed
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toEqual(['feature:0', 'feature:1']);
+});
+
+it('says in one sentence, before Create, that the campaign does not allow the source the drafts are saved in', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => ({ ...draftsPreview(2), referenceNote: 'campaign.source-not-allowed' }));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(within(section).getAllByRole('note').map((n) => n.textContent)).toContain(
+    "This character's campaign does not allow the source these drafts are saved in. A published feat is still pinned.",
+  );
+});
+
+it('has no campaign sentence when the service gives no note', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(section.textContent).not.toContain('campaign');
+  expect(section.textContent).toContain('Published feats (if any) are pinned on the character.');
 });
 
 it('sends publishReferences false when the tick is left alone', async () => {

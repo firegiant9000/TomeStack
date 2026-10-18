@@ -1754,6 +1754,8 @@ export interface DdbPreview {
   stub?: StubClassReview | null;
   /** The reference drafts for unmatched feats and features that carry text (item 16); absent when there are none. */
   referenceDrafts?: ReferenceDraftInfo[] | null;
+  /** `campaign.source-not-allowed` when a published feat would be pinned from a source the chosen campaign does not allow. */
+  referenceNote?: 'campaign.source-not-allowed' | null;
 }
 
 export interface DdbApplyResult {

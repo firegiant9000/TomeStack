@@ -218,7 +218,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (!request || created || applying) return;
     try {
       setApplying(true);
-      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '');
+      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '' ? (preview?.referenceDrafts ?? []).map((d) => d.rowId) : false);
       live.current = undefined; // spent
       setCreated(true);
       await onCreated(result.characterId, result);

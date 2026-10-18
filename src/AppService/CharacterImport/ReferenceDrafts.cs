@@ -37,21 +37,37 @@ internal static class ReferenceDrafts
 
     private const int FirstLineChars = 200;
 
-    public static ReferenceDraftSet Build(DdbSheet sheet, IReadOnlyList<MatchRow> rows, string family, Guid sourceId)
+    /// <summary>The longest name a draft keeps (the gap notes' own limit); a longer one is cut at a code point.</summary>
+    public const int MaxNameChars = 200;
+
+    /// <param name="existing">
+    /// R106: the kind and normalised name of every entry already in the import-derived source (any revision status). An entry
+    /// that is there already, or that an earlier row of this sheet drafts, is not drafted again; the report counts them.
+    /// </param>
+    public static ReferenceDraftSet Build(DdbSheet sheet, IReadOnlyList<MatchRow> rows, string family, Guid sourceId, IReadOnlySet<(ContentKind Kind, string Name)> existing)
     {
         if (sheet.FeatureTexts is not { Count: > 0 } texts)
             return ReferenceDraftSet.None;
-        // A name listed twice takes its texts in sheet order, as the rows come in sheet order.
-        var queues = texts.GroupBy(t => (t.Kind, Normalise.Name(t.Name))).ToDictionary(g => g.Key, g => new Queue<FeatureText>(g));
+        // A text belongs to the row at its own position in its list, never to a row that merely shares its name.
+        var byPosition = texts.GroupBy(t => (t.Kind, t.Index)).ToDictionary(g => g.Key, g => g.First());
+        var known = new HashSet<(ContentKind, string)>(existing);
         var drafts = new List<ContentRevision>();
         var info = new List<ReferenceDraftInfo>();
         var lines = new List<string>();
         var skipped = 0;
+        var already = 0;
         foreach (var row in rows.Where(r => r.Status == MatchStatus.NotFound && r.Kind is MatchKind.Feat or MatchKind.Feature))
         {
             var kind = row.Kind == MatchKind.Feat ? FeatureKind.Feat : FeatureKind.Feature;
-            if (!queues.TryGetValue((kind, Normalise.Name(row.Label)), out var queue) || !queue.TryDequeue(out var found))
+            if (!byPosition.TryGetValue((kind, Index(row.RowId)), out var found) || Normalise.Name(found.Name) != Normalise.Name(row.Label))
                 continue;
+            var contentKind = kind == FeatureKind.Feat ? ContentKind.Feat : ContentKind.Feature;
+            var name = Clip(row.Label, MaxNameChars);
+            if (!known.Add((contentKind, Normalise.Name(name))))
+            {
+                already++;
+                continue;
+            }
             if (drafts.Count >= MaxDrafts)
             {
                 skipped++;
@@ -68,23 +84,36 @@ internal static class ReferenceDrafts
             {
                 ContentId = Guid.NewGuid(),
                 RevisionId = Guid.NewGuid(),
-                Kind = kind == FeatureKind.Feat ? ContentKind.Feat : ContentKind.Feature,
-                Name = row.Label,
+                Kind = contentKind,
+                Name = name,
                 RulesFamilies = [family],
                 Provenance = new(sourceId),
                 Status = RevisionStatus.Draft,
                 Summary = text,
             });
-            info.Add(new(row.RowId, kind, row.Label, FirstLine(text), text.Length));
+            info.Add(new(row.RowId, kind, name, FirstLine(text), text.Length));
         }
+        if (already > 0)
+            lines.Add(already == 1 ? "1 feature already had a reference draft and was not added again." : $"{already.ToString(CultureInfo.InvariantCulture)} features already had reference drafts and were not added again.");
         if (skipped > 0)
             lines.Add(skipped == 1 ? "1 more feature was left as a gap note." : $"{skipped.ToString(CultureInfo.InvariantCulture)} more features were left as gap notes.");
         return new(drafts, info, lines);
     }
 
+    /// <summary>The 0-based position of an entry in its list, from its row id (<c>feature:2</c> is 2); -1 when it has none.</summary>
+    private static int Index(string rowId) =>
+        int.TryParse(rowId.AsSpan(rowId.IndexOf(':') + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index) ? index : -1;
+
     /// <summary>The 1-based position of an entry in its list, from its row id (<c>feature:2</c> is the third).</summary>
-    private static int Position(string rowId) =>
-        int.TryParse(rowId.AsSpan(rowId.IndexOf(':') + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index) ? index + 1 : 0;
+    private static int Position(string rowId) => Index(rowId) + 1;
+
+    private static string Clip(string text, int max)
+    {
+        if (text.Length <= max)
+            return text;
+        var end = char.IsHighSurrogate(text[max - 1]) ? max - 1 : max;
+        return text[..end];
+    }
 
     private static string FirstLine(string text)
     {

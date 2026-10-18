@@ -94,8 +94,13 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           </label>
           <p role="note">
             They hold a name and a description only, no mechanics. Features are kept as reference content in the studio; the gap notes stay on the
-            character. {publishReferences ? 'Published feats are pinned on the character.' : 'Left unticked, they stay drafts in the studio.'}
+            character. Published feats (if any) are pinned on the character.
           </p>
+          {preview.referenceNote === 'campaign.source-not-allowed' && (
+            <p role="note" className="warn">
+              This character&apos;s campaign does not allow the source these drafts are saved in. A published feat is still pinned.
+            </p>
+          )}
         </section>
       )}
       <label>

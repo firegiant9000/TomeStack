@@ -266,12 +266,12 @@ public static partial class DdbParser
             var texts = new List<Read<string>> { Text(semantic) };
             texts.AddRange(Rows(semantic).Select(n => Text($"{semantic}[{n}]")));
             string? section = null;
-            (string Name, FeatureKind Kind)? current = null;
+            (string Name, FeatureKind Kind, int Index)? current = null;
             var under = new List<string>();
             void Flush()
             {
                 if (current is { } open && string.Join('\n', under).Trim() is { Length: > 0 } body)
-                    described.Add(new(open.Name, open.Kind, body));
+                    described.Add(new(open.Name, open.Kind, body, open.Index));
                 current = null;
                 under.Clear();
             }
@@ -311,9 +311,10 @@ public static partial class DdbParser
                         if (item.Length == 0)
                             continue;
                         var inFeats = split?.FeatsSection is { } featsSection && section is not null && compiled.Patterns[featsSection].IsMatch(section);
-                        (inFeats ? feats : items).Add(Read<string>.Ok(item));
+                        var list = inFeats ? feats : items;
                         if (split?.ItemPattern is not null)
-                            current = (item, inFeats ? FeatureKind.Feat : FeatureKind.Feature);
+                            current = (item, inFeats ? FeatureKind.Feat : FeatureKind.Feature, list.Count);
+                        list.Add(Read<string>.Ok(item));
                     }
                 }
                 catch (RegexMatchTimeoutException)

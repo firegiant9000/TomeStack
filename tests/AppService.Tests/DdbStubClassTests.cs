@@ -414,7 +414,9 @@ public class DdbStubClassTests
     {
         var result = h.Temp.App.ApplyDdbImport(Apply(Read(h, Sheet()), Row0, publish: true));
         var published = h.Temp.App.ListRevisions(result.CreatedClass!.Value).Last();
-        var references = h.Temp.App.ApplyDdbImport(new(Read(h, DdbReferenceDraftTests.Fields(h, DdbReferenceDraftTests.Block())), RulesFamilies.Srd521, null, [], [], false, Confirm: true, PublishReferences: true));
+        var referenceToken = Read(h, DdbReferenceDraftTests.Fields(h, DdbReferenceDraftTests.Block()));
+        var shown = h.Temp.App.PreviewDdbImport(new(referenceToken, RulesFamilies.Srd521, null, [], [], false)).ReferenceDrafts!.Select(d => d.RowId).ToList();
+        var references = h.Temp.App.ApplyDdbImport(new(referenceToken, RulesFamilies.Srd521, null, [], [], false, Confirm: true, PublishReferences: true, ExpectedReferences: shown));
         var drafts = references.ReferenceDrafts!.Select(id => h.Temp.App.ListRevisions(id).Last()).ToList();
         Assert.All(drafts, d => Assert.Equal(published.Provenance.SourceId, d.Provenance.SourceId)); // one import-derived source
         Assert.Equal(3, drafts.Count);

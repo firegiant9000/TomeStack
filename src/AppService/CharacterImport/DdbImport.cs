@@ -176,6 +176,15 @@ public sealed partial class TomeStackApp
         if (request.CreateClassRow is not null && stub is null)
             throw Refused("ddb.class-not-offered", "A class cannot be created for that line of the sheet. Choose it again in the matches step, or leave it out.");
 
+        // Item 16: the publish tick belongs to the drafts the user was shown. Unless the drafts derived now are exactly those
+        // (by row id, in any order), nothing is written and the token is kept. The refusal names no entry.
+        if (request.PublishReferences)
+        {
+            var derived = (proposal.ReferenceDrafts ?? []).Select(d => d.RowId).ToHashSet(StringComparer.Ordinal);
+            if (!derived.SetEquals(request.ExpectedReferences ?? []))
+                throw Refused("ddb.references-changed", "The reference drafts are not the ones you were shown. Nothing was created; look at the summary again.");
+        }
+
         var problems = new List<Diagnostic>();
         if (sheet.Classes.Status != ReadStatus.Ok)
             problems.Add(new("character.level-out-of-range", $"The sheet's class levels could not be read, or add up to more than {Character.MaxLevel}. Fix the classes before creating the character."));
@@ -337,7 +346,14 @@ public sealed partial class TomeStackApp
 
         var rows = planner.Rows;
         // Item 16: the unmatched feats and features that carry text become reference drafts in the same source as the stub.
-        var references = ReferenceDrafts.Build(sheet, rows, request.RulesFamily, stubSource.Id);
+        // R106: an entry the import-derived source already holds (any revision, draft or published) is not drafted again.
+        var existing = ContentBySource(stubSource.Id).Select(e => (e.Kind, Normalise.Name(e.Name))).ToHashSet();
+        var references = ReferenceDrafts.Build(sheet, rows, request.RulesFamily, stubSource.Id, existing);
+        // A campaign that does not allow that source still gets the pin; the summary says so first (campaign.source-not-allowed).
+        var referenceNote = references.Drafts.Any(d => d.Kind == ContentKind.Feat)
+            && request.CampaignId is { } referenceCampaign && _store.FindCampaign(referenceCampaign)?.AllowedSources.Contains(stubSource.Id) == false
+                ? "campaign.source-not-allowed"
+                : null;
         int Count(MatchStatus status) => rows.Count(r => r.Status == status);
         var report = new DdbReport(
             Count(MatchStatus.Matched) - planner.ChosenByUser,
@@ -357,7 +373,7 @@ public sealed partial class TomeStackApp
         var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || accepted.Contains((c.Source, c.ChoiceId))).ToList();
         var write = planner.StubRevision is { } draft ? new StubWrite(draft, stubSource) : null;
         return (new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply, planner.StubOffers, planner.StubReview,
-            references.Info.Count > 0 ? references.Info : null), new ImportWrites(write, stubSource, references.Drafts));
+            references.Info.Count > 0 ? references.Info : null, referenceNote), new ImportWrites(write, stubSource, references.Drafts));
     }
 
     /// <summary>D16d: only what <see cref="PlayState"/> has and the layout read.</summary>
@@ -429,14 +445,19 @@ public sealed record DdbPreview(
     bool CanApply,
     IReadOnlyList<StubOffer>? StubOffers = null,
     StubClassReview? Stub = null,
-    IReadOnlyList<ReferenceDraftInfo>? ReferenceDrafts = null);
+    IReadOnlyList<ReferenceDraftInfo>? ReferenceDrafts = null,
+    string? ReferenceNote = null);
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
 /// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped. Defaults to true, as the UI's checkbox does; a caller that omits it gets the guess.</param>
 public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false);
+/// <param name="ExpectedReferences">
+/// Item 16, the consent token (D33's <c>expected</c> pattern): the row ids of the reference drafts the user was shown. Required
+/// with <c>PublishReferences</c>; the apply refuses (<c>ddb.references-changed</c>) unless the drafts it derives are exactly these.
+/// </param>
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>
