@@ -49,14 +49,34 @@ public sealed partial class TomeStackApp
 
         var map = DdbParser.Recognise(fields)
             ?? throw Refused("ddb.layout-unknown", $"This PDF's {fields.Count} form field{(fields.Count == 1 ? "" : "s")} do not match a known character sheet layout.");
-        var sheet = DdbParser.Parse(map, fields);
+        return Hold(DdbParser.Parse(map, fields));
+    }
+
+    /// <summary>
+    /// <c>ddb.readText</c> (item 19a, D37, ADR-017): reads pasted or file text into the same sheet the PDF importer makes and holds
+    /// it under a token; everything after (preview, apply, discard) is unchanged. A text over a cap is refused with a code and counts.
+    /// Error messages carry counts, never the text.
+    /// </summary>
+    public DdbReadResult ReadDdbText(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var parsed = TextSheetParser.Parse(text);
+        if (parsed.Refusal is { } refusal)
+            throw Refused(refusal.Code, refusal.Message);
+        return Hold(parsed.Sheet!);
+    }
+
+    private DdbReadResult Hold(DdbSheet sheet)
+    {
         var token = DdbSessions.Add(sheet);
         var classes = sheet.Classes.Status == ReadStatus.Ok
             ? string.Join(" / ", sheet.Classes.Value!.Select(c => $"{c.Name} {c.Level}{(c.Subclass is null ? "" : $" ({c.Subclass})")}"))
             : "";
-        return new DdbReadResult(token, map.Id, map.SuggestedFamily,
-            new DdbSummary(sheet.Name.Value ?? "", classes, sheet.Features.Count, sheet.Spells.Count, sheet.Items.Count),
-            LayoutMaps.NameOf(map.Id));
+        // A text sheet's equipment is one text (its lines become custom items), so the card counts the lines.
+        var items = sheet.Items.Count + (sheet.Layout == LayoutMaps.TextId && sheet.Texts?.Equipment is { Status: ReadStatus.Ok } equipment ? equipment.Value!.Split('\n').Count(l => l.Length > 0) : 0);
+        return new DdbReadResult(token, sheet.Layout, sheet.SuggestedFamily,
+            new DdbSummary(sheet.Name.Value ?? "", classes, sheet.Features.Count, sheet.Spells.Count, items, sheet.NotRead?.Count ?? 0),
+            LayoutMaps.NameOf(sheet.Layout));
     }
 
     /// <summary>
@@ -121,7 +141,7 @@ public sealed partial class TomeStackApp
             yield return code;
     }
 
-    private static LayoutMap? MapOf(DdbSheet sheet) => LayoutMaps.All.FirstOrDefault(m => m.Id == sheet.Layout);
+    private static LayoutMap? MapOf(DdbSheet sheet) => LayoutMaps.Find(sheet.Layout);
 
     private static bool NumberRead(DdbSheet sheet, string field) => sheet.Numbers.TryGetValue(field, out var read) && read.Status == ReadStatus.Ok;
 
@@ -168,7 +188,7 @@ public sealed partial class TomeStackApp
         var sheet = DdbSessions.Peek(request.Token)
             ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
         var (proposal, writes) = ProposeDdb(sheet,
-            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched, request.CreateClassRow),
+            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched, request.CreateClassRow, request.KeepNotRead),
             Guid.NewGuid());
         // Item 15: a class asked for that is not offered (its die cannot be read, another row already creates one, or it is
         // installed after all) is refused with a code, not guessed at. The message never names the class.
@@ -267,7 +287,7 @@ public sealed partial class TomeStackApp
         var stubSource = StubSource(request.RulesFamily);
 
         var now = _time.GetUtcNow();
-        var extras = ImportExtras.Build(sheet, DateOnly.FromDateTime(now.LocalDateTime), now);
+        var extras = ImportExtras.Build(sheet, DateOnly.FromDateTime(now.LocalDateTime), now, keepNotRead: request.KeepNotRead);
         var start = new Character
         {
             Id = id,
@@ -375,7 +395,7 @@ public sealed partial class TomeStackApp
         var openChoices = (final.Choices ?? []).Where(c => !c.Resolved || accepted.Contains((c.Source, c.ChoiceId))).ToList();
         var write = planner.StubRevision is { } draft ? new StubWrite(draft, stubSource) : null;
         return (new DdbPreview(character, rows, openChoices, comparison, plan, report, diagnostics, canApply, planner.StubOffers, planner.StubReview,
-            references.Info.Count > 0 ? references.Info : null, referenceNote), new ImportWrites(write, stubSource, references.Drafts));
+            references.Info.Count > 0 ? references.Info : null, referenceNote, sheet.NotRead is { Count: > 0 } notRead ? notRead : null), new ImportWrites(write, stubSource, references.Drafts));
     }
 
     /// <summary>D16d: only what <see cref="PlayState"/> has and the layout read.</summary>
@@ -448,18 +468,19 @@ public sealed record DdbPreview(
     IReadOnlyList<StubOffer>? StubOffers = null,
     StubClassReview? Stub = null,
     IReadOnlyList<ReferenceDraftInfo>? ReferenceDrafts = null,
-    string? ReferenceNote = null);
+    string? ReferenceNote = null,
+    IReadOnlyList<NotReadLine>? NotRead = null);
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
 /// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped. Defaults to true, as the UI's checkbox does; a caller that omits it gets the guess.</param>
-public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null);
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null, bool KeepNotRead = true);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
 /// <param name="ExpectedReferences">
 /// Item 16, the consent token (D33's <c>expected</c> pattern): the row ids of the reference drafts the user was shown. Required
 /// with <c>PublishReferences</c>; the apply refuses (<c>ddb.references-changed</c>) unless the drafts it derives are exactly these.
 /// </param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null);
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null, bool KeepNotRead = true);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>
@@ -468,7 +489,8 @@ public sealed record DdbApplyResult(Guid CharacterId, int Overrides, int GapNote
 
 /// <param name="Name">The character's name as read (shown to the user only, never logged).</param>
 /// <param name="ClassText">The classes as read, "Name level (subclass)" joined with " / ", or empty when unreadable.</param>
-public sealed record DdbSummary(string Name, string ClassText, int Features, int Spells, int Items);
+/// <param name="NotRead">Item 19a: the lines of a text import that were not understood (0 for a PDF).</param>
+public sealed record DdbSummary(string Name, string ClassText, int Features, int Spells, int Items, int NotRead = 0);
 
 /// <param name="LayoutName">The layout in words, as <see cref="DdbReport.LayoutName"/>.</param>
 public sealed record DdbReadResult(Guid Token, string Layout, string? SuggestedFamily, DdbSummary Summary, string LayoutName = "");

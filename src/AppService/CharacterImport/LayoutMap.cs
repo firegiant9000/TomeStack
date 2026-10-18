@@ -155,7 +155,24 @@ public static class LayoutMaps
 
     /// <summary>The layout's name in a report: its display name, or its id when it has none.</summary>
     public static string NameOf(string layoutId) =>
-        All.FirstOrDefault(m => m.Id == layoutId) is { } map && map.DisplayName.Length > 0 ? map.DisplayName : layoutId;
+        Find(layoutId) is { } map && map.DisplayName.Length > 0 ? map.DisplayName : layoutId;
+
+    /// <summary>The id of the text importer's layout (item 19a).</summary>
+    public const string TextId = "text";
+
+    /// <summary>
+    /// The text importer's layout (item 19a): not a map of form fields (it is not in <see cref="All"/>, so no PDF is ever recognised
+    /// as it), only the neutral texts a kept number or an import note gets. Nothing in it says where the text came from.
+    /// </summary>
+    public static LayoutMap Text { get; } = new(
+        TextId, 1, null, [], new Dictionary<string, FieldRule>(), "", [],
+        DisplayName: "pasted or file text",
+        ImportedOverrideReason: "Imported from text",
+        ImportFieldNoteText: "Imported from the character text: it showed a different number here when this character was imported.",
+        ImportGapNoteText: "Not brought over from the text: TomeStack had no match or no place for it.");
+
+    /// <summary>A shipped map by id, or the text layout.</summary>
+    public static LayoutMap? Find(string layoutId) => All.FirstOrDefault(m => m.Id == layoutId) ?? (layoutId == TextId ? Text : null);
 
     /// <summary>Compiles a map's pattern as the parser runs it.</summary>
     internal static Regex Compile(string pattern) =>

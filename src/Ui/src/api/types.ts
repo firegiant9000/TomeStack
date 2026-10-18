@@ -1598,9 +1598,11 @@ export interface DdbSummary {
   features: number;
   spells: number;
   items: number;
+  /** Item 19a: the lines of a text import that were not understood; 0 or absent for a PDF. */
+  notRead?: number;
 }
 
-/** `ddb.read` and `ddb.readData`: the sheet is held in memory under the one-use token. `chosen` is false when the dialog was cancelled. */
+/** `ddb.read`, `ddb.readData` and `ddb.readText`: the sheet is held in memory under the one-use token. `chosen` is false when the dialog was cancelled. */
 export interface DdbReadResult {
   chosen?: boolean;
   token: string;
@@ -1709,6 +1711,15 @@ export interface DdbPreviewRequest {
   equipMatched?: boolean;
   /** D35: the row id of the one class the sheet names that TomeStack lacks, to be created as a minimal homebrew class. */
   createClassRow?: string;
+  /** Item 19a: keep a text import's lines that were not read as session notes (the service defaults to true). Part of the request, so a change re-previews. */
+  keepNotRead?: boolean;
+}
+
+/** Item 19a (D37): a line of the pasted or file text that was not understood. The user's own text: shown as plain text only. */
+export interface NotReadLine {
+  /** 1-based. */
+  line: number;
+  text: string;
 }
 
 /** D35: a class the sheet names that is not installed, and whether a stub can be created for it. `note` is null when it can. */
@@ -1756,6 +1767,8 @@ export interface DdbPreview {
   referenceDrafts?: ReferenceDraftInfo[] | null;
   /** `campaign.source-not-allowed` when a published feat would be pinned from a source the chosen campaign does not allow. */
   referenceNote?: 'campaign.source-not-allowed' | null;
+  /** Item 19a: the text lines that were not read, in order; absent for a PDF or when every line was understood. */
+  notRead?: NotReadLine[] | null;
 }
 
 export interface DdbApplyResult {

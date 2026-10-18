@@ -2552,6 +2552,58 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
 });
 
+// ---- item 19a (D37): character import from pasted or file text ----
+// The text is invented. "Barbarian 1" is an installed SRD class with no choice to answer at level 1.
+
+const fixtureText = [
+  '# Testy Texter',
+  'Class: Barbarian 1',
+  'STR 16  DEX 14  CON 14  INT 8  WIS 9  CHA 10',
+  'Gold: 12',
+  'Languages: Common, Fixturish',
+  'Some line the reader cannot place',
+].join('\n');
+
+it('imports a character from pasted text: the unreadable line is listed and kept as a session note, and a too-large file is refused by size', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+
+  await user.click(await screen.findByRole('button', { name: 'Import a character from text…' }));
+  const box = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' });
+  await waitFor(() => expect(document.activeElement).toBe(box));
+
+  // A file over the limit is refused by its size alone, before any of it is read.
+  const big = new File(['x'], 'big-fixture.txt', { type: 'text/plain' });
+  Object.defineProperty(big, 'size', { value: 300_000 });
+  await user.upload(screen.getByLabelText('Character text file'), big);
+  expect((await screen.findByRole('alert')).textContent).toContain('300,000');
+  expect(box.value).toBe('');
+
+  await user.click(box);
+  await user.paste(fixtureText);
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  expect(await screen.findByText('pasted or file text')).toBeTruthy();
+
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const notRead = await screen.findByRole('region', { name: 'Lines not read' });
+  expect(notRead.textContent).toContain('Some line the reader cannot place');
+  const tick = within(notRead).getByRole<HTMLInputElement>('checkbox', { name: 'Keep the lines that were not read as session notes' });
+  expect(tick.checked).toBe(true);
+
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  const sheet = await screen.findByRole('article', { name: 'Testy Texter' });
+  await openTab(user, sheet, 'Notes');
+  expect(await within(sheet).findByText(/Some line the reader cannot place/)).toBeTruthy();
+});
+
 // ---- item 15 (D35): a class the sheet names that TomeStack does not have, offered as a homebrew class ----
 // The generated sheet names the invented "Fixture Tinkerer" 3 with hit dice 3d8; no installed content has it.
 

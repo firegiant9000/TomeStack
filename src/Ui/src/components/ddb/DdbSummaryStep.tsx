@@ -13,18 +13,25 @@ interface Props {
   /** Item 16: publish the reference drafts with the character (off by default). */
   publishReferences?: boolean;
   onPublishReferences?: (publish: boolean) => void;
+  /** Item 19a: keep the lines a text import could not read as session notes (on by default; part of the request). */
+  keepNotRead?: boolean;
+  onKeepNotRead?: (keep: boolean) => void;
 }
+
+/** How many not-read lines the summary lists before "and N more" (all of them are still kept when the tick is on). */
+const shownNotRead = 200;
 
 /** How many reference drafts the summary lists before "and N more". */
 const shownDrafts = 10;
 
 /** Step 5: what will be created and what will not, before the one write. */
-export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, publishClass, onPublishClass, publishReferences = false, onPublishReferences }: Props) {
+export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, publishClass, onPublishClass, publishReferences = false, onPublishReferences, keepNotRead = true, onKeepNotRead }: Props) {
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
   const waiting = matches.filter((m) => m.status === 'choose').length;
   const drafts = preview.referenceDrafts ?? [];
+  const notRead = preview.notRead ?? [];
   const classes = matches.filter((m) => m.kind === 'class' && m.status === 'matched').map((m) => m.label);
   return (
     <>
@@ -117,6 +124,22 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
           {report.leftOut > 0 && <li>{report.leftOut} items you left out</li>}
         </ul>
       </section>
+      {notRead.length > 0 && (
+        <section aria-labelledby="ddb-not-read">
+          <h4 id="ddb-not-read">Lines not read</h4>
+          <ul>
+            {notRead.slice(0, shownNotRead).map((n) => (
+              <li key={n.line}>
+                Line {n.line}: {n.text}
+              </li>
+            ))}
+            {notRead.length > shownNotRead && <li>and {notRead.length - shownNotRead} more</li>}
+          </ul>
+          <label>
+            <input type="checkbox" checked={keepNotRead} onChange={(e) => onKeepNotRead?.(e.target.checked)} /> Keep the lines that were not read as session notes
+          </label>
+        </section>
+      )}
       {report.lines && report.lines.length > 0 && (
         <section aria-labelledby="ddb-report-lines">
           <h4 id="ddb-report-lines">From reading the sheet</h4>

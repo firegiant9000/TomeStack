@@ -48,6 +48,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [answers, setAnswers] = useState<ChoiceSelection[]>([]);
   const [includePlayState, setIncludePlayState] = useState(false);
   const [equipMatched, setEquipMatched] = useState(true);
+  /** Item 19a: keep the lines a text import could not read as session notes. Part of the request, so the stale-preview hold covers it. */
+  const [keepNotRead, setKeepNotRead] = useState(true);
   /** D35: the class row to create a homebrew class for; part of the preview request. */
   const [createClassRow, setCreateClassRow] = useState<string>();
   /** D35: publish the created class with the character. Off by default; sent with Create only, never part of the preview. */
@@ -113,6 +115,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           answers,
           equipMatched,
           createClassRow,
+          keepNotRead,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -336,6 +339,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             onPublishClass={setPublishClass}
             publishReferences={publishReferences}
             onPublishReferences={setPublishReferences}
+            keepNotRead={keepNotRead}
+            onKeepNotRead={setKeepNotRead}
           />
         )}
       </section>

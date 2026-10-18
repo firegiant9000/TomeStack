@@ -36,7 +36,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
-        "ddb.read", "ddb.readData", "ddb.preview", "ddb.apply", "ddb.discard",
+        "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
     ];
 
     /// <summary>
@@ -123,6 +123,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
         "ddb.read" => ReadDdbSheet(),
         "ddb.readData" => ReadDdbSheetData(Payload<DdbDataPayload>(payload)),
+        "ddb.readText" => app.ReadDdbText(Payload<DdbTextPayload>(payload).Text ?? throw new JsonException("ddb.readText needs text.")),
         "ddb.preview" => app.PreviewDdbImport(Payload<DdbPreviewRequest>(payload)),
         "ddb.apply" => app.ApplyDdbImport(Payload<DdbApplyRequest>(payload)),
         "ddb.discard" => new { discarded = app.DiscardDdbSheet(Payload<DdbTokenPayload>(payload).Token) },
@@ -610,6 +611,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record AttachDataPayload(Guid SourceId, string FileName, string Base64);
 
     private sealed record DdbDataPayload(string? FileName, string? Data);
+
+    /// <summary>Item 19a: the pasted or file text; its caps are the parser's, checked before anything is read.</summary>
+    private sealed record DdbTextPayload(string? Text);
 
     private sealed record DdbTokenPayload(Guid Token);
 

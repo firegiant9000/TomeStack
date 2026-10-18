@@ -13,6 +13,7 @@ vi.mock('../../api/client', () => ({
   client: {
     ddbRead: vi.fn(),
     ddbReadData: vi.fn(),
+    ddbReadText: vi.fn(),
     ddbPreview: vi.fn(),
     ddbApply: vi.fn(),
     ddbDiscard: vi.fn(),
@@ -968,4 +969,119 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
   const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
   expect(tick.checked).toBe(false);
+});
+
+// Item 19a (D37): character import from pasted or file text.
+const textRead: DdbReadResult = { ...read, layout: 'text', layoutName: 'pasted or file text', summary: { ...read.summary, notRead: 2 } };
+
+function notReadPreview(): DdbPreview {
+  return { ...preview(true), notRead: [{ line: 3, text: '<b>Fixture odd line</b>' }, { line: 9, text: 'Another fixture line' }] };
+}
+
+async function openText(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Import a character from text…' }));
+  return screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' });
+}
+
+async function textToSummary(user: ReturnType<typeof userEvent.setup>) {
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: matches' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+}
+
+it('opens a labelled textarea, moves focus into it, and returns focus to the button on close', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const button = screen.getByRole('button', { name: 'Import a character from text…' });
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  const box = await openText(user);
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  await waitFor(() => expect(document.activeElement).toBe(box));
+  expect(box.maxLength).toBe(-1);
+  await user.click(button);
+  expect(screen.queryByRole('textbox', { name: 'Character text' })).toBeNull();
+  expect(document.activeElement).toBe(button);
+});
+
+it('keeps Read the text disabled until there is text and sends the pasted text unchanged', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  renderPanel();
+  const box = await openText(user);
+  const readButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Read the text' });
+  expect(readButton.disabled).toBe(true);
+  await user.click(box);
+  await user.paste('Name: Fixture Text\nClass: Fixture 1');
+  expect(readButton.disabled).toBe(false);
+  await user.click(readButton);
+  await waitFor(() => expect(client.ddbReadText).toHaveBeenCalledWith('Name: Fixture Text\nClass: Fixture 1'));
+  expect(await screen.findByText('pasted or file text')).toBeTruthy();
+  expect(screen.getByText('2 lines')).toBeTruthy();
+});
+
+it('refuses text over the limit without sending it', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('x'.repeat(262_145));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Read the text' }).disabled).toBe(true);
+  expect(screen.getByRole('alert').textContent).toContain('262,145');
+  expect(client.ddbReadText).not.toHaveBeenCalled();
+});
+
+it('refuses a file over the limit by its size alone, before reading it', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const file = new File(['x'], 'secret-name.txt', { type: 'text/plain' });
+  Object.defineProperty(file, 'size', { value: 300_000 });
+  const textSpy = vi.spyOn(file, 'text');
+  await user.upload(screen.getByLabelText('Character text file'), file);
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('300,000');
+  expect(alert.textContent).not.toContain('secret-name');
+  expect(textSpy).not.toHaveBeenCalled();
+  expect(client.ddbReadText).not.toHaveBeenCalled();
+});
+
+it('reads a file within the limit into the textarea and keeps focus on the textarea', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const file = new File(['Name: From File'], 'fixture.md', { type: 'text/markdown' });
+  await user.upload(screen.getByLabelText('Character text file'), file);
+  await waitFor(() => expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' }).value).toBe('Name: From File'));
+  expect(client.ddbReadText).not.toHaveBeenCalled(); // reviewing the text comes first
+});
+
+it('lists the lines that were not read as plain text, ticked by default, and the tick is part of the request', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  vi.mocked(client.ddbPreview).mockImplementation(async () => notReadPreview());
+  renderPanel();
+  await textToSummary(user);
+
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Keep the lines that were not read as session notes' });
+  expect(tick.checked).toBe(true);
+  expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].keepNotRead).toBe(true);
+  expect(screen.getByText(/<b>Fixture odd line<\/b>/)).toBeTruthy(); // text, never markup
+  expect(document.querySelector('b')).toBeNull();
+  await user.click(tick);
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].keepNotRead).toBe(false));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(vi.mocked(client.ddbApply).mock.calls[0]?.[0].keepNotRead).toBe(false));
+});
+
+it('does not offer the Not read section for a PDF import', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+  expect(screen.queryByRole('checkbox', { name: /lines that were not read/ })).toBeNull();
 });

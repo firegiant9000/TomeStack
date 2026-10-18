@@ -100,10 +100,20 @@ public sealed record DdbSheet(
     IReadOnlyList<string>? Lines = null,
     DdbTexts? Texts = null,
     Read<string>? HitDiceTotal = null,
-    IReadOnlyList<FeatureText>? FeatureTexts = null)
+    IReadOnlyList<FeatureText>? FeatureTexts = null,
+    IReadOnlyList<NotReadLine>? NotRead = null)
 {
     public override string ToString() =>
-        $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, FeatureTexts = {FeatureTexts?.Count ?? 0}, Numbers = {Numbers.Count} }}";
+        $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, FeatureTexts = {FeatureTexts?.Count ?? 0}, Numbers = {Numbers.Count}, NotRead = {NotRead?.Count ?? 0} }}";
+}
+
+/// <summary>
+/// Item 19a (D37): a line of pasted or file text the text importer did not understand, with its 1-based line number, clipped to
+/// 2,000 characters. The user's own text, so <c>ToString</c> prints the number only. Only a text-layout <see cref="DdbSheet"/> has any.
+/// </summary>
+public sealed record NotReadLine(int Line, string Text)
+{
+    public override string ToString() => $"NotReadLine {{ Line = {Line} }}";
 }
 
 /// <summary>One weapon row of the fillable sheet, as the text the player typed (R83 splits it later).</summary>

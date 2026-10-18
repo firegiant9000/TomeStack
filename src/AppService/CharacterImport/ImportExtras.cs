@@ -21,12 +21,15 @@ public sealed record ImportExtras(
 {
     private const string ImportNoteTitle = "Import note";
 
+    /// <summary>The title of the notes that keep a text import's unread lines (item 19a); the splitter adds "(part n of m)".</summary>
+    internal const string NotReadTitle = "Not read from the text";
+
     public static readonly ImportExtras None = new(null, [], [], [], [], []);
 
     public override string ToString() => $"ImportExtras {{ Items = {Items.Count}, Attacks = {Attacks.Count}, Notes = {Notes.Count}, Lines = {Lines.Count} }}";
 
     /// <summary>Builds the extras for a sheet; a layout with no free text (D&amp;D Beyond) gives <see cref="None"/>. <paramref name="noteRoom"/> is how many notes the character can still take.</summary>
-    public static ImportExtras Build(DdbSheet sheet, DateOnly day, DateTimeOffset now, int noteRoom = Character.MaxNotes)
+    public static ImportExtras Build(DdbSheet sheet, DateOnly day, DateTimeOffset now, int noteRoom = Character.MaxNotes, bool keepNotRead = true)
     {
         ArgumentNullException.ThrowIfNull(sheet);
         if (sheet.Texts is not { } texts)
@@ -49,6 +52,15 @@ public sealed record ImportExtras(
             if (key == "backstory")
                 backstoryAt = notes.Count;
             notes.AddRange(Chunk(title, read.Value!, day, now));
+        }
+        // Item 19a: the text importer's lines that were not understood, the user's own text going into their own character.
+        // Last, so the structured notes are the ones the character's note limit keeps first; what does not fit is counted below.
+        if (sheet.NotRead is { Count: > 0 } notRead)
+        {
+            if (keepNotRead)
+                notes.AddRange(Chunk(NotReadTitle, string.Join('\n', notRead.Select(n => $"Line {n.Line.ToString(CultureInfo.InvariantCulture)}: {n.Text}")), day, now));
+            else
+                lines.Add($"{notRead.Count.ToString(CultureInfo.InvariantCulture)} line{(notRead.Count == 1 ? "" : "s")} that {(notRead.Count == 1 ? "was" : "were")} not read {(notRead.Count == 1 ? "was" : "were")} dropped, as you chose.");
         }
         var room = Math.Max(0, noteRoom);
         if (notes.Count > room)

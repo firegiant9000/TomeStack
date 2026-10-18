@@ -293,6 +293,8 @@ export function createClient(transport: Transport) {
     ddbRead: () => call<DdbReadResult>('ddb.read', {}, { timeoutMs: null }),
     /** Browser development and e2e: the chosen file's bytes, read once and not kept. No timeout, as for `ddbRead`. */
     ddbReadData: (fileName: string, base64: string) => call<DdbReadResult>('ddb.readData', { fileName, data: base64 }, { timeoutMs: null }),
+    /** Item 19a (D37): pasted or file text read into the same sheet; the caps (256 KB, 5,000 lines) are refused with a code and counts. */
+    ddbReadText: (text: string) => call<DdbReadResult>('ddb.readText', { text }),
     /** The proposed character for the chosen family, campaign and answers; writes nothing. */
     ddbPreview: (request: DdbPreviewRequest) => call<DdbPreview>('ddb.preview', request),
     /** Only the summary's "Create character" button calls this. */

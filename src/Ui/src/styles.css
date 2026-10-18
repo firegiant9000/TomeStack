@@ -515,3 +515,9 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
   .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
 }
+/* Item 19a (D37): import from text. The box and the file field fill their column and the text wraps at any width (reflow at 400%, WCAG 1.4.10). */
+.ddb-text-entry { margin-top: var(--space-3); }
+.ddb-text-entry textarea, .ddb-text-entry input[type='file'] { width: 100%; max-width: 100%; box-sizing: border-box; font: inherit; }
+.ddb-text-entry textarea { resize: vertical; padding: 0.3rem 0.4rem; }
+.ddb-text-entry [aria-invalid='true'] { border: 2px solid var(--error); }
+#ddb-not-read li { overflow-wrap: anywhere; white-space: pre-wrap; }
