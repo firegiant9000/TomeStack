@@ -265,6 +265,59 @@ public class WorkerProcessTests
         Assert.Equal("worker.protocol", refused.Code);
     }
 
+    // Item 19b (R114): a PDF without form fields is read with the existing extract request under the sheet limits; no new kind.
+
+    [Fact]
+    public async Task An_extract_under_the_sheet_limits_gives_the_text_sheets_pages_in_the_child_process()
+    {
+        var events = await Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits, new PageScope(1, 20));
+
+        Assert.Equal(FixturePdfs.TextSheetPages.Count, Assert.IsType<DocumentOpened>(events[0]).PageCount);
+        var pages = events.OfType<ExtractedPage>().ToList();
+        Assert.Equal(FixturePdfs.TextSheetPages.Count, pages.Count);
+        Assert.Equal(FixturePdfs.TextSheetPages[0].Where(l => l.Length > 0), pages[0].Text.Split('\n').Where(l => l.Length > 0));
+    }
+
+    [Fact]
+    public async Task An_extract_of_pages_one_to_twenty_reads_no_more_than_twenty_pages_of_a_longer_document()
+    {
+        using var file = FixturePdfs.Write(FixturePdfs.Pages(25));
+
+        var events = await Run(file.Path, WorkerFormReader.DefaultLimits, new PageScope(1, 20));
+
+        Assert.Equal(25, Assert.IsType<DocumentOpened>(events[0]).PageCount); // the caller counts the pages it did not read
+        Assert.Equal(Enumerable.Range(1, 20), events.OfType<ExtractedPage>().Select(p => p.PageNumber));
+    }
+
+    [Fact]
+    public async Task The_sheet_limits_refuse_a_document_of_more_than_fifty_pages()
+    {
+        using var file = FixturePdfs.Write(FixturePdfs.Pages(51));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(file.Path, WorkerFormReader.DefaultLimits, new PageScope(1, 20)));
+
+        Assert.Equal("pdf.too-many-pages", refused.Code);
+    }
+
+    [Fact]
+    public async Task An_extract_under_the_sheet_limits_stops_a_worker_that_sends_nothing_within_the_page_timeout()
+    {
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(1) }, new PageScope(1, 20)));
+
+        Assert.Equal("worker.page-timeout", refused.Code);
+    }
+
+    [Fact]
+    public async Task An_extract_request_stores_nothing_and_the_worker_has_no_page_text_kind()
+    {
+        // R114: the allowed set is unchanged; "pageText" is refused as any unknown kind is.
+        using var file = FixturePdfs.Write(FixturePdfs.TextSheet());
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "pageText"));
+        Assert.Equal(3, exit);
+        Assert.Equal("worker.bad-request", Assert.Single(lines).Code);
+        Assert.Equal([Path.GetFileName(file.Path)], Directory.EnumerateFiles(Path.GetDirectoryName(file.Path)!).Select(Path.GetFileName));
+    }
+
     [Fact]
     public async Task An_unknown_request_kind_is_a_bad_request()
     {

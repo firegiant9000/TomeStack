@@ -195,6 +195,70 @@ internal static class FixturePdfs
         }
     }
 
+    /// <summary>The committed text-only character sheet's path in the test output (item 19b, D37).</summary>
+    public static string TextSheetPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-text-sheet.pdf");
+
+    /// <summary>
+    /// An invented character sheet printed as plain text: no form fields at all (item 19b, ADR-013). Two pages of 12-point lines;
+    /// a blank entry is a gap, as in a note a player prints. The names match the DevHost's original fixture content, so the e2e
+    /// flow resolves its class, species and spells.
+    /// </summary>
+    public static IReadOnlyList<string[]> TextSheetPages { get; } =
+    [
+        [
+            "Name: Testy Printout",
+            "Class: Fixture Arcanist 3",
+            "Race: Fixture Quickfoot",
+            "Background: Fixture Archivist",
+            "HP: 28",
+            "AC: 16",
+            "Speed: 30 ft.",
+            "",
+            "Strength 16, Dexterity 14, Constitution 15, Intelligence 10, Wisdom 12, Charisma 8",
+            "",
+            "Saves: Strength",
+            "Skills: Athletics",
+            "",
+            "Spells",
+            "Fixture Frost Ring",
+            "",
+            "Equipment",
+            "Fixture Rope Coil",
+            "Fixture Lantern",
+            "12gp",
+        ],
+        [
+            "Features",
+            "Fixture Steady Breath",
+            "A line of invented description.",
+            "",
+            "Fixture Bold Surge",
+            "Another invented line.",
+        ],
+    ];
+
+    /// <summary>The text-only sheet (<see cref="TextSheetPages"/>): letters on the page, no form, no annotations.</summary>
+    public static byte[] TextSheet() => TextPages(TextSheetPages);
+
+    /// <summary>A PDF with one page per entry, each line drawn at 12 points from the top (a blank line is a gap).</summary>
+    public static byte[] TextPages(IReadOnlyList<string[]> pages)
+    {
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        foreach (var lines in pages)
+        {
+            var page = builder.AddPage(PageSize.Letter);
+            var y = 720.0;
+            foreach (var line in lines)
+            {
+                if (line.Length > 0)
+                    page.AddText(line, 12, new PdfPoint(60, y), font);
+                y -= line.Length == 0 ? 14 : 18;
+            }
+        }
+        return builder.Build();
+    }
+
     /// <summary>A text PDF of <paramref name="pages"/> pages (for the page limit).</summary>
     public static byte[] Pages(int pages)
     {

@@ -2604,6 +2604,32 @@ it('imports a character from pasted text: the unreadable line is listed and kept
   expect(await within(sheet).findByText(/Some line the reader cannot place/)).toBeTruthy();
 });
 
+// ---- item 19b (D37, ADR-013): a PDF with no form fields is read as text through the same entry ----
+// The committed sheet is a generated text-only PDF (no form): "Testy Printout", an invented Fixture Arcanist 3.
+
+const textSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-text-sheet.pdf'));
+
+it('imports a PDF that has no form fields: its page text is read, the layout says so, and the character is created', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([textSheet()], 'fixture-text-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Arcanist 3', {}, { timeout: 30000 })).toBeTruthy();
+  expect(screen.getByText('text from the PDF')).toBeTruthy();
+
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  expect(await screen.findByRole('article', { name: 'Testy Printout' })).toBeTruthy();
+});
+
 // ---- item 15 (D35): a class the sheet names that TomeStack does not have, offered as a homebrew class ----
 // The generated sheet names the invented "Fixture Tinkerer" 3 with hit dice 3d8; no installed content has it.
 

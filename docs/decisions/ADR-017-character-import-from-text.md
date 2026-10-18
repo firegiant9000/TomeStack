@@ -5,7 +5,7 @@ Date: 2026-10-18
 
 ## Context
 
-Tester feedback item 19a: some players keep a character as notes, not as a filled-in sheet. D37 scopes the first slice to pasted text and `.txt` / `.md` files. A PDF without form fields is a second slice (a new worker request kind, an ADR-009 amendment, with ADR-013 and a local-drive check on dialog paths first). No `.docx`, no network.
+Tester feedback item 19a: some players keep a character as notes, not as a filled-in sheet. D37 scopes the first slice to pasted text and `.txt` / `.md` files. A PDF without form fields is a second slice (item 19b, built after it: ADR-013 records it, with a local-drive check on dialog paths). No `.docx`, no network.
 
 ## Decision
 
@@ -21,7 +21,7 @@ Tester feedback item 19a: some players keep a character as notes, not as a fille
 
 - A pasted character reaches the same review as a PDF, with the same consent steps; nothing is written before "Create character".
 - The format is forgiving by design, so a misread is possible: the lines not read and the comparison step are the safety net, and the user sees both before anything is saved.
-- PDFs without form fields are not covered; that is the second slice.
+- A PDF without form fields (item 19b) uses this same parser: `ddb.read` falls back to the PDF's page text when the form reader reports no fields, so the caps, refusals, "Not read" lines and privacy rules here apply to it unchanged (the layout is named "text from the PDF"). See ADR-013.
 
 ## Alternatives considered
 

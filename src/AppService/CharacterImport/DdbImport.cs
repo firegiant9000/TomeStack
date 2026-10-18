@@ -38,13 +38,13 @@ public sealed partial class TomeStackApp
         {
             fields = FormReader.ReadAsync(path, CancellationToken.None).GetAwaiter().GetResult();
         }
-        catch (ExtractionException ex) when (ex.Code.StartsWith("worker.", StringComparison.Ordinal))
+        catch (ExtractionException ex) when (ex.Code == NoFormCode)
         {
-            throw Refused("ddb.read-failed", $"The sheet could not be read ({ex.Code}). Nothing was kept.");
+            return ReadDdbPdfText(path); // item 19b (R115): a PDF without form fields is read as text
         }
         catch (ExtractionException ex)
         {
-            throw Refused(ex.Code, ex.Message); // the reader's messages never quote the document
+            throw Failed(ex); // the reader's messages never quote the document
         }
 
         var map = DdbParser.Recognise(fields)
@@ -66,6 +66,99 @@ public sealed partial class TomeStackApp
         return Hold(parsed.Sheet!);
     }
 
+    /// <summary>The form reader's code for a PDF with no form (the worker's <c>AcroFormReader</c>).</summary>
+    private const string NoFormCode = "ddb.no-form-fields";
+
+    /// <summary>A PDF's text is read from its first twenty pages; the rest are counted, not read.</summary>
+    public const int MaxTextPdfPages = 20;
+
+    /// <summary>Fewer letters, digits and marks than this on all the pages is not a sheet (a scan with no OCR, a blank page).</summary>
+    public const int MinTextPdfChars = 10;
+
+    /// <summary>What the summary and the report call a sheet whose text came from a PDF.</summary>
+    public const string PdfTextLayoutName = "text from the PDF";
+
+    private IDocumentExtractor? _sheetExtractor;
+
+    // R114: the extract request, called here with the sheet limits (20 MB, 50 pages, 30 s) and kept apart from the import jobs'
+    // book limits. Nothing is stored; the text is parsed in memory and held under a token like any other read.
+    private IDocumentExtractor SheetExtractor => _sheetExtractor ??= new ImportWorker.Extraction.WorkerProcessExtractor(Path.Combine(AppContext.BaseDirectory, WorkerFileName), WorkerFormReader.DefaultLimits);
+
+    /// <summary>
+    /// Item 19b (D37, ADR-013): the page text of a PDF that has no form fields goes through <see cref="TextSheetParser"/>, so the user
+    /// picks a PDF the same way whether or not it has a form. The same caps and refusals apply as to pasted text; a page the worker
+    /// cut short is refused, not read in part. No page text reaches a message, a code or a log.
+    /// </summary>
+    private DdbReadResult ReadDdbPdfText(string path)
+    {
+        var pages = new List<string>();
+        var warnings = new HashSet<string>(StringComparer.Ordinal);
+        var pageCount = 0;
+        var unreadable = 0;
+        try
+        {
+            ReadPages().GetAwaiter().GetResult();
+        }
+        catch (ExtractionException ex)
+        {
+            throw Failed(ex);
+        }
+
+        async Task ReadPages()
+        {
+            await foreach (var item in SheetExtractor.ExtractAsync(path, new PageScope(1, MaxTextPdfPages), CancellationToken.None).ConfigureAwait(false))
+            {
+                switch (item)
+                {
+                    case DocumentOpened opened:
+                        pageCount = opened.PageCount;
+                        break;
+                    case ExtractedPage { Error: not null }:
+                        unreadable++;
+                        break;
+                    case ExtractedPage page:
+                        pages.Add(page.Text);
+                        warnings.UnionWith(page.Warnings ?? []);
+                        break;
+                }
+            }
+        }
+
+        var read = pages.Count + unreadable;
+        if (warnings.Contains("page.text-truncated") || warnings.Contains("page.blocks-truncated"))
+            throw Refused("ddb.text-too-large", $"A page of the PDF holds more text than can be read (the limit is {Count(WorkerFormReader.DefaultLimits.MaxTextPerPage)} characters a page). Nothing was read.");
+        var text = string.Join("\n\n", pages);
+        var readable = text.Count(c => !char.IsWhiteSpace(c));
+        if (readable < MinTextPdfChars)
+        {
+            throw Refused("ddb.pdf-no-text", $"The PDF has no text that can be read ({Count(readable)} character{(readable == 1 ? "" : "s")} on {Count(read)} page{(read == 1 ? "" : "s")}). "
+                + "If it is a scan, its text could not be recognised: save the sheet as a PDF that has text, or paste its text instead. Nothing was read.");
+        }
+
+        var parsed = TextSheetParser.Parse(text);
+        if (parsed.Refusal is { } refusal)
+            throw Refused(refusal.Code, refusal.Message);
+        var sheet = parsed.Sheet!;
+        var notes = new List<string>(sheet.Lines ?? []);
+        var skipped = Math.Max(0, pageCount - MaxTextPdfPages);
+        if (skipped > 0)
+            notes.Add($"{Count(skipped)} page{(skipped == 1 ? "" : "s")} after the first {MaxTextPdfPages} {(skipped == 1 ? "was" : "were")} not read.");
+        if (unreadable > 0)
+            notes.Add($"{Count(unreadable)} page{(unreadable == 1 ? "" : "s")} could not be read.");
+        return Hold(sheet with { LayoutName = PdfTextLayoutName, Lines = notes.Count > 0 ? notes : sheet.Lines });
+    }
+
+    private static string Count(int n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>A worker failure is <c>ddb.read-failed</c> with its code; any other extraction code (the PDF's own) is kept. Neither quotes the document.</summary>
+    private static AppValidationException Failed(ExtractionException ex) =>
+        ex.Code.StartsWith("worker.", StringComparison.Ordinal)
+            ? Refused("ddb.read-failed", $"The sheet could not be read ({ex.Code}). Nothing was kept.")
+            : Refused(ex.Code, ex.Message);
+
+    /// <summary>The layout in words: "text from the PDF" for a PDF's text, else the layout's own name.</summary>
+    private static string LayoutNameOf(DdbSheet sheet) => sheet.LayoutName ?? LayoutMaps.NameOf(sheet.Layout);
+
     private DdbReadResult Hold(DdbSheet sheet)
     {
         var token = DdbSessions.Add(sheet);
@@ -76,7 +169,7 @@ public sealed partial class TomeStackApp
         var items = sheet.Items.Count + (sheet.Layout == LayoutMaps.TextId && sheet.Texts?.Equipment is { Status: ReadStatus.Ok } equipment ? equipment.Value!.Split('\n').Count(l => l.Length > 0) : 0);
         return new DdbReadResult(token, sheet.Layout, sheet.SuggestedFamily,
             new DdbSummary(sheet.Name.Value ?? "", classes, sheet.Features.Count, sheet.Spells.Count, items, sheet.NotRead?.Count ?? 0),
-            LayoutMaps.NameOf(sheet.Layout));
+            LayoutNameOf(sheet));
     }
 
     /// <summary>
@@ -387,7 +480,7 @@ public sealed partial class TomeStackApp
             [.. NotBroughtOver(sheet, extras), .. request.IncludePlayState ? Array.Empty<string>() : ["playState"]],
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily,
-            LayoutMaps.NameOf(sheet.Layout),
+            LayoutNameOf(sheet),
             [.. sheet.Lines ?? [], .. extras.Lines, .. planner.Lines, .. references.Lines]);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
         // A choice the user answered stays listed once it is full, so step 3 can still change the answer; a refused answer

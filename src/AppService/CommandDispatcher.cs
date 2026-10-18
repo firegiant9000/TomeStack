@@ -267,8 +267,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         var path = host.ChooseOpenFile("Character sheet", ".pdf");
         if (path is null)
             return new { chosen = false };
+        LocalDrivePath.Require(path, ".pdf"); // R116: the worker reads this path, so a network or device path is refused first
         var read = app.ReadDdbSheet(path);
-        return new { chosen = true, read.Token, read.Layout, read.SuggestedFamily, read.Summary };
+        return new { chosen = true, read.Token, read.Layout, read.SuggestedFamily, read.Summary, read.LayoutName };
     }
 
     private DdbReadResult ReadDdbSheetData(DdbDataPayload payload) =>

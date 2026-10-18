@@ -94,7 +94,7 @@ public sealed partial class TomeStackApp : IDisposable
             var version = appVersion ?? AppVersionStamp.CurrentVersion;
             AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();

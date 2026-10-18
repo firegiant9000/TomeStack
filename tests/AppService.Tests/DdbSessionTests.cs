@@ -94,7 +94,6 @@ public class DdbSessionTests
     [InlineData("worker.timeout", "ddb.read-failed")]
     [InlineData("worker.crashed", "ddb.read-failed")]
     [InlineData("pdf.encrypted", "pdf.encrypted")]
-    [InlineData("ddb.no-form-fields", "ddb.no-form-fields")]
     public void A_reader_failure_keeps_its_pdf_or_form_code_and_a_worker_failure_is_ddb_read_failed(string code, string expected)
     {
         using var temp = new TempApp(formReader: new FakeFormReader(() => throw new ExtractionException(code, "Fixture message.")));

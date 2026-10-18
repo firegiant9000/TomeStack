@@ -74,7 +74,7 @@ public sealed record DdbPlay(
 /// What the parser read from a character sheet's form fields (<c>features/ddb-pdf-import.md</c>): semantic values only,
 /// each typed or marked. Fields the layout map does not name never reach it. <see cref="Numbers"/> is keyed by calculated
 /// field id (<c>proficiencyBonus</c>, <c>armorClass</c>, <c>save.str</c>, <c>skill.athletics</c>, <c>spellSlots.1</c>, …) and
-/// holds only the ids the map names. <see cref="HitDiceTotal"/> (item 15) is the hit dice total box as typed ("3d10 + 2d8"), null when the
+/// holds only the ids the map names. <see cref="LayoutName"/> (item 19b) overrides the layout's name in words when the text came from a PDF ("text from the PDF"). <see cref="HitDiceTotal"/> (item 15) is the hit dice total box as typed ("3d10 + 2d8"), null when the
 /// layout has none; only the stub class reads it, and <c>ToString</c> never prints it. <see cref="FeatureTexts"/> (item 16, R104) holds
 /// the lines under each listed feat or feature that has any, null for a layout whose features are one prose block. <see cref="Currency"/> is keyed <c>cp</c>…<c>pp</c>, only the coins the map names (empty when
 /// it names none); an unreadable or negative count is <see cref="ReadStatus.Unreadable"/>. <see cref="Abilities"/> and <see cref="SaveProficient"/> hold all six abilities and
@@ -101,7 +101,8 @@ public sealed record DdbSheet(
     DdbTexts? Texts = null,
     Read<string>? HitDiceTotal = null,
     IReadOnlyList<FeatureText>? FeatureTexts = null,
-    IReadOnlyList<NotReadLine>? NotRead = null)
+    IReadOnlyList<NotReadLine>? NotRead = null,
+    string? LayoutName = null)
 {
     public override string ToString() =>
         $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, FeatureTexts = {FeatureTexts?.Count ?? 0}, Numbers = {Numbers.Count}, NotRead = {NotRead?.Count ?? 0} }}";

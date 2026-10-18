@@ -1,4 +1,5 @@
 using TomeStack.ImportWorker.Extraction;
+using TomeStack.ImportWorker.Forms;
 
 namespace TomeStack.ImportWorker.Tests;
 
@@ -59,6 +60,41 @@ public class ExtractionTests
         using var fresh = FixturePdfs.Write(generated);
         static IEnumerable<string> Texts(IEnumerable<ExtractionEvent> events) => events.OfType<ExtractedPage>().Select(p => p.Text);
         Assert.Equal(Texts(await Extract(fresh.Path)), Texts(await Extract(FixturePdfs.ImportPath)));
+    }
+
+    [Fact]
+    public async Task The_committed_text_sheet_has_exactly_the_generators_original_text_and_no_form()
+    {
+        // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-text-sheet.pdf). PdfPig writes a
+        // random document /ID, so the check compares the text of every page.
+        var generated = FixturePdfs.TextSheet();
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-text-sheet.pdf"), generated);
+        }
+        using var fresh = FixturePdfs.Write(generated);
+        static IEnumerable<string> Texts(IEnumerable<ExtractionEvent> events) => events.OfType<ExtractedPage>().Select(p => p.Text);
+        Assert.Equal(Texts(await Extract(fresh.Path)), Texts(await Extract(FixturePdfs.TextSheetPath)));
+        var noForm = Assert.Throws<ExtractionException>(() => AcroFormReader.Read(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits, FormLimits.Default));
+        Assert.Equal("ddb.no-form-fields", noForm.Code);
+    }
+
+    [Fact]
+    public async Task R114_the_extract_output_of_a_text_sheet_gives_its_lines_in_reading_order()
+    {
+        // Measured for item 19b: the text parser needs each printed line on a line of its own, in page order, and a gap only
+        // where the page has one. Blocks join with a blank line and a block's lines with a line break.
+        var pages = (await Extract(FixturePdfs.TextSheetPath)).OfType<ExtractedPage>().ToList();
+
+        Assert.Equal(FixturePdfs.TextSheetPages.Count, pages.Count);
+        for (var i = 0; i < pages.Count; i++)
+        {
+            var read = pages[i].Text.Split('\n').Where(l => l.Length > 0).ToArray();
+            Assert.Equal(FixturePdfs.TextSheetPages[i].Where(l => l.Length > 0), read);
+        }
     }
 
     [Fact]

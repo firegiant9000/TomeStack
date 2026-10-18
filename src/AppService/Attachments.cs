@@ -10,7 +10,7 @@ public enum AttachmentMode { Managed, Linked }
 /// ADR-005 attachment record. <paramref name="Sha256"/> is null only for a linked file that was missing when it was
 /// recorded (database migration v3). <paramref name="LinkedPath"/> is machine-local: never sent to the UI and never in a
 /// character package. Only a full library backup carries it (a personal file, ADR-007 item 10), and a restore accepts
-/// it only as a full path to a PDF on a local drive (<c>PackageService.IsSafeLinkedPath</c>; no network or device path).
+/// it only as a full path to a PDF on a local drive (<c>LocalDrivePath</c>; no network or device path).
 /// </summary>
 public sealed record Attachment(Guid AttachmentId, string? Sha256, string OriginalFileName, long ByteLength, AttachmentMode Mode, string? LinkedPath, DateTimeOffset CreatedAt);
 
@@ -49,6 +49,7 @@ public sealed partial class TomeStackApp
     /// <summary>Attaches a file the user chose in the native dialog: copied (managed, the default) or linked.</summary>
     internal AttachmentInfo AttachPdfFile(Guid sourceId, string path, AttachmentMode mode)
     {
+        LocalDrivePath.Require(path, ".pdf"); // R116: before anything opens the path (a network path would connect to another machine)
         var source = FindSourceOrThrow(sourceId);
         return Attach(source, () =>
         {
