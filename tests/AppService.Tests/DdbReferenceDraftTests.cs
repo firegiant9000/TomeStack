@@ -460,6 +460,28 @@ public class DdbReferenceDraftTests
     }
 
     [Fact]
+    public void A_feat_texts_index_is_its_position_in_the_final_feats_list_when_the_layout_has_a_feats_field_too()
+    {
+        var fields = new Dictionary<string, FieldRule> { ["fixture class"] = new("classLevels"), ["fixture feats"] = new("feats"), ["fixture features"] = new("features") };
+        var form = new List<FormField>
+        {
+            new("fixture class", "text", 1, "Fixture Class 1"),
+            new("fixture feats", "text", 1, "Fixture Plain Feat A\nFixture Plain Feat B"),
+            new("fixture features", "text", 1, "=== FEATS ===\n* Fixture Sheet Feat •\nAn invented line.\n=== OTHER ===\n* Fixture Sheet Feature • FX 1\nAnother invented line."),
+        };
+        var map = new LayoutMap("fixture-layout", 1, RulesFamilies.Srd521, ["fixture class"], fields, "Yes",
+            [new("feats", "\n"), new("features", "\n", @"^\*\s+(?<value>[^•]+?)\s*(?:•.*)?$", @"^===\s*(?<section>.+?)\s*===$", "^FEATS$")]);
+        Assert.Empty(LayoutMaps.Problems(map));
+
+        var sheet = DdbParser.Parse(map, form);
+
+        var feat = Assert.Single(sheet.FeatureTexts!, t => t.Kind == FeatureKind.Feat);
+        Assert.Equal("Fixture Sheet Feat", sheet.Feats[feat.Index].Value); // the row feat:N reads sheet.Feats[N]
+        var feature = Assert.Single(sheet.FeatureTexts!, t => t.Kind == FeatureKind.Feature);
+        Assert.Equal("Fixture Sheet Feature", sheet.Features[feature.Index].Value);
+    }
+
+    [Fact]
     public void A_campaign_that_does_not_allow_the_source_is_told_before_create_and_the_feat_is_still_pinned()
     {
         using var h = new DdbHarness();

@@ -223,6 +223,13 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
       setCreated(true);
       await onCreated(result.characterId, result);
     } catch (error) {
+      // The drafts changed since the summary showed them: the tick is gone and the preview is fetched again (the request itself is
+      // unchanged, so only a retry bump reloads it), so the new set is reviewed before anything is published.
+      if (error instanceof TomeStackError && error.code === 'ddb.references-changed') {
+        setPublishReferences(false);
+        setPreviewFor(undefined);
+        setRetry((n) => n + 1);
+      }
       onError(error);
     } finally {
       setApplying(false);

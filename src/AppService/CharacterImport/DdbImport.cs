@@ -347,8 +347,10 @@ public sealed partial class TomeStackApp
         var rows = planner.Rows;
         // Item 16: the unmatched feats and features that carry text become reference drafts in the same source as the stub.
         // R106: an entry the import-derived source already holds (any revision, draft or published) is not drafted again.
-        var existing = ContentBySource(stubSource.Id).Select(e => (e.Kind, Normalise.Name(e.Name))).ToHashSet();
-        var references = ReferenceDrafts.Build(sheet, rows, request.RulesFamily, stubSource.Id, existing);
+        // The source is read only for a sheet that has texts, so any other preview does no extra store work.
+        var references = sheet.FeatureTexts is { Count: > 0 }
+            ? ReferenceDrafts.Build(sheet, rows, request.RulesFamily, stubSource.Id, ContentBySource(stubSource.Id).Select(e => (e.Kind, Normalise.Name(e.Name))).ToHashSet())
+            : ReferenceDraftSet.None;
         // A campaign that does not allow that source still gets the pin; the summary says so first (campaign.source-not-allowed).
         var referenceNote = references.Drafts.Any(d => d.Kind == ContentKind.Feat)
             && request.CampaignId is { } referenceCampaign && _store.FindCampaign(referenceCampaign)?.AllowedSources.Contains(stubSource.Id) == false

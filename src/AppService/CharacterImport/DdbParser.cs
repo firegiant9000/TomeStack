@@ -58,6 +58,7 @@ public static partial class DdbParser
         }
         var sheet = new SheetReader(compiled, values);
         var features = sheet.ListItems("features"); // S0: feats can sit in a section of the features text
+        var ownFeats = sheet.List("feats"); // the feats field's own items come first in the final feats list
         var hitDice = DdbSemantics.HitDice.Select(d => (Die: d, Read: sheet.Int($"play.hitDiceSpent.d{d}", 0, 20))).ToList();
         var slots = Enumerable.Range(1, 9).Select(l => (Level: l, Read: sheet.Int($"play.spellSlotsSpent.{l}", 0, 99))).ToList();
         var lines = new List<string>();
@@ -86,7 +87,7 @@ public static partial class DdbParser
             abilities,
             Enum.GetValues<Ability>().ToDictionary(a => a, a => sheet.Bool($"saves.{FieldIds.Key(a)}.proficient")),
             CharacterCalculator.Skills.ToDictionary(s => s.Key, s => sheet.Bool($"skills.{s.Key}.proficient"), StringComparer.Ordinal),
-            SheetReader.Capped([.. sheet.List("feats"), .. features.Feats]), // one list, one cap, wherever the feats came from
+            SheetReader.Capped([.. ownFeats, .. features.Feats]), // one list, one cap, wherever the feats came from
             [.. sheet.SpellRows(), .. sheet.List("spells").Select(r => r.Status == ReadStatus.Ok ? Read<SpellText>.Ok(new(r.Value!, null)) : Read<SpellText>.Unreadable)],
             [.. sheet.ItemRows(), .. sheet.List("equipment").Select(r => r.Status == ReadStatus.Ok ? Read<ItemText>.Ok(new(r.Value!, 1, null)) : Read<ItemText>.Unreadable)],
             features.Items,
@@ -104,7 +105,8 @@ public static partial class DdbParser
             lines.Count == 0 ? null : lines,
             texts,
             sheet.Text("play.hitDice.total", applyPattern: false),
-            features.Texts.Count == 0 ? null : features.Texts);
+            // A feat text's index was counted in the features split's own feats; the final list puts the feats field's items first.
+            features.Texts.Count == 0 ? null : [.. features.Texts.Select(t => t.Kind == FeatureKind.Feat ? t with { Index = t.Index + ownFeats.Count } : t)]);
     }
 
     private static readonly ConditionalWeakTable<LayoutMap, CompiledMap> CompiledMaps = [];

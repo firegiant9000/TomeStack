@@ -2406,13 +2406,11 @@ async function importSourceRevisions(): Promise<number> {
   return source ? (await client.contentBySource(source.id)).reduce((n, entry) => n + entry.revisions.length, 0) : 0;
 }
 
-// These two run before any other test imports this sheet: the service does not draft an entry the import-derived source holds
-// already (R106), so the drafts exist only for the first import of the sheet.
-it('Cancel at the summary writes no reference drafts and no source', async () => {
-  const user = userEvent.setup();
+/** The Cancel path: tick Publish at the summary, then Cancel; nothing is written (no source, no draft). Unmounts when done. */
+async function cancelAtSummary(user: ReturnType<typeof userEvent.setup>) {
   const sources = (await client.listSources()).map((s) => s.id).sort();
   const revisions = await importSourceRevisions();
-  render(<App />);
+  const { unmount } = render(<App />);
   await toDdbSummary(user);
   const section = await screen.findByRole('region', { name: 'Reference drafts' });
   await user.click(within(section).getByRole('checkbox', { name: /^Publish these \d+ reference drafts$/ }));
@@ -2422,10 +2420,15 @@ it('Cancel at the summary writes no reference drafts and no source', async () =>
   await expectStatus(/Import cancelled\. Nothing was saved\./);
   expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
   expect(await importSourceRevisions()).toBe(revisions);
-});
+  unmount();
+}
 
-it('lists the unmatched features with text as reference drafts, unticked by default, and publishing them makes them studio content', async () => {
+// One test, Cancel path first and then a fresh import: the service does not draft an entry the import-derived source holds
+// already (R106), so the drafts exist only for the first import of this sheet. No earlier test may import
+// fixture-ddb-sheet.pdf before this one (and none does: the main import test below runs after it).
+it('Cancel writes no reference drafts; a fresh import lists them unticked and publishing makes them studio content', async () => {
   const user = userEvent.setup();
+  await cancelAtSummary(user);
   const revisions = await importSourceRevisions();
   render(<App />);
   await toDdbSummary(user);

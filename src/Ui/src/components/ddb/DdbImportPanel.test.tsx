@@ -94,8 +94,9 @@ afterEach(() => {
 function renderPanel() {
   const onCancel = vi.fn();
   const onCreated = vi.fn();
-  render(<DdbImportPanel rulesFamilies={families} onError={vi.fn()} onCancel={onCancel} onCreated={onCreated} />);
-  return { onCancel, onCreated };
+  const onError = vi.fn();
+  render(<DdbImportPanel rulesFamilies={families} onError={onError} onCancel={onCancel} onCreated={onCreated} />);
+  return { onCancel, onCreated, onError };
 }
 
 async function toMatches(user: ReturnType<typeof userEvent.setup>) {
@@ -947,4 +948,24 @@ it('uses the singular for one reference draft', async () => {
   await toStubSummary(user);
 
   expect(await screen.findByRole('checkbox', { name: 'Publish this reference draft' })).toBeTruthy();
+});
+
+it('after ddb.references-changed unticks the publish tick, keeps the error and asks for a new preview so the new set is reviewed', async () => {
+  const user = userEvent.setup();
+  let changed = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(changed ? 3 : 2));
+  vi.mocked(client.ddbApply).mockRejectedValueOnce(new TomeStackError({ code: 'ddb.references-changed', message: 'Fixture: the drafts changed.' }));
+  const { onError } = renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  const previews = vi.mocked(client.ddbPreview).mock.calls.length;
+  changed = true;
+
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  expect((onError.mock.calls[0]![0] as TomeStackError).code).toBe('ddb.references-changed');
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  expect(tick.checked).toBe(false);
 });
