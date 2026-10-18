@@ -27,7 +27,7 @@ public class ClassAcceptTests
     private static StoredCandidate Reviewed(TempApp temp, Guid jobId, string name)
     {
         var stored = Named(temp, jobId, name);
-        return temp.App.EditCandidate(new(stored.Id, Name: stored.Current.ProposedName));
+        return temp.App.EditCandidate(new(stored.Id, Expected: temp.EtagOf(stored.Id), Name: stored.Current.ProposedName));
     }
 
     private static AppValidationException Refused(Action action) => Assert.Throws<AppValidationException>(action);
@@ -127,7 +127,7 @@ public class ClassAcceptTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var warden = Named(temp, jobId, "Fixture Warden");
-        temp.App.EditCandidate(new(warden.Id, Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
+        temp.App.EditCandidate(new(warden.Id, Expected: temp.EtagOf(warden.Id), Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         var before = temp.App.Store.ListRevisions().Count;
 
         var check = temp.App.CheckCandidate(warden.Id);
@@ -337,7 +337,7 @@ public class ClassAcceptTests
         var (_, jobId) = ImportedInto(temp);
         var installed = PublishedFeature(temp, "Test Installed Book", "Fixture Beacon");
         var beacon = Named(temp, jobId, "Fixture Beacon");
-        temp.App.EditCandidate(new(beacon.Id, Name: "Fixture Beacon Renamed"));
+        temp.App.EditCandidate(new(beacon.Id, Expected: temp.EtagOf(beacon.Id), Name: "Fixture Beacon Renamed"));
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
 
         var check = temp.App.CheckCandidate(lamplighter.Id);
@@ -484,7 +484,7 @@ public class ClassAcceptTests
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
         Assert.Contains(temp.App.CheckCandidate(lamplighter.Id).Blockers, b => b.Code == "import.family-needed");
 
-        temp.App.EditCandidate(new(lamplighter.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        temp.App.EditCandidate(new(lamplighter.Id, Expected: temp.EtagOf(lamplighter.Id), RulesFamilies: [RulesFamilies.Srd521]));
         var check = temp.App.CheckCandidate(lamplighter.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => $"{d.Code} {d.Message}")));
 

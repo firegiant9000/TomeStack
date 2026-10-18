@@ -1082,7 +1082,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   const [job] = await client.listImports(source.id);
   const ember = (await client.candidates(job!.id, { kind: 'spell' })).items.find((c) => c.candidate.proposedName === 'Fixture Ember Lance')!;
   const effects = ember.candidate.proposedEffects.map((e) => (e.type === 'spell' ? { ...e, level: 1 } : e));
-  await client.editCandidate(ember.id, { effects });
+  await client.editCandidate(ember.id, { effects, expected: ember.etag });
 
   // Nothing is ticked: the list button is held with its reason.
   const open = within(panel()).getByRole('button', { name: 'Add to a spell list…' });

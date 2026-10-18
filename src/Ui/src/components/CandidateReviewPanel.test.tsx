@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // Item 2: the review screen says what happens to an accepted entry and offers the way to the studio.
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
@@ -1048,4 +1049,37 @@ it('says on a class that the ticked effects become automatic and the others stay
 it('keeps the reference-only label for other kinds', async () => {
   await openDetail([], checkOf({}));
   expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in the studio)')).toBeTruthy();
+});
+
+// R120: an edit carries the token it was opened with; a refused one reloads the candidate and says so.
+it('sends the opened candidates token with the edit', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.editCandidate).mockClear();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.editCandidate).mockResolvedValue({ ...detected(['srd-5.1']), etag: 'token-2' });
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Save edit' }));
+  expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ expected: 'token-1' }));
+});
+
+it('reloads the candidate and says it changed when the edit is refused, without reporting an error', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValueOnce(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-9', updatedAt: '2026-10-15T00:00:00Z' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.editCandidate).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  expect(onError).not.toHaveBeenCalled();
+  expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
+  // The editor is still there, on the reloaded candidate, and focus is inside it.
+  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
 });

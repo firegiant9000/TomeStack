@@ -42,6 +42,14 @@ public sealed record StoredCandidate
     public ContentReference? Draft { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 
+    /// <summary>
+    /// R120: the compare-and-swap token of the stored row: SHA-256 (hex) of the stored JSON string, set by the store when it
+    /// reads the row and sent back as <see cref="CandidateEditRequest.Expected"/>. Never written to the row (the store drops
+    /// it on save), so it is absent from the stored JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Etag { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 
@@ -57,6 +65,8 @@ public sealed record CandidateGrant(Guid CandidateId, int Level);
 /// M4 D4 <c>import.candidate.edit</c>: the reviewer's version. Absent fields keep the current value. Saving it clears the
 /// low-confidence flags (the reviewer has seen the fields). <paramref name="DismissReferences"/> names the unresolved
 /// references the reviewer says are not needed (for example a spell that is only mentioned).
+/// <paramref name="Expected"/> (R120) is the candidate's <see cref="StoredCandidate.Etag"/> as the editor last saw it; the edit
+/// is refused (<c>import.candidate-changed</c>) when the stored row has changed since, or when none is sent.
 /// </summary>
 public sealed record CandidateEditRequest(
     Guid CandidateId,
@@ -65,7 +75,8 @@ public sealed record CandidateEditRequest(
     IReadOnlyList<string>? RulesFamilies = null,
     string? Summary = null,
     IReadOnlyList<Effect>? Effects = null,
-    IReadOnlyList<string>? DismissReferences = null);
+    IReadOnlyList<string>? DismissReferences = null,
+    string? Expected = null);
 
 public sealed record CandidateRequest(Guid CandidateId);
 
@@ -235,6 +246,7 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(request);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
+        RequireUnchanged(stored, request.Expected);
         var current = stored.Current;
         var name = request.Name?.Trim() ?? current.ProposedName;
         if (name.Length is < 1 or > 200)
@@ -262,12 +274,23 @@ public sealed partial class TomeStackApp
         };
         // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
         var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
+        StoredCandidate? saved = null;
         _store.InTransaction(() =>
         {
+            // R120: the check and the write share one transaction (and the store lock), so no other writer can land between them.
+            RequireUnchanged(FindCandidateOrThrow(request.CandidateId), request.Expected);
             _store.SaveImportCandidate(updated);
             _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), "candidate-edited", $"{edited.ProposedKind.ToString().ToLowerInvariant()}, {dismissed.Count} references dismissed");
+            saved = _store.FindImportCandidate(updated.Id);
         });
-        return updated;
+        return saved ?? updated;
+    }
+
+    /// <summary>R120: refuses an edit made from a state other than the stored one (or from none). Says nothing about the contents.</summary>
+    private static void RequireUnchanged(StoredCandidate stored, string? expected)
+    {
+        if (expected is null || stored.Etag is null || !string.Equals(expected, stored.Etag, StringComparison.Ordinal))
+            throw new AppValidationException([new("import.candidate-changed", "This candidate changed since it was opened. Reload it and edit again; nothing was changed.")]);
     }
 
     /// <summary>

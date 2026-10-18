@@ -1015,6 +1015,10 @@ export interface StoredCandidate {
   draft?: ContentReference;
   /** Item 11 (D34): on a class, the feature candidates of the same import that it grants, with the class level each is granted at. */
   grantsCandidates?: { candidateId: string; level: number }[];
+  /** R29: the reviewer saved a rules family for this candidate; absent (false) until then. */
+  familiesReviewed?: boolean;
+  /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
+  etag?: string;
   updatedAt: string;
 }
 
@@ -1070,6 +1074,8 @@ export interface CandidateEdit {
   summary?: string;
   effects?: unknown[];
   dismissReferences?: string[];
+  /** R120: the candidate's `etag` as the editor last saw it; the edit is refused when the stored row has changed since. */
+  expected?: string;
 }
 
 /** `gap.listAll` (M3 C5): a note with its character's name. */

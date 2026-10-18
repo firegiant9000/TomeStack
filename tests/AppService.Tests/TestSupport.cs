@@ -40,6 +40,9 @@ internal sealed class TempApp : IDisposable
 
     public string Directory => _directory;
 
+    /// <summary>The compare-and-swap token of a candidate as stored now (what the UI would send back with its edit).</summary>
+    public string? EtagOf(Guid candidateId) => App.Store.FindImportCandidate(candidateId)?.Etag;
+
     private bool _closed;
 
     public void Reopen()

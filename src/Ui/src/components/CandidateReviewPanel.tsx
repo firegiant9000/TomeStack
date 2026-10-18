@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
@@ -530,7 +531,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       )}
       {current && (
         <CandidateDetail
-          key={`${current.id}-${current.updatedAt}`}
+          key={`${current.id}-${current.etag ?? current.updatedAt}`}
           stored={current}
           sourceFamilies={source.rulesFamilies}
           onOpenPage={onOpenPage}
@@ -653,9 +654,18 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     }
     setEffectsError(undefined);
     try {
-      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed });
+      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed, expected: stored.etag });
       await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
     } catch (error) {
+      if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
+        // R120: the stored candidate moved on (another save, a spell list, a re-detect): show what is stored now, and say so.
+        try {
+          await onChanged('This candidate changed since you opened it. It has been reloaded.');
+        } catch (reloadError) {
+          onError(reloadError);
+        }
+        return;
+      }
       onError(error);
     }
   }

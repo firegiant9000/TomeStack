@@ -171,7 +171,7 @@ public class CandidateReviewTests
         Assert.Contains(temp.App.CheckCandidate(warden.Id).Blockers, b => b.Code == "candidate.low-confidence");
 
         // 2026-10-14 item 3: a two-family source gives the class no family, so the reviewer sets one.
-        var edited = temp.App.EditCandidate(new(warden.Id, Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
+        var edited = temp.App.EditCandidate(new(warden.Id, Expected: temp.EtagOf(warden.Id), Name: "Fixture Warden (edited)", RulesFamilies: [RulesFamilies.Srd521], Effects: [new HitDieEffect { Id = "hit-die", Die = 10 }]));
         Assert.Empty(edited.Current.LowConfidenceFields);
         Assert.Empty(edited.Current.UnresolvedReferences); // item 11: the two names are feature stubs of the job now, linked from the class
         Assert.Equal("Fixture Warden", edited.Candidate.ProposedName); // the detected version stays as it was
@@ -195,7 +195,7 @@ public class CandidateReviewTests
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
         var weapon = hookblade.Current.ProposedEffects.OfType<WeaponEffect>().Single();
 
-        temp.App.EditCandidate(new(hookblade.Id, Effects: [weapon with { Damage = "1d8 + + 1" }]));
+        temp.App.EditCandidate(new(hookblade.Id, Expected: temp.EtagOf(hookblade.Id), Effects: [weapon with { Damage = "1d8 + + 1" }]));
         var check = temp.App.CheckCandidate(hookblade.Id);
 
         Assert.False(check.CanAccept);
@@ -214,7 +214,7 @@ public class CandidateReviewTests
         var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
         var missing = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
 
-        temp.App.EditCandidate(new(feat.Id, Effects: [.. feat.Current.ProposedEffects,
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
             new GrantEffect { Id = "grant-installed", Grant = GrantKind.Content, Content = installed.Reference },
             new GrantEffect { Id = "grant-missing", Grant = GrantKind.Content, Content = missing }]));
         var check = temp.App.CheckCandidate(feat.Id);
@@ -237,7 +237,7 @@ public class CandidateReviewTests
 
         Assert.Equal(revisions, temp.App.Store.ListRevisions().Count);
         Assert.Equal("candidate.already-reviewed", Code(() => temp.App.AcceptCandidate(new(veil.Id, Confirm: true))));
-        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.EditCandidate(new(veil.Id, Name: "Other"))));
+        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.EditCandidate(new(veil.Id, Expected: temp.EtagOf(veil.Id), Name: "Other"))));
         Assert.Single(temp.App.ListCandidates(new(jobId, Status: CandidateStatus.Ignored)));
     }
 
@@ -248,9 +248,9 @@ public class CandidateReviewTests
         using var _t = temp;
         var veil = Named(temp, jobId, "Fixture Frost Veil");
 
-        Assert.Equal("candidate.name-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, Name: " "))));
-        Assert.Equal("candidate.family-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, RulesFamilies: ["srd-9"]))));
-        Assert.Equal("candidate.summary-too-long", Code(() => temp.App.EditCandidate(new(veil.Id, Summary: new string('x', 20_001)))));
+        Assert.Equal("candidate.name-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, Expected: temp.EtagOf(veil.Id), Name: " "))));
+        Assert.Equal("candidate.family-invalid", Code(() => temp.App.EditCandidate(new(veil.Id, Expected: temp.EtagOf(veil.Id), RulesFamilies: ["srd-9"]))));
+        Assert.Equal("candidate.summary-too-long", Code(() => temp.App.EditCandidate(new(veil.Id, Expected: temp.EtagOf(veil.Id), Summary: new string('x', 20_001)))));
         Assert.Equal("candidate.not-found", Code(() => temp.App.CheckCandidate(Guid.NewGuid())));
     }
 
@@ -266,7 +266,7 @@ public class CandidateReviewTests
         temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
         var coat = Named(temp, job.Id, "Fixture Quilted Coat");
 
-        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
 
         Assert.Equal("import.family-not-in-source", refused.Problems[0].Code);
         Assert.All(refused.Problems, p => Assert.DoesNotContain("Fixture", p.Message, StringComparison.Ordinal));
@@ -283,9 +283,49 @@ public class CandidateReviewTests
         using var _t = temp;
         var coat = Named(temp, jobId, "Fixture Quilted Coat");
 
-        var edited = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51, RulesFamilies.Srd51, RulesFamilies.Srd521, RulesFamilies.Srd51]));
+        var edited = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd51, RulesFamilies.Srd51, RulesFamilies.Srd521, RulesFamilies.Srd51]));
 
         Assert.Equal([RulesFamilies.Srd51, RulesFamilies.Srd521], edited.Current.RulesFamilies);
+    }
+
+    [Fact]
+    public void Two_edits_from_the_same_token_save_the_first_and_refuse_the_second()
+    {
+        // Wave 0/1 minor (R120): compare-and-swap on the stored state the editor last saw.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+        Assert.False(string.IsNullOrEmpty(coat.Etag));
+
+        var first = temp.App.EditCandidate(new(coat.Id, Expected: coat.Etag, Name: "Fixture Coat One"));
+        Assert.NotEqual(coat.Etag, first.Etag);
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Expected: coat.Etag, Name: "Fixture Coat Two")));
+        Assert.Equal("import.candidate-changed", refused.Problems[0].Code);
+        Assert.All(refused.Problems, p => Assert.DoesNotContain("Fixture", p.Message, StringComparison.Ordinal));
+
+        var after = temp.App.Store.FindImportCandidate(coat.Id)!;
+        Assert.Equal("Fixture Coat One", after.Current.ProposedName);
+        Assert.Equal(first.Etag, after.Etag);
+
+        // The token the first edit returned is the next one to send.
+        var third = temp.App.EditCandidate(new(coat.Id, Expected: first.Etag, Name: "Fixture Coat Three"));
+        Assert.Equal("Fixture Coat Three", third.Current.ProposedName);
+    }
+
+    [Fact]
+    public void An_edit_with_no_token_is_refused_and_the_token_is_never_stored()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Quilted Coat");
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.EditCandidate(new(coat.Id, Name: "Fixture Other"))));
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.EditCandidate(new(coat.Id, Expected: "not-a-token", Name: "Fixture Other"))));
+
+        Assert.Null(temp.App.Store.FindImportCandidate(coat.Id)!.Edited);
+        Assert.DoesNotContain("etag", System.Text.Json.JsonSerializer.Serialize(temp.App.Store.FindImportCandidate(coat.Id)! with { Etag = null }, RulesJson.Compact), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(coat.Etag, temp.App.Store.FindImportCandidate(coat.Id)!.Etag); // nothing was written, so the token is unchanged
     }
 
     /// <summary>A 0.5.0 job's armour row: it was stored with a silent srd-5.2.1 on a two-family source (ruling R28).</summary>
@@ -319,7 +359,7 @@ public class CandidateReviewTests
         Assert.DoesNotContain(temp.App.CheckCandidate(Named(temp, jobId, "Fixture Ember Lance").Id).Blockers, b => b.Code == "import.family-needed");
 
         // Saving an edit is the reviewer's answer.
-        temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd521]));
         var ready = temp.App.CheckCandidate(coat.Id);
         Assert.DoesNotContain(ready.Blockers, b => b.Code == "import.family-needed");
         Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
@@ -340,12 +380,12 @@ public class CandidateReviewTests
         Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
 
         // An edit that sends no families is not an answer either.
-        var renamed = temp.App.EditCandidate(new(coat.Id, Summary: "Fixture padding."));
+        var renamed = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Summary: "Fixture padding."));
         Assert.False(renamed.FamiliesReviewed);
         Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
 
         // Saving a family (even the one it already has) is.
-        var saved = temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd521]));
+        var saved = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd521]));
         Assert.True(saved.FamiliesReviewed);
         Assert.True(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
         Assert.DoesNotContain(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
@@ -393,7 +433,7 @@ public class CandidateReviewTests
         Assert.Null(System.Text.Json.JsonSerializer.Deserialize<StoredCandidate>(plain, RulesJson.Compact)!.GrantsCandidates);
 
         // An edit keeps the links.
-        Assert.Equal(grants, temp.App.EditCandidate(new(lamplighter.Id, Summary: "Edited text.")).GrantsCandidates);
+        Assert.Equal(grants, temp.App.EditCandidate(new(lamplighter.Id, Expected: temp.EtagOf(lamplighter.Id), Summary: "Edited text.")).GrantsCandidates);
     }
 
     [Fact]
@@ -457,7 +497,7 @@ public class CandidateReviewTests
         var twin = Named(temp, second.Id, "Fixture Ember Lance");
         Assert.Contains(temp.App.CheckCandidate(twin.Id).Blockers, b => b.Code == "import.already-accepted");
 
-        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+        temp.App.EditCandidate(new(twin.Id, Expected: temp.EtagOf(twin.Id), Name: "Fixture Ember Lance Copy"));
 
         var check = temp.App.CheckCandidate(twin.Id);
         Assert.DoesNotContain(check.Blockers, b => b.Code == "import.already-accepted");
@@ -484,12 +524,12 @@ public class CandidateReviewTests
         Assert.Equal("import.family-needed", refused.Problems[0].Code);
 
         // Saving an edit that leaves the family empty is allowed (other fields can be fixed first); accept still waits.
-        var renamed = temp.App.EditCandidate(new(coat.Id, Name: "Fixture Quilted Coat", RulesFamilies: []));
+        var renamed = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Name: "Fixture Quilted Coat", RulesFamilies: []));
         Assert.Empty(renamed.Current.RulesFamilies);
         Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
         Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
 
-        temp.App.EditCandidate(new(coat.Id, RulesFamilies: [RulesFamilies.Srd51]));
+        temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd51]));
         var ready = temp.App.CheckCandidate(coat.Id);
         Assert.True(ready.CanAccept, string.Join("; ", ready.Blockers.Concat(ready.Report.Errors).Select(d => d.Code)));
         var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
@@ -515,7 +555,7 @@ public class CandidateReviewTests
         Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(twin.Id)!.Status);
 
         // Renaming the twin still lifts it (the twin side uses the effective values).
-        temp.App.EditCandidate(new(twin.Id, Name: "Fixture Ember Lance Copy"));
+        temp.App.EditCandidate(new(twin.Id, Expected: temp.EtagOf(twin.Id), Name: "Fixture Ember Lance Copy"));
         Assert.Equal([twin.Id], temp.App.AcceptMany(new([twin.Id], Confirm: true)).Accepted.Select(c => c.Id));
     }
 

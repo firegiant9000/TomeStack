@@ -455,14 +455,18 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
             ("$id", Key(candidate.Id)),
             ("$job", Key(candidate.JobId)),
             ("$status", candidate.Status.ToString()),
-            ("$json", Serialize(candidate)));
+            ("$json", Serialize(candidate with { Etag = null })));
     }
 
     public StoredCandidate? FindImportCandidate(Guid id) =>
-        QuerySingle<StoredCandidate>("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id))) is { } found ? Typed(found) : null;
+        QueryScalar("SELECT json FROM import_candidates WHERE id = $id;", ("$id", Key(id))) is { } json ? ReadCandidate(json) : null;
 
     public IReadOnlyList<StoredCandidate> ListImportCandidates(Guid jobId) =>
-        [.. Query<StoredCandidate>("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId))).Select(Typed)];
+        [.. QueryStrings("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId))).Select(ReadCandidate)];
+
+    /// <summary>R120: a stored candidate with its compare-and-swap token (the SHA-256 of the stored JSON string, as read).</summary>
+    private static StoredCandidate ReadCandidate(string json) =>
+        Typed(JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!) with { Etag = Sha256(json) };
 
     /// <summary>Versioned effect types are typed only inside a revision, so a stored candidate's effects are typed on read (ADR-003).</summary>
     private static StoredCandidate Typed(StoredCandidate stored) => stored with
@@ -893,6 +897,19 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
 
     private T? QuerySingle<T>(string sql, params (string Name, object Value)[] parameters) where T : class =>
         QueryScalar(sql, parameters) is { } json ? JsonSerializer.Deserialize<T>(json, RulesJson.Compact) : null;
+
+    private List<string> QueryStrings(string sql, params (string Name, object Value)[] parameters)
+    {
+        lock (_gate)
+        {
+            using var command = Command(sql, parameters);
+            using var reader = command.ExecuteReader();
+            var results = new List<string>();
+            while (reader.Read())
+                results.Add(reader.GetString(0));
+            return results;
+        }
+    }
 
     private List<T> Query<T>(string sql, params (string Name, object Value)[] parameters)
     {
