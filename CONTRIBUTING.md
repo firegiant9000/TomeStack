@@ -1,8 +1,12 @@
-# TomeStack
+# Contributing to TomeStack
 
-Local-first Windows desktop app (WPF + WebView2 shell, React/TS UI, .NET 10 service, SQLite). The specs in `docs/` are authoritative: SPEC is behavior, MVP is the release boundary, and ROADMAP is the milestones. Follow `docs/LIVING_SPECS.md` for changes: update specs/ADRs and `docs/CHANGELOG.md` in the same change.
+TomeStack is a local-first Windows desktop app: a WPF + WebView2 shell, a React/TypeScript UI, a .NET 10 service and SQLite. Setup and the everyday build are in the [README](README.md#build-and-test).
 
-## Gate (all must pass; warning budget 0: `TreatWarningsAsErrors` is on)
+The specs in [`docs/`](docs/) are authoritative: [SPEC](docs/SPEC.md) is behavior, [MVP](docs/MVP.md) is the release boundary and [ROADMAP](docs/ROADMAP.md) is the milestones. Changes follow [LIVING_SPECS](docs/LIVING_SPECS.md#change-workflow): update the specs or ADRs and [CHANGELOG](docs/CHANGELOG.md) in the same change as the code.
+
+## The gate
+
+Every change passes all of these, in this order. The warning budget is 0 (`TreatWarningsAsErrors` is on).
 
 ```
 npm ci --prefix src/Ui
@@ -25,4 +29,4 @@ scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-wind
 - UI components call `src/Ui/src/api/client.ts` only. Only `transport.ts` (and the e2e DevHost harness) may use `fetch` (lint-enforced).
 - The shipped app opens no listening socket (ADR-006). `src/DevHost` is dev-only.
 - Fixtures must be original. SRD text lives only in `src/AppService/Content/`, and in screenshots of it listed in the review (`docs/media/`) (CC-BY-4.0, reviewed in `docs/licensing/srd-pack-review.md`); add no more SRD or any third-party rules text without updating that review (SPEC Q-03).
-- The repo is **public** on GitHub.
+- The repository is public: no secrets, personal data or third-party text in commits.
