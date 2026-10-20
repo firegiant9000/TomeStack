@@ -116,7 +116,9 @@ public class PersistenceAndDispatchTests
 
         var json = dispatcher.Dispatch($$$"""{"id":"1","command":"character.unarchive","payload":{"characterId":"{{{created.Character.Id}}}"}}""");
 
-        Assert.Equal("character.not-archived", JsonDocument.Parse(json).RootElement.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
+        var diagnostic = JsonDocument.Parse(json).RootElement.GetProperty("error").GetProperty("diagnostics")[0];
+        Assert.Equal("character.not-archived", diagnostic.GetProperty("code").GetString());
+        Assert.Contains(Marker, diagnostic.GetProperty("message").GetString(), StringComparison.Ordinal); // G12: the refusal does quote the name, so the empty log below proves something
         Assert.Empty(log.Entries);
     }
 

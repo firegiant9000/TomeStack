@@ -289,10 +289,10 @@ export function createClient(transport: Transport) {
     /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices, campaignChoices }),
-    // ---- character import from a character sheet PDF (D&D Beyond export or the fillable 2014 sheet): read once, preview, then one confirmed create ----
+    // ---- character import from a character sheet PDF (D&D Beyond export or the fillable 2014 sheet): read, preview, then one confirmed create ----
     /** Native Open dialog in the shell; the path never reaches the page. `unsupported` elsewhere. No timeout: it waits for the dialog and the worker. */
     ddbRead: () => call<DdbReadResult>('ddb.read', {}, { timeoutMs: null }),
-    /** Browser development and e2e: the chosen file's bytes, read once and not kept. No timeout, as for `ddbRead`. */
+    /** Browser development and e2e: the chosen file's bytes, not kept. No timeout, as for `ddbRead`. */
     ddbReadData: (fileName: string, base64: string) => call<DdbReadResult>('ddb.readData', { fileName, data: base64 }, { timeoutMs: null }),
     /** Item 19a (D37): pasted or file text read into the same sheet; the caps (256 KB, 5,000 lines) are refused with a code and counts. */
     ddbReadText: (text: string) => call<DdbReadResult>('ddb.readText', { text }),

@@ -1106,6 +1106,29 @@ it('names what is not kept by the source it was read from, and never says "read 
   expect(header()).not.toContain('read once');
 });
 
+it('names the source by how it was chosen, not by the layout read, and step 1 says nothing of "once" (R143)', async () => {
+  const user = userEvent.setup();
+  const header = () => screen.getByText(/^Step \d of 5\./).textContent ?? '';
+  // A PDF with no form fields comes back with the text layout; it is still a PDF.
+  vi.mocked(client.ddbRead).mockResolvedValue({ ...read, layout: 'text', layoutName: 'text layout of a PDF' });
+  renderPanel();
+  expect(screen.getByText(/Choose a fillable character sheet PDF/).textContent).not.toMatch(/\bonce\b/);
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await screen.findByText('text layout of a PDF');
+  expect(header()).toContain("The PDF itself isn't kept.");
+  cleanup();
+
+  // Pasted text is text whatever layout id the service names.
+  vi.mocked(client.ddbReadText).mockResolvedValue({ ...read, layout: 'ddb-2014', layoutName: 'a named layout' });
+  renderPanel();
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await screen.findByText('a named layout');
+  expect(header()).toContain("The text itself isn't kept.");
+});
+
 it('keeps Read the text disabled until there is text and sends the pasted text unchanged', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbReadText).mockResolvedValue(textRead);

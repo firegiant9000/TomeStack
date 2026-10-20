@@ -12,7 +12,7 @@ import type {
   RulesFamilyId,
   RulesFamilyPolicy,
 } from '../../api/types';
-import { DdbChooseStep } from './DdbChooseStep';
+import { DdbChooseStep, type ReadSource } from './DdbChooseStep';
 import { DdbFamilyStep } from './DdbFamilyStep';
 import type { NumberPreset } from './ddbLabels';
 import { DdbMatchesStep } from './DdbMatchesStep';
@@ -40,6 +40,8 @@ const titles: Record<Step, string> = { 1: 'Choose the sheet', 2: 'Rules and camp
 export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [read, setRead] = useState<DdbReadResult>();
+  /** How the sheet was chosen (R143): the header hint names this, not the layout the service read it as. */
+  const [source, setSource] = useState<ReadSource>('pdf');
   const [family, setFamily] = useState<RulesFamilyId>();
   const [campaignId, setCampaignId] = useState<string>();
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
@@ -194,7 +196,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     setAnswers((all) => all.filter((a) => !a.selected.some((s) => revisions.has(s.revisionId))));
   }
 
-  function onRead(result: DdbReadResult) {
+  function onRead(result: DdbReadResult, how: ReadSource) {
     if (!open.current) {
       void client.ddbDiscard(result.token).catch(() => undefined); // cancelled while the sheet was being read
       return;
@@ -203,6 +205,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (live.current && live.current !== result.token) void client.ddbDiscard(live.current).catch(() => undefined);
     live.current = result.token;
     setRead(result);
+    setSource(how);
     setFamily((current) => current ?? result.suggestedFamily ?? rulesFamilies[0]?.id);
     setResolutions({});
     setNumbers({});
@@ -254,7 +257,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
       </h2>
       <p className="hint">
         Step {step} of 5. Nothing is saved until you choose “Create character”.{' '}
-        {read === undefined ? "The PDF or text itself isn't kept." : read.layout === 'text' ? "The text itself isn't kept." : "The PDF itself isn't kept."}
+        {read === undefined ? "The PDF or text itself isn't kept." : source === 'text' ? "The text itself isn't kept." : "The PDF itself isn't kept."}
       </p>
       <section aria-labelledby={headingId}>
         <h3 id={headingId} ref={heading} tabIndex={-1}>
