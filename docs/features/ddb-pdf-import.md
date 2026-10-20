@@ -183,6 +183,8 @@ Step 1 also offers "Import a character from text…": a labelled box ("Character
 
 **Command.** `ddb.readText { text }` returns the same `{ token, layout, suggestedFamily, summary }` as `ddb.read`, with `summary.notRead` (a count) added. `ddb.preview` and `ddb.apply` take `keepNotRead` (default true); it is part of the request, so the stale-preview hold covers it.
 
+**List caps.** Each list (feats, features, spells) keeps at most `DdbParser.MaxListItems` (1,000) entries; the first one past the cap becomes one unreadable placeholder (so it still gets a gap note) and the rest are dropped. The report counts them, as a number and never a name: "N lines were beyond the 1,000-entry limit of the feats and features lists and were not read." and, for spells, "N spells were beyond the 1,000-entry limit of the spell list and were not read." (the spell line is new; spells used to be dropped after the placeholder with no count).
+
 ### A PDF without form fields (item 19b, D37, ADR-013, ADR-017)
 
 `ddb.read` and `ddb.readData` accept a PDF whatever it holds. When the form reader reports `ddb.no-form-fields` (a flattened or printed sheet), the same command reads the page text and gives it to `TextSheetParser`, then returns the same `{ token, layout, suggestedFamily, summary, layoutName }` with layout `text` and layout name "text from the PDF" (the choose step and the summary's "Layout read" row show it). Any other form failure (`pdf.encrypted`, `ddb.too-many-fields`, a worker failure, ...) is reported as before and never falls back. `ddb.readText` stays text only; no PDF travels in a JSON payload.

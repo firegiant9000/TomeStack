@@ -581,6 +581,19 @@ public class TextSheetParserTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Spells_past_the_limit_are_counted_in_the_report_without_naming_any()
+    {
+        var text = string.Join('\n', Enumerable.Range(0, DdbParser.MaxListItems + 5).Select(i => $"Fixture Spell {i}").Prepend("Spells"));
+
+        var sheet = Parse(text);
+
+        Assert.Equal(DdbParser.MaxListItems + 1, sheet.Spells.Count); // the cap plus one unreadable placeholder
+        var line = Assert.Single(sheet.Lines!, l => l.Contains("spell", StringComparison.Ordinal) && l.Contains("not read", StringComparison.Ordinal));
+        Assert.StartsWith("5 spells ", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("Fixture", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_timeout_part_way_through_discards_the_earlier_lines()
     {
         var ticks = 0;

@@ -707,7 +707,7 @@ public static class TextSheetParser
                     else
                     {
                         foreach (var entry in entries)
-                            AddTo(_spells, Read<SpellText>.Ok(new(entry, null)));
+                            AddSpell(entry);
                     }
                     break;
                 case Section.Equipment:
@@ -775,13 +775,23 @@ public static class TextSheetParser
             return entry[..end].Trim().ToLowerInvariant().Replace("  ", " ", StringComparison.Ordinal);
         }
 
-        private static void AddTo<T>(List<Read<T>> list, Read<T> item)
+        /// <summary>
+        /// Adds a spell up to the list cap. The first one past it becomes one unreadable placeholder (so it still gets a gap note);
+        /// every one past the cap is counted, for the report (a number, never a name).
+        /// </summary>
+        private void AddSpell(string entry)
         {
-            if (list.Count < DdbParser.MaxListItems)
-                list.Add(item);
-            else if (list.Count == DdbParser.MaxListItems)
-                list.Add(Read<T>.Unreadable);
+            if (_spells.Count < DdbParser.MaxListItems)
+            {
+                _spells.Add(Read<SpellText>.Ok(new(entry, null)));
+                return;
+            }
+            if (_spells.Count == DdbParser.MaxListItems)
+                _spells.Add(Read<SpellText>.Unreadable);
+            _spellsBeyondCap++;
         }
+
+        private int _spellsBeyondCap;
 
         // ---- feats and features: "Name: description", or a name with the lines under it ----
 
@@ -891,6 +901,8 @@ public static class TextSheetParser
                 lines.Add($"{_longLines.ToString("N0", CultureInfo.InvariantCulture)} line{(_longLines == 1 ? " was" : "s were")} longer than {MaxLineChars.ToString("N0", CultureInfo.InvariantCulture)} characters and {(_longLines == 1 ? "was" : "were")} not read.");
             if (_beyondCap > 0)
                 lines.Add($"{_beyondCap.ToString("N0", CultureInfo.InvariantCulture)} line{(_beyondCap == 1 ? " was" : "s were")} beyond the {DdbParser.MaxListItems.ToString("N0", CultureInfo.InvariantCulture)}-entry limit of the feats and features lists and {(_beyondCap == 1 ? "was" : "were")} not read.");
+            if (_spellsBeyondCap > 0)
+                lines.Add($"{_spellsBeyondCap.ToString("N0", CultureInfo.InvariantCulture)} spell{(_spellsBeyondCap == 1 ? " was" : "s were")} beyond the {DdbParser.MaxListItems.ToString("N0", CultureInfo.InvariantCulture)}-entry limit of the spell list and {(_spellsBeyondCap == 1 ? "was" : "were")} not read.");
             lines.AddRange(_notes);
 
             var abilities = Enum.GetValues<Ability>().ToDictionary(a => a, a => _abilities.TryGetValue(a, out var read) ? read : Read<int>.Missing);
