@@ -18,6 +18,16 @@ it('undoes damage by setting hit points and temporary hit points back', () => {
   expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 35 }, { action: 'setTemporaryHitPoints', amount: 5 }]);
 });
 
+it('undoes damage that bloodies the character by an exact hit point step and no toggle action (D38)', () => {
+  // An auto toggle is computed from the hit points and never stored, so putting the hit points back switches it off for free.
+  const grit = { content: { contentId: 'c', revisionId: 'r' }, toggleId: 'grit', on: false, auto: true };
+  const bloodied = (current: number, on: boolean) =>
+    ({ ...view(current, 0), sheet: { hitPoints: { maximum: 35, current, temporary: 0 }, bloodied: on || undefined, toggles: [{ ...grit, on }] } }) as unknown as CharacterView;
+  const entry = inverseOf({ action: 'damage', amount: 18 }, bloodied(35, false), bloodied(17, true))!;
+  expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 35 }]);
+  expect(entry.inverse.some((a) => a.action === 'toggleOn' || a.action === 'toggleOff')).toBe(false);
+});
+
 it('undoes heal by setting hit points back, without a temporary step when nothing changed', () => {
   expect(inverseOf({ action: 'heal', amount: 4 }, view(20, 0), view(24, 0))!.inverse).toEqual([{ action: 'setHitPoints', amount: 20 }]);
 });

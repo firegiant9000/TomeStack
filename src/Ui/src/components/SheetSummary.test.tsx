@@ -267,3 +267,20 @@ it('keeps one markup for both ability-box orders: modifier, then score, then the
   expect(Array.from(strength.children).map((c) => c.className || c.tagName.toLowerCase())).toEqual(['derived', 'score', 'roll']);
   expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });
+
+it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit points box, with no live region (D38)', () => {
+  const base = fixtureView();
+  const summary = (bloodied?: boolean) => (
+    <SheetSummary view={{ ...base, sheet: { ...base.sheet, hitPoints: { maximum: 35, current: bloodied ? 17 : 18, temporary: 0 }, bloodied } }} rollMode="normal" onRollMode={() => {}} rollLog={[]} act={() => {}} onRoll={() => {}} onRollDice={async () => {}} />
+  );
+  const { rerender } = render(summary(undefined));
+  const region = screen.getByRole('region', { name: 'Summary' });
+  expect(within(region).queryByText('Bloodied')).toBeNull();
+
+  rerender(summary(true));
+  const chip = within(region).getByText('Bloodied');
+  expect(chip.closest('dl > div')!.querySelector('dt')!.textContent).toBe('Hit points');
+  expect(chip.closest('[aria-live]')).toBeNull();
+  expect(chip.getAttribute('role')).toBeNull();
+  expect(dd('Hit points')).toBe('17 of 35'); // the Hit points text itself is unchanged
+});

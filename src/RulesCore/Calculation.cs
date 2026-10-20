@@ -99,7 +99,8 @@ public sealed record CharacterSheet(
     SlotValue? PactSlots = null,
     IReadOnlyList<AttackEntry>? Attacks = null,
     IReadOnlyList<ToggleValue>? Toggles = null,
-    IReadOnlyList<ScaleValue>? Scales = null)
+    IReadOnlyList<ScaleValue>? Scales = null,
+    bool? Bloodied = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -167,8 +168,12 @@ public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
 
-/// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
-public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
+/// <summary>
+/// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
+/// D38): true when the sheet switches it itself (<c>autoWhen</c>); it has no switch, is never stored and never spends a use.
+/// Null otherwise, so nothing is written for an ordinary toggle.
+/// </summary>
+public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
@@ -360,15 +365,27 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(catalog);
 
-        var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>());
+        // D38 / R154: Bloodied is decided by a first pass in which auto toggles are off, so the maximum is the pre-toggle one
+        // and an auto toggle can never move the line it is judged by. Only when the character is bloodied and has an auto
+        // toggle is the sheet calculated again with those toggles on (the common case costs one pass).
+        var pass = CalculateSheet(character, catalog, autoOn: false);
+        if (pass.Bloodied != true || pass.Toggles is not { } toggles || !toggles.Any(t => t.Auto == true))
+            return pass;
+        return CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true };
+    }
+
+    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
+    private static CharacterSheet CalculateSheet(Character character, IContentCatalog catalog, bool autoOn)
+    {
+        var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>(), autoOn);
         var unmet = new List<(ContentReference Content, Diagnostic Diagnostic)>();
         foreach (var restricted in first.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsPrerequisite)))
         {
-            var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference });
+            var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference }, autoOn);
             foreach (var failed in Unmet(restricted.Revision, restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsPrerequisite), without.Sheet, "without it", "Its effects are not applied."))
                 unmet.Add((restricted.Revision.Reference, failed));
         }
-        var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet());
+        var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet(), autoOn);
 
         // D04: multiclass prerequisites are checked once the character has two or more classes, against the sheet as it is
         // (a class's own features count: its levels are already taken). Unmet ones warn; the class stays applied.
@@ -456,7 +473,7 @@ public static class CharacterCalculator
     private sealed record Calculation(CharacterSheet Sheet, IReadOnlyList<ActiveContent> Active);
 
     /// <param name="excluded">Revisions left out (restriction checks); anything they would grant or offer is left out with them.</param>
-    private static Calculation Calculate(Character character, IContentCatalog catalog, IReadOnlySet<ContentReference> excluded)
+    private static Calculation Calculate(Character character, IContentCatalog catalog, IReadOnlySet<ContentReference> excluded, bool autoOn)
     {
         var policy = RulesFamilies.Get(character.RulesFamily);
         var family = character.RulesFamily;
@@ -495,7 +512,7 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, autoOn);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -571,10 +588,13 @@ public static class CharacterCalculator
         var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
-                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
+                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(item.Revision, t, character, autoOn), t.ResourceId, t.Text,
+                IsAuto(item.Revision, t) ? true : null)))
             .ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+        // R168: bloodied = a maximum of at least 1 and current hit points at or below half of it, rounded down. Temporary hit points do not count.
+        var bloodied = maximum >= 1 && hitPoints.Current <= maximum / 2;
         var hitDice = resolved.Classes
             .Where(c => c.Die is not null && c.Level > 0)
             .GroupBy(c => c.Die!.Die)
@@ -616,8 +636,16 @@ public static class CharacterCalculator
             .ToList();
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
-            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null), active);
+            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null), active);
     }
+
+    /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>
+    private static bool IsAuto(ContentRevision revision, ToggleEffect toggle) =>
+        toggle.AutoWhen == ToggleAutoWhen.Bloodied && revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion;
+
+    /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
+    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, Character character, bool autoOn) =>
+        IsAuto(revision, toggle) ? autoOn : character.Play.IsOn(revision.ContentId, toggle.ToggleId);
 
     /// <summary>
     /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
@@ -1497,7 +1525,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual)
+        HashSet<string> manual, bool autoOn)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -1508,9 +1536,9 @@ public static class CharacterCalculator
                 // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
                 // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
                 if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
-                    && revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                    && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
                 {
-                    if (!character.Play.IsOn(revision.ContentId, toggle))
+                    if (!ToggleIsOn(revision, named, character, autoOn))
                         continue;
                 }
                 else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)

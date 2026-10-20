@@ -189,6 +189,17 @@ public static class ContentValidator
                         Error("validate.toggle-incomplete", $"Toggle '{toggleEffect.Id}' needs a toggleId and a label.", toggleEffect.Id);
                     if (toggleEffect.ResourceId is { } spends && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
                         Error("validate.toggle-resource", $"Toggle '{toggleEffect.Id}' spends '{spends}', which this revision does not define.", toggleEffect.Id);
+                    if (toggleEffect.AutoWhen is not null)
+                    {
+                        // D38: an auto toggle follows the hit points, so it never spends a use, and it may not change the values
+                        // Bloodied is judged by (the hit point maximum, an ability score or modifier), which would feed back.
+                        if (toggleEffect.ResourceId is not null)
+                            Error("validate.toggle-auto-resource", $"Toggle '{toggleEffect.Id}' switches itself, so it cannot spend a use of a resource.", toggleEffect.Id);
+                        foreach (var changes in revision.Effects.OfType<ModifierEffect>().Where(m =>
+                            m.Toggle == toggleEffect.ToggleId && m.Timing == EffectTiming.WhileActive
+                            && (m.Target == FieldIds.HitPoints || m.Target.StartsWith("ability.", StringComparison.Ordinal))))
+                            Error("validate.toggle-auto-target", $"Modifier '{changes.Id}' belongs to toggle '{toggleEffect.ToggleId}', which switches itself; it cannot change hit points or an ability.", changes.Id);
+                    }
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;

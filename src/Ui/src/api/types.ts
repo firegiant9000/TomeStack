@@ -284,6 +284,8 @@ export interface ToggleValue {
   on: boolean;
   resourceId?: string;
   text?: string;
+  /** Content v10 (D38): the sheet switches this toggle itself while the character is bloodied; it has no switch and is never stored. */
+  auto?: boolean;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
@@ -365,6 +367,8 @@ export interface CharacterSheet {
   toggles?: ToggleValue[];
   /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
   scales?: ScaleValue[];
+  /** D38: current hit points are at or below half the maximum (rounded down), with a maximum of at least 1. Absent when not bloodied. */
+  bloodied?: boolean;
 }
 
 export interface ScaleValue {

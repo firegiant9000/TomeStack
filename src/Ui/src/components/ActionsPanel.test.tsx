@@ -61,3 +61,20 @@ it('offers a damage button only for an attack that has damage, and each Roll nam
   expect(screen.getAllByRole('button', { name: /^Roll Testy Sling (attack|damage)$/ })).toHaveLength(2);
   expect(screen.queryByRole('button', { name: /^Edit|^Remove/ })).toBeNull(); // no editing on Play
 });
+
+it('shows an auto toggle as text, "On while bloodied", with no switch, and keeps the switch for a manual one (D38)', () => {
+  const ref = { contentId: 'c1', revisionId: 'r1' };
+  const toggles = [
+    { content: ref, contentName: 'Testy Grit', effectId: 'e1', toggleId: 'grit', label: 'Testy grit', on: true, auto: true },
+    { content: ref, contentName: 'Testy Grit', effectId: 'e2', toggleId: 'stance', label: 'Testy stance', on: false },
+  ];
+  const v = { character: { id: 'fixture' }, sheet: { attacks: [], toggles, features: [] } } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+
+  const effects = screen.getByRole('group', { name: /Active effects/ });
+  expect(within(effects).getAllByRole('checkbox')).toHaveLength(1); // only the manual toggle has a switch
+  expect(within(effects).getByRole('checkbox', { name: /Testy stance/ })).toBeTruthy();
+  expect(within(effects).queryByRole('checkbox', { name: /Testy grit/ })).toBeNull();
+  expect(effects.textContent).toMatch(/Testy grit/);
+  expect(effects.textContent).toMatch(/On while bloodied \(on now\)/);
+});

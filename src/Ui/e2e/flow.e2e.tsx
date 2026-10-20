@@ -2860,3 +2860,50 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   // The sheet's base scores are the assigned rolled totals (increases come from content the draft does not pin).
   for (const [label, value] of assigned) expect(within(sheet).getByRole('heading', { name: new RegExp(`^${label} score: ${value}\\b`) })).toBeTruthy();
 });
+
+it('shows the Bloodied chip and switches an auto toggle on at half hit points, and Undo takes both away (item 20, D38)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: a homebrew feat (content schema v10) whose toggle switches itself while bloodied, and a character with 20 hit points.
+  const source = await client.createHomebrewSource('E2E Grit Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Grit',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'toggle', id: 'grit-toggle', toggleId: 'grit', label: 'E2E grit', autoWhen: 'bloodied' },
+      { type: 'modifier', id: 'grit-ac', operation: 'bonus', target: 'armorClass', value: '2', timing: 'whileActive', toggle: 'grit' },
+    ],
+  });
+  const feat = (await client.publish(draft)).published;
+  const created = await client.createCharacter({ name: 'E2E Grit Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] });
+  await client.saveCharacter({ ...created.character, overrides: [{ field: 'hitPoints', value: 20 }] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Grit Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Grit Hero' });
+  await openTab(user, sheet, 'Play');
+  const summary = () => within(sheet).getByRole('region', { name: 'Summary' });
+  const effects = () => within(screen.getByRole('region', { name: 'Attacks and actions' })).getByRole('group', { name: /Active effects/ });
+  const armorClass = summaryValue(sheet, 'Armor Class');
+  expect(within(summary()).queryByText('Bloodied')).toBeNull();
+  expect(effects().textContent).toMatch(/E2E grit.*On while bloodied \(off now\)/);
+  expect(within(effects()).queryByRole('checkbox')).toBeNull(); // no switch: the sheet decides
+
+  // Damage to exactly half (10 of 20): the chip, the toggle and its +2 Armor Class.
+  const hpPanel = () => screen.getByRole('region', { name: /^Hit points:/ });
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(within(summary()).getByText('Bloodied')).toBeTruthy());
+  expect(effects().textContent).toMatch(/On while bloodied \(on now\)/);
+  expect(Number(summaryValue(sheet, 'Armor Class'))).toBe(Number(armorClass) + 2);
+
+  // Undo puts the hit points back exactly; the chip, the toggle and the bonus go with them.
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 10' }));
+  await waitFor(() => expect(within(summary()).queryByText('Bloodied')).toBeNull());
+  expect(effects().textContent).toMatch(/On while bloodied \(off now\)/);
+  expect(summaryValue(sheet, 'Armor Class')).toBe(armorClass);
+});

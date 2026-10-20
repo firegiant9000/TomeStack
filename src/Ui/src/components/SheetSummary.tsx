@@ -136,6 +136,9 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
               >
                 +
               </button>
+              {/* D38: plain text, not colour alone, and not a live region (damage is already announced by the confirmed change).
+                  It sits in this row so the box does not grow when it appears. */}
+              {sheet.bloodied && <span className="bloodied-chip">Bloodied</span>}
             </dd>
           </div>
         )}

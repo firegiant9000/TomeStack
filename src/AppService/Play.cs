@@ -159,6 +159,9 @@ public sealed partial class TomeStackApp
     {
         var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
             ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
+        // D38: an auto toggle follows the hit points; it has no state to switch, in either direction.
+        if (toggle.Auto == true)
+            throw new AppValidationException([new("toggle.automatic", "This toggle switches itself while the character is bloodied; it cannot be switched by hand.")]);
         var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
         if (command.Action == PlayActionKind.ToggleOff)
         {

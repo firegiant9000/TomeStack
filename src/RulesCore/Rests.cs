@@ -168,7 +168,8 @@ public static class RestPlanner
         AddPactSlots(sheet, "a long rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.LongRest, changes, manual, rules);
         // Content v6 toggles (stances, auras) rarely outlast a night's rest; each is proposed off, and the player can keep it.
-        foreach (var toggle in (sheet.Toggles ?? []).Where(t => t.On))
+        // An auto toggle (D38) follows the hit points, so a rest has nothing to switch off.
+        foreach (var toggle in (sheet.Toggles ?? []).Where(t => t.On && t.Auto != true))
         {
             changes.Add(new(
                 $"toggle:{toggle.Content.ContentId:D}:{toggle.ToggleId}", RestChangeKind.Toggle, toggle.Label, 1, 0,

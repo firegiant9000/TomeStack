@@ -12,6 +12,7 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
+  ToggleValue,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
 import { diceLine } from '../rollText';
@@ -384,6 +385,39 @@ const activationGroups: { key: Activation; title: string }[] = [
 const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
 
 /**
+ * One toggle of the active effects. D38: an auto toggle follows the hit points, so it shows its state as text and has no switch
+ * (there is nothing to confirm). Kept small so activation groups can take it over.
+ */
+function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
+  if (t.auto) {
+    return (
+      <div className="choice">
+        {t.label}
+        <span className="option-source">
+          {t.contentName} · On while bloodied ({t.on ? 'on now' : 'off now'})
+          {t.text ? ` · ${t.text}` : ''}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <label className="choice">
+      <input
+        type="checkbox"
+        checked={t.on}
+        onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+      />
+      {t.label}
+      <span className="option-source">
+        {t.contentName}
+        {t.resourceId ? ' · turning it on spends 1 use' : ''}
+        {t.text ? ` · ${t.text}` : ''}
+      </span>
+    </label>
+  );
+}
+
+/**
  * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
  * a roll that names a resource offers "Spend" in its record.
  */
@@ -414,19 +448,7 @@ export function ActionsPanel({
         <fieldset>
           <legend>Active effects (switching one is a confirmed change)</legend>
           {toggles.map((t) => (
-            <label key={`${t.content.revisionId}-${t.toggleId}`} className="choice">
-              <input
-                type="checkbox"
-                checked={t.on}
-                onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
-              />
-              {t.label}
-              <span className="option-source">
-                {t.contentName}
-                {t.resourceId ? ' · turning it on spends 1 use' : ''}
-                {t.text ? ` · ${t.text}` : ''}
-              </span>
-            </label>
+            <ToggleRow key={`${t.content.revisionId}-${t.toggleId}`} toggle={t} act={act} />
           ))}
         </fieldset>
       )}
