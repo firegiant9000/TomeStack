@@ -2933,3 +2933,43 @@ it('shows the Bloodied chip and switches an auto toggle on at half hit points, a
   expect(effects().textContent).toMatch(/On while bloodied \(off now\)/);
   expect(summaryValue(sheet, 'Armor Class')).toBe(armorClass);
 });
+
+it('lists a toggle and a resource with an activation under their group, and switching the toggle keeps focus on it (item 22, R157)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Reflex Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Reflex',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'toggle', id: 'guard-toggle', toggleId: 'guard', label: 'E2E guard', activation: 'reaction' },
+      { type: 'modifier', id: 'guard-ac', operation: 'bonus', target: 'armorClass', value: '2', timing: 'whileActive', toggle: 'guard' },
+      { type: 'toggle', id: 'calm-toggle', toggleId: 'calm', label: 'E2E calm' },
+      { type: 'resource', id: 'surge-resource', resourceId: 'surge', label: 'E2E surge', maximum: '2', activation: 'bonusAction' },
+    ],
+  });
+  const feat = (await client.publish(draft)).published;
+  await client.createCharacter({ name: 'E2E Reflex Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Reflex Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Reflex Hero' });
+  await openTab(user, sheet, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  const armorClass = summaryValue(sheet, 'Armor Class');
+
+  expect(within(within(actions()).getByRole('group', { name: /Active effects/ })).getByRole('checkbox', { name: /E2E calm/ })).toBeTruthy(); // no activation: stays
+  expect(within(within(actions()).getByRole('group', { name: /Active effects/ })).queryByRole('checkbox', { name: /E2E guard/ })).toBeNull();
+  const resources = within(sheet).getByRole('region', { name: 'Resources' });
+  expect(within(within(resources).getByRole('region', { name: 'Bonus actions' })).getByRole('heading', { name: /^E2E surge: 2 of 2/ })).toBeTruthy();
+
+  await user.click(within(within(actions()).getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /E2E guard/ }));
+  await waitFor(() => expect(Number(summaryValue(sheet, 'Armor Class'))).toBe(Number(armorClass) + 2));
+  const guard = within(within(actions()).getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /E2E guard/ }) as HTMLInputElement;
+  expect(guard.checked).toBe(true);
+  expect(document.activeElement).toBe(guard);
+});

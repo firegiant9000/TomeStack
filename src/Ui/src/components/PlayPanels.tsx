@@ -345,16 +345,17 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-function ResourceCard({ resource, act }: { resource: ResourceValue; act: Act }) {
+function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
+  const Heading = level === 4 ? 'h4' : 'h5';
   return (
     <li className="resource">
-      <h4 id={headingId}>
+      <Heading id={headingId}>
         {resource.label}: {tracked ? `${resource.current} of ${resource.maximum}` : 'tracked by hand'}
         {tracked && <Pips filled={resource.current!} total={resource.maximum!} />}
-      </h4>
+      </Heading>
       <p className="hint">
         From {resource.contentName} · {automationLabels[resource.automation]}
         {resource.recoveries.length > 0 &&
@@ -421,14 +422,25 @@ export function ClassColumnsPanel({ view }: { view: CharacterView }) {
 export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act }) {
   const resources = view.sheet.resources ?? [];
   if (resources.length === 0) return null;
+  // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
+  const ungrouped = resources.filter((r) => !r.activation);
+  const card = (resource: ResourceValue, level?: 4 | 5) => (
+    <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={level} />
+  );
   return (
     <section aria-labelledby="resources-heading" className="play-panel">
       <h3 id="resources-heading">Resources</h3>
-      <ul className="resources">
-        {resources.map((resource) => (
-          <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} />
-        ))}
-      </ul>
+      {ungrouped.length > 0 && <ul className="resources">{ungrouped.map((resource) => card(resource))}</ul>}
+      {activationGroups.map(({ key, title }) => {
+        const group = resources.filter((r) => r.activation === key);
+        if (group.length === 0) return null;
+        return (
+          <section key={key} aria-labelledby={`resources-${key}`}>
+            <h4 id={`resources-${key}`}>{title}</h4>
+            <ul className="resources">{group.map((resource) => card(resource, 5))}</ul>
+          </section>
+        );
+      })}
     </section>
   );
 }
@@ -506,13 +518,15 @@ export function ActionsPanel({
     feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
   );
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
+  // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
+  const ungroupedToggles = toggles.filter((t) => !t.activation);
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
-      {toggles.length > 0 && (
+      {ungroupedToggles.length > 0 && (
         <fieldset>
-          <legend>Active effects (switching one is a confirmed change)</legend>
-          {toggles.map((t) => (
+          <legend>Active effects (a switch is a confirmed change)</legend>
+          {ungroupedToggles.map((t) => (
             <ToggleRow key={`${t.content.revisionId}-${t.toggleId}`} toggle={t} act={act} />
           ))}
         </fieldset>
@@ -525,7 +539,8 @@ export function ActionsPanel({
         const groupAttacks = key === 'action' ? attacks : [];
         const groupCustom = key === 'action' ? customAttacks : [];
         const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
-        if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0) return null;
+        const groupToggles = toggles.filter((t) => t.activation === key);
+        if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
             <h4 id={`actions-${key}`}>{title}</h4>
@@ -558,6 +573,11 @@ export function ActionsPanel({
                     {feature.name}
                     {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
                   </span>
+                </li>
+              ))}
+              {groupToggles.map((t) => (
+                <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
+                  <ToggleRow toggle={t} act={act} />
                 </li>
               ))}
             </ul>

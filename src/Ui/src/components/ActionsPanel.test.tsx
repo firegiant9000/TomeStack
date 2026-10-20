@@ -78,3 +78,51 @@ it('shows an auto toggle as text, "On while bloodied", with no switch, and keeps
   expect(effects.textContent).toMatch(/Testy grit/);
   expect(effects.textContent).toMatch(/On while bloodied \(on now\)/);
 });
+
+// Wave 3 item 22 (R157): a toggle with an activation is listed under that group; one without stays in "Active effects".
+const ref = { contentId: 'c1', revisionId: 'r1' };
+const toggle = (id: string, extra: object = {}) => ({ content: ref, contentName: 'Testy Source', effectId: `e-${id}`, toggleId: id, label: `Testy ${id}`, on: false, ...extra });
+const togglesView = (toggles: object[]) => ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles, features: [] } }) as unknown as CharacterView;
+
+it('lists a reaction toggle under Reactions and a bonus-action toggle under Bonus actions, and keeps an unassigned one in Active effects', () => {
+  const v = togglesView([toggle('parry', { activation: 'reaction' }), toggle('dash', { activation: 'bonusAction' }), toggle('stance')]);
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+
+  const reactions = screen.getByRole('region', { name: 'Reactions' });
+  expect(within(reactions).getByRole('checkbox', { name: /Testy parry/ })).toBeTruthy();
+  expect(within(reactions).getAllByRole('checkbox')).toHaveLength(1);
+  const bonus = screen.getByRole('region', { name: 'Bonus actions' });
+  expect(within(bonus).getByRole('checkbox', { name: /Testy dash/ })).toBeTruthy();
+  const effects = screen.getByRole('group', { name: /Active effects/ });
+  expect(within(effects).getAllByRole('checkbox')).toHaveLength(1);
+  expect(within(effects).getByRole('checkbox', { name: /Testy stance/ })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Actions' })).toBeNull(); // no empty group
+});
+
+it('drops the Active effects group when every toggle has an activation, and its legend does not claim a switch for switchless rows', () => {
+  render(<ActionsPanel view={togglesView([toggle('parry', { activation: 'reaction' })])} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByRole('group', { name: /Active effects/ })).toBeNull();
+  cleanup();
+  render(<ActionsPanel view={togglesView([toggle('a', { auto: true, on: true }), toggle('b')])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('group', { name: /Active effects/ }).querySelector('legend')!.textContent).not.toMatch(/switching one/);
+});
+
+it('keeps an auto toggle with an activation switchless, "On while bloodied", inside its group', () => {
+  render(<ActionsPanel view={togglesView([toggle('grit', { auto: true, on: true, activation: 'reaction' })])} roll={() => {}} act={() => {}} />);
+  const reactions = screen.getByRole('region', { name: 'Reactions' });
+  expect(within(reactions).queryByRole('checkbox')).toBeNull();
+  expect(reactions.textContent).toMatch(/Testy grit/);
+  expect(reactions.textContent).toMatch(/On while bloodied \(on now\)/);
+});
+
+it('switches a grouped toggle with the same command as an ungrouped one', async () => {
+  const act = vi.fn();
+  render(<ActionsPanel view={togglesView([toggle('parry', { activation: 'reaction' })])} roll={() => {}} act={act} />);
+  await userEvent.click(within(screen.getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /Testy parry/ }));
+  expect(act).toHaveBeenCalledWith({ action: 'toggleOn', contentId: 'c1', toggleId: 'parry' });
+});
+
+it('lists an explicit "other" toggle under Other like a roll, and shows the panel for grouped toggles alone', () => {
+  render(<ActionsPanel view={togglesView([toggle('misc', { activation: 'other' })])} roll={() => {}} act={() => {}} />);
+  expect(within(screen.getByRole('region', { name: 'Other' })).getByRole('checkbox', { name: /Testy misc/ })).toBeTruthy();
+});

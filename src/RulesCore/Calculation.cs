@@ -131,7 +131,8 @@ public sealed record ResourceValue(
     IReadOnlyList<Diagnostic> Warnings,
     AutomationStatus Automation,
     IReadOnlyList<RecoveryInfo> Recoveries,
-    string? Text);
+    string? Text,
+    Activation? Activation = null);
 
 /// <summary>
 /// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
@@ -174,7 +175,7 @@ public sealed record FeatureEffect(
 /// D38): true when the sheet switches it itself (<c>autoWhen</c>); it has no switch, is never stored and never spends a use.
 /// Null otherwise, so nothing is written for an ordinary toggle.
 /// </summary>
-public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null);
+public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -599,7 +600,7 @@ public static class CharacterCalculator
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
                 item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(item.Revision, t, character, autoOn), t.ResourceId, t.Text,
-                IsAuto(item.Revision, t) ? true : null)))
+                IsAuto(item.Revision, t) ? true : null, ActivationOf(item.Revision, t.Activation))))
             .ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
@@ -695,6 +696,10 @@ public static class CharacterCalculator
     /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>
     private static bool IsAuto(ContentRevision revision, ToggleEffect toggle) =>
         toggle.AutoWhen == ToggleAutoWhen.Bloodied && revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion;
+
+    /// <summary>Wave 3 item 22: a toggle's or resource's <c>activation</c> reaches the sheet from v10 only (below it the key is extension data and is never read).</summary>
+    private static Activation? ActivationOf(ContentRevision revision, Activation? activation) =>
+        revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion ? activation : null;
 
     /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
     private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, Character character, bool autoOn) =>
@@ -1032,7 +1037,7 @@ public static class CharacterCalculator
                     : effect.Automation;
                 resources.Add(new(
                     revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
-                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text));
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation)));
             }
         }
         return resources;

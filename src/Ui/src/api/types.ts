@@ -253,6 +253,8 @@ export interface ResourceValue {
   automation: AutomationStatus;
   recoveries: RecoveryInfo[];
   text?: string;
+  /** Content v10 (Wave 3 item 22): the group the resource is listed under on Play; absent below v10 and when the content names none. */
+  activation?: Activation;
 }
 
 export interface FeatureEffect {
@@ -286,6 +288,8 @@ export interface ToggleValue {
   text?: string;
   /** Content v10 (D38): the sheet switches this toggle itself while the character is bloodied; it has no switch and is never stored. */
   auto?: boolean;
+  /** Content v10 (Wave 3 item 22): the group the toggle is listed under on Play; absent below v10 and when the content names none. */
+  activation?: Activation;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
