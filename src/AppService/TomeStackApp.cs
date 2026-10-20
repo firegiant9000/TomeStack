@@ -291,25 +291,24 @@ public sealed partial class TomeStackApp : IDisposable
     /// Wave 3 item 25 (R160): charges spent are play state on the equipment entry, so a save keeps the stored <c>chargesSpent</c> of
     /// every entry the payload still has (matched by id), whatever the payload says; only the play and rest commands change it.
     /// An entry the stored character does not have keeps what it carries. A payload entry without an id (a stale copy of an entry
-    /// the play path has since given an id) is paired, in list order, with a stored entry of the same item that no payload id
-    /// claimed, and takes its id and spent count, so charges never come back for free and the id is not lost.
+    /// the play path has since given an id) is paired only with the stored entry at the same list position, of the same content
+    /// (ContentId, whatever the revision), that has an id no payload entry claims; it takes that id and spent count, so charges
+    /// never come back for free and the id is not lost. Residual (R175): a delete and a re-add of the same item landing at the same
+    /// position in one save still inherits; the compare-and-set on save refuses the stale save this pairing exists for.
     /// </summary>
     private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
     {
         if (payload is null || stored is null || payload.Any(e => e is null) || stored.Any(e => e is null))
             return payload!;
         var claimed = payload.Where(e => e.Id is not null).Select(e => e.Id).ToHashSet();
-        var unclaimed = stored.Where(s => s.Id is not null && !claimed.Contains(s.Id)).ToList(); // an id-less stored entry has no id to keep
-        return [.. payload.Select(e =>
+        return [.. payload.Select((e, index) =>
         {
             if (e.Id is { } id)
                 return stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e;
-            var pair = unclaimed.FindIndex(s => s.Item == e.Item);
-            if (pair < 0)
-                return e;
-            var match = unclaimed[pair];
-            unclaimed.RemoveAt(pair);
-            return e with { Id = match.Id, ChargesSpent = match.ChargesSpent };
+            // An id-less stored entry has no id to keep.
+            return index < stored.Count && stored[index] is { Id: { } storedId } match && match.Item.ContentId == e.Item.ContentId && !claimed.Contains(storedId)
+                ? e with { Id = storedId, ChargesSpent = match.ChargesSpent }
+                : e;
         })];
     }
 

@@ -320,6 +320,59 @@ public class ItemChargesTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
+    public void R175_a_new_id_less_copy_at_another_position_gets_a_fresh_id_and_full_charges(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var wandId = Save(s, new EquipmentEntry(s.Ring), new EquipmentEntry(s.Wand)).Character.Equipment[1].Id!.Value;
+        Spend(s, wandId, 2);
+
+        // The wand is removed and a new copy added at the front: it is a new entry, not the stale one.
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), Get(s).Character.Equipment[0]] });
+
+        Assert.Null(saved.Character.Equipment[0].ChargesSpent);
+        Assert.NotEqual(wandId, saved.Character.Equipment[0].Id!.Value);
+        Assert.DoesNotContain(saved.Character.Equipment, e => e.Id == wandId);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R175_a_fresh_copy_inserted_ahead_of_a_stale_copy_does_not_take_its_charges(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var wandId = Save(s, new EquipmentEntry(s.Ring), new EquipmentEntry(s.Wand)).Character.Equipment[1].Id!.Value;
+        Spend(s, wandId, 2);
+        var ring = Get(s).Character.Equipment[0];
+
+        // A new wand is inserted at the front; the stale wand (still id-less) follows at its old position.
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), ring, new EquipmentEntry(s.Wand)] });
+
+        Assert.Null(saved.Character.Equipment[0].ChargesSpent); // the new copy is fresh
+        Assert.NotEqual(wandId, saved.Character.Equipment[0].Id!.Value);
+        Assert.DoesNotContain(saved.Character.Equipment, e => e.Id == wandId); // neither landed at the stored position: both are new entries
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R175_pairing_is_by_content_id_across_a_different_revision(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var wandId = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        Spend(s, wandId, 2);
+
+        var otherRevision = s.Wand with { RevisionId = Guid.NewGuid() };
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(otherRevision)] });
+
+        Assert.Equal((wandId, 2), (saved.Character.Equipment[0].Id!.Value, saved.Character.Equipment[0].ChargesSpent));
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
     public void Refusal_messages_for_charges_never_quote_the_item_name_or_the_dice(string family)
     {
         var s = Start(family);
