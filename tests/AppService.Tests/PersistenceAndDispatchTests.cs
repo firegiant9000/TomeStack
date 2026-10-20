@@ -103,6 +103,24 @@ public class PersistenceAndDispatchTests
     }
 
     [Fact]
+    public void A_refusal_that_names_the_users_content_goes_back_to_the_ui_and_is_never_logged()
+    {
+        // Task 9 (R135): refusals quote names the user typed or a sheet supplied, which is fine on screen; the error log
+        // must never hold them, so only exceptions the dispatcher did not anticipate are recorded.
+        const string Marker = "Fixture Marker Zq";
+        using var temp = new TempApp();
+        var log = new RecordingErrorLog();
+        var dispatcher = new CommandDispatcher(temp.App, log);
+        var created = temp.App.CreateCharacter(new CreateCharacterRequest(
+            Marker, RulesFamilies.Srd521, new AbilityScores(10, 10, 10, 10, 10, 10), null));
+
+        var json = dispatcher.Dispatch($$$"""{"id":"1","command":"character.unarchive","payload":{"characterId":"{{{created.Character.Id}}}"}}""");
+
+        Assert.Equal("character.not-archived", JsonDocument.Parse(json).RootElement.GetProperty("error").GetProperty("diagnostics")[0].GetProperty("code").GetString());
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
     public void File_error_log_writes_under_the_data_directory()
     {
         using var temp = new TempApp();
