@@ -30,6 +30,15 @@ export const damageTypes = [
   'thunder',
 ] as const;
 
+/** A damage type as the select shows it ("Slashing"). */
+export const damageTypeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1);
+
+/**
+ * Wave 3 item 21: a weapon's or custom attack's damage type is a free string. It pre-fills the damage-type select only when it
+ * names one of the thirteen types (any case, no trimming, like the service); anything else gives '' (untyped).
+ */
+export const normalizeDamageType = (type?: string): string => damageTypes.find((t) => t === type?.toLowerCase()) ?? '';
+
 export interface ItemDraft {
   [key: string]: string | boolean;
   name: string;

@@ -177,7 +177,7 @@ public sealed record Character
     /// <summary>Character schema v9 (D42): attacks recorded by hand, with a typed-in to-hit bonus and damage. Never calculated. Null while empty.</summary>
     public IReadOnlyList<CustomAttack>? CustomAttacks { get => _customAttacks; init => _customAttacks = NullIfEmpty(value); }
 
-    /// <summary>Character schema v9 (D42): damage resistances, immunities and vulnerabilities. A reminder only. Types are stored lower-case. Null while empty.</summary>
+    /// <summary>Character schema v9 (D42): damage resistances, immunities and vulnerabilities. Typed damage uses them through <see cref="CharacterSheet.DamageDefences"/> (Wave 3, D19 amended). Types are stored lower-case. Null while empty.</summary>
     public IReadOnlyList<DamageDefence>? DamageDefences
     {
         get => _damageDefences;
@@ -604,7 +604,10 @@ public static class DamageTypes
     }
 }
 
-/// <summary>Character schema v9 (D42): how a character treats one damage type. A reminder only: damage commands do not use it.</summary>
+/// <summary>
+/// Character schema v9 (D42): how a character treats one damage type. Wave 3 (D19 amended): the sheet merges these with the
+/// v10 damage grants (<see cref="CharacterSheet.DamageDefences"/>), and typed damage taken through the play command uses them.
+/// </summary>
 public enum DamageDefenceKind { Resistance, Immunity, Vulnerability }
 
 /// <summary>Character schema v9 (D42): one damage resistance, immunity or vulnerability. <paramref name="Type"/> is one of <see cref="DamageTypes.All"/>, stored lower-case.</summary>

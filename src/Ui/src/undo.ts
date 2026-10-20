@@ -21,7 +21,9 @@ const hp = (view: CharacterView) => view.sheet.hitPoints;
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
-  const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${action.condition ? ` ${action.condition}` : ''}`;
+  // Wave 3 item 21: typed damage names its type and what was taken after defences ("damage 13 slashing (6 taken)"); untyped keeps "damage 12".
+  const typed = action.action === 'damage' && after.damage?.type ? ` ${after.damage.type} (${after.damage.adjusted} taken)` : '';
+  const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${typed}${action.condition ? ` ${action.condition}` : ''}`;
   const b = before.character.play;
   const entry = (inverse: PlayAction[]): UndoEntry => ({ label, inverse, after });
   const hadCondition = (condition?: string) => !!condition && (b?.conditions ?? []).some((c) => c.toLowerCase() === condition.toLowerCase());

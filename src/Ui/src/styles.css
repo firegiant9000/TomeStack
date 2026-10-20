@@ -261,6 +261,10 @@ span.warn { color: var(--warn); }
 .play-panel { border-top: 1px solid var(--line); padding-top: 0.5rem; }
 .play-panel h3 { margin: 0.25rem 0; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
+/* Wave 3 item 21: the damage type and defence selects (24px targets, WCAG 2.5.8; wrap at 400%). */
+.play-panel .inline-form select, .defences select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.defences button { min-height: 1.75rem; }
+.damage-result { margin: 0.25rem 0; overflow-wrap: anywhere; }
 /* Conditions as outlined chips (still native checkboxes); the checked chip is accent-filled like the d20 segment. */
 .conditions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .conditions .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 1rem; }

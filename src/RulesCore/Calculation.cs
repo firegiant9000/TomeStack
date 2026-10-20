@@ -100,7 +100,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<AttackEntry>? Attacks = null,
     IReadOnlyList<ToggleValue>? Toggles = null,
     IReadOnlyList<ScaleValue>? Scales = null,
-    bool? Bloodied = null)
+    bool? Bloodied = null,
+    IReadOnlyList<DamageDefenceValue>? DamageDefences = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -174,6 +175,15 @@ public sealed record FeatureEffect(
 /// Null otherwise, so nothing is written for an ordinary toggle.
 /// </summary>
 public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null);
+
+/// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
+public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
+
+/// <summary>
+/// Wave 3 item 21 (D19 amended): one damage resistance, immunity or vulnerability the character has. <paramref name="Type"/> is
+/// the canonical lower-case name from <see cref="DamageTypes.All"/>; several sources of the same type and kind are one entry.
+/// </summary>
+public sealed record DamageDefenceValue(string Type, DamageDefenceKind Kind, IReadOnlyList<DamageDefenceSource> Sources);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
@@ -624,6 +634,7 @@ public static class CharacterCalculator
             : null;
 
         var attacks = CollectAttacks(active, values, family, weaponProficiencies);
+        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -636,7 +647,49 @@ public static class CharacterCalculator
             .ToList();
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
-            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null), active);
+            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
+            damageDefences.Count > 0 ? damageDefences : null), active);
+    }
+
+    /// <summary>
+    /// Wave 3 item 21 (D19 amended): the character's own <c>damageDefences</c> (character v9) and the damage grants of content
+    /// v10, merged. A grant counts only when the calculator can apply it by itself (automatic, always on) and its <c>level</c>
+    /// and <c>onlyAs</c> are met, the same rules as the other grants. Grants are stored as written, so the type is normalised
+    /// here. Several sources of one type and kind are one entry (R169), ordered by damage type, then kind. A damage grant in
+    /// a revision below v10 is an unknown effect (Task 1) and never arrives here.
+    /// </summary>
+    private static List<DamageDefenceValue> CollectDamageDefences(List<ActiveContent> active, Character character, ClassLevelMap classLevels)
+    {
+        var found = new List<(string Type, DamageDefenceKind Kind, DamageDefenceSource Source)>();
+        foreach (var defence in character.DamageDefences ?? [])
+        {
+            if (defence is not null && DamageTypes.TryNormalize(defence.Type, out var type))
+                found.Add((type, defence.Kind, new("Entered by hand")));
+        }
+        foreach (var item in active)
+        {
+            foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
+            {
+                if (!GrantEffect.IsDamageDefence(grant.Grant) || grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                    continue;
+                if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                    continue;
+                if (!EntryApplies(item, grant.OnlyAs, character) || !DamageTypes.TryNormalize(grant.DamageType, out var type))
+                    continue;
+                var kind = grant.Grant switch
+                {
+                    GrantKind.DamageImmunity => DamageDefenceKind.Immunity,
+                    GrantKind.DamageVulnerability => DamageDefenceKind.Vulnerability,
+                    _ => DamageDefenceKind.Resistance,
+                };
+                found.Add((type, kind, new(item.Revision.Name, item.Revision.Reference, grant.Id)));
+            }
+        }
+        var order = DamageTypes.All.ToList();
+        return [.. found
+            .GroupBy(f => (f.Type, f.Kind))
+            .OrderBy(g => order.IndexOf(g.Key.Type)).ThenBy(g => g.Key.Kind)
+            .Select(g => new DamageDefenceValue(g.Key.Type, g.Key.Kind, [.. g.Select(f => f.Source).Distinct()]))];
     }
 
     /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>
@@ -1041,6 +1094,9 @@ public static class CharacterCalculator
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
+            // A damage defence that is conditional is not applied by the calculator: the player applies it (D19 amended).
+            GrantEffect { Timing: not EffectTiming.Always } grant when GrantEffect.IsDamageDefence(grant.Grant) =>
+                new FeatureEffect(e.Id, e.Type, e.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : e.Automation, e.Text),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
         }).ToList();
         var automation = effects.Count == 0 ? AutomationStatus.Reference : effects.Max(e => e.Automation);

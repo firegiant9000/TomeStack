@@ -486,7 +486,8 @@ public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
-public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);
+/// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 

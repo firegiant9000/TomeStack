@@ -397,6 +397,32 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
 
+  // Wave 3 item 21 (D19 amended): a resistance recorded by hand on Stats halves typed damage on Play, and Undo puts it all back.
+  await openTab(user, sheet, 'Stats');
+  const defences = () => screen.getByRole('region', { name: 'Damage resistances, immunities and vulnerabilities' });
+  await user.selectOptions(within(defences()).getByRole('combobox', { name: 'Damage type' }), 'slashing');
+  await user.click(within(defences()).getByRole('button', { name: 'Add' }));
+  await waitFor(() => expect(within(defences()).getByRole('list', { name: 'Damage defences the sheet applies' }).textContent).toMatch(/Slashing resistance from Entered by hand/));
+  await openTab(user, sheet, 'Play');
+  await user.selectOptions(within(hpPanel()).getByRole('combobox', { name: 'Damage type' }), 'slashing');
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '13');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 29 of 35' })).toBeTruthy()); // 13 halved, rounded down: 6
+  expect(hpPanel().textContent).toMatch(/13 slashing, halved: 6\./);
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 13 slashing (6 taken)' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+  // Untyped damage ignores the resistance.
+  await user.selectOptions(within(hpPanel()).getByRole('combobox', { name: 'Damage type' }), '');
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '4');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 31 of 35' })).toBeTruthy());
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 4' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+  await openTab(user, sheet, 'Stats');
+  await user.click(within(defences()).getByRole('button', { name: 'Remove slashing resistance' }));
+  await waitFor(() => expect(screen.queryByRole('list', { name: 'Damage defences the sheet applies' })).toBeNull());
+  await openTab(user, sheet, 'Play');
+
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
   await openTab(user, sheet, 'Inventory');
   const equipment = () => screen.getByRole('region', { name: 'Equipment' });

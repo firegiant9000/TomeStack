@@ -5,6 +5,7 @@ import type {
   AutomationStatus,
   CharacterView,
   ContentKind,
+  DamageOutcome,
   FeatureEntry,
   PageRef,
   PlayAction,
@@ -17,6 +18,7 @@ import type {
 import { hitDiceText, rollBonus } from '../format';
 import { diceLine } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
+import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -81,9 +83,41 @@ export const pageText =(page?: PageRef) =>
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
 type Act = (action: PlayAction) => void;
 
-export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act }) {
+const effectWords: Record<DamageOutcome['effect'], string> = {
+  none: 'no defence',
+  immune: 'immune',
+  halved: 'halved',
+  doubled: 'doubled',
+  halvedThenDoubled: 'halved, then doubled',
+};
+
+/** Wave 3 item 21: "13 slashing, halved: 6". Plain text, not a live region (the hit points heading above already changes). */
+export function damageResultText(damage: DamageOutcome): string {
+  const what = `${damage.amount} ${damage.type ?? 'untyped'}`;
+  const taken = damage.type ? `${what}, ${effectWords[damage.effect]}: ${damage.adjusted}` : `${what}: ${damage.adjusted}`;
+  return damage.absorbed > 0 ? `${taken}. Temporary hit points took ${damage.absorbed}.` : `${taken}.`;
+}
+
+/**
+ * The damage type, first option "Untyped" (no defence applies). `onDamageType` makes it controlled, so a weapon's damage
+ * roll elsewhere on the Play tab can pre-fill it; alone it keeps its own value.
+ */
+export function HitPointsPanel({
+  view,
+  act,
+  damageType,
+  onDamageType,
+}: {
+  view: CharacterView;
+  act: Act;
+  damageType?: string;
+  onDamageType?: (type: string) => void;
+}) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
+  const [ownType, setOwnType] = useState('');
+  const type = damageType ?? ownType;
+  const setType = onDamageType ?? setOwnType;
   if (!hp) return null;
   const n = Number(amount);
   const valid = amount !== '' && Number.isInteger(n) && n >= 0;
@@ -94,7 +128,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
 
   function apply(action: PlayAction['action']) {
     if (!valid) return;
-    act({ action, amount: n });
+    act({ action, amount: n, ...(action === 'damage' && type ? { damageType: type } : {}) });
     setAmount('');
   }
 
@@ -109,6 +143,17 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           Amount
           <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
+        <label className="field">
+          Damage type
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">Untyped</option>
+            {damageTypes.map((t) => (
+              <option key={t} value={t}>
+                {damageTypeLabel(t)}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" disabled={!valid} onClick={() => apply('damage')}>
           Take damage
         </button>
@@ -119,7 +164,20 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           Set temporary hit points
         </button>
       </form>
-      <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
+      {view.damage && (
+        <>
+          <p className="damage-result">{damageResultText(view.damage)}</p>
+          {view.damage.warnings.map((w) => (
+            <p key={w.code} className="warn">
+              {w.message}
+            </p>
+          ))}
+        </>
+      )}
+      <p className="hint">
+        A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
+        rest. They do not stack: setting them replaces the old value.
+      </p>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
           Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
@@ -426,14 +484,21 @@ export function ActionsPanel({
   roll,
   act,
   rollMode = 'normal',
+  onDamageType,
 }: {
   view: CharacterView;
   roll: (target: RollTarget) => void;
   act: Act;
   /** The summary's advantage / disadvantage choice. Used by the attack rolls of weapons and of the character's own attacks (R93); damage is always normal. */
   rollMode?: RollMode;
+  /** Wave 3 item 21: a damage roll pre-fills the Hit points damage type with the attack's type ('' when it names none of the thirteen). */
+  onDamageType?: (type: string) => void;
 }) {
   const [critical, setCritical] = useState(false);
+  const rollDamage = (target: RollTarget, type?: string) => {
+    onDamageType?.(normalizeDamageType(type));
+    roll(target);
+  };
   const attacks = view.sheet.attacks ?? [];
   const customAttacks = view.character.customAttacks ?? [];
   const toggles = view.sheet.toggles ?? [];
@@ -466,7 +531,7 @@ export function ActionsPanel({
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
               {groupAttacks.map((attack) => (
-                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} rollMode={rollMode} roll={roll} />
+                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} rollMode={rollMode} roll={roll} rollDamage={rollDamage} />
               ))}
               {groupCustom.map((attack) => (
                 <li key={attack.id} className="feature">
@@ -477,7 +542,7 @@ export function ActionsPanel({
                     Roll {attack.name} attack
                   </button>
                   {attack.damage && (
-                    <button type="button" onClick={() => roll({ customAttack: attack.id, damage: true, critical })}>
+                    <button type="button" onClick={() => rollDamage({ customAttack: attack.id, damage: true, critical }, attack.damageType)}>
                       Roll {attack.name} damage
                     </button>
                   )}
@@ -503,7 +568,19 @@ export function ActionsPanel({
   );
 }
 
-function AttackItem({ attack, critical, rollMode, roll }: { attack: AttackEntry; critical: boolean; rollMode: RollMode; roll: (target: RollTarget) => void }) {
+function AttackItem({
+  attack,
+  critical,
+  rollMode,
+  roll,
+  rollDamage,
+}: {
+  attack: AttackEntry;
+  critical: boolean;
+  rollMode: RollMode;
+  roll: (target: RollTarget) => void;
+  rollDamage: (target: RollTarget, type?: string) => void;
+}) {
   return (
     <li className="feature">
       <details>
@@ -536,11 +613,11 @@ function AttackItem({ attack, critical, rollMode, roll }: { attack: AttackEntry;
       <button type="button" onClick={() => roll({ weapon: attack.item, mode: rollMode })}>
         Roll {attack.name} attack
       </button>
-      <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, critical })}>
+      <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, critical }, attack.damageType)}>
         Roll {attack.name} damage ({attack.damage})
       </button>
       {attack.versatileDamage && (
-        <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, versatile: true, critical })}>
+        <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
           Roll {attack.name} two-handed damage ({attack.versatileDamage})
         </button>
       )}

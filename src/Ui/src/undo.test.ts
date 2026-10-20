@@ -18,6 +18,20 @@ it('undoes damage by setting hit points and temporary hit points back', () => {
   expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 35 }, { action: 'setTemporaryHitPoints', amount: 5 }]);
 });
 
+it('labels typed damage with its type and what was taken, and undoes it with the same exact steps (item 21)', () => {
+  // 13 slashing, halved to 6: 5 to temporary hit points, 1 to hit points. The inverse is unchanged by the type.
+  const after = { ...view(34, 0), damage: { amount: 13, type: 'slashing', effect: 'halved', adjusted: 6, absorbed: 5, lost: 1, warnings: [] } } as unknown as CharacterView;
+  const entry = inverseOf({ action: 'damage', amount: 13, damageType: 'Slashing' }, view(35, 5), after)!;
+  expect(entry.label).toBe('damage 13 slashing (6 taken)');
+  expect(entry.inverse).toEqual([{ action: 'setHitPoints', amount: 35 }, { action: 'setTemporaryHitPoints', amount: 5 }]);
+});
+
+it('keeps the plain label for untyped damage, and for typed damage whose reply carries no outcome', () => {
+  const untyped = { ...view(23, 0), damage: { amount: 12, effect: 'none', adjusted: 12, absorbed: 0, lost: 12, warnings: [] } } as unknown as CharacterView;
+  expect(inverseOf({ action: 'damage', amount: 12 }, view(35, 0), untyped)!.label).toBe('damage 12');
+  expect(inverseOf({ action: 'damage', amount: 12, damageType: 'fire' }, view(35, 0), view(23, 0))!.label).toBe('damage 12');
+});
+
 it('undoes damage that bloodies the character by an exact hit point step and no toggle action (D38)', () => {
   // An auto toggle is computed from the hit points and never stored, so putting the hit points back switches it off for free.
   const grit = { content: { contentId: 'c', revisionId: 'r' }, toggleId: 'grit', on: false, auto: true };

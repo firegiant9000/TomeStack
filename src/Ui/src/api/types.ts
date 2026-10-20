@@ -369,6 +369,36 @@ export interface CharacterSheet {
   scales?: ScaleValue[];
   /** D38: current hit points are at or below half the maximum (rounded down), with a maximum of at least 1. Absent when not bloodied. */
   bloodied?: boolean;
+  /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
+  damageDefences?: DamageDefenceValue[];
+}
+
+/** Where a damage defence comes from: the character's own list (no `content`) or a damage grant of active content. */
+export interface DamageDefenceSource {
+  name: string;
+  content?: ContentReference;
+  effectId?: string;
+}
+
+/** One damage resistance, immunity or vulnerability on the sheet: several sources of the same type and kind are one entry. */
+export interface DamageDefenceValue {
+  type: string;
+  kind: DamageDefence['kind'];
+  sources: DamageDefenceSource[];
+}
+
+/**
+ * What a damage command did (set only on the view it returns, never stored). `adjusted` is the amount after defences;
+ * `warnings` carries codes and numbers only (`play.massive-damage`).
+ */
+export interface DamageOutcome {
+  amount: number;
+  type?: string;
+  effect: 'none' | 'immune' | 'halved' | 'doubled' | 'halvedThenDoubled';
+  adjusted: number;
+  absorbed: number;
+  lost: number;
+  warnings: Diagnostic[];
 }
 
 export interface ScaleValue {
@@ -436,6 +466,8 @@ export interface PlayAction {
   condition?: string;
   /** Content v6: the toggle to switch on or off (with `contentId`). */
   toggleId?: string;
+  /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
+  damageType?: string;
 }
 
 export interface RestChange {
@@ -569,6 +601,8 @@ export interface CharacterView {
   character: Character;
   sheet: CharacterSheet;
   campaign?: CampaignStatus;
+  /** Set only on the view a damage command returns. */
+  damage?: DamageOutcome;
 }
 
 export interface CharacterSummary {

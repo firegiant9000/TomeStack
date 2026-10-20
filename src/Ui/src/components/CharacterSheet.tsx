@@ -21,6 +21,7 @@ import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
 import { EntryGone, useSheetSave } from './sheetSave';
+import { DefencesPanel } from './DefencesPanel';
 import { DetailsPanel } from './DetailsPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
@@ -252,6 +253,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
   const [undo, setUndo] = useState<UndoEntry>();
+  // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
+  const [damageType, setDamageType] = useState('');
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -646,7 +649,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </div>
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />
@@ -654,7 +657,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
         </div>
       </TabPanel>
 
@@ -694,6 +697,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             sheet.fields.filter((f) => group.match(f.field)),
           ),
         )}
+        <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
         {((character.details?.languages ?? []).length > 0 || (character.details?.toolsAndOther ?? []).length > 0) && (
           <section aria-labelledby="stats-details-heading" className="field-group">
             <h3 id="stats-details-heading">Languages and tools</h3>
