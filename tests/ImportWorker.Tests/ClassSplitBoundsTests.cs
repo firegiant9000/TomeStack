@@ -80,17 +80,31 @@ public class ClassSplitBoundsTests
     [Fact]
     public void A_cancelled_token_stops_the_merged_read_of_a_class_table()
     {
-        // G8: the merged read (a page with more than eight titles, or one class) used to ignore the token in its header scan.
-        var blocks = Page(9, _ => true);
+        // G8/H1: the legacy header scan (a table the whole-table reader cannot complete) is quadratic in the window's lines, so
+        // it checks the token itself. The token is cancelled after the last window filter, so only the scan's own checks can see it.
+        var blocks = Page(9, _ => true, fillerPerClass: 20);
         var page = new DetectionPage(1, "", blocks, false);
         var lines = blocks.Select(b => (1, new TextLine(b.Text, b.X, b.Y, b.Width, b.Height))).ToList();
         var whole = blocks.Select(b => new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)).ToList();
+
+        // Dry run: count the window predicate's calls, and prove the window reaches the legacy readers (no whole table).
+        var calls = 0;
+        var read = CandidateDetector.ReadClassTable(page, lines, _ => { calls++; return true; }, "Fixture Alpha Features", whole, CancellationToken.None);
+        Assert.NotNull(read);
+        Assert.Null(read.Table);
+        Assert.Equal(lines.Count + whole.Count, calls);
+
         using var cts = new CancellationTokenSource();
+        var seen = 0;
+        bool CancelOnLast(TextLine _)
+        {
+            if (++seen == calls)
+                cts.Cancel();
+            return true;
+        }
 
-        Assert.NotNull(CandidateDetector.ReadClassTable(page, lines, _ => true, "Fixture Alpha Features", whole, cts.Token));
-
-        cts.Cancel();
-        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(page, lines, _ => true, "Fixture Alpha Features", whole, cts.Token));
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(page, lines, CancelOnLast, "Fixture Alpha Features", whole, cts.Token));
+        Assert.Equal(calls, seen); // it was the last filter call that cancelled, not an earlier check
     }
 
     [Fact]

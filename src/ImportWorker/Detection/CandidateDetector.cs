@@ -1040,15 +1040,14 @@ public static partial class CandidateDetector
 
         // Item 11 (D34): the whole table, read back by position; the legacy readers below stay for layouts it cannot read.
         var pageTextLines = lines.Select(l => l.Line).ToList();
-        if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
+        if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine, cancellationToken) is { Complete: true } table)
             return new(table.FeaturesByLevel, table, pageTextLines);
         // A cell the running-header rule took for boilerplate (text repeated on many pages) can break the table: read it again whole.
         var wholePage = wholePageLines.Where(inWindow).ToList();
-        if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine) is { Complete: true } whole)
+        if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine, cancellationToken) is { Complete: true } whole)
             return new(whole.FeaturesByLevel, whole, wholePage);
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
-        cancellationToken.ThrowIfCancellationRequested();
         var header = lines.Select(l => l.Line).FirstOrDefault(l =>
         {
             cancellationToken.ThrowIfCancellationRequested(); // the row scan below is quadratic in the window's lines
