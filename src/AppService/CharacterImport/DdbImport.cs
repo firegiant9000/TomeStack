@@ -515,7 +515,7 @@ public sealed partial class TomeStackApp
             ListCharacters().Any(c => string.Equals(c.Name, character.Name, StringComparison.OrdinalIgnoreCase)),
             sheet.SuggestedFamily is { } suggested && suggested != request.RulesFamily,
             LayoutNameOf(sheet),
-            [.. sheet.Lines ?? [], .. extras.Lines, .. planner.Lines, .. references.Lines]);
+            [.. (sheet.Lines ?? []).Where(l => request.IncludePlayState || l != DdbParser.DeathSavesLine), .. extras.Lines, .. planner.Lines, .. references.Lines]);
         var canApply = valid && sheet.Classes.Status == ReadStatus.Ok && character.Classes.Count > 0 && Count(MatchStatus.Choose) == 0;
         // A choice the user answered stays listed once it is full, so step 3 can still change the answer; a refused answer
         // does not keep a choice the sheet filled listed (its diagnostic says why).

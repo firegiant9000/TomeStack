@@ -16,6 +16,12 @@ namespace TomeStack.AppService.CharacterImport;
 public static partial class DdbParser
 {
     /// <summary>
+    /// The report line for a layout whose death-save boxes were read by number. It is about the play state, so the preview and the
+    /// apply drop it unless "Bring over current hit points…" is ticked (the boxes are not brought over otherwise).
+    /// </summary>
+    internal const string DeathSavesLine = "Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.";
+
+    /// <summary>
     /// The most items one list keeps (features, feats, a split spell or equipment list); the rest are one unreadable item.
     /// Above the 500 gap notes a character can hold, so the import notes' limit is still what users meet first.
     /// </summary>
@@ -76,7 +82,7 @@ public static partial class DdbParser
         var texts = sheet.Texts(lines);
         // The order of the form's six death-save boxes is read from their numbers, not confirmed against a filled sheet.
         if (sheet.AnyDeathBoxTicked())
-            lines.Add("Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.");
+            lines.Add(DeathSavesLine);
         return new DdbSheet(
             map.Id,
             map.SuggestedFamily,

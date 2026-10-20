@@ -371,6 +371,23 @@ public class WotcImportTests
         Assert.Equal(1, play.HitDiceSpent.Single(d => d.Die == 8).Spent);
     }
 
+    private const string DeathSaveLine = "Death saves were read as boxes 12 to 14 successes and 15 to 17 failures; check them.";
+
+    [Fact]
+    public void The_death_save_check_them_line_is_in_the_report_only_when_play_state_is_brought_over()
+    {
+        using var h = new DdbHarness { Fields = Wotc() }; // the fixture ticks some death-save boxes
+        var token = h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
+        DdbPreviewRequest Preview(bool play) => new(token, RulesFamilies.Srd51, null, [], [], play);
+
+        Assert.DoesNotContain(DeathSaveLine, h.Temp.App.PreviewDdbImport(Preview(play: false)).Report.Lines ?? []);
+        Assert.Contains(DeathSaveLine, h.Temp.App.PreviewDdbImport(Preview(play: true)).Report.Lines!);
+
+        Assert.DoesNotContain(DeathSaveLine, h.Temp.App.ApplyDdbImport(Apply(token)).Report.Lines ?? []);
+        var again = h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
+        Assert.Contains(DeathSaveLine, h.Temp.App.ApplyDdbImport(Apply(again, play: true)).Report.Lines!);
+    }
+
     [Fact]
     public void The_report_carries_the_swap_clip_and_row_lines_with_labels_and_counts_only()
     {
@@ -379,7 +396,7 @@ public class WotcImportTests
         using var h = new DdbHarness { Fields = fields };
         var token = h.Temp.App.ReadDdbSheet("C:/fixture/sheet.pdf").Token;
 
-        var applied = h.Temp.App.ApplyDdbImport(Apply(token));
+        var applied = h.Temp.App.ApplyDdbImport(Apply(token, play: true)); // the death-save line needs the play state (it reads those boxes)
 
         Assert.Equal(
             [
