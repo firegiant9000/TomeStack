@@ -568,7 +568,7 @@ it('discards the picked hit dice when switching from a short rest to a long rest
   expect(await screen.findByRole('button', { name: /^Remove/ })).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Long rest…' }));
   const panel = screen.getByRole('region', { name: 'Long rest' });
-  await waitFor(() => expect(vi.mocked(client.restPreview).mock.lastCall).toEqual(['fixture-2', 'longRest', []]));
+  await waitFor(() => expect(vi.mocked(client.restPreview).mock.lastCall).toEqual(['fixture-2', 'longRest', [], []]));
   expect(within(panel).queryByRole('button', { name: /^Remove/ })).toBeNull();
   expect(client.rest).not.toHaveBeenCalled();
 });
@@ -912,7 +912,7 @@ it('returns focus to the opener and reports the result when a rest finishes (D29
   await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
   await user.click(finish);
   await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Long rest finished: 1 change applied.'));
-  expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'fixture', [], []);
+  expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'fixture', [], [], []);
   expect(onChanged).toHaveBeenCalledWith(v);
   expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull();
   expect(document.activeElement).toBe(long);

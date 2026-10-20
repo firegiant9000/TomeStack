@@ -60,6 +60,7 @@ import type {
   GapTarget,
   ImportResult,
   HitDieRoll,
+  ChargeRoll,
   LibraryBackupOutcome,
   LibraryBackupPreview,
   LibraryRestoreChoice,
@@ -214,11 +215,11 @@ export function createClient(transport: Transport) {
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
     /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
-    restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = []) =>
-      call<RestPreview>('character.restPreview', { characterId, kind, hitDice }),
+    restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
+      call<RestPreview>('character.restPreview', { characterId, kind, hitDice, chargeRolls }),
     /** Applies exactly the previewed rest (same hit dice), minus the unticked changes. Only the "Finish … rest" button calls this. */
-    rest: (characterId: string, kind: RestPeriod, basis: string, skip: string[], hitDice: HitDieRoll[] = []) =>
-      call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, confirm: true }),
+    rest: (characterId: string, kind: RestPeriod, basis: string, skip: string[], hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
+      call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, chargeRolls, confirm: true }),
     /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
     /** D32: a labelled roll with no character (the builder's scores); writes nothing. */

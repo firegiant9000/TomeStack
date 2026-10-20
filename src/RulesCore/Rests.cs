@@ -1,7 +1,7 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration, Charges }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
@@ -10,7 +10,9 @@ public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion
 /// a <see cref="RestChangeKind.HitDie"/> or <see cref="RestChangeKind.HitDice"/> change, and <paramref name="Amount"/> the
 /// hit points one spent hit die restores. <paramref name="SlotLevel"/> is the spell level of a
 /// <see cref="RestChangeKind.SpellSlots"/> change. A <see cref="RestChangeKind.Toggle"/> change carries its toggle id in
-/// <paramref name="ResourceId"/>.
+/// <paramref name="ResourceId"/>. A <see cref="RestChangeKind.Charges"/> change (Wave 3 item 25) carries the entry key of the
+/// equipment entry in <paramref name="ResourceId"/> (<see cref="ItemUseValue.EntryKey"/>) and the charges it regains in
+/// <paramref name="Amount"/>; <paramref name="Dice"/> is the expression the player still has to roll while <paramref name="SpentAfter"/> is null.
 /// </summary>
 public sealed record RestChange(
     string Id,
@@ -26,7 +28,11 @@ public sealed record RestChange(
     int? SpentAfter = null,
     int? Die = null,
     int? Amount = null,
-    int? SlotLevel = null);
+    int? SlotLevel = null,
+    string? Dice = null);
+
+/// <summary>What the player rolled (or saw at the table) for the <c>regain</c> dice of one item entry's charges on a rest: the whole total.</summary>
+public sealed record ChargeRoll(string Entry, int Roll);
 
 /// <summary>A rest's proposal: every change it would make, plus what the player must handle by hand.</summary>
 public sealed record RestPlan(RestPeriod Kind, IReadOnlyList<RestChange> Changes, IReadOnlyList<Diagnostic> Manual);
@@ -89,7 +95,7 @@ public static class RestPlanner
     /// Constitution modifier (at least <see cref="RulesFamilyPolicy.HitDieHealingMinimum"/>), up to the maximum, and every
     /// resource recovers by its <c>shortRest</c> recovery. Check the rolls with <see cref="CheckHitDice"/> first.
     /// </summary>
-    public static RestPlan ShortRest(Character character, CharacterSheet sheet, IReadOnlyList<HitDieRoll> rolls)
+    public static RestPlan ShortRest(Character character, CharacterSheet sheet, IReadOnlyList<HitDieRoll> rolls, IReadOnlyList<ChargeRoll>? chargeRolls = null)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(sheet);
@@ -127,6 +133,7 @@ public static class RestPlanner
 
         AddPactSlots(sheet, "a short rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.ShortRest, changes, manual, rules);
+        AddChargeRecoveries(sheet, RestPeriod.ShortRest, chargeRolls ?? [], changes, manual, character.RulesFamily);
         return new(RestPeriod.ShortRest, changes, manual);
     }
 
@@ -137,7 +144,7 @@ public static class RestPlanner
     /// Short-rest recoveries are not part of a long rest; content that recovers on both declares both. Every spent spell
     /// slot and Pact Magic slot comes back.
     /// </summary>
-    public static RestPlan LongRest(Character character, CharacterSheet sheet)
+    public static RestPlan LongRest(Character character, CharacterSheet sheet, IReadOnlyList<ChargeRoll>? chargeRolls = null)
     {
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(sheet);
@@ -167,6 +174,7 @@ public static class RestPlanner
         }
         AddPactSlots(sheet, "a long rest", changes, rules);
         AddResourceRecoveries(sheet, RestPeriod.LongRest, changes, manual, rules);
+        AddChargeRecoveries(sheet, RestPeriod.LongRest, chargeRolls ?? [], changes, manual, character.RulesFamily);
         // Content v6 toggles (stances, auras) rarely outlast a night's rest; each is proposed off, and the player can keep it.
         // An auto toggle (D38) follows the hit points, so a rest has nothing to switch off.
         foreach (var toggle in (sheet.Toggles ?? []).Where(t => t.On && t.Auto != true))
@@ -198,6 +206,93 @@ public static class RestPlanner
         }
 
         return new(RestPeriod.LongRest, changes, manual);
+    }
+
+    /// <summary>
+    /// The problems with the charge rolls (Wave 3 item 25): an entry that regains no dice on this rest (unknown, nothing spent, another
+    /// rest, no dice, or rolled twice), or a total the dice cannot show. Codes only. Empty when every roll can be used.
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> CheckChargeRolls(CharacterSheet sheet, RestPeriod period, IReadOnlyList<ChargeRoll> rolls)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        ArgumentNullException.ThrowIfNull(rolls);
+        var problems = new List<Diagnostic>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var roll in rolls)
+        {
+            var use = roll is null ? null : sheet.ItemUses?.FirstOrDefault(u => u.EntryKey == roll.Entry);
+            if (use is null || use.ChargesSpent < 1 || use.Recovery is not { Regain: not null } recovery || recovery.On != period || !seen.Add(use.EntryKey)
+                || !DiceExpression.TryParse(recovery.Regain, out var dice, out _))
+            {
+                problems.Add(new("rest.charge-roll-unknown", "A charge roll names an item that regains no dice on this rest."));
+                continue;
+            }
+            if (roll!.Roll < dice!.Minimum || roll.Roll > dice.Maximum)
+                problems.Add(new("rest.charge-roll-invalid", $"{recovery.Regain} shows {dice.Minimum} to {dice.Maximum}; {roll.Roll} is not possible."));
+        }
+        return problems;
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R160, R171): an item's charges come back by its own recovery rule, on its rest only: all of them with no
+    /// <c>regain</c>, else the dice the player rolled (<paramref name="rolls"/>, checked first with <see cref="CheckChargeRolls"/>),
+    /// capped at the spent count. Until the roll is in, the change is listed with its dice and applies nothing. No recovery: none.
+    /// </summary>
+    private static void AddChargeRecoveries(CharacterSheet sheet, RestPeriod period, IReadOnlyList<ChargeRoll> rolls, List<RestChange> changes, List<Diagnostic> manual, string family)
+    {
+        var rest = period == RestPeriod.LongRest ? "long rest" : "short rest";
+        foreach (var use in sheet.ItemUses ?? [])
+        {
+            if (use.ChargesMax is not { } maximum || use.ChargesSpent < 1 || use.Recovery is not { } recovery || recovery.On != period)
+                continue;
+            var spent = Math.Min(use.ChargesSpent, maximum); // a spent count above the maximum (after an update lowered it) is cleared along with the rest
+            var left = maximum - spent;
+            var origin = new TraceOrigin(TraceOriginKind.Content, family, use.Item, use.Name);
+            var id = $"charges:{use.EntryKey}";
+            var label = $"{use.Name} charges";
+            if (recovery.Regain is null)
+            {
+                changes.Add(new(id, RestChangeKind.Charges, label, left, maximum, $"{use.Name}: regain all expended charges on a {rest}", origin, ResourceId: use.EntryKey, SpentAfter: 0, Amount: spent));
+                continue;
+            }
+            if (!DiceExpression.TryParse(recovery.Regain, out _, out _))
+            {
+                manual.Add(new("rest.recover-by-hand", $"'{use.Name}' regains charges on a {rest}, but its dice could not be read; recover them by hand.", use.Item));
+                continue;
+            }
+            var roll = rolls.FirstOrDefault(r => r.Entry == use.EntryKey);
+            if (roll is null)
+            {
+                changes.Add(new(id, RestChangeKind.Charges, label, left, left, $"{use.Name}: roll {recovery.Regain} for the charges it regains on a {rest}", origin, ResourceId: use.EntryKey, Dice: recovery.Regain));
+                continue;
+            }
+            var regained = Math.Clamp(roll.Roll, 0, spent);
+            changes.Add(new(
+                id, RestChangeKind.Charges, label, left, left + regained,
+                $"{use.Name}: regain {regained} charge(s) on a {rest} ({recovery.Regain} showed {roll.Roll})", origin,
+                ResourceId: use.EntryKey, SpentAfter: spent - regained, Amount: regained, Dice: recovery.Regain));
+        }
+    }
+
+    /// <summary>
+    /// The equipment after the plan's charge changes, except those in <paramref name="skipped"/> (Wave 3 item 25, R160): each rest
+    /// writes <c>chargesSpent</c> on its entry, through the play path, never the save path. A change still waiting for its roll applies
+    /// nothing. An entry that has no id yet gets one here (R158).
+    /// </summary>
+    public static IReadOnlyList<EquipmentEntry> ApplyEquipment(IReadOnlyList<EquipmentEntry> equipment, RestPlan plan, IReadOnlySet<string> skipped)
+    {
+        ArgumentNullException.ThrowIfNull(equipment);
+        ArgumentNullException.ThrowIfNull(plan);
+        var result = equipment.ToList();
+        foreach (var change in plan.Changes.Where(c => c.Kind == RestChangeKind.Charges && c.SpentAfter is not null && !skipped.Contains(c.Id)))
+        {
+            var index = result.FindIndex(e => e.Id is { } id && id.ToString("D") == change.ResourceId);
+            if (index < 0 && change.ResourceId is ['#', .. var position] && int.TryParse(position, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var at) && at < result.Count && result[at].Id is null)
+                index = at;
+            if (index >= 0)
+                result[index] = result[index] with { ChargesSpent = change.SpentAfter, Id = result[index].Id ?? Guid.NewGuid() };
+        }
+        return result;
     }
 
     /// <summary>Pact Magic slots come back on a short or a long rest (both SRDs).</summary>

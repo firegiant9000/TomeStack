@@ -119,3 +119,23 @@ it('has no inverse for death saves and for ending concentration', () => {
   expect(inverseOf({ action: 'recordDeathSave', amount: 12 }, view(0, 0), view(0, 0))).toBeUndefined();
   expect(inverseOf({ action: 'endConcentration' }, view(1, 0), view(1, 0))).toBeUndefined();
 });
+
+// Wave 3 item 25 (D23): charges are put back by the other direction with the same amount on the same entry.
+const withUses = (uses: unknown[]): CharacterView => ({ character: { play: { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 } }, sheet: { itemUses: uses } }) as unknown as CharacterView;
+const wandUse = (entryId?: string) => ({ item: { contentId: 'c-wand', revisionId: 'r-wand' }, entryIndex: 1, ...(entryId ? { entryId } : {}) });
+
+it('undoes spending a charge with the regain of the same amount on the same entry, and the reverse', () => {
+  const spent = inverseOf({ action: 'spendCharge', amount: 2, entryId: 'e1' }, withUses([wandUse('e1')]), withUses([wandUse('e1')]))!;
+  expect(spent.label).toBe('spend charge 2');
+  expect(spent.inverse).toEqual([{ action: 'regainCharge', amount: 2, entryId: 'e1' }]);
+  expect(inverseOf({ action: 'regainCharge', amount: 1, entryId: 'e1' }, withUses([wandUse('e1')]), withUses([wandUse('e1')]))!.inverse).toEqual([
+    { action: 'spendCharge', amount: 1, entryId: 'e1' },
+  ]);
+});
+
+it('names the id an entry was given by the change it undoes, and offers nothing when the entry is not in the view after', () => {
+  // Spent by position and item while the entry had no id; the view after shows the id the service gave it.
+  const action = { action: 'spendCharge' as const, amount: 1, entryIndex: 1, contentId: 'c-wand' };
+  expect(inverseOf(action, withUses([wandUse()]), withUses([wandUse('given')]))!.inverse).toEqual([{ action: 'regainCharge', amount: 1, entryId: 'given' }]);
+  expect(inverseOf(action, withUses([wandUse()]), withUses([]))).toBeUndefined();
+});

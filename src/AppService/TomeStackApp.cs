@@ -283,8 +283,20 @@ public sealed partial class TomeStackApp : IDisposable
     {
         ArgumentNullException.ThrowIfNull(character);
         return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
-            ? character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt }
+            ? character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) }
             : character with { ArchivedAt = null }); // a save never creates an archived character
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R160): charges spent are play state on the equipment entry, so a save keeps the stored <c>chargesSpent</c> of
+    /// every entry the payload still has (matched by id), whatever the payload says; only the play and rest commands change it.
+    /// An entry the stored character does not have keeps what it carries.
+    /// </summary>
+    private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
+    {
+        if (payload is null || stored is null || payload.Any(e => e is null))
+            return payload!;
+        return [.. payload.Select(e => e.Id is { } id && stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e)];
     }
 
     private static PlayState WithoutOrphanedCompanionPlay(PlayState play, Character payload)

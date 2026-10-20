@@ -70,6 +70,12 @@ public enum PlayActionKind
 
     /// <summary>The Constitution saving throw after damage was made and kept: clears the pending DC.</summary>
     ClearConcentrationCheck,
+
+    /// <summary>Wave 3 item 25 (R160): spends <c>amount</c> charges of one equipment entry (<c>entryId</c>), written to the entry's <c>chargesSpent</c>.</summary>
+    SpendCharge,
+
+    /// <summary>Regains <c>amount</c> spent charges of one equipment entry by hand.</summary>
+    RegainCharge,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -83,7 +89,9 @@ public sealed record PlayCommand(
     string? ResourceId = null,
     string? Condition = null,
     string? ToggleId = null,
-    string? DamageType = null);
+    string? DamageType = null,
+    Guid? EntryId = null,
+    int? EntryIndex = null);
 
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
@@ -115,6 +123,8 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 
         var sheet = CharacterCalculator.Calculate(character, _store);
+        if (command.Action is PlayActionKind.SpendCharge or PlayActionKind.RegainCharge)
+            return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
         var play = character.Play;
         var hp = sheet.HitPoints!;
         int? AtMaximumIsNull(int value) => value >= hp.Maximum ? null : value;
@@ -168,6 +178,40 @@ public sealed partial class TomeStackApp
             play = play with { DeathSaves = new() };
         var view = SaveWithPlay(character with { Play = play });
         return damage is null ? view : view with { Damage = damage };
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
+    /// position and item. The entry gets its id here if it had none. The inverse of a spend is the regain of the same amount (D23).
+    /// </summary>
+    private static Character ChangeCharges(Character character, CharacterSheet sheet, PlayCommand command)
+    {
+        var use = (command.EntryId is { } id
+                ? sheet.ItemUses?.FirstOrDefault(u => u.EntryId == id)
+                : command.EntryIndex is { } index
+                    ? sheet.ItemUses?.FirstOrDefault(u => u.EntryIndex == index && u.EntryId is null && u.Item.ContentId == command.ContentId)
+                    : null)
+            ?? throw new AppValidationException([new("play.entry-unknown", "This character has no such item entry with charges.")]);
+        if (use.ChargesMax is null)
+            throw new AppValidationException([new("play.entry-unknown", "This character has no such item entry with charges.", use.Item)]);
+        if (command.Amount < 1)
+            throw new AppValidationException([new("play.amount-out-of-range", "Spend or regain at least one charge.", use.Item)]);
+        int spent;
+        if (command.Action == PlayActionKind.SpendCharge)
+        {
+            if (command.Amount > use.ChargesLeft)
+                throw new AppValidationException([new("play.charges-none-left", $"'{use.Name}' has {use.ChargesLeft} of {use.ChargesMax} charges left; {command.Amount} cannot be spent.", use.Item)]);
+            spent = use.ChargesSpent + command.Amount;
+        }
+        else
+        {
+            if (command.Amount > use.ChargesSpent)
+                throw new AppValidationException([new("play.charges-full", $"{use.ChargesSpent} charge(s) of '{use.Name}' are spent; {command.Amount} cannot be regained.", use.Item)]);
+            spent = use.ChargesSpent - command.Amount;
+        }
+        var equipment = character.Equipment.ToList();
+        equipment[use.EntryIndex] = equipment[use.EntryIndex] with { ChargesSpent = spent == 0 ? null : spent, Id = equipment[use.EntryIndex].Id ?? Guid.NewGuid() };
+        return character with { Equipment = equipment };
     }
 
     private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)

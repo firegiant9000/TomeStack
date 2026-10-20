@@ -679,7 +679,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
-        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
+        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} act={act} />
         <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <CurrencyPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />

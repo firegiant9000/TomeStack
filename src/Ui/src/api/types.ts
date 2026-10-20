@@ -375,6 +375,39 @@ export interface CharacterSheet {
   bloodied?: boolean;
   /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
   damageDefences?: DamageDefenceValue[];
+  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, carried or equipped; absent when there are none. */
+  itemUses?: ItemUseValue[];
+}
+
+/** When an item's charges come back; absent `regain` means all of them. */
+export interface ItemChargeRecovery {
+  on: RestPeriod;
+  regain?: string;
+}
+
+/**
+ * One equipment entry of an item with attunement or charges. `entryKey` names it for a rest roll or a charges roll: its id, or `#`
+ * and its position in the list while it has none (`entryId` absent). Charges are per entry; `chargesMax` is absent when the item has none.
+ */
+export interface ItemUseValue {
+  item: ContentReference;
+  name: string;
+  entryKey: string;
+  entryId?: string;
+  entryIndex: number;
+  equipped: boolean;
+  requiresAttunement: boolean;
+  attuned: boolean;
+  chargesMax?: number;
+  chargesSpent: number;
+  chargesLeft?: number;
+  recovery?: ItemChargeRecovery;
+}
+
+/** What the player rolled for the `regain` dice of one entry's charges on a rest: the whole total. */
+export interface ChargeRoll {
+  entry: string;
+  roll: number;
 }
 
 /** Where a damage defence comes from: the character's own list (no `content`) or a damage grant of active content. */
@@ -460,7 +493,9 @@ export type PlayActionKind =
   | 'toggleOff'
   | 'startConcentration'
   | 'endConcentration'
-  | 'clearConcentrationCheck';
+  | 'clearConcentrationCheck'
+  | 'spendCharge'
+  | 'regainCharge';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -472,12 +507,15 @@ export interface PlayAction {
   toggleId?: string;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
+  /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
+  entryId?: string;
+  entryIndex?: number;
 }
 
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges';
   slotLevel?: number;
   die?: number;
   amount?: number;
@@ -490,6 +528,9 @@ export interface RestChange {
   resourceId?: string;
   /** Set when the change depends on the situation; the player decides. */
   condition?: string;
+  /** `charges` (Wave 3 item 25): `resourceId` is the entry key, `dice` what the player still rolls while `spentAfter` is absent. */
+  dice?: string;
+  spentAfter?: number | null;
 }
 
 /** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
@@ -563,6 +604,8 @@ export interface RollTarget {
   versatile?: boolean;
   /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
   customAttack?: string;
+  /** The entry key of an item whose `regain` dice to roll for its charges (Wave 3 item 25). */
+  chargeEntry?: string;
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */

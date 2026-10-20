@@ -2973,3 +2973,69 @@ it('lists a toggle and a resource with an activation under their group, and swit
   expect(guard.checked).toBe(true);
   expect(document.activeElement).toBe(guard);
 });
+
+it('carries two copies of a charged wand that needs attunement: attuning applies it, charges are separate, and a long rest returns them by the rolled total (item 25)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Wand Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'item',
+    name: 'E2E Wand',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'modifier', id: 'wand-ac', operation: 'bonus', target: 'armorClass', value: '2' },
+      { type: 'item', id: 'wand-use', requiresAttunement: true, charges: { max: 3, recovery: { period: 'longRest', regain: '1d3' } } },
+    ],
+  });
+  await client.publish(draft);
+  await client.createCharacter({ name: 'E2E Wand Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Wand Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Wand Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  const armorClass = () => Number(/^(\d+)/.exec(summaryValue(hero, 'Armor Class'))![1]);
+  const before = armorClass();
+
+  // Two copies: an item with charges is offered again once it is carried.
+  for (const copies of [1, 2]) {
+    await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Wand/ })).toBeTruthy());
+    await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Wand/ }));
+    await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(within(equipment()).getAllByRole('checkbox', { name: /^Equip E2E Wand/ })).toHaveLength(copies));
+  }
+  expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2); // carried: charges show on Inventory too
+
+  // Equipped but not attuned: nothing applies, and the sheet says so. Attuning applies it once.
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip E2E Wand (copy 1 of 2)' }));
+  await within(equipment()).findByText('E2E Wand (copy 1 of 2) is not attuned, so its effects do not apply.');
+  expect(armorClass()).toBe(before);
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Attuned: E2E Wand (copy 1 of 2)' }));
+  await waitFor(() => expect(armorClass()).toBe(before + 2));
+
+  // Separate counts; focus stays on the button that was pressed.
+  const spend = () => within(equipment()).getByRole('button', { name: 'Spend a charge: E2E Wand (copy 1 of 2)' });
+  await user.click(spend());
+  await user.click(spend());
+  await waitFor(() => expect(within(equipment()).getByText('1 of 3 charges left')).toBeTruthy());
+  expect(within(equipment()).getByText('3 of 3 charges left')).toBeTruthy();
+  expect(document.activeElement).toBe(spend());
+
+  // A long rest asks for the 1d3, takes the total as rolled at the table, and returns that many (capped at the two spent).
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  await user.type(await within(rest).findByLabelText('E2E Wand: 1d3 rolled at the table (total)'), '2');
+  await user.click(within(rest).getByRole('button', { name: 'Add the 1d3 total: E2E Wand' }));
+  expect(await within(rest).findByRole('checkbox', { name: /^E2E Wand charges: 1 → 3/ })).toBeTruthy();
+  const finish = within(rest).getByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+  await openTab(user, hero, 'Inventory');
+  await waitFor(() => expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2));
+});

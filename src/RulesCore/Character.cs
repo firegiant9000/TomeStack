@@ -270,7 +270,10 @@ public sealed record Character
                 problems.Add(new("character.ability-out-of-range", $"{ability} score {score} must be between 1 and 30."));
         }
         problems.AddRange(Play.Validate());
-        foreach (var duplicate in Equipment.GroupBy(e => e.Item).Where(g => g.Count() > 1))
+        // Wave 3 item 25 (R158, R159): a second entry of one item exists only for an item that needs attunement or has charges, and
+        // such an entry always has an id, so a repeated item with any id-less copy is refused here. The application service checks
+        // that the item is one of those (it holds the catalog).
+        foreach (var duplicate in Equipment.GroupBy(e => e.Item).Where(g => g.Count() > 1 && g.Any(e => e.Id is null)))
             problems.Add(new("character.equipment-duplicate", "An item is recorded more than once; record one entry with its quantity.", duplicate.Key));
         foreach (var entry in Equipment.Where(e => e.Quantity is < 1 or > EquipmentEntry.MaxQuantity))
             problems.Add(new("character.equipment-quantity", $"Item quantity {entry.Quantity} must be between 1 and {EquipmentEntry.MaxQuantity}.", entry.Item));

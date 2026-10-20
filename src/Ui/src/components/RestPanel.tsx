@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, HitDiceValue, HitDieRoll, RestPeriod, RestPreview, RollRecord } from '../api/types';
+import type { ChargeRoll, CharacterView, HitDiceValue, HitDieRoll, RestChange, RestPeriod, RestPreview, RollRecord } from '../api/types';
 
 interface Props {
   characterId: string;
@@ -12,7 +12,7 @@ interface Props {
   onRested: (view: CharacterView, applied: number) => void;
   onCancel: () => void;
   onError: (error: unknown) => void;
-  /** Every hit-die roll, so the sheet can log it (D28); a rest never shows it as the Last roll. */
+  /** Every hit-die roll and every item-charge roll, so the sheet can log it (D28); a rest never shows it as the Last roll. */
   onRoll?: (record: RollRecord) => void;
 }
 
@@ -25,12 +25,14 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   // The proposal belongs to the view and the hit dice it was worked out for: after any other change (for example "Lose 1 hit
   // point" in the summary, or a die added or removed) it is stale and fetched again. The last proposal stays on screen
   // meanwhile (so a focused control is not unmounted) but "Finish" waits for the one for the current view and dice.
-  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown; rolls: HitDieRoll[] }>();
+  const [fetched, setFetched] = useState<{ preview: RestPreview; version: unknown; rolls: HitDieRoll[]; chargeRolls: ChargeRoll[] }>();
   const [rolls, setRolls] = useState<HitDieRoll[]>([]);
-  const [failure, setFailure] = useState<{ version: unknown; rolls: HitDieRoll[] }>();
+  // Wave 3 item 25: the totals rolled for the dice an item regains charges with, one per entry (the same way as the hit dice).
+  const [chargeRolls, setChargeRolls] = useState<ChargeRoll[]>([]);
+  const [failure, setFailure] = useState<{ version: unknown; rolls: HitDieRoll[]; chargeRolls: ChargeRoll[] }>();
   const preview = fetched?.preview;
-  const ready = fetched !== undefined && fetched.version === version && fetched.rolls === rolls;
-  const failed = failure !== undefined && failure.version === version && failure.rolls === rolls;
+  const ready = fetched !== undefined && fetched.version === version && fetched.rolls === rolls && fetched.chargeRolls === chargeRolls;
+  const failed = failure !== undefined && failure.version === version && failure.rolls === rolls && failure.chargeRolls === chargeRolls;
   const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -39,19 +41,19 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   useEffect(() => {
     let current = true;
     client
-      .restPreview(characterId, kind, rolls)
+      .restPreview(characterId, kind, rolls, chargeRolls)
       .then((next) => {
-        if (current) setFetched({ preview: next, version, rolls });
+        if (current) setFetched({ preview: next, version, rolls, chargeRolls });
       })
       .catch((error) => {
         if (!current) return;
-        setFailure({ version, rolls });
+        setFailure({ version, rolls, chargeRolls });
         onError(error);
       });
     return () => {
       current = false;
     };
-  }, [characterId, kind, rolls, version, onError]);
+  }, [characterId, kind, rolls, chargeRolls, version, onError]);
 
   // WCAG 2.4.3: the panel opens with focus on its heading.
   useEffect(() => heading.current?.focus(), []);
@@ -86,15 +88,46 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     changeRolls((r) => r.filter((_, i) => i !== index));
   }
 
+  // The charge rows: asking for a roll, or showing the one that was made. A roll in flight counts against finishing, like a hit die.
+  const [chargePending, setChargePending] = useState(0);
+
+  async function rollCharges(change: RestChange) {
+    const entry = change.resourceId;
+    if (!entry || !ready) return;
+    setChargePending((n) => n + 1);
+    try {
+      const record = await client.roll(characterId, { chargeEntry: entry });
+      setChargeRolls((r) => [...r.filter((c) => c.entry !== entry), { entry, roll: record.total }]);
+      onRoll?.(record);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setChargePending((n) => n - 1);
+    }
+  }
+
+  function addChargeRoll(change: RestChange, value: number) {
+    const entry = change.resourceId;
+    if (entry) setChargeRolls((r) => [...r.filter((c) => c.entry !== entry), { entry, roll: value }]);
+  }
+
+  function clearChargeRoll(change: RestChange) {
+    // The row asks for a roll again once the new proposal arrives, so focus moves to the heading now (WCAG 2.4.3).
+    if (!ready) return;
+    heading.current?.focus();
+    setChargeRolls((r) => r.filter((c) => c.entry !== change.resourceId));
+  }
+
   // A roll in flight is a die the proposal does not hold yet: finishing now would leave it out (and spend it anyway).
-  const rollingAny = Object.values(pending).some((n) => n > 0);
+  const rollingAny = Object.values(pending).some((n) => n > 0) || chargePending > 0;
 
   async function finish() {
     if (!preview || !ready || failed || busy || rollingAny) return;
     setBusy(true);
     try {
-      const applied = preview.changes.filter((c) => !skipped.includes(c.id)).length;
-      onRested(await client.rest(characterId, kind, preview.basis, skipped, rolls), applied);
+      // A charges row still waiting for its roll applies nothing, so it is not counted.
+      const applied = preview.changes.filter((c) => !skipped.includes(c.id) && !(c.kind === 'charges' && c.spentAfter == null && c.dice)).length;
+      onRested(await client.rest(characterId, kind, preview.basis, skipped, rolls, chargeRolls), applied);
     } catch (error) {
       onError(error);
     } finally {
@@ -102,7 +135,8 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     }
   }
 
-  const toggles = preview?.changes.filter((c) => c.kind !== 'hitDie') ?? [];
+  const diceCharges = preview?.changes.filter((c) => c.kind === 'charges' && c.dice) ?? [];
+  const toggles = preview?.changes.filter((c) => c.kind !== 'hitDie' && !diceCharges.includes(c)) ?? [];
   const spent = preview?.changes.filter((c) => c.kind === 'hitDie') ?? [];
 
   return (
@@ -143,7 +177,32 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
       ) : (
         <>
           {!ready && !failed && <p className="hint">Updating the proposal…</p>}
-          {toggles.length === 0 && spent.length === 0 ? (
+          {diceCharges.length > 0 && (
+            <fieldset>
+              <legend>Item charges (roll the dice to see how many come back)</legend>
+              {diceCharges.map((change) =>
+                change.spentAfter == null ? (
+                  <ChargeRollPicker key={change.id} change={change} onRoll={() => rollCharges(change)} onAdd={(value) => addChargeRoll(change, value)} />
+                ) : (
+                  <div key={change.id} className="inline-form">
+                    <label className="choice">
+                      <input
+                        type="checkbox"
+                        checked={!skipped.includes(change.id)}
+                        onChange={() => setSkipped((s) => (s.includes(change.id) ? s.filter((id) => id !== change.id) : [...s, change.id]))}
+                      />
+                      {change.label}: {change.from} → {change.to}
+                      <span className="option-source">{change.reason}</span>
+                    </label>
+                    <button type="button" aria-disabled={!ready} onClick={() => clearChargeRoll(change)}>
+                      Clear the roll: {change.label}
+                    </button>
+                  </div>
+                ),
+              )}
+            </fieldset>
+          )}
+          {toggles.length === 0 && spent.length === 0 && diceCharges.length === 0 ? (
             <p>A {name.toLowerCase()} would change nothing{kind === 'shortRest' ? ' yet' : ''}.</p>
           ) : (
             toggles.length > 0 && (
@@ -187,6 +246,38 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
         </button>
       </div>
     </section>
+  );
+}
+
+function ChargeRollPicker({ change, onRoll, onAdd }: { change: RestChange; onRoll: () => void; onAdd: (value: number) => void }) {
+  const [entered, setEntered] = useState('');
+  const value = Number(entered);
+  const valid = entered !== '' && Number.isInteger(value) && value >= 0;
+  const item = change.label.replace(/ charges$/, '');
+  return (
+    <div className="inline-form">
+      <span>
+        {change.label}: {change.from} left. Regains {change.dice}.
+      </span>
+      <button type="button" onClick={onRoll}>
+        Roll {change.dice}: {item}
+      </button>
+      <label className="field">
+        {item}: {change.dice} rolled at the table (total)
+        <input type="number" min={0} value={entered} onChange={(e) => setEntered(e.target.value)} />
+      </label>
+      <button
+        type="button"
+        aria-disabled={!valid}
+        onClick={() => {
+          if (!valid) return;
+          onAdd(value);
+          setEntered('');
+        }}
+      >
+        Add the {change.dice} total: {item}
+      </button>
+    </div>
   );
 }
 

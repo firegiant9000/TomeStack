@@ -79,6 +79,15 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff':
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       return backing(action) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+    case 'spendCharge':
+    case 'regainCharge': {
+      // Wave 3 item 25: the exact inverse is the other direction with the same amount on the same entry. An entry that had no id gets one
+      // by the first change, so the inverse names the id the view after it shows. A rest's charge recovery is not undoable (a rest is
+      // not a play command; the view it produces makes any earlier entry stale).
+      const entryId = action.entryId ?? after.sheet.itemUses?.find((u) => u.entryIndex === action.entryIndex && u.item.contentId === action.contentId)?.entryId;
+      if (!entryId) return undefined;
+      return entry([{ action: action.action === 'spendCharge' ? 'regainCharge' : 'spendCharge', amount: action.amount, entryId }]);
+    }
     case 'startConcentration': {
       const held = b?.concentration?.spell.contentId;
       if (held === action.contentId) return undefined; // already concentrating on it: nothing changed

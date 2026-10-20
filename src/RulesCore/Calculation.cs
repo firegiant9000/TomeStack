@@ -101,10 +101,36 @@ public sealed record CharacterSheet(
     IReadOnlyList<ToggleValue>? Toggles = null,
     IReadOnlyList<ScaleValue>? Scales = null,
     bool? Bloodied = null,
-    IReadOnlyList<DamageDefenceValue>? DamageDefences = null)
+    IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
+    IReadOnlyList<ItemUseValue>? ItemUses = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>Wave 3 item 25: when an item's charges come back (content v10 <c>item.charges.recovery</c>). Null <paramref name="Regain"/>: all of them.</summary>
+public sealed record ItemChargeRecoveryInfo(RestPeriod On, string? Regain);
+
+/// <summary>
+/// Wave 3 item 25 (R158, R159, R171): one equipment entry of an item with a v10 <c>item</c> effect that needs attunement or has
+/// charges, carried or equipped alike. <paramref name="EntryKey"/> names the entry for a change: its <c>id</c>, or <c>#</c> and its
+/// position in the list while it has none (<paramref name="EntryId"/> null). <paramref name="Attuned"/> is what is recorded; the item's
+/// other effects apply only while it is equipped and, when <paramref name="RequiresAttunement"/>, attuned. Charges are per entry:
+/// <paramref name="ChargesMax"/> is null when the item has none; <paramref name="ChargesLeft"/> is the maximum less
+/// <paramref name="ChargesSpent"/>, never below 0.
+/// </summary>
+public sealed record ItemUseValue(
+    ContentReference Item,
+    string Name,
+    string EntryKey,
+    Guid? EntryId,
+    int EntryIndex,
+    bool Equipped,
+    bool RequiresAttunement,
+    bool Attuned,
+    int? ChargesMax,
+    int ChargesSpent,
+    int? ChargesLeft,
+    ItemChargeRecoveryInfo? Recovery);
 
 /// <summary>
 /// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
@@ -636,6 +662,7 @@ public static class CharacterCalculator
 
         var attacks = CollectAttacks(active, values, family, weaponProficiencies);
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
+        var itemUses = CollectItemUses(character, catalog);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -649,7 +676,32 @@ public static class CharacterCalculator
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
-            damageDefences.Count > 0 ? damageDefences : null), active);
+            damageDefences.Count > 0 ? damageDefences : null, itemUses.Count > 0 ? itemUses : null), active);
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R158 to R160, R171): every equipment entry of a published item whose v10 <c>item</c> effect needs attunement or
+    /// has charges, equipped or only carried, in list order. Charges belong to the entry, not the item: two copies have two counts.
+    /// The spent count is recorded as the player says; the sheet only shows what is left (never below 0).
+    /// </summary>
+    private static List<ItemUseValue> CollectItemUses(Character character, IContentCatalog catalog)
+    {
+        var uses = new List<ItemUseValue>();
+        for (var index = 0; index < character.Equipment.Count; index++)
+        {
+            var entry = character.Equipment[index];
+            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision
+                || revision.Effects.OfType<ItemEffect>().FirstOrDefault() is not { } item
+                || (item.RequiresAttunement != true && item.Charges is null))
+                continue;
+            var spent = entry.ChargesSpent ?? 0;
+            var recovery = item.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
+            uses.Add(new(
+                entry.Item, revision.Name, entry.Id is { } id ? id.ToString("D") : $"#{index}", entry.Id, index, entry.Equipped,
+                item.RequiresAttunement == true, entry.Attuned == true, item.Charges?.Max, spent,
+                item.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery));
+        }
+        return uses;
     }
 
     /// <summary>
@@ -1291,13 +1343,21 @@ public static class CharacterCalculator
                 active.Add(item);
         }
         // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
-        foreach (var entry in character.Equipment.Where(e => e.Equipped))
+        // Wave 3 item 25 (R159): an item equipped twice applies once, and an item that needs attunement (content v10, Q13) applies only
+        // while at least one equipped entry of it is attuned. A revision below v10 has no typed item effect, so no gate.
+        var equipped = character.Equipment.Where(e => e.Equipped).ToList();
+        foreach (var entry in equipped)
         {
             if (!seen.Add(entry.Item) || Admit(entry.Item, null) is not { } item)
                 continue;
             if (item.Revision.Kind != ContentKind.Item)
             {
                 diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
+                continue;
+            }
+            if (item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true) && !equipped.Any(e => e.Item == entry.Item && e.Attuned == true))
+            {
+                diagnostics.Add(new("item.not-attuned", $"'{item.Revision.Name}' is equipped but needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", entry.Item));
                 continue;
             }
             active.Add(item);

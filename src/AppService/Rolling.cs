@@ -26,7 +26,8 @@ public sealed record RollCommand(
     ContentReference? Weapon = null,
     bool Damage = false,
     bool Versatile = false,
-    Guid? CustomAttack = null);
+    Guid? CustomAttack = null,
+    string? ChargeEntry = null);
 
 public sealed partial class TomeStackApp
 {
@@ -48,7 +49,7 @@ public sealed partial class TomeStackApp
         RollRequest request;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
             + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
-            + (command.CustomAttack is not null ? 1 : 0);
+            + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0);
         if (targets > 1)
             throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell, a weapon or your own attack.")]);
         if (command.CustomAttack is { } customId)
@@ -111,6 +112,15 @@ public sealed partial class TomeStackApp
                     ? new RollRequest(dice, RollMode.Normal, command.Critical, [], provenance)
                     : throw new AppValidationException([new("roll.spell-no-dice", $"'{spell.Name}' has no dice to roll.", spellReference)]);
             }
+        }
+        else if (command.ChargeEntry is { } entry)
+        {
+            // Wave 3 item 25 (R171): the dice an item regains charges with on a rest, rolled here so they appear in the roll strip. Nothing is saved.
+            var use = sheet.ItemUses?.FirstOrDefault(u => u.EntryKey == entry)
+                ?? throw new AppValidationException([new("roll.charges-unknown", "This character has no such item entry with charges.")]);
+            var dice = use.Recovery?.Regain
+                ?? throw new AppValidationException([new("roll.charges-no-dice", $"'{use.Name}' has no dice to roll for its charges.", use.Item)]);
+            request = new RollRequest(dice, RollMode.Normal, false, [], new RollProvenance("charges.regain", $"{use.Name} charges", use.Item, use.Name));
         }
         else if (command.HitDie is { } die)
         {

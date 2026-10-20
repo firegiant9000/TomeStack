@@ -273,6 +273,10 @@ span.warn { color: var(--warn); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
 .resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+/* Wave 3 item 25: an item's charges on Inventory. The row wraps (400% reflow); each button is at least 24 CSS px (WCAG 2.5.8). */
+.charges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); min-width: 0; }
+.charges button { min-height: 1.5rem; min-width: 1.5rem; max-width: 100%; overflow-wrap: anywhere; }
+.charges .hint { overflow-wrap: anywhere; }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
