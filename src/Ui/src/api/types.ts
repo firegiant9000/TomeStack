@@ -1452,6 +1452,10 @@ export interface RestorePreview {
   currencyAfter?: Currency;
   /** Names of the detail fields (such as "alignment") the restore changes; never their text. Set only when some differ (D36). */
   detailsChange?: string[];
+  /** Whether the restore changes the custom items, the custom attacks, or the experience points, damage defences and companions (R128). Flags only, never names. */
+  customItemsChange?: boolean;
+  customAttacksChange?: boolean;
+  otherSheetValuesChange?: boolean;
 }
 
 export interface RestoreResult {

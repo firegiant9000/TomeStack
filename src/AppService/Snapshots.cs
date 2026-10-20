@@ -45,6 +45,9 @@ public sealed record RestoreSnapshotRequest(Guid Token, bool Confirm = false);
 /// <param name="CurrencyNow">The coins now, set only when the restore changes them (coins roll back with the snapshot; D21).</param>
 /// <param name="CurrencyAfter">The coins the restore brings back, set only when they differ from the current ones.</param>
 /// <param name="DetailsChange">The names of the detail fields (such as "alignment" or "languages") the restore changes, set only when some differ (details roll back with the snapshot; D36). Names only, never the text.</param>
+/// <param name="CustomItemsChange">Whether the custom items differ (they roll back with the snapshot; R128). A flag, never the names.</param>
+/// <param name="CustomAttacksChange">Whether the custom attacks differ (R128).</param>
+/// <param name="OtherSheetValuesChange">Whether the experience points, damage defences or companions differ (R128).</param>
 public sealed record RestorePreview(
     Guid Token,
     SnapshotSummary Snapshot,
@@ -58,7 +61,10 @@ public sealed record RestorePreview(
     IReadOnlyList<Diagnostic>? CampaignWarnings = null,
     Currency? CurrencyNow = null,
     Currency? CurrencyAfter = null,
-    IReadOnlyList<string>? DetailsChange = null);
+    IReadOnlyList<string>? DetailsChange = null,
+    bool CustomItemsChange = false,
+    bool CustomAttacksChange = false,
+    bool OtherSheetValuesChange = false);
 
 /// <param name="Undo">The snapshot of the character as it was just before, taken in the same transaction.</param>
 public sealed record RestoreResult(CharacterView View, SnapshotSummary Undo);
@@ -132,7 +138,12 @@ public sealed partial class TomeStackApp
             [.. warningsThen.Where(w => !warningsNow.Any(n => n.Code == w.Code && n.Content == w.Content))],
             restored.Currency != current.Currency ? current.Currency : null,
             restored.Currency != current.Currency ? restored.Currency : null,
-            DifferingDetails(current.Details, restored.Details));
+            DifferingDetails(current.Details, restored.Details),
+            TempJson(current.CustomItems) != TempJson(restored.CustomItems),
+            TempJson(current.CustomAttacks) != TempJson(restored.CustomAttacks),
+            TempJson(current.Xp) != TempJson(restored.Xp)
+                || TempJson(current.DamageDefences) != TempJson(restored.DamageDefences)
+                || TempJson(current.Companions) != TempJson(restored.Companions));
     }
 
     /// <summary>The names of the detail fields that differ between two details (a field name and nothing of the text), or null when none do.</summary>

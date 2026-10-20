@@ -114,6 +114,38 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void The_restore_preview_flags_custom_entries_and_other_sheet_values_without_naming_them()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "plain"));
+
+        var same = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.False(same.CustomItemsChange);
+        Assert.False(same.CustomAttacksChange);
+        Assert.False(same.OtherSheetValuesChange);
+
+        var item = new CustomItem(Guid.NewGuid(), "Fixture-rope", 1, null, false);
+        var attack = new CustomAttack(Guid.NewGuid(), "Fixture-stick", 2, "1d4", "bludgeoning", null);
+        var companion = new Companion(Guid.NewGuid(), "Fixture-pony", null, null, 5, null, null, null);
+        temp.App.SaveCharacter(saved with { CustomItems = [item], CustomAttacks = [attack] });
+        var custom = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.True(custom.CustomItemsChange);
+        Assert.True(custom.CustomAttacksChange);
+        Assert.False(custom.OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Xp = 300 });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+        temp.App.SaveCharacter(saved with { DamageDefences = [new("fire", DamageDefenceKind.Resistance)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+        temp.App.SaveCharacter(saved with { Companions = [companion] });
+        var others = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.True(others.OtherSheetValuesChange);
+        Assert.False(others.CustomItemsChange);
+        Assert.DoesNotContain("Fixture-", JsonSerializer.Serialize(others, RulesJson.Options), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
     {
         using var temp = new TempApp();

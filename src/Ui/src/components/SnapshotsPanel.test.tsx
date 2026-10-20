@@ -51,6 +51,17 @@ it('names the detail fields the restore changes, and says nothing about details 
   expect(quiet.textContent).not.toContain('Details go back');
 });
 
+it('says one sentence for each custom-entry flag the restore sets, and none when unset (R128)', async () => {
+  const region = await openPreview(preview({ customItemsChange: true, customAttacksChange: true, otherSheetValuesChange: true }));
+  expect(region.textContent).toContain('Your own items go back to the snapshot too.');
+  expect(region.textContent).toContain('Your own attacks go back to the snapshot too.');
+  expect(region.textContent).toContain('Experience points, damage resistances and companions go back to the snapshot too.');
+  cleanup();
+  const quiet = await openPreview(preview({}));
+  expect(quiet.textContent).not.toContain('Your own');
+  expect(quiet.textContent).not.toContain('Experience points');
+});
+
 it('names a snapshot with an empty label by its reason, never by an empty name (carry 5)', async () => {
   vi.mocked(client.snapshots).mockResolvedValue({ items: [{ ...snapshot, label: '', reason: 'beforeRestore' }], hasMore: false });
   vi.mocked(client.restorePreview).mockResolvedValue(preview({}));
