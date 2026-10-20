@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, ContentOption, EquipmentEntry } from '../api/types';
-import { directSave, type SheetSave } from './sheetSave';
+import { directSave, EntryGone, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
@@ -43,6 +43,12 @@ export function EquipmentPanel({ view, onChanged, onError, saveCharacter }: Prop
     }
   }
 
+  // The new value is the opposite of the latest saved one, not of what this render shows (G10); an item that is gone is refused (G9).
+  function toggled(list: EquipmentEntry[], entry: EquipmentEntry): EquipmentEntry[] {
+    if (!list.some((e) => sameRef(e.item, entry.item))) throw new EntryGone(`${nameOf(entry)} was removed meanwhile, so nothing was saved.`);
+    return list.map((e) => (sameRef(e.item, entry.item) ? { ...e, equipped: !e.equipped } : e));
+  }
+
   // Carried items keep their names from every revision; new items are offered at their newest revision (SPEC I-06).
   const addable = items.filter((o) => o.compatible && !o.superseded && !equipment.some((e) => sameRef(e.item, o.reference)));
 
@@ -72,7 +78,7 @@ export function EquipmentPanel({ view, onChanged, onError, saveCharacter }: Prop
                       <input
                         type="checkbox"
                         checked={entry.equipped}
-                        onChange={() => save((list) => list.map((e) => (sameRef(e.item, entry.item) ? { ...e, equipped: !entry.equipped } : e)))}
+                        onChange={() => save((list) => toggled(list, entry))}
                       />
                       Equip {nameOf(entry)}
                       {entry.quantity > 1 ? ` (${entry.quantity})` : ''}

@@ -22,7 +22,7 @@ import {
   type ItemDraft,
   type Problems,
 } from './customModel';
-import { directSave, type SheetSave } from './sheetSave';
+import { directSave, EntryGone, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
@@ -174,10 +174,16 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
         focusOn(`${config.prefix}-${verdict.field}`);
       } else {
         const entry = config.build(target.id, submitted);
-        saved = await config.persist((list) => (target.isNew ? [...list, entry] : list.map((e) => (e.id === target.id ? entry : e))));
+        saved = await config.persist((list) => {
+          if (target.isNew) return [...list, entry];
+          // G9: an edit to an entry that is gone from the latest saved list is refused, not dropped under a "Saved".
+          if (!list.some((e) => e.id === target.id)) throw new EntryGone(`${entry.name} was removed meanwhile, so the edit was not saved.`);
+          return list.map((e) => (e.id === target.id ? entry : e));
+        });
       }
     } catch (error) {
-      config.onError(error); // what was typed stays
+      if (error instanceof EntryGone) config.onStatus(error.message);
+      else config.onError(error); // what was typed stays
     }
     running.current = false;
     setSaving(false);

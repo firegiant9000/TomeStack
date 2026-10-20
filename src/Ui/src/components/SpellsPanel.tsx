@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Ability, Character, CharacterView, PlayAction, RollMode, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
+import type { Ability, Character, CharacterView, KnownSpell, PlayAction, RollMode, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
+import { EntryGone } from './sheetSave';
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
@@ -58,12 +59,13 @@ export function SpellsPanel({
   }
 
   function togglePrepared(entry: SpellcastingEntry, spell: SpellEntry) {
-    onSave((latest) => ({
-      ...latest,
-      spells: (latest.spells ?? []).map((s) =>
-        s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId ? { ...s, prepared: !spell.prepared } : s,
-      ),
-    }));
+    // The new value comes from the latest saved list, not from what this render shows (G10).
+    const here = (s: KnownSpell) => s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId;
+    onSave((latest) => {
+      const list = latest.spells ?? [];
+      if (!list.some(here)) throw new EntryGone(`${spell.name} was removed meanwhile, so nothing was saved.`);
+      return { ...latest, spells: list.map((s) => (here(s) ? { ...s, prepared: !s.prepared } : s)) };
+    });
   }
 
   return (

@@ -9,6 +9,17 @@ import type { Character, CharacterView } from '../api/types';
  */
 export type SheetSave = (update: (latest: Character) => Character) => Promise<CharacterView>;
 
+/**
+ * G9/G10: an updater throws this when the entry its change is about is no longer in the latest saved character (removed by a
+ * restore, an import or another panel). Nothing is saved; the panel says so with its own message, not "Saved".
+ */
+export class EntryGone extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EntryGone';
+  }
+}
+
 /** The save for a panel mounted on its own (tests, or no sheet around it): one save from the character it was given. */
 export const directSave = (character: Character): SheetSave => (update) => client.saveCharacter(update(character));
 

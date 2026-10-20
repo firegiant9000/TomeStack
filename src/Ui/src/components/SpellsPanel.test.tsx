@@ -119,3 +119,16 @@ it('a marks-only query filters nothing and announces nothing (D30)', async () =>
   expect(screen.queryByText(/spells shown/)).toBeNull();
   expect(screen.getByRole('button', { name: 'Concentrate on Fixture Hush' })).toBeTruthy();
 });
+
+it('works out the prepared flag from the latest saved list, and refuses a spell that was removed meanwhile (G10)', async () => {
+  const user = userEvent.setup();
+  const onSave = vi.fn();
+  const v = view();
+  render(<SpellsPanel view={v} act={() => {}} roll={() => {}} onSave={onSave} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Prepared: Fixture Veil' })); // shown prepared
+  const update = onSave.mock.calls[0]![0] as (latest: CharacterView['character']) => CharacterView['character'];
+  const entry = (prepared: boolean) => ({ caster: ref(1).contentId, spell: ref(11), prepared });
+  // The latest saved list has it unprepared (changed elsewhere meanwhile): the press toggles that, not the stale render.
+  expect(update({ ...v.character, spells: [entry(false)] }).spells).toEqual([entry(true)]);
+  expect(() => update({ ...v.character, spells: [] })).toThrow(/removed/);
+});

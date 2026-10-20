@@ -9,6 +9,7 @@ import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { Character, CharacterView, CustomAttack, CustomItem } from '../api/types';
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
+import type { SheetSave } from './sheetSave';
 
 vi.mock('../api/client', () => ({ client: { saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
@@ -120,6 +121,29 @@ it('edits an item (Save held until something changes), and focus returns to its 
   await waitFor(() => expect(latest.character.customItems![0]).toMatchObject({ id: 'i1', name: 'Testy Rope Long', equipped: true }));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Testy Rope Long' })));
   expect(latest.character.customItems![1]).toEqual(lamp);
+});
+
+it('refuses an edit to an item that was removed meanwhile, with its own status and not "Saved" (G9)', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const saveCharacter: SheetSave = async (update) => view(update(view({ customItems: [lamp] }).character) as Partial<Character>);
+  render(
+    <CustomItemsPanel
+      view={view({ customItems: [rope, lamp] })}
+      onChanged={onChanged}
+      onError={(e) => errors.push(e)}
+      onStatus={(t) => status.push(t)}
+      saveCharacter={saveCharacter}
+    />,
+  );
+  await user.click(screen.getByRole('button', { name: 'Edit Testy Rope' }));
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), ' Long');
+  await user.click(screen.getByRole('button', { name: 'Save item' }));
+  await waitFor(() => expect(status).toHaveLength(1));
+  expect(status[0]).toMatch(/removed/);
+  expect(status[0]).not.toMatch(/^Saved/);
+  expect(onChanged).not.toHaveBeenCalled();
+  expect(errors).toEqual([]);
 });
 
 it('cancel returns focus to the opener, and an unsaved draft is dropped', async () => {
