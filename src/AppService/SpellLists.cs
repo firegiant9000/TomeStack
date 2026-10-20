@@ -86,7 +86,7 @@ public sealed partial class TomeStackApp
                 };
                 var saved = stored with { Edited = edited, UpdatedAt = _time.GetUtcNow() };
                 _store.SaveImportCandidate(saved);
-                updated.Add(saved);
+                updated.Add(_store.FindImportCandidate(saved.Id) ?? saved); // the row as stored, with its fresh Etag (R134)
                 if (marked && !onlyThisKey)
                     notes.Add(new(id, ["spell-list.other-lists-unreviewed"]));
             }

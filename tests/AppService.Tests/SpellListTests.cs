@@ -58,6 +58,22 @@ public class SpellListTests
     }
 
     [Fact]
+    public void The_rows_returned_for_a_spell_list_add_carry_the_etag_as_stored_after_the_write()
+    {
+        // R134: the panel reloads these rows; a pre-write etag would make its next accept or edit look stale.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var veil = Named(temp, jobId, "Fixture Frost Veil");
+        var before = temp.EtagOf(veil.Id);
+
+        var result = temp.App.AddCandidatesToSpellList(new([veil.Id], "wizard"));
+
+        var returned = Assert.Single(result.Updated);
+        Assert.NotEqual(before, returned.Etag);
+        Assert.Equal(temp.EtagOf(veil.Id), returned.Etag);
+    }
+
+    [Fact]
     public void A_spell_candidate_with_a_list_and_no_other_unsure_field_can_then_be_accepted_with_the_key()
     {
         var (temp, _, jobId) = Imported();
