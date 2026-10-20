@@ -322,6 +322,9 @@ public sealed partial class TomeStackApp
         var stub = writes.Stub;
         if (request.CreateClassRow is not null && stub is null)
             throw Refused("ddb.class-not-offered", "A class cannot be created for that line of the sheet. Choose it again in the matches step, or leave it out.");
+        // R141: when a class is offered, the apply must say which publish choice the summary was calculated for (a missing value is refused).
+        if (stub is not null && request.PreviewedPublishClass is null)
+            throw Refused("ddb.publish-changed", "The publish choice is not the one the summary was calculated for. Nothing was created; look at the summary again.");
 
         // Item 16: the publish tick belongs to the drafts the user was shown. Unless the drafts derived now are exactly those
         // (by row id, in any order), nothing is written and the token is kept. The refusal names no entry.
@@ -611,7 +614,7 @@ public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? Cam
 /// Item 16, the consent token (D33's <c>expected</c> pattern): the row ids of the reference drafts the user was shown. Required
 /// with <c>PublishReferences</c>; the apply refuses (<c>ddb.references-changed</c>) unless the drafts it derives are exactly these.
 /// </param>
-/// <param name="PreviewedPublishClass">R129: the <c>PublishClass</c> of the preview the user was shown. When given and different, the apply refuses (<c>ddb.publish-changed</c>).</param>
+/// <param name="PreviewedPublishClass">R129: the <c>PublishClass</c> of the preview the user was shown. When different, the apply refuses (<c>ddb.publish-changed</c>); when a class is offered it is required (a missing value is refused too, R141).</param>
 public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null, bool KeepNotRead = true, bool? PreviewedPublishClass = null);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>

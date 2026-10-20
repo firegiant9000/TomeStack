@@ -650,7 +650,7 @@ public class TextSheetParserTests(ITestOutputHelper output)
         new(token, family, null, [], [], false, CreateClassRow: create, KeepNotRead: keep);
 
     private static DdbApplyRequest Apply(Guid token, string family = RulesFamilies.Srd51, string? create = null, bool keep = true) =>
-        new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, KeepNotRead: keep);
+        new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, KeepNotRead: keep, PreviewedPublishClass: false);
 
     private static ContentReference Srd(int n) => new(Guid.Parse($"52c00000-0000-4000-8000-{n:D12}"), Guid.Parse($"52e00000-0000-4000-8000-{n:D12}"));
 

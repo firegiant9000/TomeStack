@@ -63,6 +63,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
+  /** R141: the publish choice the shown preview was calculated with; Create sends it, so the service can tell a changed choice from the one shown. */
+  const [previewedPublish, setPreviewedPublish] = useState(false);
   /** A preview that failed, keyed to the request it answered; it ends the loading state and offers "Try again". */
   const [previewError, setPreviewError] = useState<{ key: string; message: string }>();
   const [retry, setRetry] = useState(0);
@@ -132,6 +134,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         if (!current) return;
         setPreview(next);
         setPreviewFor(requestKey);
+        setPreviewedPublish(request.publishClass ?? false);
         setPreviewError(undefined);
         // A class that can no longer be created (the family changed what is installed, or its hit die is not readable) is let go.
         if (request.createClassRow && !next.stub) {
@@ -223,7 +226,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (!request || created || applying) return;
     try {
       setApplying(true);
-      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '' ? (preview?.referenceDrafts ?? []).map((d) => d.rowId) : false);
+      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '' ? (preview?.referenceDrafts ?? []).map((d) => d.rowId) : false, previewedPublish);
       live.current = undefined; // spent
       setCreated(true);
       await onCreated(result.characterId, result);

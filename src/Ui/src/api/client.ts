@@ -300,13 +300,13 @@ export function createClient(transport: Transport) {
     ddbPreview: (request: DdbPreviewRequest) => call<DdbPreview>('ddb.preview', request),
     /** Only the summary's "Create character" button calls this. */
     /** `references`: false for no publish, else the row ids of the reference drafts the summary showed (the consent token the service re-checks). */
-    ddbApply: (request: DdbPreviewRequest, publishClass = false, references: string[] | false = false) =>
+    ddbApply: (request: DdbPreviewRequest, publishClass: boolean, references: string[] | false, previewedPublishClass: boolean) =>
       call<DdbApplyResult>('ddb.apply', {
         ...request,
         confirm: true,
         publishClass,
-        // R129: the publish choice the shown preview was calculated for; the service refuses an apply that differs.
-        previewedPublishClass: request.publishClass ?? false,
+        // R129/R141: the publish choice of the preview the user was shown (not of the request state); the service refuses an apply that differs.
+        previewedPublishClass,
         publishReferences: references !== false,
         ...(references === false ? {} : { expectedReferences: references }),
       }),

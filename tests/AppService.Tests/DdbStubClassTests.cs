@@ -36,7 +36,7 @@ public class DdbStubClassTests
         new(token, family, null, [], [], false, CreateClassRow: create);
 
     private static DdbApplyRequest Apply(Guid token, string? create = null, bool publish = false, string family = RulesFamilies.Srd51) =>
-        new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, PublishClass: publish);
+        new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, PublishClass: publish, PreviewedPublishClass: publish);
 
     // ---- F3/R129: the preview describes the character apply saves ----
 
@@ -86,6 +86,26 @@ public class DdbStubClassTests
         Assert.DoesNotContain(Tinkerer, refused.Message, StringComparison.Ordinal);
         Assert.Equal(before, Counts(h));
         Assert.NotNull(h.Temp.App.DdbSessions.Peek(token));
+    }
+
+    [Fact]
+    public void An_apply_that_does_not_say_which_publish_choice_the_summary_showed_is_refused_when_a_class_is_offered()
+    {
+        // G5/R141: a missing previewedPublishClass used to skip the guard.
+        using var h = new DdbHarness();
+        var before = Counts(h);
+        var token = Read(h, Sheet());
+
+        var refused = Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(token, Row0, publish: false) with { PreviewedPublishClass = null }));
+
+        Assert.Equal("ddb.publish-changed", refused.Code);
+        Assert.Equal(before, Counts(h));
+        Assert.NotNull(h.Temp.App.DdbSessions.Peek(token));
+
+        // With no class offered there is no publish choice to agree on, so a missing value is not what stops this apply.
+        var plain = Read(h, Sheet());
+        var other = Record.Exception(() => h.Temp.App.ApplyDdbImport(Apply(plain, null, publish: false) with { PreviewedPublishClass = null }));
+        Assert.NotEqual("ddb.publish-changed", (other as AppValidationException)?.Code);
     }
 
     internal static (int Sources, int Revisions, int Characters, int Notes) Counts(DdbHarness h) =>

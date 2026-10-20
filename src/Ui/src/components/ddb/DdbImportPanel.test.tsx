@@ -671,7 +671,7 @@ it('shows the stub in full on the summary, leaves Publish it unticked and says t
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
-  expect(vi.mocked(client.ddbApply).mock.calls[0]).toEqual([expect.objectContaining({ createClassRow: 'class:0' }), false, false]);
+  expect(vi.mocked(client.ddbApply).mock.calls[0]).toEqual([expect.objectContaining({ createClassRow: 'class:0' }), false, false, false]); // the last is the publish choice the shown preview was calculated for (R141)
 });
 
 it('sends publishClass true once Publish it is ticked, and the draft line goes away', async () => {
@@ -686,6 +686,7 @@ it('sends publishClass true once Publish it is ticked, and the draft line goes a
 
   await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
   expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(true);
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[3]).toBe(true); // the displayed preview was calculated with the class published (R141)
 });
 
 it('re-previews when Publish it is toggled (R129) and holds both publish ticks, with a linked reason and focus kept, until the new preview is in', async () => {
