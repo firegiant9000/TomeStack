@@ -179,7 +179,7 @@ A feat or feature the sheet names, that TomeStack does not have and that carries
 
 ## From text (item 19a, D37, ADR-017)
 
-Step 1 also offers "Import a character from text…": a labelled box ("Character text") and a file input (`.txt`, `.md`). `TextSheetParser` turns the text into the same `DdbSheet` the PDF layouts produce (layout id `text`, a synthetic layout outside `LayoutMaps.All`, so no PDF is ever recognised as text), then the hold, matching, numbers, summary and apply are unchanged. No worker is involved, nothing is written to disk, and the text is not kept after the token is spent.
+Step 1 also offers "Import a character from text…": a labelled box ("Character text") and a file input (`.txt`, `.md`). `TextSheetParser` turns the text into the same `DdbSheet` the PDF layouts produce (layout id `text`, a synthetic layout outside `LayoutMaps.All`, so no PDF is ever recognised as text), then the hold, matching, numbers, summary and apply are unchanged. No worker is involved, nothing is written to disk, and the text itself is not kept after the token is spent. The lines that could not be read are the exception, by the user's choice: with "Keep the lines that were not read as session notes" ticked (the default) they become session notes on the character, so they are in backups (not in snapshots or share packages). The step-1 hint says so: "The text itself isn't kept. Lines that can't be read become session notes if you keep the tick." (F6, R131).
 
 **Command.** `ddb.readText { text }` returns the same `{ token, layout, suggestedFamily, summary }` as `ddb.read`, with `summary.notRead` (a count) added. `ddb.preview` and `ddb.apply` take `keepNotRead` (default true); it is part of the request, so the stale-preview hold covers it.
 

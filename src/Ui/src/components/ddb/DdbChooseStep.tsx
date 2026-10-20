@@ -109,7 +109,7 @@ export function DdbChooseStep({ read, onRead, onError }: Props) {
           <div id="ddb-text-panel">
             <p className="hint">
               Paste a character written as text, or choose a .txt or .md file. TomeStack reads labelled lines such as “Name:”, “Class:” and “STR 10”, and
-              lists any line it could not read. The text is read once and not kept.
+              lists any line it could not read. The text itself isn&apos;t kept. Lines that can&apos;t be read become session notes if you keep the tick.
             </p>
             <label className="field">
               Character text

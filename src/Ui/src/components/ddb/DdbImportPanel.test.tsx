@@ -1049,6 +1049,15 @@ it('opens a labelled textarea, moves focus into it, and returns focus to the but
   expect(document.activeElement).toBe(button);
 });
 
+it('says the text itself is not kept and that unreadable lines become session notes if the tick stays on (R131)', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const hint = screen.getByText(/lists any line it could not read/).textContent ?? '';
+  expect(hint).toContain("The text itself isn't kept. Lines that can't be read become session notes if you keep the tick.");
+  expect(hint).not.toContain('read once');
+});
+
 it('keeps Read the text disabled until there is text and sends the pasted text unchanged', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
