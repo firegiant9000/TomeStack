@@ -808,10 +808,29 @@ function EntryEditor(props: {
     };
   }, [props.initial.kind, family, onError]);
 
-  // The draft the formula previews (D61) are worked out against. Memoised: a preview asks again whenever this object
-  // changes, so it must change with the draft and not with every render.
+  // What the formula previews (D61) are worked out against: only the draft's scale columns (the one thing a preview reads
+  // from it) with the identity fields the server requires. A preview asks again whenever this object changes, so it is
+  // memoised on a key of exactly those inputs: editing a name, a summary or any other rule asks for nothing.
   const [previewId] = useState(() => crypto.randomUUID());
-  const previewRevision = useMemo(() => ({ ...forServer(revision), revisionId: previewId }), [revision, previewId]);
+  const previewKey = JSON.stringify({
+    kind: revision.kind,
+    schemaVersion: revision.schemaVersion,
+    scales: revision.effects.filter((e) => e.type === 'scale'),
+  });
+  const previewRevision = useMemo<ContentRevision>(() => {
+    const { kind, schemaVersion, scales } = JSON.parse(previewKey) as { kind: ContentRevision['kind']; schemaVersion?: number; scales: Effect[] };
+    return {
+      contentId: props.initial.contentId,
+      revisionId: previewId,
+      schemaVersion,
+      kind,
+      name: 'Preview',
+      rulesFamilies: [],
+      provenance: props.initial.provenance,
+      status: 'draft',
+      effects: scales,
+    };
+  }, [previewKey, previewId, props.initial.contentId, props.initial.provenance]);
 
   const update = (change: Partial<ContentRevision>) => setRevision((r) => ({ ...r, ...change }));
   const setEffect = (index: number, effect: Effect) => update({ effects: revision.effects.map((e, i) => (i === index ? effect : e)) });
@@ -1362,7 +1381,7 @@ function SpellcastingFields(props: {
           onChange={(e) => onChange({ ...effect, spellsFormula: e.target.value || undefined })}
         />
       </label>
-      <FormulaPreview id={`rule-${effect.id}-spells-preview`} formula={effect.spellsFormula ?? ''} revision={props.previewRevision} />
+      <FormulaPreview id={`rule-${effect.id}-spells-preview`} formula={effect.spellsFormula ?? ''} revision={props.previewRevision} floorAtZero />
       <div className="field">
         <label>
           Spell slots: one line per class level 1 to 20, the slots of spell levels 1, 2, … separated by commas
@@ -1535,7 +1554,7 @@ function EffectEditor(props: {
             Uses (a number or a formula such as PB, CLASS_LEVEL or SCALE.column1)
             <input value={effect.maximum} aria-describedby={`rule-${effect.id}-maximum-preview`} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
           </label>
-          <FormulaPreview id={`rule-${effect.id}-maximum-preview`} formula={effect.maximum} revision={props.previewRevision} />
+          <FormulaPreview id={`rule-${effect.id}-maximum-preview`} formula={effect.maximum} revision={props.previewRevision} floorAtZero />
         </>
       )}
       {effect.type === 'recovery' && (
@@ -1567,7 +1586,7 @@ function EffectEditor(props: {
             How many (all, a number or a formula)
             <input value={effect.amount} aria-describedby={`rule-${effect.id}-amount-preview`} onChange={(e) => onChange({ ...effect, amount: e.target.value })} />
           </label>
-          <FormulaPreview id={`rule-${effect.id}-amount-preview`} formula={effect.amount} revision={props.previewRevision} />
+          <FormulaPreview id={`rule-${effect.id}-amount-preview`} formula={effect.amount} revision={props.previewRevision} floorAtZero />
         </>
       )}
       {effect.type === 'roll' && (

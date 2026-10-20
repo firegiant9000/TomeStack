@@ -62,6 +62,31 @@ public class FormulaPreviewTests
     }
 
     [Fact]
+    public void Only_a_class_or_subclass_column_is_used()
+    {
+        Assert.NotNull(FormulaPreview.Preview("SCALE.column1", Revision(ContentKind.Feature, Column())).Unavailable);
+        Assert.Null(FormulaPreview.Preview("SCALE.column1", Revision(ContentKind.Subclass, Column())).Unavailable);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(FormulaLimits.MaxLiteral + 1)]
+    public void A_column_with_a_value_outside_0_to_the_literal_limit_is_not_used(int bad)
+    {
+        var column = new ScaleEffect { Id = "col", ScaleId = "column1", Label = "Column 1", Values = [.. Enumerable.Range(1, 19), bad], Automation = AutomationStatus.Automatic };
+        Assert.NotNull(FormulaPreview.Preview("SCALE.column1", Revision(ContentKind.Class, column)).Unavailable);
+        var edge = new ScaleEffect { Id = "col", ScaleId = "column1", Label = "Column 1", Values = [.. Enumerable.Range(1, 18), 0, FormulaLimits.MaxLiteral], Automation = AutomationStatus.Automatic };
+        Assert.Null(FormulaPreview.Preview("SCALE.column1", Revision(ContentKind.Class, edge)).Unavailable);
+    }
+
+    [Fact]
+    public void Floor_at_zero_shows_what_the_sheet_shows()
+    {
+        Assert.Equal<int?>([-1, 0, 1, 2, 3], Values(FormulaPreview.Preview("PB - 3", null)));
+        Assert.Equal<int?>([0, 0, 1, 2, 3], Values(FormulaPreview.Preview("PB - 3", null, floorAtZero: true)));
+    }
+
+    [Fact]
     public void A_failure_at_one_level_leaves_the_other_levels()
     {
         var points = FormulaPreview.Preview("10 / (CLASS_LEVEL - 5)", null).Points;

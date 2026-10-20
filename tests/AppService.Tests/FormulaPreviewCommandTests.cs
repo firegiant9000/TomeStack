@@ -38,6 +38,17 @@ public class FormulaPreviewCommandTests
     }
 
     [Fact]
+    public void Passes_floorAtZero_through()
+    {
+        using var temp = new TempApp();
+        Assert.Equal<int?>([-1, 0, 1, 2, 3], temp.App.PreviewFormula(new("PB - 3")).Points.Select(p => p.Value));
+        Assert.Equal<int?>([0, 0, 1, 2, 3], temp.App.PreviewFormula(new("PB - 3", FloorAtZero: true)).Points.Select(p => p.Value));
+        var reply = new CommandDispatcher(temp.App).Dispatch("""{"id":"1","command":"content.previewFormula","payload":{"formula":"PB - 3","floorAtZero":true}}""");
+        using var json = JsonDocument.Parse(reply);
+        Assert.Equal(0, json.RootElement.GetProperty("result").GetProperty("points")[0].GetProperty("value").GetInt32());
+    }
+
+    [Fact]
     public void Writes_nothing()
     {
         using var temp = new TempApp();

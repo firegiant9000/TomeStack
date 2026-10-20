@@ -14,7 +14,7 @@ function previewable(formula: string): boolean {
  * A formula's value at sample class levels (D61), asked 300 ms after the last keystroke. `id` is what the input's
  * aria-describedby points to; the text is read on focus, so it is not a live region.
  */
-export function FormulaPreview({ id, formula, revision }: { id: string; formula: string; revision?: ContentRevision }) {
+export function FormulaPreview({ id, formula, revision, floorAtZero }: { id: string; formula: string; revision?: ContentRevision; floorAtZero?: boolean }) {
   // The answer is stored with the formula it answers, so a formula that stops being previewable (or changes) never
   // shows an older result.
   const [answer, setAnswer] = useState<{ formula: string; outcome: FormulaPreviewResult | 'failed' } | null>(null);
@@ -24,7 +24,7 @@ export function FormulaPreview({ id, formula, revision }: { id: string; formula:
     // Each run of this effect owns one request; the cleanup (formula change or unmount) makes its reply stale.
     let stale = false;
     const timer = setTimeout(() => {
-      client.previewFormula(formula, revision).then(
+      client.previewFormula(formula, revision, floorAtZero).then(
         (r) => {
           if (!stale) setAnswer({ formula, outcome: r });
         },
@@ -37,7 +37,7 @@ export function FormulaPreview({ id, formula, revision }: { id: string; formula:
       stale = true;
       clearTimeout(timer);
     };
-  }, [formula, revision]);
+  }, [formula, revision, floorAtZero]);
 
   // The container stays (so the input's aria-describedby always resolves) and, for a formula that gets a preview, keeps
   // its room while the answer is on its way, so the form below does not jump on each keystroke.

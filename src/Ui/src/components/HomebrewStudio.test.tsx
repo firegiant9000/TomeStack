@@ -162,4 +162,31 @@ it('a_resource_maximum_shows_its_preview_and_is_described_by_it', async () => {
   expect(uses.getAttribute('aria-describedby')).toBe('rule-resource-1-maximum-preview');
   expect(document.getElementById('rule-resource-1-maximum-preview')?.textContent).toContain('Level 20: 6');
   expect(vi.mocked(client.previewFormula).mock.calls.at(-1)?.[0]).toBe('PB');
+  expect(vi.mocked(client.previewFormula).mock.calls.at(-1)?.[2]).toBe(true); // Uses is floored at 0, as on the sheet
+});
+
+// D61 review: only the scale columns are sent, and only a scale edit asks again.
+it('an_edit_outside_the_scale_columns_does_not_ask_for_the_previews_again', async () => {
+  const user = userEvent.setup();
+  const resource = { type: 'resource', id: 'resource-1', resourceId: 'resource-1', label: 'Testy Pool', maximum: 'PB' };
+  const entry = {
+    contentId: 'id-r',
+    name: 'Testy Resource',
+    kind: 'feat',
+    revisions: [],
+    latest: { contentId: 'id-r', revisionId: 'r-r', name: 'Testy Resource', kind: 'feat', status: 'draft', rulesFamilies: ['srd-5.1'], provenance: {}, effects: [resource] },
+  } as unknown as StudioEntry;
+  vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  vi.mocked(client.previewFormula).mockReset();
+  vi.mocked(client.previewFormula).mockResolvedValue({ formula: 'PB', points: [{ level: 1, value: 2 }] });
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Edit Testy Resource' }));
+  await screen.findByText('Level 1: 2');
+  const asked = vi.mocked(client.previewFormula).mock.calls.length;
+  expect(vi.mocked(client.previewFormula).mock.calls.at(-1)?.[1]?.effects).toEqual([]); // the resource rule is not sent
+
+  await user.type(screen.getByLabelText('Name'), ' renamed');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(vi.mocked(client.previewFormula).mock.calls.length).toBe(asked);
 });

@@ -24,14 +24,15 @@ public static class FormulaPreview
     public const int SampleScore = 10;
 
     /// <summary>
-    /// The revision's own automatic class columns with all 20 values, as the calculator takes them (the first per scale id).
-    /// Empty when there is no revision.
+    /// The revision's own automatic columns with all 20 values, each 0 to <see cref="FormulaLimits.MaxLiteral"/>, when it is a
+    /// class or subclass, as the calculator takes them (the first per scale id). Empty when there is no revision.
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<int>> Scales(ContentRevision? revision) =>
-        revision is null
+        revision is null || revision.Kind is not (ContentKind.Class or ContentKind.Subclass)
             ? new Dictionary<string, IReadOnlyList<int>>(StringComparer.Ordinal)
             : revision.Effects.OfType<ScaleEffect>()
-                .Where(s => s.Automation == AutomationStatus.Automatic && s.Values.Count == Character.MaxLevel)
+                .Where(s => s.Automation == AutomationStatus.Automatic && s.Values.Count == Character.MaxLevel
+                    && s.Values.All(v => v is >= 0 and <= FormulaLimits.MaxLiteral))
                 .GroupBy(s => s.ScaleId)
                 .ToDictionary(g => g.Key, g => g.First().Values, StringComparer.Ordinal);
 
@@ -47,8 +48,11 @@ public static class FormulaPreview
         _ => null,
     };
 
-    /// <summary>Evaluates <paramref name="formula"/> at <paramref name="levels"/> (default <see cref="SampleLevels"/>) against <paramref name="revision"/>'s columns.</summary>
-    public static FormulaPreviewResult Preview(string formula, ContentRevision? revision, IReadOnlyList<int>? levels = null)
+    /// <summary>
+    /// Evaluates <paramref name="formula"/> at <paramref name="levels"/> (default <see cref="SampleLevels"/>) against <paramref name="revision"/>'s columns.
+    /// <paramref name="floorAtZero"/> shows a value below 0 as 0, as the sheet does for resource uses, recoveries and spells.
+    /// </summary>
+    public static FormulaPreviewResult Preview(string formula, ContentRevision? revision, IReadOnlyList<int>? levels = null, bool floorAtZero = false)
     {
         if (!Formula.TryParse(formula, allowScales: true, out var parsed, out var error))
             return new(formula, error, null, []);
@@ -65,7 +69,7 @@ public static class FormulaPreview
         }
         var points = (levels ?? SampleLevels)
             .Select(level => parsed.TryEvaluate(id => Resolve(id, level, scales), out var value, out var problem)
-                ? new FormulaPreviewPoint(level, value, null)
+                ? new FormulaPreviewPoint(level, floorAtZero ? Math.Max(value, 0) : value, null)
                 : new FormulaPreviewPoint(level, null, problem!.Message))
             .ToList();
         return new(formula, null, null, points);

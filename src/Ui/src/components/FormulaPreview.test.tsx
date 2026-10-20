@@ -48,6 +48,16 @@ it('waits_300ms_before_asking', async () => {
   expect(client.previewFormula).toHaveBeenCalledTimes(1);
 });
 
+it('forwards_floorAtZero_to_the_client', async () => {
+  vi.mocked(client.previewFormula).mockResolvedValue(result([0, 0, 1, 2, 3]));
+  const { rerender } = render(<FormulaPreview id="p" formula="PB - 3" floorAtZero />);
+  await settle();
+  expect(vi.mocked(client.previewFormula).mock.calls.at(-1)).toEqual(['PB - 3', undefined, true]);
+  rerender(<FormulaPreview id="p" formula="PB - 4" />);
+  await settle();
+  expect(vi.mocked(client.previewFormula).mock.calls.at(-1)?.[2]).toBeFalsy();
+});
+
 it.each(['', 'all', '3'])('does_not_ask_for_empty_all_or_a_plain_number (%j)', async (formula) => {
   const { container } = render(<FormulaPreview id="p" formula={formula} />);
   await settle(1000);

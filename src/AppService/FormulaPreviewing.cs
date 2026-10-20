@@ -4,9 +4,9 @@ namespace TomeStack.AppService;
 
 /// <summary>
 /// <c>content.previewFormula</c> (D61): a formula to preview, optionally with the unsaved revision it belongs to (its own
-/// scales are read) and the levels to sample (null: 1, 5, 11, 16, 20).
+/// scales are read), the levels to sample (null: 1, 5, 11, 16, 20) and whether values below 0 show as 0.
 /// </summary>
-public sealed record FormulaPreviewRequest(string? Formula, ContentRevision? Revision = null, IReadOnlyList<int>? Levels = null);
+public sealed record FormulaPreviewRequest(string? Formula, ContentRevision? Revision = null, IReadOnlyList<int>? Levels = null, bool FloorAtZero = false);
 
 public sealed partial class TomeStackApp
 {
@@ -23,6 +23,6 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("formula-preview.levels", "Preview levels are 1 to 20, at most 20 of them.")]);
         if (request.Revision is { } revision && revision.Effects.Count > MaxCompareEffects)
             throw new AppValidationException([new("formula-preview.too-large", $"Formula preview covers revisions of up to {MaxCompareEffects} rules.", revision.Reference)]);
-        return FormulaPreview.Preview(request.Formula, request.Revision, request.Levels);
+        return FormulaPreview.Preview(request.Formula, request.Revision, request.Levels, request.FloorAtZero);
     }
 }
