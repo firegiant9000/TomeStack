@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- **The local-path check also refuses the console and superscript device names (R116):** a file named `CONIN$`, `CONOUT$`, `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²` or `LPT³` (any case, with or without an extension, in any folder of the path) is refused like `CON` or `COM1` already were.
 - **A page with many class headings is read in bounded time, and Cancel stops it (R127):** the per-page class split now splits at most 8 class titles; a page with more is read whole, as before the split existed. Each window is read once (a window that did not change after a class was dropped is not read again), and the split checks for Cancel on every pass.
 - **The importer's entry names both ways in (R133):** the sidebar button and the import's title read "Import a character (sheet or text)…" (they said "character sheet (PDF)" even though a text entry sat inside), and step 1's first line names a fillable sheet PDF, or pasted text or a .txt or .md file. The text importer's hint no longer says the text is "read once and not kept": the text itself isn't kept, but the lines that could not be read become session notes if you keep that tick (R131).
 - **Text import counts spells past the list limit:** a spell list over 1,000 entries used to drop the extra spells after one placeholder with no word about it. The report now says how many spells were beyond the limit and were not read (a number, never a name), as it already did for feats and features.

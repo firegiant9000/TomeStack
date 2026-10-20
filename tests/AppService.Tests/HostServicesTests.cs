@@ -137,6 +137,18 @@ public class HostServicesTests
     [InlineData(@"C:\CON\sheet.pdf", ".pdf", false)]
     [InlineData(@"C:\fixture\console.pdf", ".pdf", true)]
     [InlineData(@"C:\fixture\COM10.pdf", ".pdf", true)]
+    [InlineData(@"C:\fixture\CONIN$.pdf", ".pdf", false)]           // the console handles and the superscript device names (Windows reserves them too)
+    [InlineData(@"C:\fixture\conout$.pdf", ".pdf", false)]
+    [InlineData(@"C:\CONIN$\sheet.pdf", ".pdf", false)]
+    [InlineData(@"C:\CONOUT$\sheet.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\COM\u00b9.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\com\u00b2.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\COM\u00b3.txt.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\LPT\u00b9.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\lpt\u00b2.PDF", ".pdf", false)]
+    [InlineData("C:\\LPT\u00b3\\sheet.pdf", ".pdf", false)]
+    [InlineData("C:\\fixture\\COM\u00b9x.pdf", ".pdf", true)]
+    [InlineData(@"C:\fixture\CONIN.pdf", ".pdf", true)]
     public void The_local_drive_rule_takes_the_extension_as_a_parameter(string? path, string extension, bool expected) =>
         Assert.Equal(expected, LocalDrivePath.IsSafe(path, extension));
 

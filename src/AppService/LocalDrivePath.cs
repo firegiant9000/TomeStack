@@ -24,6 +24,7 @@ internal static class LocalDrivePath
     private static readonly HashSet<string> DeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "CONIN$", "CONOUT$", "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³", // the console handles and the superscript forms Windows reserves too
     };
 
     /// <summary>Windows treats <c>CON</c>, <c>nul.txt</c> and <c>COM1.anything</c> as a device, in any folder, so the name before the first dot decides.</summary>
