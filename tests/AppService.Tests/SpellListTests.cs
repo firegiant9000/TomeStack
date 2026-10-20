@@ -16,7 +16,7 @@ public class SpellListTests
         var source = temp.App.CreateHomebrewSource(new("Test Spell List Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         return (temp, source.Id, job.Id);
     }
 

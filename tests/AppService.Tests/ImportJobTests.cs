@@ -26,11 +26,8 @@ public class ImportJobTests
         return source.Id;
     }
 
-    private static ImportJobRecord Settle(TempApp temp, Guid jobId)
-    {
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
-        return temp.App.ImportStatus(jobId);
-    }
+    /// <summary>Waits for the job and fails, naming its status and code, unless it ended as <paramref name="expected"/> (Completed unless a test says otherwise).</summary>
+    private static ImportJobRecord Settle(TempApp temp, Guid jobId, ImportJobStatus expected = ImportJobStatus.Completed) => temp.WaitForImport(jobId, expected);
 
     private static ImportJobRecord WaitFor(TempApp temp, Guid jobId, Func<ImportJobRecord, bool> condition)
     {
@@ -222,7 +219,7 @@ public class ImportJobTests
         using var temp = new TempApp(new FailingExtractor("pdf.encrypted"));
         var sourceId = SourceWithBook(temp);
 
-        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
 
         Assert.Equal((ImportJobStatus.Failed, "pdf.encrypted"), (job.Status, job.FailureCode));
         Assert.Equal("failed", temp.App.ImportAudit(job.Id)[^1].Event);
@@ -351,7 +348,7 @@ public class ImportJobTests
     public void After_too_many_pages_that_kill_the_worker_the_run_fails_and_resume_continues_after_them()
     {
         using var temp = new TempApp(new DyingExtractor(6, new HashSet<int> { 1, 2, 3, 4, 5, 6 }));
-        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
+        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id, ImportJobStatus.Failed);
 
         Assert.Equal(ImportJobStatus.Failed, job.Status);
         Assert.Equal("worker.crashed", job.FailureCode);

@@ -46,11 +46,7 @@ public class ImportCandidateIdentityTests
         return (temp, source.Id, job.Id);
     }
 
-    private static ImportJobRecord Run(TempApp temp, Guid jobId)
-    {
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
-        return temp.App.ImportStatus(jobId);
-    }
+    private static ImportJobRecord Run(TempApp temp, Guid jobId) => temp.WaitForImport(jobId);
 
     private static StoredCandidate Class(TempApp temp, Guid jobId, string name) =>
         temp.App.ListCandidates(new(jobId)).Single(c => c.Candidate.ProposedKind == ContentKind.Class && c.Candidate.ProposedName == name);

@@ -25,7 +25,7 @@ public class CandidateReviewTests
         var source = temp.App.CreateHomebrewSource(new("Test Review Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         return (temp, source.Id, job.Id);
     }
 
@@ -436,7 +436,7 @@ public class CandidateReviewTests
         var source = temp.App.CreateHomebrewSource(new("Test One Family Book", [RulesFamilies.Srd51]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         var coat = Named(temp, job.Id, "Fixture Quilted Coat");
 
         var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Name: "Fixture Other", RulesFamilies: [RulesFamilies.Srd521])));
@@ -617,7 +617,7 @@ public class CandidateReviewTests
         var source = temp.App.CreateHomebrewSource(new("Test Review Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true, WrittenFor: [RulesFamilies.Srd521]));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         var coat = Named(temp, job.Id, "Fixture Quilted Coat");
 
         Assert.Equal([RulesFamilies.Srd521], coat.Current.RulesFamilies);
@@ -632,7 +632,7 @@ public class CandidateReviewTests
         var (temp, sourceId, firstJob) = Imported();
         using var _t = temp;
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(second.Id);
         var ember = Named(temp, firstJob, "Fixture Ember Lance");
         var again = Named(temp, second.Id, "Fixture Ember Lance");
         var stormcall = Named(temp, firstJob, "Fixture Stormcall");
@@ -665,7 +665,7 @@ public class CandidateReviewTests
         var (temp, sourceId, firstJob) = Imported();
         using var _t = temp;
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(second.Id);
         temp.Accept(new(Named(temp, firstJob, "Fixture Ember Lance").Id, Confirm: true));
         var twin = Named(temp, second.Id, "Fixture Ember Lance");
         Assert.Contains(temp.App.CheckCandidate(twin.Id).Blockers, b => b.Code == "import.already-accepted");
@@ -716,7 +716,7 @@ public class CandidateReviewTests
         var (temp, sourceId, firstJob) = Imported();
         using var _t = temp;
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(second.Id);
         var first = Named(temp, firstJob, "Fixture Ember Lance");
         var twin = Named(temp, second.Id, "Fixture Ember Lance");
 

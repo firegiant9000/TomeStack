@@ -215,7 +215,7 @@ public class SourcePackTests
         var source = app.CreateHomebrewSource(new("Test Review Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         app.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = app.StartImport(new(source.Id, WholeDocument: true));
-        app.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
 
         // As if the flag had been lost (a folder from before it existed, rewritten by hand): each import path sets it again.
         void Clear() => Execute(temp, $"UPDATE sources SET import_derived = 0, json = json_remove(json, '$.importDerived') WHERE id = '{source.Id:D}';");

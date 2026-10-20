@@ -16,7 +16,7 @@ public class ClassAcceptTests
         var source = temp.App.CreateHomebrewSource(new("Test Class Book", oneFamily ? [RulesFamilies.Srd521] : [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         return (temp, source.Id, job.Id);
     }
 
@@ -263,7 +263,7 @@ public class ClassAcceptTests
         var source = temp.App.CreateHomebrewSource(new("Test Class Book", [RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         return (temp, job.Id);
     }
 
@@ -398,7 +398,7 @@ public class ClassAcceptTests
         temp.Ignore(Named(temp, firstJob, "Fixture Beacon").Id);
 
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(second.Id);
         var lamplighter = Named(temp, second.Id, "Fixture Lamplighter");
 
         Assert.Contains("2 table features were reviewed in an earlier import and are not linked: add them in the studio.", lamplighter.Current.Uncertainties);

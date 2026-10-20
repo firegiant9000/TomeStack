@@ -53,6 +53,36 @@ internal sealed class TempApp : IDisposable
     /// <summary>R134: ignores as the panel does, sending the etag the candidate has now.</summary>
     public StoredCandidate Ignore(Guid candidateId) => App.IgnoreCandidate(new(candidateId, EtagOf(candidateId)));
 
+    /// <summary>
+    /// Waits for the running import to end (30 s unless <paramref name="timeout"/> says otherwise), then fails the test unless the wait
+    /// finished and the job's stored status is <paramref name="expected"/> (a test that expects any end passes <c>null</c>: it must still
+    /// finish). The failure names the status, the failure code, the page counts and whether the wait timed out; never document text.
+    /// </summary>
+    public ImportJobRecord WaitForImport(Guid jobId, ImportJobStatus? expected = ImportJobStatus.Completed, TimeSpan? timeout = null)
+    {
+        var limit = timeout ?? TimeSpan.FromSeconds(30);
+        var finished = true;
+        string? faulted = null;
+        try
+        {
+            if (App.RunningImport is { } task)
+                finished = task.Wait(limit);
+        }
+        catch (AggregateException e)
+        {
+            faulted = e.InnerException?.GetType().Name ?? e.GetType().Name;
+        }
+        var job = App.ImportStatus(jobId);
+        if (!finished || faulted is not null || (expected is { } want && job.Status != want))
+        {
+            Assert.Fail(
+                $"Import job {jobId:D}: expected {(expected?.ToString() ?? "any end")}, status {job.Status}, failure code {job.FailureCode ?? "none"}, " +
+                $"wait timed out: {!finished} (limit {limit.TotalSeconds:F0} s), task faulted: {faulted ?? "no"}, " +
+                $"pages done {job.PagesDone} of {job.PageCount?.ToString() ?? "?"}, failed {job.PagesFailed}, next {job.NextPage?.ToString() ?? "none"}, candidates {job.Candidates}.");
+        }
+        return job;
+    }
+
     private bool _closed;
 
     public void Reopen()

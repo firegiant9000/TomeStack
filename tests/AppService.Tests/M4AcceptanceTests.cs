@@ -72,8 +72,8 @@ public class M4AcceptanceTests(ITestOutputHelper output)
         temp.App.AttachPdf(source.Id, "book.pdf", pdf);
         var before = temp.App.ListContent(family).Count(o => o.SourceId == source.Id);
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromMinutes(30));
-        job = temp.App.ImportStatus(job.Id);
+        // Any end is reported (a failed read is carried in the outcome's failure code), but the job must have ended.
+        job = temp.WaitForImport(job.Id, expected: null, timeout: TimeSpan.FromMinutes(30));
         var candidates = job.Status == ImportJobStatus.Completed ? temp.App.ListCandidates(new(job.Id)) : [];
 
         foreach (var first in candidates.GroupBy(c => c.Candidate.ProposedKind).Select(g => g.First()))
