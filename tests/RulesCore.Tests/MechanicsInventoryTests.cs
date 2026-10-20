@@ -38,4 +38,53 @@ public class MechanicsInventoryTests
         Assert.Empty(report.Unsupported);
         Assert.Empty(MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid>()).Mechanics); // other sources only
     }
+
+    private static (MechanicsReport Report, ContentRevision Revision) Report(ContentRevision revision, Func<Character, Character> shape)
+    {
+        var source = new SourceRecord
+        {
+            Id = Homebrew, Title = "Test Homebrew", Publisher = "Personal homebrew", RulesFamilies = [RulesFamilies.Srd521],
+            EditionVersion = "homebrew", License = "Personal homebrew", Redistributable = false,
+        };
+        var pack = Fixtures.Pack();
+        var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, revision]);
+        var character = shape(Fixtures.Srd521Character());
+        return (MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid> { Homebrew }), revision);
+    }
+
+    [Fact]
+    public void Scale_effects_are_not_reported_unsupported()
+    {
+        var feat = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = 10, Kind = ContentKind.Feat, Name = "Test Scale Feat",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(Homebrew, new(4)), Status = RevisionStatus.Published,
+            Effects =
+            [
+                new ScaleEffect { Id = "ink-scale", ScaleId = "ink", Label = "Ink", Values = [.. Enumerable.Repeat(2, 20)] },
+                new RollEffect { Id = "ink-roll", RollId = "ink", Label = "Ink roll", Dice = "1d4", Bonus = "SCALE.ink" },
+            ],
+        };
+
+        var (report, _) = Report(feat, c => c with { Pins = [.. c.Pins, feat.Reference] });
+
+        Assert.Empty(report.Unsupported);
+        Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "ink-scale").Automation);
+    }
+
+    [Fact]
+    public void Item_effects_are_not_reported_unsupported_once_charges_apply()
+    {
+        var wand = new ContentRevision
+        {
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = 10, Kind = ContentKind.Item, Name = "Test Charged Wand",
+            RulesFamilies = [RulesFamilies.Srd521], Provenance = new(Homebrew, new(4)), Status = RevisionStatus.Published,
+            Effects = [new ItemEffect { Id = "use", Charges = new() { Max = 3 } }],
+        };
+
+        var (report, _) = Report(wand, c => c with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: true)] });
+
+        Assert.Empty(report.Unsupported);
+        Assert.Contains(report.Mechanics, m => m.EffectId == "use" && m.EffectType == ItemEffect.TypeName);
+    }
 }

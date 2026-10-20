@@ -42,6 +42,7 @@
 
 ### Fixed
 
+- **The mechanics report no longer lists scale values as unsupported (G3):** a per-level scale (`SCALE.<id>`) and an item's charges are known effect types, so the report counts them as automatic instead of flagging them as gaps.
 - **An import no longer fails with "took too long" on a busy computer (R151):** each search the importer runs to find entries may now take up to 1 second. Some searches cover a whole block or page of text. The limit was 0.1 s, which a busy computer could exceed on any search. A pattern that runs longer still stops the import with `detect.timeout`.
 - **A change refused because the item or spell is gone is announced as a status, not an error (R144):** toggling Equip on an item, or Prepared on a spell, that was removed meanwhile (by a restore, an import or another panel) saves nothing and says so in the polite status line, as the custom items and attacks already did. Focus stays on the control.
 - **The local-path check also refuses the console and superscript device names (R116):** a file named `CONIN$`, `CONOUT$`, `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²` or `LPT³` (any case, with or without an extension, in any folder of the path) is refused like `CON` or `COM1` already were.
