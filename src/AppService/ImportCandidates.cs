@@ -327,6 +327,12 @@ public sealed partial class TomeStackApp
         // The linked feature drafts are written first, so the class draft's grants pin drafts that exist (ADR-016).
         _store.InTransaction(() =>
         {
+            // The candidate is read again here, so the accept acts on what is stored at commit time: reviewed since the plan
+            // was made, or edited (the same compare-and-swap as an edit, R120), it is refused and nothing is written.
+            var current = FindCandidateOrThrow(request.CandidateId);
+            RequirePending(current);
+            RequireUnchanged(current, stored.Etag);
+            stored = current;
             // Fix round 1, item 7: the plan read each linked feature's status before the transaction; one reviewed since then
             // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
             if (plan.Linked.Any(l => l.Candidate is { } planned && _store.FindImportCandidate(planned.Id)?.Status != planned.Status))

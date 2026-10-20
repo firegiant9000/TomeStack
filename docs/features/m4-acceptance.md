@@ -61,6 +61,15 @@ To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PD
 
 The other kinds did not move (class 8, feat 47, spell 116, item 66); review sample accepted 3, as reference 2, ignored 1, pending 330. The 4 extra feature stubs and 9 extra links are names that match installed content but not exactly one installed feature in the class's families, which R67 now stubs instead of dropping. No class on this book gets a `spellcasting` proposal before or after: why (no slot table read, or a casting sentence the reader does not match) is **not reviewed**, and neither is the precision of any proposal here.
 
+**Class-import accuracy (Wave 0/1 minors, group d), SRD link and stub counts, old against new (counts only).** The change scopes the "Core … Traits" read to its own block, gives two classes on one page a window each, and re-reads the class inside the accept. `SrdDetectionMeasurementTests` now prints, for each SRD, the classes, links, linked features and reference stubs.
+
+| | SRD 5.1 (classes / links / stubs) | SRD 5.2.1 (classes / links / stubs) |
+| --- | --- | --- |
+| Old (before this change) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+| New | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+
+"Old" is the build before this change (`788bc60`), "new" the build with it. No number is recorded: the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor until it has been measured.
+
 ## Precision and recall (D3)
 
 Measured 2026-09-28 on both SRD PDFs, whose hashes match `licensing/srd-pack-review.md`, against the bundled packs (`SrdDetectionMeasurementTests`; the PDFs stay outside the repository). Details and the match rule are in `pdf-import.md`. The test now fails below floors set a little under these numbers. The floors were added after this measurement, and first ran later the same day (below).

@@ -95,12 +95,14 @@ public static partial class CandidateDetector
     /// Item 11 (R54, review fix): each class links the features its table names, owner-aware. Target order for a class C at page P with
     /// the next class table at page N: a detected feature whose class field names C; else the nearest detected feature with no class
     /// field in [P, N); else (R67) no link when exactly one installed feature has the name; else a stub owned by C. A detected feature
-    /// that names another class is never C's target, and a stub is never shared between classes. New stubs are appended to <paramref name="found"/>.
+    /// that names another class is never C's target, and a stub is never shared between classes. Two classes on one page have no window of
+    /// their own on that page (a feature there is placed under neither), and the pages after it belong to the last of them. New stubs are appended to <paramref name="found"/>.
     /// </summary>
     internal static List<CandidateLink> LinkClasses(List<DraftCandidate> found, IReadOnlyDictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, DetectionContext context, CancellationToken cancellationToken = default)
     {
         var owners = found.Where(c => c.ProposedKind == ContentKind.Class).ToDictionary(c => c.Id);
         var classPages = owners.Values.Select(c => c.Page.Start).Distinct().Order().ToList();
+        var onPage = owners.Values.GroupBy(c => c.Page.Start).ToDictionary(g => g.Key, g => g.Select(c => c.Id).ToList()); // in detection order: top to bottom
         var detected = found.Where(c => c.ProposedKind == ContentKind.Feature).OrderBy(c => c.Page.Start).ToLookup(c => Key(c.ProposedName));
         var links = new List<CandidateLink>();
         foreach (var (classId, features) in classFeatures)
@@ -110,11 +112,15 @@ public static partial class CandidateDetector
             var classKey = Key(owner.ProposedName);
             var start = owner.Page.Start;
             var next = classPages.Where(p => p > start).Select(p => (int?)p).FirstOrDefault();
+            // Classes sharing a page: a feature on that page cannot be placed under one of them, and the pages after it belong to the last.
+            var sharesPage = onPage[start].Count > 1;
+            var lastOnPage = onPage[start][^1] == classId;
+            bool InWindow(DraftCandidate c) => c.Page.Start == start ? !sharesPage : c.Page.Start > start && (next is null || c.Page.Start < next) && lastOnPage;
             foreach (var name in features.SelectMany(f => f.Value.Select(n => (Name: n, Level: f.Key))).Where(f => IsLinkable(f.Name)).GroupBy(f => Key(f.Name)).Select(g => (g.First().Name, Levels: g.Select(x => x.Level).Distinct().Order().ToList())))
             {
                 var candidates = detected[Key(name.Name)].ToList();
                 var target = candidates.FirstOrDefault(c => c.Fields.TryGetValue("class", out var named) && Key(named) == classKey)
-                    ?? candidates.FirstOrDefault(c => !c.Fields.ContainsKey("class") && c.Page.Start >= start && (next is null || c.Page.Start < next));
+                    ?? candidates.FirstOrDefault(c => !c.Fields.ContainsKey("class") && InWindow(c));
                 if (target is null)
                 {
                     // R67: one installed feature of that name is granted from at accept; two, or none, and the name gets a stub (R54).
@@ -939,19 +945,82 @@ public static partial class CandidateDetector
             return [];
         var className = titles[0];
         var following = followingFor();
+
+        // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
+        var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
+            ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
+        if (titles.Select(Key).Distinct(StringComparer.Ordinal).Count() > 1 && SplitClasses(page, lines, pageUnits, className, titleLine) is { Count: > 1 } split)
+        {
+            // Wave 0/1 minors (d): two classes on one page are read each from its own window, and the page's text after them goes to the last.
+            return [.. split.Select((s, i) => ClassCandidate(page, s.Name, s.Read.Features, s.Read.Table, s.Read.TextLines, context, classFeatures, i == split.Count - 1 ? following : [], previous))];
+        }
+        return ReadClassTable(page, lines, _ => true, titleLine) is { } read
+            ? [ClassCandidate(page, className, read.Features, read.Table, read.TextLines, context, classFeatures, following, previous)]
+            : [];
+    }
+
+    private sealed record ClassRead(IReadOnlyDictionary<int, IReadOnlyList<string>> Features, ClassTable? Table, List<TextLine> TextLines);
+
+    /// <summary>
+    /// The classes of a page with more than one class table, top to bottom, each with the read of its own window: from its
+    /// heading (its "Core … Traits" heading when that is printed above it) to the next class's. A title whose window holds no
+    /// table is not a class and is left out; null when the page cannot be split, and the whole page is read as one class.
+    /// </summary>
+    private static List<(string Name, ClassRead Read)>? SplitClasses(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, string className, string className0Title)
+    {
+        var names = new List<(string Name, string Title)> { (className, className0Title) };
+        foreach (var unit in pageUnits)
+        {
+            var title = unit.Lines[0];
+            if (ClassTableTitle().Match(title) is not { Success: true } m)
+                continue;
+            var name = TitleCase(m.Groups["name"].Value.Trim());
+            name = name.EndsWith(" Class", StringComparison.Ordinal) ? name[..^" Class".Length] : name;
+            if (name.Length == 0 || name == "Class" || names.Any(n => Key(n.Name) == Key(name)))
+                continue;
+            names.Add((name, pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{name} Features" || t.Trim() == $"The {name}") ?? title));
+        }
+        var anchored = new List<(string Name, string Title, double Y)>();
+        foreach (var (name, title) in names)
+        {
+            if (lines.Where(l => l.Line.Text == title).Select(l => l.Line).OrderByDescending(l => l.Y).FirstOrDefault() is not { } titleAt)
+                return null;
+            var core = lines.Select(l => l.Line).Where(l => l.Y > titleAt.Y && l.Text.Trim().Equals($"Core {name} Traits", StringComparison.OrdinalIgnoreCase)).Select(l => l.Y).DefaultIfEmpty(titleAt.Y).Max();
+            anchored.Add((name, title, core));
+        }
+        // A class whose own window holds no table is dropped, and the windows are drawn again without it.
+        while (anchored.Count > 1)
+        {
+            var ordered = anchored.OrderByDescending(a => a.Y).ToList();
+            var reads = ordered.Select((a, i) => (a.Name, Read: ReadClassTable(page, lines, WindowOf(ordered.Select(o => o.Y).ToList(), i), a.Title))).ToList();
+            if (reads.All(r => r.Read is not null))
+                return [.. reads.Select(r => (r.Name, r.Read!))];
+            var drop = reads.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Read is null && x.r.Name != className);
+            if (drop.r.Name is null)
+                return null; // the first class itself cannot be read in its window: read the page whole
+            anchored.RemoveAll(a => a.Name == drop.r.Name);
+        }
+        return null;
+    }
+
+    /// <summary>The lines from the <paramref name="index"/>th anchor down to the next (the first window also takes everything above it).</summary>
+    private static Func<TextLine, bool> WindowOf(List<double> anchors, int index) =>
+        l => (index == 0 || l.Y <= anchors[index] + 1) && (index == anchors.Count - 1 || l.Y > anchors[index + 1] + 1);
+
+    /// <summary>One class table read from the lines in a window: whole by position (D34), else by the legacy readers; null when no table is found.</summary>
+    private static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine)
+    {
+        var lines = allLines.Where(l => inWindow(l.Line)).ToList();
         var byLevel = new SortedDictionary<int, List<string>>();
 
         // Item 11 (D34): the whole table, read back by position; the legacy readers below stay for layouts it cannot read.
         var pageTextLines = lines.Select(l => l.Line).ToList();
-        // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
-        var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
-            ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
         if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
-            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context, classFeatures, following, previous)];
+            return new(table.FeaturesByLevel, table, pageTextLines);
         // A cell the running-header rule took for boilerplate (text repeated on many pages) can break the table: read it again whole.
-        var wholePage = page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
+        var wholePage = page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).Where(inWindow).ToList();
         if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine) is { Complete: true } whole)
-            return [ClassCandidate(page, className, whole.FeaturesByLevel, whole, wholePage, context, classFeatures, following, previous)];
+            return new(whole.FeaturesByLevel, whole, wholePage);
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
         var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
@@ -978,9 +1047,9 @@ public static partial class CandidateDetector
                 byLevel[int.Parse(row.Groups["level"].Value, CultureInfo.InvariantCulture)] = [row.Groups["features"].Value];
         }
         if (byLevel.Count == 0)
-            return [];
+            return null;
         var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
-        return [ClassCandidate(page, className, features, null, pageTextLines, context, classFeatures, following, previous)];
+        return new(features, null, pageTextLines);
     }
 
     /// <summary>A class candidate: the Features column by level, plus the effects its page supports (<see cref="ClassProposals"/>).</summary>

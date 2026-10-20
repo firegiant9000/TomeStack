@@ -95,7 +95,8 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
                 if (item is ExtractedPage page)
                     pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
             }
-            var candidates = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false));
+            var detected = CandidateDetector.DetectWithLimit(pages, new(Guid.NewGuid(), [family], _ => false));
+            var candidates = detected.Candidates;
             var truth = GroundTruth(version).ToList();
 
             foreach (var kind in new[] { ContentKind.Spell, ContentKind.Item, ContentKind.Feature, ContentKind.Feat, ContentKind.Class })
@@ -169,6 +170,13 @@ public class SrdDetectionMeasurementTests(ITestOutputHelper output)
                 belowFloor.Add($"{version} armor recall {armorRecall:P1} < {ArmorRecallFloor:P0}");
             if (acRight < armorMatched.Count)
                 belowFloor.Add($"{version} armor class {acRight}/{armorMatched.Count}");
+            // Wave 0/1 minors (d): the class links and the reference stubs the class tables add, counted (m4-acceptance.md); counts only, no floor.
+            var byId = candidates.ToDictionary(c => c.Id);
+            var linkedFeatures = detected.Links.Select(l => byId[l.FeatureId]).DistinctBy(c => c.Id).ToList();
+            var stubs = linkedFeatures.Count(c => c.Fields.TryGetValue("class", out var owner) && c.Excerpt.StartsWith($"{owner}, level ", StringComparison.Ordinal));
+            var linkLine = $"{version} class links: classes {candidates.Count(c => c.ProposedKind == ContentKind.Class)}, links {detected.Links.Count}, linked features {linkedFeatures.Count}, of them stubs {stubs}";
+            output.WriteLine(linkLine);
+            report.AppendLine(linkLine);
             output.WriteLine($"{version}: {pages.Count} pages, {candidates.Count} candidates");
             Assert.NotEmpty(candidates);
         }

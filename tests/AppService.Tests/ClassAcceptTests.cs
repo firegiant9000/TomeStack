@@ -444,6 +444,39 @@ public class ClassAcceptTests
     }
 
     [Fact]
+    public void A_class_edited_before_the_writes_is_refused_as_changed_and_nothing_is_written()
+    {
+        // Wave 0/1 minors (d): the accept acts on the stored class at commit time, with the same compare-and-swap as an edit (R120).
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+        temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(lamplighter with { Edited = lamplighter.Current with { Summary = "Edited by a second window." } });
+
+        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+
+        Assert.Equal(["import.candidate-changed"], Codes(refused));
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+        var stored = Named(temp, jobId, "Fixture Lamplighter");
+        Assert.Equal(CandidateStatus.Pending, stored.Status);
+        Assert.Equal("Edited by a second window.", stored.Current.Summary);
+    }
+
+    [Fact]
+    public void A_class_ignored_before_the_writes_is_refused_as_reviewed_and_nothing_is_written()
+    {
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+        temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(lamplighter with { Status = CandidateStatus.Ignored });
+
+        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+
+        Assert.Equal(["candidate.already-reviewed"], Codes(refused));
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+        Assert.Equal(CandidateStatus.Ignored, Named(temp, jobId, "Fixture Lamplighter").Status);
+    }
+
+    [Fact]
     public void Confirmed_effect_ids_are_a_set_so_a_repeated_id_is_accepted_once()
     {
         var (temp, _, jobId) = Imported();

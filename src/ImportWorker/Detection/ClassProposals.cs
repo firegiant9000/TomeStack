@@ -191,10 +191,23 @@ public static partial class ClassProposals
     public static IReadOnlyList<string> LabelledLines(IReadOnlyList<TextLine> lines, IReadOnlyList<TextLine>? previousPage = null, string className = "")
     {
         // The 2024 SRD prints "Core <Class> Traits" at the foot of the page before the class's feature table for some classes.
-        IReadOnlyList<TextLine> core = previousPage is { Count: > 0 } && className.Length > 0 && previousPage.Any(l => l.Text.Trim().Equals($"Core {className} Traits", StringComparison.OrdinalIgnoreCase))
-            ? previousPage : [];
+        // Only that heading's own block is read: from the heading down to the next "Core … Traits" heading (another class's) or the foot of the page.
+        IReadOnlyList<TextLine> core = previousPage is { Count: > 0 } && className.Length > 0 ? CoreBlock(previousPage, className) : [];
         return [.. JoinedLabels(lines), .. JoinedLabels(core), .. lines.Select(l => l.Text), .. core.Select(l => l.Text)];
     }
+
+    /// <summary>The lines of a page under the "Core <paramref name="className"/> Traits" heading, down to the next "Core … Traits" heading; none when the page has no such heading.</summary>
+    private static List<TextLine> CoreBlock(IReadOnlyList<TextLine> page, string className)
+    {
+        var heading = page.Where(l => l.Text.Trim().Equals($"Core {className} Traits", StringComparison.OrdinalIgnoreCase)).OrderByDescending(l => l.Y).FirstOrDefault();
+        if (heading is null)
+            return [];
+        var next = page.Where(l => l.Y < heading.Y && CoreHeading().IsMatch(l.Text.Trim())).Select(l => l.Y).DefaultIfEmpty(double.NegativeInfinity).Max();
+        return [.. page.Where(l => l.Y < heading.Y && l.Y > next)];
+    }
+
+    [GeneratedRegex(@"^Core .{1,60} Traits$", RegexOptions.IgnoreCase, 100)]
+    private static partial Regex CoreHeading();
 
     private static List<string> JoinedLabels(IReadOnlyList<TextLine> lines)
     {
