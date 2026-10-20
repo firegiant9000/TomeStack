@@ -386,6 +386,38 @@ public class PlayCommandTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
+    public void The_concentration_dc_comes_from_the_amount_after_defences_and_before_temporary_hit_points(string family)
+    {
+        var cap = RulesFamilies.Get(family).ConcentrationSaveMaximumDc ?? 100; // PlayState validation bound when the family has none
+        DamageOutcome Hit(int temporary, int amount, string type, out int? dc)
+        {
+            var (temp, id, veil) = Caster(family, [SlashingResistance, new("cold", DamageDefenceKind.Vulnerability)]);
+            using var _ = temp;
+            temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+            temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: temporary));
+            var view = temp.App.Play(Typed(id, amount, type));
+            dc = view.Character.Play.Concentration!.PendingSaveDc;
+            return view.Damage!;
+        }
+
+        // 60 slashing resisted is 30, so the DC is 15; from the 60 entered it would be 30.
+        Hit(1000, 60, "slashing", out var resisted);
+        Assert.Equal(15, resisted);
+
+        // 40 cold doubled is 80, so the DC is 40, capped by the family; from the 40 entered it would be 20.
+        Hit(1000, 40, "cold", out var doubled);
+        Assert.Equal(Math.Min(40, cap), doubled);
+
+        // 30 cold doubled is 60: 50 temporary hit points take part of it, and the DC still comes from the 60 (30), not from the 10 left
+        // for hit points (10) nor from the 30 entered (15).
+        var partly = Hit(50, 30, "cold", out var absorbed);
+        Assert.Equal((60, 50, 10), (partly.Adjusted, partly.Absorbed, partly.Lost));
+        Assert.Equal(Math.Min(30, cap), absorbed);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
     public void Immunity_takes_nothing_and_asks_for_no_concentration_check(string family)
     {
         var (temp, id, veil) = Caster(family, [new("fire", DamageDefenceKind.Immunity)]);
