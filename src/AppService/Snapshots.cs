@@ -143,7 +143,21 @@ public sealed partial class TomeStackApp
             TempJson(current.CustomAttacks) != TempJson(restored.CustomAttacks),
             TempJson(current.Xp) != TempJson(restored.Xp)
                 || TempJson(current.DamageDefences) != TempJson(restored.DamageDefences)
-                || TempJson(current.Companions) != TempJson(restored.Companions));
+                || TempJson(current.Companions) != TempJson(restored.Companions)
+                || EquipmentV9Differs(current.Equipment, restored.Equipment));
+    }
+
+    /// <summary>
+    /// Whether the v9 fields of the equipment (attuned, charges spent) differ, matched by item. Quantity and equipped are older
+    /// than v9 and are not part of this flag (R138). An item on one side only counts as unattuned with no charges spent there.
+    /// </summary>
+    private static bool EquipmentV9Differs(IReadOnlyList<EquipmentEntry>? now, IReadOnlyList<EquipmentEntry>? then)
+    {
+        static Dictionary<ContentReference, (bool? Attuned, int? Charges)> Of(IReadOnlyList<EquipmentEntry>? list) =>
+            (list ?? []).GroupBy(e => e.Item).ToDictionary(g => g.Key, g => (g.First().Attuned, g.First().ChargesSpent));
+        var a = Of(now);
+        var b = Of(then);
+        return a.Keys.Union(b.Keys).Any(k => a.GetValueOrDefault(k) != b.GetValueOrDefault(k));
     }
 
     /// <summary>The names of the detail fields that differ between two details (a field name and nothing of the text), or null when none do.</summary>

@@ -55,7 +55,7 @@ it('says one sentence for each custom-entry flag the restore sets, and none when
   const region = await openPreview(preview({ customItemsChange: true, customAttacksChange: true, otherSheetValuesChange: true }));
   expect(region.textContent).toContain('Your own items go back to the snapshot too.');
   expect(region.textContent).toContain('Your own attacks go back to the snapshot too.');
-  expect(region.textContent).toContain('Experience points, damage resistances and companions go back to the snapshot too.');
+  expect(region.textContent).toContain('Experience points, damage resistances, companions, and attunement and charges spent on equipment go back to the snapshot too.');
   cleanup();
   const quiet = await openPreview(preview({}));
   expect(quiet.textContent).not.toContain('Your own');

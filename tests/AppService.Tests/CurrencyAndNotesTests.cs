@@ -146,6 +146,28 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void The_restore_preview_flags_attunement_and_charges_on_equipment_but_not_the_pre_v9_fields()
+    {
+        // G2/R138: attuned and chargesSpent are v9 fields of an equipment entry and roll back with the snapshot; quantity and
+        // equipped are older and are covered by the sheet changes, so they do not set the "other sheet values" flag.
+        using var temp = new TempApp();
+        var item = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")
+            with { Equipment = [new(item, Equipped: false, Quantity: 1)] }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "plain equipment"));
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: true, Quantity: 4)] });
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: false, Quantity: 1, Attuned: true)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: false, Quantity: 1, ChargesSpent: 2)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+    }
+
+    [Fact]
     public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
     {
         using var temp = new TempApp();
