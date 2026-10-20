@@ -39,7 +39,7 @@ public class MechanicsInventoryTests
         Assert.Empty(MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid>()).Mechanics); // other sources only
     }
 
-    private static (MechanicsReport Report, ContentRevision Revision) Report(ContentRevision revision, Func<Character, Character> shape)
+    private static (MechanicsReport Report, CharacterSheet Sheet) Report(ContentRevision revision, Func<Character, Character> shape)
     {
         var source = new SourceRecord
         {
@@ -49,15 +49,17 @@ public class MechanicsInventoryTests
         var pack = Fixtures.Pack();
         var catalog = new InMemoryContentCatalog([.. pack.Sources, source], [.. pack.Revisions, revision]);
         var character = shape(Fixtures.Srd521Character());
-        return (MechanicsInventory.Of(CharacterCalculator.Calculate(character, catalog), new HashSet<Guid> { Homebrew }), revision);
+        var sheet = CharacterCalculator.Calculate(character, catalog);
+        return (MechanicsInventory.Of(sheet, new HashSet<Guid> { Homebrew }), sheet);
     }
 
     [Fact]
     public void Scale_effects_are_not_reported_unsupported()
     {
+        // The calculator collects scales only from class and subclass content, so the fixture is an invented class.
         var feat = new ContentRevision
         {
-            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = 10, Kind = ContentKind.Feat, Name = "Test Scale Feat",
+            ContentId = Guid.NewGuid(), RevisionId = Guid.NewGuid(), SchemaVersion = 10, Kind = ContentKind.Class, Name = "Test Scale Class",
             RulesFamilies = [RulesFamilies.Srd521], Provenance = new(Homebrew, new(4)), Status = RevisionStatus.Published,
             Effects =
             [
@@ -66,10 +68,13 @@ public class MechanicsInventoryTests
             ],
         };
 
-        var (report, _) = Report(feat, c => c with { Pins = [.. c.Pins, feat.Reference] });
+        var (report, sheet) = Report(feat, c => c with { Pins = [], Classes = [new ClassLevel(feat.Reference, 3)], Level = 3 });
 
         Assert.Empty(report.Unsupported);
         Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "ink-scale").Automation);
+        Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "ink-roll").Automation);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Content == feat.Reference);
+        Assert.DoesNotContain(sheet.Features!.SelectMany(f => f.Diagnostics), d => d.EffectId == "ink-roll");
     }
 
     [Fact]
@@ -85,6 +90,6 @@ public class MechanicsInventoryTests
         var (report, _) = Report(wand, c => c with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: true)] });
 
         Assert.Empty(report.Unsupported);
-        Assert.Contains(report.Mechanics, m => m.EffectId == "use" && m.EffectType == ItemEffect.TypeName);
+        Assert.Equal(AutomationStatus.Automatic, Assert.Single(report.Mechanics, m => m.EffectId == "use" && m.EffectType == ItemEffect.TypeName).Automation);
     }
 }
