@@ -105,6 +105,13 @@ Play's second column ends with a "Companions" section: one card per companion (a
 - **Undo (D23):** each companion action is undone by an exact `companionSetHitPoints` that restores both current and temporary hit points (a companion with no recorded hit points reads as at its maximum with none temporary). A change that changed nothing has no Undo. After Undo, focus moves to the companion's heading.
 - **Attack lines roll** through `roll` with `companionAttack: { companionId, attackId }`: the attack roll is a d20 plus the typed to-hit (with the d20 mode choice), `damage: true` rolls the damage dice (`critical` doubles them), exactly as for "Your own attacks". The record reads "<companion>: <attack> attack" / "damage (<type>)" with `rollId` `companion.attack` / `companion.damage`. Refusals: `roll.companion-unknown`, `roll.companion-attack-unknown`, `roll.companion-attack-no-damage`, and `roll.ambiguous` with another target. Rolling changes nothing.
 
+## Spells tab: filters (P09, D70)
+
+- Beside the name search (D30), each caster has a **Filters** button (`aria-expanded`) that opens a "Filter {caster} spells" group: level (0 is "Cantrip", up to 9), school (the schools that caster's spells have, compared without regard to case), casting time (Action, Bonus action, Reaction, "Longer or not stated"), Concentration and Ritual (Any, Yes, No), and "Clear filters". An empty group means any; the groups combine with AND, and the name search still applies.
+- A casting time is read from its leading words, with or without a leading "1 ", in either SRD wording ("1 bonus action", "Bonus Action"). "Action or Ritual" and "1 action or 8 hours" count as an action; any other time ("1 minute", "10 minutes"), and a spell with no casting time, as "Longer or not stated". A spell with no school stays in the list with no school ticked and is hidden as soon as a school is ticked.
+- The count ("N of M spells shown") is the search box's existing polite status, now also shown while any filter is set. It changes only when the count changes. When the filters hide every spell the list says "No spells match these filters. Clear filters to see all M."
+- The choices are kept per caster while the sheet is open (a second caster has its own) and are not saved. The builder's spell pickers are unchanged. The logic is `filterSpells` and `castingBucket` in `src/Ui/src/spellSearch.ts`.
+
 ## Not in this slice
 
 Conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

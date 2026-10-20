@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Concentration (D19): "Concentrate on {spell}" is offered for every prepared concentration spell, cantrips included.
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CharacterView, SpellEntry, TraceOrigin } from '../api/types';
@@ -131,4 +131,117 @@ it('works out the prepared flag from the latest saved list, and refuses a spell 
   // The latest saved list has it unprepared (changed elsewhere meanwhile): the press toggles that, not the stale render.
   expect(update({ ...v.character, spells: [entry(false)] }).spells).toEqual([entry(true)]);
   expect(() => update({ ...v.character, spells: [] })).toThrow(/removed/);
+});
+
+// P09 (D70): filters per caster. Cantrips: Glint, Hush (ritual), Whisper (ritual, no school); then Veil (1), Chant (2, ritual).
+function filterView(): CharacterView {
+  const v = view();
+  v.sheet.spellcasting![0]!.spells = [
+    { ...spell(30, 'Fixture Glint', 0, false), school: 'Evocation', castingTime: 'Action' },
+    { ...spell(31, 'Fixture Hush', 0, false), school: 'illusion', castingTime: '1 bonus action', ritual: true },
+    { ...spell(32, 'Fixture Whisper', 0, false), ritual: true },
+    { ...spell(33, 'Fixture Veil', 1, true), school: 'Illusion', castingTime: '1 reaction, which you take when hit' },
+    { ...spell(34, 'Fixture Chant', 2, false), school: 'Divination', castingTime: '10 minutes', ritual: true },
+  ];
+  return v;
+}
+const openFilters = async (user: ReturnType<typeof userEvent.setup>, name = 'Fixture Arcanist') => {
+  await user.click(screen.getByRole('button', { name: `Filters: ${name} spells` }));
+  return within(screen.getByRole('group', { name: `Filter ${name} spells` }));
+};
+const listed = (name = 'Fixture Arcanist') =>
+  [...screen.getByRole('list', { name: `${name} spells` }).querySelectorAll('.option-name')].map((e) => e.textContent);
+
+it('the Filters button sets aria-expanded and shows the group only while open', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  const button = screen.getByRole('button', { name: 'Filters: Fixture Arcanist spells' });
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  expect(screen.queryByRole('group', { name: 'Filter Fixture Arcanist spells' })).toBeNull();
+  await user.click(button);
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('group', { name: 'Filter Fixture Arcanist spells' })).toBeTruthy();
+  await user.click(button);
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('ticking Cantrip and Ritual Yes leaves exactly the matching spells, and says how many', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  const group = await openFilters(user);
+  await user.click(group.getByRole('checkbox', { name: 'Cantrip' }));
+  await user.selectOptions(group.getByRole('combobox', { name: 'Ritual' }), 'Yes');
+  expect(listed()).toEqual(['Fixture Hush', 'Fixture Whisper']);
+  expect(screen.getByText('2 of 5 spells shown')).toBeTruthy();
+});
+
+it('filters by school (case-insensitively, offered once), casting time and concentration', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  const group = await openFilters(user);
+  const school = within(group.getByRole('group', { name: 'School' }));
+  expect(school.getAllByRole('checkbox').map((c) => c.parentElement?.textContent)).toEqual(['Divination', 'Evocation', 'illusion']);
+  await user.click(school.getByRole('checkbox', { name: 'illusion' }));
+  expect(listed()).toEqual(['Fixture Hush', 'Fixture Veil']);
+  await user.click(group.getByRole('checkbox', { name: 'Reaction' }));
+  expect(listed()).toEqual(['Fixture Veil']);
+  await user.selectOptions(group.getByRole('combobox', { name: 'Concentration' }), 'No');
+  expect(screen.getByText('No spells match these filters. Clear filters to see all 5.')).toBeTruthy();
+  expect(screen.queryByRole('list', { name: 'Fixture Arcanist spells' })).toBeNull();
+});
+
+it('Clear filters restores every spell', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  const group = await openFilters(user);
+  await user.click(group.getByRole('checkbox', { name: 'Level 2' }));
+  expect(listed()).toEqual(['Fixture Chant']);
+  await user.click(group.getByRole('button', { name: 'Clear filters' }));
+  expect(listed()).toHaveLength(5);
+  expect((group.getByRole('checkbox', { name: 'Level 2' }) as HTMLInputElement).checked).toBe(false);
+  expect(screen.queryByText(/spells shown/)).toBeNull();
+});
+
+it('announces a filter-only change in the one polite region, with no second region', async () => {
+  const user = userEvent.setup();
+  const { container } = panel(filterView());
+  const group = await openFilters(user);
+  expect(container.querySelectorAll('[aria-live]')).toHaveLength(1);
+  await user.click(group.getByRole('checkbox', { name: 'Cantrip' }));
+  expect(container.querySelector('[aria-live="polite"]')!.textContent).toBe('3 of 5 spells shown');
+  expect(container.querySelectorAll('[aria-live]')).toHaveLength(1);
+});
+
+it('The_count_region_changes_only_when_the_count_does', async () => {
+  const user = userEvent.setup();
+  const { container } = panel(filterView());
+  const region = container.querySelector('[aria-live="polite"]')!;
+  const changes: string[] = [];
+  new MutationObserver(() => changes.push(region.textContent ?? '')).observe(region, { childList: true, characterData: true, subtree: true });
+  const search = screen.getByRole('searchbox');
+  await user.type(search, 'fixture'); // every keystroke matches all five, so the text is set once and then left alone
+  expect(changes).toEqual(['5 of 5 spells shown']);
+  await user.type(search, ' v'); // narrows to Veil only
+  expect(changes).toEqual(['5 of 5 spells shown', '1 of 5 spells shown']);
+});
+
+it('keeps each caster’s filters of its own', async () => {
+  const user = userEvent.setup();
+  const v = filterView();
+  const first = v.sheet.spellcasting![0]!;
+  v.sheet.spellcasting = [
+    first,
+    { ...first, name: 'Fixture Warden', content: ref(2), primary: false, spells: [{ ...spell(40, 'Fixture Thorn', 1, false), school: 'Conjuration' }, spell(41, 'Fixture Gale', 2, false)] },
+  ];
+  panel(v);
+  const arcanist = await openFilters(user);
+  await user.click(arcanist.getByRole('checkbox', { name: 'Cantrip' }));
+  expect(listed()).toHaveLength(3);
+  expect(listed('Fixture Warden')).toHaveLength(2);
+  const warden = await openFilters(user, 'Fixture Warden');
+  await user.click(warden.getByRole('checkbox', { name: 'Level 2' }));
+  expect(listed('Fixture Warden')).toEqual(['Fixture Gale']);
+  expect(listed()).toHaveLength(3);
+  expect((arcanist.getByRole('checkbox', { name: 'Cantrip' }) as HTMLInputElement).checked).toBe(true);
+  expect((warden.getByRole('checkbox', { name: 'Cantrip' }) as HTMLInputElement).checked).toBe(false);
 });

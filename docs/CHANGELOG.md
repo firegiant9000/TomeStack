@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Spell filters on the Spells tab (P09, D70):** each caster has a "Filters" button that opens level, school, casting time, Concentration and Ritual filters and "Clear filters", beside the name search. An empty group means any, and the groups combine. Casting time reads both SRD wordings ("1 bonus action", "Bonus Action"); "Action or Ritual" counts as an action, and a time that is not an action, bonus action or reaction (or is missing) is "Longer or not stated". A spell with no school stays in the list until you tick a school. The "N of M spells shown" status now also appears while a filter is set, and when the filters hide every spell the list says so. The choices are kept per caster until the sheet is closed. The builder is unchanged. No schema, package, content or database change.
+
 ### Internal
 
 - **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
