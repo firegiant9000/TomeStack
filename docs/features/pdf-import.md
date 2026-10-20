@@ -67,7 +67,7 @@ Service: `src/AppService/ImportCandidates.cs`. Acceptance: `tests/AppService.Tes
 
 Code: `src/ImportWorker/Detection/CandidateDetector.cs`; the service runs it when a job's extraction completes (`src/AppService/ImportCandidates.cs`). Acceptance: `tests/ImportWorker.Tests/DetectionTests.cs` (the original fixture book), `ImportJobTests.A_completed_import_lists_its_candidates…`, and the measurement below.
 
-**Deterministic and rule-based**, with no AI (an optional local model is M7). It reads the extracted blocks and their positioned lines, not PDF bytes, so it runs in the app. Every pattern is anchored and has a 100 ms match timeout.
+**Deterministic and rule-based**, with no AI (an optional local model is M7). It reads the extracted blocks and their positioned lines, not PDF bytes, so it runs in the app. Every pattern is anchored and has a 1 s match timeout (one shared constant, `DetectionLimits.RegexTimeoutMs`; it was 100 ms, which a busy computer could exceed on any line, R151).
 
 | Detector | Recognizes | Proposes |
 | --- | --- | --- |

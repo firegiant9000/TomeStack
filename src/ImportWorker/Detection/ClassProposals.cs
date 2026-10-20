@@ -206,7 +206,7 @@ public static partial class ClassProposals
         return [.. page.Where(l => l.Y < heading.Y && l.Y > next)];
     }
 
-    [GeneratedRegex(@"^Core .{1,60} Traits$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^Core .{1,60} Traits$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CoreHeading();
 
     private static List<string> JoinedLabels(IReadOnlyList<TextLine> lines)
@@ -277,30 +277,30 @@ public static partial class ClassProposals
         _ => Ability.Cha,
     };
 
-    [GeneratedRegex(@"\b1?[dD](?<die>6|8|10|12) per .{1,40}? level\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b1?[dD](?<die>6|8|10|12) per .{1,40}? level\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex HitDie();
 
-    [GeneratedRegex(@"^Saving Throws?(?: Proficiencies)?(?::\s*|\s+)(?<list>.{3,80})$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^Saving Throws?(?: Proficiencies)?(?::\s*|\s+)(?<list>.{3,80})$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SavesLine();
 
-    [GeneratedRegex(@"^Armor(?::\s*|(?: Training| Proficiencies):?\s*)(?<list>.{3,120})$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^Armor(?::\s*|(?: Training| Proficiencies):?\s*)(?<list>.{3,120})$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorLine();
 
-    [GeneratedRegex(@"^Weapons?(?::\s*|(?: Proficiencies):?\s*)(?<list>.{3,160})$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^Weapons?(?::\s*|(?: Proficiencies):?\s*)(?<list>.{3,160})$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponsLine();
 
-    [GeneratedRegex(@"\b(?:that|which|with|property|properties|finesse)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b(?:that|which|with|property|properties|finesse)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex QualifiedWeapons();
 
-    [GeneratedRegex(@"^Skills?(?::\s*|(?: Proficiencies):?\s*)(?<list>.{3,200})$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^Skills?(?::\s*|(?: Proficiencies):?\s*)(?<list>.{3,200})$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SkillsLine();
 
-    [GeneratedRegex(@"\b(?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b(?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex AbilityNames();
 
-    [GeneratedRegex(@"(\p{L})- (\p{Ll})", RegexOptions.None, 100)]
+    [GeneratedRegex(@"(\p{L})- (\p{Ll})", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LineBreakHyphen();
 
-    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) is your spellcasting ability|[Ss]pellcasting [Aa]bility:?\s*(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) is your spellcasting ability|[Ss]pellcasting [Aa]bility:?\s*(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CastingAbility();
 }

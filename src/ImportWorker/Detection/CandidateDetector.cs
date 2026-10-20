@@ -808,7 +808,7 @@ public static partial class CandidateDetector
             var properties = WeaponProperty().Matches(rest).Select(m => m.Value.ToLowerInvariant().Replace(' ', '-')).Distinct().ToList();
             var range = WeaponRange().Match(rest);
             var versatile = Versatile().Match(rest);
-            var mastery = Masteries.FirstOrDefault(m => Regex.IsMatch(rest, $@"\b{m}\b", RegexOptions.None, TimeSpan.FromMilliseconds(100)));
+            var mastery = Masteries.FirstOrDefault(m => Regex.IsMatch(rest, $@"\b{m}\b", RegexOptions.None, TimeSpan.FromMilliseconds(DetectionLimits.RegexTimeoutMs)));
             var uncertainties = new List<string> { "Read from a table row; check the columns against the page." };
             var low = new List<string>();
             if (category is null)
@@ -1119,116 +1119,116 @@ public static partial class CandidateDetector
 
     // ---- patterns (anchored, with a match timeout) ----
 
-    [GeneratedRegex(@"^(?:Level (?<level>[1-9]) (?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \((?<lists>[^()]+)\)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Level (?<level>[1-9]) (?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \((?<lists>[^()]+)\)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Spell521();
 
-    [GeneratedRegex(@"^(?:(?<level>[1-9])(?:st|nd|rd|th)-level (?<school>abjuration|conjuration|divination|enchantment|evocation|illusion|necromancy|transmutation)|(?<school>[Aa]bjuration|[Cc]onjuration|[Dd]ivination|[Ee]nchantment|[Ee]vocation|[Ii]llusion|[Nn]ecromancy|[Tt]ransmutation) cantrip)(?<ritual> \(ritual\))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:(?<level>[1-9])(?:st|nd|rd|th)-level (?<school>abjuration|conjuration|divination|enchantment|evocation|illusion|necromancy|transmutation)|(?<school>[Aa]bjuration|[Cc]onjuration|[Dd]ivination|[Ee]nchantment|[Ee]vocation|[Ii]llusion|[Nn]ecromancy|[Tt]ransmutation) cantrip)(?<ritual> \(ritual\))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Spell51();
 
-    [GeneratedRegex(@"^(?<label>Casting Time|Range|Components|Duration):\s*(?<value>.*)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<label>Casting Time|Range|Components|Duration):\s*(?<value>.*)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex StatLine();
 
-    [GeneratedRegex(@"^(?<category>Origin|General|Fighting Style|Epic Boon) Feat(?: \(Prerequisite: (?<prerequisite>[^()]+)\))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<category>Origin|General|Fighting Style|Epic Boon) Feat(?: \(Prerequisite: (?<prerequisite>[^()]+)\))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Feat521();
 
-    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20): (?<name>[A-Z][^:]{1,60})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20): (?<name>[A-Z][^:]{1,60})$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelFeature();
 
-    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20) (?<owner>[A-Z][\w' ]{1,40}?) Feature$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20) (?<owner>[A-Z][\w' ]{1,40}?) Feature$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex OwnedFeature();
 
-    [GeneratedRegex(@"^(?:Starting at|Beginning at|At|When you reach|Beginning when you reach) (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Starting at|Beginning at|At|When you reach|Beginning when you reach) (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelSentence();
 
-    [GeneratedRegex(@"\b\d{1,2}d(?:4|6|8|10|12|20|100)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b\d{1,2}d(?:4|6|8|10|12|20|100)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex DiceExpression();
 
-    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SavingThrow();
 
-    [GeneratedRegex(@"\+(?<amount>[1-9]) bonus to (?<target>[Ii]nitiative|AC|Armor Class)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\+(?<amount>[1-9]) bonus to (?<target>[Ii]nitiative|AC|Armor Class)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Bonus();
 
-    [GeneratedRegex(@"proficiency in the (?<skill>[A-Z][a-z]+(?: of [A-Z][a-z]+| [A-Z][a-z]+)?) skill", RegexOptions.None, 100)]
+    [GeneratedRegex(@"proficiency in the (?<skill>[A-Z][a-z]+(?: of [A-Z][a-z]+| [A-Z][a-z]+)?) skill", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SkillProficiency();
 
-    [GeneratedRegex(@"\bcast (?:the )?(?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4})\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\bcast (?:the )?(?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4})\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CastsSpell();
 
-    [GeneratedRegex(@"\bthe (?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4}) spell\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\bthe (?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4}) spell\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NamedSpell();
 
-    [GeneratedRegex(@"^(?<name>\p{L}[\p{L}\p{N}'’ -]{0,48}?) Spells$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^(?<name>\p{L}[\p{L}\p{N}'’ -]{0,48}?) Spells$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellListHeading();
 
-    [GeneratedRegex(@"^(?:Cantrips|\d(?:st|nd|rd|th) Level)\b", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^(?:Cantrips|\d(?:st|nd|rd|th) Level)\b", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellLevelGroup();
 
-    [GeneratedRegex(@"^(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponDamageCell();
 
-    [GeneratedRegex(@"^(?<name>[A-Z][\w,' ]{1,40}?)\s+(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)(?:\s+(?<rest>.*))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<name>[A-Z][\w,' ]{1,40}?)\s+(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)(?:\s+(?<rest>.*))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponRowLine();
 
-    [GeneratedRegex(@"\b[Aa]t (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b[Aa]t (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex EarlyLevel();
 
-    [GeneratedRegex(@"^(?:\d+(?:/\d+)? lb\.|\d+ (?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)|—|-)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:\d+(?:/\d+)? lb\.|\d+ (?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)|—|-)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CostOrWeight();
 
-    [GeneratedRegex(@"^(?:Simple|Martial) (?:Melee|Ranged) Weapons", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Simple|Martial) (?:Melee|Ranged) Weapons", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponSection();
 
-    [GeneratedRegex(@"\b(?:Ammunition|Finesse|Heavy|Light|Loading|Reach|Special|Thrown|Two-Handed|Versatile)\b", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"\b(?:Ammunition|Finesse|Heavy|Light|Loading|Reach|Special|Thrown|Two-Handed|Versatile)\b", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponProperty();
 
-    [GeneratedRegex(@"[Rr]ange (?<range>\d{1,3}/\d{1,4})", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[Rr]ange (?<range>\d{1,3}/\d{1,4})", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponRange();
 
-    [GeneratedRegex(@"[Vv]ersatile \((?<dice>\d{1,2}d(?:4|6|8|10|12))\)", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[Vv]ersatile \((?<dice>\d{1,2}d(?:4|6|8|10|12))\)", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Versatile();
 
-    [GeneratedRegex(@"^(?:1[0-9](?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:1[0-9](?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorClassCell();
 
-    [GeneratedRegex(@"^(?<name>[A-Z][\w' ]{1,40}?)\s+(?<ac>\d{1,2}(?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])\s+(?:-|—|Str \d+)", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<name>[A-Z][\w' ]{1,40}?)\s+(?<ac>\d{1,2}(?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])\s+(?:-|—|Str \d+)", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorRowLine();
 
-    [GeneratedRegex(@"^(?:Light|Medium|Heavy) Armor\b|^Shield\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Light|Medium|Heavy) Armor\b|^Shield\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorCategoryLine();
 
-    [GeneratedRegex(@"^(?:(?:The|THE) (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) (?:Features|FEATURES))$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:(?:The|THE) (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) (?:Features|FEATURES))$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableTitle();
 
     /// <summary>A feat's prerequisite line: "Prerequisite: …" or "Prerequisites: …".</summary>
-    [GeneratedRegex(@"^Prerequisites?:\s*(?<p>.+)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Prerequisites?:\s*(?<p>.+)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex PrerequisitesLine();
 
     /// <summary>
     /// An item name that holds a price ("5 gp") or continues as a sentence (", which counts as": a comma, then two or more
     /// lower-case words). One word after the comma stays a name: the SRD's "Crossbow, hand".
     /// </summary>
-    [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex JunkItemName();
 
-    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelCell();
 
-    [GeneratedRegex(@"^Level\s+Proficiency Bonus\b.*\bFeatures$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level\s+Proficiency Bonus\b.*\bFeatures$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableHeaderLine();
 
-    [GeneratedRegex(@"^(?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th)?\s+\+[2-6]\s+(?<features>[A-Z—-].*)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th)?\s+\+[2-6]\s+(?<features>[A-Z—-].*)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableRowLine();
 
-    [GeneratedRegex(@"\d+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\d+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Digits();
 
-    [GeneratedRegex(@"^(?:Level [1-9] (?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \(", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Level [1-9] (?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \(", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellLineStart();
 
-    [GeneratedRegex(@"^(?:Origin|General|Fighting Style|Epic Boon) Feat\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Origin|General|Fighting Style|Epic Boon) Feat\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex FeatLineStart();
 
-    [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NonWord();
 }

@@ -475,15 +475,15 @@ public static partial class ClassTableReconstruction
     private static List<(TextLine Line, int Level)>? LevelColumn(List<TextLine> lines, CancellationToken cancellationToken) =>
         LevelRuns(lines, cancellationToken).Where(r => r.Count >= 3).OrderByDescending(r => r.Count).ThenBy(r => r[0].Line.X).FirstOrDefault();
 
-    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelCell();
 
-    [GeneratedRegex(@"^(?<n>[1-9])(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<n>[1-9])(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex OrdinalHeader();
 
-    [GeneratedRegex(@"^\+?[0-9]{1,3}$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^\+?[0-9]{1,3}$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NumberToken();
 
-    [GeneratedRegex(@"\S+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\S+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Words();
 }
