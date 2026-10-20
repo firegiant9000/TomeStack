@@ -295,10 +295,12 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>R120: refuses an edit made from a state other than the stored one (or from none). Says nothing about the contents.</summary>
-    private static void RequireUnchanged(StoredCandidate stored, string? expected)
+    private static void RequireUnchanged(StoredCandidate stored, string? expected, bool forEdit = true)
     {
         if (expected is null || stored.Etag is null || !string.Equals(expected, stored.Etag, StringComparison.Ordinal))
-            throw new AppValidationException([new("import.candidate-changed", "This candidate changed since it was opened. Reload it and edit again; nothing was changed.")]);
+            throw new AppValidationException([new("import.candidate-changed", forEdit
+                ? "This candidate changed since it was opened. Reload it and edit again; nothing was changed."
+                : "This candidate changed since you opened it. Review it again; nothing was changed.")]);
     }
 
     /// <summary>
@@ -338,7 +340,7 @@ public sealed partial class TomeStackApp
             // was made, or edited (the same compare-and-swap as an edit, R120), it is refused and nothing is written.
             var current = FindCandidateOrThrow(request.CandidateId);
             RequirePending(current);
-            RequireUnchanged(current, stored.Etag);
+            RequireUnchanged(current, stored.Etag, forEdit: false);
             stored = current;
             // Fix round 1, item 7: the plan read each linked feature's status before the transaction; one reviewed since then
             // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
@@ -584,7 +586,7 @@ public sealed partial class TomeStackApp
                     continue;
                 }
                 var written = WriteAccepted(stored, DraftOf(stored, request.AsReference), request.AsReference);
-                accepted.Add(written);
+                accepted.Add(_store.FindImportCandidate(written.Id) ?? written); // the row as stored, with its fresh Etag
                 AcceptedOf(acceptedCache, ImportStatus(stored.JobId)).Add((stored.JobId, CandidateIdentity(written.Candidate)));
             }
         });
@@ -603,7 +605,7 @@ public sealed partial class TomeStackApp
             // Task 8a M2: read again inside the transaction, so a concurrent edit or accept is refused instead of overwritten.
             var current = FindCandidateOrThrow(candidateId);
             RequirePending(current);
-            RequireUnchanged(current, stored.Etag);
+            RequireUnchanged(current, stored.Etag, forEdit: false);
             _store.SaveImportCandidate(current with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() });
             _store.AddImportAudit(current.JobId, _time.GetUtcNow(), "candidate-ignored", current.Current.ProposedKind.ToString().ToLowerInvariant());
             ignored = _store.FindImportCandidate(candidateId);

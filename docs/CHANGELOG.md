@@ -41,7 +41,7 @@
 - **Review fixes to class import and candidate review (Task 8a, Wave 0/1 minors):**
   - Two classes on one page that list one feature name keep a stub each when you review one and read the document again (or read it a second time): reviewing one stub no longer hides the other, retargets the other class's link to it, or gives a false "reviewed in an earlier import" note or `import.already-accepted`.
   - Accepting a class is refused (`import.candidate-changed`) when a feature it grants was edited while the accept ran, instead of saving that feature from the old row and losing the edit.
-  - Ignoring a candidate re-checks inside the transaction: if it was edited or accepted meanwhile, the ignore is refused (`import.candidate-changed` or `candidate.already-reviewed`) and nothing is overwritten. Accept and ignore return the row as stored, with its new `etag`.
+  - Ignoring a candidate re-checks inside the transaction: if it was edited or accepted meanwhile, the ignore is refused (`import.candidate-changed` or `candidate.already-reviewed`) and nothing is overwritten. Accept, accept-many and ignore return the row as stored, with its new `etag`. A refused accept or ignore says "Review it again" (not "edit again"), and the review panel reloads the candidate and says it changed, as it does for an edit.
   - The one-time upgrade that fills the new candidate columns skips any row it cannot read and no longer stops the data folder from opening. The upgrade's index (still the unreleased v11) now covers the page-turn query.
 
 ### Migration

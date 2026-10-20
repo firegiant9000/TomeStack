@@ -58,6 +58,43 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void An_accept_many_result_carries_the_etag_as_stored()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+
+        var result = temp.App.AcceptMany(new([ember.Id], Confirm: true));
+
+        var returned = Assert.Single(result.Accepted);
+        Assert.Equal(temp.App.Store.FindImportCandidate(ember.Id)!.Etag, returned.Etag);
+    }
+
+    [Fact]
+    public void A_refused_accept_or_ignore_does_not_tell_the_reviewer_to_edit_again()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        temp.App.BeforeIgnoreWrites = () => temp.App.EditCandidate(new(hookblade.Id, Expected: temp.EtagOf(hookblade.Id), Summary: "Edited meanwhile."));
+        var ignoreRefused = Assert.Throws<AppValidationException>(() => temp.App.IgnoreCandidate(hookblade.Id));
+        temp.App.BeforeIgnoreWrites = null;
+        var coat = Named(temp, jobId, "Fixture Frost Veil");
+        temp.App.BeforeAcceptWrites = () =>
+        {
+            temp.App.BeforeAcceptWrites = null;
+            temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Summary: "Edited meanwhile."));
+        };
+        var acceptRefused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true)));
+
+        foreach (var refused in new[] { ignoreRefused, acceptRefused })
+        {
+            Assert.Equal("import.candidate-changed", refused.Problems[0].Code);
+            Assert.DoesNotContain("edit again", refused.Problems[0].Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void An_ignore_that_races_an_edit_is_refused_and_the_edit_survives()
     {
         var (temp, _, jobId) = Imported();

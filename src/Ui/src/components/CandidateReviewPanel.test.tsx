@@ -9,7 +9,7 @@ import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCan
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
-  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), acceptCandidates: vi.fn() },
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn() },
 }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -1080,6 +1080,28 @@ it('reloads the candidate and says it changed when the edit is refused, without 
   expect(onError).not.toHaveBeenCalled();
   expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
   // The editor is still there, on the reloaded candidate, and focus is inside it.
+  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
+});
+
+it.each([
+  ['Accept as a draft', 'acceptCandidate'],
+  ['Ignore', 'ignoreCandidate'],
+] as const)('reloads the candidate and says it changed when %s is refused, without reporting an error', async (button, method) => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValueOnce(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-9', updatedAt: '2026-10-15T00:00:00Z' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client[method]).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: button }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  expect(onError).not.toHaveBeenCalled();
+  expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
   const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
   await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
 });

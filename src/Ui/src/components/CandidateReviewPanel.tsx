@@ -657,17 +657,22 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed, expected: stored.etag });
       await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
     } catch (error) {
-      if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
-        // R120: the stored candidate moved on (another save, a spell list, a re-detect): show what is stored now, and say so.
-        try {
-          await onChanged('This candidate changed since you opened it. It has been reloaded.');
-        } catch (reloadError) {
-          onError(reloadError);
-        }
-        return;
-      }
-      onError(error);
+      await reloadIfChanged(error);
     }
+  }
+
+  // R120: the stored candidate moved on (another save, a spell list, a re-detect): show what is stored now, and say so.
+  // Used by edit, accept and ignore; any other error is reported as usual.
+  async function reloadIfChanged(error: unknown) {
+    if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
+      try {
+        await onChanged('This candidate changed since you opened it. It has been reloaded.');
+      } catch (reloadError) {
+        onError(reloadError);
+      }
+      return;
+    }
+    onError(error);
   }
 
   async function accept(asReference: boolean) {
@@ -678,7 +683,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
         `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
       );
     } catch (error) {
-      onError(error);
+      await reloadIfChanged(error);
     }
   }
 
@@ -687,7 +692,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
       await client.ignoreCandidate(stored.id);
       await onChanged(`Ignored ${candidate.proposedName}. Nothing was created.`);
     } catch (error) {
-      onError(error);
+      await reloadIfChanged(error);
     }
   }
 
