@@ -35,6 +35,73 @@ public class CandidateReviewTests
     private static string Code(Action action) => Assert.Throws<AppValidationException>(action).Problems[0].Code;
 
     [Fact]
+    public void An_edit_that_loses_a_race_in_the_gap_before_its_transaction_is_refused_and_writes_nothing()
+    {
+        // Task 8a fix round 1 (M6): the in-transaction compare-and-swap (R120) is what stops an edit that passed its first check.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        var etag = temp.EtagOf(hookblade.Id);
+        temp.App.BeforeEditWrites = () =>
+        {
+            temp.App.BeforeEditWrites = null;
+            temp.App.EditCandidate(new(hookblade.Id, Expected: etag, Summary: "First window."));
+        };
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.EditCandidate(new(hookblade.Id, Expected: etag, Summary: "Second window.", Name: "Fixture Hookblade Two")));
+
+        Assert.Equal("import.candidate-changed", refused.Problems[0].Code);
+        var stored = Named(temp, jobId, "Fixture Hookblade");
+        Assert.Equal("First window.", stored.Current.Summary);
+        Assert.Equal("Fixture Hookblade", stored.Current.ProposedName);
+        Assert.DoesNotContain(temp.App.ListCandidates(new(jobId)), c => c.Current.ProposedName == "Fixture Hookblade Two");
+    }
+
+    [Fact]
+    public void An_ignore_that_races_an_edit_is_refused_and_the_edit_survives()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        temp.App.BeforeIgnoreWrites = () => temp.App.EditCandidate(new(hookblade.Id, Expected: temp.EtagOf(hookblade.Id), Summary: "Edited meanwhile."));
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.IgnoreCandidate(hookblade.Id)));
+
+        var stored = Named(temp, jobId, "Fixture Hookblade");
+        Assert.Equal(CandidateStatus.Pending, stored.Status);
+        Assert.Equal("Edited meanwhile.", stored.Current.Summary);
+    }
+
+    [Fact]
+    public void An_ignore_that_races_an_accept_is_refused_and_the_accept_survives()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        temp.App.BeforeIgnoreWrites = () => temp.App.AcceptCandidate(new(hookblade.Id, AsReference: true, Confirm: true));
+
+        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.IgnoreCandidate(hookblade.Id)));
+
+        var stored = Named(temp, jobId, "Fixture Hookblade");
+        Assert.Equal(CandidateStatus.AcceptedAsReference, stored.Status);
+        Assert.NotNull(stored.Draft);
+    }
+
+    [Fact]
+    public void Accept_and_ignore_return_the_row_as_stored_after_the_write()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        var ignoredRow = temp.App.IgnoreCandidate(Named(temp, jobId, "Fixture Frost Veil").Id);
+        var acceptedRow = temp.App.AcceptCandidate(new(hookblade.Id, AsReference: true, Confirm: true));
+
+        Assert.Equal(temp.EtagOf(ignoredRow.Id), ignoredRow.Etag);
+        Assert.Equal(temp.EtagOf(acceptedRow.Id), acceptedRow.Etag);
+        Assert.NotNull(acceptedRow.Etag);
+    }
+
+    [Fact]
     public void The_list_pages_in_page_then_name_order_and_the_total_counts_the_filtered_set()
     {
         var (temp, _, jobId) = Imported();

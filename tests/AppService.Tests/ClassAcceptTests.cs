@@ -444,6 +444,26 @@ public class ClassAcceptTests
     }
 
     [Fact]
+    public void A_linked_feature_edited_before_the_writes_refuses_the_accept_and_the_edit_survives()
+    {
+        // Task 8a fix round 1 (M1): the status alone is not enough; an edit leaves it Pending but the stale row would be saved Accepted.
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
+        var beacon = Named(temp, jobId, "Fixture Beacon");
+        temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(beacon with { Edited = beacon.Current with { Summary = "Edited by a second window." } });
+
+        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+
+        Assert.Equal(["import.candidate-changed"], Codes(refused));
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+        var stored = Named(temp, jobId, "Fixture Beacon");
+        Assert.Equal(CandidateStatus.Pending, stored.Status);
+        Assert.Equal("Edited by a second window.", stored.Current.Summary);
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Lamplighter").Status);
+    }
+
+    [Fact]
     public void A_class_edited_before_the_writes_is_refused_as_changed_and_nothing_is_written()
     {
         // Wave 0/1 minors (d): the accept acts on the stored class at commit time, with the same compare-and-swap as an edit (R120).

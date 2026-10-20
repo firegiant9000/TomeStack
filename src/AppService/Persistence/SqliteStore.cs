@@ -158,7 +158,7 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         ALTER TABLE import_candidates ADD COLUMN page_end INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE import_candidates ADD COLUMN name TEXT NOT NULL DEFAULT '';
         ALTER TABLE import_candidates ADD COLUMN confidence REAL NOT NULL DEFAULT 0;
-        CREATE INDEX ix_import_candidates_page ON import_candidates (job_id, status, kind, page);
+        CREATE INDEX ix_import_candidates_page ON import_candidates (job_id, status, kind, page, page_end, name, confidence, id);
         """, store => store.BackfillImportCandidateColumns()),
     ];
 
@@ -1007,25 +1007,29 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
         foreach (var (id, json) in rows)
         {
-            StoredCandidate? stored;
+            // Total (Task 8a M3): whatever the row holds, reading it may skip it, never abort the migration. Only the read is
+            // guarded; the UPDATE below keeps its own failure path. Nothing from the document is logged.
+            (string Kind, int Page, int PageEnd, string Name, double Confidence)? values;
             try
             {
-                stored = JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact);
+                var current = JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)?.Current;
+                values = current is null || current.Page is null || current.ProposedName is null
+                    ? null
+                    : (current.ProposedKind.ToString(), current.Page.Start, current.Page.End ?? current.Page.Start, current.ProposedName, current.Confidence);
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or NullReferenceException or InvalidOperationException or ArgumentException or FormatException)
             {
                 continue;
             }
-            if (stored is null)
-                continue; // the literal JSON null
-            var current = stored.Current;
+            if (values is not { } v)
+                continue; // a literal JSON null, or a candidate without its page, name or kind
             Execute(
                 "UPDATE import_candidates SET kind = $kind, page = $page, page_end = $pageEnd, name = $name, confidence = $confidence WHERE id = $id;",
-                ("$kind", current.ProposedKind.ToString()),
-                ("$page", current.Page.Start),
-                ("$pageEnd", current.Page.End ?? current.Page.Start),
-                ("$name", current.ProposedName),
-                ("$confidence", current.Confidence),
+                ("$kind", v.Kind),
+                ("$page", v.Page),
+                ("$pageEnd", v.PageEnd),
+                ("$name", v.Name),
+                ("$confidence", v.Confidence),
                 ("$id", id));
         }
     }

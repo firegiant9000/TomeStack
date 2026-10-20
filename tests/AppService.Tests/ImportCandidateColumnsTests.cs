@@ -84,6 +84,13 @@ public class ImportCandidateColumnsTests
         Assert.Contains("confidence", columns);
         Assert.Contains("status", columns);
         Assert.Contains(Rows(database, "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'import_candidates'"), r => (string?)r[0] == "ix_import_candidates_page");
+        // R124: the index covers the page-turn query (filters, order and the columns it returns), so a turn reads the index alone.
+        Assert.Equal(["job_id", "status", "kind", "page", "page_end", "name", "confidence"],
+            Rows(database, "SELECT name FROM pragma_index_info('ix_import_candidates_page') ORDER BY seqno").Select(r => (string)r[0]!).Take(7));
+        var plan = string.Join(" | ", Rows(database,
+            "EXPLAIN QUERY PLAN SELECT id, page, name FROM import_candidates WHERE job_id = 'x' AND status = 'Pending' AND kind = 'Spell' AND page_end >= 2 AND page <= 9 AND confidence >= 0.5 ORDER BY rowid")
+            .Select(r => (string)r[3]!));
+        Assert.Contains("USING COVERING INDEX ix_import_candidates_page", plan, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -113,7 +120,19 @@ public class ImportCandidateColumnsTests
         using (var connection = new SqliteConnection($"Data Source={database};Pooling=False"))
         {
             connection.Open();
-            foreach (var (id, json) in new[] { ("00000000-0000-4000-8000-0000000000b1", "null"), ("00000000-0000-4000-8000-0000000000b2", "{not json") })
+            // Task 8a fix round 1 (M3): also a row whose candidate is null or whose name reads as null (not NULL-able in the column).
+            var nameless = SqliteStore.Serialize(Stored(Job, 9, 4, null, ContentKind.Spell, "Fixture Nameless", 0.85));
+            Assert.Contains("\"proposedName\":\"Fixture Nameless\"", nameless, StringComparison.Ordinal);
+            nameless = nameless.Replace("\"proposedName\":\"Fixture Nameless\"", "\"proposedName\":null", StringComparison.Ordinal);
+            var kindless = SqliteStore.Serialize(Stored(Job, 10, 4, null, ContentKind.Spell, "Fixture Kindless", 0.85));
+            Assert.Contains("\"proposedKind\":\"spell\"", kindless, StringComparison.Ordinal);
+            kindless = kindless.Replace("\"proposedKind\":\"spell\"", "\"proposedKind\":null", StringComparison.Ordinal);
+            foreach (var (id, json) in new[]
+            {
+                ("00000000-0000-4000-8000-0000000000b1", "null"), ("00000000-0000-4000-8000-0000000000b2", "{not json"),
+                ("00000000-0000-4000-8000-0000000000b3", $"{{\"id\":\"{Guid.NewGuid()}\",\"jobId\":\"{Job}\",\"candidate\":null}}"), ("00000000-0000-4000-8000-0000000000b4", nameless),
+                ("00000000-0000-4000-8000-0000000000b5", kindless), ("00000000-0000-4000-8000-0000000000b6", "{}"),
+            })
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = "INSERT INTO import_candidates (id, job_id, status, json) VALUES ($id, $job, 'Pending', $json);";
@@ -128,12 +147,12 @@ public class ImportCandidateColumnsTests
             Assert.Equal(11, migrated.SchemaVersion);
 
         var rows = Rows(database, "SELECT id, kind, page, name FROM import_candidates ORDER BY id");
-        Assert.Equal(3, rows.Count);
+        Assert.Equal(7, rows.Count);
         var goodRow = rows.Single(r => (string?)r[0] == good.Id.ToString("D"));
         Assert.Equal(("Spell", 4L, "Fixture Good"), ((string)goodRow[1]!, (long)goodRow[2]!, (string)goodRow[3]!));
         var defaults = rows.Where(r => (string?)r[0] != good.Id.ToString("D")).ToList();
-        Assert.Equal(2, defaults.Count);
-        Assert.All(defaults, r => Assert.NotEqual("Spell", r[1])); // untouched: the column defaults
+        Assert.Equal(6, defaults.Count);
+        Assert.All(defaults, r => Assert.Equal(("", 0L, ""), ((string)r[1]!, (long)r[2]!, (string)r[3]!))); // untouched: the column defaults
     }
 
     [Fact]

@@ -161,6 +161,12 @@ public sealed partial class TomeStackApp
     /// <summary>Test seam (fix round 1, item 7): runs after an accept is planned and checked, just before its writes.</summary>
     internal Action? BeforeAcceptWrites { get; set; }
 
+    /// <summary>Test seam (Task 8a fix round 1, M6): runs after an edit's first check, just before its transaction.</summary>
+    internal Action? BeforeEditWrites { get; set; }
+
+    /// <summary>Test seam (Task 8a fix round 1, M2): runs after an ignore reads the candidate, just before its transaction.</summary>
+    internal Action? BeforeIgnoreWrites { get; set; }
+
     /// <summary>
     /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
     /// Candidates already reviewed stay; pending ones are replaced. A candidate reviewed in an earlier import of the same
@@ -186,7 +192,7 @@ public sealed partial class TomeStackApp
             DetectionCandidateCap, cancellationToken);
         var detected = result.Candidates;
 
-        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+        static (ContentKind, string, int) Identity(DraftCandidate c) => CandidateIdentity(c); // one function for detection and accept (I1)
         var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).Select(c => Identity(c.Candidate)).ToHashSet();
         var reviewedBefore = _store.ListImportJobs()
             .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
@@ -276,6 +282,7 @@ public sealed partial class TomeStackApp
         // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
         var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
         StoredCandidate? saved = null;
+        BeforeEditWrites?.Invoke();
         _store.InTransaction(() =>
         {
             // R120: the check and the write share one transaction (and the store lock), so no other writer can land between them.
@@ -337,9 +344,13 @@ public sealed partial class TomeStackApp
             // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
             if (plan.Linked.Any(l => l.Candidate is { } planned && _store.FindImportCandidate(planned.Id)?.Status != planned.Status))
                 throw new AppValidationException([new("candidate.linked-changed", "A feature this class grants was reviewed while it was being accepted. Check the class again; nothing was changed.")]);
+            // Task 8a M1: one edited since the plan (status unchanged) would be saved Accepted from the stale row and the edit lost.
+            if (plan.Linked.Any(l => l.Candidate is { } planned && !string.Equals(_store.FindImportCandidate(planned.Id)?.Etag, planned.Etag, StringComparison.Ordinal)))
+                throw new AppValidationException([new("import.candidate-changed", "A feature this class grants changed while it was being accepted. Check the class again; nothing was changed.")]);
             foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
                 WriteAccepted(feature.Candidate!, feature.NewDraft!, asReference: false);
             accepted = WriteAccepted(stored, plan.Draft, request.AsReference);
+            accepted = _store.FindImportCandidate(accepted.Id) ?? accepted; // the row as stored, with its fresh Etag
         });
         return accepted!;
     }
@@ -585,13 +596,19 @@ public sealed partial class TomeStackApp
     {
         var stored = FindCandidateOrThrow(candidateId);
         RequirePending(stored);
-        var ignored = stored with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() };
+        BeforeIgnoreWrites?.Invoke();
+        StoredCandidate? ignored = null;
         _store.InTransaction(() =>
         {
-            _store.SaveImportCandidate(ignored);
-            _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), "candidate-ignored", stored.Current.ProposedKind.ToString().ToLowerInvariant());
+            // Task 8a M2: read again inside the transaction, so a concurrent edit or accept is refused instead of overwritten.
+            var current = FindCandidateOrThrow(candidateId);
+            RequirePending(current);
+            RequireUnchanged(current, stored.Etag);
+            _store.SaveImportCandidate(current with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() });
+            _store.AddImportAudit(current.JobId, _time.GetUtcNow(), "candidate-ignored", current.Current.ProposedKind.ToString().ToLowerInvariant());
+            ignored = _store.FindImportCandidate(candidateId);
         });
-        return ignored;
+        return ignored!;
     }
 
     private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null, AcceptPlan? plan = null)
@@ -686,7 +703,14 @@ public sealed partial class TomeStackApp
         return blockers;
     }
 
-    private static (ContentKind, string, int) CandidateIdentity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+    /// <summary>
+    /// What makes two candidates the same entry: kind, name and first page, and (Task 8a I1) the class a feature stub belongs to,
+    /// so two classes on one page that list one feature name keep a stub each. The class joins the name part, after a control
+    /// character no name carries; a candidate with no <c>class</c> field has the plain name, as before.
+    /// Used both when detection filters reviewed entries and when an accept checks for an earlier acceptance.
+    /// </summary>
+    internal static (ContentKind, string, int) CandidateIdentity(DraftCandidate c) =>
+        (c.ProposedKind, CandidateDetector.Key(c.ProposedName) + (c.Fields.TryGetValue("class", out var owner) ? "\u0001" + CandidateDetector.Key(owner) : ""), c.Page.Start);
 
     /// <summary>
     /// The identities already accepted from one document in one source, across all its jobs, read once per (source, document)
