@@ -150,13 +150,24 @@ internal sealed class ImportCatalog : IContentCatalog
     private readonly IContentCatalog _inner;
     private IContentCatalog _current;
 
-    public ImportCatalog(IContentCatalog inner)
+    private readonly bool _publishStub;
+
+    /// <param name="publishStub">
+    /// R129: the stub counts as published only when apply will publish it. Otherwise the calculation reads the store alone,
+    /// exactly as the saved character will (a draft gives it nothing), so the preview describes what apply saves.
+    /// </param>
+    public ImportCatalog(IContentCatalog inner, bool publishStub)
     {
         _inner = inner;
         _current = inner;
+        _publishStub = publishStub;
     }
 
-    public void Use(ContentRevision draft, SourceRecord source) => _current = new DraftOverlayCatalog(_inner, draft, source);
+    public void Use(ContentRevision draft, SourceRecord source)
+    {
+        if (_publishStub)
+            _current = new DraftOverlayCatalog(_inner, draft, source);
+    }
 
     public ContentRevision? FindRevision(ContentReference reference) => _current.FindRevision(reference);
 

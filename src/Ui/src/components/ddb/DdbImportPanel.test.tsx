@@ -687,6 +687,35 @@ it('sends publishClass true once Publish it is ticked, and the draft line goes a
   expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(true);
 });
 
+it('re-previews when Publish it is toggled (R129) and holds both publish ticks, with a linked reason and focus kept, until the new preview is in', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(false);
+  expect(tick.getAttribute('aria-disabled')).toBeNull();
+
+  const pending = deferred<DdbPreview>();
+  vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
+  await user.click(tick);
+
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(true));
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  expect(held.getAttribute('aria-disabled')).toBe('true');
+  expect(held.disabled).toBe(false);
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.activeElement).toBe(held);
+  const calls = vi.mocked(client.ddbPreview).mock.calls.length;
+  await user.click(held); // a click while held changes nothing
+  expect(held.checked).toBe(true);
+  expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(calls);
+
+  pending.resolve(stubPreview(true));
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).getAttribute('aria-disabled')).toBeNull());
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+});
+
 it('puts Publish it back to unticked whenever the created class is cleared or chosen again', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
@@ -961,14 +990,26 @@ it('after ddb.references-changed unticks the publish tick, keeps the error and a
   await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
   const previews = vi.mocked(client.ddbPreview).mock.calls.length;
   changed = true;
+  const pending = deferred<DdbPreview>();
+  vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
 
   await user.click(screen.getByRole('button', { name: 'Create character' }));
 
   await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
   expect((onError.mock.calls[0]![0] as TomeStackError).code).toBe('ddb.references-changed');
   await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
+  // R129: while the new set is on its way, the tick is held (aria-disabled, reason linked) and the old set cannot be ticked again.
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  expect(held.getAttribute('aria-disabled')).toBe('true');
+  expect(held.disabled).toBe(false);
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  await user.click(held);
+  expect(held.checked).toBe(false);
+
+  pending.resolve(draftsPreview(3));
   const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
   expect(tick.checked).toBe(false);
+  expect(tick.getAttribute('aria-disabled')).toBeNull();
 });
 
 // Item 19a (D37): character import from pasted or file text.

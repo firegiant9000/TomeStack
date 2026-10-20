@@ -38,6 +38,56 @@ public class DdbStubClassTests
     private static DdbApplyRequest Apply(Guid token, string? create = null, bool publish = false, string family = RulesFamilies.Srd51) =>
         new(token, family, null, [], [], false, Confirm: true, CreateClassRow: create, PublishClass: publish);
 
+    // ---- F3/R129: the preview describes the character apply saves ----
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_preview_numbers_are_the_saved_characters_whether_or_not_the_stub_is_published(bool publish)
+    {
+        using var h = new DdbHarness();
+        var token = Read(h, Sheet());
+
+        var preview = h.Temp.App.PreviewDdbImport(Preview(token, Row0) with { PublishClass = publish });
+        var result = h.Temp.App.ApplyDdbImport(Apply(token, Row0, publish) with { PreviewedPublishClass = publish });
+
+        var saved = h.Temp.App.GetCharacter(result.CharacterId).Sheet;
+        foreach (var field in new[] { FieldIds.HitPoints, FieldIds.Save(Ability.Str) })
+            Assert.Equal(saved.Field(field).Value, preview.Comparison.Single(c => c.Field == field).Calculated);
+    }
+
+    [Fact]
+    public void With_the_stub_unticked_the_hit_points_and_saves_that_rely_on_the_class_differ_and_ticked_they_use_it()
+    {
+        using var h = new DdbHarness();
+        var token = Read(h, Sheet());
+
+        var unticked = h.Temp.App.PreviewDdbImport(Preview(token, Row0));
+        var ticked = h.Temp.App.PreviewDdbImport(Preview(token, Row0) with { PublishClass = true });
+
+        var hp = FieldIds.HitPoints;
+        var save = FieldIds.Save(Ability.Str);
+        Assert.NotEqual(ticked.Comparison.Single(c => c.Field == hp).Calculated, unticked.Comparison.Single(c => c.Field == hp).Calculated);
+        Assert.NotEqual(ticked.Comparison.Single(c => c.Field == save).Calculated, unticked.Comparison.Single(c => c.Field == save).Calculated);
+        Assert.True(unticked.Comparison.Single(c => c.Field == hp).Differs);
+        Assert.NotNull(unticked.Stub); // the stub is still shown for review; only the calculation leaves it out
+    }
+
+    [Fact]
+    public void An_apply_whose_publish_tick_differs_from_the_previewed_request_is_refused_and_writes_nothing()
+    {
+        using var h = new DdbHarness();
+        var before = Counts(h);
+        var token = Read(h, Sheet());
+
+        var refused = Assert.Throws<AppValidationException>(() => h.Temp.App.ApplyDdbImport(Apply(token, Row0, publish: true) with { PreviewedPublishClass = false }));
+
+        Assert.Equal("ddb.publish-changed", refused.Code);
+        Assert.DoesNotContain(Tinkerer, refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, Counts(h));
+        Assert.NotNull(h.Temp.App.DdbSessions.Peek(token));
+    }
+
     internal static (int Sources, int Revisions, int Characters, int Notes) Counts(DdbHarness h) =>
         (h.Temp.App.Store.ListSources().Count, h.Temp.App.Store.ListRevisions().Count, h.Temp.App.ListCharacters().Count, h.Temp.App.ListAllGapNotes().Count);
 
@@ -85,7 +135,7 @@ public class DdbStubClassTests
         var before = Counts(h);
         var token = Read(h, Sheet());
 
-        var preview = h.Temp.App.PreviewDdbImport(Preview(token, Row0));
+        var preview = h.Temp.App.PreviewDdbImport(Preview(token, Row0) with { PublishClass = true }); // R129: the class counts only when it will be published
 
         var row = preview.Matches.Single(m => m.RowId == Row0);
         Assert.Equal(MatchStatus.Matched, row.Status);

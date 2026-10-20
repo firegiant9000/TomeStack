@@ -311,8 +311,11 @@ public sealed partial class TomeStackApp
             throw Refused("ddb.confirmation-required", "Creating the character needs confirmation.");
         var sheet = DdbSessions.Peek(request.Token)
             ?? throw Refused("ddb.token-invalid", "This sheet is no longer open: it was used, discarded or expired. Read it again.");
+        // R129: the preview calculated for one publish choice; an apply for the other would save numbers the user never saw.
+        if (request.PreviewedPublishClass is { } previewedPublish && previewedPublish != request.PublishClass)
+            throw Refused("ddb.publish-changed", "The publish choice is not the one the summary was calculated for. Nothing was created; look at the summary again.");
         var (proposal, writes) = ProposeDdb(sheet,
-            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched, request.CreateClassRow, request.KeepNotRead),
+            new DdbPreviewRequest(request.Token, request.RulesFamily, request.CampaignId, request.Resolutions, request.NumberChoices, request.IncludePlayState, request.Answers, request.EquipMatched, request.CreateClassRow, request.KeepNotRead, request.PublishClass),
             Guid.NewGuid());
         // Item 15: a class asked for that is not offered (its die cannot be read, another row already creates one, or it is
         // installed after all) is refused with a code, not guessed at. The message never names the class.
@@ -405,7 +408,7 @@ public sealed partial class TomeStackApp
     internal (DdbPreview Preview, ImportWrites Writes) ProposeDdb(DdbSheet sheet, DdbPreviewRequest request, Guid id)
     {
         var options = ListContent(request.RulesFamily, request.CampaignId).Where(o => o.Compatible && !o.Superseded).ToList();
-        var catalog = new ImportCatalog(_store);
+        var catalog = new ImportCatalog(_store, request.PublishClass);
         static Character Levelled(Character c) => c.Classes.Count > 0 ? c with { Level = c.Classes.Sum(l => l.Level) } : c;
         CharacterSheet Calculate(Character c) => CharacterCalculator.Calculate(Levelled(c), catalog);
         var stubSource = StubSource(request.RulesFamily);
@@ -597,14 +600,19 @@ public sealed record DdbPreview(
 
 /// <param name="Answers">Open choices the user answered in step 3 (a 2024 background's ability scores), applied after the matches through the builder's check.</param>
 /// <param name="EquipMatched">D16g: matched items whose revision is a weapon or armour are created equipped. Defaults to true, as the UI's checkbox does; a caller that omits it gets the guess.</param>
-public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null, bool KeepNotRead = true);
+/// <param name="PublishClass">
+/// R129: the created class will be published with the character. The calculation counts the class only then, so the comparison,
+/// overrides and gap notes describe the character apply saves. Reference drafts carry no effects, so ticking them changes no number and is not part of the request.
+/// </param>
+public sealed record DdbPreviewRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool EquipMatched = true, string? CreateClassRow = null, bool KeepNotRead = true, bool PublishClass = false);
 
 /// <param name="Confirm">Must be true: creating the character is the one write of the import.</param>
 /// <param name="ExpectedReferences">
 /// Item 16, the consent token (D33's <c>expected</c> pattern): the row ids of the reference drafts the user was shown. Required
 /// with <c>PublishReferences</c>; the apply refuses (<c>ddb.references-changed</c>) unless the drafts it derives are exactly these.
 /// </param>
-public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null, bool KeepNotRead = true);
+/// <param name="PreviewedPublishClass">R129: the <c>PublishClass</c> of the preview the user was shown. When given and different, the apply refuses (<c>ddb.publish-changed</c>).</param>
+public sealed record DdbApplyRequest(Guid Token, string RulesFamily, Guid? CampaignId, IReadOnlyList<Resolution>? Resolutions, IReadOnlyList<NumberChoice>? NumberChoices, bool IncludePlayState, IReadOnlyList<ChoiceSelection>? Answers = null, bool Confirm = false, bool EquipMatched = true, string? CreateClassRow = null, bool PublishClass = false, bool PublishReferences = false, IReadOnlyList<string>? ExpectedReferences = null, bool KeepNotRead = true, bool? PreviewedPublishClass = null);
 
 /// <param name="GapNotes">Notes stored: one per unmatched, unplaced or unreadable item, and one per noted difference.</param>
 /// <param name="GapNotesNotStored">Unmatched items past the per-character note limit, counted but not stored.</param>

@@ -1719,6 +1719,8 @@ export interface DdbPreviewRequest {
   createClassRow?: string;
   /** Item 19a: keep a text import's lines that were not read as session notes (the service defaults to true). Part of the request, so a change re-previews. */
   keepNotRead?: boolean;
+  /** R129: the created class will be published with the character. The preview counts the class only then, so a toggle re-previews. */
+  publishClass?: boolean;
 }
 
 /** Item 19a (D37): a line of the pasted or file text that was not understood. The user's own text: shown as plain text only. */

@@ -305,6 +305,8 @@ export function createClient(transport: Transport) {
         ...request,
         confirm: true,
         publishClass,
+        // R129: the publish choice the shown preview was calculated for; the service refuses an apply that differs.
+        previewedPublishClass: request.publishClass ?? false,
         publishReferences: references !== false,
         ...(references === false ? {} : { expectedReferences: references }),
       }),

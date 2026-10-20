@@ -52,7 +52,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [keepNotRead, setKeepNotRead] = useState(true);
   /** D35: the class row to create a homebrew class for; part of the preview request. */
   const [createClassRow, setCreateClassRow] = useState<string>();
-  /** D35: publish the created class with the character. Off by default; sent with Create only, never part of the preview. */
+  /** D35: publish the created class with the character. Off by default. R129: part of the request, so ticking it re-previews. */
   const [publishClass, setPublishClass] = useState(false);
   /** The stub content `publishClass` was last reconciled with; see `stubKey`. */
   const [publishKey, setPublishKey] = useState('');
@@ -116,6 +116,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           equipMatched,
           createClassRow,
           keepNotRead,
+          // R129: the numbers describe the saved character, so the stub counts only when it will be published.
+          publishClass: publishClass && createClassRow !== undefined,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -335,6 +337,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             suggested={read?.suggestedFamily}
             includePlayState={includePlayState}
             onIncludePlayState={setIncludePlayState}
+            held={stale}
             publishClass={publishClass}
             onPublishClass={setPublishClass}
             publishReferences={publishReferences}

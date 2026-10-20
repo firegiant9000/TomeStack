@@ -7,6 +7,11 @@ interface Props {
   suggested?: RulesFamilyId;
   includePlayState: boolean;
   onIncludePlayState: (include: boolean) => void;
+  /**
+   * R129: the shown preview does not answer the current choices (a newer one is loading, or it failed). The publish ticks are held:
+   * aria-disabled with a linked reason, never `disabled`, so focus stays where it is.
+   */
+  held?: boolean;
   /** D35: publish the created class with the character (off by default). */
   publishClass: boolean;
   onPublishClass: (publish: boolean) => void;
@@ -21,11 +26,13 @@ interface Props {
 /** How many not-read lines the summary lists before "and N more" (all of them are still kept when the tick is on). */
 const shownNotRead = 200;
 
+const heldReasonId = 'ddb-publish-held';
+
 /** How many reference drafts the summary lists before "and N more". */
 const shownDrafts = 10;
 
 /** Step 5: what will be created and what will not, before the one write. */
-export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, publishClass, onPublishClass, publishReferences = false, onPublishReferences, keepNotRead = true, onKeepNotRead }: Props) {
+export function DdbSummaryStep({ preview, family, suggested, includePlayState, onIncludePlayState, held = false, publishClass, onPublishClass, publishReferences = false, onPublishReferences, keepNotRead = true, onKeepNotRead }: Props) {
   if (!preview) return <p className="hint">Preparing the summary…</p>;
   const { character, matches, report } = preview;
   const unplaced = report.notFound + report.noPlace + report.unreadable;
@@ -33,8 +40,14 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
   const drafts = preview.referenceDrafts ?? [];
   const notRead = preview.notRead ?? [];
   const classes = matches.filter((m) => m.kind === 'class' && m.status === 'matched').map((m) => m.label);
+  const heldProps = { 'aria-disabled': held || undefined, 'aria-describedby': held ? heldReasonId : undefined };
   return (
     <>
+      {held && (preview.stub || drafts.length > 0) && (
+        <p id={heldReasonId} className="hint">
+          The summary is being refreshed, so the publish choices wait for it.
+        </p>
+      )}
       <dl>
         {report.layoutName && (
           <>
@@ -74,7 +87,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             so your later work on it cannot be shared or moved; to share your own version, make a new class.
           </p>
           <label>
-            <input type="checkbox" checked={publishClass} onChange={(e) => onPublishClass(e.target.checked)} /> Publish it
+            <input type="checkbox" checked={publishClass} {...heldProps} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Publish it
           </label>
           <p role="note">
             {publishClass
@@ -96,7 +109,7 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             {drafts.length > shownDrafts && <li>and {drafts.length - shownDrafts} more</li>}
           </ul>
           <label>
-            <input type="checkbox" checked={publishReferences} onChange={(e) => onPublishReferences?.(e.target.checked)} />{' '}
+            <input type="checkbox" checked={publishReferences} {...heldProps} onChange={(e) => !held && onPublishReferences?.(e.target.checked)} />{' '}
             {drafts.length === 1 ? 'Publish this reference draft' : `Publish these ${drafts.length} reference drafts`}
           </label>
           <p role="note">
