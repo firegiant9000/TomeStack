@@ -845,6 +845,29 @@ it('holds Create after a failed re-preview on the summary, never applies, and a 
   await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
 });
 
+it('frees the publish tick after a failed re-preview (Create stays held) and keeps its reason in one place, so nothing shifts (R142)', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return stubPreview(wantsStub(request));
+  });
+  renderPanel();
+  await toStubSummary(user);
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const slot = document.getElementById('ddb-publish-held-class');
+  expect(slot).not.toBeNull(); // the reason's place exists before anything is held
+  expect(slot!.textContent).toBe('');
+
+  failing = true;
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  expect(tick.getAttribute('aria-disabled')).toBeNull(); // not loading any more: the tick is free
+  expect(document.getElementById('ddb-publish-held-class')).toBe(slot); // the same node, never inserted or removed
+  expect(slot!.textContent).toBe('');
+});
+
 it('says on the summary that the created class lives in a source that is never shared, and how to share one (D35)', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));

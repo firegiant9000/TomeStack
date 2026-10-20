@@ -8,8 +8,9 @@ interface Props {
   includePlayState: boolean;
   onIncludePlayState: (include: boolean) => void;
   /**
-   * R129: the shown preview does not answer the current choices (a newer one is loading, or it failed). The publish ticks are held:
-   * aria-disabled with a linked reason, never `disabled`, so focus stays where it is.
+   * R129/R142: a newer preview is loading, so the shown one does not answer the current choices. The publish ticks are held while it
+   * loads (and only then; after a failure they are free and Create stays held): aria-disabled with a linked reason, never `disabled`,
+   * so focus stays where it is.
    */
   held?: boolean;
   /** D35: publish the created class with the character (off by default). */
@@ -26,7 +27,9 @@ interface Props {
 /** How many not-read lines the summary lists before "and N more" (all of them are still kept when the tick is on). */
 const shownNotRead = 200;
 
-const heldReasonId = 'ddb-publish-held';
+const classSlot = 'ddb-publish-held-class';
+const referencesSlot = 'ddb-publish-held-references';
+const heldReasonText = 'The summary is being refreshed, so the publish choices wait for it.';
 
 /** How many reference drafts the summary lists before "and N more". */
 const shownDrafts = 10;
@@ -40,14 +43,16 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
   const drafts = preview.referenceDrafts ?? [];
   const notRead = preview.notRead ?? [];
   const classes = matches.filter((m) => m.kind === 'class' && m.status === 'matched').map((m) => m.label);
-  const heldProps = { 'aria-disabled': held || undefined, 'aria-describedby': held ? heldReasonId : undefined };
+  // R142: each publish tick has its own reason slot beside it. The slot is always in the page (empty unless held), so the
+  // reason appearing never moves the focused tick.
+  const heldProps = (slot: string) => ({ 'aria-disabled': held || undefined, 'aria-describedby': held ? slot : undefined });
+  const reason = (slot: string) => (
+    <span id={slot} className="hint">
+      {held ? heldReasonText : ''}
+    </span>
+  );
   return (
     <>
-      {held && (preview.stub || drafts.length > 0) && (
-        <p id={heldReasonId} className="hint">
-          The summary is being refreshed, so the publish choices wait for it.
-        </p>
-      )}
       <dl>
         {report.layoutName && (
           <>
@@ -87,8 +92,9 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             so your later work on it cannot be shared or moved; to share your own version, make a new class.
           </p>
           <label>
-            <input type="checkbox" checked={publishClass} {...heldProps} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Publish it
-          </label>
+            <input type="checkbox" checked={publishClass} {...heldProps(classSlot)} onChange={(e) => !held && onPublishClass(e.target.checked)} /> Publish it
+          </label>{' '}
+          {reason(classSlot)}
           <p role="note">
             {publishClass
               ? 'The class is published with the character, so its hit die and saving throws count now.'
@@ -109,9 +115,10 @@ export function DdbSummaryStep({ preview, family, suggested, includePlayState, o
             {drafts.length > shownDrafts && <li>and {drafts.length - shownDrafts} more</li>}
           </ul>
           <label>
-            <input type="checkbox" checked={publishReferences} {...heldProps} onChange={(e) => !held && onPublishReferences?.(e.target.checked)} />{' '}
+            <input type="checkbox" checked={publishReferences} {...heldProps(referencesSlot)} onChange={(e) => !held && onPublishReferences?.(e.target.checked)} />{' '}
             {drafts.length === 1 ? 'Publish this reference draft' : `Publish these ${drafts.length} reference drafts`}
-          </label>
+          </label>{' '}
+          {reason(referencesSlot)}
           <p role="note">
             They hold a name and a description only, no mechanics. Features are kept as reference content in the studio; the gap notes stay on the
             character. Published feats (if any) are pinned on the character.

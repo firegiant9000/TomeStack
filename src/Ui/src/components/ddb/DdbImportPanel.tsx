@@ -341,7 +341,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             suggested={read?.suggestedFamily}
             includePlayState={includePlayState}
             onIncludePlayState={setIncludePlayState}
-            held={stale}
+            held={loading}
             publishClass={publishClass}
             onPublishClass={setPublishClass}
             publishReferences={publishReferences}
