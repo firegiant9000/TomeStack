@@ -361,7 +361,7 @@ public sealed partial class TomeStackApp
                 throw new AppValidationException([new("candidate.linked-changed", "A feature this class grants was reviewed while it was being accepted. Check the class again; nothing was changed.")]);
             // Task 8a M1: one edited since the plan (status unchanged) would be saved Accepted from the stale row and the edit lost.
             if (plan.Linked.Any(l => l.Candidate is { } planned && !string.Equals(_store.FindImportCandidate(planned.Id)?.Etag, planned.Etag, StringComparison.Ordinal)))
-                throw new AppValidationException([new("import.candidate-changed", "A feature this class grants changed while it was being accepted. Check the class again; nothing was changed.")]);
+                throw new AppValidationException([new("candidate.linked-edited", "A feature this class grants was edited while it was being accepted. Check the class again; nothing was changed.")]);
             foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
                 WriteAccepted(feature.Candidate!, feature.NewDraft!, asReference: false);
             accepted = WriteAccepted(stored, plan.Draft, request.AsReference);

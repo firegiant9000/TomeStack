@@ -1123,3 +1123,27 @@ it.each([
   const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
   await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
 });
+
+// R134: a linked feature that moved on does not change the class's own etag, so the check is asked for again by hand.
+it.each(['candidate.linked-edited', 'candidate.linked-changed'])('asks for the check again, and says so, when a linked feature moved on (%s)', async (code) => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([lamp()]));
+  vi.mocked(client.checkCandidate).mockReset();
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockRejectedValueOnce(new TomeStackError({ code, message: 'Fixture: a feature moved on.' }));
+  render(<CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Lamplighter' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(1));
+
+  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+
+  await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(2));
+  expect(onStatus).toHaveBeenCalledWith('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
+  expect(onError).not.toHaveBeenCalled();
+});

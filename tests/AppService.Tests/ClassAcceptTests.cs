@@ -455,7 +455,9 @@ public class ClassAcceptTests
 
         var refused = Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
-        Assert.Equal(["import.candidate-changed"], Codes(refused));
+        // R134: its own code, not `import.candidate-changed` (the class itself did not change), and its message names no feature.
+        Assert.Equal(["candidate.linked-edited"], Codes(refused));
+        Assert.DoesNotContain("Fixture", refused.Problems[0].Message, StringComparison.Ordinal);
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
         var stored = Named(temp, jobId, "Fixture Beacon");
         Assert.Equal(CandidateStatus.Pending, stored.Status);

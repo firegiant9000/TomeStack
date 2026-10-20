@@ -41,6 +41,7 @@ const blockedReasons: Record<string, string> = {
   'spell-list.not-a-spell': 'is not a spell',
   'import.class-unconfirmed': 'is a class: open it, tick the hit die and slot table, and accept it on its own',
   'candidate.linked-changed': 'had a linked feature reviewed while it was being accepted: check it again',
+  'candidate.linked-edited': 'had a linked feature edited while it was being accepted: check it again',
 };
 
 /** A code this screen does not know yet still reads as words (WCAG 3.3.1), never as the code. */
@@ -591,6 +592,8 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [effectsError, setEffectsError] = useState<string>();
   const [check, setCheck] = useState<CandidateCheck>();
+  // R134: a linked feature that moved on leaves this candidate's own etag as it was, so the check is asked for again by hand.
+  const [checkRound, setCheckRound] = useState(0);
   const pending = stored.status === 'pending';
 
   // Item 11 (D34, ADR-016): a class is accepted as a draft only once the reviewer has confirmed its hit die and, when it
@@ -646,7 +649,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     return () => {
       current = false;
     };
-  }, [stored.id, onError]);
+  }, [stored.id, checkRound, onError]);
 
   async function save() {
     let parsed: unknown[];
@@ -673,6 +676,17 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
       try {
         await onChanged('This candidate changed since you opened it. It has been reloaded.');
+      } catch (reloadError) {
+        onError(reloadError);
+      }
+      return;
+    }
+    // R134: a feature this class grants was edited or reviewed meanwhile: the class itself is as it was, so refetch the check
+    // and say so (the list is reloaded too, in case the feature's row moved).
+    if (error instanceof TomeStackError && (error.code === 'candidate.linked-edited' || error.code === 'candidate.linked-changed')) {
+      setCheckRound((n) => n + 1);
+      try {
+        await onChanged('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
       } catch (reloadError) {
         onError(reloadError);
       }
