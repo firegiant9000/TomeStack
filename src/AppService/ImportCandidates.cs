@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TomeStack.ImportWorker;
+using TomeStack.AppService.Persistence;
 using TomeStack.ImportWorker.Detection;
 using TomeStack.RulesCore;
 
@@ -748,7 +749,7 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         ImportStatus(request.JobId);
-        return [.. Filtered(request)];
+        return _store.QueryImportCandidates(request.JobId, FilterOf(request), 0, null).Items;
     }
 
     /// <summary>The most candidates one page of <c>import.candidates</c> returns.</summary>
@@ -769,21 +770,11 @@ public sealed partial class TomeStackApp
         if (request.Limit is < 1 or > MaxCandidatePageSize)
             throw new AppValidationException([new("import.limit-out-of-range", $"A page holds 1 to {MaxCandidatePageSize} candidates.")]);
         ImportStatus(request.JobId);
-        var all = Filtered(request).ToList();
-        return new([.. all.Skip(request.Offset ?? 0).Take(request.Limit ?? DefaultCandidatePageSize)], all.Count);
+        // R82: the filter and the order run on the indexed columns; only the rows of this page are read from the JSON.
+        var (items, total) = _store.QueryImportCandidates(request.JobId, FilterOf(request), request.Offset ?? 0, request.Limit ?? DefaultCandidatePageSize);
+        return new(items, total);
     }
 
-    private IEnumerable<StoredCandidate> Filtered(ImportCandidatesRequest request)
-    {
-        var first = request.FirstPage ?? request.Page;
-        var last = request.LastPage ?? request.Page;
-        return _store.ListImportCandidates(request.JobId)
-            .Where(c => first is not { } from || (c.Current.Page.End ?? c.Current.Page.Start) >= from)
-            .Where(c => last is not { } to || c.Current.Page.Start <= to)
-            .Where(c => request.Kind is not { } kind || c.Current.ProposedKind == kind)
-            .Where(c => request.MinConfidence is not { } min || c.Current.Confidence >= min)
-            .Where(c => request.MaxConfidence is not { } max || c.Current.Confidence <= max)
-            .Where(c => request.Status is not { } status || c.Status == status)
-            .OrderBy(c => c.Current.Page.Start).ThenBy(c => c.Current.ProposedName, StringComparer.CurrentCultureIgnoreCase);
-    }
+    private static ImportCandidateFilter FilterOf(ImportCandidatesRequest request) =>
+        new(request.FirstPage ?? request.Page, request.LastPage ?? request.Page, request.Kind, request.MinConfidence, request.MaxConfidence, request.Status);
 }

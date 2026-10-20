@@ -51,7 +51,7 @@ public class UpgradeTests
     {
         // Import gap notes (gap-note v2) are stored like any note; a build that knows only v1 notes would open the folder
         // and then fail on every read of them. Version 10 changes nothing but the number, so such a build refuses it.
-        Assert.Equal(10, SqliteStore.LatestSchemaVersion);
+        Assert.True(SqliteStore.LatestSchemaVersion >= 10);
         var directory = NewDirectory();
         Directory.CreateDirectory(directory);
         var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
@@ -67,7 +67,7 @@ public class UpgradeTests
             Assert.Equal(9, version9.SchemaVersion);
         var before = Tables();
 
-        using (var current = new SqliteStore(database))
+        using (var current = new SqliteStore(database, SqliteStore.Migrations[..10])) // the list as it stood at version 10 (11 adds the candidate columns)
             Assert.Equal(10, current.SchemaVersion);
 
         Assert.Equal(before, Tables());
@@ -259,13 +259,27 @@ public class UpgradeTests
             Assert.Equal(bytes, Text(database, $"SELECT json FROM characters WHERE id = '{id:D}';")); // v8, and the bytes 0.5.0 wrote
         var copy = Path.Combine(directory, $"tomestack.db.app-pre-{AppVersionStamp.CurrentVersion}-to-{AppVersionStamp.CurrentVersion}.bak");
         Assert.True(File.Exists(copy), "the one-time app-version copy was not written");
-        Assert.Equal([Path.GetFileName(copy)], Directory.GetFiles(directory, "*.bak").Select(Path.GetFileName)); // and no schema copy: the schema is unchanged
-        Assert.Equal(2, Scalar(copy, "SELECT COUNT(*) FROM characters;"));
+        // R75: two copies on this first open, since 0.5.0's database is at version 10 and this build migrates it to 11: the app-version
+        // copy (R87) and BackupBeforeUpgrade's copy at the version it was opened with. Both are of the 0.5.0 database, and both open.
+        var schemaCopy = SqliteStore.BackupPath(database, 10);
+        Assert.True(File.Exists(schemaCopy), "the copy before the schema migration was not written");
+        Assert.Equal([Path.GetFileName(copy), Path.GetFileName(schemaCopy)], Directory.GetFiles(directory, "*.bak").Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        foreach (var backup in new[] { copy, schemaCopy })
+        {
+            Assert.Equal(2, Scalar(backup, "SELECT COUNT(*) FROM characters;"));
+            Assert.Equal(10, Scalar(backup, "PRAGMA user_version;"));
+            var probe = Path.Combine(NewDirectory(), TomeStackApp.DatabaseFileName); // a copy of the copy: opening migrates it and takes its own backup
+            Directory.CreateDirectory(Path.GetDirectoryName(probe)!);
+            File.Copy(backup, probe);
+            using var opened = new SqliteStore(probe);
+            Assert.Equal(SqliteStore.LatestSchemaVersion, opened.SchemaVersion);
+            Assert.Equal(2, opened.ListCharacters().Count);
+        }
         Assert.Equal(AppVersionStamp.CurrentVersion, File.ReadAllText(Path.Combine(directory, AppVersionStamp.FileName)).Trim());
 
         var written = File.GetLastWriteTimeUtc(copy);
         using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [], devFixtures: true)) { }
-        Assert.Single(Directory.GetFiles(directory, "*.bak"));
+        Assert.Equal(2, Directory.GetFiles(directory, "*.bak").Length);
         Assert.Equal(written, File.GetLastWriteTimeUtc(copy)); // written once
     }
 

@@ -146,6 +146,20 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         // read of one (the strict enum reader), full backups included. The number alone makes such a build refuse the
         // folder cleanly (NewerDatabaseException). Forward-only, with the usual single copy first.
         new("SELECT 1;"),
+        // v11 (Wave 2, R82, owner-approved): import_candidates gains the columns a candidate page turn filters and orders by
+        // (kind, page, page_end, name and confidence of the CURRENT version, edited or detected; status already exists), and an
+        // index that serves it, so a page turn reads only its page. The JSON stays authoritative and every writer sets both
+        // (SaveImportCandidate); the data step fills the existing rows from their JSON and leaves the JSON untouched. Once a
+        // build with v11 opens a data folder, v10 builds refuse it (NewerDatabaseException); forward-only, with the usual single
+        // copy first (BackupBeforeUpgrade, at the version the database was opened with).
+        new("""
+        ALTER TABLE import_candidates ADD COLUMN kind TEXT NOT NULL DEFAULT '';
+        ALTER TABLE import_candidates ADD COLUMN page INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE import_candidates ADD COLUMN page_end INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE import_candidates ADD COLUMN name TEXT NOT NULL DEFAULT '';
+        ALTER TABLE import_candidates ADD COLUMN confidence REAL NOT NULL DEFAULT 0;
+        CREATE INDEX ix_import_candidates_page ON import_candidates (job_id, status, kind, page);
+        """, store => store.BackfillImportCandidateColumns()),
     ];
 
     private readonly SqliteConnection _connection;
@@ -447,15 +461,30 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    /// <summary>
+    /// The one writer of <c>import_candidates</c> rows: the JSON (authoritative) and the columns derived from it, together. The
+    /// columns describe <see cref="StoredCandidate.Current"/> (the edited version when there is one).
+    /// </summary>
     public void SaveImportCandidate(StoredCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+        var current = candidate.Current;
         Execute(
-            "INSERT INTO import_candidates (id, job_id, status, json) VALUES ($id, $job, $status, $json) ON CONFLICT(id) DO UPDATE SET status = excluded.status, json = excluded.json;",
+            """
+            INSERT INTO import_candidates (id, job_id, status, json, kind, page, page_end, name, confidence)
+            VALUES ($id, $job, $status, $json, $kind, $page, $pageEnd, $name, $confidence)
+            ON CONFLICT(id) DO UPDATE SET status = excluded.status, json = excluded.json, kind = excluded.kind, page = excluded.page,
+                page_end = excluded.page_end, name = excluded.name, confidence = excluded.confidence;
+            """,
             ("$id", Key(candidate.Id)),
             ("$job", Key(candidate.JobId)),
             ("$status", candidate.Status.ToString()),
-            ("$json", Serialize(candidate with { Etag = null })));
+            ("$json", Serialize(candidate with { Etag = null })),
+            ("$kind", current.ProposedKind.ToString()),
+            ("$page", current.Page.Start),
+            ("$pageEnd", current.Page.End ?? current.Page.Start),
+            ("$name", current.ProposedName),
+            ("$confidence", current.Confidence));
     }
 
     public StoredCandidate? FindImportCandidate(Guid id) =>
@@ -464,9 +493,83 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IReadOnlyList<StoredCandidate> ListImportCandidates(Guid jobId) =>
         [.. QueryStrings("SELECT json FROM import_candidates WHERE job_id = $job ORDER BY rowid;", ("$job", Key(jobId))).Select(ReadCandidate)];
 
+    /// <summary>Test seam: how many candidate JSON documents this store has read and deserialised (a page turn reads its page only).</summary>
+    internal long CandidateJsonRowsRead => Interlocked.Read(ref _candidateJsonRowsRead);
+
+    private long _candidateJsonRowsRead;
+
+    /// <summary>
+    /// A job's candidates matching <paramref name="filter"/> in page then name order (the old in-memory filter's order: stable, by
+    /// the current version's first page, then its name ignoring case in the current culture, ties in storage order), the
+    /// <paramref name="limit"/> from <paramref name="offset"/> (null: all), and how many match in all. The filter and the order key
+    /// run on the indexed columns; only the rows of the returned page are read and deserialised.
+    /// </summary>
+    public (IReadOnlyList<StoredCandidate> Items, int Total) QueryImportCandidates(Guid jobId, ImportCandidateFilter filter, int offset, int? limit)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        var sql = new StringBuilder("SELECT id, page, name FROM import_candidates WHERE job_id = $job");
+        var parameters = new List<(string, object)> { ("$job", Key(jobId)) };
+        if (filter.Status is { } status)
+        {
+            sql.Append(" AND status = $status");
+            parameters.Add(("$status", status.ToString()));
+        }
+        if (filter.Kind is { } kind)
+        {
+            sql.Append(" AND kind = $kind");
+            parameters.Add(("$kind", kind.ToString()));
+        }
+        if (filter.FirstPage is { } first)
+        {
+            sql.Append(" AND page_end >= $first");
+            parameters.Add(("$first", first));
+        }
+        if (filter.LastPage is { } last)
+        {
+            sql.Append(" AND page <= $last");
+            parameters.Add(("$last", last));
+        }
+        if (filter.MinConfidence is { } min)
+        {
+            sql.Append(" AND confidence >= $min");
+            parameters.Add(("$min", min));
+        }
+        if (filter.MaxConfidence is { } max)
+        {
+            sql.Append(" AND confidence <= $max");
+            parameters.Add(("$max", max));
+        }
+        sql.Append(" ORDER BY rowid;");
+        lock (_gate)
+        {
+            var keys = new List<(string Id, int Page, string Name)>();
+            using (var command = Command(sql.ToString(), [.. parameters]))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                    keys.Add((reader.GetString(0), reader.GetInt32(1), reader.GetString(2)));
+            }
+            var ordered = keys.OrderBy(k => k.Page).ThenBy(k => k.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var wanted = ordered.Skip(Math.Max(0, offset)).Take(limit ?? int.MaxValue).Select(k => k.Id).ToList();
+            var json = new Dictionary<string, string>(wanted.Count, StringComparer.Ordinal);
+            foreach (var chunk in wanted.Chunk(400))
+            {
+                var names = chunk.Select((_, i) => $"$i{i}").ToList();
+                using var command = Command($"SELECT id, json FROM import_candidates WHERE id IN ({string.Join(", ", names)});", [.. chunk.Select((id, i) => (names[i], (object)id))]);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                    json[reader.GetString(0)] = reader.GetString(1);
+            }
+            return ([.. wanted.Where(json.ContainsKey).Select(id => ReadCandidate(json[id]))], ordered.Count);
+        }
+    }
+
     /// <summary>R120: a stored candidate with its compare-and-swap token (the SHA-256 of the stored JSON string, as read).</summary>
-    private static StoredCandidate ReadCandidate(string json) =>
-        Typed(JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!) with { Etag = Sha256(json) };
+    private StoredCandidate ReadCandidate(string json)
+    {
+        Interlocked.Increment(ref _candidateJsonRowsRead);
+        return Typed(JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact)!) with { Etag = Sha256(json) };
+    }
 
     /// <summary>Versioned effect types are typed only inside a revision, so a stored candidate's effects are typed on read (ADR-003).</summary>
     private static StoredCandidate Typed(StoredCandidate stored) => stored with
@@ -661,8 +764,17 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
     public IEnumerable<ContentRevision> RevisionsOf(Guid contentId) => ListRevisions(contentId);
 
     /// <summary>Every stored revision in the order it was added (the homebrew studio's history).</summary>
-    public IReadOnlyList<ContentRevision> ListRevisionsInOrder() =>
-        Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY rowid;");
+    public IReadOnlyList<ContentRevision> ListRevisionsInOrder()
+    {
+        if (_transaction is not null)
+            Interlocked.Increment(ref _revisionListsInTransaction);
+        return Query<ContentRevision>("SELECT json FROM content_revisions ORDER BY rowid;");
+    }
+
+    /// <summary>Test seam: how many whole-library revision lists were read while a transaction (so the store lock) was held.</summary>
+    internal long RevisionListsInTransaction => Interlocked.Read(ref _revisionListsInTransaction);
+
+    private long _revisionListsInTransaction;
 
     /// <summary>
     /// The newest published revision (insertion order) of each content, but only those whose stored JSON holds an effect of one of
@@ -877,6 +989,47 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         }
     }
 
+    /// <summary>
+    /// Migration v11 data step (R82). Runs inside the migration's transaction: fills <c>kind</c>, <c>page</c>, <c>page_end</c>, <c>name</c>
+    /// and <c>confidence</c> of every candidate row from its stored JSON (the current version, as <see cref="StoredCandidate.Current"/>).
+    /// The JSON is not touched, so 0.5.0's bytes stay as they were. A row whose JSON does not read keeps the column defaults (it would
+    /// not read for review either); nothing is logged from the document.
+    /// </summary>
+    private void BackfillImportCandidateColumns()
+    {
+        var rows = new List<(string Id, string Json)>();
+        lock (_gate)
+        {
+            using var command = Command("SELECT id, json FROM import_candidates;", []);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1)));
+        }
+        foreach (var (id, json) in rows)
+        {
+            StoredCandidate? stored;
+            try
+            {
+                stored = JsonSerializer.Deserialize<StoredCandidate>(json, RulesJson.Compact);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+            if (stored is null)
+                continue; // the literal JSON null
+            var current = stored.Current;
+            Execute(
+                "UPDATE import_candidates SET kind = $kind, page = $page, page_end = $pageEnd, name = $name, confidence = $confidence WHERE id = $id;",
+                ("$kind", current.ProposedKind.ToString()),
+                ("$page", current.Page.Start),
+                ("$pageEnd", current.Page.End ?? current.Page.Start),
+                ("$name", current.ProposedName),
+                ("$confidence", current.Confidence),
+                ("$id", id));
+        }
+    }
+
     private void Execute(string sql, params (string Name, object Value)[] parameters)
     {
         lock (_gate)
@@ -934,6 +1087,14 @@ public sealed class SqliteStore : IContentCatalog, IDisposable
         return command;
     }
 }
+
+/// <summary>
+/// The filters of a candidate list (<see cref="SqliteStore.QueryImportCandidates"/>), as the request states them: a candidate matches
+/// when its page span reaches <paramref name="FirstPage"/>, starts on or before <paramref name="LastPage"/>, and has this kind,
+/// status and confidence range (all on the current version, edited or detected).
+/// </summary>
+public sealed record ImportCandidateFilter(
+    int? FirstPage = null, int? LastPage = null, ContentKind? Kind = null, double? MinConfidence = null, double? MaxConfidence = null, CandidateStatus? Status = null);
 
 /// <summary>The data folder was written by a newer TomeStack. Nothing is changed; the user must update the app.</summary>
 public sealed class NewerDatabaseException(int version, int supported)
