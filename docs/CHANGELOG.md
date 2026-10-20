@@ -37,7 +37,7 @@
 
 ### Fixed
 
-- **An import no longer fails with "took too long" on a busy computer (R151):** each text pattern the importer uses to find entries may now take up to 1 second on one line (it was 0.1 s, which a busy computer could exceed on any line). A pattern that runs longer still stops the import with `detect.timeout`.
+- **An import no longer fails with "took too long" on a busy computer (R151):** each search the importer runs to find entries may now take up to 1 second. Some searches cover a whole block or page of text. The limit was 0.1 s, which a busy computer could exceed on any search. A pattern that runs longer still stops the import with `detect.timeout`.
 - **A change refused because the item or spell is gone is announced as a status, not an error (R144):** toggling Equip on an item, or Prepared on a spell, that was removed meanwhile (by a restore, an import or another panel) saves nothing and says so in the polite status line, as the custom items and attacks already did. Focus stays on the control.
 - **The local-path check also refuses the console and superscript device names (R116):** a file named `CONIN$`, `CONOUT$`, `COM¹`, `COM²`, `COM³`, `LPT¹`, `LPT²` or `LPT³` (any case, with or without an extension, in any folder of the path) is refused like `CON` or `COM1` already were.
 - **A page with many class headings is read in bounded time, and Cancel stops it (R127):** the per-page class split now splits at most 8 class titles; a page with more is read whole, as before the split existed. Each window is read once (a window that did not change after a class was dropped is not read again), and the split, and the reading of each class table (the whole-table reader and the older header scan), check for Cancel as they go.

@@ -19,14 +19,17 @@ public class DetectionRegexTimeoutTests
                 yield return ($"{type.Name}.{method.Name}", (Regex)method.Invoke(null, null)!);
             foreach (var property in type.GetProperties(AllStatic).Where(p => p.PropertyType == typeof(Regex) && p.GetIndexParameters().Length == 0))
                 yield return ($"{type.Name}.{property.Name}", (Regex)property.GetValue(null)!);
+            foreach (var field in type.GetFields(AllStatic).Where(f => f.FieldType == typeof(Regex)))
+                yield return ($"{type.Name}.{field.Name}", (Regex)field.GetValue(null)!);
         }
     }
 
+    // CandidateDetector's weapon-mastery match builds its pattern per name, so it stays inline; it uses the same constant.
     [Fact]
     public void Every_detection_regex_uses_the_shared_timeout()
     {
         var regexes = DetectionRegexes().ToList();
-        Assert.True(regexes.Count > 0, "No detection regex was found; the reflection no longer sees them.");
+        Assert.True(regexes.Count >= 50, $"Only {regexes.Count} detection regexes were found (50 at R151); the reflection no longer sees them all.");
 
         var expected = TimeSpan.FromMilliseconds(DetectionLimits.RegexTimeoutMs);
         var wrong = regexes.Where(r => r.Regex.MatchTimeout != expected).Select(r => $"{r.Name} ({r.Regex.MatchTimeout.TotalMilliseconds} ms)").ToList();
