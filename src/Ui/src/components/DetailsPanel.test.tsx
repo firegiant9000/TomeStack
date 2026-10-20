@@ -191,7 +191,7 @@ it('ignores a second press while a save runs', async () => {
   const { rerender } = render(<DetailsPanel view={viewOf()} onChanged={onChanged} onError={vi.fn()} onStatus={vi.fn()} />);
   const form = screen.getByRole('form', { name: 'Details' });
   const save = within(form).getByRole('button', { name: 'Save details' });
-  await user.type(within(form).getByRole('textbox', { name: 'Hair' }), 'Fixture auburn');
+  await user.type(within(form).getByRole('textbox', { name: 'Hair' }), 'Fixture auburn  '); // trailing spaces: the saved (trimmed) answer must replace them
   await user.click(save);
   await user.click(save);
   expect(client.saveCharacter).toHaveBeenCalledTimes(1);

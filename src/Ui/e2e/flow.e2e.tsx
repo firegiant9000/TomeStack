@@ -1050,13 +1050,13 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ }));
   await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
   const region = screen.getByRole('region', { name: 'Publish drafts of E2E Bulk Book' });
-  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' })));
   const publish = await within(region).findByRole('button', { name: 'Publish 2 drafts' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
 
   const result = await within(region).findByText('Published 2 drafts.');
-  expect(document.activeElement).toBe(result);
+  await waitFor(() => expect(document.activeElement).toBe(result)); // an effect moves focus to the result, so it can land after the text
   expect((await client.contentBySource(source.id)).map((e) => e.latest.status)).toEqual(['published', 'published']);
   // A second press would find nothing pending: the button is gone with the drafts.
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull());
@@ -1090,7 +1090,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Ember Lance' }));
   await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to a spell list…' }));
   const key = within(panel()).getByRole('combobox', { name: 'Spell list key' });
-  expect(document.activeElement).toBe(key);
+  await waitFor(() => expect(document.activeElement).toBe(key));
   await user.type(key, ' Wizard');
   expect(within(panel()).getByText('Saved as: wizard')).toBeTruthy();
   await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to this list' }));
@@ -1745,7 +1745,7 @@ it('reaches the primary actions by keyboard alone', async () => {
 
   await user.keyboard('{Shift>}{Tab}{/Shift}{Enter}');
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })));
 });
 
 it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions are grouped', async () => {
@@ -1891,7 +1891,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   const features = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: 'Features' });
   await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
-  expect(document.activeElement).toBe(text);
+  await waitFor(() => expect(document.activeElement).toBe(text));
   expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
   await user.type(text, 'Speed bonus should apply while unarmored only.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
@@ -1907,7 +1907,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(armor).getByRole('heading'));
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
-  expect(document.activeElement).toBe(text);
+  await waitFor(() => expect(document.activeElement).toBe(text));
   // "Report a gap" left Notes as the remembered tab; move the memory off it so the deep link below is what selects Notes.
   await openTab(user, sheet, 'Play');
 
@@ -1968,7 +1968,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
-  expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })); // focus moves to the preview on open
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' }))); // focus moves to the preview on open
   expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
   expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
   expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
@@ -1995,7 +1995,7 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(print).toHaveBeenCalledTimes(1);
   await user.click(within(preview).getByRole('button', { name: 'Close print preview' }));
   expect(within(sheet).queryByRole('region', { name: 'Print preview' })).toBeNull();
-  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' })));
   print.mockRestore();
 });
 
@@ -2339,7 +2339,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await waitFor(() => expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Archive' })));
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' })));
   await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
   confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
   await user.click(within(confirm).getByRole('button', { name: 'Keep it' }));
@@ -2713,7 +2713,7 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   const user = userEvent.setup();
   const { unmount } = render(<App />);
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' })));
   await user.click(screen.getByRole('radio', { name: 'Violet' }));
   expect(document.documentElement.dataset.theme).toBe('violet');
   await user.click(screen.getByRole('radio', { name: 'Dark' }));
@@ -2761,7 +2761,7 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
   newCharacter.focus();
   await user.keyboard('{Control>}b{/Control}');
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' })));
 
   unmount();
   render(<App />);
@@ -2801,7 +2801,7 @@ it('opens the Characters home screen with a card per character and opens one fro
   expect(await screen.findByRole('article', { name })).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   const back = await screen.findByRole('region', { name: 'Characters' });
-  expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' })));
 });
 
 it('creates a character with the standard array (D32)', async () => {
