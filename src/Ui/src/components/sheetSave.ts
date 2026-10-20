@@ -21,15 +21,20 @@ export function useSheetSave(view: CharacterView): SheetSave {
   const pending = useRef(0);
   const tail = useRef<Promise<unknown>>(Promise.resolve());
 
-  // A view shown by another route (a restore, a rest, a reload) becomes the latest, but never while a save is queued or
-  // running and never an older one than a save already returned (the prop can lag the queue by a render).
+  const shown = useRef(view.character);
+
+  // R137: the newest view the sheet was given is always kept. A view shown by another route (a restore, a rest, a reload)
+  // that arrives while saves are queued is picked up when the next one starts, if it is newer than the last save's result.
   useEffect(() => {
+    shown.current = view.character;
     if (pending.current === 0 && (view.character.updatedAt ?? '') >= (latest.current.updatedAt ?? '')) latest.current = view.character;
   }, [view.character]);
 
   return useCallback<SheetSave>((update) => {
     pending.current += 1;
     const run = async () => {
+      // Ties go to the queue's own latest. Known limit: character.save has no compare-and-set, and a clock set back wins here.
+      if ((shown.current.updatedAt ?? '') > (latest.current.updatedAt ?? '')) latest.current = shown.current;
       const saved = await client.saveCharacter(update(latest.current));
       latest.current = saved.character;
       return saved;

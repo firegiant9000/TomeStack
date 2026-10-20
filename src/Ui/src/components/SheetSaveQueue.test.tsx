@@ -108,6 +108,39 @@ it('keeps both changes when two panels save close together (R132)', async () => 
   expect(shown[1]!.character.notes).toHaveLength(1);
 });
 
+it('keeps a view that arrives while saves are queued (R137)', async () => {
+  const settle: Array<() => void> = [];
+  let saves = 0;
+  vi.mocked(client.saveCharacter).mockImplementation(
+    (sent) =>
+      new Promise<CharacterView>((resolve) => {
+        saves += 1;
+        const stamp = `2026-10-06T00:00:0${saves}Z`;
+        settle.push(() => resolve({ character: { ...sent, updatedAt: stamp }, sheet }));
+      }),
+  );
+  const props = { onChanged: noop, onError: noop, onStatus: noop, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop };
+  const { rerender } = render(<CharacterSheet view={{ character, sheet }} {...props} />);
+
+  fireEvent.change(screen.getByLabelText('Gold (gp)', { selector: 'input' }), { target: { value: '5' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save currency', hidden: true }));
+  fireEvent.change(screen.getByLabelText('Note', { selector: 'textarea', exact: true }), { target: { value: 'Fixture note three.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save session note', hidden: true }));
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(1));
+
+  // A restore (another route) shows a newer character while the second save is still queued.
+  const restored: Character = { ...character, name: 'Fixture Restored', updatedAt: '2026-10-06T00:00:05Z' };
+  rerender(<CharacterSheet view={{ character: restored, sheet }} {...props} />);
+
+  await act(async () => settle[0]!());
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(2));
+  await act(async () => settle[1]!());
+
+  const second = vi.mocked(client.saveCharacter).mock.calls[1]![0];
+  expect(second.name).toBe('Fixture Restored'); // the queued save did not rewrite the restore
+  expect(second.notes?.map((n) => n.text)).toEqual(['Fixture note three.']);
+});
+
 it('gives each panel its own failure and carries on with the next save (R132)', async () => {
   vi.mocked(client.saveCharacter)
     .mockRejectedValueOnce(new Error('fixture refusal'))
