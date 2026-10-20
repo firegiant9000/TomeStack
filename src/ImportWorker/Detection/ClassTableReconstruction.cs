@@ -260,7 +260,10 @@ public static partial class ClassTableReconstruction
 
         var values = levels.Select(_ => new string[columnCount]).ToList();
         foreach (var (row, line) in singles)
+        {
+            cancellationToken.ThrowIfCancellationRequested(); // NearestColumn scans every column per cell
             values[row][NearestColumn(Centre(line))] = NormaliseCell(line.Text);
+        }
         var digitWidth = DigitWidth(singles.Select(s => s.Line));
         foreach (var (row, line, tokens) in fused)
         {

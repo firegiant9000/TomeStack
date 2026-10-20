@@ -1077,7 +1077,11 @@ public static partial class CandidateDetector
                 byLevel[int.Parse(row.Groups["level"].Value, CultureInfo.InvariantCulture)] = [row.Groups["features"].Value];
         }
         if (byLevel.Count == 0)
+        {
+            // A window emptied because the token fired mid-call is a cancel, not a finished read of "no table" (R147).
+            cancellationToken.ThrowIfCancellationRequested();
             return null;
+        }
         var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
         return new(features, null, pageTextLines);
     }

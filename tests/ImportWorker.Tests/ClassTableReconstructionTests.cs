@@ -169,6 +169,40 @@ public class ClassTableReconstructionTests
         ClassTableReconstruction.Reconstruct(page.Lines, "Fixture Lamplighter Features") ?? throw new InvalidOperationException("no table");
 
     [Fact]
+    public void A_cancelled_token_stops_the_reconstruction()
+    {
+        // J1a: a table of 20 levels; a pre-cancelled token must surface, never a table.
+        var page = Build(Shape.Caster, Invent(Shape.Caster));
+        using var cts = new CancellationTokenSource();
+        Assert.NotNull(ClassTableReconstruction.Reconstruct(page.Lines, "Fixture Lamplighter Features", cts.Token));
+
+        cts.Cancel();
+        Assert.Throws<OperationCanceledException>(() => ClassTableReconstruction.Reconstruct(page.Lines, "Fixture Lamplighter Features", cts.Token));
+    }
+
+    [Fact]
+    public void A_cancel_during_the_whole_page_second_read_is_not_swallowed()
+    {
+        // J1b: the window's own lines are empty (every cell was taken for boilerplate), so only the whole-page list holds the
+        // table and the second Reconstruct is the one that reads it. The token fires on the last window-filter call, so only
+        // that Reconstruct's own checks can see it; passing no token to it would return the table instead.
+        var lines = Build(Shape.Caster, Invent(Shape.Caster)).Lines;
+        var detection = new DetectionPage(1, "", [], false);
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        bool CancelOnLast(TextLine _)
+        {
+            if (++calls == lines.Count)
+                cts.Cancel();
+            return true;
+        }
+
+        Assert.NotNull(CandidateDetector.ReadClassTable(detection, [], _ => true, "Fixture Lamplighter Features", lines, CancellationToken.None)?.Table);
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(detection, [], CancelOnLast, "Fixture Lamplighter Features", lines, cts.Token));
+        Assert.Equal(lines.Count, calls);
+    }
+
+    [Fact]
     public void A_full_caster_table_reads_back_slots_cantrips_prepared_bonus_and_features()
     {
         var truth = Invent(Shape.Caster);

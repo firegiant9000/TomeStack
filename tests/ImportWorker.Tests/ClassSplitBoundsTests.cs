@@ -108,6 +108,44 @@ public class ClassSplitBoundsTests
     }
 
     [Fact]
+    public void A_cancelled_token_stops_a_class_table_read_at_its_entry()
+    {
+        // J2: the entry check, before any window filter runs.
+        var blocks = Page(3, _ => true);
+        var page = new DetectionPage(1, "", blocks, false);
+        var lines = blocks.Select(b => (1, new TextLine(b.Text, b.X, b.Y, b.Width, b.Height))).ToList();
+        var whole = blocks.Select(b => new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)).ToList();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(page, lines, _ => true, "Fixture Alpha Features", whole, cts.Token));
+    }
+
+    [Fact]
+    public void A_window_cancelled_mid_call_that_finds_no_table_does_not_complete()
+    {
+        // J4/R147: an empty window must not return null (a finished read) when the token fired during the call.
+        var blocks = Page(3, _ => true);
+        var page = new DetectionPage(1, "", blocks, false);
+        var lines = blocks.Select(b => (1, new TextLine(b.Text, b.X, b.Y, b.Width, b.Height))).ToList();
+        var whole = blocks.Select(b => new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)).ToList();
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        bool CancelOnLast(TextLine _)
+        {
+            if (++calls == lines.Count + whole.Count)
+                cts.Cancel();
+            return false;
+        }
+
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(page, lines, CancelOnLast, "Fixture Alpha Features", whole, cts.Token));
+        Assert.Equal(lines.Count + whole.Count, calls);
+
+        // Not cancelled: the same empty window is simply no table.
+        Assert.Null(CandidateDetector.ReadClassTable(page, lines, _ => false, "Fixture Alpha Features", whole, CancellationToken.None));
+    }
+
+    [Fact]
     public void A_page_with_many_headings_is_read_in_bounded_time()
     {
         var blocks = Page(60, i => i == 0, fillerPerClass: 40);
