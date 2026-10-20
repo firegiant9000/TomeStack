@@ -96,12 +96,12 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 
 **Decided: a manual update.**
 - TomeStack never creates a Velopack `UpdateManager`, so it never checks for, downloads or applies updates (ADR-001: local-only, no network calls; ADR-006: no listening socket).
-- To update, the user downloads the newer `Setup.exe` from the release page and runs it. Velopack installs over the old version, the data folder is untouched, and a database upgrade backs it up first (ADR-008 R3).
+- To update, the user downloads the newer `Setup.exe` from the release page and runs it. Velopack installs over the old version, the data folder is untouched, and a database upgrade backs it up first (ADR-008 R3). Two copies can result on the first start of a new version: `tomestack.db.v<N>.bak` (the database at the version it was opened with, before a migration) and `tomestack.db.app-<from>-to-<to>.bak` (the database as the previous app version left it, before anything changes). A 0.5.0 folder has no version stamp, so opening it with 0.6.0 leaves `tomestack.db.v10.bak` and `tomestack.db.app-pre-0.6.0-to-0.6.0.bak`; both hold the database as 0.5.0 left it (version 10, before the move to 11).
 - The release still carries Velopack's `releases.win.json` and `.nupkg`. An opt-in update check could use them later, but that would need its own decision against ADR-001.
 
 ## Release procedure (owner)
 
-1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this.
+1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this. (For 0.6.0 the `<Version>` bump to `0.6.0` is already done on the Wave 2 branch, ruling R130; the owner confirms it in the PR. Tagging and releasing stay the owner's.)
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;

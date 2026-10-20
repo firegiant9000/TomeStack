@@ -52,6 +52,7 @@ Sources: Velopack [preserved files](https://docs.velopack.io/integrating/preserv
 - `<Version>` in `Directory.Build.props` is the single source for the assembly version, `app.info`, the smoke report and `vpk --packVersion`.
 - Semantic versions `MAJOR.MINOR.PATCH`, with no pre-release suffixes. Before 1.0, MINOR goes up when a milestone is delivered (M1 → 0.2.0) and PATCH for any other build given to a user. Velopack refuses to update to a version that is not higher, so a version is never reused or lowered.
 - The bump goes in the same commit as the change being released. 0.1.1 is the first installable build.
+- **0.6.0 (ruling R130, Wave 2):** `<Version>` is `0.6.0` on the Wave 2 branch, so its builds stamp `0.6.0` and name the one-time app-version copy after it. A 0.5.0 data folder holds no stamp, so the first start of 0.6.0 leaves `tomestack.db.app-pre-0.6.0-to-0.6.0.bak` (and `tomestack.db.v10.bak`), both of the database as 0.5.0 left it. The owner confirms the bump in the PR; tagging and releasing stay the owner's.
 - **0.4.0 (owner decision 2026-10-01):** the first published release. It follows the locally built, never-published 0.3.1, because Velopack needs a higher number than any installer a user might have. No tags are added for the earlier, unpublished versions (owner decision); `m5-m6-merged` stays a marker, not a version tag.
 
 ## Installer-neutral evidence (2026-09-25, Windows 11 26200)
