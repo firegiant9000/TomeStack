@@ -25,6 +25,7 @@ vi.mock('../api/client', () => ({
     rollDice: vi.fn(),
     restPreview: vi.fn(),
     rest: vi.fn(),
+    saveCharacter: vi.fn(),
   },
 }));
 
@@ -302,6 +303,32 @@ it('offers Spells to a caster, or when a spell field has a value, and opens on P
     }),
   );
   expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Play', 'Spells', 'Inventory', 'Features', 'Stats', 'Notes', 'Manage']);
+});
+
+it('announces a Prepared toggle on a spell removed meanwhile as a polite status, not an error, and keeps focus (H2/R144)', async () => {
+  const user = userEvent.setup();
+  const ref = { contentId: '00000000-0000-4000-8000-0000000000a1', revisionId: '00000000-0000-4000-8000-0000000000b1' };
+  const spellRef = { contentId: '00000000-0000-4000-8000-0000000000c1', revisionId: '00000000-0000-4000-8000-0000000000d1' };
+  const origin = { kind: 'content' as const, rulesFamily: 'srd-5.1' as const, content: ref, contentName: 'Fixture Arcanist' };
+  const v = view({
+    spellcasting: [
+      {
+        content: ref, name: 'Fixture Arcanist', effectId: 'fixture-spellcasting', classLevel: 1, ability: 'int', attackBonus: 4, saveDc: 12,
+        preparation: 'prepared', spellList: 'fixture-list', slotKind: 'spellSlots', slots: [2], primary: true, origin, warnings: [],
+        spells: [{ spell: spellRef, name: 'Fixture Veil', level: 1, prepared: true, concentration: false, ritual: false, attack: 'none', origin, diagnostics: [] }],
+      },
+    ],
+  });
+  const onStatus = vi.fn();
+  const onError = vi.fn();
+  render(<CharacterSheet view={v} onChanged={noop} onError={onError} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="spells" />);
+  const box = screen.getByRole('checkbox', { name: 'Prepared: Fixture Veil' });
+  box.focus();
+  await user.click(box); // the saved character has no such spell in its list
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/removed/)));
+  expect(onError).not.toHaveBeenCalled();
+  expect(client.saveCharacter).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(box);
 });
 
 it('falls back to Play when the requested tab is not offered', () => {

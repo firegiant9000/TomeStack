@@ -20,7 +20,7 @@ afterEach(() => {
 const entry = (id: string, equipped: boolean): EquipmentEntry => ({ item: { contentId: `c-${id}`, revisionId: `r-${id}` }, equipped, quantity: 1 });
 // Only the fields EquipmentPanel reads; the rest of the view does not matter here.
 const view = (equipment: EquipmentEntry[]) => ({ character: { id: 'fixture', rulesFamily: 'srd-5.2.1', equipment } }) as unknown as CharacterView;
-const panel = (equipment: EquipmentEntry[]) => render(<EquipmentPanel view={view(equipment)} onChanged={() => {}} onError={() => {}} />);
+const panel = (equipment: EquipmentEntry[]) => render(<EquipmentPanel view={view(equipment)} onChanged={() => {}} onError={() => {}} onStatus={() => {}} />);
 
 it('says one carried item is not equipped, and what equipping does', () => {
   panel([entry('a', true), entry('b', false)]);
@@ -53,7 +53,7 @@ const queue = (start: EquipmentEntry[]) => {
 it('toggles from the latest saved list, so two presses before a re-render end where they began (G10)', async () => {
   const user = userEvent.setup();
   const q = queue([entry('a', false)]);
-  render(<EquipmentPanel view={view([entry('a', false)])} onChanged={() => {}} onError={() => {}} saveCharacter={q.saveCharacter} />);
+  render(<EquipmentPanel view={view([entry('a', false)])} onChanged={() => {}} onError={() => {}} onStatus={() => {}} saveCharacter={q.saveCharacter} />);
   const box = () => screen.getByRole('checkbox', { name: /^Equip Item r-a/ });
   await user.click(box());
   await user.click(box()); // the view prop never changed, so the render still shows the first state
@@ -64,9 +64,17 @@ it('refuses a toggle on an item that was removed meanwhile, with its own message
   const user = userEvent.setup();
   const q = queue([]);
   const errors: unknown[] = [];
-  render(<EquipmentPanel view={view([entry('a', false)])} onChanged={() => {}} onError={(e) => errors.push(e)} saveCharacter={q.saveCharacter} />);
-  await user.click(screen.getByRole('checkbox', { name: /^Equip Item r-a/ }));
-  await waitFor(() => expect(errors).toHaveLength(1));
-  expect((errors[0] as Error).message).toMatch(/removed/);
+  const statuses: string[] = [];
+  render(
+    <EquipmentPanel view={view([entry('a', false)])} onChanged={() => {}} onError={(e) => errors.push(e)} onStatus={(t) => statuses.push(t)} saveCharacter={q.saveCharacter} />,
+  );
+  const box = screen.getByRole('checkbox', { name: /^Equip Item r-a/ });
+  box.focus();
+  await user.click(box);
+  // H2/R144: a refusal is a polite status, not an error, and focus stays on the control.
+  await waitFor(() => expect(statuses).toHaveLength(1));
+  expect(statuses[0]).toMatch(/removed/);
+  expect(errors).toHaveLength(0);
+  expect(document.activeElement).toBe(box);
   expect(q.equipment()).toEqual([]);
 });

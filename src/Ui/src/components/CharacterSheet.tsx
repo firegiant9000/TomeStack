@@ -20,7 +20,7 @@ import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, D
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
-import { useSheetSave } from './sheetSave';
+import { EntryGone, useSheetSave } from './sheetSave';
 import { DetailsPanel } from './DetailsPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
@@ -668,7 +668,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             onSave={(update) =>
               saveCharacter(update)
                 .then(onChanged)
-                .catch(onError)
+                .catch((error) => (error instanceof EntryGone ? onStatus(error.message) : onError(error)))
             }
           />
           {fieldGroup('Spellcasting', spellFields)}
@@ -676,7 +676,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
-        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
+        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <CurrencyPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />

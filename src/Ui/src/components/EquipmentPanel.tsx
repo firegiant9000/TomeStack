@@ -7,6 +7,8 @@ interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
+  /** Polite status (4.1.3): a refused change is announced here, not as an error. */
+  onStatus: (text: string) => void;
   /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
   saveCharacter?: SheetSave;
 }
@@ -18,7 +20,7 @@ const sameRef = (a: { contentId: string; revisionId: string }, b: { contentId: s
  * M2 item 4: items carried, and which are equipped. Equipped armor sets the Armor Class (the trace says which item);
  * each change is one explicit action saved with the character.
  */
-export function EquipmentPanel({ view, onChanged, onError, saveCharacter }: Props) {
+export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharacter }: Props) {
   const { character } = view;
   const persist = saveCharacter ?? directSave(character);
   const equipment = character.equipment ?? [];
@@ -39,7 +41,8 @@ export function EquipmentPanel({ view, onChanged, onError, saveCharacter }: Prop
     try {
       onChanged(await persist((latest) => ({ ...latest, equipment: change(latest.equipment ?? []) })));
     } catch (error) {
-      onError(error);
+      if (error instanceof EntryGone) onStatus(error.message);
+      else onError(error);
     }
   }
 
@@ -143,7 +146,7 @@ type Coin = (typeof coins)[number][0];
 const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
 /** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
-export function CurrencyPanel({ view, onChanged, onError, saveCharacter }: Props) {
+export function CurrencyPanel({ view, onChanged, onError, saveCharacter }: Omit<Props, 'onStatus'>) {
   const { character } = view;
   const persist = saveCharacter ?? directSave(character);
   const stored = character.currency ?? emptyCurrency;
