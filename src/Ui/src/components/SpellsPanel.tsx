@@ -34,8 +34,8 @@ export function SpellsPanel({
   roll: (target: RollTarget) => void;
   /** The summary's advantage / disadvantage choice, sent with spell attack rolls (R93); spell dice are always normal. */
   rollMode?: RollMode;
-  /** Saves a changed spell list (preparing is a choice, not play state). */
-  onSave: (character: Character) => void;
+  /** Saves a changed spell list (preparing is a choice, not play state); the change is applied to the latest saved character (R132). */
+  onSave: (update: (latest: Character) => Character) => void;
 }) {
   // D30: the search text per caster. The sheet is keyed by character in App, so this remounts (and resets) per character.
   const [queries, setQueries] = useState<Record<string, string>>({});
@@ -58,10 +58,12 @@ export function SpellsPanel({
   }
 
   function togglePrepared(entry: SpellcastingEntry, spell: SpellEntry) {
-    const spells = (view.character.spells ?? []).map((s) =>
-      s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId ? { ...s, prepared: !spell.prepared } : s,
-    );
-    onSave({ ...view.character, spells });
+    onSave((latest) => ({
+      ...latest,
+      spells: (latest.spells ?? []).map((s) =>
+        s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId ? { ...s, prepared: !spell.prepared } : s,
+      ),
+    }));
   }
 
   return (

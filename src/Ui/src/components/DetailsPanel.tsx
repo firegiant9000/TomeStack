@@ -1,5 +1,4 @@
 import { useRef, useState, type RefObject, type SubmitEvent } from 'react';
-import { client } from '../api/client';
 import type { CharacterView } from '../api/types';
 import {
   appearanceFields,
@@ -19,6 +18,7 @@ import {
   type DraftKey,
   type TextField,
 } from './detailsModel';
+import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
@@ -32,6 +32,8 @@ interface Props {
    * add some eighty elements to every sheet. Defaults to shown.
    */
   shown?: boolean;
+  /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
+  saveCharacter?: SheetSave;
 }
 
 /** The hint shows only when this few characters are left, so it stays quiet while there is plenty of room. */
@@ -100,10 +102,11 @@ function DetailList({ id, label, value, onChange }: { id: string; label: string;
  * Character schema v9 (D42, item 17): personality, appearance, backstory, languages and tools, in the player's own words.
  * Never calculated. Save is held with aria-disabled (never `disabled`, so it keeps focus and its place) until something
  * changed and every field is within the service's limits; the reason is linked. Text over a limit is a linked error and is
- * never cut. Saving sends the whole loaded character, so the v9 fields this form does not edit survive.
+ * never cut. Saving applies the details to the latest saved character (R132), so the fields this form does not edit, and other panels' saves, survive.
  */
-export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, shown = true }: Props) {
+export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, shown = true, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const stored = toDraft(character.details);
   const storedKey = JSON.stringify(stored);
   const [draft, setDraft] = useState<Draft>(stored);
@@ -135,7 +138,7 @@ export function DetailsPanel({ view, onChanged, onError, onStatus, headingRef, s
     setSaving(true);
     let saved: CharacterView | undefined;
     try {
-      saved = await client.saveCharacter({ ...character, details: built });
+      saved = await persist((latest) => ({ ...latest, details: built }));
     } catch (error) {
       onError(error); // what was typed stays
     }

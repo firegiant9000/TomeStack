@@ -20,6 +20,7 @@ import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, D
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
+import { useSheetSave } from './sheetSave';
 import { DetailsPanel } from './DetailsPanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
@@ -230,6 +231,8 @@ interface Props {
 
 export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
   const { character, sheet } = view;
+  // R132: every sheet save goes through this one queue, each as an updater applied to the latest saved character.
+  const saveCharacter = useSheetSave(view);
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
   const printButton = useRef<HTMLButtonElement>(null);
@@ -343,9 +346,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   }
 
   async function changeOverride(field: string, change: FieldOverride | undefined) {
-    const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
     try {
-      onChanged(await client.saveCharacter({ ...character, overrides }));
+      onChanged(
+        await saveCharacter((latest) => ({
+          ...latest,
+          overrides: [...latest.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])],
+        })),
+      );
     } catch (error) {
       onError(error);
     }
@@ -658,9 +665,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             act={act}
             roll={roll}
             rollMode={rollMode}
-            onSave={(changed) =>
-              client
-                .saveCharacter(changed)
+            onSave={(update) =>
+              saveCharacter(update)
                 .then(onChanged)
                 .catch(onError)
             }
@@ -670,10 +676,10 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
-        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
-        <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-        <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
-        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} />
+        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
+        <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
+        <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
+        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
@@ -701,9 +707,9 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
-        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
-        <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} />
+        <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} saveCharacter={saveCharacter} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>

@@ -22,12 +22,15 @@ import {
   type ItemDraft,
   type Problems,
 } from './customModel';
+import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
+  saveCharacter?: SheetSave;
 }
 
 type Draft = Record<string, string | boolean>;
@@ -52,7 +55,8 @@ interface Config<T extends { id: string; name: string }, D extends Draft> {
   problems: (draft: D) => Problems;
   /** The dice engine's verdict on a field, asked when Save is pressed; a refusal keeps the form open. */
   check?: (draft: D) => Promise<FieldRefusal | undefined>;
-  persist: (next: T[]) => Promise<CharacterView>;
+  /** Saves the list after `change` is applied to the latest saved list (R132), not to this panel's props snapshot. */
+  persist: (change: (list: T[]) => T[]) => Promise<CharacterView>;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
@@ -170,8 +174,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
         focusOn(`${config.prefix}-${verdict.field}`);
       } else {
         const entry = config.build(target.id, submitted);
-        const next = target.isNew ? [...entries, entry] : entries.map((e) => (e.id === target.id ? entry : e));
-        saved = await config.persist(next);
+        saved = await config.persist((list) => (target.isNew ? [...list, entry] : list.map((e) => (e.id === target.id ? entry : e))));
       }
     } catch (error) {
       config.onError(error); // what was typed stays
@@ -198,7 +201,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
     const index = entries.findIndex((e) => e.id === entry.id);
     const neighbour = entries[index + 1] ?? entries[index - 1];
     try {
-      const saved = await config.persist(entries.filter((e) => e.id !== entry.id));
+      const saved = await config.persist((list) => list.filter((e) => e.id !== entry.id));
       focusOn(neighbour ? rowId(neighbour.id) : `${config.prefix}-add`);
       if (editing?.id === entry.id) setEditing(null);
       config.onChanged(saved);
@@ -330,8 +333,9 @@ function AddButton({ prefix, label, atCap, capText, onClick }: { prefix: string;
 }
 
 /** Character schema v9 (D42, item 18): things carried that are not content. Never calculated, whatever the "equipped" box says. */
-export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) {
+export function CustomItemsPanel({ view, onChanged, onError, onStatus, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const entries: CustomItem[] = character.customItems ?? [];
   const editor = useEntryEditor<CustomItem, ItemDraft>({
     prefix: 'own-item',
@@ -342,7 +346,7 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
     draftOf: itemDraft,
     build: buildItem,
     problems: itemProblems,
-    persist: (next) => client.saveCharacter({ ...character, customItems: next }),
+    persist: (change) => persist((latest) => ({ ...latest, customItems: change(latest.customItems ?? []) })),
     onChanged,
     onError,
     onStatus,
@@ -408,8 +412,9 @@ export function CustomItemsPanel({ view, onChanged, onError, onStatus }: Props) 
 }
 
 /** Character schema v9 (D42, item 18): attacks typed in by hand. Rolled on Play; the to-hit and damage are exactly what was typed. */
-export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props) {
+export function CustomAttacksPanel({ view, onChanged, onError, onStatus, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const entries: CustomAttack[] = character.customAttacks ?? [];
   const editor = useEntryEditor<CustomAttack, AttackDraft>({
     prefix: 'own-attack',
@@ -430,7 +435,7 @@ export function CustomAttacksPanel({ view, onChanged, onError, onStatus }: Props
         return { field: 'damage', message: refusalText(error) };
       }
     },
-    persist: (next) => client.saveCharacter({ ...character, customAttacks: next }),
+    persist: (change) => persist((latest) => ({ ...latest, customAttacks: change(latest.customAttacks ?? []) })),
     onChanged,
     onError,
     onStatus,

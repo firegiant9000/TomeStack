@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, ContentOption, EquipmentEntry } from '../api/types';
+import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
+  /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
+  saveCharacter?: SheetSave;
 }
 
 const sameRef = (a: { contentId: string; revisionId: string }, b: { contentId: string; revisionId: string }) =>
@@ -15,8 +18,9 @@ const sameRef = (a: { contentId: string; revisionId: string }, b: { contentId: s
  * M2 item 4: items carried, and which are equipped. Equipped armor sets the Armor Class (the trace says which item);
  * each change is one explicit action saved with the character.
  */
-export function EquipmentPanel({ view, onChanged, onError }: Props) {
+export function EquipmentPanel({ view, onChanged, onError, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const equipment = character.equipment ?? [];
   const [items, setItems] = useState<ContentOption[]>([]);
   const [adding, setAdding] = useState('');
@@ -30,9 +34,10 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
 
   const nameOf = (entry: EquipmentEntry) => items.find((o) => sameRef(o.reference, entry.item))?.name ?? `Item ${entry.item.revisionId}`;
 
-  async function save(next: EquipmentEntry[]) {
+  // The change is applied to the latest saved list (R132), so entries are matched by their item, not by object identity.
+  async function save(change: (list: EquipmentEntry[]) => EquipmentEntry[]) {
     try {
-      onChanged(await client.saveCharacter({ ...character, equipment: next }));
+      onChanged(await persist((latest) => ({ ...latest, equipment: change(latest.equipment ?? []) })));
     } catch (error) {
       onError(error);
     }
@@ -67,12 +72,12 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
                       <input
                         type="checkbox"
                         checked={entry.equipped}
-                        onChange={() => save(equipment.map((e) => (e === entry ? { ...e, equipped: !e.equipped } : e)))}
+                        onChange={() => save((list) => list.map((e) => (sameRef(e.item, entry.item) ? { ...e, equipped: !entry.equipped } : e)))}
                       />
                       Equip {nameOf(entry)}
                       {entry.quantity > 1 ? ` (${entry.quantity})` : ''}
                     </label>
-                    <button type="button" onClick={() => save(equipment.filter((e) => e !== entry))}>
+                    <button type="button" onClick={() => save((list) => list.filter((e) => !sameRef(e.item, entry.item)))}>
                       Remove {nameOf(entry)}
                     </button>
                   </li>
@@ -102,7 +107,7 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
             const option = addable.find((o) => o.reference.revisionId === adding);
             if (!option) return;
             setAdding('');
-            void save([...equipment, { item: option.reference, equipped: false, quantity: 1 }]);
+            void save((list) => [...list, { item: option.reference, equipped: false, quantity: 1 }]);
           }}
         >
           Add
@@ -132,8 +137,9 @@ type Coin = (typeof coins)[number][0];
 const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
 /** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
-export function CurrencyPanel({ view, onChanged, onError }: Props) {
+export function CurrencyPanel({ view, onChanged, onError, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const stored = character.currency ?? emptyCurrency;
   const seed = (c: typeof stored) => Object.fromEntries(coins.map(([k]) => [k, String(c[k])])) as Record<Coin, string>;
   const [draft, setDraft] = useState<Record<Coin, string>>(() => seed(stored));
@@ -156,7 +162,7 @@ export function CurrencyPanel({ view, onChanged, onError }: Props) {
   async function save() {
     if (!valid) return;
     try {
-      onChanged(await client.saveCharacter({ ...character, currency: parsed }));
+      onChanged(await persist((latest) => ({ ...latest, currency: parsed })));
       heading.current?.focus(); // "Save currency" is disabled now that nothing differs: focus goes to the section
     } catch (error) {
       onError(error);
