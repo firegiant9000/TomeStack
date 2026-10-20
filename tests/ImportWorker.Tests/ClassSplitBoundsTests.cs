@@ -78,6 +78,22 @@ public class ClassSplitBoundsTests
     }
 
     [Fact]
+    public void A_cancelled_token_stops_the_merged_read_of_a_class_table()
+    {
+        // G8: the merged read (a page with more than eight titles, or one class) used to ignore the token in its header scan.
+        var blocks = Page(9, _ => true);
+        var page = new DetectionPage(1, "", blocks, false);
+        var lines = blocks.Select(b => (1, new TextLine(b.Text, b.X, b.Y, b.Width, b.Height))).ToList();
+        var whole = blocks.Select(b => new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)).ToList();
+        using var cts = new CancellationTokenSource();
+
+        Assert.NotNull(CandidateDetector.ReadClassTable(page, lines, _ => true, "Fixture Alpha Features", whole, cts.Token));
+
+        cts.Cancel();
+        Assert.Throws<OperationCanceledException>(() => CandidateDetector.ReadClassTable(page, lines, _ => true, "Fixture Alpha Features", whole, cts.Token));
+    }
+
+    [Fact]
     public void A_page_with_many_headings_is_read_in_bounded_time()
     {
         var blocks = Page(60, i => i == 0, fillerPerClass: 40);

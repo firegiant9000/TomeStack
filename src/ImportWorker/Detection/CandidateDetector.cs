@@ -954,7 +954,7 @@ public static partial class CandidateDetector
             // Wave 0/1 minors (d): two classes on one page are read each from its own window, and the page's text after them goes to the last.
             return [.. split.Select((s, i) => ClassCandidate(page, s.Name, s.Read.Features, s.Read.Table, s.Read.TextLines, context, classFeatures, i == split.Count - 1 ? following : [], previous))];
         }
-        return ReadClassTable(page, lines, _ => true, titleLine, WholePageLines(page)) is { } read
+        return ReadClassTable(page, lines, _ => true, titleLine, WholePageLines(page), cancellationToken) is { } read
             ? [ClassCandidate(page, className, read.Features, read.Table, read.TextLines, context, classFeatures, following, previous)]
             : [];
     }
@@ -1009,7 +1009,7 @@ public static partial class CandidateDetector
                 if (!memo.TryGetValue(key, out var read))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    memo[key] = read = ReadClassTable(page, lines, WindowOf(anchorYs, i), a.Title, wholePage);
+                    memo[key] = read = ReadClassTable(page, lines, WindowOf(anchorYs, i), a.Title, wholePage, cancellationToken);
                 }
                 return (a.Name, Read: read);
             }).ToList();
@@ -1032,8 +1032,9 @@ public static partial class CandidateDetector
         page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
 
     /// <summary>One class table read from the lines in a window: whole by position (D34), else by the legacy readers; null when no table is found.</summary>
-    private static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine, List<TextLine> wholePageLines)
+    internal static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine, List<TextLine> wholePageLines, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var lines = allLines.Where(l => inWindow(l.Line)).ToList();
         var byLevel = new SortedDictionary<int, List<string>>();
 
@@ -1047,8 +1048,13 @@ public static partial class CandidateDetector
             return new(whole.FeaturesByLevel, whole, wholePage);
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
-        var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
-            && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X));
+        cancellationToken.ThrowIfCancellationRequested();
+        var header = lines.Select(l => l.Line).FirstOrDefault(l =>
+        {
+            cancellationToken.ThrowIfCancellationRequested(); // the row scan below is quadratic in the window's lines
+            return (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
+                && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X);
+        });
         if (header is not null)
         {
             // Columns: rows are keyed by the level column; wrapped feature lines belong to the row just above them.
@@ -1056,6 +1062,7 @@ public static partial class CandidateDetector
             var levels = lines.Select(l => l.Line).Where(l => Math.Abs(l.X - header.X) < 15 && l.Y < header.Y && LevelCell().IsMatch(l.Text)).OrderByDescending(l => l.Y).ToList();
             foreach (var cell in lines.Select(l => l.Line).Where(l => l.X >= featuresHeader.X - 5 && l.X < featuresHeader.X + 150 && l.Y < header.Y))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var row = levels.Where(l => l.Y + Math.Max(2.5, l.Height * 0.4) >= cell.Y).OrderBy(l => l.Y - cell.Y).FirstOrDefault();
                 if (row is null)
                     continue;
