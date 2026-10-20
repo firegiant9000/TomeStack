@@ -7,7 +7,7 @@ namespace TomeStack.AppService;
 
 /// <summary>
 /// Character import from a D&amp;D Beyond PDF sheet (<c>features/ddb-pdf-import.md</c>), reading side: the form fields are
-/// read once in the import worker (ADR-009), parsed with the layout map, and held in memory under a token. Nothing is
+/// read in the import worker (ADR-009), parsed with the layout map, and held in memory under a token. Nothing is
 /// written to the database; <c>ddb.readData</c>'s temporary copy is deleted before the command returns. Error messages
 /// carry codes and counts, never a field value.
 /// </summary>

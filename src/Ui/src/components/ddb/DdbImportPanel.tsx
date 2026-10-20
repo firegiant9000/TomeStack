@@ -250,7 +250,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         Import a character (sheet or text)
       </h2>
       <p className="hint">
-        Step {step} of 5. Nothing is saved until you choose “Create character”. The PDF is read once and not kept.
+        Step {step} of 5. Nothing is saved until you choose “Create character”.{' '}
+        {read === undefined ? "The PDF or text itself isn't kept." : read.layout === 'text' ? "The text itself isn't kept." : "The PDF itself isn't kept."}
       </p>
       <section aria-labelledby={headingId}>
         <h3 id={headingId} ref={heading} tabIndex={-1}>

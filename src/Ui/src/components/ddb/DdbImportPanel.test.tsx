@@ -1059,6 +1059,29 @@ it('says the text itself is not kept and that unreadable lines become session no
   expect(hint).not.toContain('read once');
 });
 
+it('names what is not kept by the source it was read from, and never says "read once" (R131)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  renderPanel();
+  const header = () => screen.getByText(/^Step \d of 5\./).textContent ?? '';
+  expect(header()).toContain("The PDF or text itself isn't kept.");
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await screen.findByText('pasted or file text');
+  expect(header()).toContain("The text itself isn't kept.");
+  expect(header()).not.toContain('PDF');
+  expect(header()).not.toContain('read once');
+  cleanup();
+
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await screen.findByText('ddb-2014');
+  expect(header()).toContain("The PDF itself isn't kept.");
+  expect(header()).not.toContain('read once');
+});
+
 it('keeps Read the text disabled until there is text and sends the pasted text unchanged', async () => {
   const user = userEvent.setup();
   vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
