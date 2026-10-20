@@ -171,15 +171,16 @@ export function createClient(transport: Transport) {
     checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
     editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
     /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
-    acceptCandidate: (candidateId: string, asReference: boolean, confirmedEffectIds?: string[]) =>
-      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
-    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
-    acceptCandidates: (candidateIds: string[], asReference: boolean) =>
-      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),
+    /** R134: `expected` is the candidate's etag as the panel last read it; the service refuses the accept when the row has moved on (or none is sent). */
+    acceptCandidate: (candidateId: string, asReference: boolean, expected: string | undefined, confirmedEffectIds?: string[]) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, expected, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
+    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. R134: `expected` maps each id to its etag; one stale row refuses the whole batch. */
+    acceptCandidates: (candidateIds: string[], asReference: boolean, expected: Record<string, string>) =>
+      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true, expected }),
     /** Item 10: adds the list key to the spell candidates' edits; other unsure fields stay unsure. */
     addCandidatesToSpellList: (candidateIds: string[], listKey: string) =>
       call<CandidateSpellListResult>('import.candidate.addToSpellList', { candidateIds, listKey }),
-    ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
+    ignoreCandidate: (candidateId: string, expected: string | undefined) => call<StoredCandidate>('import.candidate.ignore', { candidateId, expected }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),

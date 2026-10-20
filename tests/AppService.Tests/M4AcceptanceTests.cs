@@ -80,12 +80,12 @@ public class M4AcceptanceTests(ITestOutputHelper output)
         {
             var check = temp.App.CheckCandidate(first.Id);
             if (check.CanAccept && first.Candidate.ProposedKind != ContentKind.Class)
-                temp.App.AcceptCandidate(new(first.Id, Confirm: true));
+                temp.Accept(new(first.Id, Confirm: true));
             else if (check.CanAcceptAsReference) // a class needs its hit die confirmed (ADR-016); this reviewer confirms nothing
-                temp.App.AcceptCandidate(new(first.Id, AsReference: true, Confirm: true));
+                temp.Accept(new(first.Id, AsReference: true, Confirm: true));
         }
         if (candidates.Count > 1 && temp.App.ListCandidates(new(job.Id, Status: CandidateStatus.Pending)).LastOrDefault() is { } last)
-            temp.App.IgnoreCandidate(last.Id);
+            temp.Ignore(last.Id);
 
         var reviewed = temp.App.ListCandidates(new(job.Id));
         // Active without approval: anything from the source that the calculator would apply although nobody published it.

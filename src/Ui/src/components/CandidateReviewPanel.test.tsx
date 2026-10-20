@@ -47,6 +47,7 @@ const detected = (rulesFamilies: string[]): StoredCandidate => ({
   id: 'cand-1',
   jobId: 'job-1',
   status: 'pending',
+  etag: 'etag-1',
   updatedAt: '2026-10-14T00:00:00Z',
   candidate: {
     id: 'cand-1',
@@ -200,7 +201,7 @@ it('counts a changed family, text, effects or kind as an edit, and a saved edit 
 // Item 13: the list pages at 50, filters by a page range, and says when detection stopped early.
 const numbered = (n: number): StoredCandidate => {
   const base = detected(['srd-5.1']);
-  return { ...base, id: `cand-${n}`, candidate: { ...base.candidate, id: `cand-${n}`, proposedName: `Testy Item ${n}`, page: { start: 1 + Math.floor(n / 10) } } };
+  return { ...base, id: `cand-${n}`, etag: `etag-${n}`, candidate: { ...base.candidate, id: `cand-${n}`, proposedName: `Testy Item ${n}`, page: { start: 1 + Math.floor(n / 10) } } };
 };
 
 /** A job of `total` candidates; the mock answers each request from its offset and limit. */
@@ -653,7 +654,7 @@ it('accepts the selection in bulk, reports the counts, and leaves the blocked ro
 
   await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
 
-  expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false);
+  expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false, { 'cand-1': 'etag-1', 'cand-2': 'etag-2', 'cand-3': 'etag-3' });
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Accepted 2; 1 need review\./)));
   await screen.findByText('1 selected', { selector: '[aria-live="polite"]' });
   expect((screen.getByRole('checkbox', { name: 'Select Testy Item 3' }) as HTMLInputElement).checked).toBe(true);
@@ -668,7 +669,7 @@ it('accepts as reference with the same selection', async () => {
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('checkbox', { name: 'Select Testy Item 1' }));
   await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
-  expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true);
+  expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true, { 'cand-1': 'etag-1' });
 });
 
 it('ignores a second press while a bulk accept is in flight', async () => {
@@ -832,14 +833,14 @@ it('holds Accept as a draft, with a visible reason, until the hit die and slot t
   await user.click(slots);
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting']);
 });
 
 it('accepts a class as reference without any confirmation, and sends none', async () => {
   const user = userEvent.setup();
   await openClass();
   await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'etag-1');
 });
 
 it('adds no live region for a class', async () => {
@@ -904,7 +905,7 @@ it('offers one unticked Confirm checkbox per proposed effect, named by it, and s
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the shield proficiency' }));
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
 });
 
 // Item 9.
@@ -917,7 +918,7 @@ it('treats a candidate edited into a class as a class', async () => {
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting']);
 });
 
 it('treats a class edited into another kind as that kind', async () => {
@@ -928,7 +929,7 @@ it('treats a class edited into another kind as that kind', async () => {
   expect(screen.queryByRole('group', { name: 'Confirm what was read' })).toBeNull();
   await vi.waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1');
 });
 
 // Item 10.
@@ -1014,7 +1015,7 @@ it('clears the ticks when a saved edit changes the effects, and keeps them when 
   await openStored(rows);
   vi.mocked(client.editCandidate).mockImplementation((_id, edit) => {
     const candidate = { ...rows.current.candidate, proposedName: edit.name ?? rows.current.candidate.proposedName, proposedEffects: (edit.effects ?? []) as DraftCandidate['proposedEffects'] };
-    rows.current = { ...rows.current, edited: candidate, updatedAt: `${rows.current.updatedAt}x` };
+    rows.current = { ...rows.current, edited: candidate, etag: `${rows.current.etag}x`, updatedAt: `${rows.current.updatedAt}x` };
     return Promise.resolve(rows.current);
   });
   await user.click(await screen.findByRole('checkbox', { name: 'Confirm the hit die, d8' }));
@@ -1082,6 +1083,23 @@ it('reloads the candidate and says it changed when the edit is refused, without 
   // The editor is still there, on the reloaded candidate, and focus is inside it.
   const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
   await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
+});
+
+// R134: accept and ignore carry the opened candidate's token too.
+it('sends the opened candidates token with Accept as reference and with Ignore', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.ignoreCandidate).mockReset();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.acceptCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.ignoreCandidate).mockResolvedValue(detected(['srd-5.1']));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
+  await waitFor(() => expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'token-1'));
+  await user.click(await screen.findByRole('button', { name: 'Ignore' }));
+  await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'token-1'));
 });
 
 it.each([

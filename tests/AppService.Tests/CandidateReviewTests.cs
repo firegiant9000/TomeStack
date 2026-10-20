@@ -58,13 +58,82 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void An_accept_or_ignore_from_a_state_the_stored_row_has_left_is_refused_and_writes_nothing()
+    {
+        // R134: the token is the caller's (the panel's read), not the service's own pre-read, so an edit between the two is caught.
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Frost Veil");
+        var hookblade = Named(temp, jobId, "Fixture Hookblade");
+        var coatSeen = temp.EtagOf(coat.Id);
+        var hookbladeSeen = temp.EtagOf(hookblade.Id);
+        temp.App.EditCandidate(new(coat.Id, Expected: coatSeen, Summary: "Edited in another window."));
+        temp.App.EditCandidate(new(hookblade.Id, Expected: hookbladeSeen, Summary: "Edited in another window."));
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true, Expected: coatSeen))));
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.IgnoreCandidate(new(hookblade.Id, hookbladeSeen))));
+
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Frost Veil").Status);
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Hookblade").Status);
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+    }
+
+    [Fact]
+    public void An_accept_or_ignore_without_a_token_is_refused()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var coat = Named(temp, jobId, "Fixture Frost Veil");
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true))));
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.IgnoreCandidate(new(coat.Id))));
+
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Frost Veil").Status);
+    }
+
+    [Fact]
+    public void An_accept_many_with_one_stale_or_missing_token_refuses_the_whole_batch_and_writes_nothing()
+    {
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var coat = Named(temp, jobId, "Fixture Frost Veil");
+        var seen = new Dictionary<Guid, string> { [ember.Id] = temp.EtagOf(ember.Id)!, [coat.Id] = temp.EtagOf(coat.Id)! };
+        temp.App.EditCandidate(new(coat.Id, Expected: seen[coat.Id], Summary: "Edited in another window."));
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptMany(new([ember.Id, coat.Id], Confirm: true, Expected: seen))));
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptMany(new([ember.Id, coat.Id], Confirm: true, Expected: new Dictionary<Guid, string> { [ember.Id] = seen[ember.Id] }))));
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptMany(new([ember.Id], Confirm: true))));
+
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Ember Lance").Status);
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Frost Veil").Status);
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+    }
+
+    [Fact]
+    public void An_accept_many_whose_row_is_edited_in_the_gap_before_its_transaction_is_refused_and_writes_nothing()
+    {
+        var (temp, sourceId, jobId) = Imported();
+        using var _t = temp;
+        var ember = Named(temp, jobId, "Fixture Ember Lance");
+        var coat = Named(temp, jobId, "Fixture Frost Veil");
+        var seen = new Dictionary<Guid, string> { [ember.Id] = temp.EtagOf(ember.Id)!, [coat.Id] = temp.EtagOf(coat.Id)! };
+        temp.App.BeforeAcceptWrites = () => temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Summary: "Edited in the gap."));
+
+        Assert.Equal("import.candidate-changed", Code(() => temp.App.AcceptMany(new([ember.Id, coat.Id], Confirm: true, Expected: seen))));
+
+        Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Ember Lance").Status);
+        Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
+    }
+
+    [Fact]
     public void An_accept_many_result_carries_the_etag_as_stored()
     {
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var ember = Named(temp, jobId, "Fixture Ember Lance");
 
-        var result = temp.App.AcceptMany(new([ember.Id], Confirm: true));
+        var result = temp.AcceptMany(new([ember.Id], Confirm: true));
 
         var returned = Assert.Single(result.Accepted);
         Assert.Equal(temp.App.Store.FindImportCandidate(ember.Id)!.Etag, returned.Etag);
@@ -77,7 +146,7 @@ public class CandidateReviewTests
         using var _t = temp;
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
         temp.App.BeforeIgnoreWrites = () => temp.App.EditCandidate(new(hookblade.Id, Expected: temp.EtagOf(hookblade.Id), Summary: "Edited meanwhile."));
-        var ignoreRefused = Assert.Throws<AppValidationException>(() => temp.App.IgnoreCandidate(hookblade.Id));
+        var ignoreRefused = Assert.Throws<AppValidationException>(() => temp.Ignore(hookblade.Id));
         temp.App.BeforeIgnoreWrites = null;
         var coat = Named(temp, jobId, "Fixture Frost Veil");
         temp.App.BeforeAcceptWrites = () =>
@@ -85,7 +154,7 @@ public class CandidateReviewTests
             temp.App.BeforeAcceptWrites = null;
             temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Summary: "Edited meanwhile."));
         };
-        var acceptRefused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true)));
+        var acceptRefused = Assert.Throws<AppValidationException>(() => temp.Accept(new(coat.Id, AsReference: true, Confirm: true)));
 
         foreach (var refused in new[] { ignoreRefused, acceptRefused })
         {
@@ -102,7 +171,7 @@ public class CandidateReviewTests
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
         temp.App.BeforeIgnoreWrites = () => temp.App.EditCandidate(new(hookblade.Id, Expected: temp.EtagOf(hookblade.Id), Summary: "Edited meanwhile."));
 
-        Assert.Equal("import.candidate-changed", Code(() => temp.App.IgnoreCandidate(hookblade.Id)));
+        Assert.Equal("import.candidate-changed", Code(() => temp.Ignore(hookblade.Id)));
 
         var stored = Named(temp, jobId, "Fixture Hookblade");
         Assert.Equal(CandidateStatus.Pending, stored.Status);
@@ -115,9 +184,9 @@ public class CandidateReviewTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
-        temp.App.BeforeIgnoreWrites = () => temp.App.AcceptCandidate(new(hookblade.Id, AsReference: true, Confirm: true));
+        temp.App.BeforeIgnoreWrites = () => temp.Accept(new(hookblade.Id, AsReference: true, Confirm: true));
 
-        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.IgnoreCandidate(hookblade.Id)));
+        Assert.Equal("candidate.already-reviewed", Code(() => temp.Ignore(hookblade.Id)));
 
         var stored = Named(temp, jobId, "Fixture Hookblade");
         Assert.Equal(CandidateStatus.AcceptedAsReference, stored.Status);
@@ -130,8 +199,8 @@ public class CandidateReviewTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
-        var ignoredRow = temp.App.IgnoreCandidate(Named(temp, jobId, "Fixture Frost Veil").Id);
-        var acceptedRow = temp.App.AcceptCandidate(new(hookblade.Id, AsReference: true, Confirm: true));
+        var ignoredRow = temp.Ignore(Named(temp, jobId, "Fixture Frost Veil").Id);
+        var acceptedRow = temp.Accept(new(hookblade.Id, AsReference: true, Confirm: true));
 
         Assert.Equal(temp.EtagOf(ignoredRow.Id), ignoredRow.Etag);
         Assert.Equal(temp.EtagOf(acceptedRow.Id), acceptedRow.Etag);
@@ -224,9 +293,9 @@ public class CandidateReviewTests
         Assert.Empty(check.Blockers);
         Assert.Empty(check.Report.Errors);
         Assert.Contains(check.Dependencies, d => d.Kind == "source" && d.Name == "Test Review Book");
-        Assert.Equal("candidate.confirmation-required", Code(() => temp.App.AcceptCandidate(new(ember.Id))));
+        Assert.Equal("candidate.confirmation-required", Code(() => temp.Accept(new(ember.Id))));
 
-        var accepted = temp.App.AcceptCandidate(new(ember.Id, Confirm: true));
+        var accepted = temp.Accept(new(ember.Id, Confirm: true));
 
         Assert.Equal(CandidateStatus.Accepted, accepted.Status);
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
@@ -234,7 +303,7 @@ public class CandidateReviewTests
         Assert.All(draft.Effects, e => Assert.Equal(AutomationStatus.Reference, e.Automation)); // ADR-004
         Assert.StartsWith("A lance of fixture flame", draft.Summary, StringComparison.Ordinal);
         Assert.DoesNotContain(temp.App.ListContent(RulesFamilies.Srd521), o => o.Reference == accepted.Draft); // drafts are never active
-        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.AcceptCandidate(new(ember.Id, Confirm: true))));
+        Assert.Equal("candidate.already-reviewed", Code(() => temp.Accept(new(ember.Id, Confirm: true))));
 
         // Publishing is the separate command, and it validates again.
         var published = temp.App.Publish(accepted.Draft!);
@@ -255,11 +324,11 @@ public class CandidateReviewTests
         Assert.Contains(check.Blockers, b => b.Code == "candidate.unresolved-reference");
         Assert.Contains(check.Dependencies, d => d.Kind == "unresolved-name" && d.Name == "Fixture Thunder Word");
         // The error never quotes the PDF's text.
-        var refused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(stormcall.Id, Confirm: true)));
+        var refused = Assert.Throws<AppValidationException>(() => temp.Accept(new(stormcall.Id, Confirm: true)));
         Assert.Equal("candidate.needs-review", refused.Problems[0].Code);
         Assert.All(refused.Problems, p => Assert.DoesNotContain("Thunder", p.Message, StringComparison.Ordinal));
 
-        var asReference = temp.App.AcceptCandidate(new(stormcall.Id, AsReference: true, Confirm: true));
+        var asReference = temp.Accept(new(stormcall.Id, AsReference: true, Confirm: true));
         Assert.Equal(CandidateStatus.AcceptedAsReference, asReference.Status);
         var draft = temp.App.Store.FindRevision(asReference.Draft!)!;
         Assert.Empty(draft.Effects);
@@ -283,10 +352,10 @@ public class CandidateReviewTests
         // Item 11 (R55): the class links Fixture Stormcall, which still names a spell that is not installed; that blocks the class
         // until the feature is settled (here, as reference). ClassAcceptTests covers the rest of the class accept.
         Assert.False(temp.App.CheckCandidate(warden.Id).CanAccept);
-        temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
+        temp.Accept(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
         var check = temp.App.CheckCandidate(warden.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => d.Code)));
-        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])).Draft!)!;
+        var draft = temp.App.Store.FindRevision(temp.Accept(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])).Draft!)!;
         Assert.Equal(("Fixture Warden (edited)", ContentKind.Class), (draft.Name, draft.Kind));
         Assert.Equal(10, draft.Effects.OfType<HitDieEffect>().Single().Die);
     }
@@ -304,7 +373,7 @@ public class CandidateReviewTests
 
         Assert.False(check.CanAccept);
         Assert.Contains(check.Report.Errors, e => e.Code == "validate.dice-invalid");
-        var refused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(hookblade.Id, Confirm: true)));
+        var refused = Assert.Throws<AppValidationException>(() => temp.Accept(new(hookblade.Id, Confirm: true)));
         Assert.Equal("candidate.validation-failed", refused.Problems[0].Code);
         Assert.Contains(refused.Problems, p => p.Code == "validate.dice-invalid");
     }
@@ -337,10 +406,10 @@ public class CandidateReviewTests
         var veil = Named(temp, jobId, "Fixture Frost Veil");
         var revisions = temp.App.Store.ListRevisions().Count;
 
-        Assert.Equal(CandidateStatus.Ignored, temp.App.IgnoreCandidate(veil.Id).Status);
+        Assert.Equal(CandidateStatus.Ignored, temp.Ignore(veil.Id).Status);
 
         Assert.Equal(revisions, temp.App.Store.ListRevisions().Count);
-        Assert.Equal("candidate.already-reviewed", Code(() => temp.App.AcceptCandidate(new(veil.Id, Confirm: true))));
+        Assert.Equal("candidate.already-reviewed", Code(() => temp.Accept(new(veil.Id, Confirm: true))));
         Assert.Equal("candidate.already-reviewed", Code(() => temp.App.EditCandidate(new(veil.Id, Expected: temp.EtagOf(veil.Id), Name: "Other"))));
         Assert.Single(temp.App.ListCandidates(new(jobId, Status: CandidateStatus.Ignored)));
     }
@@ -455,8 +524,8 @@ public class CandidateReviewTests
             Assert.Contains(check.Blockers, b => b.Code == "import.family-needed");
             Assert.False(check.CanAccept);
             Assert.False(check.CanAcceptAsReference);
-            Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(old.Id, Confirm: true))));
-            Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(old.Id, AsReference: true, Confirm: true))));
+            Assert.Equal("import.family-needed", Code(() => temp.Accept(new(old.Id, Confirm: true))));
+            Assert.Equal("import.family-needed", Code(() => temp.Accept(new(old.Id, AsReference: true, Confirm: true))));
         }
 
         // A layout-decided kind in the same job is not asked: its family came from the page.
@@ -466,7 +535,7 @@ public class CandidateReviewTests
         temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd521]));
         var ready = temp.App.CheckCandidate(coat.Id);
         Assert.DoesNotContain(ready.Blockers, b => b.Code == "import.family-needed");
-        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
+        Assert.Equal(CandidateStatus.Accepted, temp.Accept(new(coat.Id, Confirm: true)).Status);
     }
 
     [Fact]
@@ -481,7 +550,7 @@ public class CandidateReviewTests
         Assert.False(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
 
         Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
-        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+        Assert.Equal("import.family-needed", Code(() => temp.Accept(new(coat.Id, Confirm: true))));
 
         // An edit that sends no families is not an answer either.
         var renamed = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Summary: "Fixture padding."));
@@ -493,7 +562,7 @@ public class CandidateReviewTests
         Assert.True(saved.FamiliesReviewed);
         Assert.True(temp.App.Store.FindImportCandidate(coat.Id)!.FamiliesReviewed);
         Assert.DoesNotContain(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
-        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Status);
+        Assert.Equal(CandidateStatus.Accepted, temp.Accept(new(coat.Id, Confirm: true)).Status);
     }
 
     [Fact]
@@ -570,8 +639,8 @@ public class CandidateReviewTests
         var stormAgain = Named(temp, second.Id, "Fixture Stormcall");
         Assert.True(temp.App.CheckCandidate(again.Id).CanAccept);
 
-        temp.App.AcceptCandidate(new(ember.Id, Confirm: true));
-        temp.App.AcceptCandidate(new(stormcall.Id, AsReference: true, Confirm: true)); // a reference counts too
+        temp.Accept(new(ember.Id, Confirm: true));
+        temp.Accept(new(stormcall.Id, AsReference: true, Confirm: true)); // a reference counts too
 
         foreach (var twin in new[] { again, stormAgain })
         {
@@ -580,14 +649,14 @@ public class CandidateReviewTests
             Assert.False(check.CanAcceptAsReference);
             var blocker = Assert.Single(check.Blockers, b => b.Code == "import.already-accepted");
             Assert.Equal("This entry was already accepted from another reading of this document.", blocker.Message);
-            Assert.Equal("import.already-accepted", Code(() => temp.App.AcceptCandidate(new(twin.Id, Confirm: true))));
-            Assert.Equal("import.already-accepted", Code(() => temp.App.AcceptCandidate(new(twin.Id, AsReference: true, Confirm: true))));
+            Assert.Equal("import.already-accepted", Code(() => temp.Accept(new(twin.Id, Confirm: true))));
+            Assert.Equal("import.already-accepted", Code(() => temp.Accept(new(twin.Id, AsReference: true, Confirm: true))));
         }
         Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
 
         // Nothing stored changed: the other reading's candidates are still pending, and ignoring one is still allowed.
         Assert.Equal(CandidateStatus.Pending, Named(temp, second.Id, "Fixture Ember Lance").Status);
-        Assert.Equal(CandidateStatus.Ignored, temp.App.IgnoreCandidate(again.Id).Status);
+        Assert.Equal(CandidateStatus.Ignored, temp.Ignore(again.Id).Status);
     }
 
     [Fact]
@@ -597,7 +666,7 @@ public class CandidateReviewTests
         using var _t = temp;
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
         temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
-        temp.App.AcceptCandidate(new(Named(temp, firstJob, "Fixture Ember Lance").Id, Confirm: true));
+        temp.Accept(new(Named(temp, firstJob, "Fixture Ember Lance").Id, Confirm: true));
         var twin = Named(temp, second.Id, "Fixture Ember Lance");
         Assert.Contains(temp.App.CheckCandidate(twin.Id).Blockers, b => b.Code == "import.already-accepted");
 
@@ -605,7 +674,7 @@ public class CandidateReviewTests
 
         var check = temp.App.CheckCandidate(twin.Id);
         Assert.DoesNotContain(check.Blockers, b => b.Code == "import.already-accepted");
-        Assert.Equal(CandidateStatus.Accepted, temp.App.AcceptCandidate(new(twin.Id, Confirm: true)).Status);
+        Assert.Equal(CandidateStatus.Accepted, temp.Accept(new(twin.Id, Confirm: true)).Status);
         Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance"));
         Assert.Equal(1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft && r.Name == "Fixture Ember Lance Copy"));
     }
@@ -623,20 +692,20 @@ public class CandidateReviewTests
         Assert.False(check.CanAccept);
         Assert.Contains(check.Blockers, b => b.Code == "import.family-needed");
         Assert.False(check.CanAcceptAsReference); // a reference entry needs a family too
-        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, AsReference: true, Confirm: true))));
-        var refused = Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true)));
+        Assert.Equal("import.family-needed", Code(() => temp.Accept(new(coat.Id, AsReference: true, Confirm: true))));
+        var refused = Assert.Throws<AppValidationException>(() => temp.Accept(new(coat.Id, Confirm: true)));
         Assert.Equal("import.family-needed", refused.Problems[0].Code);
 
         // Saving an edit that leaves the family empty is allowed (other fields can be fixed first); accept still waits.
         var renamed = temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), Name: "Fixture Quilted Coat", RulesFamilies: []));
         Assert.Empty(renamed.Current.RulesFamilies);
         Assert.Contains(temp.App.CheckCandidate(coat.Id).Blockers, b => b.Code == "import.family-needed");
-        Assert.Equal("import.family-needed", Code(() => temp.App.AcceptCandidate(new(coat.Id, Confirm: true))));
+        Assert.Equal("import.family-needed", Code(() => temp.Accept(new(coat.Id, Confirm: true))));
 
         temp.App.EditCandidate(new(coat.Id, Expected: temp.EtagOf(coat.Id), RulesFamilies: [RulesFamilies.Srd51]));
         var ready = temp.App.CheckCandidate(coat.Id);
         Assert.True(ready.CanAccept, string.Join("; ", ready.Blockers.Concat(ready.Report.Errors).Select(d => d.Code)));
-        var draft = temp.App.Store.FindRevision(temp.App.AcceptCandidate(new(coat.Id, Confirm: true)).Draft!)!;
+        var draft = temp.App.Store.FindRevision(temp.Accept(new(coat.Id, Confirm: true)).Draft!)!;
         Assert.Equal([RulesFamilies.Srd51], draft.RulesFamilies);
     }
 
@@ -651,7 +720,7 @@ public class CandidateReviewTests
         var first = Named(temp, firstJob, "Fixture Ember Lance");
         var twin = Named(temp, second.Id, "Fixture Ember Lance");
 
-        var result = temp.App.AcceptMany(new([first.Id, twin.Id], Confirm: true));
+        var result = temp.AcceptMany(new([first.Id, twin.Id], Confirm: true));
 
         Assert.Equal([first.Id], result.Accepted.Select(c => c.Id));
         Assert.Equal(["import.already-accepted"], result.Blocked.Single(b => b.CandidateId == twin.Id).Codes);
@@ -660,7 +729,7 @@ public class CandidateReviewTests
 
         // Renaming the twin still lifts it (the twin side uses the effective values).
         temp.App.EditCandidate(new(twin.Id, Expected: temp.EtagOf(twin.Id), Name: "Fixture Ember Lance Copy"));
-        Assert.Equal([twin.Id], temp.App.AcceptMany(new([twin.Id], Confirm: true)).Accepted.Select(c => c.Id));
+        Assert.Equal([twin.Id], temp.AcceptMany(new([twin.Id], Confirm: true)).Accepted.Select(c => c.Id));
     }
 
     [Fact]
@@ -674,7 +743,7 @@ public class CandidateReviewTests
         var coat = Named(temp, jobId, "Fixture Quilted Coat"); // no family
         var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
 
-        var result = temp.App.AcceptMany(new([ember.Id, stormcall.Id, coat.Id, ember.Id], AsReference: false, Confirm: true));
+        var result = temp.AcceptMany(new([ember.Id, stormcall.Id, coat.Id, ember.Id], AsReference: false, Confirm: true));
 
         Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
         Assert.Equal(CandidateStatus.Accepted, result.Accepted[0].Status);
@@ -687,7 +756,7 @@ public class CandidateReviewTests
         Assert.True(temp.App.Store.FindSource(temp.App.Store.FindRevision(result.Accepted[0].Draft!)!.Provenance.SourceId)!.ImportDerived);
 
         // Asking again: the accepted one is now blocked as already reviewed, nothing is duplicated.
-        var again = temp.App.AcceptMany(new([ember.Id], AsReference: false, Confirm: true));
+        var again = temp.AcceptMany(new([ember.Id], AsReference: false, Confirm: true));
         Assert.Empty(again.Accepted);
         Assert.Equal(["candidate.already-reviewed"], again.Blocked.Single().Codes);
         Assert.Equal(drafts + 1, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
@@ -701,7 +770,7 @@ public class CandidateReviewTests
         var stormcall = Named(temp, jobId, "Fixture Stormcall");
         var coat = Named(temp, jobId, "Fixture Quilted Coat");
 
-        var result = temp.App.AcceptMany(new([stormcall.Id, coat.Id], AsReference: true, Confirm: true));
+        var result = temp.AcceptMany(new([stormcall.Id, coat.Id], AsReference: true, Confirm: true));
 
         Assert.Equal([stormcall.Id], result.Accepted.Select(c => c.Id));
         Assert.Equal(CandidateStatus.AcceptedAsReference, result.Accepted[0].Status);
@@ -717,15 +786,15 @@ public class CandidateReviewTests
         var ember = Named(temp, jobId, "Fixture Ember Lance");
         var drafts = temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft);
 
-        Assert.Equal("candidate.confirmation-required", Code(() => temp.App.AcceptMany(new([ember.Id]))));
-        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([.. Enumerable.Range(0, 201).Select(_ => Guid.NewGuid())], Confirm: true))));
-        Assert.Equal("import.limit-out-of-range", Code(() => temp.App.AcceptMany(new([], Confirm: true))));
+        Assert.Equal("candidate.confirmation-required", Code(() => temp.AcceptMany(new([ember.Id]))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.AcceptMany(new([.. Enumerable.Range(0, 201).Select(_ => Guid.NewGuid())], Confirm: true))));
+        Assert.Equal("import.limit-out-of-range", Code(() => temp.AcceptMany(new([], Confirm: true))));
         Assert.Equal(drafts, temp.App.Store.ListRevisions().Count(r => r.Status == RevisionStatus.Draft));
         Assert.Equal(CandidateStatus.Pending, temp.App.Store.FindImportCandidate(ember.Id)!.Status);
 
         // A candidate that does not exist is blocked, not thrown: the rest still go through.
         var ghost = Guid.NewGuid();
-        var result = temp.App.AcceptMany(new([ghost, ember.Id], Confirm: true));
+        var result = temp.AcceptMany(new([ghost, ember.Id], Confirm: true));
         Assert.Equal([ember.Id], result.Accepted.Select(c => c.Id));
         Assert.Equal(["candidate.not-found"], result.Blocked.Single().Codes);
     }
@@ -740,7 +809,7 @@ public class CandidateReviewTests
         var stormcall = Named(temp, jobId, "Fixture Stormcall");
 
         using var response = System.Text.Json.JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(System.Text.Json.JsonSerializer.Serialize(
-            new { id = "1", command = "import.candidate.acceptMany", payload = new { candidateIds = new[] { ember.Id, stormcall.Id }, asReference = false, confirm = true } }, RulesJson.Compact)));
+            new { id = "1", command = "import.candidate.acceptMany", payload = new { candidateIds = new[] { ember.Id, stormcall.Id }, asReference = false, confirm = true, expected = new Dictionary<Guid, string?> { [ember.Id] = temp.EtagOf(ember.Id), [stormcall.Id] = temp.EtagOf(stormcall.Id) } } }, RulesJson.Compact)));
 
         Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
         var data = response.RootElement.GetProperty("result");

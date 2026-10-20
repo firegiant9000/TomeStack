@@ -61,7 +61,7 @@ public class ImportCandidateIdentityTests
     private static StoredCandidate AcceptAsReference(TempApp temp, StoredCandidate stub)
     {
         var edited = temp.App.EditCandidate(new(stub.Id, Expected: temp.EtagOf(stub.Id), RulesFamilies: [RulesFamilies.Srd51]));
-        return temp.App.AcceptCandidate(new(edited.Id, AsReference: true, Confirm: true));
+        return temp.Accept(new(edited.Id, AsReference: true, Confirm: true));
     }
 
     private static bool NotesEarlier(StoredCandidate candidate) =>
@@ -130,7 +130,7 @@ public class ImportCandidateIdentityTests
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var first = Run(temp, temp.App.StartImport(new(source.Id, WholeDocument: true)).Id);
         var beacon = temp.App.ListCandidates(new(first.Id)).Single(c => c.Candidate.ProposedName == "Fixture Beacon");
-        temp.App.IgnoreCandidate(beacon.Id);
+        temp.Ignore(beacon.Id);
 
         var second = Run(temp, temp.App.StartImport(new(source.Id, WholeDocument: true)).Id);
 

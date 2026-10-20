@@ -191,7 +191,13 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setBusyText('Accepting the selected candidates…');
     setBulkBusy(true);
     try {
-      const outcome = await client.acceptCandidates(ticked, asReference);
+      // R134: each id goes with the etag of the row as shown; a stale one refuses the whole batch.
+      const expected: Record<string, string> = {};
+      for (const id of ticked) {
+        const etag = candidates?.find((x) => x.id === id)?.etag;
+        if (etag !== undefined) expected[id] = etag;
+      }
+      const outcome = await client.acceptCandidates(ticked, asReference, expected);
       const nameOf = (id: string) => {
         const c = candidates?.find((x) => x.id === id);
         return c ? (c.edited ?? c.candidate).proposedName : 'A candidate';
@@ -677,7 +683,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
 
   async function accept(asReference: boolean) {
     try {
-      await (isClass && !asReference ? client.acceptCandidate(stored.id, false, confirmedIds) : client.acceptCandidate(stored.id, asReference));
+      await (isClass && !asReference ? client.acceptCandidate(stored.id, false, stored.etag, confirmedIds) : client.acceptCandidate(stored.id, asReference, stored.etag));
       const alongside = isClass && !asReference && linkedCount > 0 ? ` granting ${plural(linkedCount, 'feature', 'features')}` : '';
       await onChanged(
         `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
@@ -689,7 +695,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
 
   async function ignore() {
     try {
-      await client.ignoreCandidate(stored.id);
+      await client.ignoreCandidate(stored.id, stored.etag);
       await onChanged(`Ignored ${candidate.proposedName}. Nothing was created.`);
     } catch (error) {
       await reloadIfChanged(error);

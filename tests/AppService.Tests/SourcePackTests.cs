@@ -222,7 +222,7 @@ public class SourcePackTests
         Clear();
         Assert.Null(app.Store.FindSource(source.Id)!.ImportDerived);
         var candidate = app.ListCandidates(new(job.Id)).First(c => app.CheckCandidate(c.Id).CanAcceptAsReference);
-        app.AcceptCandidate(new(candidate.Id, AsReference: true, Confirm: true));
+        temp.Accept(new(candidate.Id, AsReference: true, Confirm: true));
         Assert.True(app.Store.FindSource(source.Id)!.ImportDerived);
 
         Clear();

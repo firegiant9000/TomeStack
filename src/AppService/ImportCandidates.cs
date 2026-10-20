@@ -89,11 +89,23 @@ public sealed record CandidateRequest(Guid CandidateId);
 /// A class is not accepted as a draft without its hit die confirmed (<c>import.class-unconfirmed</c>). Only for a class, and not
 /// together with <paramref name="AsReference"/>.
 /// </param>
-public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false, IReadOnlyList<string>? ConfirmedEffectIds = null);
+/// <param name="Expected">
+/// R134: the candidate's <see cref="StoredCandidate.Etag"/> as the review panel last read it. The accept is refused
+/// (<c>import.candidate-changed</c>) when the stored row has changed since, or when none is sent.
+/// </param>
+public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false, IReadOnlyList<string>? ConfirmedEffectIds = null, string? Expected = null);
+
+/// <summary><c>import.candidate.ignore</c>; <paramref name="Expected"/> is the candidate's etag as the panel last read it (R134).</summary>
+public sealed record CandidateIgnoreRequest(Guid CandidateId, string? Expected = null);
 
 /// <param name="CandidateIds">At most <see cref="TomeStackApp.MaxAcceptMany"/>.</param>
 /// <param name="Confirm">Must be true: it creates draft revisions.</param>
-public sealed record CandidateAcceptManyRequest(IReadOnlyList<Guid> CandidateIds, bool AsReference = false, bool Confirm = false);
+/// <param name="Expected">
+/// R134: one expected etag per candidate id, as the panel last read them. A stored candidate with a stale or missing token
+/// refuses the whole batch (<c>import.candidate-changed</c>) and nothing is written. An id that no longer exists is reported
+/// as blocked, as before.
+/// </param>
+public sealed record CandidateAcceptManyRequest(IReadOnlyList<Guid> CandidateIds, bool AsReference = false, bool Confirm = false, IReadOnlyDictionary<Guid, string>? Expected = null);
 
 /// <summary>A candidate that <c>import.candidate.acceptMany</c> skipped, and why (diagnostic codes only).</summary>
 public sealed record BlockedCandidate(Guid CandidateId, IReadOnlyList<string> Codes);
@@ -158,7 +170,7 @@ public sealed partial class TomeStackApp
 
     internal int DetectionCandidateCap { get; set; } = CandidateDetector.MaxCandidates;
 
-    /// <summary>Test seam (fix round 1, item 7): runs after an accept is planned and checked, just before its writes.</summary>
+    /// <summary>Test seam (fix round 1, item 7): runs after an accept (or accept-many) is planned and checked, just before its writes.</summary>
     internal Action? BeforeAcceptWrites { get; set; }
 
     /// <summary>Test seam (Task 8a fix round 1, M6): runs after an edit's first check, just before its transaction.</summary>
@@ -316,6 +328,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates a draft entry. Confirm to accept; nothing was changed.")]);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
+        RequireUnchanged(stored, request.Expected, forEdit: false); // R134: the caller's token, as for an edit (R120)
         // Even as reference, an entry needs a family, and a double acceptance is refused: "reference only" lifts neither.
         var provenance = ProvenanceBlockers(stored); // once: it reads every candidate of every same-document job
         if (provenance is [var first, ..])
@@ -340,7 +353,7 @@ public sealed partial class TomeStackApp
             // was made, or edited (the same compare-and-swap as an edit, R120), it is refused and nothing is written.
             var current = FindCandidateOrThrow(request.CandidateId);
             RequirePending(current);
-            RequireUnchanged(current, stored.Etag, forEdit: false);
+            RequireUnchanged(current, request.Expected, forEdit: false);
             stored = current;
             // Fix round 1, item 7: the plan read each linked feature's status before the transaction; one reviewed since then
             // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
@@ -552,8 +565,19 @@ public sealed partial class TomeStackApp
         var accepted = new List<StoredCandidate>();
         var blocked = new List<BlockedCandidate>();
         var acceptedCache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
+        // R134: one expected etag per id; any stale or missing one refuses the whole batch before anything is written.
+        // Checked here and again inside the transaction (the same compare-and-swap as an edit, R120).
+        void RequireAllUnchanged()
+        {
+            foreach (var id in ids)
+                if (_store.FindImportCandidate(id) is { } row)
+                    RequireUnchanged(row, request.Expected is { } expected && expected.TryGetValue(id, out var token) ? token : null, forEdit: false);
+        }
+        RequireAllUnchanged();
+        BeforeAcceptWrites?.Invoke();
         _store.InTransaction(() =>
         {
+            RequireAllUnchanged();
             foreach (var id in ids)
             {
                 if (_store.FindImportCandidate(id) is not { } stored)
@@ -594,10 +618,13 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary><c>import.candidate.ignore</c>: sets a pending candidate aside. Nothing is created.</summary>
-    public StoredCandidate IgnoreCandidate(Guid candidateId)
+    public StoredCandidate IgnoreCandidate(CandidateIgnoreRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        var candidateId = request.CandidateId;
         var stored = FindCandidateOrThrow(candidateId);
         RequirePending(stored);
+        RequireUnchanged(stored, request.Expected, forEdit: false); // R134
         BeforeIgnoreWrites?.Invoke();
         StoredCandidate? ignored = null;
         _store.InTransaction(() =>
@@ -605,7 +632,7 @@ public sealed partial class TomeStackApp
             // Task 8a M2: read again inside the transaction, so a concurrent edit or accept is refused instead of overwritten.
             var current = FindCandidateOrThrow(candidateId);
             RequirePending(current);
-            RequireUnchanged(current, stored.Etag, forEdit: false);
+            RequireUnchanged(current, request.Expected, forEdit: false);
             _store.SaveImportCandidate(current with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() });
             _store.AddImportAudit(current.JobId, _time.GetUtcNow(), "candidate-ignored", current.Current.ProposedKind.ToString().ToLowerInvariant());
             ignored = _store.FindImportCandidate(candidateId);

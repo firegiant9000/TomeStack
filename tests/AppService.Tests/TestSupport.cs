@@ -43,6 +43,16 @@ internal sealed class TempApp : IDisposable
     /// <summary>The compare-and-swap token of a candidate as stored now (what the UI would send back with its edit).</summary>
     public string? EtagOf(Guid candidateId) => App.Store.FindImportCandidate(candidateId)?.Etag;
 
+    /// <summary>R134: accepts as the panel does, sending the etag the candidate has now (a stored one; none for an unknown id).</summary>
+    public StoredCandidate Accept(CandidateAcceptRequest request) => App.AcceptCandidate(request with { Expected = EtagOf(request.CandidateId) });
+
+    /// <summary>R134: bulk accept as the panel does, one current etag per id that exists.</summary>
+    public AcceptManyResult AcceptMany(CandidateAcceptManyRequest request) =>
+        App.AcceptMany(request with { Expected = request.CandidateIds.Distinct().Where(id => EtagOf(id) is not null).ToDictionary(id => id, id => EtagOf(id)!) });
+
+    /// <summary>R134: ignores as the panel does, sending the etag the candidate has now.</summary>
+    public StoredCandidate Ignore(Guid candidateId) => App.IgnoreCandidate(new(candidateId, EtagOf(candidateId)));
+
     private bool _closed;
 
     public void Reopen()

@@ -65,7 +65,7 @@ public class SpellListTests
         var veil = Named(temp, jobId, "Fixture Frost Veil");
 
         temp.App.AddCandidatesToSpellList(new([veil.Id], "wizard"));
-        var accepted = temp.App.AcceptCandidate(new(veil.Id, Confirm: true));
+        var accepted = temp.Accept(new(veil.Id, Confirm: true));
 
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
         Assert.Equal(["wizard"], Assert.IsType<SpellEffect>(Assert.Single(draft.Effects)).Lists);
@@ -81,7 +81,7 @@ public class SpellListTests
         var ember = Named(temp, jobId, "Fixture Ember Lance");
         var stormcall = Named(temp, jobId, "Fixture Stormcall");
         var ghost = Guid.NewGuid();
-        temp.App.IgnoreCandidate(veil.Id);
+        temp.Ignore(veil.Id);
         temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
         // R59: the key is already there and every key is it, so the repeat is a confirmation (updated), not a skip.
         var again = temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
@@ -132,7 +132,7 @@ public class SpellListTests
         Assert.Equal(["fixture-seer"], ListsOf(saved));
         Assert.DoesNotContain("lists", saved.Current.LowConfidenceFields);
         Assert.DoesNotContain(temp.App.CheckCandidate(veil.Id).Blockers, b => b.Code == "candidate.low-confidence");
-        Assert.NotNull(temp.App.AcceptCandidate(new(veil.Id, Confirm: true)).Draft);
+        Assert.NotNull(temp.Accept(new(veil.Id, Confirm: true)).Draft);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class SpellListTests
         Assert.Equal(["fixture-seer", "wizard"], ListsOf(saved));
         Assert.Contains("lists", saved.Current.LowConfidenceFields);
         Assert.Contains("candidate.low-confidence", temp.App.CheckCandidate(veil.Id).Blockers.Select(b => b.Code));
-        Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(veil.Id, Confirm: true)));
+        Assert.Throws<AppValidationException>(() => temp.Accept(new(veil.Id, Confirm: true)));
     }
 
     [Fact]

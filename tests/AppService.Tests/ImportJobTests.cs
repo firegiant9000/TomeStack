@@ -370,7 +370,7 @@ public class ImportJobTests
         var sourceId = SourceWithBook(temp);
         var first = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
         var ignored = temp.App.ListCandidates(new(first.Id))[0];
-        temp.App.IgnoreCandidate(ignored.Id);
+        temp.Ignore(ignored.Id);
 
         var second = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
 

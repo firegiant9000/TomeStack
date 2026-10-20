@@ -45,13 +45,13 @@ public class ClassAcceptTests
         // Fixture Glow is the one linked block of the book; settling it leaves only the confirmation to give.
         Assert.Contains(lamplighter.Current.ProposedEffects, e => e.Id == "spellcasting");
 
-        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true)))));
-        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])))));
-        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["spellcasting"])))));
-        Assert.Equal(["candidate.confirm-unknown"], Codes(Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: [.. Both, "no-such-effect"])))));
-        Assert.Equal(["candidate.confirm-unsupported"], Codes(Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, AsReference: true, Confirm: true, ConfirmedEffectIds: Both)))));
+        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true)))));
+        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])))));
+        Assert.Equal(["import.class-unconfirmed"], Codes(Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["spellcasting"])))));
+        Assert.Equal(["candidate.confirm-unknown"], Codes(Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: [.. Both, "no-such-effect"])))));
+        Assert.Equal(["candidate.confirm-unsupported"], Codes(Refused(() => temp.Accept(new(lamplighter.Id, AsReference: true, Confirm: true, ConfirmedEffectIds: Both)))));
         var hookblade = Named(temp, jobId, "Fixture Hookblade");
-        Assert.Equal(["candidate.confirm-unsupported"], Codes(Refused(() => temp.App.AcceptCandidate(new(hookblade.Id, Confirm: true, ConfirmedEffectIds: ["weapon"])))));
+        Assert.Equal(["candidate.confirm-unsupported"], Codes(Refused(() => temp.Accept(new(hookblade.Id, Confirm: true, ConfirmedEffectIds: ["weapon"])))));
 
         // Nothing was written by any refusal.
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == lamplighter.Candidate.SourceId);
@@ -72,7 +72,7 @@ public class ClassAcceptTests
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => $"{d.Code} {d.Message}")));
         Assert.Equal(7, check.Dependencies.Count(d => d.Kind == "content")); // the feature drafts it would write, named before they exist
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         Assert.Equal(CandidateStatus.Accepted, accepted.Status);
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
@@ -111,9 +111,9 @@ public class ClassAcceptTests
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
         var glow = Named(temp, jobId, "Fixture Glow");
-        var first = temp.App.AcceptCandidate(new(glow.Id, Confirm: true));
+        var first = temp.Accept(new(glow.Id, Confirm: true));
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
         Assert.Contains(draft.Effects.OfType<GrantEffect>(), g => g.Content == first.Draft);
@@ -133,7 +133,7 @@ public class ClassAcceptTests
         var check = temp.App.CheckCandidate(warden.Id);
         Assert.False(check.CanAccept);
         Assert.Contains(check.Blockers, b => b.Code == "candidate.unresolved-reference" && b.Message.StartsWith("1 linked feature(s)", StringComparison.Ordinal));
-        var refused = Refused(() => temp.App.AcceptCandidate(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])));
+        var refused = Refused(() => temp.Accept(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"])));
         Assert.Equal("candidate.needs-review", refused.Problems[0].Code);
         Assert.Contains("candidate.unresolved-reference", Codes(refused));
 
@@ -141,8 +141,8 @@ public class ClassAcceptTests
         Assert.All(temp.App.ListCandidates(new(jobId)), c => Assert.Equal(CandidateStatus.Pending, c.Status));
 
         // Accepting the feature as reference settles it; the class then pins that draft and writes the two stubs.
-        var stormcall = temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
-        var accepted = temp.App.AcceptCandidate(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"]));
+        var stormcall = temp.Accept(new(Named(temp, jobId, "Fixture Stormcall").Id, AsReference: true, Confirm: true));
+        var accepted = temp.Accept(new(warden.Id, Confirm: true, ConfirmedEffectIds: ["hit-die"]));
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
         Assert.Equal(3, draft.Effects.OfType<GrantEffect>().Count(g => g.Grant == GrantKind.Content));
         Assert.Contains(draft.Effects.OfType<GrantEffect>(), g => g.Content == stormcall.Draft);
@@ -156,7 +156,7 @@ public class ClassAcceptTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
-        var beacon = temp.App.IgnoreCandidate(Named(temp, jobId, "Fixture Beacon").Id);
+        var beacon = temp.Ignore(Named(temp, jobId, "Fixture Beacon").Id);
 
         var check = temp.App.CheckCandidate(lamplighter.Id);
 
@@ -165,7 +165,7 @@ public class ClassAcceptTests
         Assert.Contains("1 linked feature is ignored and will not be granted.", check.Notes);
         Assert.Equal(CandidateStatus.Ignored, Assert.Single(check.Linked, l => l.CandidateId == beacon.Id).Status);
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
         var granted = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content)
             .Select(g => temp.App.Store.FindRevision(g.Content!)!.Name).ToList();
         Assert.Equal(6, granted.Count);
@@ -179,7 +179,7 @@ public class ClassAcceptTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
-        var reference = temp.App.AcceptCandidate(new(lamplighter.Id, AsReference: true, Confirm: true));
+        var reference = temp.Accept(new(lamplighter.Id, AsReference: true, Confirm: true));
         var draft = temp.App.Store.FindRevision(reference.Draft!)!;
         Assert.Empty(draft.Effects); // reference only: no effects, no grants, and the features stay pending
         Assert.Equal(CandidateStatus.Pending, Named(temp, jobId, "Fixture Glow").Status);
@@ -192,7 +192,7 @@ public class ClassAcceptTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
-        temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
+        temp.Accept(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
 
         var linked = temp.App.CheckCandidate(lamplighter.Id).Linked;
 
@@ -210,10 +210,10 @@ public class ClassAcceptTests
         var (temp, sourceId, jobId) = Imported();
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
-        var glow = temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
+        var glow = temp.Accept(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
         var published = temp.App.Publish(glow.Draft!).Published;
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content).ToList();
         Assert.Contains(grants, g => g.Content == published);
@@ -236,11 +236,11 @@ public class ClassAcceptTests
         var (temp, _, jobId) = Imported();
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
-        var glow = temp.App.AcceptCandidate(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
+        var glow = temp.Accept(new(Named(temp, jobId, "Fixture Glow").Id, Confirm: true));
         var old = temp.App.Store.FindRevision(glow.Draft!)!;
         var redrafted = temp.App.SaveDraft(old with { RevisionId = Guid.Empty, Summary = "Fixture text edited in the studio." });
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content).ToList();
         Assert.Contains(grants, g => g.Content == redrafted);
@@ -281,7 +281,7 @@ public class ClassAcceptTests
         var check = temp.App.CheckCandidate(lamplighter.Id);
         var link = Assert.Single(check.Linked, l => l.Name == "Fixture Beacon");
         Assert.Equal((null, 5, true), (link.CandidateId, link.Level, link.Installed));
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var grant = Assert.Single(temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>(), g => g.Content == installed.Reference);
         Assert.Equal(5, grant.Level);
@@ -297,7 +297,7 @@ public class ClassAcceptTests
         var (_, jobId) = ImportedInto(temp);
 
         var stub = Assert.Single(temp.App.ListCandidates(new(jobId)), c => c.Candidate.ProposedName == "Fixture Beacon");
-        var accepted = temp.App.AcceptCandidate(new(Reviewed(temp, jobId, "Fixture Lamplighter").Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(Reviewed(temp, jobId, "Fixture Lamplighter").Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var pins = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Select(g => g.Content).ToList();
         Assert.DoesNotContain(one.Reference, pins);
@@ -344,7 +344,7 @@ public class ClassAcceptTests
         Assert.DoesNotContain(check.Notes, n => n.Contains("not linked", StringComparison.Ordinal));
         var renamed = Assert.Single(check.Linked, l => l.CandidateId == beacon.Id);
         Assert.Equal("Fixture Beacon Renamed", renamed.Name);
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var grants = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().ToList();
         Assert.DoesNotContain(grants, g => g.Content == installed.Reference);
@@ -363,7 +363,7 @@ public class ClassAcceptTests
 
         var check = temp.App.CheckCandidate(lamplighter.Id);
         Assert.Contains("1 table feature is not linked and will not be granted; add it in the studio.", check.Notes);
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
         var pins = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Select(g => g.Content).ToList();
         Assert.DoesNotContain(one.Reference, pins);
         Assert.DoesNotContain(two.Reference, pins);
@@ -394,8 +394,8 @@ public class ClassAcceptTests
         // Ruling R68 (fix round 1, item 4): not dropped silently, and not linked across jobs.
         var (temp, sourceId, firstJob) = Imported();
         using var _t = temp;
-        temp.App.AcceptCandidate(new(Named(temp, firstJob, "Fixture Glow").Id, Confirm: true));
-        temp.App.IgnoreCandidate(Named(temp, firstJob, "Fixture Beacon").Id);
+        temp.Accept(new(Named(temp, firstJob, "Fixture Glow").Id, Confirm: true));
+        temp.Ignore(Named(temp, firstJob, "Fixture Beacon").Id);
 
         var second = temp.App.StartImport(new(sourceId, WholeDocument: true));
         temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
@@ -421,7 +421,7 @@ public class ClassAcceptTests
                 throw new InvalidOperationException("forced failure");
         };
 
-        Assert.Throws<InvalidOperationException>(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+        Assert.Throws<InvalidOperationException>(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
         Assert.All(temp.App.ListCandidates(new(jobId)), c => Assert.Equal(CandidateStatus.Pending, c.Status));
@@ -436,7 +436,7 @@ public class ClassAcceptTests
         var beacon = Named(temp, jobId, "Fixture Beacon");
         temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(beacon with { Status = CandidateStatus.Ignored });
 
-        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+        var refused = Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
         Assert.Equal(["candidate.linked-changed"], Codes(refused));
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -453,7 +453,7 @@ public class ClassAcceptTests
         var beacon = Named(temp, jobId, "Fixture Beacon");
         temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(beacon with { Edited = beacon.Current with { Summary = "Edited by a second window." } });
 
-        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+        var refused = Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
         Assert.Equal(["import.candidate-changed"], Codes(refused));
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -472,7 +472,7 @@ public class ClassAcceptTests
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
         temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(lamplighter with { Edited = lamplighter.Current with { Summary = "Edited by a second window." } });
 
-        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+        var refused = Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
         Assert.Equal(["import.candidate-changed"], Codes(refused));
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -489,7 +489,7 @@ public class ClassAcceptTests
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
         temp.App.BeforeAcceptWrites = () => temp.App.Store.SaveImportCandidate(lamplighter with { Status = CandidateStatus.Ignored });
 
-        var refused = Refused(() => temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
+        var refused = Refused(() => temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both)));
 
         Assert.Equal(["candidate.already-reviewed"], Codes(refused));
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == sourceId);
@@ -503,7 +503,7 @@ public class ClassAcceptTests
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["hit-die", "spellcasting", "hit-die", "save-wis", "save-wis"]));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: ["hit-die", "spellcasting", "hit-die", "save-wis", "save-wis"]));
 
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
         Assert.Single(draft.Effects, e => e.Id == "hit-die");
@@ -519,14 +519,14 @@ public class ClassAcceptTests
         using var _t = temp;
         var lamplighter = Reviewed(temp, jobId, "Fixture Lamplighter");
 
-        var result = temp.App.AcceptMany(new([lamplighter.Id], Confirm: true));
+        var result = temp.AcceptMany(new([lamplighter.Id], Confirm: true));
 
         Assert.Empty(result.Accepted);
         Assert.Equal(["import.class-unconfirmed"], Assert.Single(result.Blocked).Codes);
         Assert.DoesNotContain(temp.App.Store.ListRevisions(), r => r.Provenance.SourceId == lamplighter.Candidate.SourceId);
         Assert.All(temp.App.ListCandidates(new(jobId)), c => Assert.Equal(CandidateStatus.Pending, c.Status));
         // As reference it is still accepted in bulk.
-        Assert.Single(temp.App.AcceptMany(new([lamplighter.Id], AsReference: true, Confirm: true)).Accepted);
+        Assert.Single(temp.AcceptMany(new([lamplighter.Id], AsReference: true, Confirm: true)).Accepted);
     }
 
     [Fact]
@@ -541,7 +541,7 @@ public class ClassAcceptTests
         var check = temp.App.CheckCandidate(lamplighter.Id);
         Assert.True(check.CanAccept, string.Join("; ", check.Blockers.Concat(check.Report.Errors).Select(d => $"{d.Code} {d.Message}")));
 
-        var accepted = temp.App.AcceptCandidate(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(lamplighter.Id, Confirm: true, ConfirmedEffectIds: Both));
         var drafts = temp.App.Store.FindRevision(accepted.Draft!)!.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content).Select(g => temp.App.Store.FindRevision(g.Content!)!).ToList();
         Assert.All(drafts, d => Assert.Equal([RulesFamilies.Srd521], d.RulesFamilies));
     }
@@ -551,7 +551,7 @@ public class ClassAcceptTests
     {
         var (temp, sourceId, jobId) = Imported();
         using var _t = temp;
-        var accepted = temp.App.AcceptCandidate(new(Reviewed(temp, jobId, "Fixture Lamplighter").Id, Confirm: true, ConfirmedEffectIds: Both));
+        var accepted = temp.Accept(new(Reviewed(temp, jobId, "Fixture Lamplighter").Id, Confirm: true, ConfirmedEffectIds: Both));
 
         var drafts = temp.App.ListContent(RulesFamilies.Srd521).Count(o => o.SourceId == sourceId);
         Assert.Equal(0, drafts); // drafts are not active
