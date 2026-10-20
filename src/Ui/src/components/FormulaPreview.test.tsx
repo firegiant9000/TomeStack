@@ -127,3 +127,20 @@ it('clears_the_result_when_the_formula_becomes_empty_and_ignores_a_late_reply', 
   await act(async () => resolve(result([2, 3, 4, 5, 6])));
   expect(container.textContent).toBe('');
 });
+
+it('keeps_its_container_for_aria_describedby_and_reserves_room_only_for_a_previewable_formula', () => {
+  const { container, rerender } = render(<FormulaPreview id="p" formula="PB" />);
+  expect(container.querySelector('#p')?.classList.contains('reserved')).toBe(true);
+  expect(container.textContent).toBe('');
+  rerender(<FormulaPreview id="p" formula="3" />);
+  expect(container.querySelector('#p')).not.toBeNull();
+  expect(container.querySelector('#p')?.classList.contains('reserved')).toBe(false);
+});
+
+it('shows_a_dash_for_a_point_with_neither_a_value_nor_a_problem', async () => {
+  vi.mocked(client.previewFormula).mockResolvedValue({ points: [{ level: 1 }, { level: 5, value: 3 }] } as FormulaPreviewResult);
+  const { container } = render(<FormulaPreview id="p" formula="PB" />);
+  await settle();
+  expect(container.textContent).toContain('Level 1: — · Level 5: 3');
+  expect(container.textContent).not.toContain('undefined');
+});

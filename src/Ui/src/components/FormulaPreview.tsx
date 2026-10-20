@@ -39,19 +39,27 @@ export function FormulaPreview({ id, formula, revision }: { id: string; formula:
     };
   }, [formula, revision]);
 
-  if (!previewable(formula) || answer === null || answer.formula !== formula) return null;
-  const outcome = answer.outcome;
+  // The container stays (so the input's aria-describedby always resolves) and, for a formula that gets a preview, keeps
+  // its room while the answer is on its way, so the form below does not jump on each keystroke.
+  const ready = previewable(formula);
+  const outcome = ready && answer !== null && answer.formula === formula ? answer.outcome : null;
 
-  let body: string;
+  let body: string | null = null;
   if (outcome === 'failed') body = 'Preview unavailable.';
-  else if (outcome.error != null) body = outcome.error.message;
-  else if (outcome.unavailable != null) body = outcome.unavailable;
-  else body = outcome.points.map((p) => `Level ${p.level}: ${p.problem ?? p.value}`).join(' · ');
+  else if (outcome !== null) {
+    if (outcome.error != null) body = outcome.error.message;
+    else if (outcome.unavailable != null) body = outcome.unavailable;
+    else body = outcome.points.map((p) => `Level ${p.level}: ${p.problem ?? p.value ?? '—'}`).join(' · ');
+  }
 
   return (
-    <div id={id} className="formula-preview">
-      <div>{body}</div>
-      <small>Preview, not a character: ability scores 10, proficiency bonus by level.</small>
+    <div id={id} className={ready ? 'formula-preview reserved' : 'formula-preview'}>
+      {body !== null && (
+        <>
+          <div>{body}</div>
+          <small>Preview, not a character: ability scores 10, proficiency bonus by level.</small>
+        </>
+      )}
     </div>
   );
 }
