@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Internal
+
+- **RulesCore boundary test:** `RulesCoreBoundaryTests` fails the build if `TomeStack.RulesCore` references persistence, UI, Windows or network assemblies, declares any project, package or framework reference, or targets Windows. No change to the app.
+
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
 
 Everything from the 2026-10-14 tester feedback plan (Waves 0 to 3, D33 to D42) and the studio's formula preview (D61), listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print, the upgrade from 0.5.0).
