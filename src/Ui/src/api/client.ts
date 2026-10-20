@@ -51,6 +51,7 @@ import type {
   DdbReadResult,
   DebugReport,
   DesignHint,
+  FormulaPreviewResult,
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
@@ -127,6 +128,8 @@ export function createClient(transport: Transport) {
     tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
     /** Design hints for the unsaved revision on screen (M5 slice 7), asked only while the setting is on. Writes nothing. */
     feedback: (revision: ContentRevision) => call<DesignHint[]>('content.feedback', { revision }),
+    /** A formula's value at sample class levels (D61). Read-only; `revision` is the unsaved draft whose scales `SCALE.<id>` reads. */
+    previewFormula: (formula: string, revision?: ContentRevision) => call<FormulaPreviewResult>('content.previewFormula', { formula, revision }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
