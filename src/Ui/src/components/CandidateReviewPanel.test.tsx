@@ -1147,3 +1147,39 @@ it.each(['candidate.linked-edited', 'candidate.linked-changed'])('asks for the c
   expect(onStatus).toHaveBeenCalledWith('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
   expect(onError).not.toHaveBeenCalled();
 });
+
+// R134: accept and ignore act on the stored candidate, so they are held, like selecting another one, while the form differs from it.
+it('holds Accept as a draft, Accept as reference and Ignore, with a linked reason, while the open candidate has an unsaved edit', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.ignoreCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.ignoreCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  const name = await screen.findByLabelText('Name');
+  const buttons = ['Accept as a draft', 'Accept as reference', 'Ignore'].map((label) => screen.getByRole('button', { name: label }));
+  await waitFor(() => expect(held(buttons[0]!)).toBe(false));
+  await user.type(name, ' II');
+  const reason = await screen.findByText('Save or undo your edit first.');
+
+  for (const button of buttons) {
+    expect(held(button)).toBe(true);
+    expect(button).toHaveProperty('disabled', false);
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toContain(reason.id);
+    button.focus();
+    await user.click(button);
+    expect(document.activeElement).toBe(button);
+  }
+  expect(client.acceptCandidate).not.toHaveBeenCalled();
+  expect(client.ignoreCandidate).not.toHaveBeenCalled();
+  expect((name as HTMLInputElement).value).toBe('Testy Coat II');
+
+  // Undo: the same buttons work again.
+  await user.type(name, '{Backspace}{Backspace}{Backspace}');
+  for (const button of buttons) expect(held(button)).toBe(false);
+  await user.click(buttons[2]!);
+  await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'etag-1'));
+});

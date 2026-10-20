@@ -544,6 +544,7 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
           onOpenPage={onOpenPage}
           onError={onError}
           onDirtyChange={setDirty}
+          dirtyReasonId={dirtyId}
           confirmed={confirmTicks.current.get(current.id)}
           onConfirmedChange={(ticks) => confirmTicks.current.set(current.id, ticks)}
           onChanged={async (text) => {
@@ -570,6 +571,8 @@ interface DetailProps {
   onChanged: (status: string) => Promise<void>;
   /** Whether the form differs from what is stored, so the panel can keep the player from leaving with an unsaved edit. */
   onDirtyChange: (dirty: boolean) => void;
+  /** The panel's "Save or undo your edit first." line, which a held button points at (R77, as the other held controls do). */
+  dirtyReasonId: string;
   /** Item 12: the confirm ticks from before a save, with the effects they were made on. */
   confirmed: ConfirmTicks | undefined;
   onConfirmedChange: (ticks: ConfirmTicks) => void;
@@ -581,7 +584,7 @@ interface ConfirmTicks {
   ids: string[];
 }
 
-function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, confirmed: remembered, onConfirmedChange }: DetailProps) {
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, dirtyReasonId, confirmed: remembered, onConfirmedChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
@@ -696,6 +699,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   }
 
   async function accept(asReference: boolean) {
+    if (dirty) return; // R134: held while the form differs from what is stored
     try {
       await (isClass && !asReference ? client.acceptCandidate(stored.id, false, stored.etag, confirmedIds) : client.acceptCandidate(stored.id, asReference, stored.etag));
       const alongside = isClass && !asReference && linkedCount > 0 ? ` granting ${plural(linkedCount, 'feature', 'features')}` : '';
@@ -708,6 +712,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   }
 
   async function ignore() {
+    if (dirty) return; // R134: held while the form differs from what is stored
     try {
       await client.ignoreCandidate(stored.id, stored.etag);
       await onChanged(`Ignored ${candidate.proposedName}. Nothing was created.`);
@@ -897,21 +902,21 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           {/* aria-disabled, never `disabled`: a re-check can block a button that has focus (2.4.3); the reason is the visible list. */}
           <button
             type="button"
-            aria-disabled={!check?.canAccept || confirmHeld || undefined}
-            aria-describedby={[!check?.canAccept ? reasonId : undefined, confirmHeld ? confirmId : undefined].filter(Boolean).join(' ') || undefined}
-            onClick={() => check?.canAccept && !confirmHeld && accept(false)}
+            aria-disabled={!check?.canAccept || confirmHeld || dirty || undefined}
+            aria-describedby={[dirty ? dirtyReasonId : undefined, !check?.canAccept ? reasonId : undefined, confirmHeld ? confirmId : undefined].filter(Boolean).join(' ') || undefined}
+            onClick={() => check?.canAccept && !confirmHeld && !dirty && accept(false)}
           >
             Accept as a draft
           </button>
           <button
             type="button"
-            aria-disabled={!check?.canAcceptAsReference || undefined}
-            aria-describedby={!check?.canAcceptAsReference ? reasonId : undefined}
-            onClick={() => check?.canAcceptAsReference && accept(true)}
+            aria-disabled={!check?.canAcceptAsReference || dirty || undefined}
+            aria-describedby={[dirty ? dirtyReasonId : undefined, !check?.canAcceptAsReference ? reasonId : undefined].filter(Boolean).join(' ') || undefined}
+            onClick={() => check?.canAcceptAsReference && !dirty && accept(true)}
           >
             Accept as reference
           </button>
-          <button type="button" onClick={ignore}>
+          <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyReasonId : undefined} onClick={() => !dirty && ignore()}>
             Ignore
           </button>
         </div>
