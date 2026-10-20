@@ -23,6 +23,7 @@ internal static class GoldenRevisions
         "76e246dfd1ccf4e1e5e27e0127977d764797c95418fb3a12b02b082963e698b6",
         "2e1e8b8e9d4a812dc168ca37a1f18911f3888f42c3fddc42f10d3715f54d47e2",
         "fd177e2950867210d00ff9be73d2557b46b45df97b5bae103c28691e51a35916",
+        "153d03675f52e19b2a428f51ff56e3d1c7f87b6a4d7eeb54e6c2d47f5fd960db", // v10, added by Wave 3 (the v1 to v9 hashes above are unchanged)
     ];
 
     /// <summary>The golden revision of content schema <paramref name="version"/>, as written in the fixture.</summary>

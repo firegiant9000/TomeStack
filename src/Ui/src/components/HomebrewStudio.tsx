@@ -1431,6 +1431,7 @@ function EffectEditor(props: {
     spellcasting: 'Spellcasting',
     spell: 'Spell data',
     toggle: 'Toggle',
+    item: 'Item rules',
   };
   const toggles = props.toggles;
   const legend = `Rule ${n}: ${names[effect.type]}`;

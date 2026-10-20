@@ -592,6 +592,16 @@ public static class DamageTypes
 {
     public static readonly IReadOnlyList<string> All =
         ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+
+    /// <summary>
+    /// Content schema v10: maps a damage type written in any case to its lowercase name in <see cref="All"/>. Exact apart
+    /// from case (no trimming): anything else, including null, is refused with <paramref name="canonical"/> empty.
+    /// </summary>
+    public static bool TryNormalize(string? name, out string canonical)
+    {
+        canonical = All.FirstOrDefault(t => string.Equals(t, name, StringComparison.OrdinalIgnoreCase)) ?? "";
+        return canonical.Length > 0;
+    }
 }
 
 /// <summary>Character schema v9 (D42): how a character treats one damage type. A reminder only: damage commands do not use it.</summary>

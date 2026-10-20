@@ -157,5 +157,23 @@
         "multiclassCasterTable": [0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10]
       }
     ]
+  },
+  {
+    "contentId": "6a7e000a-0000-4000-8000-000000000001",
+    "revisionId": "6a7e000a-0000-4000-8000-000000000101",
+    "schemaVersion": 10,
+    "kind": "item",
+    "name": "Fixture Emberstaff",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      { "type": "item", "id": "ember-item", "requiresAttunement": true, "charges": { "max": 6, "recovery": { "period": "longRest", "regain": "1d4+2" } } },
+      { "type": "toggle", "id": "ember-glow", "toggleId": "glow", "label": "Glow", "autoWhen": "bloodied", "activation": "bonusAction" },
+      { "type": "resource", "id": "ember-pool", "resourceId": "embers", "label": "Embers", "maximum": "3", "activation": "reaction" },
+      { "type": "grant", "id": "ember-ward", "grant": "damageResistance", "damageType": "Fire" },
+      { "type": "modifier", "id": "ember-pace", "operation": "bonus", "target": "speed", "value": "10" },
+      { "type": "restriction", "id": "ember-watch", "field": "passive.perception", "minimum": 8 }
+    ]
   }
 ]

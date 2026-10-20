@@ -59,6 +59,80 @@ public class PassiveAndSpeedTests
         Assert.DoesNotContain(gated.Reference, sheet.Active!);
     }
 
+    // ---- content schema v10 (Wave 3, D42): a v10 revision may target speed and the passive scores ------------------------
+
+    [Fact]
+    public void A_v10_modifier_on_speed_and_on_a_passive_applies_and_is_traced()
+    {
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var quick = Feat(4, "Fixture Quickness", 10,
+            new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" },
+            new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" },
+            new ModifierEffect { Id = "pi", Operation = ModifierOperation.Set, Target = FieldIds.Passive("insight"), Value = "25" });
+        var sheet = Calc(Fixtures.Srd51Character(), quick);
+
+        Assert.Equal(40, sheet.Field(FieldIds.Speed).Value);
+        Assert.Equal(plain.Field(FieldIds.Passive("perception")).Value + 5, sheet.Field(FieldIds.Passive("perception")).Value);
+        Assert.Equal(25, sheet.Field(FieldIds.Passive("insight")).Value);
+        Assert.Contains(sheet.Field(FieldIds.Speed).Trace, s => s.Origin.Kind == TraceOriginKind.Content && s.Amount == 10);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.character-only-field");
+        Assert.Equal(plain.Field(FieldIds.Passive("investigation")).Value, sheet.Field(FieldIds.Passive("investigation")).Value);
+    }
+
+    [Fact]
+    public void A_v10_passive_modifier_sees_a_skill_changed_by_other_content()
+    {
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var keen = Feat(5, "Fixture Keen", 10,
+            new ModifierEffect { Id = "skill", Operation = ModifierOperation.Bonus, Target = FieldIds.Skill("perception"), Value = "2" },
+            new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "3" });
+        var sheet = Calc(Fixtures.Srd51Character(), keen);
+        Assert.Equal(plain.Field(FieldIds.Passive("perception")).Value + 5, sheet.Field(FieldIds.Passive("perception")).Value);
+    }
+
+    [Fact]
+    public void A_v10_restriction_on_speed_or_a_passive_is_checked_like_any_other_field()
+    {
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var met = Feat(6, "Fixture Met", 10,
+            new RestrictionEffect { Id = "needs-speed", Field = FieldIds.Speed, Minimum = 30 },
+            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "5" });
+        var metSheet = Calc(Fixtures.Srd51Character(), met);
+        Assert.Contains(met.Reference, metSheet.Active!);
+        Assert.Equal(plain.Field(FieldIds.Initiative).Value + 5, metSheet.Field(FieldIds.Initiative).Value);
+        Assert.DoesNotContain(metSheet.Diagnostics, d => d.Code is "effect.character-only-field" or "restriction.unmet");
+
+        var unmet = Feat(7, "Fixture Unmet", 10,
+            new RestrictionEffect { Id = "needs-pp", Field = FieldIds.Passive("perception"), Minimum = 99 },
+            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "5" });
+        var unmetSheet = Calc(Fixtures.Srd51Character(), unmet);
+        Assert.Contains(unmetSheet.Diagnostics, d => d.Code == "restriction.unmet" && d.Content == unmet.Reference);
+        Assert.DoesNotContain(unmetSheet.Diagnostics, d => d.Code == "effect.character-only-field");
+        Assert.DoesNotContain(unmet.Reference, unmetSheet.Active!);
+    }
+
+    [Fact]
+    public void The_stats_override_on_speed_and_a_passive_stays_final_beside_v10_content()
+    {
+        var quick = Feat(8, "Fixture Quickness", 10,
+            new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" },
+            new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" });
+        var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
+        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Dwarf"), new(FieldIds.Passive("perception"), 12, "Keen")] }, quick);
+        Assert.Equal((25, 40), (sheet.Field(FieldIds.Speed).Value, sheet.Field(FieldIds.Speed).ComputedValue));
+        Assert.Equal((12, plain.Field(FieldIds.Passive("perception")).Value + 5), (sheet.Field(FieldIds.Passive("perception")).Value, sheet.Field(FieldIds.Passive("perception")).ComputedValue));
+    }
+
+    [Fact]
+    public void A_v10_revision_stored_with_a_speed_target_survives_a_json_round_trip_and_still_applies()
+    {
+        var quick = Feat(9, "Fixture Quickness", 10, new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" });
+        var stored = System.Text.Json.JsonSerializer.Serialize(quick, RulesJson.Compact);
+        var read = System.Text.Json.JsonSerializer.Deserialize<ContentRevision>(stored, RulesJson.Compact)!;
+        Assert.Equal(10, read.SchemaVersion);
+        Assert.Equal(40, Calc(Fixtures.Srd51Character(), read).Field(FieldIds.Speed).Value);
+    }
+
     [Fact]
     public void A_character_override_on_speed_still_applies_beside_content_that_targets_it()
     {

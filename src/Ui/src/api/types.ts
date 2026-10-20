@@ -1157,9 +1157,20 @@ export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export type Effect =
   | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
-  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string })
-  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number; onlyAs?: ClassEntry })
-  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
+  // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
+  // kinds with a damageType, and the item effect. All optional; a revision below v10 never carries them.
+  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string; autoWhen?: 'bloodied'; activation?: Activation })
+  | (EffectBase & {
+      type: 'grant';
+      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
+      target?: string;
+      content?: ContentReference;
+      level?: number;
+      onlyAs?: ClassEntry;
+      damageType?: string;
+    })
+  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string; activation?: Activation })
+  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })

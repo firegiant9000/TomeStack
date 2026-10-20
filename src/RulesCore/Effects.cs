@@ -71,7 +71,15 @@ public enum StackingRule { Stack, HighestInGroup }
 /// <summary>When an effect applies. Derived fields use only <see cref="Always"/>; the rest belong to commands and rolls.</summary>
 public enum EffectTiming { Always, WhileActive, OnRoll, OnShortRest, OnLongRest }
 
-public enum GrantKind { Proficiency, Expertise, Content }
+/// <summary>
+/// What a <see cref="GrantEffect"/> grants. Content schema v10 (D42) adds the three damage defences, which name a damage
+/// type (<see cref="GrantEffect.DamageType"/>) and no target. They are typed only in a v10 revision: a v9 build cannot read
+/// these values, keeps such an effect as an <see cref="UnknownEffect"/>, and so does this build below v10 (<see cref="GrantEffect.FromUnknown"/>).
+/// </summary>
+public enum GrantKind { Proficiency, Expertise, Content, DamageResistance, DamageImmunity, DamageVulnerability }
+
+/// <summary>Content schema v10 (Wave 3, D42): when a toggle switches itself, computed from play state and never stored. One value for now.</summary>
+public enum ToggleAutoWhen { Bloodied }
 
 /// <summary>
 /// Content schema v5 (D04 multiclass proficiency subsets): a class's grant or choice that applies only when the class is
@@ -163,6 +171,40 @@ public sealed record GrantEffect : Effect
 
     /// <summary>Content schema v5: only as the starting class, or only as a later class (<see cref="ClassEntry"/>). Null: always.</summary>
     public ClassEntry? OnlyAs { get; init; }
+
+    /// <summary>
+    /// Content schema v10 (D42): with <see cref="GrantKind.DamageResistance"/>, <see cref="GrantKind.DamageImmunity"/> or
+    /// <see cref="GrantKind.DamageVulnerability"/>, the damage type, one of <see cref="DamageTypes.All"/> in any case and
+    /// stored as written (use <see cref="DamageTypes.TryNormalize"/> to compare). Refused on every other grant kind.
+    /// Below v10 the key stays extension data and does nothing.
+    /// </summary>
+    public string? DamageType { get; init; }
+
+    /// <summary>The content schema version that adds the damage-defence kinds and <see cref="DamageType"/>.</summary>
+    public const int DamageSchemaVersion = ContentRevision.PlayDetailsSchemaVersion;
+
+    internal const string DamageTypeProperty = "damageType";
+
+    internal static bool IsDamageDefence(GrantKind kind) =>
+        kind is GrantKind.DamageResistance or GrantKind.DamageImmunity or GrantKind.DamageVulnerability;
+
+    /// <summary>The JSON spelling of a damage kind, matched the way the serializer matches enum names: ignoring case.</summary>
+    internal static bool IsDamageDefenceName(string? name) =>
+        name is not null && Enum.GetValues<GrantKind>().Where(IsDamageDefence).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Typed from the revision's own version. A deferred grant (<see cref="EffectJsonConverter"/> hands over any grant that
+    /// names a damage kind or a <c>damageType</c>) is typed in full from v10. Below v10 it reads as a v9 build reads it: a
+    /// damage kind is a value the v9 enum cannot hold, so the whole effect stays unknown and byte for byte; a
+    /// <c>damageType</c> on any other kind, in any spelling and with any value, stays extension data in document order.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion >= DamageSchemaVersion)
+            return VersionedEffects.Typed<GrantEffect>(unknown);
+        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, DamageTypeProperty);
+        return typed is GrantEffect { Grant: var kind } && IsDamageDefence(kind) ? unknown : typed;
+    }
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -189,6 +231,17 @@ public sealed record ResourceEffect : Effect
     public required string Label { get; init; }
 
     public required string Maximum { get; init; }
+
+    /// <summary>
+    /// Content schema v10 (D42): the kind of action that spends this resource, so the sheet can group it. Display only
+    /// (Wave 3 item 24); null: ungrouped. Below v10 the key stays extension data and does nothing.
+    /// </summary>
+    public Activation? Activation { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
+            ? VersionedEffects.Typed<ResourceEffect>(unknown)
+            : VersionedEffects.TypedWithout<ResourceEffect>(unknown, ToggleEffect.ActivationProperty);
 }
 
 /// <summary>A choice the player makes (for example, pick one of these content revisions).</summary>
@@ -308,7 +361,27 @@ public sealed record ToggleEffect : Effect
     /// <summary>A resource of this revision that turning the toggle on spends one use of.</summary>
     public string? ResourceId { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ToggleEffect>(unknown);
+    /// <summary>
+    /// Content schema v10 (D42): the toggle switches itself from play state while the condition holds (Bloodied). Computed,
+    /// never stored. Field only here; below v10 the key stays extension data and does nothing.
+    /// </summary>
+    public ToggleAutoWhen? AutoWhen { get; init; }
+
+    /// <summary>Content schema v10 (D42): the kind of action that switches the toggle, so the sheet can group it. Display only.</summary>
+    public Activation? Activation { get; init; }
+
+    internal const string AutoWhenProperty = "autoWhen";
+
+    internal const string ActivationProperty = "activation";
+
+    /// <summary>
+    /// Typed from v6. Below v10, <c>autoWhen</c> and <c>activation</c> (every spelling, any value) stay extension data in
+    /// document order, exactly as a v9 build reads them: never typed, so they do nothing, and written back in the same place.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
+            ? VersionedEffects.Typed<ToggleEffect>(unknown)
+            : VersionedEffects.TypedWithout<ToggleEffect>(unknown, AutoWhenProperty, ActivationProperty);
 }
 
 /// <summary>
@@ -340,6 +413,45 @@ public sealed record ScaleEffect : Effect
         id is { Length: > 0 and <= MaxScaleIdLength } && char.IsAsciiLetterLower(id[0]) && id.All(char.IsAsciiLetterOrDigit);
 
     internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ScaleEffect>(unknown);
+}
+
+/// <summary>Content schema v10: when an item's charges come back, and how many (<see cref="Regain"/>; null: all of them).</summary>
+public sealed record ItemChargeRecovery
+{
+    public required RestPeriod Period { get; init; }
+
+    /// <summary>A dice expression (<see cref="DiceExpression"/>), for example <c>1d4+1</c>. Null: every charge comes back on that rest.</summary>
+    public string? Regain { get; init; }
+}
+
+/// <summary>Content schema v10: an item's charges, 1 to <see cref="MaxCharges"/>. A null <see cref="Recovery"/> means they come back only through the play action.</summary>
+public sealed record ItemCharges
+{
+    public const int MaxCharges = 99;
+
+    public required int Max { get; init; }
+
+    public ItemChargeRecovery? Recovery { get; init; }
+}
+
+/// <summary>
+/// Content schema v10 (Wave 3, R155): what an item needs to be used: attunement and charges. The calculator does not use it
+/// yet (Task 5 gives it behaviour). Typed only in a v10 revision, like <see cref="ArmorEffect"/>: in an older revision an
+/// <c>item</c> effect stays an <see cref="UnknownEffect"/>, byte for byte. On an <see cref="ContentKind.Item"/> revision, at most one.
+/// </summary>
+public sealed record ItemEffect : Effect
+{
+    public const string TypeName = "item";
+
+    public const int SchemaVersion = ContentRevision.PlayDetailsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    public bool? RequiresAttunement { get; init; }
+
+    public ItemCharges? Charges { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ItemEffect>(unknown);
 }
 
 public enum WeaponCategory { Simple, Martial }
@@ -506,30 +618,11 @@ public sealed record SpellcastingEffect : Effect
     /// </summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
-        bool IsTableKey(string name) => string.Equals(name, MulticlassCasterTableProperty, StringComparison.OrdinalIgnoreCase);
-        if (revisionSchemaVersion >= MulticlassTableSchemaVersion || !unknown.Raw.EnumerateObject().Any(p => IsTableKey(p.Name)))
-            return VersionedEffects.Typed<SpellcastingEffect>(unknown);
-
         // The serializer matches names case-insensitively, so every spelling of the key, with any value (null, or not a
         // list), is taken out before typing, exactly as a v8 build never binds it (review fix).
-        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            writer.WriteStartObject();
-            foreach (var property in unknown.Raw.EnumerateObject().Where(p => !IsTableKey(p.Name)))
-                property.WriteTo(writer);
-            writer.WriteEndObject();
-        }
-        using var stripped = JsonDocument.Parse(buffer.WrittenMemory);
-        if (VersionedEffects.Typed<SpellcastingEffect>(UnknownEffect.From(stripped.RootElement)) is not SpellcastingEffect caster)
-            return unknown; // the rest does not type either: reference-only and unchanged, as in a v8 build
-        var extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var property in unknown.Raw.EnumerateObject())
-        {
-            if (IsTableKey(property.Name) || caster.Extensions?.ContainsKey(property.Name) == true)
-                extensions[property.Name] = property.Value.Clone(); // document order, as the v8 build keeps it
-        }
-        return caster with { Extensions = extensions };
+        return revisionSchemaVersion >= MulticlassTableSchemaVersion
+            ? VersionedEffects.Typed<SpellcastingEffect>(unknown)
+            : VersionedEffects.TypedWithout<SpellcastingEffect>(unknown, MulticlassCasterTableProperty);
     }
 }
 
@@ -587,9 +680,47 @@ internal static class VersionedEffects
             [SpellcastingEffect.TypeName] = (SpellcastingEffect.SchemaVersion, SpellcastingEffect.FromUnknown),
             [SpellEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => SpellEffect.FromUnknown(u)),
             [WeaponEffect.TypeName] = (SpellcastingEffect.SchemaVersion, (u, _) => WeaponEffect.FromUnknown(u)),
-            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, (u, _) => ToggleEffect.FromUnknown(u)),
+            [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
+            [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
+            // Always typed, except that the converter hands these over when they carry a v10 key or value (see
+            // EffectJsonConverter.CarriesV10Detail), so the revision's version decides how they read.
+            [GrantEffect.TypeName] = (1, GrantEffect.FromUnknown),
+            [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
         };
+
+    /// <summary>
+    /// Types <paramref name="unknown"/> as <typeparamref name="T"/> with the named keys kept out of the typed properties, the
+    /// way a build that has no such property reads them (content schema gates, ADR-003). Every spelling of a key (the
+    /// serializer matches names case-insensitively), with any value, stays in <see cref="Effect.Extensions"/> in document order,
+    /// so the effect writes back byte for byte as that build writes it, and the key does nothing. An effect that does not
+    /// type without the keys stays <paramref name="unknown"/>, as it would in that build.
+    /// </summary>
+    public static Effect TypedWithout<T>(UnknownEffect unknown, params string[] keys) where T : Effect
+    {
+        bool IsGated(string name) => keys.Any(k => string.Equals(name, k, StringComparison.OrdinalIgnoreCase));
+        if (!unknown.Raw.EnumerateObject().Any(p => IsGated(p.Name)))
+            return Typed<T>(unknown);
+
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in unknown.Raw.EnumerateObject().Where(p => !IsGated(p.Name)))
+                property.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+        using var stripped = JsonDocument.Parse(buffer.WrittenMemory);
+        if (Typed<T>(UnknownEffect.From(stripped.RootElement)) is not T typed)
+            return unknown; // the rest does not type either: reference-only and unchanged, as in that build
+        var extensions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in unknown.Raw.EnumerateObject())
+        {
+            if (IsGated(property.Name) || typed.Extensions?.ContainsKey(property.Name) == true)
+                extensions[property.Name] = property.Value.Clone(); // document order, as that build keeps it
+        }
+        return ((Effect)typed) with { Extensions = extensions };
+    }
 
     /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
     public static Effect Typed<T>(UnknownEffect unknown) where T : Effect
@@ -649,6 +780,10 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             return type switch
             {
                 ModifierEffect.TypeName => (Effect?)element.Deserialize<ModifierEffect>(options),
+                // A grant or resource that carries a content schema v10 detail is typed by the revision, which knows its
+                // version (ContentRevision.OnDeserialized); the others are typed here, as in every earlier build.
+                GrantEffect.TypeName when CarriesV10Detail(element, type) => UnknownEffect.From(element),
+                ResourceEffect.TypeName when CarriesV10Detail(element, type) => UnknownEffect.From(element),
                 GrantEffect.TypeName => element.Deserialize<GrantEffect>(options),
                 ResourceEffect.TypeName => element.Deserialize<ResourceEffect>(options),
                 ChoiceEffect.TypeName => element.Deserialize<ChoiceEffect>(options),
@@ -657,7 +792,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
@@ -668,6 +803,30 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             // JsonElement accessors throw InvalidOperationException on a wrong value kind, not JsonException.
             return UnknownEffect.From(element);
         }
+    }
+
+    /// <summary>
+    /// Whether a <c>grant</c> or <c>resource</c> has something a v9 build did not read: a grant that names a damage kind (a
+    /// value the v9 enum cannot hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any
+    /// spelling), or a resource with an <c>activation</c> key. The names are the ones the serializer binds to the v10 properties.
+    /// </summary>
+    private static bool CarriesV10Detail(JsonElement element, string type)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (type == ResourceEffect.TypeName)
+            {
+                if (string.Equals(property.Name, ToggleEffect.ActivationProperty, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            else if (string.Equals(property.Name, GrantEffect.DamageTypeProperty, StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(property.Name, "grant", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.String
+                    && GrantEffect.IsDamageDefenceName(property.Value.GetString())))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public override void Write(Utf8JsonWriter writer, Effect value, JsonSerializerOptions options)

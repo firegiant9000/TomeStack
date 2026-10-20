@@ -120,8 +120,16 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// and <c>roll.bonus</c>. All are optional, so older revisions serialize unchanged.
     /// v9 (M5, ADR-010) adds the <c>scale</c> effect, the formula identifier <c>SCALE.&lt;id&gt;</c> and
     /// <c>spellcasting.multiclassCasterTable</c>, each read only in a v9 revision.
+    /// v10 (Wave 3, D42) lets content target <c>speed</c> and <c>passive.*</c> (modifiers and restrictions), and adds
+    /// <c>toggle.autoWhen</c>, <c>toggle.activation</c>, <c>resource.activation</c>, the grant kinds <c>damageResistance</c>,
+    /// <c>damageImmunity</c> and <c>damageVulnerability</c> with <c>grant.damageType</c>, and the <c>item</c> effect (attunement
+    /// and charges). All are optional, so older revisions serialize unchanged; each is read only in a v10 revision, and below
+    /// v10 a key stays extension data (an <c>item</c> or a damage grant stays an unknown effect) and does nothing.
     /// </summary>
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
+
+    /// <summary>The content schema version that adds the Wave 3 details listed above (v10).</summary>
+    public const int PlayDetailsSchemaVersion = 10;
 
     /// <summary>The content schema version that adds the M2.2 combat details listed above.</summary>
     public const int CombatDetailsSchemaVersion = 8;

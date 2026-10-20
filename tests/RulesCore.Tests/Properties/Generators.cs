@@ -88,6 +88,7 @@ internal static class Generators
         [WeaponEffect.TypeName] = SpellcastingEffect.SchemaVersion,
         [ToggleEffect.TypeName] = ToggleEffect.SchemaVersion,
         [ScaleEffect.TypeName] = ScaleEffect.SchemaVersion,
+        [ItemEffect.TypeName] = ItemEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -130,13 +131,23 @@ internal static class Generators
                 from target in Gen.Elements("skill.stealth", "save.dex", "skill.arcana")
                 from level in OptionalValue(Gen.Choose(1, 20))
                 from onlyAs in Gen.Elements<string?>(null, "startingClass", "multiclass")
+                // Any version: below v10 the key must stay extension data, written back where it was.
+                from damageType in Gen.Elements<string?>(null, null, "fire", "Cold")
                 select new JsonObject { ["grant"] = grant, ["target"] = target }
-                    .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)),
+                    .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)
+                    .With("damageType", damageType)),
+            // The damage defences: below v10 the whole effect stays unknown and unchanged (a v9 build cannot read the kind).
+            Common(GrantEffect.TypeName,
+                from grant in Gen.Elements("damageResistance", "damageImmunity", "DamageVulnerability")
+                from damageType in Gen.Elements("fire", "Cold", "thunder")
+                select new JsonObject { ["grant"] = grant, ["damageType"] = damageType }),
             Common(ResourceEffect.TypeName,
                 from id in Keys
                 from label in Names
                 from max in Formulas
-                select new JsonObject { ["resourceId"] = id, ["label"] = label, ["maximum"] = max }),
+                // Any version: below v10 the key must stay extension data, written back where it was.
+                from activation in Gen.Elements<string?>(null, null, "action", "reaction")
+                select new JsonObject { ["resourceId"] = id, ["label"] = label, ["maximum"] = max }.With("activation", activation)),
             Common(RecoveryEffect.TypeName,
                 from id in Keys
                 from period in Gen.Elements("shortRest", "longRest")
@@ -192,7 +203,20 @@ internal static class Generators
                 from id in Keys
                 from label in Names
                 from resource in Optional(Keys)
-                select new JsonObject { ["toggleId"] = id, ["label"] = label }.With("resourceId", resource)),
+                // Any version: below v10 the keys must stay extension data, written back where they were.
+                from autoWhen in Gen.Elements<string?>(null, null, "bloodied")
+                from activation in Gen.Elements<string?>(null, null, "bonusAction", "other")
+                select new JsonObject { ["toggleId"] = id, ["label"] = label }.With("resourceId", resource)
+                    .With("autoWhen", autoWhen).With("activation", activation)),
+            Common(ItemEffect.TypeName,
+                from attune in OptionalValue(Gen.Elements(true, false))
+                from max in OptionalValue(Gen.Choose(1, 99))
+                from period in Gen.Elements<string?>(null, "shortRest", "longRest")
+                from regain in Optional(Gen.Elements("1d4", "1d6+1"))
+                select new JsonObject().With("requiresAttunement", attune)
+                    .With("charges", max is { } m
+                        ? new JsonObject { ["max"] = m }.With("recovery", period is null ? null : new JsonObject { ["period"] = period }.With("regain", regain))
+                        : null)),
             Common(ScaleEffect.TypeName,
                 from id in Keys
                 from label in Names

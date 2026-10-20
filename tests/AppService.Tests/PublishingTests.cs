@@ -107,6 +107,15 @@ public class PublishingTests
         };
         var old = temp.App.Publish(temp.App.SaveDraft(spell));
         Assert.Equal((4, 4), (temp.App.Store.FindRevision(old.Published)!.SchemaVersion, old.Report.RequiredSchemaVersion));
+
+        // Content v10 (D42): a draft that uses a v10 addition publishes at v10; the same draft without it still publishes lower.
+        var quick = Draft2 with
+        {
+            RevisionId = Guid.NewGuid(),
+            Effects = [new ModifierEffect { Id = "pace", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" }],
+        };
+        var v10 = temp.App.Publish(temp.App.SaveDraft(quick));
+        Assert.Equal((10, 10), (temp.App.Store.FindRevision(v10.Published)!.SchemaVersion, v10.Report.RequiredSchemaVersion));
     }
 
     [Fact]

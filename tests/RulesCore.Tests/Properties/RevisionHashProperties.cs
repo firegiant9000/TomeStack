@@ -57,11 +57,23 @@ public class RevisionHashProperties
         for (var i = 0; i < inputEffects.Count; i++)
         {
             var type = (string)inputEffects[i]!["type"]!;
-            var unknown = Generators.StaysUnknown(type, version);
+            // Content v10: a damage-defence grant is a value a v9 build cannot read, so below v10 the effect stays unknown.
+            var unknown = Generators.StaysUnknown(type, version)
+                || (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion
+                    && ((string?)inputEffects[i]!["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true);
             if (read.Effects[i] is UnknownEffect != unknown)
                 return $"effect {i} ({type}) is {(unknown ? "typed" : "unknown")} in v{version}";
             if (unknown && !JsonNode.DeepEquals(inputEffects[i], outputEffects[i]))
                 return $"unknown effect {i} ({type}) changed: {outputEffects[i]!.ToJsonString()}";
+            // Content v10: below v10 these keys stay extension data with the value they had (a v9 build never binds them).
+            if (version < ContentRevision.PlayDetailsSchemaVersion && !unknown)
+            {
+                foreach (var key in new[] { "autoWhen", "activation", "damageType" })
+                {
+                    if (type != RollEffect.TypeName && inputEffects[i]![key] is { } kept && !JsonNode.DeepEquals(kept, outputEffects[i]![key]))
+                        return $"effect {i}'s {key} changed below v10";
+                }
+            }
             if (type == SpellcastingEffect.TypeName && version < SpellcastingEffect.MulticlassTableSchemaVersion
                 && inputEffects[i]!["multiclassCasterTable"] is { } table && !JsonNode.DeepEquals(table, outputEffects[i]!["multiclassCasterTable"]))
                 return $"effect {i}'s multiclassCasterTable changed below v9";
@@ -123,10 +135,25 @@ public class RevisionHashProperties
         foreach (var effect in revision["effects"]?.AsArray().OfType<JsonObject>() ?? [])
         {
             var type = (string)effect["type"]!;
+            // A damage-defence grant below v10 stays an unknown effect, kept exactly as written (nothing to add).
+            if (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion && ((string?)effect["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true)
+                continue;
             var members = NullableMembers.GetValueOrDefault(type)
                 ?? (type == ToggleEffect.TypeName && version >= ToggleEffect.SchemaVersion ? ["resourceId"]
                 : type == ArmorEffect.TypeName && version >= ArmorEffect.SchemaVersion ? ["dexterityCap"]
                 : null);
+            // Content v10 members are typed only from v10; below it a null stays extension data, as a v9 build keeps it.
+            if (version >= ContentRevision.PlayDetailsSchemaVersion)
+            {
+                members = type switch
+                {
+                    "toggle" => [.. members ?? [], "autoWhen", "activation"],
+                    "resource" => [.. members ?? [], "activation"],
+                    "grant" => [.. members ?? [], "damageType"],
+                    "item" => ["requiresAttunement", "charges"],
+                    _ => members,
+                };
+            }
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))
