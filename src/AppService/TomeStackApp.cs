@@ -290,13 +290,27 @@ public sealed partial class TomeStackApp : IDisposable
     /// <summary>
     /// Wave 3 item 25 (R160): charges spent are play state on the equipment entry, so a save keeps the stored <c>chargesSpent</c> of
     /// every entry the payload still has (matched by id), whatever the payload says; only the play and rest commands change it.
-    /// An entry the stored character does not have keeps what it carries.
+    /// An entry the stored character does not have keeps what it carries. A payload entry without an id (a stale copy of an entry
+    /// the play path has since given an id) is paired, in list order, with a stored entry of the same item that no payload id
+    /// claimed, and takes its id and spent count, so charges never come back for free and the id is not lost.
     /// </summary>
     private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
     {
-        if (payload is null || stored is null || payload.Any(e => e is null))
+        if (payload is null || stored is null || payload.Any(e => e is null) || stored.Any(e => e is null))
             return payload!;
-        return [.. payload.Select(e => e.Id is { } id && stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e)];
+        var claimed = payload.Where(e => e.Id is not null).Select(e => e.Id).ToHashSet();
+        var unclaimed = stored.Where(s => s.Id is not null && !claimed.Contains(s.Id)).ToList(); // an id-less stored entry has no id to keep
+        return [.. payload.Select(e =>
+        {
+            if (e.Id is { } id)
+                return stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e;
+            var pair = unclaimed.FindIndex(s => s.Item == e.Item);
+            if (pair < 0)
+                return e;
+            var match = unclaimed[pair];
+            unclaimed.RemoveAt(pair);
+            return e with { Id = match.Id, ChargesSpent = match.ChargesSpent };
+        })];
     }
 
     private static PlayState WithoutOrphanedCompanionPlay(PlayState play, Character payload)

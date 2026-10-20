@@ -286,6 +286,68 @@ public class ItemChargesTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
+    public void R160_a_stale_id_less_payload_keeps_the_stored_id_and_spent_count(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand)] });
+        var spent = s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 0));
+        var id = spent.Character.Equipment[0].Id!.Value;
+
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand, Equipped: true)] }); // stale: still id-less
+
+        Assert.Equal((id, 2, true), (saved.Character.Equipment[0].Id!.Value, saved.Character.Equipment[0].ChargesSpent, saved.Character.Equipment[0].Equipped));
+        Assert.Equal(5, Use(saved, id).ChargesLeft);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R160_two_stale_id_less_copies_of_one_item_pair_with_the_stored_entries_in_order(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)] });
+        var first = s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 0));
+        var second = Spend(s, first.Character.Equipment[1].Id!.Value); // saving gave both copies their ids
+        var (a, b) = (second.Character.Equipment[0].Id!.Value, second.Character.Equipment[1].Id!.Value);
+
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)] });
+
+        Assert.Equal([(a, 2), (b, 1)], saved.Character.Equipment.Select(e => (e.Id!.Value, e.ChargesSpent ?? 0)));
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void Refusal_messages_for_charges_never_quote_the_item_name_or_the_dice(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var id = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        Spend(s, id, 4);
+        var messages = new List<string>
+        {
+            Assert.Throws<AppValidationException>(() => Spend(s, id, 8)).Problems[0].Message,
+            Assert.Throws<AppValidationException>(() => Regain(s, id, 8)).Problems[0].Message,
+            Assert.Throws<AppValidationException>(() => s.Temp.App.PreviewRest(s.Id, RestPeriod.LongRest, null, [new(id.ToString("D"), 9)])).Problems[0].Message,
+        };
+        var all = Start(family, regain: null);
+        using var _2 = all.Temp;
+        var allId = Save(all, new EquipmentEntry(all.Wand)).Character.Equipment[0].Id!.Value;
+        messages.Add(Assert.Throws<AppValidationException>(() => all.Temp.App.Roll(new(all.Id, ChargeEntry: allId.ToString("D")))).Problems[0].Message);
+
+        Assert.Equal(4, messages.Count);
+        foreach (var message in messages)
+        {
+            Assert.DoesNotContain("Fixture wand", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("1d6", message, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
     public void The_commands_reach_the_service_through_the_dispatcher_with_codes_only(string family)
     {
         var s = Start(family);

@@ -228,7 +228,7 @@ public static class RestPlanner
                 continue;
             }
             if (roll!.Roll < dice!.Minimum || roll.Roll > dice.Maximum)
-                problems.Add(new("rest.charge-roll-invalid", $"{recovery.Regain} shows {dice.Minimum} to {dice.Maximum}; {roll.Roll} is not possible."));
+                problems.Add(new("rest.charge-roll-invalid", $"The charge dice show {dice.Minimum} to {dice.Maximum}; {roll.Roll} is not possible."));
         }
         return problems;
     }

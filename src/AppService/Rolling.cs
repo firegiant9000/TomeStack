@@ -119,7 +119,7 @@ public sealed partial class TomeStackApp
             var use = sheet.ItemUses?.FirstOrDefault(u => u.EntryKey == entry)
                 ?? throw new AppValidationException([new("roll.charges-unknown", "This character has no such item entry with charges.")]);
             var dice = use.Recovery?.Regain
-                ?? throw new AppValidationException([new("roll.charges-no-dice", $"'{use.Name}' has no dice to roll for its charges.", use.Item)]);
+                ?? throw new AppValidationException([new("roll.charges-no-dice", "This item entry has no dice to roll for its charges.", use.Item)]);
             request = new RollRequest(dice, RollMode.Normal, false, [], new RollProvenance("charges.regain", $"{use.Name} charges", use.Item, use.Name));
         }
         else if (command.HitDie is { } die)

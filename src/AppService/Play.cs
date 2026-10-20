@@ -200,13 +200,13 @@ public sealed partial class TomeStackApp
         if (command.Action == PlayActionKind.SpendCharge)
         {
             if (command.Amount > use.ChargesLeft)
-                throw new AppValidationException([new("play.charges-none-left", $"'{use.Name}' has {use.ChargesLeft} of {use.ChargesMax} charges left; {command.Amount} cannot be spent.", use.Item)]);
+                throw new AppValidationException([new("play.charges-none-left", $"This item entry has {use.ChargesLeft} of {use.ChargesMax} charges left; {command.Amount} cannot be spent.", use.Item)]);
             spent = use.ChargesSpent + command.Amount;
         }
         else
         {
             if (command.Amount > use.ChargesSpent)
-                throw new AppValidationException([new("play.charges-full", $"{use.ChargesSpent} charge(s) of '{use.Name}' are spent; {command.Amount} cannot be regained.", use.Item)]);
+                throw new AppValidationException([new("play.charges-full", $"This item entry has {use.ChargesSpent} charge(s) spent; {command.Amount} cannot be regained.", use.Item)]);
             spent = use.ChargesSpent - command.Amount;
         }
         var equipment = character.Equipment.ToList();
