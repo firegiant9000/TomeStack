@@ -320,6 +320,22 @@ public class ItemChargesTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
+    public void R175_a_save_with_a_null_item_where_the_stored_entry_has_an_id_is_refused_with_its_code_and_writes_nothing(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        Save(s, new EquipmentEntry(s.Wand));
+        var before = TempApp.Json(Get(s).Character);
+
+        var problems = Assert.Throws<AppValidationException>(() => s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(null!)] })).Problems;
+
+        Assert.Equal("character.empty-entry", problems[0].Code);
+        Assert.Equal(before, TempApp.Json(Get(s).Character));
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
     public void R175_a_new_id_less_copy_at_another_position_gets_a_fresh_id_and_full_charges(string family)
     {
         var s = Start(family);
@@ -338,7 +354,7 @@ public class ItemChargesTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
-    public void R175_a_fresh_copy_inserted_ahead_of_a_stale_copy_does_not_take_its_charges(string family)
+    public void R175_a_fresh_copy_inserted_ahead_of_a_stale_copy_does_not_take_its_charges_and_the_shifted_stale_copy_is_reset_too(string family)
     {
         var s = Start(family);
         using var _ = s.Temp;

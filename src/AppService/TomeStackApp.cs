@@ -293,8 +293,10 @@ public sealed partial class TomeStackApp : IDisposable
     /// An entry the stored character does not have keeps what it carries. A payload entry without an id (a stale copy of an entry
     /// the play path has since given an id) is paired only with the stored entry at the same list position, of the same content
     /// (ContentId, whatever the revision), that has an id no payload entry claims; it takes that id and spent count, so charges
-    /// never come back for free and the id is not lost. Residual (R175): a delete and a re-add of the same item landing at the same
-    /// position in one save still inherits; the compare-and-set on save refuses the stale save this pairing exists for.
+    /// never come back for free and the id is not lost. Residuals (R175), accepted until the compare-and-set on save, which refuses
+    /// the stale save this pairing exists for: (1) a delete and a re-add of the same item landing at the same position in one save
+    /// still inherits the old id and count; (2) a stale id-less copy shifted out of its stored position (stored [ring, wand X],
+    /// stale payload [new wand, ring, wand]) loses its id and spent count, and comes back as a new entry with full charges.
     /// </summary>
     private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
     {
@@ -306,6 +308,8 @@ public sealed partial class TomeStackApp : IDisposable
             if (e.Id is { } id)
                 return stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e;
             // An id-less stored entry has no id to keep.
+            if (e.Item is null)
+                return e; // validation refuses the save with its code
             return index < stored.Count && stored[index] is { Id: { } storedId } match && match.Item.ContentId == e.Item.ContentId && !claimed.Contains(storedId)
                 ? e with { Id = storedId, ChargesSpent = match.ChargesSpent }
                 : e;
