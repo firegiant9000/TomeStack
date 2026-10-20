@@ -89,6 +89,10 @@ public class SchemaTests
         Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-ward")["target"] = "skill.stealth"));
         Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-pace")["target"] = "passive.stealth"));
         Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "skill.stealth", ["damageType"] = "fire" })));
+        // speed and passive.* are modifier and restriction targets, not grant targets.
+        Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "speed" })));
+        Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "expertise", ["target"] = "passive.perception" })));
+        Assert.Equal("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "skill.stealth" })));
         Assert.Equal("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 99));
     }
 

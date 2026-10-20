@@ -200,11 +200,20 @@ public sealed record GrantEffect : Effect
     /// </summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
     {
+        // From v10 the kind must be written as a name (any case): the serializer would also bind padded names, lists of names
+        // (read as combined bits) and, in an enum with more members, a different value than a v9 build read; those stay unknown.
         if (revisionSchemaVersion >= DamageSchemaVersion)
-            return VersionedEffects.Typed<GrantEffect>(unknown);
+            return VersionedEffects.NamesMember<GrantKind>(unknown.Raw, "grant") ? VersionedEffects.Typed<GrantEffect>(unknown) : unknown;
+        // Below v10 any value outside the v9 names (Proficiency, Expertise, Content) is one a v9 build either refused (it stays
+        // unknown) or could only bind by naming a member this build has since added (a damage kind, a padded or listed
+        // spelling): this build must not bind it, whatever number it would give.
         var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, DamageTypeProperty);
-        return typed is GrantEffect { Grant: var kind } && IsDamageDefence(kind) ? unknown : typed;
+        return typed is GrantEffect { Grant: var kind } && (int)kind > (int)GrantKind.Content ? unknown : typed;
     }
+
+    /// <summary>The names a v9 build could read (the converter hands over any grant whose kind is not exactly one of them).</summary>
+    internal static bool IsPreV10Name(string? name) =>
+        name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Content schema v3: a class's hit point die (d6–d12), used for hit points at each level of that class.</summary>
@@ -240,7 +249,7 @@ public sealed record ResourceEffect : Effect
 
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
         revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
-            ? VersionedEffects.Typed<ResourceEffect>(unknown)
+            ? (VersionedEffects.NamesMember<Activation>(unknown.Raw, ToggleEffect.ActivationProperty) ? VersionedEffects.Typed<ResourceEffect>(unknown) : unknown)
             : VersionedEffects.TypedWithout<ResourceEffect>(unknown, ToggleEffect.ActivationProperty);
 }
 
@@ -380,7 +389,8 @@ public sealed record ToggleEffect : Effect
     /// </summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
         revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
-            ? VersionedEffects.Typed<ToggleEffect>(unknown)
+            ? (VersionedEffects.NamesMember<ToggleAutoWhen>(unknown.Raw, AutoWhenProperty) && VersionedEffects.NamesMember<Activation>(unknown.Raw, ActivationProperty)
+                ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown)
             : VersionedEffects.TypedWithout<ToggleEffect>(unknown, AutoWhenProperty, ActivationProperty);
 }
 
@@ -722,6 +732,24 @@ internal static class VersionedEffects
         return ((Effect)typed) with { Extensions = extensions };
     }
 
+    /// <summary>
+    /// Whether every property of <paramref name="raw"/> named <paramref name="property"/> (any case) is null or a string that
+    /// is exactly the name of a <typeparamref name="TEnum"/> member, ignoring case. The serializer also binds padded names and
+    /// lists of names (as combined bits), which no schema allows, so v10 refuses them instead of reading a guess.
+    /// </summary>
+    public static bool NamesMember<TEnum>(JsonElement raw, string property) where TEnum : struct, Enum
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, property, StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind == JsonValueKind.Null)
+                continue;
+            if (p.Value.ValueKind != JsonValueKind.String
+                || !Enum.GetNames<TEnum>().Any(n => string.Equals(n, p.Value.GetString(), StringComparison.OrdinalIgnoreCase)))
+                return false;
+        }
+        return true;
+    }
+
     /// <summary>The typed effect, or the unknown one unchanged when its body does not fit (it stays reference-only).</summary>
     public static Effect Typed<T>(UnknownEffect unknown) where T : Effect
     {
@@ -820,8 +848,8 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                     return true;
             }
             else if (string.Equals(property.Name, GrantEffect.DamageTypeProperty, StringComparison.OrdinalIgnoreCase)
-                || (string.Equals(property.Name, "grant", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.String
-                    && GrantEffect.IsDamageDefenceName(property.Value.GetString())))
+                || (string.Equals(property.Name, "grant", StringComparison.OrdinalIgnoreCase)
+                    && !(property.Value.ValueKind == JsonValueKind.String && GrantEffect.IsPreV10Name(property.Value.GetString()))))
             {
                 return true;
             }

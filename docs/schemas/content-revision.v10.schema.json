@@ -156,6 +156,11 @@
       "type": "string",
       "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*)$"
     },
+    "grantFieldId": {
+      "type": "string",
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*)$",
+      "description": "The fields a grant may name: the v9 list. speed and passive.* are modifier and restriction targets only; the validator refuses a grant on them."
+    },
     "common": {
       "type": "object",
       "required": [
@@ -268,7 +273,7 @@
                 {
                   "anyOf": [
                     {
-                      "$ref": "#/$defs/fieldId"
+                      "$ref": "#/$defs/grantFieldId"
                     },
                     {
                       "type": "string",

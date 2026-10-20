@@ -141,6 +141,14 @@ public static class ContentValidator
                     needsV10 = true;
                     Error("validate.item-incomplete", $"Item effect '{unknownItem.Id}' does not match the item shape: charges need a whole-number max and, if present, a recovery with a shortRest or longRest period.", unknownItem.Id);
                     break;
+                // From v10 a toggle, resource or grant that stays unknown did not read (an activation, autoWhen or grant kind that
+                // is not one of the allowed names). Publishing would write it at a lower version, where it reads back as a
+                // different, typed effect, so it blocks. Below v10 it is what it always was: a warning.
+                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName } malformed
+                    when revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion:
+                    needsV10 = true;
+                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                    break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
                     break;
