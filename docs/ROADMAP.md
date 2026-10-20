@@ -18,7 +18,9 @@ _**2026-10-07 (LIVING_SPECS D27–D32):** the owner's feedback round (light pale
 
 _**2026-10-14 (LIVING_SPECS D41):** by owner exception to R4, like D16a, the tester-feedback plan's four waves (guidance and detection; book import to a playable class; characters from a fillable sheet or text; table features) are built before the T2 gap report, and ship as one release before the group's first session. The gap report then ranks what follows. Content breadth beyond what an import or the owner authors stays after T2._
 
-_**2026-10-18 (LIVING_SPECS D60; owner ruling):** T2 no longer gates anything. Its hard stop on M7, content breadth, and studio or extension work beyond M5/M6 is waived by the owner. The queue is wave 2, wave 3, the play-mechanics engine (D43, ADR-018), the 0.6.0 freeze (about 2026-11-11, D41), then the Homebrew Import Lab (below). T2 stays a milestone: the played session and its gap report are still owed. When the report exists, it re-ranks remaining work. Nothing waits for it. R4's other bans stay in force: no DM or combat tools, no plugin execution, no cloud sync or accounts, no cloud infrastructure, no security scanning beyond Dependabot. The statuses of T5, T6 and M4 are refreshed below, and the owner checks still owed are collected in one table ("Owed owner checks")._
+_**2026-10-18 (LIVING_SPECS D60; owner ruling):** T2 no longer gates anything. Its hard stop on M7, content breadth, and studio or extension work beyond M5/M6 is waived by the owner. ~~The queue is wave 2, wave 3, the play-mechanics engine (D43, ADR-018), the 0.6.0 freeze (about 2026-11-11, D41), then the Homebrew Import Lab (below).~~ The queue was amended on 2026-10-20 (next note). T2 stays a milestone: the played session and its gap report are still owed. When the report exists, it re-ranks remaining work. Nothing waits for it. R4's other bans stay in force: no DM or combat tools, no plugin execution, no cloud sync or accounts, no cloud infrastructure, no security scanning beyond Dependabot. The statuses of T5, T6 and M4 are refreshed below, and the owner checks still owed are collected in one table ("Owed owner checks")._
+
+_**2026-10-20 (LIVING_SPECS D41 and D60 amended; owner ruling):** there is no feature freeze. 0.6.0 is released when Wave 3 is done, and the session (about 2026-11-11) is context, not a deadline. The play-mechanics engine (D43, ADR-018) ships in the release after 0.6.0. The queue is wave 2, wave 3, 0.6.0, the play-mechanics engine, then the Homebrew Import Lab (below). The lab's scope is narrowed (D62), and DM and combat tools stay banned but are noted for later (D63, under R4). The "Owed owner checks" table is re-checked against the recorded evidence as of 2026-10-20._
 
 ### R1. Decision
 
@@ -164,7 +166,15 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
 
 #### Homebrew Import Lab (queued after 0.6.0; added 2026-10-18, D60)
 
-- **Scope.** Phase 2 (AUTH-01 … AUTH-05) and §8B analyze mode of the owner's spec `TomeStack_Creator_Player_DM_QoL_Deep_Dive.md`. Bring the spec into `docs/` first, so the repository holds it.
+- **Scope.** ~~Phase 2 (AUTH-01 … AUTH-05) and §8B analyze mode of the owner's spec `TomeStack_Creator_Player_DM_QoL_Deep_Dive.md`.~~ **Narrowed by the owner on 2026-10-20 (LIVING_SPECS D62).** The lab builds six things:
+  - a capability registry with a coverage report, which shows the missing-mechanic warnings;
+  - a class progression projection with a read-only studio grid;
+  - a library-scale pass (indexed per-source queries, candidate paging, a review of the entry cap);
+  - a per-effect source span in candidate review;
+  - a package preflight (provenance, notices and redistributable flags, with import-derived content blocked);
+  - duplicate detection that only lists duplicates and never merges them.
+
+  It adds a deterministic Markdown importer that feeds the existing detector. Recipes, the source graph, batch review and version diff, edition lineage, importers for other third-party formats, and a simulator are deferred. Bring the spec into `docs/` first, so the repository holds it.
 - **Deterministic by default.** It reuses the existing PdfPig/OCR worker and `CandidateDetector`.
 - **Separate statuses.** "Parsed", "human reviewed" and "playable" are three different statuses (spec §8B).
 - **No AI in this milestone.** Any AI import is a later, separate, optional and consented feature (spec §12). RulesCore stays independent of any LLM (spec §9).
@@ -177,22 +187,34 @@ On another physical machine or a clean VM: install the T5 release, restore a ful
 
 #### Owed owner checks (added 2026-10-18, D60)
 
-Each row gets an owner date when it is done, or the word "deferred" with a reason. Built-but-never-run work is listed here instead of being scattered across the milestones.
+Each row gets an owner date when it is done, or the word "deferred" with a reason. Built-but-never-run work is listed here instead of being scattered across the milestones. A milestone that depends on a row is not complete until that row has an owner date.
 
-| Check | Where it's defined | Status |
-|---|---|---|
-| T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | owed |
-| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | owed |
-| First paint (cold start, by hand) | T4 above; [performance.md](performance.md) | owed |
-| Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | owed |
-| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md) | owed |
-| M4 third-party PDF: confirm the counts and review the candidates | R2 M4 row; [features/m4-acceptance.md](features/m4-acceptance.md) | owed |
+**Re-checked 2026-10-20.** The evidence column records what exists today:
+
+- *built*: the feature or tool exists;
+- *automated*: tests cover it;
+- *owner*: an owner record exists.
+
+No row has an owner record yet. Where a row names the 0.6.0 release candidate, the check is planned for that build.
+
+| Check | Where it's defined | Evidence recorded (2026-10-20) | Status |
+|---|---|---|---|
+| T2 played session and gap report | T2 above; [features/gap-notes.md](features/gap-notes.md) | Built: gap notes. No session or report recorded | owed (session about 2026-11-11) |
+| T6 restore drill on the current published release | T6 above; [features/restore-drill-procedure.md](features/restore-drill-procedure.md) | Built and automated: the DevHost drill report and compare, `RestoreDrillTests`. No drill record on a second machine | owed (0.6.0 release candidate) |
+| First paint (cold start, by hand) | T4 above; [performance.md](performance.md) | Method only. The smoke script's start-to-ready time is not first paint | owed (0.6.0 release candidate) |
+| Narrator, 200 %/400 % zoom and High Contrast checks (D17/D18) | [features/accessibility-checklist.md](features/accessibility-checklist.md) | Automated: keyboard flows and 400 % reflow. Checklist items 6, 15, 16, 17 and 21 are still open | owed (0.6.0 release candidate) |
+| Populated upgrade, published to published | T5 above; [features/m2-acceptance.md](features/m2-acceptance.md); [features/release-0.4.0-verification.md](features/release-0.4.0-verification.md) | Automated: `UpgradeTests` and the installer smoke. No populated 0.4.0 → 0.5.0 upgrade recorded | owed (0.5.0 → 0.6.0 release candidate, on a copy of real data) |
+| M4 third-party PDF: confirm the counts and review the candidates | R2 M4 row; [features/m4-acceptance.md](features/m4-acceptance.md) | Automated, counts only: 336 feature candidates, 8 of 8 classes. Spellcasting is proposed for 0 of 8 and not reviewed | owed (closed by the Import Lab's precision/recall table) |
+| Foundry export imported into a real Foundry world | [features/export-adapters.md](features/export-adapters.md); ADR-012 | Automated: golden files. The adapter stays labelled Experimental | owed |
+| Homebrew Import Lab Phase 0: five timed usability observations (AUD-02) | Homebrew Import Lab above | Not run. The other Phase 0 items are done as untracked working notes | owed (before Lab work starts) |
 
 ### R4. Do not do (2026-09 revision)
 
 No new studio tools, no DM or combat tools, no plugin execution model, no cloud sync or accounts, no content breadth, ~~and no M6 slices 2 to 5~~ and no new extension hooks, export targets or "Optional after the M6 gate" work (D15: the slices are built) ~~before the T2 gap report~~; no security scanning beyond Dependabot; no cloud infrastructure of any kind.
 
 **2026-10-18 (D60):** the "before the T2 gap report" clause is waived for studio tools, content breadth, extension hooks, export targets and the "Optional after the M6 gate" work. They are no longer banned. They are not queued either: the queue is in the D60 note at the top. Still banned outright: DM or combat tools, a plugin execution model, cloud sync or accounts, security scanning beyond Dependabot, and cloud infrastructure.
+
+**2026-10-20 (D63):** DM and combat tools stay banned for now. The owner has noted them to come back to later for development. Nothing is scheduled, and work starts only after a new owner decision. Three things stay eligible: a campaign rule profile, house-rule flags copied onto a character through a reviewed update, and large print.
 
 | Milestone | Deliverable | Exit gate | Dependencies |
 | --- | --- | --- | --- |
