@@ -216,7 +216,20 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       setAnnouncement(`${stay.length} selected`);
       await load();
     } catch (error) {
-      onError(error);
+      if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
+        // R139: a ticked row changed since it was listed. The tokens on screen are stale, so every retry would be refused too:
+        // reload the list, clear the ticks, say so (WCAG 4.1.3); focus stays on the button that was pressed.
+        setSkipped([]);
+        setTicked([]);
+        setAnnouncement('Some selected candidates changed; the selection was cleared.');
+        try {
+          await load();
+        } catch (reloadError) {
+          onError(reloadError);
+        }
+      } else {
+        onError(error);
+      }
     } finally {
       bulkRunning.current = false;
       setBulkBusy(false);

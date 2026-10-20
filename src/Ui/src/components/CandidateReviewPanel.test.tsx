@@ -672,6 +672,24 @@ it('accepts as reference with the same selection', async () => {
   expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true, { 'cand-1': 'etag-1' });
 });
 
+it('reloads and clears the selection when a bulk accept is refused as changed, so the next try is not stale (R139)', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  const onError = vi.fn();
+  vi.mocked(client.acceptCandidates).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+  const button = screen.getByRole('button', { name: 'Accept selected as drafts' });
+  await user.click(button);
+
+  await screen.findByText('Some selected candidates changed; the selection was cleared.', { selector: '[aria-live="polite"]' });
+  expect(onError).not.toHaveBeenCalled(); // a refusal to act on, not an error to show
+  expect(vi.mocked(client.candidates).mock.calls.length).toBeGreaterThan(calls); // the list was reloaded, for fresh tokens
+  expect(screen.getAllByRole('checkbox', { name: /^Select Testy Item / }).some((b) => (b as HTMLInputElement).checked)).toBe(false);
+  expect(document.activeElement).toBe(button); // WCAG 2.4.3: focus stays where it was
+});
+
 it('ignores a second press while a bulk accept is in flight', async () => {
   const user = userEvent.setup();
   longList(2);
