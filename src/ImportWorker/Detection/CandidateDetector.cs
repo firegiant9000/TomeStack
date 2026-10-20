@@ -40,7 +40,7 @@ public static partial class CandidateDetector
 
     private static readonly string[] Schools = ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"];
 
-    private sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr);
+    internal sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr);
 
     private sealed record Row(int Page, double Y, List<TextLine> Cells);
 
@@ -74,7 +74,7 @@ public static partial class CandidateDetector
             var lines = PageLines(page, boilerplate);
             found.AddRange(Weapons(page, lines, context));
             found.AddRange(Armor(page, lines, context));
-            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures, () => FollowingText(pages, page, boilerplate), pages.Where(p => p.Page == page.Page - 1).Select(p => PageLines(p, boilerplate)).FirstOrDefault() ?? []));
+            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures, () => FollowingText(pages, page, boilerplate), pages.Where(p => p.Page == page.Page - 1).Select(p => PageLines(p, boilerplate)).FirstOrDefault() ?? [], cancellationToken));
         }
 
         // Item 11 (R54): what each class's Features column names becomes a link to a detected feature, or to a reference stub.
@@ -935,7 +935,7 @@ public static partial class CandidateDetector
         return following;
     }
 
-    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, Func<List<string>> followingFor, List<(int Page, TextLine Line)> previous)
+    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, Func<List<string>> followingFor, List<(int Page, TextLine Line)> previous, CancellationToken cancellationToken)
     {
         // "The Bard" (SRD 5.1) or "Bard Features" (SRD 5.2.1); "Class Features" and "Bard Class Features" are section headings.
         var titles = pageUnits.Select(u => u.Lines[0]).Select(t => ClassTableTitle().Match(t)).Where(m => m.Success)
@@ -949,24 +949,27 @@ public static partial class CandidateDetector
         // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
         var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
             ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
-        if (titles.Select(Key).Distinct(StringComparer.Ordinal).Count() > 1 && SplitClasses(page, lines, pageUnits, className, titleLine) is { Count: > 1 } split)
+        if (titles.Select(Key).Distinct(StringComparer.Ordinal).Count() > 1 && SplitClasses(page, lines, pageUnits, className, titleLine, cancellationToken) is { Count: > 1 } split)
         {
             // Wave 0/1 minors (d): two classes on one page are read each from its own window, and the page's text after them goes to the last.
             return [.. split.Select((s, i) => ClassCandidate(page, s.Name, s.Read.Features, s.Read.Table, s.Read.TextLines, context, classFeatures, i == split.Count - 1 ? following : [], previous))];
         }
-        return ReadClassTable(page, lines, _ => true, titleLine) is { } read
+        return ReadClassTable(page, lines, _ => true, titleLine, WholePageLines(page)) is { } read
             ? [ClassCandidate(page, className, read.Features, read.Table, read.TextLines, context, classFeatures, following, previous)]
             : [];
     }
 
-    private sealed record ClassRead(IReadOnlyDictionary<int, IReadOnlyList<string>> Features, ClassTable? Table, List<TextLine> TextLines);
+    /// <summary>Most class titles on one page that are split into windows (R127); more are read as one page.</summary>
+    internal const int MaxSplitClasses = 8;
+
+    internal sealed record ClassRead(IReadOnlyDictionary<int, IReadOnlyList<string>> Features, ClassTable? Table, List<TextLine> TextLines);
 
     /// <summary>
     /// The classes of a page with more than one class table, top to bottom, each with the read of its own window: from its
     /// heading (its "Core … Traits" heading when that is printed above it) to the next class's. A title whose window holds no
     /// table is not a class and is left out; null when the page cannot be split, and the whole page is read as one class.
     /// </summary>
-    private static List<(string Name, ClassRead Read)>? SplitClasses(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, string className, string className0Title)
+    internal static List<(string Name, ClassRead Read)>? SplitClasses(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, string className, string className0Title, CancellationToken cancellationToken)
     {
         var names = new List<(string Name, string Title)> { (className, className0Title) };
         foreach (var unit in pageUnits)
@@ -979,6 +982,9 @@ public static partial class CandidateDetector
             if (name.Length == 0 || name == "Class" || names.Any(n => Key(n.Name) == Key(name)))
                 continue;
             names.Add((name, pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{name} Features" || t.Trim() == $"The {name}") ?? title));
+            // R127: more class titles than any real page holds is not split; the page is read whole (the merged read).
+            if (names.Count > MaxSplitClasses)
+                return null;
         }
         var anchored = new List<(string Name, string Title, double Y)>();
         foreach (var (name, title) in names)
@@ -989,10 +995,24 @@ public static partial class CandidateDetector
             anchored.Add((name, title, core));
         }
         // A class whose own window holds no table is dropped, and the windows are drawn again without it.
+        // The page's whole text is built once, and a window that did not change between passes is not read again.
+        var wholePage = WholePageLines(page);
+        var memo = new Dictionary<(string Name, double Upper, double Lower), ClassRead?>();
         while (anchored.Count > 1)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var ordered = anchored.OrderByDescending(a => a.Y).ToList();
-            var reads = ordered.Select((a, i) => (a.Name, Read: ReadClassTable(page, lines, WindowOf(ordered.Select(o => o.Y).ToList(), i), a.Title))).ToList();
+            var anchorYs = ordered.Select(o => o.Y).ToList();
+            var reads = ordered.Select((a, i) =>
+            {
+                var key = (a.Name, i == 0 ? double.PositiveInfinity : anchorYs[i], i == anchorYs.Count - 1 ? double.NegativeInfinity : anchorYs[i + 1]);
+                if (!memo.TryGetValue(key, out var read))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    memo[key] = read = ReadClassTable(page, lines, WindowOf(anchorYs, i), a.Title, wholePage);
+                }
+                return (a.Name, Read: read);
+            }).ToList();
             if (reads.All(r => r.Read is not null))
                 return [.. reads.Select(r => (r.Name, r.Read!))];
             var drop = reads.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Read is null && x.r.Name != className);
@@ -1007,8 +1027,12 @@ public static partial class CandidateDetector
     private static Func<TextLine, bool> WindowOf(List<double> anchors, int index) =>
         l => (index == 0 || l.Y <= anchors[index] + 1) && (index == anchors.Count - 1 || l.Y > anchors[index + 1] + 1);
 
+    /// <summary>Every non-blank line of the page's blocks, trimmed, boilerplate included.</summary>
+    private static List<TextLine> WholePageLines(DetectionPage page) =>
+        page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
+
     /// <summary>One class table read from the lines in a window: whole by position (D34), else by the legacy readers; null when no table is found.</summary>
-    private static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine)
+    private static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine, List<TextLine> wholePageLines)
     {
         var lines = allLines.Where(l => inWindow(l.Line)).ToList();
         var byLevel = new SortedDictionary<int, List<string>>();
@@ -1018,7 +1042,7 @@ public static partial class CandidateDetector
         if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
             return new(table.FeaturesByLevel, table, pageTextLines);
         // A cell the running-header rule took for boilerplate (text repeated on many pages) can break the table: read it again whole.
-        var wholePage = page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).Where(inWindow).ToList();
+        var wholePage = wholePageLines.Where(inWindow).ToList();
         if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine) is { Complete: true } whole)
             return new(whole.FeaturesByLevel, whole, wholePage);
 
