@@ -1,3 +1,4 @@
+using TomeStack.AppService.Exports;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -115,6 +116,30 @@ public class ToggleCommandTests
         Assert.NotEqual(true, mended.Sheet.Bloodied);
         Assert.False(mended.Sheet.Toggles!.Single(t => t.ToggleId == "grit").On);
         Assert.Equal(healthy.Sheet.Field(FieldIds.ArmorClass).Value, mended.Sheet.Field(FieldIds.ArmorClass).Value);
+    }
+
+    [Fact]
+    public void The_sheet_export_lists_manual_toggles_but_never_an_auto_toggle_bloodied_or_not()
+    {
+        using var temp = new TempApp();
+        var grit = InstallAutoGrit(temp);
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, Stance, grit] }).Character.Id;
+        string Exported()
+        {
+            var preview = temp.App.PreviewVttExport(id, SheetJson.Target, SheetPurpose.Personal);
+            return System.Text.Encoding.UTF8.GetString(temp.App.VttExportOutput(preview.Token).Bytes);
+        }
+
+        var healthy = Exported();
+        Assert.Contains("Radiant stance", healthy, StringComparison.Ordinal);
+        Assert.DoesNotContain("Testy grit", healthy, StringComparison.Ordinal);
+        var maximum = temp.App.GetCharacter(id).Sheet.HitPoints!.Maximum;
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: maximum - maximum / 2));
+        Assert.True(temp.App.GetCharacter(id).Sheet.Bloodied);
+        var bloodied = Exported();
+        Assert.Contains("Radiant stance", bloodied, StringComparison.Ordinal);
+        Assert.DoesNotContain("Testy grit", bloodied, StringComparison.Ordinal);
     }
 
     [Fact]
