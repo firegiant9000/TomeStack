@@ -2373,7 +2373,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
 const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
 
 async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
-  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import a character sheet (PDF)…' });
+  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import a character (sheet or text)…' });
   await waitFor(() => expect(start.disabled).toBe(false));
   await user.click(start);
 }

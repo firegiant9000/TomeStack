@@ -207,7 +207,7 @@ export function App() {
           </button>
           <button
             type="button"
-            title="Package import is for TomeStack .zip files. For a character sheet PDF, use Import a character sheet (PDF)."
+            title="Package import is for TomeStack .zip files. For a character sheet PDF or text, use Import a character (sheet or text)."
             onClick={() => fileInput.current?.click()}
           >
             Import package…
@@ -222,7 +222,7 @@ export function App() {
               setScreen({ kind: 'ddb-import' });
             }}
           >
-            Import a character sheet (PDF)…
+            Import a character (sheet or text)…
           </button>
           <button
             type="button"

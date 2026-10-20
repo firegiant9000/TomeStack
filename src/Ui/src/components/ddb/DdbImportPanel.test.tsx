@@ -518,13 +518,14 @@ it('discards the token of a read that resolves after Cancel', async () => {
 
 // ---- item 14: one entry for D&D Beyond exports and the fillable 2014 sheet ----
 
-it('titles the import as a character sheet import and names the layout it read in words', async () => {
+it('titles the import as a sheet or text import (R133) and names the layout it read in words', async () => {
   vi.mocked(client.ddbRead).mockResolvedValue({ ...read, layout: 'wotc-2014', layoutName: 'the fillable 2014 sheet' });
   const user = userEvent.setup();
   renderPanel();
 
-  expect(screen.getByRole('heading', { name: 'Import a character sheet (PDF)', hidden: true })).toBeTruthy();
-  expect(screen.getByText(/Choose a character sheet PDF/)).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Import a character (sheet or text)', hidden: true })).toBeTruthy();
+  // Step 1's first line names both entries: a fillable sheet PDF, or pasted text or a .txt/.md file.
+  expect(screen.getByText(/a fillable character sheet PDF.*pasted text or a \.txt or \.md file/)).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
 
   const layout = (await screen.findByText('Layout')).nextElementSibling;

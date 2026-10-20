@@ -43,7 +43,7 @@ From the owner's one 2014-style export (a single-class character without spells)
 
 ## The fillable 2014 sheet (`wotc-2014`; item 14, Q14, D16(e) amended 2026-10-14)
 
-A second layout, read by the same parser, steps and commands behind the one entry "Import a character sheet (PDF)…". The report names the layout in words ("D&D Beyond 2014", "D&D Beyond 2024", "the fillable 2014 sheet"); the summary step shows it as "Layout read". No logo or Wizards mark is used; the not-affiliated line stays (D08).
+A second layout, read by the same parser, steps and commands behind the one entry "Import a character (sheet or text)…" (named "Import a character sheet (PDF)…" until the text entry arrived, R133). The report names the layout in words ("D&D Beyond 2014", "D&D Beyond 2024", "the fillable 2014 sheet"); the summary step shows it as "Layout read". No logo or Wizards mark is used; the not-affiliated line stays (D08).
 
 - **Recognition (R72).** A layout is recognised when all its required names are present: `ClassLevel`, `Features and Traits` and `PersonalityTraits ` (trailing space). When several layouts match, the one with the most required names wins only if its set holds every other match's whole set; otherwise the sheet is refused (`ddb.layout-unknown`). The three maps are disjoint, so a doctored file carrying two layouts' names is refused rather than resolved by the order the maps load in. The message no longer says "D&D Beyond".
 - **Names are the form's own,** trailing and double spaces included (`Race `, `DEXmod `, `Wpn3 AtkBonus  `). A test pins them in the embedded JSON so a formatter that trims a key fails the build. `PlayerName` is never mapped. The private field inventory stays in the gitignored local folder; this page records names and counts only.
@@ -66,7 +66,7 @@ A second layout, read by the same parser, steps and commands behind the one entr
 
 ### Flow (the UI)
 
-"Import a character sheet (PDF)…" sits in the Characters sidebar (`App.tsx`), next to "Import package…". The package button's help text says: "Package import is for TomeStack .zip files. For a character sheet PDF, use Import a character sheet (PDF)." This fixes the confusion that started this spec.
+"Import a character (sheet or text)…" sits in the Characters sidebar (`App.tsx`), next to "Import package…"; the import's title is the same without the ellipsis, and step 1's first line names a fillable sheet PDF, or pasted text or a .txt or .md file (R133). The package button's help text says: "Package import is for TomeStack .zip files. For a character sheet PDF or text, use Import a character (sheet or text)." This fixes the confusion that started this spec.
 
 A step view, not a modal. Each step can go back, and **Cancel at any step writes nothing** (SPEC C-07): it sends `ddb.discard` and returns to the character list.
 

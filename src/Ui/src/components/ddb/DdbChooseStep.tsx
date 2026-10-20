@@ -92,8 +92,9 @@ export function DdbChooseStep({ read, onRead, onError }: Props) {
   return (
     <>
       <p>
-        Choose a character sheet PDF: an export from D&amp;D Beyond, or the fillable 2014 character sheet filled in on a computer.
-        TomeStack reads its form fields once, in the import worker, and keeps nothing of the file.
+        Choose a fillable character sheet PDF (an export from D&amp;D Beyond, or the fillable 2014 character sheet filled in on a computer), or
+        use “Import a character from text…” below for pasted text or a .txt or .md file. TomeStack reads a PDF&apos;s form fields once, in the
+        import worker, and keeps nothing of the file.
       </p>
       {/* Release checklist item 1 (owner, 2026-10-12): the name only describes the file; no affiliation is implied. */}
       <p className="hint">TomeStack is not affiliated with D&amp;D Beyond or Wizards of the Coast.</p>

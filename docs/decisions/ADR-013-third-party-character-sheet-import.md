@@ -19,7 +19,7 @@ The owner's character lives on D&D Beyond, and players keep sheets in other form
 
 ## Consequences
 
-- One entry, "Import a character sheet (PDF)…", reads a fillable sheet exactly and a printed one approximately, and says which in the layout row.
+- One entry, "Import a character (sheet or text)…" (first "Import a character sheet (PDF)…"; renamed when the text entry joined it, R133), reads a fillable sheet exactly and a printed one approximately, and says which in the layout row.
 - A text-read PDF can misread (columns, tables, a scan's recognition errors). The lines not read and the comparison step are the safety net, as for pasted text.
 - A PDF on a network share can no longer be attached or imported; copy it to a local drive first.
 - The layouts follow an unofficial format that can change; a new layout is a new map file, not code.

@@ -247,7 +247,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   return (
     <section className="ddb-import" aria-labelledby="ddb-import-title">
       <h2 id="ddb-import-title" className="visually-hidden">
-        Import a character sheet (PDF)
+        Import a character (sheet or text)
       </h2>
       <p className="hint">
         Step {step} of 5. Nothing is saved until you choose “Create character”. The PDF is read once and not kept.
