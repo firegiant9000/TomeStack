@@ -26,6 +26,7 @@ vi.mock('../api/client', () => ({
     restPreview: vi.fn(),
     rest: vi.fn(),
     saveCharacter: vi.fn(),
+    getCharacter: vi.fn(),
   },
 }));
 
@@ -1013,4 +1014,52 @@ it('says why "Level up" is unavailable at level 20, and does nothing when presse
   expect(document.getElementById('level-up-hint')).toBeNull();
   await user.click(open);
   expect(onLevelUp).toHaveBeenCalledTimes(1);
+});
+
+// R161/R182: character.save is compare-and-set on updatedAt.
+function withUpdatedAt(v: CharacterView, updatedAt: string, gp = 0): CharacterView {
+  return { ...v, character: { ...v.character, updatedAt, currency: { cp: 0, sp: 0, ep: 0, gp, pp: 0 } } };
+}
+
+it('feeds the updatedAt of each successful save to the next queued save, so two quick edits both save (R182)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter)
+    .mockResolvedValueOnce(withUpdatedAt(v, '2026-10-03T00:00:05.1234567+00:00', 20))
+    .mockResolvedValueOnce(withUpdatedAt(v, '2026-10-03T00:00:09.7654321+00:00', 30));
+  renderSheet(v, 'inventory');
+  const gold = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
+  await user.clear(gold);
+  await user.type(gold, '20');
+  await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].updatedAt).toBe('2026-10-03T00:00:00Z'); // the version the sheet showed
+  await user.clear(screen.getByRole('spinbutton', { name: 'Gold (gp)' }));
+  await user.type(screen.getByRole('spinbutton', { name: 'Gold (gp)' }), '30');
+  await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(client.saveCharacter).mock.calls[1]![0].updatedAt).toBe('2026-10-03T00:00:05.1234567+00:00'); // verbatim, never reparsed
+});
+
+it('shows the refusal, brings in the current copy and leaves focus where it was when a save is stale (R182)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const current = withUpdatedAt(v, '2026-10-03T00:01:00Z', 7);
+  const refusal = new TomeStackError({ code: 'character.stale', message: "This character changed since you opened it. Your change wasn't saved; the current copy is shown." });
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter).mockRejectedValue(refusal);
+  vi.mocked(client.getCharacter).mockResolvedValue(current);
+  const onError = vi.fn();
+  const onChanged = vi.fn();
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="inventory" />);
+  await user.clear(screen.getByRole('spinbutton', { name: 'Gold (gp)' }));
+  await user.type(screen.getByRole('spinbutton', { name: 'Gold (gp)' }), '20');
+  const save = screen.getByRole('button', { name: 'Save currency' });
+  await user.click(save);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(current));
+  expect(onError).toHaveBeenCalledWith(refusal); // the app's alert shows its text
+  expect(client.getCharacter).toHaveBeenCalledWith('fixture-2');
+  expect(document.activeElement).toBe(save); // not <body>
+  expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' }).value).toBe('20'); // what was typed stays
 });

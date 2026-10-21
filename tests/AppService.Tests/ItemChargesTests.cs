@@ -29,9 +29,9 @@ public class ItemChargesTests
     /// A level 3 caster plus four installed items: a wand (attunement, 7 charges, back on a long rest by 1d6+1, +2 Stealth), a trinket
     /// (an item effect with neither), a plain cup (no item effect) and a ring (attunement only).
     /// </summary>
-    private static Setup Start(string family, string? regain = "1d6+1", RestPeriod? period = RestPeriod.LongRest, params EquipmentEntry[] equipment)
+    private static Setup Start(string family, string? regain = "1d6+1", RestPeriod? period = RestPeriod.LongRest, TimeProvider? time = null, params EquipmentEntry[] equipment)
     {
-        var temp = new TempApp();
+        var temp = new TempApp(time: time);
         ContentReference Install(ContentRevision revision)
         {
             temp.App.Store.AddRevision(revision);
@@ -286,35 +286,21 @@ public class ItemChargesTests
     [Theory]
     [InlineData(RulesFamilies.Srd51)]
     [InlineData(RulesFamilies.Srd521)]
-    public void R160_a_stale_id_less_payload_keeps_the_stored_id_and_spent_count(string family)
+    public void R182_a_stale_id_less_copy_is_refused_where_pairing_used_to_hand_it_the_stored_id_and_spent_count(string family)
     {
-        var s = Start(family);
-        using var _ = s.Temp;
-        s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand)] });
-        var spent = s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 0));
-        var id = spent.Character.Equipment[0].Id!.Value;
-
-        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand, Equipped: true)] }); // stale: still id-less
-
-        Assert.Equal((id, 2, true), (saved.Character.Equipment[0].Id!.Value, saved.Character.Equipment[0].ChargesSpent, saved.Character.Equipment[0].Equipped));
-        Assert.Equal(5, Use(saved, id).ChargesLeft);
-    }
-
-    [Theory]
-    [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
-    public void R160_two_stale_id_less_copies_of_one_item_pair_with_the_stored_entries_in_order(string family)
-    {
-        var s = Start(family);
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
         using var _ = s.Temp;
         s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)] });
-        var first = s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 0));
-        var second = Spend(s, first.Character.Equipment[1].Id!.Value); // saving gave both copies their ids
-        var (a, b) = (second.Character.Equipment[0].Id!.Value, second.Character.Equipment[1].Id!.Value);
+        var stale = Get(s).Character; // both copies still id-less
+        clock.Now = clock.Now.AddSeconds(5);
+        s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 0));
+        var before = TempApp.Json(Get(s).Character);
 
-        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)] });
+        var code = CodeOf(() => s.Temp.App.SaveCharacter(stale with { Equipment = [new EquipmentEntry(s.Wand, Equipped: true), new EquipmentEntry(s.Wand)] }));
 
-        Assert.Equal([(a, 2), (b, 1)], saved.Character.Equipment.Select(e => (e.Id!.Value, e.ChargesSpent ?? 0)));
+        Assert.Equal("character.stale", code);
+        Assert.Equal(before, TempApp.Json(Get(s).Character));
     }
 
     [Theory]
@@ -349,41 +335,6 @@ public class ItemChargesTests
         Assert.Null(saved.Character.Equipment[0].ChargesSpent);
         Assert.NotEqual(wandId, saved.Character.Equipment[0].Id!.Value);
         Assert.DoesNotContain(saved.Character.Equipment, e => e.Id == wandId);
-    }
-
-    [Theory]
-    [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
-    public void R175_a_fresh_copy_inserted_ahead_of_a_stale_copy_does_not_take_its_charges_and_the_shifted_stale_copy_is_reset_too(string family)
-    {
-        var s = Start(family);
-        using var _ = s.Temp;
-        var wandId = Save(s, new EquipmentEntry(s.Ring), new EquipmentEntry(s.Wand)).Character.Equipment[1].Id!.Value;
-        Spend(s, wandId, 2);
-        var ring = Get(s).Character.Equipment[0];
-
-        // A new wand is inserted at the front; the stale wand (still id-less) follows at its old position.
-        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand), ring, new EquipmentEntry(s.Wand)] });
-
-        Assert.Null(saved.Character.Equipment[0].ChargesSpent); // the new copy is fresh
-        Assert.NotEqual(wandId, saved.Character.Equipment[0].Id!.Value);
-        Assert.DoesNotContain(saved.Character.Equipment, e => e.Id == wandId); // neither landed at the stored position: both are new entries
-    }
-
-    [Theory]
-    [InlineData(RulesFamilies.Srd51)]
-    [InlineData(RulesFamilies.Srd521)]
-    public void R175_pairing_is_by_content_id_across_a_different_revision(string family)
-    {
-        var s = Start(family);
-        using var _ = s.Temp;
-        var wandId = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
-        Spend(s, wandId, 2);
-
-        var otherRevision = s.Wand with { RevisionId = Guid.NewGuid() };
-        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(otherRevision)] });
-
-        Assert.Equal((wandId, 2), (saved.Character.Equipment[0].Id!.Value, saved.Character.Equipment[0].ChargesSpent));
     }
 
     [Theory]

@@ -44,7 +44,9 @@ export function useSheetSave(view: CharacterView): SheetSave {
   return useCallback<SheetSave>((update) => {
     pending.current += 1;
     const run = async () => {
-      // Ties go to the queue's own latest. Known limit: character.save has no compare-and-set, and a clock set back wins here.
+      // Ties go to the queue's own latest. R182: character.save is compare-and-set on updatedAt, so each save names the version it
+      // edits: the queue's latest is always the previous save's returned character, and its updatedAt is passed on verbatim. A newer
+      // shown view replaces it; a save that is refused as stale rejects here and the sheet reads the current copy.
       if ((shown.current.updatedAt ?? '') > (latest.current.updatedAt ?? '')) latest.current = shown.current;
       const saved = await client.saveCharacter(update(latest.current));
       latest.current = saved.character;
