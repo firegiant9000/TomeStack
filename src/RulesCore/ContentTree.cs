@@ -172,7 +172,9 @@ public static class ContentTree
                 {
                     if (!Room(depth + 1))
                         break;
-                    var spends = toggle.ResourceId is null ? "" : $", spends '{Named(toggle.ResourceId, "")}', which this content does not define";
+                    var spends = toggle.ResourceId is null ? "" : toggle.ResourceContent is { } holder && holder != revision.ContentId
+                        ? $", spends '{Named(toggle.ResourceId, "")}' of {Named(graph.Current.GetValueOrDefault(holder)?.Name, "content that is not installed")}"
+                        : $", spends '{Named(toggle.ResourceId, "")}', which this content does not define";
                     children.Add(Node(Next(), TreeNodeKind.Toggle, $"Toggle: {Named(toggle.Label, toggle.Id)}{spends}", revision.Reference, toggle.Id, [], owner: revision.Reference));
                 }
                 foreach (var recovery in p.OrphanRecoveries)
@@ -260,7 +262,7 @@ public static class ContentTree
             var own = effects.OfType<RollEffect>().Where(r => r.ResourceId is { } id && seen.Contains(id) && (r.ResourceContent is null || r.ResourceContent == revision.ContentId)).ToList();
             _rolls = own.ToLookup(r => r.ResourceId!, StringComparer.Ordinal);
             LooseRolls = [.. effects.OfType<RollEffect>().Except(own)];
-            var spending = effects.OfType<ToggleEffect>().Where(t => t.ResourceId is { } id && seen.Contains(id)).ToList();
+            var spending = effects.OfType<ToggleEffect>().Where(t => t.ResourceId is { } id && seen.Contains(id) && (t.ResourceContent is null || t.ResourceContent == revision.ContentId)).ToList();
             _toggles = spending.ToLookup(t => t.ResourceId!, StringComparer.Ordinal);
             LooseToggles = [.. effects.OfType<ToggleEffect>().Except(spending)];
             _recoveries = effects.OfType<RecoveryEffect>().Where(r => seen.Contains(r.ResourceId)).ToLookup(r => r.ResourceId, StringComparer.Ordinal);

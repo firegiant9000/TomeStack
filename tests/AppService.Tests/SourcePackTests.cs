@@ -107,6 +107,26 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void A_toggle_that_names_content_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000a1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000a1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Form Source");
+        var toggle = Feat(own.Id, "Test Form Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000a2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000a2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new ToggleEffect { Id = "form", ToggleId = "form", Label = "Form", Cost = "1", ResourceId = "focus", ResourceContent = pool.ContentId }],
+        };
+        temp.App.Store.AddRevision(toggle);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {
         using var origin = new TempApp();
