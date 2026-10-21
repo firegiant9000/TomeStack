@@ -119,7 +119,7 @@ The end of the Features tab has "TomeStack won't do these for you" (`ByHandPanel
 - **Spend by hand:** a feature's roll that names a resource (read from the sheet, the same test the mechanics report uses for limited-use actions).
 - **Reference only:** effects TomeStack knows but does not apply. A feature that is only text is never listed (an SRD sheet would list hundreds).
 - **Partly automatic:** effects that need the player, including one that has a problem (a formula that fails).
-- **Not understood:** effects of a type this build does not know. A row here is not repeated in another group.
+- **Not understood:** effects of a type this build does not know. A row here is not repeated in another group, and a roll listed under Spend by hand is left out of Reference only and Partly automatic (matched on the feature revision, the effect id and the effect type).
 
 It is UI only: it reads the existing `character.mechanics` command (`client.characterMechanics`) for the sources the sheet's features come from. It asks only while the Features tab is open and again when the sheet is recalculated; a reply for an older sheet or another character is ignored. A sheet with no sources makes no call. If the read fails the panel shows "Couldn't list what needs you by hand." and nothing else.
 

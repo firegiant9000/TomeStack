@@ -56,7 +56,7 @@ function spendRows(sheet: CharacterSheet): ByHandRow[] {
     .flatMap((f) =>
       f.effects
         .filter((e) => e.type === 'roll' && e.resourceId)
-        .map((e) => ({ key: `${f.content.revisionId}|${e.id}`, name: f.name, detail: e.label, page: f.origin.page })),
+        .map((e) => ({ key: `${f.content.revisionId}|${e.id}|${e.type}`, name: f.name, detail: e.label, page: f.origin.page })),
     );
 }
 
@@ -65,10 +65,12 @@ function groupReport(sheet: CharacterSheet, report: MechanicsReport | null): ByH
   const unique = (rows: ByHandRow[]) => rows.filter((r, i) => rows.findIndex((o) => o.key === r.key) === i);
   const unsupported = report?.unsupported ?? [];
   const unsupportedKeys = new Set(unsupported.map(rowKey));
-  // Unsupported is a subset of Mechanics: a row in "Not understood" appears nowhere else. Pure text is never listed.
-  const rest = (report?.mechanics ?? []).filter((m) => !unsupportedKeys.has(rowKey(m)) && m.effectType !== 'text');
+  const spend = unique(spendRows(sheet));
+  const spendKeys = new Set(spend.map((r) => r.key)); // same key shape as rowKey: revision | effect id | effect type
+  // Each row appears once: Not understood (a subset of Mechanics) > Spend by hand > the rest. Pure text is never listed.
+  const rest = (report?.mechanics ?? []).filter((m) => !unsupportedKeys.has(rowKey(m)) && !spendKeys.has(rowKey(m)) && m.effectType !== 'text');
   return {
-    spend: unique(spendRows(sheet)),
+    spend,
     reference: unique(rest.filter((m) => m.automation === 'reference').map(toRow)),
     assisted: unique(rest.filter((m) => m.automation === 'assisted').map(toRow)),
     unsupported: unique(unsupported.map(toRow)),

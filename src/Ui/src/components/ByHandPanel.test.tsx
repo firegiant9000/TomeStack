@@ -126,6 +126,16 @@ it('Unsupported_rows_appear_once', async () => {
   expect(within(screen.getByRole('region', { name: 'Not understood' })).getByText(/Fixture Odd/)).toBeTruthy();
 });
 
+it('Spend_by_hand_rows_appear_once', async () => {
+  // The same roll (feature "Fixture Surge", effect e0) also comes back from the report as assisted.
+  const asRoll: MechanicEntry = { ...mech('Fixture Surge', 'roll', 'assisted', 7), effectId: 'e0' };
+  vi.mocked(client.characterMechanics).mockResolvedValue(report([asRoll, mech('Fixture Half', 'spell', 'assisted')]));
+  render(<ByHandPanel characterId="char-1" sheet={sheet} active />);
+  await screen.findByRole('heading', { name: 'Partly automatic' });
+  expect(screen.getAllByText(/Fixture Surge/)).toHaveLength(1);
+  expect(within(screen.getByRole('region', { name: 'Spend by hand' })).getByText(/Fixture Surge/)).toBeTruthy();
+});
+
 it('Pure_text_features_are_not_listed', async () => {
   vi.mocked(client.characterMechanics).mockResolvedValue(
     report([mech('Fixture Prose', 'text', 'reference'), mech('Fixture Glow', 'modifier', 'reference')]),
