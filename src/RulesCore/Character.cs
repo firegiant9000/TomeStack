@@ -7,9 +7,13 @@ namespace TomeStack.RulesCore;
 /// Stored character choices and play state. Derived values are never stored here; they are
 /// recalculated from <see cref="BaseAbilities"/>, <see cref="Pins"/> and <see cref="Overrides"/>.
 /// </summary>
-public sealed record Character : IJsonOnDeserialized
+public sealed record Character
 {
     /// <summary>
+    /// v9 adds <see cref="Details"/>, <see cref="CustomItems"/>, <see cref="CustomAttacks"/>, <see cref="DamageDefences"/>, <see cref="Companions"/>,
+    /// <see cref="Xp"/>, the id, attunement and charges of an <see cref="EquipmentEntry"/>, and <see cref="PlayState.Companions"/> (Wave 2;
+    /// LIVING_SPECS D42). The version written is computed (<see cref="SchemaVersion"/>): v9 only when one of them is set, otherwise
+    /// <see cref="PreviousSchemaVersion"/>, so a character that uses none of them stays readable by the previous release.
     /// v8 adds <see cref="Currency"/>, <see cref="Notes"/> and <see cref="PlayState.Concentration"/> (owner, 2026-10-06; LIVING_SPECS D19, D21, D22).
     /// v7 adds the active toggles to <see cref="Play"/> (M3 B2).
     /// v6 adds <see cref="Spells"/> and spent spell slots in <see cref="Play"/> (spellcasting, M2, D04).
@@ -18,10 +22,39 @@ public sealed record Character : IJsonOnDeserialized
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
+
+    /// <summary>The version written while no v9 field is set (R73): the release before v9 reads it, and the bytes are the ones it wrote.</summary>
+    public const int PreviousSchemaVersion = 8;
 
     public const int MinLevel = 1;
     public const int MaxLevel = 20;
+
+    // Bounds on the v9 data (untrusted input, SPEC Q-02). The ruled budget is about 100,000 characters in all; the maxima add up to:
+    //   details      13 texts x 2,000                                   = 26,000
+    //                2 lists x 30 entries x 80                          =  4,800
+    //   items        50 x (name 80 + note 200)                          = 14,000
+    //   attacks      30 x (name 80 + dice 40 + type 80 + note 200 = 400) = 12,000
+    //   companions   10 x (name 80 + kind 80 + speed 80 + note 200
+    //                      + 5 attacks x 400)                          = 24,400
+    //                                                           total   = 81,200
+    // (equipment ids and charges, XP, defences and ids add a few thousand more). A test keeps the sum at or under 100,000.
+    public const int MaxDetailText = 2_000;
+    public const int MaxDetailListEntries = 30;
+    public const int MaxDetailListEntryLength = 80;
+    public const int MaxCustomItems = 50;
+    public const int MaxName = 80;
+    public const int MaxShortNote = 200;
+    public const int MaxCustomAttacks = 30;
+    public const int MaxCompanions = 10;
+    public const int MaxCompanionAttacks = 5;
+    public const int MinToHit = -20;
+    public const int MaxToHit = 30;
+    public const int MaxXp = 1_000_000;
+    public const int MaxDamageTypeLength = 80;
+    public const int MaxCompanionTextLength = 80;
+    public const int MaxCompanionSpeedLength = 80;
+    public const int MaxCompanionArmorClass = 50;
 
     /// <summary>A bound on recorded spells (untrusted input, SPEC Q-02); far above any SRD caster's list.</summary>
     public const int MaxSpells = 500;
@@ -30,10 +63,32 @@ public sealed record Character : IJsonOnDeserialized
     public const int MaxNotes = 200;
 
     private int _schemaVersion = CurrentSchemaVersion;
+    private CharacterDetails? _details;
+    private IReadOnlyList<CustomItem>? _customItems;
+    private IReadOnlyList<CustomAttack>? _customAttacks;
+    private IReadOnlyList<DamageDefence>? _damageDefences;
+    private IReadOnlyList<Companion>? _companions;
 
     public required Guid Id { get; init; }
 
-    public int SchemaVersion { get => _schemaVersion; init => _schemaVersion = value; }
+    /// <summary>
+    /// The schema version this character is written in, computed from its data (R73): <see cref="CurrentSchemaVersion"/> when a v9 field
+    /// is set, otherwise <see cref="PreviousSchemaVersion"/>. Every version from 1 reads as one of the two, since older data
+    /// upcasts with the new fields at their default. A version outside 1 to <see cref="CurrentSchemaVersion"/> (data from a newer build) is
+    /// kept as read, so <see cref="Validate"/> refuses it.
+    /// </summary>
+    public int SchemaVersion
+    {
+        get => _schemaVersion is >= 1 and <= CurrentSchemaVersion ? (UsesV9Fields ? CurrentSchemaVersion : PreviousSchemaVersion) : _schemaVersion;
+        init => _schemaVersion = value;
+    }
+
+    /// <summary>True when any field that only schema v9 has is set. The lists and <see cref="Details"/> are normalised to absent when empty (R74), so null is the only "unset".</summary>
+    [JsonIgnore]
+    public bool UsesV9Fields =>
+        Details is not null || CustomItems is not null || CustomAttacks is not null || DamageDefences is not null || Companions is not null || Xp is not null
+        || Play?.Companions is not null
+        || (Equipment?.Any(e => e is { Id: not null } or { Attuned: not null } or { ChargesSpent: not null }) ?? false);
 
     public required string Name { get; init; }
     public required string RulesFamily { get; init; }
@@ -110,6 +165,37 @@ public sealed record Character : IJsonOnDeserialized
     /// </summary>
     public IReadOnlyList<SessionNote> Notes { get; init; } = [];
 
+    /// <summary>
+    /// Character schema v9 (D42): the sheet's Details page (personality, appearance, backstory, languages). Text the player keeps,
+    /// never calculated. Null while every field is empty (an all-empty value is normalised to null).
+    /// </summary>
+    public CharacterDetails? Details { get => _details; init => _details = value?.Normalized(); }
+
+    /// <summary>Character schema v9 (D42): carried things that are not content (gear from a paper sheet). Never calculated. Null while empty.</summary>
+    public IReadOnlyList<CustomItem>? CustomItems { get => _customItems; init => _customItems = NullIfEmpty(value); }
+
+    /// <summary>Character schema v9 (D42): attacks recorded by hand, with a typed-in to-hit bonus and damage. Never calculated. Null while empty.</summary>
+    public IReadOnlyList<CustomAttack>? CustomAttacks { get => _customAttacks; init => _customAttacks = NullIfEmpty(value); }
+
+    /// <summary>Character schema v9 (D42): damage resistances, immunities and vulnerabilities. Typed damage uses them through <see cref="CharacterSheet.DamageDefences"/> (Wave 3, D19 amended). Types are stored lower-case. Null while empty.</summary>
+    public IReadOnlyList<DamageDefence>? DamageDefences
+    {
+        get => _damageDefences;
+        init => _damageDefences = NullIfEmpty(value?.Select(d => d is null ? d! : d with { Type = d.Type?.ToLowerInvariant()! }).ToArray());
+    }
+
+    /// <summary>Character schema v9 (D42): familiars, mounts and the like. Their current hit points are <see cref="PlayState.Companions"/>. Null while empty.</summary>
+    public IReadOnlyList<Companion>? Companions
+    {
+        get => _companions;
+        init => _companions = NullIfEmpty(value?.Select(c => c?.Normalized()!).ToArray());
+    }
+
+    /// <summary>Character schema v9 (D42): experience points as the player records them. Never derives the level. Null while unrecorded.</summary>
+    public int? Xp { get; init; }
+
+    internal static IReadOnlyList<T>? NullIfEmpty<T>(IReadOnlyList<T>? list) => list is { Count: 0 } ? null : list;
+
     public DateTimeOffset UpdatedAt { get; init; }
 
     /// <summary>
@@ -184,7 +270,10 @@ public sealed record Character : IJsonOnDeserialized
                 problems.Add(new("character.ability-out-of-range", $"{ability} score {score} must be between 1 and 30."));
         }
         problems.AddRange(Play.Validate());
-        foreach (var duplicate in Equipment.GroupBy(e => e.Item).Where(g => g.Count() > 1))
+        // Wave 3 item 25 (R158, R159): a second entry of one item exists only for an item that needs attunement or has charges, and
+        // such an entry always has an id, so a repeated item with any id-less copy is refused here. The application service checks
+        // that the item is one of those (it holds the catalog).
+        foreach (var duplicate in Equipment.GroupBy(e => e.Item).Where(g => g.Count() > 1 && g.Any(e => e.Id is null)))
             problems.Add(new("character.equipment-duplicate", "An item is recorded more than once; record one entry with its quantity.", duplicate.Key));
         foreach (var entry in Equipment.Where(e => e.Quantity is < 1 or > EquipmentEntry.MaxQuantity))
             problems.Add(new("character.equipment-quantity", $"Item quantity {entry.Quantity} must be between 1 and {EquipmentEntry.MaxQuantity}.", entry.Item));
@@ -200,7 +289,132 @@ public sealed record Character : IJsonOnDeserialized
             problems.Add(new("character.note-text-invalid", $"A session note needs 1 to {SessionNote.MaxText} characters."));
         foreach (var note in Notes.Where(n => n.Date.Year is < 1900 or > 2200))
             problems.Add(new("character.note-date-invalid", "A session note's date must be between 1900 and 2200."));
+        ValidateV9(problems);
         return problems;
+    }
+
+    /// <summary>
+    /// The v9 bounds (D42, SPEC Q-02). Every message names the field and the limit, never the player's text, because the dispatcher logs
+    /// messages and a character carries free text.
+    /// </summary>
+    private void ValidateV9(List<Diagnostic> problems)
+    {
+        if (Xp is < 0 or > MaxXp)
+            problems.Add(new("character.xp-out-of-range", $"Experience points must be between 0 and {MaxXp}."));
+        foreach (var (entry, number) in Equipment.Select((e, i) => (e, i + 1)).Where(p => p.e.ChargesSpent is < 0 or > EquipmentEntry.MaxChargesSpent))
+            problems.Add(new("character.equipment-charges-out-of-range", $"Charges spent on equipment entry {number} must be between 0 and {EquipmentEntry.MaxChargesSpent}.", entry.Item));
+        if (Equipment.Any(e => e.Id == Guid.Empty))
+            problems.Add(new("character.equipment-id-missing", "An equipment entry has an empty id; leave the id out or give it a real one."));
+        if (Equipment.Where(e => e.Id is not null).GroupBy(e => e.Id).Any(g => g.Count() > 1))
+            problems.Add(new("character.equipment-id-duplicate", "Two equipment entries share an id."));
+
+        if (Details is { } details)
+        {
+            foreach (var (field, text) in details.Texts().Where(t => t.Text is { Length: > MaxDetailText }))
+                problems.Add(new("character.details-text-too-long", $"The {field} text must be at most {MaxDetailText} characters."));
+            foreach (var (field, list) in new[] { ("languages", details.Languages), ("tools and other", details.ToolsAndOther) })
+            {
+                if (list is null)
+                    continue;
+                if (list.Count > MaxDetailListEntries)
+                    problems.Add(new("character.details-list-too-many", $"At most {MaxDetailListEntries} entries can be kept under {field}."));
+                else if (list.Any(e => string.IsNullOrWhiteSpace(e) || e.Length > MaxDetailListEntryLength))
+                    problems.Add(new("character.details-list-entry-invalid", $"Each entry under {field} needs 1 to {MaxDetailListEntryLength} characters."));
+            }
+        }
+
+        if (CustomItems is { } items)
+        {
+            if (items.Count > MaxCustomItems)
+                problems.Add(new("character.custom-items-too-many", $"At most {MaxCustomItems} custom items can be kept."));
+            else
+            {
+                foreach (var (item, number) in items.Select((c, i) => (c, i + 1)))
+                {
+                    if (string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > MaxName)
+                        problems.Add(new("character.custom-item-name-invalid", $"Custom item {number} needs a name of 1 to {MaxName} characters."));
+                    if (item.Note is { Length: > MaxShortNote })
+                        problems.Add(new("character.custom-item-note-too-long", $"The note on custom item {number} must be at most {MaxShortNote} characters."));
+                    if (item.Quantity is < 1 or > EquipmentEntry.MaxQuantity)
+                        problems.Add(new("character.custom-item-quantity", $"The quantity of custom item {number} must be between 1 and {EquipmentEntry.MaxQuantity}."));
+                }
+                if (items.Any(c => c.Id == Guid.Empty))
+                    problems.Add(new("character.custom-item-id-missing", "A custom item has no id."));
+                if (items.GroupBy(c => c.Id).Any(g => g.Count() > 1))
+                    problems.Add(new("character.custom-item-duplicate", "Two custom items share an id."));
+            }
+        }
+
+        if (CustomAttacks is { } attacks)
+        {
+            if (attacks.Count > MaxCustomAttacks)
+                problems.Add(new("character.custom-attacks-too-many", $"At most {MaxCustomAttacks} custom attacks can be kept."));
+            else
+                ValidateAttacks(attacks, "Custom attack", problems);
+        }
+
+        if (DamageDefences is { } defences)
+        {
+            if (defences.Any(d => !DamageTypes.All.Contains(d.Type, StringComparer.OrdinalIgnoreCase)))
+                problems.Add(new("character.damage-defence-type-unknown", "A damage resistance, immunity or vulnerability names a damage type TomeStack does not know."));
+            if (defences.GroupBy(d => (d.Type, d.Kind)).Any(g => g.Count() > 1))
+                problems.Add(new("character.damage-defence-duplicate", "A damage type is recorded more than once for the same kind of defence."));
+        }
+
+        if (Companions is { } companions)
+        {
+            if (companions.Count > MaxCompanions)
+                problems.Add(new("character.companions-too-many", $"At most {MaxCompanions} companions can be kept."));
+            else
+            {
+                foreach (var (companion, number) in companions.Select((c, i) => (c, i + 1)))
+                {
+                    if (string.IsNullOrWhiteSpace(companion.Name) || companion.Name.Length > MaxName)
+                        problems.Add(new("character.companion-name-invalid", $"Companion {number} needs a name of 1 to {MaxName} characters."));
+                    if (companion.Kind is { Length: > MaxCompanionTextLength } || companion.Speed is { Length: > MaxCompanionSpeedLength } || companion.Note is { Length: > MaxShortNote })
+                        problems.Add(new("character.companion-text-too-long", $"Companion {number} allows a kind of at most {MaxCompanionTextLength} characters, a speed of at most {MaxCompanionSpeedLength} and a note of at most {MaxShortNote}."));
+                    if (companion.ArmorClass is < 0 or > MaxCompanionArmorClass)
+                        problems.Add(new("character.companion-armor-class-out-of-range", $"The Armor Class of companion {number} must be between 0 and {MaxCompanionArmorClass}."));
+                    if (companion.HitPointMaximum is < 0 or > PlayState.MaxHitPoints)
+                        problems.Add(new("character.companion-hit-points-out-of-range", $"The hit point maximum of companion {number} must be between 0 and {PlayState.MaxHitPoints}."));
+                    if (companion.Attacks is { } companionAttacks)
+                    {
+                        if (companionAttacks.Count > MaxCompanionAttacks)
+                            problems.Add(new("character.companion-attacks-too-many", $"Companion {number} can have at most {MaxCompanionAttacks} attacks."));
+                        else
+                            ValidateAttacks(companionAttacks, $"Companion {number} attack", problems);
+                    }
+                }
+                if (companions.Any(c => c.Id == Guid.Empty))
+                    problems.Add(new("character.companion-id-missing", "A companion has no id."));
+                if (companions.GroupBy(c => c.Id).Any(g => g.Count() > 1))
+                    problems.Add(new("character.companion-duplicate", "Two companions share an id."));
+            }
+        }
+
+        if (Play.Companions is { } companionPlay && companionPlay.Any(p => Companions is null || Companions.All(c => c.Id != p.Id)))
+            problems.Add(new("character.companion-play-unknown", "Hit points are recorded for a companion the character does not have."));
+    }
+
+    private static void ValidateAttacks(IReadOnlyList<CustomAttack> attacks, string label, List<Diagnostic> problems)
+    {
+        foreach (var (attack, number) in attacks.Select((a, i) => (a, i + 1)))
+        {
+            if (string.IsNullOrWhiteSpace(attack.Name) || attack.Name.Length > MaxName)
+                problems.Add(new("character.custom-attack-name-invalid", $"{label} {number} needs a name of 1 to {MaxName} characters."));
+            if (attack.Note is { Length: > MaxShortNote })
+                problems.Add(new("character.custom-attack-note-too-long", $"The note on {label.ToLowerInvariant()} {number} must be at most {MaxShortNote} characters."));
+            if (attack.DamageType is { Length: > MaxDamageTypeLength })
+                problems.Add(new("character.custom-attack-type-too-long", $"The damage type of {label.ToLowerInvariant()} {number} must be at most {MaxDamageTypeLength} characters."));
+            if (attack.ToHit is < MinToHit or > MaxToHit)
+                problems.Add(new("character.custom-attack-to-hit-out-of-range", $"The to-hit bonus of {label.ToLowerInvariant()} {number} must be between {MinToHit} and +{MaxToHit}."));
+            if (attack.Damage is not null && !DiceExpression.TryParse(attack.Damage, out _, out _))
+                problems.Add(new("character.custom-attack-damage-invalid", $"The damage of {label.ToLowerInvariant()} {number} must be dice such as 1d8+3 (at most {DiceLimits.MaxLength} characters, {DiceLimits.MaxDice} dice, {DiceLimits.MaxSides} sides)."));
+        }
+        if (attacks.Any(a => a.Id == Guid.Empty))
+            problems.Add(new("character.custom-attack-id-missing", $"A {label.ToLowerInvariant()} has no id."));
+        if (attacks.GroupBy(a => a.Id).Any(g => g.Count() > 1))
+            problems.Add(new("character.custom-attack-duplicate", $"Two {label.ToLowerInvariant()}s share an id."));
     }
 
     private List<Diagnostic> EmptyEntries()
@@ -221,6 +435,12 @@ public sealed record Character : IJsonOnDeserialized
         Check("spells", Spells is null || Spells.Any(s => s?.Spell is null));
         Check("notes", Notes is null || Notes.Any(n => n is null || n.Text is null));
         Check("currency", Currency is null);
+        Check("details", Details is { } d && ((d.Languages?.Any(l => l is null) ?? false) || (d.ToolsAndOther?.Any(l => l is null) ?? false)));
+        Check("custom items", CustomItems?.Any(i => i is null) ?? false);
+        Check("custom attacks", CustomAttacks?.Any(a => a is null) ?? false);
+        Check("damage defences", DamageDefences?.Any(x => x is null || x.Type is null) ?? false);
+        Check("companions", Companions?.Any(c => c is null || (c.Attacks?.Any(a => a is null) ?? false)) ?? false);
+        Check("companion play state", Play?.Companions?.Any(c => c is null) ?? false);
         Check("play state", Play is null || Play.Resources is null || Play.Resources.Any(r => r?.ResourceId is null) || Play.Conditions is null || Play.Conditions.Any(c => c is null)
             || Play.HitDiceSpent is null || Play.HitDiceSpent.Any(h => h is null) || Play.DeathSaves is null
             || Play.SpellSlotsSpent is null || Play.SpellSlotsSpent.Any(s => s is null)
@@ -229,15 +449,9 @@ public sealed record Character : IJsonOnDeserialized
         return problems;
     }
 
-    /// <summary>
-    /// v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, v5 no spells or spell
-    /// slots, v6 no toggles, and v7 no currency, notes or concentration; the defaults (level 1, none, full, nothing spent, all off) are exactly their meaning.
-    /// </summary>
-    void IJsonOnDeserialized.OnDeserialized()
-    {
-        if (_schemaVersion is >= 1 and < CurrentSchemaVersion)
-            _schemaVersion = CurrentSchemaVersion;
-    }
+    // Reading needs no upcast step: v1 has no level, v2 no classes, v3 no play state, v4 no hit dice, death saves or inspiration, v5 no
+    // spells or spell slots, v6 no toggles, v7 no currency, notes or concentration, and v8 none of the v9 fields; the defaults (level 1,
+    // none, full, nothing spent, all off, absent) are exactly their meaning, and SchemaVersion is computed from what is set.
 }
 
 public sealed record AbilityScores(int Str, int Dex, int Con, int Int, int Wis, int Cha)
@@ -266,10 +480,23 @@ public sealed record CampaignException(ContentReference Content, string Reason, 
 /// <summary>A recorded, per-character decision to use one pinned revision outside its rules families (B06).</summary>
 public sealed record CrossFamilyException(ContentReference Content, string Reason, DateTimeOffset? RecordedAt = null);
 
-/// <summary>One item carried: an exact pin to the item revision, whether it is equipped (worn or held), and how many.</summary>
-public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1)
+/// <summary>
+/// One item carried: an exact pin to the item revision, whether it is equipped (worn or held), and how many. Schema v9 (D42) adds
+/// <paramref name="Id"/> (names this entry, for a later change to find it), <paramref name="Attuned"/> and <paramref name="ChargesSpent"/>
+/// (recorded as the player says; never calculated). All three are null until set. "Not attuned" (false) and "no charges spent" (0)
+/// are the same as unset, so they are stored as null and do not make the character v9; readers treat null as false and 0.
+/// </summary>
+public sealed record EquipmentEntry(ContentReference Item, bool Equipped = false, int Quantity = 1, Guid? Id = null, bool? Attuned = null, int? ChargesSpent = null)
 {
+    private readonly bool? _attuned = Attuned == false ? null : Attuned;
+    private readonly int? _chargesSpent = ChargesSpent == 0 ? null : ChargesSpent;
+
+    public bool? Attuned { get => _attuned; init => _attuned = value == false ? null : value; }
+
+    public int? ChargesSpent { get => _chargesSpent; init => _chargesSpent = value == 0 ? null : value; }
+
     public const int MaxQuantity = 9_999;
+    public const int MaxChargesSpent = 1_000;
 }
 
 /// <summary>
@@ -293,6 +520,113 @@ public sealed record SessionNote(Guid Id, DateOnly Date, string Text, DateTimeOf
 {
     public const int MaxText = 4_000;
 }
+
+/// <summary>
+/// Character schema v9 (D42): the sheet's Details page. All free text the player keeps, never calculated. Each text is at most
+/// <see cref="Character.MaxDetailText"/> characters; <paramref name="Languages"/> and <paramref name="ToolsAndOther"/> are short entries.
+/// </summary>
+public sealed record CharacterDetails(
+    string? Alignment = null, string? PersonalityTraits = null, string? Ideals = null, string? Bonds = null, string? Flaws = null,
+    Appearance? Appearance = null, string? Backstory = null, string? AlliesAndOrganisations = null,
+    IReadOnlyList<string>? Languages = null, IReadOnlyList<string>? ToolsAndOther = null)
+{
+    /// <summary>The same details with empty text and empty lists made absent, or null when nothing is left (R74), so clearing the page makes the character v8 again.</summary>
+    internal CharacterDetails? Normalized()
+    {
+        var result = this with
+        {
+            Alignment = Text(Alignment),
+            PersonalityTraits = Text(PersonalityTraits),
+            Ideals = Text(Ideals),
+            Bonds = Text(Bonds),
+            Flaws = Text(Flaws),
+            Appearance = Appearance?.Normalized(),
+            Backstory = Text(Backstory),
+            AlliesAndOrganisations = Text(AlliesAndOrganisations),
+            Languages = Character.NullIfEmpty(Languages),
+            ToolsAndOther = Character.NullIfEmpty(ToolsAndOther),
+        };
+        return result == new CharacterDetails() ? null : result;
+    }
+
+    internal static string? Text(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    internal IEnumerable<(string Field, string? Text)> Texts()
+    {
+        yield return ("alignment", Alignment);
+        yield return ("personality traits", PersonalityTraits);
+        yield return ("ideals", Ideals);
+        yield return ("bonds", Bonds);
+        yield return ("flaws", Flaws);
+        yield return ("backstory", Backstory);
+        yield return ("allies and organisations", AlliesAndOrganisations);
+        if (Appearance is not { } look)
+            yield break;
+        yield return ("age", look.Age);
+        yield return ("height", look.Height);
+        yield return ("weight", look.Weight);
+        yield return ("eyes", look.Eyes);
+        yield return ("skin", look.Skin);
+        yield return ("hair", look.Hair);
+    }
+}
+
+/// <summary>Character schema v9 (D42): how the character looks, as free text (each at most <see cref="Character.MaxDetailText"/> characters).</summary>
+public sealed record Appearance(string? Age = null, string? Height = null, string? Weight = null, string? Eyes = null, string? Skin = null, string? Hair = null)
+{
+    internal Appearance? Normalized()
+    {
+        var result = new Appearance(CharacterDetails.Text(Age), CharacterDetails.Text(Height), CharacterDetails.Text(Weight), CharacterDetails.Text(Eyes), CharacterDetails.Text(Skin), CharacterDetails.Text(Hair));
+        return result == new Appearance() ? null : result;
+    }
+}
+
+/// <summary>Character schema v9 (D42): a carried thing that is not content (gear copied from a paper sheet). Never calculated; <paramref name="Equipped"/> is a reminder.</summary>
+public sealed record CustomItem(Guid Id, string Name, int Quantity, string? Note, bool Equipped);
+
+/// <summary>
+/// Character schema v9 (D42): an attack the player recorded by hand. <paramref name="ToHit"/> is typed in, never calculated;
+/// <paramref name="Damage"/> is a dice expression (<see cref="DiceExpression"/>) or null.
+/// </summary>
+public sealed record CustomAttack(Guid Id, string Name, int ToHit, string? Damage, string? DamageType, string? Note);
+
+/// <summary>Character schema v9 (D42): the damage types of both SRDs (a closed list; the same in 5.1 and 5.2.1).</summary>
+public static class DamageTypes
+{
+    public static readonly IReadOnlyList<string> All =
+        ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+
+    /// <summary>
+    /// Content schema v10: maps a damage type written in any case to its lowercase name in <see cref="All"/>. Exact apart
+    /// from case (no trimming): anything else, including null, is refused with <paramref name="canonical"/> empty.
+    /// </summary>
+    public static bool TryNormalize(string? name, out string canonical)
+    {
+        canonical = All.FirstOrDefault(t => string.Equals(t, name, StringComparison.OrdinalIgnoreCase)) ?? "";
+        return canonical.Length > 0;
+    }
+}
+
+/// <summary>
+/// Character schema v9 (D42): how a character treats one damage type. Wave 3 (D19 amended): the sheet merges these with the
+/// v10 damage grants (<see cref="CharacterSheet.DamageDefences"/>), and typed damage taken through the play command uses them.
+/// </summary>
+public enum DamageDefenceKind { Resistance, Immunity, Vulnerability }
+
+/// <summary>Character schema v9 (D42): one damage resistance, immunity or vulnerability. <paramref name="Type"/> is one of <see cref="DamageTypes.All"/>, stored lower-case.</summary>
+public sealed record DamageDefence(string Type, DamageDefenceKind Kind);
+
+/// <summary>
+/// Character schema v9 (D42): a familiar, mount or similar. Its current hit points are in <see cref="PlayState.Companions"/>.
+/// Nothing here is calculated.
+/// </summary>
+public sealed record Companion(Guid Id, string Name, string? Kind, int? ArmorClass, int HitPointMaximum, string? Speed, IReadOnlyList<CustomAttack>? Attacks, string? Note)
+{
+    internal Companion Normalized() => this with { Attacks = Character.NullIfEmpty(Attacks) };
+}
+
+/// <summary>Character schema v9 (D42): a companion's current hit points (null: at the maximum) and temporary hit points.</summary>
+public sealed record CompanionPlay(Guid Id, int? Current, int Temporary);
 
 /// <summary>SPEC C-06. A labeled user override applied as the final display layer.</summary>
 public sealed record FieldOverride(string Field, int Value, string? Reason = null);

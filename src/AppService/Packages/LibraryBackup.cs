@@ -433,12 +433,7 @@ public sealed partial class PackageService
     /// A network (UNC) or device path would make Windows connect to another machine just by listing sources, sending the
     /// user's credentials. A relative path would mean whatever file is in the working folder.
     /// </summary>
-    internal static bool IsSafeLinkedPath(string? path) =>
-        path is { Length: > 3 and <= 32_767 }
-        && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/'
-        && Path.IsPathFullyQualified(path)
-        && !path.Contains("..", StringComparison.Ordinal)
-        && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsSafeLinkedPath(string? path) => LocalDrivePath.IsSafe(path, ".pdf");
 
     /// <summary>What a library restore does not bring back, and what it changes beyond the item list.</summary>
     private List<Diagnostic> LibraryWarnings(ParsedPackage parsed)

@@ -28,7 +28,7 @@ public class PlayCommandTests
     // The M2 spell pack (seeded by TempApp): Fixture Arcanist (1), Fixture Spark (11, a cantrip), Fixture Veil (13, concentration).
     private static ContentReference SpellRef(int n) => new(Guid.Parse($"5f5dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"5f5de000-0000-4000-8000-{n:D12}"));
 
-    private static (TempApp Temp, Guid Id, ContentReference Veil) Caster(string family = RulesFamilies.Srd521)
+    private static (TempApp Temp, Guid Id, ContentReference Veil) Caster(string family = RulesFamilies.Srd521, IReadOnlyList<DamageDefence>? defences = null)
     {
         var temp = new TempApp();
         var arcanist = SpellRef(1);
@@ -42,6 +42,7 @@ public class PlayCommandTests
             Classes = [new(arcanist, 3)],
             BaseAbilities = new(8, 14, 12, 16, 10, 10),
             Spells = [new(arcanist.ContentId, veil), new(arcanist.ContentId, SpellRef(11))],
+            DamageDefences = defences,
         };
         return (temp, temp.App.SaveCharacter(character).Character.Id, veil);
     }
@@ -316,7 +317,7 @@ public class PlayCommandTests
         Assert.Equal(2, stored.Character.Play.Exhaustion);
         Assert.True(stored.Character.Play.Inspiration);
         Assert.Equal([new HitDiceUse(12, 1)], stored.Character.Play.HitDiceSpent);
-        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, stored.Character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
 
         using var destination = new TempApp();
         destination.App.ApplyImport(temp.App.ExportCharacters([id]).Content);
@@ -324,5 +325,252 @@ public class PlayCommandTests
         Assert.Equal(TempApp.Json(stored.Character.Play), TempApp.Json(imported.Character.Play));
         Assert.Equal(3, imported.Sheet.Resources!.Single(r => r.ResourceId == "rage").Current); // the short rest gave the Rage back
         Assert.Equal(2, Assert.Single(imported.Sheet.HitDice!).Remaining);
+    }
+
+    // ---- Wave 3 item 21 (D19 amended): typed damage and damage defences --------------------------------------------------
+
+    private static PlayCommand Typed(Guid id, int amount, string? type) => new(id, PlayActionKind.Damage, Confirm: true, Amount: amount, DamageType: type);
+
+    private static (TempApp Temp, Guid Id) BrennaWith(IReadOnlyList<DamageDefence>? defences, ContentReference? feat = null)
+    {
+        var temp = new TempApp();
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { DamageDefences = defences, Pins = feat is { } pinned ? [.. brenna.Pins, pinned] : brenna.Pins }).Character.Id;
+        return (temp, id);
+    }
+
+    private static ContentRevision HideRevision(string revisionSuffix, int schema, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"5fb10d00-0000-4000-8000-0000000000{revisionSuffix}"), RevisionId = Guid.Parse($"5fb10e00-0000-4000-8000-0000000000{revisionSuffix}"),
+        SchemaVersion = schema, Kind = ContentKind.Feat, Name = "Testy Hide", RulesFamilies = [RulesFamilies.Srd521],
+        Provenance = new(TempApp.LoadFixture<ContentPack>("fixture-pack-m3-effects.json").Sources[0].Id, new(3)), Status = RevisionStatus.Published, Effects = effects,
+    };
+
+    private static ContentReference Install(TempApp temp, ContentRevision revision)
+    {
+        temp.App.Store.AddRevision(revision);
+        return revision.Reference;
+    }
+
+    private static void AssertOutcome(DamageOutcome? outcome, int amount, string? type, DamageEffect effect, int adjusted, int absorbed, int lost)
+    {
+        Assert.Equal((amount, type, effect, adjusted, absorbed, lost), (outcome!.Amount, outcome.Type, outcome.Effect, outcome.Adjusted, outcome.Absorbed, outcome.Lost));
+        Assert.Empty(outcome.Warnings);
+    }
+
+    private static readonly DamageDefence SlashingResistance = new("slashing", DamageDefenceKind.Resistance);
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void Review_focus_3_typed_damage_is_halved_then_taken_by_temporary_hit_points_then_hit_points_and_undo_is_exact(string family)
+    {
+        var (temp, id, veil) = Caster(family, [SlashingResistance]);
+        using var _ = temp;
+        var maximum = temp.App.GetCharacter(id).Sheet.HitPoints!.Maximum;
+        temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 5));
+
+        var view = temp.App.Play(Typed(id, 13, "slashing"));
+
+        AssertOutcome(view.Damage, 13, "slashing", DamageEffect.Halved, 6, 5, 1);
+        Assert.Equal((0, maximum - 1), (view.Character.Play.TemporaryHitPoints, view.Sheet.HitPoints!.Current));
+        Assert.Equal(10, view.Character.Play.Concentration!.PendingSaveDc); // max(10, 6 / 2): the amount after resistance, before temporary hit points
+
+        // The Undo the UI builds (D23): the exact hit points, then the temporary hit points, and the concentration check cleared.
+        temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: maximum));
+        view = temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 5));
+        Assert.Equal((5, maximum), (view.Sheet.HitPoints!.Temporary, view.Sheet.HitPoints.Current));
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void The_concentration_dc_comes_from_the_amount_after_defences_and_before_temporary_hit_points(string family)
+    {
+        var cap = RulesFamilies.Get(family).ConcentrationSaveMaximumDc ?? 100; // PlayState validation bound when the family has none
+        DamageOutcome Hit(int temporary, int amount, string type, out int? dc)
+        {
+            var (temp, id, veil) = Caster(family, [SlashingResistance, new("cold", DamageDefenceKind.Vulnerability)]);
+            using var _ = temp;
+            temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+            temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: temporary));
+            var view = temp.App.Play(Typed(id, amount, type));
+            dc = view.Character.Play.Concentration!.PendingSaveDc;
+            return view.Damage!;
+        }
+
+        // 60 slashing resisted is 30, so the DC is 15; from the 60 entered it would be 30.
+        Hit(1000, 60, "slashing", out var resisted);
+        Assert.Equal(15, resisted);
+
+        // 40 cold doubled is 80, so the DC is 40, capped by the family; from the 40 entered it would be 20.
+        Hit(1000, 40, "cold", out var doubled);
+        Assert.Equal(Math.Min(40, cap), doubled);
+
+        // 30 cold doubled is 60: 50 temporary hit points take part of it, and the DC still comes from the 60 (30), not from the 10 left
+        // for hit points (10) nor from the 30 entered (15).
+        var partly = Hit(50, 30, "cold", out var absorbed);
+        Assert.Equal((60, 50, 10), (partly.Adjusted, partly.Absorbed, partly.Lost));
+        Assert.Equal(Math.Min(30, cap), absorbed);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void Immunity_takes_nothing_and_asks_for_no_concentration_check(string family)
+    {
+        var (temp, id, veil) = Caster(family, [new("fire", DamageDefenceKind.Immunity)]);
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.StartConcentration, Confirm: true, ContentId: veil.ContentId));
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 5));
+        var before = temp.App.GetCharacter(id).Character.Play;
+
+        var view = temp.App.Play(Typed(id, 13, "fire"));
+
+        AssertOutcome(view.Damage, 13, "fire", DamageEffect.Immune, 0, 0, 0);
+        Assert.Equal(TempApp.Json(before), TempApp.Json(view.Character.Play)); // no hit point change, no pending save
+        Assert.Null(view.Character.Play.Concentration!.PendingSaveDc);
+    }
+
+    [Fact]
+    public void Vulnerability_doubles_before_temporary_hit_points_and_resistance_with_vulnerability_halves_then_doubles()
+    {
+        var (temp, id) = BrennaWith([new("cold", DamageDefenceKind.Vulnerability), new("slashing", DamageDefenceKind.Resistance), new("slashing", DamageDefenceKind.Vulnerability)]);
+        using var _ = temp;
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 5));
+
+        var view = temp.App.Play(Typed(id, 13, "cold"));
+        AssertOutcome(view.Damage, 13, "cold", DamageEffect.Doubled, 26, 5, 21);
+        Assert.Equal((0, 35 - 21), (view.Sheet.HitPoints!.Temporary, view.Sheet.HitPoints.Current));
+
+        view = temp.App.Play(Typed(id, 13, "slashing")); // halved to 6 (rounded down), then doubled
+        AssertOutcome(view.Damage, 13, "slashing", DamageEffect.HalvedThenDoubled, 12, 0, 12);
+    }
+
+    [Fact]
+    public void Several_resistances_to_one_type_count_once_and_a_grant_type_is_matched_in_any_case()
+    {
+        var grants = HideRevision("e1", 10,
+            new GrantEffect { Id = "hide-a", Grant = GrantKind.DamageResistance, DamageType = "Slashing" },
+            new GrantEffect { Id = "hide-b", Grant = GrantKind.DamageResistance, DamageType = "SLASHING" });
+        var (temp, id) = BrennaWith([SlashingResistance]);
+        using var _ = temp;
+        var feat = Install(temp, grants);
+        var brenna = temp.App.GetCharacter(id).Character;
+        temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, feat] });
+
+        var sheet = temp.App.GetCharacter(id).Sheet;
+        Assert.Equal(3, Assert.Single(sheet.DamageDefences!).Sources.Count);
+
+        var view = temp.App.Play(Typed(id, 13, "SLASHING")); // the command's type is normalised too
+        AssertOutcome(view.Damage, 13, "slashing", DamageEffect.Halved, 6, 0, 6);
+    }
+
+    [Fact]
+    public void Untyped_damage_ignores_every_defence_and_a_type_without_a_defence_is_unchanged()
+    {
+        var (temp, id) = BrennaWith([SlashingResistance, new("fire", DamageDefenceKind.Immunity)]);
+        using var _ = temp;
+
+        var view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 13));
+        AssertOutcome(view.Damage, 13, null, DamageEffect.None, 13, 0, 13);
+        Assert.Equal(35 - 13, view.Sheet.HitPoints!.Current);
+
+        view = temp.App.Play(Typed(id, 4, "acid"));
+        AssertOutcome(view.Damage, 4, "acid", DamageEffect.None, 4, 0, 4);
+    }
+
+    [Fact]
+    public void An_unknown_damage_type_is_refused_with_a_code_and_nothing_changes()
+    {
+        var (temp, id) = BrennaWith(null);
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        foreach (var type in new[] { "sonic", "", " fire", "fire " })
+            Assert.Equal("play.damage-type-unknown", Assert.Throws<AppValidationException>(() => temp.App.Play(Typed(id, 5, type))).Problems[0].Code);
+        Assert.Equal("play.damage-type-unknown", Code(Dispatch(temp, new { characterId = id, action = "damage", amount = 5, damageType = "sonic", confirm = true })));
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void A_damage_grant_in_a_v9_revision_is_inert()
+    {
+        // Stored by an older build: the kind is unreadable below v10, so it stays an unknown effect and gives no defence.
+        var plain = HideRevision("e2", 9, new GrantEffect { Id = "hide", Grant = GrantKind.Proficiency, Target = FieldIds.Skill("stealth") });
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(plain, RulesJson.Compact))!;
+        node["effects"]!.AsArray()[0] = System.Text.Json.Nodes.JsonNode.Parse("{\"type\":\"grant\",\"id\":\"hide\",\"grant\":\"damageResistance\",\"damageType\":\"fire\"}");
+        var stored = JsonSerializer.Deserialize<ContentRevision>(node.ToJsonString(RulesJson.Compact), RulesJson.Compact)!;
+        Assert.IsType<UnknownEffect>(stored.Effects[0]);
+        var (temp, id) = BrennaWith(null);
+        using var _ = temp;
+        var feat = Install(temp, stored);
+        var brenna = temp.App.GetCharacter(id).Character;
+        temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, feat] });
+
+        Assert.Null(temp.App.GetCharacter(id).Sheet.DamageDefences);
+        AssertOutcome(temp.App.Play(Typed(id, 12, "fire")).Damage, 12, "fire", DamageEffect.None, 12, 0, 12);
+    }
+
+    [Fact]
+    public void Massive_damage_warns_when_the_remainder_at_zero_equals_the_maximum_and_never_kills()
+    {
+        var (temp, id) = BrennaWith(null);
+        using var _ = temp;
+
+        var view = temp.App.Play(Typed(id, 69, "fire")); // 34 left over at 0: one under the maximum of 35
+        Assert.Empty(view.Damage!.Warnings);
+        Assert.Equal(0, view.Sheet.HitPoints!.Current);
+
+        view = temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: 35));
+        view = temp.App.Play(Typed(id, 70, "fire")); // exactly 35 left over
+        var warning = Assert.Single(view.Damage!.Warnings);
+        Assert.Equal("play.massive-damage", warning.Code);
+        Assert.Contains("35", warning.Message, StringComparison.Ordinal);
+        Assert.Equal(0, view.Sheet.HitPoints!.Current); // a warning only: no automatic death, no death saves recorded
+        Assert.Equal(new DeathSaves(), view.Character.Play.DeathSaves);
+
+        temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: 35));
+        temp.App.Play(new(id, PlayActionKind.SetTemporaryHitPoints, Confirm: true, Amount: 10));
+        view = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 80)); // 10 absorbed, 35 to 0, 35 left over
+        Assert.Equal("play.massive-damage", Assert.Single(view.Damage!.Warnings).Code);
+    }
+
+    [Fact]
+    public void Resistance_can_keep_a_hit_from_being_massive()
+    {
+        var (temp, id) = BrennaWith([SlashingResistance]);
+        using var _ = temp;
+
+        var view = temp.App.Play(Typed(id, 140, "slashing")); // 70 after resistance: 35 left over, the maximum
+        Assert.Equal("play.massive-damage", Assert.Single(view.Damage!.Warnings).Code);
+        temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: 35));
+        view = temp.App.Play(Typed(id, 138, "slashing")); // 69 after resistance: 34 left over
+        Assert.Empty(view.Damage!.Warnings);
+    }
+
+    [Fact]
+    public void Typed_damage_that_crosses_half_the_hit_points_bloodies_and_undo_puts_it_back()
+    {
+        var (temp, id) = BrennaWith([new("fire", DamageDefenceKind.Vulnerability)]);
+        using var _ = temp;
+        Assert.NotEqual(true, temp.App.GetCharacter(id).Sheet.Bloodied);
+
+        var view = temp.App.Play(Typed(id, 9, "fire")); // doubled to 18: 17 of 35 left, which is half rounded down
+        Assert.True(view.Sheet.Bloodied);
+
+        view = temp.App.Play(new(id, PlayActionKind.SetHitPoints, Confirm: true, Amount: 35));
+        Assert.NotEqual(true, view.Sheet.Bloodied);
+    }
+
+    [Fact]
+    public void A_play_command_that_is_not_damage_carries_no_outcome()
+    {
+        var (temp, id) = BrennaWith(null);
+        using var _ = temp;
+
+        Assert.Null(temp.App.Play(new(id, PlayActionKind.Heal, Confirm: true, Amount: 1)).Damage);
+        Assert.Null(temp.App.GetCharacter(id).Damage);
     }
 }

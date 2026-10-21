@@ -16,7 +16,7 @@ public class SpellListTests
         var source = temp.App.CreateHomebrewSource(new("Test Spell List Book", [RulesFamilies.Srd51, RulesFamilies.Srd521]));
         temp.App.AttachPdf(source.Id, "fixture-import.pdf", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-import.pdf")));
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
+        temp.WaitForImport(job.Id);
         return (temp, source.Id, job.Id);
     }
 
@@ -58,6 +58,22 @@ public class SpellListTests
     }
 
     [Fact]
+    public void The_rows_returned_for_a_spell_list_add_carry_the_etag_as_stored_after_the_write()
+    {
+        // R134: the panel reloads these rows; a pre-write etag would make its next accept or edit look stale.
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var veil = Named(temp, jobId, "Fixture Frost Veil");
+        var before = temp.EtagOf(veil.Id);
+
+        var result = temp.App.AddCandidatesToSpellList(new([veil.Id], "wizard"));
+
+        var returned = Assert.Single(result.Updated);
+        Assert.NotEqual(before, returned.Etag);
+        Assert.Equal(temp.EtagOf(veil.Id), returned.Etag);
+    }
+
+    [Fact]
     public void A_spell_candidate_with_a_list_and_no_other_unsure_field_can_then_be_accepted_with_the_key()
     {
         var (temp, _, jobId) = Imported();
@@ -65,7 +81,7 @@ public class SpellListTests
         var veil = Named(temp, jobId, "Fixture Frost Veil");
 
         temp.App.AddCandidatesToSpellList(new([veil.Id], "wizard"));
-        var accepted = temp.App.AcceptCandidate(new(veil.Id, Confirm: true));
+        var accepted = temp.Accept(new(veil.Id, Confirm: true));
 
         var draft = temp.App.Store.FindRevision(accepted.Draft!)!;
         Assert.Equal(["wizard"], Assert.IsType<SpellEffect>(Assert.Single(draft.Effects)).Lists);
@@ -81,7 +97,7 @@ public class SpellListTests
         var ember = Named(temp, jobId, "Fixture Ember Lance");
         var stormcall = Named(temp, jobId, "Fixture Stormcall");
         var ghost = Guid.NewGuid();
-        temp.App.IgnoreCandidate(veil.Id);
+        temp.Ignore(veil.Id);
         temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
         // R59: the key is already there and every key is it, so the repeat is a confirmation (updated), not a skip.
         var again = temp.App.AddCandidatesToSpellList(new([ember.Id], "fixture-mage"));
@@ -132,7 +148,7 @@ public class SpellListTests
         Assert.Equal(["fixture-seer"], ListsOf(saved));
         Assert.DoesNotContain("lists", saved.Current.LowConfidenceFields);
         Assert.DoesNotContain(temp.App.CheckCandidate(veil.Id).Blockers, b => b.Code == "candidate.low-confidence");
-        Assert.NotNull(temp.App.AcceptCandidate(new(veil.Id, Confirm: true)).Draft);
+        Assert.NotNull(temp.Accept(new(veil.Id, Confirm: true)).Draft);
     }
 
     [Fact]
@@ -153,7 +169,7 @@ public class SpellListTests
         Assert.Equal(["fixture-seer", "wizard"], ListsOf(saved));
         Assert.Contains("lists", saved.Current.LowConfidenceFields);
         Assert.Contains("candidate.low-confidence", temp.App.CheckCandidate(veil.Id).Blockers.Select(b => b.Code));
-        Assert.Throws<AppValidationException>(() => temp.App.AcceptCandidate(new(veil.Id, Confirm: true)));
+        Assert.Throws<AppValidationException>(() => temp.Accept(new(veil.Id, Confirm: true)));
     }
 
     [Fact]

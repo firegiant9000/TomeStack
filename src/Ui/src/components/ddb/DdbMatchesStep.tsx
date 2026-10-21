@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { client } from '../../api/client';
-import type { ChoiceSelection, ChoiceStatus, DdbPreview, MatchCandidate, MatchRow, MatchStatus, Resolution, RulesFamilyId } from '../../api/types';
-import { kindLabels, kindOrder, noteLabels, statusLabels } from './ddbLabels';
+import type { ChoiceSelection, ChoiceStatus, DdbPreview, MatchCandidate, MatchRow, MatchStatus, Resolution, RulesFamilyId, StubOffer } from '../../api/types';
+import { kindLabels, kindOrder, noteLabels, statusLabels, stubReasons } from './ddbLabels';
 
 interface Props {
   preview?: DdbPreview;
@@ -12,6 +12,9 @@ interface Props {
   onResolve: (resolution: Resolution) => void;
   onClear: (rowId: string) => void;
   onAnswer: (answer: ChoiceSelection) => void;
+  /** D35: the class row the user asked to create a homebrew class for (at most one per import, R100). */
+  createClassRow?: string;
+  onCreateClassRow: (rowId?: string) => void;
   onError: (error: unknown) => void;
 }
 
@@ -29,7 +32,7 @@ const filters: { id: Filter; label: string; shows: (status: MatchStatus) => bool
  * the user, and every row can be left out. Most content of a real sheet is not in the installed SRD and homebrew, so
  * "Not found" is expected; it is listed as a gap note.
  */
-export function DdbMatchesStep({ preview, family, campaignId, resolutions, answers, onResolve, onClear, onAnswer, onError }: Props) {
+export function DdbMatchesStep({ preview, family, campaignId, resolutions, answers, onResolve, onClear, onAnswer, createClassRow, onCreateClassRow, onError }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [names, setNames] = useState<Record<string, string>>({});
 
@@ -62,7 +65,7 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
       </fieldset>
       {kindOrder.map((kind) => {
         const rows = preview.matches
-          .filter((r) => r.kind === kind && shows(r.status))
+          .filter((r) => r.kind === kind && (shows(r.status) || r.rowId === preview.stub?.rowId)) // the created class stays listed so its box keeps focus
           .sort((a, b) => Number(b.status === 'choose') - Number(a.status === 'choose'));
         if (rows.length === 0) return null;
         return (
@@ -78,7 +81,18 @@ export function DdbMatchesStep({ preview, family, campaignId, resolutions, answe
             </thead>
             <tbody>
               {rows.map((row) => (
-                <Row key={row.rowId} row={row} names={names} resolution={resolutions[row.rowId]} onResolve={onResolve} onClear={onClear} />
+                <Row
+                  key={row.rowId}
+                  row={row}
+                  names={names}
+                  resolution={resolutions[row.rowId]}
+                  offer={preview.stubOffers?.find((o) => o.rowId === row.rowId)}
+                  creating={createClassRow === row.rowId}
+                  created={preview.stub?.rowId === row.rowId}
+                  onResolve={onResolve}
+                  onClear={onClear}
+                  onCreateClassRow={onCreateClassRow}
+                />
               ))}
             </tbody>
           </table>
@@ -106,16 +120,52 @@ function Row({
   row,
   names,
   resolution,
+  offer,
+  creating,
+  created,
   onResolve,
   onClear,
+  onCreateClassRow,
 }: {
   row: MatchRow;
   names: Record<string, string>;
   resolution?: Resolution;
+  offer?: StubOffer;
+  creating: boolean;
+  /** The preview created the class for this row (its note may be the campaign's instead of `stub.created`). */
+  created: boolean;
   onResolve: (resolution: Resolution) => void;
   onClear: (rowId: string) => void;
+  onCreateClassRow: (rowId?: string) => void;
 }) {
   const headerId = `ddb-row-${row.rowId.replaceAll(':', '-')}`;
+  // D35: a class row nothing matched may be created as a homebrew class. When it cannot be (no readable hit die, or another
+  // row already creates one, R100) the box stays focusable with aria-disabled and its reason linked, not hidden.
+  const reason = offer?.note ? stubReasons[offer.note] : undefined;
+  const reasonId = `${headerId}-stub-reason`;
+  const stubBox = (created || (offer && row.status === 'notFound')) && (
+    <>
+      <label>
+        <input
+          type="checkbox"
+          checked={created || creating}
+          aria-disabled={reason ? true : undefined}
+          aria-describedby={reason ? reasonId : undefined}
+          onChange={(e) => {
+            if (reason) return;
+            onCreateClassRow(e.target.checked ? row.rowId : undefined);
+          }}
+        />{' '}
+        Create a homebrew class {offer?.name ?? row.label} for this character
+      </label>
+      {reason && (
+        <span className="hint" id={reasonId}>
+          {' '}
+          {reason}
+        </span>
+      )}
+    </>
+  );
   const leftOut = resolution?.leaveOut === true || row.status === 'leftOut';
   const selected = row.candidates.findIndex(
     (c) =>
@@ -134,7 +184,8 @@ function Row({
       <td>{row.chosen ? `${describe(row.chosen, names)} · ${row.chosen.families.join(', ')}` : row.candidates.length > 1 ? `${row.candidates.length} candidates` : '—'}</td>
       <td>
         <div role="group" aria-labelledby={headerId}>
-          {row.candidates.length > 0 && (
+          {stubBox}
+          {!created && row.candidates.length > 0 && (
             <select
               aria-label={`Match for ${row.label}`}
               value={selected < 0 || leftOut ? '' : String(selected)}
@@ -153,7 +204,7 @@ function Row({
               ))}
             </select>
           )}
-          {(row.candidates.length > 0 || row.status === 'leftOut') && (
+          {!created && (row.candidates.length > 0 || row.status === 'leftOut') && (
             <label>
               <input
                 type="checkbox"

@@ -19,7 +19,8 @@ public sealed record RestRequest(
     bool Confirm = false,
     string? Basis = null,
     IReadOnlyList<string>? Skip = null,
-    IReadOnlyList<HitDieRoll>? HitDice = null);
+    IReadOnlyList<HitDieRoll>? HitDice = null,
+    IReadOnlyList<ChargeRoll>? ChargeRolls = null);
 
 public sealed partial class TomeStackApp
 {
@@ -28,9 +29,9 @@ public sealed partial class TomeStackApp
     /// Writes nothing. A short rest proposes the hit dice in <paramref name="hitDice"/> (rolled in TomeStack or at the
     /// table) and the short-rest recoveries; a long rest proposes hit points, hit dice, recoveries and exhaustion.
     /// </summary>
-    public RestPreview PreviewRest(Guid characterId, RestPeriod kind, IReadOnlyList<HitDieRoll>? hitDice = null)
+    public RestPreview PreviewRest(Guid characterId, RestPeriod kind, IReadOnlyList<HitDieRoll>? hitDice = null, IReadOnlyList<ChargeRoll>? chargeRolls = null)
     {
-        var (character, plan) = Plan(characterId, kind, hitDice ?? []);
+        var (character, plan) = Plan(characterId, kind, hitDice ?? [], chargeRolls ?? []);
         return new(plan.Kind, plan.Changes, plan.Manual, Basis(character, plan));
     }
 
@@ -44,15 +45,20 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(request);
         if (!request.Confirm)
             throw new AppValidationException([new("rest.confirmation-required", "A rest changes hit points and resources; confirm the previewed changes to apply them.")]);
-        var (character, plan) = Plan(request.CharacterId, request.Kind, request.HitDice ?? []);
+        var (character, plan) = Plan(request.CharacterId, request.Kind, request.HitDice ?? [], request.ChargeRolls ?? []);
         if (request.Basis != Basis(character, plan))
             throw new AppValidationException([new("rest.preview-stale", "The character changed since this rest was previewed. Preview the rest again.")]);
         var skip = (request.Skip ?? []).Where(s => s is not null).ToHashSet(StringComparer.Ordinal);
         var maximum = CharacterCalculator.Calculate(character, _store).HitPoints?.Maximum ?? 0;
-        return SaveWithPlay(character with { Play = RestPlanner.Apply(character.Play, plan, skip, maximum) });
+        // Item charges (Wave 3 item 25, R160) are on the equipment entries, so a rest writes them here, through the play path.
+        return SaveWithPlay(character with
+        {
+            Play = RestPlanner.Apply(character.Play, plan, skip, maximum),
+            Equipment = RestPlanner.ApplyEquipment(character.Equipment, plan, skip),
+        });
     }
 
-    private (Character Character, RestPlan Plan) Plan(Guid characterId, RestPeriod kind, IReadOnlyList<HitDieRoll> hitDice)
+    private (Character Character, RestPlan Plan) Plan(Guid characterId, RestPeriod kind, IReadOnlyList<HitDieRoll> hitDice, IReadOnlyList<ChargeRoll> chargeRolls)
     {
         var character = _store.FindCharacter(characterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {characterId} does not exist.")]);
@@ -63,16 +69,24 @@ public sealed partial class TomeStackApp
         {
             if (hitDice.Count > 0)
                 throw new AppValidationException([new("rest.hit-dice-long-rest", "Hit dice are spent on a short rest; a long rest restores all hit points.")]);
-            return (character, RestPlanner.LongRest(character, sheet));
+            CheckChargeRolls();
+            return (character, RestPlanner.LongRest(character, sheet, chargeRolls));
         }
         if (RestPlanner.CheckHitDice(sheet, hitDice) is { Count: > 0 } problems)
             throw new AppValidationException(problems);
-        return (character, RestPlanner.ShortRest(character, sheet, hitDice));
+        CheckChargeRolls();
+        return (character, RestPlanner.ShortRest(character, sheet, hitDice, chargeRolls));
+
+        void CheckChargeRolls()
+        {
+            if (RestPlanner.CheckChargeRolls(sheet, kind, chargeRolls) is { Count: > 0 } wrong)
+                throw new AppValidationException(wrong);
+        }
     }
 
-    private static string Basis(Character character, RestPlan plan)
-    {
-        var text = JsonSerializer.Serialize(character, RulesJson.Compact) + "\n" + JsonSerializer.Serialize(plan, RulesJson.Compact);
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-    }
+    private static string Basis(Character character, RestPlan plan) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(BasisText(character, plan))));
+
+    /// <summary>What the rest token hashes: the character as stored (its computed schema version included) and the plan.</summary>
+    internal static string BasisText(Character character, RestPlan plan) =>
+        JsonSerializer.Serialize(character, RulesJson.Compact) + "\n" + JsonSerializer.Serialize(plan, RulesJson.Compact);
 }

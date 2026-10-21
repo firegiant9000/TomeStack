@@ -26,11 +26,8 @@ public class ImportJobTests
         return source.Id;
     }
 
-    private static ImportJobRecord Settle(TempApp temp, Guid jobId)
-    {
-        temp.App.RunningImport?.Wait(TimeSpan.FromSeconds(30));
-        return temp.App.ImportStatus(jobId);
-    }
+    /// <summary>Waits for the job and fails, naming its status and code, unless it ended as <paramref name="expected"/> (Completed unless a test says otherwise).</summary>
+    private static ImportJobRecord Settle(TempApp temp, Guid jobId, ImportJobStatus expected = ImportJobStatus.Completed) => temp.WaitForImport(jobId, expected);
 
     private static ImportJobRecord WaitFor(TempApp temp, Guid jobId, Func<ImportJobRecord, bool> condition)
     {
@@ -222,7 +219,7 @@ public class ImportJobTests
         using var temp = new TempApp(new FailingExtractor("pdf.encrypted"));
         var sourceId = SourceWithBook(temp);
 
-        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
 
         Assert.Equal((ImportJobStatus.Failed, "pdf.encrypted"), (job.Status, job.FailureCode));
         Assert.Equal("failed", temp.App.ImportAudit(job.Id)[^1].Event);
@@ -351,7 +348,7 @@ public class ImportJobTests
     public void After_too_many_pages_that_kill_the_worker_the_run_fails_and_resume_continues_after_them()
     {
         using var temp = new TempApp(new DyingExtractor(6, new HashSet<int> { 1, 2, 3, 4, 5, 6 }));
-        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id);
+        var job = Settle(temp, temp.App.StartImport(new(SourceWithBook(temp), WholeDocument: true)).Id, ImportJobStatus.Failed);
 
         Assert.Equal(ImportJobStatus.Failed, job.Status);
         Assert.Equal("worker.crashed", job.FailureCode);
@@ -370,7 +367,7 @@ public class ImportJobTests
         var sourceId = SourceWithBook(temp);
         var first = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
         var ignored = temp.App.ListCandidates(new(first.Id))[0];
-        temp.App.IgnoreCandidate(ignored.Id);
+        temp.Ignore(ignored.Id);
 
         var second = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
 
@@ -483,6 +480,65 @@ public class ImportJobTests
         Assert.Null(limited.TruncatedCandidates);
         Assert.Equal(2, temp.App.ImportStatus(limited.Id).DetectionLimitedFromPage);
         Assert.Contains(temp.App.ImportAudit(limited.Id), a => a.Event == "detection-limited");
+    }
+
+    [Fact]
+    public void Detection_that_times_out_once_runs_again_and_the_job_completes_from_the_second_run()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var expected = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id).Candidates;
+        Assert.True(expected > 0);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            if (++attempts == 1)
+                throw new System.Text.RegularExpressions.RegexMatchTimeoutException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+
+        Assert.Equal(2, attempts);
+        Assert.Null(job.FailureCode);
+        Assert.Equal(expected, job.Candidates);
+        Assert.Equal(expected, temp.App.ListCandidatesPage(new(job.Id)).Total);
+    }
+
+    [Fact]
+    public void Detection_that_times_out_twice_fails_with_detect_timeout_after_exactly_two_runs()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            attempts++;
+            throw new System.Text.RegularExpressions.RegexMatchTimeoutException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal("detect.timeout", job.FailureCode);
+        Assert.NotNull(temp.App.Store.FindImportPage(job.Sha256, 2)); // the pages stay stored
+    }
+
+    [Fact]
+    public void Detection_that_fails_for_another_reason_is_not_retried()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            attempts++;
+            throw new InvalidOperationException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
+
+        Assert.Equal(1, attempts);
+        Assert.Equal("import.internal", job.FailureCode);
     }
 
     [Fact]

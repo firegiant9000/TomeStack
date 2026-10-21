@@ -94,7 +94,6 @@ public class DdbSessionTests
     [InlineData("worker.timeout", "ddb.read-failed")]
     [InlineData("worker.crashed", "ddb.read-failed")]
     [InlineData("pdf.encrypted", "pdf.encrypted")]
-    [InlineData("ddb.no-form-fields", "ddb.no-form-fields")]
     public void A_reader_failure_keeps_its_pdf_or_form_code_and_a_worker_failure_is_ddb_read_failed(string code, string expected)
     {
         using var temp = new TempApp(formReader: new FakeFormReader(() => throw new ExtractionException(code, "Fixture message.")));
@@ -269,7 +268,7 @@ public class DdbSessionTests
         var read = Dispatch(new CommandDispatcher(temp.App, host: host), "ddb.read", new { });
         Assert.True(read.GetProperty("ok").GetBoolean(), read.ToString());
         Assert.Equal("ddb-2014", read.GetProperty("result").GetProperty("layout").GetString());
-        Assert.Equal((".pdf"), Assert.Single(host.Asked).Extension);
+        Assert.Equal(("Character sheet", ".pdf"), Assert.Single(host.Asked)); // neutral: the dialog also opens the fillable 2014 sheet
 
         var cancelled = Dispatch(new CommandDispatcher(temp.App, host: new OpenDialogHost(null)), "ddb.read", new { });
         Assert.False(cancelled.GetProperty("result").GetProperty("chosen").GetBoolean());

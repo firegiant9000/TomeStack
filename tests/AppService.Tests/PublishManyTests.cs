@@ -1,4 +1,5 @@
 using System.Text.Json;
+using TomeStack.AppService.Persistence;
 using TomeStack.RulesCore;
 using Xunit.Abstractions;
 
@@ -512,6 +513,25 @@ public class PublishManyTests(ITestOutputHelper output)
         Assert.True(preview.CanPublish);
         Assert.Equal(300, result.Published.Count);
         Assert.All(ids, id => Assert.Equal(RevisionStatus.Published, w.Newest(id).Status));
+    }
+
+    [Fact]
+    public void The_preview_plans_without_holding_the_store_lock_and_still_dry_runs_in_a_transaction()
+    {
+        using var w = new World();
+        var a = w.Save(w.New(ContentKind.Feat, "Testy Lockfree", World.Init("1")));
+        var store = (SqliteStore)w.App.Store;
+        var before = store.RevisionListsInTransaction;
+
+        var preview = w.App.PreviewPublishMany([a.ContentId]);
+
+        Assert.True(preview.CanPublish);
+        Assert.Equal(before, store.RevisionListsInTransaction); // planning read the library outside the transaction
+        Assert.Equal(RevisionStatus.Draft, w.Newest(a.ContentId).Status); // the dry run still wrote nothing
+        Assert.Equal(1, w.RevisionCount);
+
+        w.App.PublishMany(new([a.ContentId], [a.RevisionId], Confirm: true));
+        Assert.Equal(before + 1, store.RevisionListsInTransaction); // the real publish plans inside its transaction
     }
 
     [Fact]

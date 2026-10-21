@@ -51,7 +51,7 @@ public class UpgradeTests
     {
         // Import gap notes (gap-note v2) are stored like any note; a build that knows only v1 notes would open the folder
         // and then fail on every read of them. Version 10 changes nothing but the number, so such a build refuses it.
-        Assert.Equal(10, SqliteStore.LatestSchemaVersion);
+        Assert.True(SqliteStore.LatestSchemaVersion >= 10);
         var directory = NewDirectory();
         Directory.CreateDirectory(directory);
         var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
@@ -67,7 +67,7 @@ public class UpgradeTests
             Assert.Equal(9, version9.SchemaVersion);
         var before = Tables();
 
-        using (var current = new SqliteStore(database))
+        using (var current = new SqliteStore(database, SqliteStore.Migrations[..10])) // the list as it stood at version 10 (11 adds the candidate columns)
             Assert.Equal(10, current.SchemaVersion);
 
         Assert.Equal(before, Tables());
@@ -217,6 +217,86 @@ public class UpgradeTests
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return command.ExecuteScalar() as string;
+    }
+
+    /// <summary>
+    /// <c>tests/RulesFixtures/upgrade/v0.5.0</c>: a data folder made by a build of the v0.5.0 tag (a scratch worktree) holding two
+    /// invented characters, with everything else emptied so the file stays small (the bundled and fixture content seed again on open;
+    /// <c>database.sqlite</c> is not named <c>*.db</c>, which is gitignored). <c>stored-*.json</c> are the exact bytes 0.5.0 stored.
+    /// Every test opens a COPY, because the first open migrates the file.
+    /// </summary>
+    private static string Copy050Folder()
+    {
+        var directory = NewDirectory();
+        Directory.CreateDirectory(directory);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "upgrade", "v0.5.0", "database.sqlite"), Path.Combine(directory, TomeStackApp.DatabaseFileName));
+        return directory;
+    }
+
+    [Fact]
+    public void A_copy_of_a_0_5_0_data_folder_opens_keeps_its_characters_byte_for_byte_and_takes_the_app_version_copy_once()
+    {
+        var directory = Copy050Folder();
+        var database = Path.Combine(directory, TomeStackApp.DatabaseFileName);
+        var stored = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "upgrade", "v0.5.0"), "stored-*.json")
+            .ToDictionary(f => Guid.Parse(Path.GetFileNameWithoutExtension(f)["stored-".Length..]), File.ReadAllText);
+        Assert.Equal(2, stored.Count);
+
+        using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [], devFixtures: true))
+        {
+            Assert.Equal(SqliteStore.LatestSchemaVersion, app.GetInfo().SchemaVersion);
+            Assert.Equal(stored.Keys.Order(), app.Store.ListCharacters().Select(c => c.Id).Order());
+            foreach (var id in stored.Keys)
+            {
+                var character = app.GetCharacter(id).Character;
+                Assert.Equal(8, character.SchemaVersion);
+                Assert.Empty(character.Validate());
+                app.SaveCharacter(character); // load and save with nothing changed (the clock is the one 0.5.0 saved with)
+            }
+        }
+
+        foreach (var (id, bytes) in stored)
+            Assert.Equal(bytes, Text(database, $"SELECT json FROM characters WHERE id = '{id:D}';")); // v8, and the bytes 0.5.0 wrote
+        var copy = Path.Combine(directory, $"tomestack.db.app-pre-{AppVersionStamp.CurrentVersion}-to-{AppVersionStamp.CurrentVersion}.bak");
+        Assert.True(File.Exists(copy), "the one-time app-version copy was not written");
+        // R75: two copies on this first open, since 0.5.0's database is at version 10 and this build migrates it to 11: the app-version
+        // copy (R87) and BackupBeforeUpgrade's copy at the version it was opened with. Both are of the 0.5.0 database, and both open.
+        var schemaCopy = SqliteStore.BackupPath(database, 10);
+        Assert.True(File.Exists(schemaCopy), "the copy before the schema migration was not written");
+        Assert.Equal([Path.GetFileName(copy), Path.GetFileName(schemaCopy)], Directory.GetFiles(directory, "*.bak").Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        foreach (var backup in new[] { copy, schemaCopy })
+        {
+            Assert.Equal(2, Scalar(backup, "SELECT COUNT(*) FROM characters;"));
+            Assert.Equal(10, Scalar(backup, "PRAGMA user_version;"));
+            var probe = Path.Combine(NewDirectory(), TomeStackApp.DatabaseFileName); // a copy of the copy: opening migrates it and takes its own backup
+            Directory.CreateDirectory(Path.GetDirectoryName(probe)!);
+            File.Copy(backup, probe);
+            using var opened = new SqliteStore(probe);
+            Assert.Equal(SqliteStore.LatestSchemaVersion, opened.SchemaVersion);
+            Assert.Equal(2, opened.ListCharacters().Count);
+        }
+        Assert.Equal(AppVersionStamp.CurrentVersion, File.ReadAllText(Path.Combine(directory, AppVersionStamp.FileName)).Trim());
+
+        var written = File.GetLastWriteTimeUtc(copy);
+        using (TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [], devFixtures: true)) { }
+        Assert.Equal(2, Directory.GetFiles(directory, "*.bak").Length);
+        Assert.Equal(written, File.GetLastWriteTimeUtc(copy)); // written once
+    }
+
+    [Fact]
+    public void A_character_saved_by_0_5_0_stays_readable_by_it_until_a_v9_field_is_set()
+    {
+        var directory = Copy050Folder();
+        var id = Guid.Parse("5f0dca00-0000-4000-8000-000000000522");
+        using (var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [], devFixtures: true))
+        {
+            var character = app.GetCharacter(id).Character;
+            app.SaveCharacter(character with { Level = 1, Currency = new(Gp: 50) }); // an ordinary edit
+            Assert.Contains("\"schemaVersion\":8", Text(Path.Combine(directory, TomeStackApp.DatabaseFileName), $"SELECT json FROM characters WHERE id = '{id:D}';") ?? "", StringComparison.Ordinal);
+            app.SaveCharacter(character with { Xp = 300 });
+        }
+
+        Assert.Contains("\"schemaVersion\":9", Text(Path.Combine(directory, TomeStackApp.DatabaseFileName), $"SELECT json FROM characters WHERE id = '{id:D}';") ?? "", StringComparison.Ordinal);
     }
 
     [Fact]

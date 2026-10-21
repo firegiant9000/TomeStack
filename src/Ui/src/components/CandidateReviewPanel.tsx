@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, CandidateFilter, CandidateLinkSummary, CandidatePage, CandidateStatus, ContentKind, ImportJob, RulesFamilyId, SourceRecord, StoredCandidate } from '../api/types';
 import { familyLabel } from './familyLabels';
 import { SpellListForm } from './SpellListForm';
@@ -40,6 +41,7 @@ const blockedReasons: Record<string, string> = {
   'spell-list.not-a-spell': 'is not a spell',
   'import.class-unconfirmed': 'is a class: open it, tick the hit die and slot table, and accept it on its own',
   'candidate.linked-changed': 'had a linked feature reviewed while it was being accepted: check it again',
+  'candidate.linked-edited': 'had a linked feature edited while it was being accepted: check it again',
 };
 
 /** A code this screen does not know yet still reads as words (WCAG 3.3.1), never as the code. */
@@ -190,7 +192,13 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
     setBusyText('Accepting the selected candidates…');
     setBulkBusy(true);
     try {
-      const outcome = await client.acceptCandidates(ticked, asReference);
+      // R134: each id goes with the etag of the row as shown; a stale one refuses the whole batch.
+      const expected: Record<string, string> = {};
+      for (const id of ticked) {
+        const etag = candidates?.find((x) => x.id === id)?.etag;
+        if (etag !== undefined) expected[id] = etag;
+      }
+      const outcome = await client.acceptCandidates(ticked, asReference, expected);
       const nameOf = (id: string) => {
         const c = candidates?.find((x) => x.id === id);
         return c ? (c.edited ?? c.candidate).proposedName : 'A candidate';
@@ -208,7 +216,20 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       setAnnouncement(`${stay.length} selected`);
       await load();
     } catch (error) {
-      onError(error);
+      if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
+        // R139: a ticked row changed since it was listed. The tokens on screen are stale, so every retry would be refused too:
+        // reload the list, clear the ticks, say so (WCAG 4.1.3); focus stays on the button that was pressed.
+        setSkipped([]);
+        setTicked([]);
+        setAnnouncement('Some selected candidates changed; the selection was cleared.');
+        try {
+          await load();
+        } catch (reloadError) {
+          onError(reloadError);
+        }
+      } else {
+        onError(error);
+      }
     } finally {
       bulkRunning.current = false;
       setBulkBusy(false);
@@ -530,12 +551,13 @@ export function CandidateReviewPanel({ job, source, onError, onStatus, onOpenPag
       )}
       {current && (
         <CandidateDetail
-          key={`${current.id}-${current.updatedAt}`}
+          key={`${current.id}-${current.etag ?? current.updatedAt}`}
           stored={current}
           sourceFamilies={source.rulesFamilies}
           onOpenPage={onOpenPage}
           onError={onError}
           onDirtyChange={setDirty}
+          dirtyReasonId={dirtyId}
           confirmed={confirmTicks.current.get(current.id)}
           onConfirmedChange={(ticks) => confirmTicks.current.set(current.id, ticks)}
           onChanged={async (text) => {
@@ -562,6 +584,8 @@ interface DetailProps {
   onChanged: (status: string) => Promise<void>;
   /** Whether the form differs from what is stored, so the panel can keep the player from leaving with an unsaved edit. */
   onDirtyChange: (dirty: boolean) => void;
+  /** The panel's "Save or undo your edit first." line, which a held button points at (R77, as the other held controls do). */
+  dirtyReasonId: string;
   /** Item 12: the confirm ticks from before a save, with the effects they were made on. */
   confirmed: ConfirmTicks | undefined;
   onConfirmedChange: (ticks: ConfirmTicks) => void;
@@ -573,7 +597,7 @@ interface ConfirmTicks {
   ids: string[];
 }
 
-function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, confirmed: remembered, onConfirmedChange }: DetailProps) {
+function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChanged, onDirtyChange, dirtyReasonId, confirmed: remembered, onConfirmedChange }: DetailProps) {
   const candidate = stored.edited ?? stored.candidate;
   const heading = useRef<HTMLHeadingElement>(null);
   const [name, setName] = useState(candidate.proposedName);
@@ -584,6 +608,8 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [effectsError, setEffectsError] = useState<string>();
   const [check, setCheck] = useState<CandidateCheck>();
+  // R134: a linked feature that moved on leaves this candidate's own etag as it was, so the check is asked for again by hand.
+  const [checkRound, setCheckRound] = useState(0);
   const pending = stored.status === 'pending';
 
   // Item 11 (D34, ADR-016): a class is accepted as a draft only once the reviewer has confirmed its hit die and, when it
@@ -639,7 +665,7 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     return () => {
       current = false;
     };
-  }, [stored.id, onError]);
+  }, [stored.id, checkRound, onError]);
 
   async function save() {
     let parsed: unknown[];
@@ -653,31 +679,58 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
     }
     setEffectsError(undefined);
     try {
-      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed });
+      await client.editCandidate(stored.id, { name, kind, rulesFamilies: families, summary, effects: parsed, dismissReferences: dismissed, expected: stored.etag });
       await onChanged(`Saved your edit of ${name}. Check it again before accepting.`);
     } catch (error) {
-      onError(error);
+      await reloadIfChanged(error);
     }
   }
 
+  // R120: the stored candidate moved on (another save, a spell list, a re-detect): show what is stored now, and say so.
+  // Used by edit, accept and ignore; any other error is reported as usual.
+  async function reloadIfChanged(error: unknown) {
+    if (error instanceof TomeStackError && error.code === 'import.candidate-changed') {
+      try {
+        await onChanged('This candidate changed since you opened it. It has been reloaded.');
+      } catch (reloadError) {
+        onError(reloadError);
+      }
+      return;
+    }
+    // R134: a feature this class grants was edited or reviewed meanwhile: the class itself is as it was, so refetch the check
+    // and say so (the list is reloaded too, in case the feature's row moved).
+    if (error instanceof TomeStackError && (error.code === 'candidate.linked-edited' || error.code === 'candidate.linked-changed')) {
+      setCheckRound((n) => n + 1);
+      try {
+        await onChanged('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
+      } catch (reloadError) {
+        onError(reloadError);
+      }
+      return;
+    }
+    onError(error);
+  }
+
   async function accept(asReference: boolean) {
+    if (dirty) return; // R134: held while the form differs from what is stored
     try {
-      await (isClass && !asReference ? client.acceptCandidate(stored.id, false, confirmedIds) : client.acceptCandidate(stored.id, asReference));
+      await (isClass && !asReference ? client.acceptCandidate(stored.id, false, stored.etag, confirmedIds) : client.acceptCandidate(stored.id, asReference, stored.etag));
       const alongside = isClass && !asReference && linkedCount > 0 ? ` granting ${plural(linkedCount, 'feature', 'features')}` : '';
       await onChanged(
         `${candidate.proposedName} is now a draft${asReference ? ' reference entry' : ''}${alongside} in the studio. It does nothing until you publish it there.`,
       );
     } catch (error) {
-      onError(error);
+      await reloadIfChanged(error);
     }
   }
 
   async function ignore() {
+    if (dirty) return; // R134: held while the form differs from what is stored
     try {
-      await client.ignoreCandidate(stored.id);
+      await client.ignoreCandidate(stored.id, stored.etag);
       await onChanged(`Ignored ${candidate.proposedName}. Nothing was created.`);
     } catch (error) {
-      onError(error);
+      await reloadIfChanged(error);
     }
   }
 
@@ -862,21 +915,21 @@ function CandidateDetail({ stored, sourceFamilies, onOpenPage, onError, onChange
           {/* aria-disabled, never `disabled`: a re-check can block a button that has focus (2.4.3); the reason is the visible list. */}
           <button
             type="button"
-            aria-disabled={!check?.canAccept || confirmHeld || undefined}
-            aria-describedby={[!check?.canAccept ? reasonId : undefined, confirmHeld ? confirmId : undefined].filter(Boolean).join(' ') || undefined}
-            onClick={() => check?.canAccept && !confirmHeld && accept(false)}
+            aria-disabled={!check?.canAccept || confirmHeld || dirty || undefined}
+            aria-describedby={[dirty ? dirtyReasonId : undefined, !check?.canAccept ? reasonId : undefined, confirmHeld ? confirmId : undefined].filter(Boolean).join(' ') || undefined}
+            onClick={() => check?.canAccept && !confirmHeld && !dirty && accept(false)}
           >
             Accept as a draft
           </button>
           <button
             type="button"
-            aria-disabled={!check?.canAcceptAsReference || undefined}
-            aria-describedby={!check?.canAcceptAsReference ? reasonId : undefined}
-            onClick={() => check?.canAcceptAsReference && accept(true)}
+            aria-disabled={!check?.canAcceptAsReference || dirty || undefined}
+            aria-describedby={[dirty ? dirtyReasonId : undefined, !check?.canAcceptAsReference ? reasonId : undefined].filter(Boolean).join(' ') || undefined}
+            onClick={() => check?.canAcceptAsReference && !dirty && accept(true)}
           >
             Accept as reference
           </button>
-          <button type="button" onClick={ignore}>
+          <button type="button" aria-disabled={dirty || undefined} aria-describedby={dirty ? dirtyReasonId : undefined} onClick={() => !dirty && ignore()}>
             Ignore
           </button>
         </div>

@@ -47,14 +47,23 @@ public class ContentValidatorTests
     }
 
     [Fact]
-    public void Content_cannot_target_passives_or_speed_until_a_schema_version_allows_it()
+    public void Content_can_target_passives_or_speed_only_from_content_schema_v10()
     {
-        // D24: these are calculated and overridable on the sheet, but no content-schema version carries them as targets.
-        var passive = ContentValidator.Validate(Draft(new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" }), Catalog);
+        // D24 / D42: these are calculated and overridable on the sheet; content schema v10 is the first to carry them as targets.
+        // Below v10 the validator still refuses them, as it did when no version carried them.
+        var passive = ContentValidator.Validate(Draft(new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" }) with { SchemaVersion = 9 }, Catalog);
         Assert.Contains(passive.Errors, e => e.Code == "validate.unknown-target" && e.Message.Contains("cannot be targeted by content yet"));
         Assert.False(passive.CanPublish);
-        var speed = ContentValidator.Validate(Draft(new RestrictionEffect { Id = "fast", Field = FieldIds.Speed, Minimum = 30 }), Catalog);
+        var speed = ContentValidator.Validate(Draft(new RestrictionEffect { Id = "fast", Field = FieldIds.Speed, Minimum = 30 }) with { SchemaVersion = 9 }, Catalog);
         Assert.Contains(speed.Errors, e => e.Code == "validate.unknown-target" && e.Message.Contains("cannot be targeted by content yet"));
+
+        // v10 accepts them, and asks for v10 when published.
+        var passive10 = ContentValidator.Validate(Draft(new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" }), Catalog);
+        Assert.True(passive10.CanPublish, string.Join("; ", passive10.Errors.Select(e => e.Message)));
+        Assert.Equal(10, passive10.RequiredSchemaVersion);
+        var speed10 = ContentValidator.Validate(Draft(new RestrictionEffect { Id = "fast", Field = FieldIds.Speed, Minimum = 30 }), Catalog);
+        Assert.True(speed10.CanPublish);
+        Assert.Equal(10, speed10.RequiredSchemaVersion);
     }
 
     [Fact]
@@ -67,7 +76,8 @@ public class ContentValidatorTests
         Assert.Contains("validate.effect-id", Errors(Draft(
             new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" },
             new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1" })));
-        Assert.Contains("validate.unknown-target", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = "speed", Value = "1" })));
+        Assert.Contains("validate.unknown-target", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = "speed", Value = "1" }) with { SchemaVersion = 9 }));
+        Assert.Contains("validate.unknown-target", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = "not.a.field", Value = "1" })));
         Assert.Contains("validate.unknown-target", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Proficiency, Target = FieldIds.Initiative })));
         Assert.Contains("validate.stack-group-missing", Errors(Draft(new ModifierEffect { Id = "a", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "1", Stacking = StackingRule.HighestInGroup })));
         Assert.Contains("validate.level", Errors(Draft(new GrantEffect { Id = "g", Grant = GrantKind.Content, Content = Fixtures.Watchful, Level = 21 })));

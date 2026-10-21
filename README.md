@@ -2,8 +2,9 @@
 
 A local-first Windows desktop app for building 5E-compatible characters and homebrew. It works offline, with no account.
 
-> **Status: v0.5.0, a limited-content build published as a GitHub release (unsigned; see [CHANGELOG](docs/CHANGELOG.md)).**
-> - 0.5.0 adds the tabbed character sheet, a refreshed look with themes and Settings, a guided six-step builder, and character import from a D&D Beyond PDF sheet. They are fixture-verified; the checks on an installed build are owner checks.
+> **Status: v0.6.0, a limited-content build published as a GitHub release (unsigned; see [CHANGELOG](docs/CHANGELOG.md)).**
+> - 0.6.0 adds character import from the fillable 2014 sheet, from text and from a PDF with no form fields, your own items, attacks and character details, class import and bulk publish in the studio, and play mechanics: Bloodied, damage types, companions, attunement and item charges, and XP tracking, plus more theme colours. Upgrading moves the data folder to database version 11, which 0.5.0 can't open. They are fixture-verified; the checks on an installed build are owner checks.
+> - 0.5.0 added the tabbed character sheet, a refreshed look with themes and Settings, a guided six-step builder, and character import from a D&D Beyond PDF sheet. They are fixture-verified; the checks on an installed build are owner checks.
 > - The M2 "Usable MVP" checks passed, but the MVP goal (any SRD character, levels 1–20) is not met yet.
 > - M2.1 (data safety), M2.2 (the Fighter), M5 (homebrew studio) and M6 (source and campaign packs, extensions, VTT export) are in 0.4.0. They are fixture-verified; the checks on the installed 0.4.0 are owner checks ([release-0.4.0-verification.md](docs/features/release-0.4.0-verification.md)).
 > - The M3 and M4 engineering is done, and neither gate is met ([ROADMAP](docs/ROADMAP.md)).

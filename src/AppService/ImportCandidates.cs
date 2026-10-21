@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TomeStack.ImportWorker;
+using TomeStack.AppService.Persistence;
 using TomeStack.ImportWorker.Detection;
 using TomeStack.RulesCore;
 
@@ -42,6 +43,14 @@ public sealed record StoredCandidate
     public ContentReference? Draft { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 
+    /// <summary>
+    /// R120: the compare-and-swap token of the stored row: SHA-256 (hex) of the stored JSON string, set by the store when it
+    /// reads the row and sent back as <see cref="CandidateEditRequest.Expected"/>. Never written to the row (the store drops
+    /// it on save), so it is absent from the stored JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Etag { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extensions { get; init; }
 
@@ -57,6 +66,8 @@ public sealed record CandidateGrant(Guid CandidateId, int Level);
 /// M4 D4 <c>import.candidate.edit</c>: the reviewer's version. Absent fields keep the current value. Saving it clears the
 /// low-confidence flags (the reviewer has seen the fields). <paramref name="DismissReferences"/> names the unresolved
 /// references the reviewer says are not needed (for example a spell that is only mentioned).
+/// <paramref name="Expected"/> (R120) is the candidate's <see cref="StoredCandidate.Etag"/> as the editor last saw it; the edit
+/// is refused (<c>import.candidate-changed</c>) when the stored row has changed since, or when none is sent.
 /// </summary>
 public sealed record CandidateEditRequest(
     Guid CandidateId,
@@ -65,7 +76,8 @@ public sealed record CandidateEditRequest(
     IReadOnlyList<string>? RulesFamilies = null,
     string? Summary = null,
     IReadOnlyList<Effect>? Effects = null,
-    IReadOnlyList<string>? DismissReferences = null);
+    IReadOnlyList<string>? DismissReferences = null,
+    string? Expected = null);
 
 public sealed record CandidateRequest(Guid CandidateId);
 
@@ -77,11 +89,23 @@ public sealed record CandidateRequest(Guid CandidateId);
 /// A class is not accepted as a draft without its hit die confirmed (<c>import.class-unconfirmed</c>). Only for a class, and not
 /// together with <paramref name="AsReference"/>.
 /// </param>
-public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false, IReadOnlyList<string>? ConfirmedEffectIds = null);
+/// <param name="Expected">
+/// R134: the candidate's <see cref="StoredCandidate.Etag"/> as the review panel last read it. The accept is refused
+/// (<c>import.candidate-changed</c>) when the stored row has changed since, or when none is sent.
+/// </param>
+public sealed record CandidateAcceptRequest(Guid CandidateId, bool AsReference = false, bool Confirm = false, IReadOnlyList<string>? ConfirmedEffectIds = null, string? Expected = null);
+
+/// <summary><c>import.candidate.ignore</c>; <paramref name="Expected"/> is the candidate's etag as the panel last read it (R134).</summary>
+public sealed record CandidateIgnoreRequest(Guid CandidateId, string? Expected = null);
 
 /// <param name="CandidateIds">At most <see cref="TomeStackApp.MaxAcceptMany"/>.</param>
 /// <param name="Confirm">Must be true: it creates draft revisions.</param>
-public sealed record CandidateAcceptManyRequest(IReadOnlyList<Guid> CandidateIds, bool AsReference = false, bool Confirm = false);
+/// <param name="Expected">
+/// R134: one expected etag per candidate id, as the panel last read them. A stored candidate with a stale or missing token
+/// refuses the whole batch (<c>import.candidate-changed</c>) and nothing is written. An id that no longer exists is reported
+/// as blocked, as before.
+/// </param>
+public sealed record CandidateAcceptManyRequest(IReadOnlyList<Guid> CandidateIds, bool AsReference = false, bool Confirm = false, IReadOnlyDictionary<Guid, string>? Expected = null);
 
 /// <summary>A candidate that <c>import.candidate.acceptMany</c> skipped, and why (diagnostic codes only).</summary>
 public sealed record BlockedCandidate(Guid CandidateId, IReadOnlyList<string> Codes);
@@ -146,8 +170,17 @@ public sealed partial class TomeStackApp
 
     internal int DetectionCandidateCap { get; set; } = CandidateDetector.MaxCandidates;
 
-    /// <summary>Test seam (fix round 1, item 7): runs after an accept is planned and checked, just before its writes.</summary>
+    /// <summary>Test seam (R161 a): runs at the start of every detection attempt, so a test can time one out or count the runs.</summary>
+    internal Action? BeforeDetectionAttempt { get; set; }
+
+    /// <summary>Test seam (fix round 1, item 7): runs after an accept (or accept-many) is planned and checked, just before its writes.</summary>
     internal Action? BeforeAcceptWrites { get; set; }
+
+    /// <summary>Test seam (Task 8a fix round 1, M6): runs after an edit's first check, just before its transaction.</summary>
+    internal Action? BeforeEditWrites { get; set; }
+
+    /// <summary>Test seam (Task 8a fix round 1, M2): runs after an ignore reads the candidate, just before its transaction.</summary>
+    internal Action? BeforeIgnoreWrites { get; set; }
 
     /// <summary>
     /// M4 D3: after extraction, detects candidates over the job's pages (text, not PDF bytes) and stores them for review.
@@ -156,6 +189,22 @@ public sealed partial class TomeStackApp
     /// </summary>
     private ImportJobRecord DetectCandidates(ImportJobRecord job, CancellationToken cancellationToken)
     {
+        try
+        {
+            return DetectOnce(job, cancellationToken);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // R161 a: a timeout can be a paused thread on a busy computer, so detection runs once more with a fresh budget
+            // per pattern match (DetectionLimits.RegexTimeoutMs). No candidate is written before detection finishes, so the retry
+            // starts clean (a "detection-limited" audit note may appear twice). A second timeout propagates and fails the job with detect.timeout, so a hostile page costs two runs.
+            return DetectOnce(job, cancellationToken);
+        }
+    }
+
+    private ImportJobRecord DetectOnce(ImportJobRecord job, CancellationToken cancellationToken)
+    {
+        BeforeDetectionAttempt?.Invoke();
         var source = _store.FindSource(job.SourceId);
         if (source is null)
             return job;
@@ -174,7 +223,7 @@ public sealed partial class TomeStackApp
             DetectionCandidateCap, cancellationToken);
         var detected = result.Candidates;
 
-        static (ContentKind, string, int) Identity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+        static (ContentKind, string, int) Identity(DraftCandidate c) => CandidateIdentity(c); // one function for detection and accept (I1)
         var reviewed = _store.ListImportCandidates(job.Id).Where(c => c.Status != CandidateStatus.Pending).Select(c => Identity(c.Candidate)).ToHashSet();
         var reviewedBefore = _store.ListImportJobs()
             .Where(j => j.Id != job.Id && j.SourceId == job.SourceId && j.Sha256 == job.Sha256)
@@ -235,6 +284,7 @@ public sealed partial class TomeStackApp
         ArgumentNullException.ThrowIfNull(request);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
+        RequireUnchanged(stored, request.Expected);
         var current = stored.Current;
         var name = request.Name?.Trim() ?? current.ProposedName;
         if (name.Length is < 1 or > 200)
@@ -262,12 +312,26 @@ public sealed partial class TomeStackApp
         };
         // R29: sending a families set (even the current one) is the reviewer's answer; an edit that sends none leaves it as it was.
         var updated = stored with { Edited = edited, FamiliesReviewed = stored.FamiliesReviewed || request.RulesFamilies is not null, UpdatedAt = _time.GetUtcNow() };
+        StoredCandidate? saved = null;
+        BeforeEditWrites?.Invoke();
         _store.InTransaction(() =>
         {
+            // R120: the check and the write share one transaction (and the store lock), so no other writer can land between them.
+            RequireUnchanged(FindCandidateOrThrow(request.CandidateId), request.Expected);
             _store.SaveImportCandidate(updated);
             _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), "candidate-edited", $"{edited.ProposedKind.ToString().ToLowerInvariant()}, {dismissed.Count} references dismissed");
+            saved = _store.FindImportCandidate(updated.Id);
         });
-        return updated;
+        return saved ?? updated;
+    }
+
+    /// <summary>R120: refuses an edit made from a state other than the stored one (or from none). Says nothing about the contents.</summary>
+    private static void RequireUnchanged(StoredCandidate stored, string? expected, bool forEdit = true)
+    {
+        if (expected is null || stored.Etag is null || !string.Equals(expected, stored.Etag, StringComparison.Ordinal))
+            throw new AppValidationException([new("import.candidate-changed", forEdit
+                ? "This candidate changed since it was opened. Reload it and edit again; nothing was changed."
+                : "This candidate changed since you opened it. Review it again; nothing was changed.")]);
     }
 
     /// <summary>
@@ -283,6 +347,7 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("candidate.confirmation-required", "Accepting creates a draft entry. Confirm to accept; nothing was changed.")]);
         var stored = FindCandidateOrThrow(request.CandidateId);
         RequirePending(stored);
+        RequireUnchanged(stored, request.Expected, forEdit: false); // R134: the caller's token, as for an edit (R120)
         // Even as reference, an entry needs a family, and a double acceptance is refused: "reference only" lifts neither.
         var provenance = ProvenanceBlockers(stored); // once: it reads every candidate of every same-document job
         if (provenance is [var first, ..])
@@ -303,13 +368,23 @@ public sealed partial class TomeStackApp
         // The linked feature drafts are written first, so the class draft's grants pin drafts that exist (ADR-016).
         _store.InTransaction(() =>
         {
+            // The candidate is read again here, so the accept acts on what is stored at commit time: reviewed since the plan
+            // was made, or edited (the same compare-and-swap as an edit, R120), it is refused and nothing is written.
+            var current = FindCandidateOrThrow(request.CandidateId);
+            RequirePending(current);
+            RequireUnchanged(current, request.Expected, forEdit: false);
+            stored = current;
             // Fix round 1, item 7: the plan read each linked feature's status before the transaction; one reviewed since then
             // (accepted, ignored) would leave a second draft or a pin at nothing, so the whole accept is refused instead.
             if (plan.Linked.Any(l => l.Candidate is { } planned && _store.FindImportCandidate(planned.Id)?.Status != planned.Status))
                 throw new AppValidationException([new("candidate.linked-changed", "A feature this class grants was reviewed while it was being accepted. Check the class again; nothing was changed.")]);
+            // Task 8a M1: one edited since the plan (status unchanged) would be saved Accepted from the stale row and the edit lost.
+            if (plan.Linked.Any(l => l.Candidate is { } planned && !string.Equals(_store.FindImportCandidate(planned.Id)?.Etag, planned.Etag, StringComparison.Ordinal)))
+                throw new AppValidationException([new("candidate.linked-edited", "A feature this class grants was edited while it was being accepted. Check the class again; nothing was changed.")]);
             foreach (var feature in plan.Linked.Where(l => l.NewDraft is not null))
                 WriteAccepted(feature.Candidate!, feature.NewDraft!, asReference: false);
             accepted = WriteAccepted(stored, plan.Draft, request.AsReference);
+            accepted = _store.FindImportCandidate(accepted.Id) ?? accepted; // the row as stored, with its fresh Etag
         });
         return accepted!;
     }
@@ -509,8 +584,19 @@ public sealed partial class TomeStackApp
         var accepted = new List<StoredCandidate>();
         var blocked = new List<BlockedCandidate>();
         var acceptedCache = new Dictionary<(Guid Source, string Sha), List<(Guid JobId, (ContentKind, string, int) Identity)>>();
+        // R134: one expected etag per id; any stale or missing one refuses the whole batch before anything is written.
+        // Checked here and again inside the transaction (the same compare-and-swap as an edit, R120).
+        void RequireAllUnchanged()
+        {
+            foreach (var id in ids)
+                if (_store.FindImportCandidate(id) is { } row)
+                    RequireUnchanged(row, request.Expected is { } expected && expected.TryGetValue(id, out var token) ? token : null, forEdit: false);
+        }
+        RequireAllUnchanged();
+        BeforeAcceptWrites?.Invoke();
         _store.InTransaction(() =>
         {
+            RequireAllUnchanged();
             foreach (var id in ids)
             {
                 if (_store.FindImportCandidate(id) is not { } stored)
@@ -543,7 +629,7 @@ public sealed partial class TomeStackApp
                     continue;
                 }
                 var written = WriteAccepted(stored, DraftOf(stored, request.AsReference), request.AsReference);
-                accepted.Add(written);
+                accepted.Add(_store.FindImportCandidate(written.Id) ?? written); // the row as stored, with its fresh Etag
                 AcceptedOf(acceptedCache, ImportStatus(stored.JobId)).Add((stored.JobId, CandidateIdentity(written.Candidate)));
             }
         });
@@ -551,17 +637,26 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary><c>import.candidate.ignore</c>: sets a pending candidate aside. Nothing is created.</summary>
-    public StoredCandidate IgnoreCandidate(Guid candidateId)
+    public StoredCandidate IgnoreCandidate(CandidateIgnoreRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        var candidateId = request.CandidateId;
         var stored = FindCandidateOrThrow(candidateId);
         RequirePending(stored);
-        var ignored = stored with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() };
+        RequireUnchanged(stored, request.Expected, forEdit: false); // R134
+        BeforeIgnoreWrites?.Invoke();
+        StoredCandidate? ignored = null;
         _store.InTransaction(() =>
         {
-            _store.SaveImportCandidate(ignored);
-            _store.AddImportAudit(stored.JobId, _time.GetUtcNow(), "candidate-ignored", stored.Current.ProposedKind.ToString().ToLowerInvariant());
+            // Task 8a M2: read again inside the transaction, so a concurrent edit or accept is refused instead of overwritten.
+            var current = FindCandidateOrThrow(candidateId);
+            RequirePending(current);
+            RequireUnchanged(current, request.Expected, forEdit: false);
+            _store.SaveImportCandidate(current with { Status = CandidateStatus.Ignored, UpdatedAt = _time.GetUtcNow() });
+            _store.AddImportAudit(current.JobId, _time.GetUtcNow(), "candidate-ignored", current.Current.ProposedKind.ToString().ToLowerInvariant());
+            ignored = _store.FindImportCandidate(candidateId);
         });
-        return ignored;
+        return ignored!;
     }
 
     private CandidateCheck Check(StoredCandidate stored, bool asReference, IReadOnlyList<Diagnostic>? provenance = null, AcceptPlan? plan = null)
@@ -656,7 +751,14 @@ public sealed partial class TomeStackApp
         return blockers;
     }
 
-    private static (ContentKind, string, int) CandidateIdentity(DraftCandidate c) => (c.ProposedKind, CandidateDetector.Key(c.ProposedName), c.Page.Start);
+    /// <summary>
+    /// What makes two candidates the same entry: kind, name and first page, and (Task 8a I1) the class a feature stub belongs to,
+    /// so two classes on one page that list one feature name keep a stub each. The class joins the name part, after a control
+    /// character no name carries; a candidate with no <c>class</c> field has the plain name, as before.
+    /// Used both when detection filters reviewed entries and when an accept checks for an earlier acceptance.
+    /// </summary>
+    internal static (ContentKind, string, int) CandidateIdentity(DraftCandidate c) =>
+        (c.ProposedKind, CandidateDetector.Key(c.ProposedName) + (c.Fields.TryGetValue("class", out var owner) ? "\u0001" + CandidateDetector.Key(owner) : ""), c.Page.Start);
 
     /// <summary>
     /// The identities already accepted from one document in one source, across all its jobs, read once per (source, document)
@@ -725,7 +827,7 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         ImportStatus(request.JobId);
-        return [.. Filtered(request)];
+        return _store.QueryImportCandidates(request.JobId, FilterOf(request), 0, null).Items;
     }
 
     /// <summary>The most candidates one page of <c>import.candidates</c> returns.</summary>
@@ -746,21 +848,11 @@ public sealed partial class TomeStackApp
         if (request.Limit is < 1 or > MaxCandidatePageSize)
             throw new AppValidationException([new("import.limit-out-of-range", $"A page holds 1 to {MaxCandidatePageSize} candidates.")]);
         ImportStatus(request.JobId);
-        var all = Filtered(request).ToList();
-        return new([.. all.Skip(request.Offset ?? 0).Take(request.Limit ?? DefaultCandidatePageSize)], all.Count);
+        // R82: the filter and the order run on the indexed columns; only the rows of this page are read from the JSON.
+        var (items, total) = _store.QueryImportCandidates(request.JobId, FilterOf(request), request.Offset ?? 0, request.Limit ?? DefaultCandidatePageSize);
+        return new(items, total);
     }
 
-    private IEnumerable<StoredCandidate> Filtered(ImportCandidatesRequest request)
-    {
-        var first = request.FirstPage ?? request.Page;
-        var last = request.LastPage ?? request.Page;
-        return _store.ListImportCandidates(request.JobId)
-            .Where(c => first is not { } from || (c.Current.Page.End ?? c.Current.Page.Start) >= from)
-            .Where(c => last is not { } to || c.Current.Page.Start <= to)
-            .Where(c => request.Kind is not { } kind || c.Current.ProposedKind == kind)
-            .Where(c => request.MinConfidence is not { } min || c.Current.Confidence >= min)
-            .Where(c => request.MaxConfidence is not { } max || c.Current.Confidence <= max)
-            .Where(c => request.Status is not { } status || c.Status == status)
-            .OrderBy(c => c.Current.Page.Start).ThenBy(c => c.Current.ProposedName, StringComparer.CurrentCultureIgnoreCase);
-    }
+    private static ImportCandidateFilter FilterOf(ImportCandidatesRequest request) =>
+        new(request.FirstPage ?? request.Page, request.LastPage ?? request.Page, request.Kind, request.MinConfidence, request.MaxConfidence, request.Status);
 }

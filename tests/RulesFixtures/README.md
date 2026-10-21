@@ -19,6 +19,8 @@ All content here is **original** and was written for TomeStack tests. It contain
 | `characters/srd51-ash-m1.json`, `srd521-ash-m1.json` | character v2 | no | Side-by-side: the same inputs under each family |
 | `characters/srd521-rook-exception.json` | character v2 | no | A recorded cross-family exception (BACKLOG B06) |
 | `characters/m1-acceptance-srd51-korga.json`, `m1-acceptance-srd521-brenna.json` | character v3 | no | M1 exit gate: level-3 characters built from the bundled SRD packs (they reference SRD content IDs; the files hold no rules text). See `docs/features/m1-acceptance.md` |
+| `characters/srd521-courier-v8.json`, `srd521-courier-v9.json` | character v8, v9 | no | v9 (Wave 2, D42): the v8 file is a character with currency, notes and concentration and none of the v9 fields (it must upcast with all of them absent and be written as v8); the v9 file sets every v9 field (details, custom items and attacks, damage defences, a companion with an attack and its play state, XP). Invented ("Testy Wren") |
+| `upgrade/v0.5.0/database.sqlite`, `stored-*.json` | database 10, character v8 | no, tests only | `UpgradeTests`: the data folder of a build made from the `v0.5.0` tag (a scratch worktree, discarded) holding two invented "Testy" characters, with every table but `characters` emptied and the file vacuumed (about 140 KB; the SRD and fixture content seed again when it is opened). It is named `.sqlite` because `*.db` is gitignored; tests copy it to `tomestack.db`, because the first open migrates it. `stored-<id>.json` is the exact text 0.5.0 stored for each character: a character loaded and saved by this build must reproduce it |
 
 ## Private fixtures (not in the repo)
 

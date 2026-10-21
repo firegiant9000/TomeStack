@@ -44,6 +44,10 @@ public sealed record RestoreSnapshotRequest(Guid Token, bool Confirm = false);
 /// <param name="CampaignWarnings">Campaign warnings the restored character would have that it does not have now (its campaign stays as it is).</param>
 /// <param name="CurrencyNow">The coins now, set only when the restore changes them (coins roll back with the snapshot; D21).</param>
 /// <param name="CurrencyAfter">The coins the restore brings back, set only when they differ from the current ones.</param>
+/// <param name="DetailsChange">The names of the detail fields (such as "alignment" or "languages") the restore changes, set only when some differ (details roll back with the snapshot; D36). Names only, never the text.</param>
+/// <param name="CustomItemsChange">Whether the custom items differ (they roll back with the snapshot; R128). A flag, never the names.</param>
+/// <param name="CustomAttacksChange">Whether the custom attacks differ (R128).</param>
+/// <param name="OtherSheetValuesChange">Whether the experience points, damage defences or companions differ (R128).</param>
 public sealed record RestorePreview(
     Guid Token,
     SnapshotSummary Snapshot,
@@ -56,7 +60,11 @@ public sealed record RestorePreview(
     bool ExceptionsChange = false,
     IReadOnlyList<Diagnostic>? CampaignWarnings = null,
     Currency? CurrencyNow = null,
-    Currency? CurrencyAfter = null);
+    Currency? CurrencyAfter = null,
+    IReadOnlyList<string>? DetailsChange = null,
+    bool CustomItemsChange = false,
+    bool CustomAttacksChange = false,
+    bool OtherSheetValuesChange = false);
 
 /// <param name="Undo">The snapshot of the character as it was just before, taken in the same transaction.</param>
 public sealed record RestoreResult(CharacterView View, SnapshotSummary Undo);
@@ -129,7 +137,84 @@ public sealed partial class TomeStackApp
             TempJson(current.CrossFamilyExceptions) != TempJson(restored.CrossFamilyExceptions),
             [.. warningsThen.Where(w => !warningsNow.Any(n => n.Code == w.Code && n.Content == w.Content))],
             restored.Currency != current.Currency ? current.Currency : null,
-            restored.Currency != current.Currency ? restored.Currency : null);
+            restored.Currency != current.Currency ? restored.Currency : null,
+            DifferingDetails(current.Details, restored.Details),
+            TempJson(current.CustomItems) != TempJson(restored.CustomItems),
+            TempJson(current.CustomAttacks) != TempJson(restored.CustomAttacks),
+            TempJson(current.Xp) != TempJson(restored.Xp)
+                || TempJson(current.DamageDefences) != TempJson(restored.DamageDefences)
+                || TempJson(current.Companions) != TempJson(restored.Companions)
+                || EquipmentV9Differs(current.Equipment, restored.Equipment));
+    }
+
+    /// <summary>
+    /// Whether the v9 fields of the equipment (attuned, charges spent) differ. Quantity and equipped are older than v9 and are not
+    /// part of this flag (R138). Entries are matched by entry id (two copies of one item are two entries, R159), and an entry with no
+    /// id by its position among the id-less entries of that item. An entry on one side only counts as unattuned with no charges
+    /// spent there.
+    /// </summary>
+    private static bool EquipmentV9Differs(IReadOnlyList<EquipmentEntry>? now, IReadOnlyList<EquipmentEntry>? then)
+    {
+        static Dictionary<(ContentReference Item, string Key), (bool? Attuned, int? Charges)> Of(IReadOnlyList<EquipmentEntry>? list)
+        {
+            var found = new Dictionary<(ContentReference, string), (bool?, int?)>();
+            var idless = new Dictionary<ContentReference, int>();
+            foreach (var entry in list ?? [])
+            {
+                string key;
+                if (entry.Id is { } id)
+                    key = id.ToString("D");
+                else
+                {
+                    var position = idless.GetValueOrDefault(entry.Item);
+                    idless[entry.Item] = position + 1;
+                    key = $"#{position}";
+                }
+                found[(entry.Item, key)] = (entry.Attuned, entry.ChargesSpent);
+            }
+            return found;
+        }
+        var a = Of(now);
+        var b = Of(then);
+        return a.Keys.Union(b.Keys).Any(k => a.GetValueOrDefault(k) != b.GetValueOrDefault(k));
+    }
+
+    /// <summary>The names of the detail fields that differ between two details (a field name and nothing of the text), or null when none do.</summary>
+    private static IReadOnlyList<string>? DifferingDetails(CharacterDetails? now, CharacterDetails? then)
+    {
+        now ??= new();
+        then ??= new();
+        var nowLook = now.Appearance ?? new();
+        var thenLook = then.Appearance ?? new();
+        var differing = new List<string>();
+        void Compare(string name, string? a, string? b)
+        {
+            if (!string.Equals(a, b, StringComparison.Ordinal))
+                differing.Add(name);
+        }
+
+        void CompareList(string name, IReadOnlyList<string>? a, IReadOnlyList<string>? b)
+        {
+            if (!(a ?? []).SequenceEqual(b ?? [], StringComparer.Ordinal))
+                differing.Add(name);
+        }
+
+        Compare("alignment", now.Alignment, then.Alignment);
+        Compare("personality traits", now.PersonalityTraits, then.PersonalityTraits);
+        Compare("ideals", now.Ideals, then.Ideals);
+        Compare("bonds", now.Bonds, then.Bonds);
+        Compare("flaws", now.Flaws, then.Flaws);
+        Compare("age", nowLook.Age, thenLook.Age);
+        Compare("height", nowLook.Height, thenLook.Height);
+        Compare("weight", nowLook.Weight, thenLook.Weight);
+        Compare("eyes", nowLook.Eyes, thenLook.Eyes);
+        Compare("skin", nowLook.Skin, thenLook.Skin);
+        Compare("hair", nowLook.Hair, thenLook.Hair);
+        Compare("backstory", now.Backstory, then.Backstory);
+        Compare("allies and organisations", now.AlliesAndOrganisations, then.AlliesAndOrganisations);
+        CompareList("languages", now.Languages, then.Languages);
+        CompareList("tools and other", now.ToolsAndOther, then.ToolsAndOther);
+        return differing.Count == 0 ? null : differing;
     }
 
     /// <summary>

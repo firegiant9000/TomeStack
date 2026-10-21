@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type SubmitEvent } from 'react';
-import { client } from '../api/client';
 import type { CharacterView } from '../api/types';
+import { directSave, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
   onStatus: (text: string) => void;
+  /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
+  saveCharacter?: SheetSave;
 }
 
 /** The local calendar date (a UTC date would be tomorrow's, or yesterday's, around midnight). */
@@ -19,8 +21,9 @@ const today = () => {
  * Character schema v8 (D22): the player's dated session notes, saved with the character. A journal, not rules: never
  * calculated, never in a share package (like gap notes), printed only when ticked. Newest session first.
  */
-export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props) {
+export function SessionNotesPanel({ view, onChanged, onError, onStatus, saveCharacter }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const notes = [...(character.notes ?? [])].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.createdAt < b.createdAt ? 1 : -1));
   const [date, setDate] = useState(today());
   const [text, setText] = useState('');
@@ -42,9 +45,10 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
     }
   }, [deleting]);
 
-  async function saveNotes(next: typeof notes, status: string): Promise<boolean> {
+  // The change is applied to the latest saved notes (R132), so a note another panel's save kept is not lost.
+  async function saveNotes(change: (list: typeof notes) => typeof notes, status: string): Promise<boolean> {
     try {
-      onChanged(await client.saveCharacter({ ...character, notes: next }));
+      onChanged(await persist((latest) => ({ ...latest, notes: change(latest.notes ?? []) })));
       onStatus(status);
       return true;
     } catch (error) {
@@ -58,7 +62,8 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
     if (!text.trim() || !date || saving) return;
     noteField.current?.focus(); // WCAG 2.4.3: the submit button is disabled while saving; focus stays on the note
     setSaving(true);
-    const ok = await saveNotes([...notes, { id: crypto.randomUUID(), date, text: text.trim(), createdAt: new Date().toISOString() }], 'Session note saved.');
+    const fresh = { id: crypto.randomUUID(), date, text: text.trim(), createdAt: new Date().toISOString() };
+    const ok = await saveNotes((list) => [...list, fresh], 'Session note saved.');
     setSaving(false);
     if (ok) setText(''); // a failed save keeps what was typed
   }
@@ -101,7 +106,7 @@ export function SessionNotesPanel({ view, onChanged, onError, onStatus }: Props)
                       if (saving) return;
                       setSaving(true);
                       const ok = await saveNotes(
-                        notes.filter((n) => n.id !== note.id),
+                        (list) => list.filter((n) => n.id !== note.id),
                         'Session note deleted.',
                       );
                       setSaving(false);

@@ -63,4 +63,29 @@ public class ClassProposalsLabelTests
         Assert.Contains("Saving Throw Proficiencies Wisdom and Charisma", ClassProposals.LabelledLines([], previous, "Fixture Tester"));
         Assert.DoesNotContain("Saving Throw Proficiencies Wisdom and Charisma", ClassProposals.LabelledLines([], previous, "Fixture Other"));
     }
+
+    [Fact]
+    public void Core_traits_are_read_only_from_the_headings_own_block_not_the_whole_previous_page()
+    {
+        // Wave 0/1 minors (d): two classes' Core Traits tables on one page, and a stray label above both.
+        IReadOnlyList<TextLine> previous =
+        [
+            new("Saving Throw Proficiencies", 50, 580, 80, 10),
+            new("Intelligence and Wisdom", 150, 580, 90, 10),
+            new("Core Fixture Tester Traits", 50, 520, 120, 10),
+            new("Saving Throw Proficiencies", 50, 500, 80, 10),
+            new("Wisdom and Charisma", 150, 500, 90, 10),
+            new("Core Fixture Other Traits", 50, 400, 120, 10),
+            new("Saving Throw Proficiencies", 50, 380, 80, 10),
+            new("Strength and Dexterity", 150, 380, 90, 10),
+        ];
+        var tester = ClassProposals.LabelledLines([], previous, "Fixture Tester");
+        var other = ClassProposals.LabelledLines([], previous, "Fixture Other");
+
+        Assert.Contains("Saving Throw Proficiencies Wisdom and Charisma", tester);
+        Assert.DoesNotContain("Saving Throw Proficiencies Strength and Dexterity", tester);
+        Assert.DoesNotContain("Saving Throw Proficiencies Intelligence and Wisdom", tester);
+        Assert.Contains("Saving Throw Proficiencies Strength and Dexterity", other);
+        Assert.DoesNotContain("Saving Throw Proficiencies Wisdom and Charisma", other);
+    }
 }

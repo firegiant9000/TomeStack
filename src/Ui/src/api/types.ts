@@ -61,6 +61,18 @@ export interface Character {
   notes?: { id: string; date: string; text: string; createdAt: string }[];
   /** Spells known or prepared, per caster (character schema v6, D04). */
   spells?: KnownSpell[];
+  /** Character schema v9 (D42): personality, appearance, backstory, languages and tools. Absent while every field is empty. */
+  details?: CharacterDetails;
+  /** Character schema v9 (D42): carried things that are not content. Never calculated. */
+  customItems?: CustomItem[];
+  /** Character schema v9 (D42): attacks recorded by hand. Never calculated. */
+  customAttacks?: CustomAttack[];
+  /** Character schema v9 (D42): damage resistances, immunities and vulnerabilities (a reminder only). */
+  damageDefences?: DamageDefence[];
+  /** Character schema v9 (D42): familiars, mounts and the like. */
+  companions?: Companion[];
+  /** Character schema v9 (D42): experience points as the player records them. */
+  xp?: number;
   updatedAt: string;
   /** SPEC C-08: set while archived. Only `character.archive` / `character.unarchive` change it; a save keeps it. */
   archivedAt?: string;
@@ -72,6 +84,75 @@ export interface EquipmentEntry {
   item: ContentReference;
   equipped: boolean;
   quantity: number;
+  /** Character schema v9: names this entry. */
+  id?: string;
+  /** Character schema v9: absent means not attuned. */
+  attuned?: boolean;
+  /** Character schema v9: absent means none spent. */
+  chargesSpent?: number;
+}
+
+/** Character schema v9 (D42): how the character looks, as free text. */
+export interface CharacterAppearance {
+  age?: string;
+  height?: string;
+  weight?: string;
+  eyes?: string;
+  skin?: string;
+  hair?: string;
+}
+
+/** Character schema v9 (D42): the Details page. Each text is at most 2,000 characters; each list at most 30 entries of 80. */
+export interface CharacterDetails {
+  alignment?: string;
+  personalityTraits?: string;
+  ideals?: string;
+  bonds?: string;
+  flaws?: string;
+  appearance?: CharacterAppearance;
+  backstory?: string;
+  alliesAndOrganisations?: string;
+  languages?: string[];
+  toolsAndOther?: string[];
+}
+
+export interface CustomItem {
+  id: string;
+  name: string;
+  quantity: number;
+  note?: string;
+  equipped: boolean;
+}
+
+export interface CustomAttack {
+  id: string;
+  name: string;
+  toHit: number;
+  damage?: string;
+  damageType?: string;
+  note?: string;
+}
+
+export interface DamageDefence {
+  type: string;
+  kind: 'resistance' | 'immunity' | 'vulnerability';
+}
+
+export interface Companion {
+  id: string;
+  name: string;
+  kind?: string;
+  armorClass?: number;
+  hitPointMaximum: number;
+  speed?: string;
+  attacks?: CustomAttack[];
+  note?: string;
+}
+
+export interface CompanionPlay {
+  id: string;
+  current?: number | null;
+  temporary: number;
 }
 
 export interface ClassLevel {
@@ -172,6 +253,8 @@ export interface ResourceValue {
   automation: AutomationStatus;
   recoveries: RecoveryInfo[];
   text?: string;
+  /** Content v10 (Wave 3 item 22): the group the resource is listed under on Play; absent below v10 and when the content names none. */
+  activation?: Activation;
 }
 
 export interface FeatureEffect {
@@ -203,6 +286,10 @@ export interface ToggleValue {
   on: boolean;
   resourceId?: string;
   text?: string;
+  /** Content v10 (D38): the sheet switches this toggle itself while the character is bloodied; it has no switch and is never stored. */
+  auto?: boolean;
+  /** Content v10 (Wave 3 item 22): the group the toggle is listed under on Play; absent below v10 and when the content names none. */
+  activation?: Activation;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
@@ -284,6 +371,75 @@ export interface CharacterSheet {
   toggles?: ToggleValue[];
   /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
   scales?: ScaleValue[];
+  /** D38: current hit points are at or below half the maximum (rounded down), with a maximum of at least 1. Absent when not bloodied. */
+  bloodied?: boolean;
+  /** Wave 3 item 21: the character's own damage defences and the v10 damage grants, merged; absent when there are none. */
+  damageDefences?: DamageDefenceValue[];
+  /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, carried or equipped; absent when there are none. */
+  itemUses?: ItemUseValue[];
+  /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
+  levelUpAvailable?: boolean;
+  /** Wave 3 item 27: the total needed for the next level while experience points are tracked and the level is 1 to 19; absent otherwise. */
+  xpForNextLevel?: number;
+}
+
+/** When an item's charges come back; absent `regain` means all of them. */
+export interface ItemChargeRecovery {
+  on: RestPeriod;
+  regain?: string;
+}
+
+/**
+ * One equipment entry of an item with attunement or charges. `entryKey` names it for a rest roll or a charges roll: its id, or `#`
+ * and its position in the list while it has none (`entryId` absent). Charges are per entry; `chargesMax` is absent when the item has none.
+ */
+export interface ItemUseValue {
+  item: ContentReference;
+  name: string;
+  entryKey: string;
+  entryId?: string;
+  entryIndex: number;
+  equipped: boolean;
+  requiresAttunement: boolean;
+  attuned: boolean;
+  chargesMax?: number;
+  chargesSpent: number;
+  chargesLeft?: number;
+  recovery?: ItemChargeRecovery;
+}
+
+/** What the player rolled for the `regain` dice of one entry's charges on a rest: the whole total. */
+export interface ChargeRoll {
+  entry: string;
+  roll: number;
+}
+
+/** Where a damage defence comes from: the character's own list (no `content`) or a damage grant of active content. */
+export interface DamageDefenceSource {
+  name: string;
+  content?: ContentReference;
+  effectId?: string;
+}
+
+/** One damage resistance, immunity or vulnerability on the sheet: several sources of the same type and kind are one entry. */
+export interface DamageDefenceValue {
+  type: string;
+  kind: DamageDefence['kind'];
+  sources: DamageDefenceSource[];
+}
+
+/**
+ * What a damage command did (set only on the view it returns, never stored). `adjusted` is the amount after defences;
+ * `warnings` carries codes and numbers only (`play.massive-damage`).
+ */
+export interface DamageOutcome {
+  amount: number;
+  type?: string;
+  effect: 'none' | 'immune' | 'halved' | 'doubled' | 'halvedThenDoubled';
+  adjusted: number;
+  absorbed: number;
+  lost: number;
+  warnings: Diagnostic[];
 }
 
 export interface ScaleValue {
@@ -315,6 +471,8 @@ export interface PlayState {
   inspiration?: boolean;
   /** Character schema v8 (D19): the concentration spell and a pending Constitution save DC after damage. */
   concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
+  /** Character schema v9 (D42): current and temporary hit points per companion. */
+  companions?: CompanionPlay[];
 }
 
 export type PlayActionKind =
@@ -339,7 +497,13 @@ export type PlayActionKind =
   | 'toggleOff'
   | 'startConcentration'
   | 'endConcentration'
-  | 'clearConcentrationCheck';
+  | 'clearConcentrationCheck'
+  | 'spendCharge'
+  | 'regainCharge'
+  | 'companionDamage'
+  | 'companionHeal'
+  | 'companionSetHitPoints'
+  | 'companionSetTemporaryHitPoints';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -349,12 +513,20 @@ export interface PlayAction {
   condition?: string;
   /** Content v6: the toggle to switch on or off (with `contentId`). */
   toggleId?: string;
+  /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
+  damageType?: string;
+  /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
+  entryId?: string;
+  entryIndex?: number;
+  /** With a `companion*` action (Wave 3 item 23): the companion, by its id. `companionSetHitPoints` takes the current hit points in `amount` and, when sent, the temporary ones in `temporary`; `companionSetTemporaryHitPoints` takes only the temporary ones in `amount` and keeps the stored current. */
+  companionId?: string;
+  temporary?: number;
 }
 
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges';
   slotLevel?: number;
   die?: number;
   amount?: number;
@@ -367,6 +539,9 @@ export interface RestChange {
   resourceId?: string;
   /** Set when the change depends on the situation; the player decides. */
   condition?: string;
+  /** `charges` (Wave 3 item 25): `resourceId` is the entry key, `dice` what the player still rolls while `spentAfter` is absent. */
+  dice?: string;
+  spentAfter?: number | null;
 }
 
 /** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
@@ -438,6 +613,12 @@ export interface RollTarget {
   weapon?: ContentReference;
   damage?: boolean;
   versatile?: boolean;
+  /** One of the character's own hand-typed attacks (`character.customAttacks`): its attack roll, or its damage (`damage`). */
+  customAttack?: string;
+  /** The entry key of an item whose `regain` dice to roll for its charges (Wave 3 item 25). */
+  chargeEntry?: string;
+  /** One attack line of one of the character's companions (Wave 3 item 23): its attack roll, or its damage (`damage`). */
+  companionAttack?: { companionId: string; attackId: string };
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */
@@ -480,6 +661,8 @@ export interface CharacterView {
   character: Character;
   sheet: CharacterSheet;
   campaign?: CampaignStatus;
+  /** Set only on the view a damage command returns. */
+  damage?: DamageOutcome;
 }
 
 export interface CharacterSummary {
@@ -930,6 +1113,10 @@ export interface StoredCandidate {
   draft?: ContentReference;
   /** Item 11 (D34): on a class, the feature candidates of the same import that it grants, with the class level each is granted at. */
   grantsCandidates?: { candidateId: string; level: number }[];
+  /** R29: the reviewer saved a rules family for this candidate; absent (false) until then. */
+  familiesReviewed?: boolean;
+  /** R120: the compare-and-swap token of the stored row; sent back as `CandidateEdit.expected`. */
+  etag?: string;
   updatedAt: string;
 }
 
@@ -985,6 +1172,8 @@ export interface CandidateEdit {
   summary?: string;
   effects?: unknown[];
   dismissReferences?: string[];
+  /** R120: the candidate's `etag` as the editor last saw it; the edit is refused when the stored row has changed since. */
+  expected?: string;
 }
 
 /** `gap.listAll` (M3 C5): a note with its character's name. */
@@ -1066,9 +1255,20 @@ export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export type Effect =
   | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
-  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string })
-  | (EffectBase & { type: 'grant'; grant: 'proficiency' | 'expertise' | 'content'; target?: string; content?: ContentReference; level?: number; onlyAs?: ClassEntry })
-  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string })
+  // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
+  // kinds with a damageType, and the item effect. All optional; a revision below v10 never carries them.
+  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string; autoWhen?: 'bloodied'; activation?: Activation })
+  | (EffectBase & {
+      type: 'grant';
+      grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
+      target?: string;
+      content?: ContentReference;
+      level?: number;
+      onlyAs?: ClassEntry;
+      damageType?: string;
+    })
+  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string; activation?: Activation })
+  | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
@@ -1359,6 +1559,12 @@ export interface RestorePreview {
   /** Set only when the restore changes the coins (they roll back with the snapshot): the coins now, and the coins it brings back. */
   currencyNow?: Currency;
   currencyAfter?: Currency;
+  /** Names of the detail fields (such as "alignment") the restore changes; never their text. Set only when some differ (D36). */
+  detailsChange?: string[];
+  /** Whether the restore changes the custom items, the custom attacks, or the experience points, damage defences and companions (R128). Flags only, never names. */
+  customItemsChange?: boolean;
+  customAttacksChange?: boolean;
+  otherSheetValuesChange?: boolean;
 }
 
 export interface RestoreResult {
@@ -1501,7 +1707,7 @@ export interface LibraryRestoreResult {
   warnings: Diagnostic[];
 }
 
-// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md) ----
+// ---- character import from a character sheet PDF: a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md) ----
 
 export interface DdbSummary {
   /** The character's name as read; shown, never logged. */
@@ -1511,13 +1717,17 @@ export interface DdbSummary {
   features: number;
   spells: number;
   items: number;
+  /** Item 19a: the lines of a text import that were not understood; 0 or absent for a PDF. */
+  notRead?: number;
 }
 
-/** `ddb.read` and `ddb.readData`: the sheet is held in memory under the one-use token. `chosen` is false when the dialog was cancelled. */
+/** `ddb.read`, `ddb.readData` and `ddb.readText`: the sheet is held in memory under the one-use token. `chosen` is false when the dialog was cancelled. */
 export interface DdbReadResult {
   chosen?: boolean;
   token: string;
   layout: string;
+  /** The layout in words ("D&D Beyond 2014", "the fillable 2014 sheet"); the id in `layout` is the fallback. */
+  layoutName?: string;
   suggestedFamily?: RulesFamilyId;
   summary: DdbSummary;
 }
@@ -1601,6 +1811,10 @@ export interface DdbReport {
   notBroughtOver: string[];
   sameNameExists: boolean;
   familyMismatch: boolean;
+  /** The layout in words, as in `DdbReadResult.layoutName`. */
+  layoutName?: string;
+  /** Lines from reading and importing the sheet's free text (a field cut short, a weapon row left empty): labels and counts only, never the sheet's text. */
+  lines?: string[];
 }
 
 export interface DdbPreviewRequest {
@@ -1614,6 +1828,46 @@ export interface DdbPreviewRequest {
   answers?: ChoiceSelection[];
   /** D16g: create matched weapons and armour equipped. */
   equipMatched?: boolean;
+  /** D35: the row id of the one class the sheet names that TomeStack lacks, to be created as a minimal homebrew class. */
+  createClassRow?: string;
+  /** Item 19a: keep a text import's lines that were not read as session notes (the service defaults to true). Part of the request, so a change re-previews. */
+  keepNotRead?: boolean;
+  /** R129: the created class will be published with the character. The preview counts the class only then, so a toggle re-previews. */
+  publishClass?: boolean;
+}
+
+/** Item 19a (D37): a line of the pasted or file text that was not understood. The user's own text: shown as plain text only. */
+export interface NotReadLine {
+  /** 1-based. */
+  line: number;
+  text: string;
+}
+
+/** D35: a class the sheet names that is not installed, and whether a stub can be created for it. `note` is null when it can. */
+export interface StubOffer {
+  rowId: string;
+  name: string;
+  hitDie?: number | null;
+  note?: 'stub.hit-die-missing' | 'stub.hit-die-unreadable' | 'stub.one-per-import' | null;
+}
+
+/** D35: the stub class in full, as reviewed before it is created. `saves` are ability keys (`str` to `cha`). */
+export interface StubClassReview {
+  rowId: string;
+  name: string;
+  rulesFamily: RulesFamilyId;
+  hitDie: number;
+  saves: string[];
+  sourceTitle: string;
+}
+
+/** Item 16 (D16(c)): one reference draft the import would write (name and description only). `firstLine` is the description's first line. */
+export interface ReferenceDraftInfo {
+  rowId: string;
+  kind: 'feat' | 'feature';
+  name: string;
+  firstLine: string;
+  length: number;
 }
 
 /** `ddb.preview`: the proposed character and everything the steps show. Nothing is stored. */
@@ -1626,6 +1880,16 @@ export interface DdbPreview {
   report: DdbReport;
   diagnostics: Diagnostic[];
   canApply: boolean;
+  /** One offer per unmatched class row (D35). */
+  stubOffers?: StubOffer[] | null;
+  /** Set when the previewed request asked for a class to be created. */
+  stub?: StubClassReview | null;
+  /** The reference drafts for unmatched feats and features that carry text (item 16); absent when there are none. */
+  referenceDrafts?: ReferenceDraftInfo[] | null;
+  /** `campaign.source-not-allowed` when a published feat would be pinned from a source the chosen campaign does not allow. */
+  referenceNote?: 'campaign.source-not-allowed' | null;
+  /** Item 19a: the text lines that were not read, in order; absent for a PDF or when every line was understood. */
+  notRead?: NotReadLine[] | null;
 }
 
 export interface DdbApplyResult {
@@ -1634,4 +1898,23 @@ export interface DdbApplyResult {
   gapNotes: number;
   gapNotesNotStored: number;
   report: DdbReport;
+  /** The created class's content id, when one was created. */
+  createdClass?: string | null;
+  /** The content ids of the reference drafts written, when any were. */
+  referenceDrafts?: string[] | null;
+}
+
+/** One sample class level of a formula preview (D61): a value, or the problem at that level. The server omits null fields. */
+export interface FormulaPreviewPoint {
+  level: number;
+  value?: number | null;
+  problem?: string | null;
+}
+
+/** The value of a formula at the sample levels (D61, `content.previewFormula`). Read-only; writes nothing. */
+export interface FormulaPreviewResult {
+  formula: string;
+  error?: { code: string; message: string } | null;
+  unavailable?: string | null;
+  points: FormulaPreviewPoint[];
 }

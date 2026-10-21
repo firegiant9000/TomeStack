@@ -47,7 +47,7 @@ To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PD
 
 - **Before** the change: spell 116, item 69 (2 of them not items), feature 1 (spurious), class, feat, species, background and subclass 0. Spell recall was about 84 % (116 of about 138 spell headers).
 - **After** the change: spell 116 (recall unchanged, about 84 %), item 66 (3 fewer: rows whose name held a price or read as a sentence), feat 47, class 8, feature 1. The feats and classes are new and their precision is **not reviewed**: the numbers show only that the detector now finds more, not that what it finds is right. Several of the 47 may be other kinds of entry in the same layout.
-- **SRD floors re-run the same day** with both PDFs hash-checked: every floor holds, and every number is the same as before the change (spells 100 % / 100 % on both SRDs; weapons 97.2 % / 100 % (5.1) and 97.4 % / 100 % (5.2.1); armor 100 % / 100 %; classes 83.3 % / 100 %; class features recall 88.2 % (5.1) and 100 % (5.2.1); feats recall 100 % with 1 candidate (5.1) and 17 (5.2.1)). A first draft of the feat rule took the SRDs' Eldritch Invocations for feats (+21 and +23 candidates), and a first draft of the junk-row rule dropped the SRD's "Crossbow, hand" rows (5.1 weapon recall 91.4 %). Both were narrowed until the numbers matched the baseline again.
+- **SRD floors re-run the same day** with both PDFs hash-checked: every floor holds, and every number is the same as before the change (spells 100 % / 100 % on both SRDs; weapons 97.2 % / 100 % (5.1) and 97.4 % / 100 % (5.2.1); armor 100 % / 100 %; classes 83.3 % / 100 %; class features recall 88.2 % (5.1) and 100 % (5.2.1); feats recall 100 % with 1 candidate (5.1) and 17 (5.2.1)). A first draft of the feat rule took the SRDs' option-list entries (a name with a singular "Prerequisite:" line) for feats (+21 and +23 candidates), and a first draft of the junk-row rule dropped the SRD's weapon rows whose name has one word after a comma (5.1 weapon recall 91.4 %). Both were narrowed until the numbers matched the baseline again.
 - **The gate stays not met.** It needs the owner to review precision on the book (accepted and ignored candidates, kind by kind), which this run does not replace.
 
 **2026-10-16 run (the same third-party book, local, counts only; branch `wave-1`, assisted class import, item 11).** 385 pages, 5 of them by OCR; candidates 332: class 8, feature 95, feat 47, spell 116, item 66 (before: 238, with feature 1). The review sample (the first of each kind, a class only as reference because the harness confirms nothing) gave accepted 3, accepted as reference 2, ignored 1, pending 326; **active without approval: 0**. The 94 new feature candidates are mostly reference stubs for the feature names the class tables list, not features found on their own pages, so they are not detection recall and their precision is **not reviewed**. The gate stays not met.
@@ -60,6 +60,15 @@ To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PD
 | After | 336 (feature 99) | 8 | 8 | 8 | 7 | 8 | 0 | 7 | 104 | 16 | 0 |
 
 The other kinds did not move (class 8, feat 47, spell 116, item 66); review sample accepted 3, as reference 2, ignored 1, pending 330. The 4 extra feature stubs and 9 extra links are names that match installed content but not exactly one installed feature in the class's families, which R67 now stubs instead of dropping. No class on this book gets a `spellcasting` proposal before or after: why (no slot table read, or a casting sentence the reader does not match) is **not reviewed**, and neither is the precision of any proposal here.
+
+**Class-import accuracy (Wave 0/1 minors, group d), SRD link and stub counts, old against new (counts only).** The change scopes the "Core … Traits" read to its own block, gives two classes on one page a window each, and re-reads the class inside the accept. `SrdDetectionMeasurementTests` now prints, for each SRD, the classes, links, linked features and reference stubs.
+
+| | SRD 5.1 (classes / links / stubs) | SRD 5.2.1 (classes / links / stubs) |
+| --- | --- | --- |
+| Old (before this change) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+| New | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) | to be measured by the owner (`TOMESTACK_SRD_PDF_DIR` not set) |
+
+"Old" is the build before this change (`788bc60`), "new" the build with it. No number is recorded: the PDFs were not available where the change was made. The SRD floors are unchanged; the new test line has no floor until it has been measured.
 
 ## Precision and recall (D3)
 

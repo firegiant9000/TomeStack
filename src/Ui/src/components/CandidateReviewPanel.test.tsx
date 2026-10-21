@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 // Item 2: the review screen says what happens to an accepted entry and offers the way to the studio.
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
-  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), acceptCandidates: vi.fn() },
+  client: { candidates: vi.fn(), checkCandidate: vi.fn(), editCandidate: vi.fn(), acceptCandidate: vi.fn(), ignoreCandidate: vi.fn(), acceptCandidates: vi.fn() },
 }));
 
 const source = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
@@ -46,6 +47,7 @@ const detected = (rulesFamilies: string[]): StoredCandidate => ({
   id: 'cand-1',
   jobId: 'job-1',
   status: 'pending',
+  etag: 'etag-1',
   updatedAt: '2026-10-14T00:00:00Z',
   candidate: {
     id: 'cand-1',
@@ -199,7 +201,7 @@ it('counts a changed family, text, effects or kind as an edit, and a saved edit 
 // Item 13: the list pages at 50, filters by a page range, and says when detection stopped early.
 const numbered = (n: number): StoredCandidate => {
   const base = detected(['srd-5.1']);
-  return { ...base, id: `cand-${n}`, candidate: { ...base.candidate, id: `cand-${n}`, proposedName: `Testy Item ${n}`, page: { start: 1 + Math.floor(n / 10) } } };
+  return { ...base, id: `cand-${n}`, etag: `etag-${n}`, candidate: { ...base.candidate, id: `cand-${n}`, proposedName: `Testy Item ${n}`, page: { start: 1 + Math.floor(n / 10) } } };
 };
 
 /** A job of `total` candidates; the mock answers each request from its offset and limit. */
@@ -652,7 +654,7 @@ it('accepts the selection in bulk, reports the counts, and leaves the blocked ro
 
   await user.click(screen.getByRole('button', { name: 'Accept selected as drafts' }));
 
-  expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false);
+  expect(client.acceptCandidates).toHaveBeenCalledExactlyOnceWith(['cand-1', 'cand-2', 'cand-3'], false, { 'cand-1': 'etag-1', 'cand-2': 'etag-2', 'cand-3': 'etag-3' });
   await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith(expect.stringMatching(/^Accepted 2; 1 need review\./)));
   await screen.findByText('1 selected', { selector: '[aria-live="polite"]' });
   expect((screen.getByRole('checkbox', { name: 'Select Testy Item 3' }) as HTMLInputElement).checked).toBe(true);
@@ -667,7 +669,25 @@ it('accepts as reference with the same selection', async () => {
   renderPanel(vi.fn(), bothSource);
   await user.click(await screen.findByRole('checkbox', { name: 'Select Testy Item 1' }));
   await user.click(screen.getByRole('button', { name: 'Accept selected as reference' }));
-  expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true);
+  expect(client.acceptCandidates).toHaveBeenLastCalledWith(['cand-1'], true, { 'cand-1': 'etag-1' });
+});
+
+it('reloads and clears the selection when a bulk accept is refused as changed, so the next try is not stale (R139)', async () => {
+  const user = userEvent.setup();
+  longList(3);
+  const onError = vi.fn();
+  vi.mocked(client.acceptCandidates).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={() => {}} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Select the 3 shown' }));
+  const calls = vi.mocked(client.candidates).mock.calls.length;
+  const button = screen.getByRole('button', { name: 'Accept selected as drafts' });
+  await user.click(button);
+
+  await screen.findByText('Some selected candidates changed; the selection was cleared.', { selector: '[aria-live="polite"]' });
+  expect(onError).not.toHaveBeenCalled(); // a refusal to act on, not an error to show
+  expect(vi.mocked(client.candidates).mock.calls.length).toBeGreaterThan(calls); // the list was reloaded, for fresh tokens
+  expect(screen.getAllByRole('checkbox', { name: /^Select Testy Item / }).some((b) => (b as HTMLInputElement).checked)).toBe(false);
+  expect(document.activeElement).toBe(button); // WCAG 2.4.3: focus stays where it was
 });
 
 it('ignores a second press while a bulk accept is in flight', async () => {
@@ -831,14 +851,14 @@ it('holds Accept as a draft, with a visible reason, until the hit die and slot t
   await user.click(slots);
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting']);
 });
 
 it('accepts a class as reference without any confirmation, and sends none', async () => {
   const user = userEvent.setup();
   await openClass();
   await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'etag-1');
 });
 
 it('adds no live region for a class', async () => {
@@ -903,7 +923,7 @@ it('offers one unticked Confirm checkbox per proposed effect, named by it, and s
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the shield proficiency' }));
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
 });
 
 // Item 9.
@@ -916,7 +936,7 @@ it('treats a candidate edited into a class as a class', async () => {
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the hit die, d8' }));
   await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
   await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, ['hit-die', 'spellcasting']);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting']);
 });
 
 it('treats a class edited into another kind as that kind', async () => {
@@ -927,7 +947,7 @@ it('treats a class edited into another kind as that kind', async () => {
   expect(screen.queryByRole('group', { name: 'Confirm what was read' })).toBeNull();
   await vi.waitFor(() => expect(accept.getAttribute('aria-disabled')).toBeNull());
   await user.click(accept);
-  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false);
+  expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1');
 });
 
 // Item 10.
@@ -1013,7 +1033,7 @@ it('clears the ticks when a saved edit changes the effects, and keeps them when 
   await openStored(rows);
   vi.mocked(client.editCandidate).mockImplementation((_id, edit) => {
     const candidate = { ...rows.current.candidate, proposedName: edit.name ?? rows.current.candidate.proposedName, proposedEffects: (edit.effects ?? []) as DraftCandidate['proposedEffects'] };
-    rows.current = { ...rows.current, edited: candidate, updatedAt: `${rows.current.updatedAt}x` };
+    rows.current = { ...rows.current, edited: candidate, etag: `${rows.current.etag}x`, updatedAt: `${rows.current.updatedAt}x` };
     return Promise.resolve(rows.current);
   });
   await user.click(await screen.findByRole('checkbox', { name: 'Confirm the hit die, d8' }));
@@ -1048,4 +1068,136 @@ it('says on a class that the ticked effects become automatic and the others stay
 it('keeps the reference-only label for other kinds', async () => {
   await openDetail([], checkOf({}));
   expect(screen.getByLabelText('Proposed effects (JSON; they stay reference-only until you change them in the studio)')).toBeTruthy();
+});
+
+// R120: an edit carries the token it was opened with; a refused one reloads the candidate and says so.
+it('sends the opened candidates token with the edit', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.editCandidate).mockClear();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.editCandidate).mockResolvedValue({ ...detected(['srd-5.1']), etag: 'token-2' });
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Save edit' }));
+  expect(client.editCandidate).toHaveBeenCalledWith('cand-1', expect.objectContaining({ expected: 'token-1' }));
+});
+
+it('reloads the candidate and says it changed when the edit is refused, without reporting an error', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValueOnce(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-9', updatedAt: '2026-10-15T00:00:00Z' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.editCandidate).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  expect(onError).not.toHaveBeenCalled();
+  expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
+  // The editor is still there, on the reloaded candidate, and focus is inside it.
+  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
+});
+
+// R134: accept and ignore carry the opened candidate's token too.
+it('sends the opened candidates token with Accept as reference and with Ignore', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.ignoreCandidate).mockReset();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.acceptCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.ignoreCandidate).mockResolvedValue(detected(['srd-5.1']));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: 'Accept as reference' }));
+  await waitFor(() => expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', true, 'token-1'));
+  await user.click(await screen.findByRole('button', { name: 'Ignore' }));
+  await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'token-1'));
+});
+
+it.each([
+  ['Accept as a draft', 'acceptCandidate'],
+  ['Ignore', 'ignoreCandidate'],
+] as const)('reloads the candidate and says it changed when %s is refused, without reporting an error', async (button, method) => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValueOnce(pageOf([{ ...detected(['srd-5.1']), etag: 'token-1' }]));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([{ ...detected(['srd-5.1']), etag: 'token-9', updatedAt: '2026-10-15T00:00:00Z' }]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client[method]).mockRejectedValueOnce(new TomeStackError({ code: 'import.candidate-changed', message: 'Fixture: changed.' }));
+  render(<CandidateReviewPanel job={job} source={bothSource} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  await user.click(await screen.findByRole('button', { name: button }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('This candidate changed since you opened it. It has been reloaded.'));
+  expect(onError).not.toHaveBeenCalled();
+  expect(vi.mocked(client.candidates).mock.calls.length).toBe(2);
+  const heading = await screen.findByRole('heading', { name: 'Candidate: Testy Coat' });
+  await waitFor(() => expect(heading.closest('section')?.contains(document.activeElement)).toBe(true));
+});
+
+// R134: a linked feature that moved on does not change the class's own etag, so the check is asked for again by hand.
+it.each(['candidate.linked-edited', 'candidate.linked-changed'])('asks for the check again, and says so, when a linked feature moved on (%s)', async (code) => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  const onStatus = vi.fn();
+  vi.mocked(client.candidates).mockReset();
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([lamp()]));
+  vi.mocked(client.checkCandidate).mockReset();
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockRejectedValueOnce(new TomeStackError({ code, message: 'Fixture: a feature moved on.' }));
+  render(<CandidateReviewPanel job={job} source={source} onError={onError} onStatus={onStatus} onOpenPage={() => {}} onOpenStudio={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Testy Lamplighter' }));
+  await user.click(await screen.findByRole('checkbox', { name: 'Confirm the hit die, d8' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Confirm the spell slot table' }));
+  await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(1));
+
+  await user.click(screen.getByRole('button', { name: 'Accept as a draft' }));
+
+  await waitFor(() => expect(vi.mocked(client.checkCandidate)).toHaveBeenCalledTimes(2));
+  expect(onStatus).toHaveBeenCalledWith('A feature this class grants changed while it was being accepted. The check has been refreshed; look it over and accept again.');
+  expect(onError).not.toHaveBeenCalled();
+});
+
+// R134: accept and ignore act on the stored candidate, so they are held, like selecting another one, while the form differs from it.
+it('holds Accept as a draft, Accept as reference and Ignore, with a linked reason, while the open candidate has an unsaved edit', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.acceptCandidate).mockReset();
+  vi.mocked(client.ignoreCandidate).mockReset();
+  vi.mocked(client.acceptCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.ignoreCandidate).mockResolvedValue(detected(['srd-5.1']));
+  vi.mocked(client.candidates).mockResolvedValue(pageOf([detected(['srd-5.1'])]));
+  vi.mocked(client.checkCandidate).mockResolvedValue(checkOf({}));
+  renderPanel(vi.fn(), bothSource);
+  await user.click(await screen.findByRole('button', { name: 'Testy Coat' }));
+  const name = await screen.findByLabelText('Name');
+  const buttons = ['Accept as a draft', 'Accept as reference', 'Ignore'].map((label) => screen.getByRole('button', { name: label }));
+  await waitFor(() => expect(held(buttons[0]!)).toBe(false));
+  await user.type(name, ' II');
+  const reason = await screen.findByText('Save or undo your edit first.');
+
+  for (const button of buttons) {
+    expect(held(button)).toBe(true);
+    expect(button).toHaveProperty('disabled', false);
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toContain(reason.id);
+    button.focus();
+    await user.click(button);
+    expect(document.activeElement).toBe(button);
+  }
+  expect(client.acceptCandidate).not.toHaveBeenCalled();
+  expect(client.ignoreCandidate).not.toHaveBeenCalled();
+  expect((name as HTMLInputElement).value).toBe('Testy Coat II');
+
+  // Undo: the same buttons work again.
+  await user.type(name, '{Backspace}{Backspace}{Backspace}');
+  for (const button of buttons) expect(held(button)).toBe(false);
+  await user.click(buttons[2]!);
+  await waitFor(() => expect(client.ignoreCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', 'etag-1'));
 });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
 import type { CharacterView, DerivedValue, GapNote, LicenseNotice, TraceOrigin } from '../api/types';
+import { detailRows } from './detailsModel';
 
 const abilities = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -27,6 +28,7 @@ export function PrintView({ view, onError, onClose }: Props) {
   const { character, sheet } = view;
   const [includeNotes, setIncludeNotes] = useState(false);
   const [includeSessionNotes, setIncludeSessionNotes] = useState(false);
+  const [includeDetails, setIncludeDetails] = useState(false);
   const [notes, setNotes] = useState<GapNote[]>();
   const [notices, setNotices] = useState<LicenseNotice[]>([]);
   const [version, setVersion] = useState('');
@@ -94,6 +96,7 @@ export function PrintView({ view, onError, onClose }: Props) {
   const hp = sheet.hitPoints;
   const play = character.play ?? { conditions: [], exhaustion: 0, inspiration: false };
   const caster = (sheet.spellcasting ?? []).length > 0;
+  const printedDetails = detailRows(character.details);
 
   return (
     <section className="print-sheet" role="region" aria-label="Print preview" id="print-preview" ref={section}>
@@ -107,6 +110,10 @@ export function PrintView({ view, onError, onClose }: Props) {
         <label>
           <input type="checkbox" checked={includeSessionNotes} onChange={(e) => setIncludeSessionNotes(e.target.checked)} />
           Include session notes (private)
+        </label>
+        <label>
+          <input type="checkbox" checked={includeDetails} onChange={(e) => setIncludeDetails(e.target.checked)} />
+          Include details (personality, appearance, backstory, languages and tools)
         </label>
         <div className="actions">
           <button type="button" onClick={() => window.print()}>
@@ -273,6 +280,20 @@ export function PrintView({ view, onError, onClose }: Props) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {includeDetails && printedDetails.length > 0 && (
+        <div>
+          <h4>Details</h4>
+          <dl className="print-details">
+            {printedDetails.map(([label, text]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{text}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       )}
 

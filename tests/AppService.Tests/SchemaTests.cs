@@ -62,6 +62,115 @@ public class SchemaTests
         AssertValid("character", document.RootElement, file);
     }
 
+    [Fact]
+    public void The_v10_golden_revision_matches_the_v10_schema_and_the_schema_is_not_vacuous()
+    {
+        var golden = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.AsObject();
+        using (var document = JsonDocument.Parse(golden.ToJsonString()))
+            AssertValid("content-revision", document.RootElement, "the v10 golden revision");
+
+        // Each v10 bound and rule is enforced by the schema, not only described in it.
+        string ErrorsWith(Action<JsonArray> change)
+        {
+            var copy = golden.DeepClone().AsObject();
+            change(copy["effects"]!.AsArray());
+            using var document = JsonDocument.Parse(copy.ToJsonString());
+            return Validate("content-revision", document.RootElement);
+        }
+        JsonObject Effect(JsonArray effects, string id) => effects.Single(e => (string?)e!["id"] == id)!.AsObject();
+
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 100));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 0));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["recovery"]!["period"] = "weekly"));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-glow")["autoWhen"] = "dying"));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-glow")["activation"] = "free"));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-pool")["activation"] = "free"));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-ward").Remove("damageType")));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-ward")["target"] = "skill.stealth"));
+        Assert.NotEqual("", ErrorsWith(e => Effect(e, "ember-pace")["target"] = "passive.stealth"));
+        Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "skill.stealth", ["damageType"] = "fire" })));
+        // speed and passive.* are modifier and restriction targets, not grant targets.
+        Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "speed" })));
+        Assert.NotEqual("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "expertise", ["target"] = "passive.perception" })));
+        Assert.Equal("", ErrorsWith(e => e.Add(new JsonObject { ["type"] = "grant", ["id"] = "x", ["grant"] = "proficiency", ["target"] = "skill.stealth" })));
+        Assert.Equal("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 99));
+    }
+
+    [Fact]
+    public void The_v9_schema_is_not_vacuous()
+    {
+        var node = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "characters", "srd521-courier-v9.json")))!;
+        node["xp"] = -1;
+        node["details"]!["alignment"] = new string('x', 2001);
+        var languages = new JsonArray();
+        for (var i = 0; i < 31; i++)
+            languages.Add("x");
+        node["details"]!["languages"] = languages;
+        node["damageDefences"]![0]!["type"] = "sonic";
+        node["customAttacks"]![0]!["toHit"] = 99;
+        node["companions"]![0]!["hitPointMaximum"] = 10_001;
+        node["play"]!["companions"]![0]!["temporary"] = -1;
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+        var errors = Validate("character", document.RootElement);
+
+        foreach (var location in new[] { "/xp", "/details/alignment", "/details/languages", "/damageDefences/0/type", "/customAttacks/0/toHit", "/companions/0/hitPointMaximum", "/play/companions/0/temporary" })
+            Assert.Contains(location, errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_v9_schema_bounds_equal_the_character_constants()
+    {
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", "character.v9.schema.json")))!;
+        var properties = schema["properties"]!;
+        var defs = schema["$defs"]!;
+        var item = properties["customItems"]!["items"]!["properties"]!;
+        var companion = properties["companions"]!["items"]!["properties"]!;
+        var attack = defs["customAttack"]!["properties"]!;
+
+        (string Where, int? Actual, int Expected)[] bounds =
+        [
+            ("details text", defs["detailText"]!["maxLength"]!.GetValue<int>(), Character.MaxDetailText),
+            ("details list entries", defs["shortList"]!["maxItems"]!.GetValue<int>(), Character.MaxDetailListEntries),
+            ("details list entry length", defs["shortList"]!["items"]!["maxLength"]!.GetValue<int>(), Character.MaxDetailListEntryLength),
+            ("customItems", properties["customItems"]!["maxItems"]!.GetValue<int>(), Character.MaxCustomItems),
+            ("item name", item["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("item note", item["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("item quantity", item["quantity"]!["maximum"]!.GetValue<int>(), EquipmentEntry.MaxQuantity),
+            ("customAttacks", properties["customAttacks"]!["maxItems"]!.GetValue<int>(), Character.MaxCustomAttacks),
+            ("attack name", attack["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("attack note", attack["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("attack type", attack["damageType"]!["maxLength"]!.GetValue<int>(), Character.MaxDamageTypeLength),
+            ("attack damage", attack["damage"]!["maxLength"]!.GetValue<int>(), DiceLimits.MaxLength),
+            ("attack to hit min", attack["toHit"]!["minimum"]!.GetValue<int>(), Character.MinToHit),
+            ("attack to hit max", attack["toHit"]!["maximum"]!.GetValue<int>(), Character.MaxToHit),
+            ("damageDefences", properties["damageDefences"]!["maxItems"]!.GetValue<int>(), DamageTypes.All.Count * Enum.GetValues<DamageDefenceKind>().Length),
+            ("companions", properties["companions"]!["maxItems"]!.GetValue<int>(), Character.MaxCompanions),
+            ("companion name", companion["name"]!["maxLength"]!.GetValue<int>(), Character.MaxName),
+            ("companion kind", companion["kind"]!["maxLength"]!.GetValue<int>(), Character.MaxCompanionTextLength),
+            ("companion speed", companion["speed"]!["maxLength"]!.GetValue<int>(), Character.MaxCompanionSpeedLength),
+            ("companion note", companion["note"]!["maxLength"]!.GetValue<int>(), Character.MaxShortNote),
+            ("companion armor class", companion["armorClass"]!["maximum"]!.GetValue<int>(), Character.MaxCompanionArmorClass),
+            ("companion hit points", companion["hitPointMaximum"]!["maximum"]!.GetValue<int>(), PlayState.MaxHitPoints),
+            ("companion attacks", companion["attacks"]!["maxItems"]!.GetValue<int>(), Character.MaxCompanionAttacks),
+            ("xp", properties["xp"]!["maximum"]!.GetValue<int>(), Character.MaxXp),
+        ];
+        foreach (var (where, actual, expected) in bounds)
+            Assert.True(actual == expected, $"{where}: the schema says {actual}, the code says {expected}");
+        Assert.Equal(DamageTypes.All, properties["damageDefences"]!["items"]!["properties"]!["type"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void The_v9_schema_refuses_the_empty_id_like_the_code_does()
+    {
+        var node = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "characters", "srd521-courier-v9.json")))!;
+        node["customItems"]![0]!["id"] = Guid.Empty.ToString();
+
+        using var document = JsonDocument.Parse(node.ToJsonString());
+
+        Assert.Contains("/customItems/0/id", Validate("character", document.RootElement), StringComparison.Ordinal);
+    }
+
     /// <summary>Test fixture packs and the bundled SRD packs.</summary>
     public static TheoryData<string> PackFixtures() =>
     [
@@ -139,6 +248,60 @@ public class SchemaTests
         Assert.NotEmpty(errors);
         Assert.All(errors, e => Assert.Contains($"{kind} schema v99", e.Message, StringComparison.Ordinal));
         Assert.All(errors, e => Assert.Contains("Update TomeStack", e.Message, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(10, false)]
+    [InlineData(11, true)]
+    public void A_package_content_entry_at_content_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    {
+        // Content schema v10 (Wave 3, D42) is the current version; v11 is reserved for a later build and is refused here.
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+        var edited = PackageEditor.Edit(package, path => path.StartsWith("content/", StringComparison.Ordinal), node => node["schemaVersion"] = version);
+
+        using var destination = new TempApp();
+        var preview = destination.App.PreviewImport(edited);
+
+        var errors = preview.Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
+        Assert.Equal(refused, errors.Count > 0);
+        if (refused)
+            Assert.All(errors, e => Assert.Contains("content schema v11", e.Message, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_store_keeps_a_v10_revision_typed_and_a_newer_one_is_isolated_by_the_calculator()
+    {
+        using var temp = new TempApp();
+        var character = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+        var source = temp.App.Store.ListSources()[0];
+        var v10 = new ContentRevision
+        {
+            ContentId = Guid.Parse("c10a0000-0000-4000-8000-0000000000a1"), RevisionId = Guid.Parse("c10b0000-0000-4000-8000-0000000000a1"),
+            Kind = ContentKind.Item, Name = "Fixture Charged Rod", RulesFamilies = [RulesFamilies.Srd51], Provenance = new(source.Id, new PageRef(1)),
+            Status = RevisionStatus.Published,
+            Effects =
+            [
+                new ItemEffect { Id = "rod", RequiresAttunement = true, Charges = new ItemCharges { Max = 4, Recovery = new ItemChargeRecovery { Period = RestPeriod.LongRest, Regain = "1d4" } } },
+                new GrantEffect { Id = "ward", Grant = GrantKind.DamageResistance, DamageType = "Cold" },
+            ],
+        };
+        Assert.Equal(10, v10.SchemaVersion);
+
+        temp.App.Store.InTransaction(() => temp.App.Store.AddRevision(v10));
+        var stored = temp.App.Store.FindRevision(v10.Reference)!;
+
+        Assert.Equal(10, stored.SchemaVersion);
+        Assert.Equal(v10.Effects[0], stored.Effects[0]);
+        Assert.Equal("Cold", Assert.IsType<GrantEffect>(stored.Effects[1]).DamageType);
+        Assert.Equal(Assert.IsType<ItemEffect>(v10.Effects[0]).Charges, Assert.IsType<ItemEffect>(stored.Effects[0]).Charges);
+
+        var future = stored with { RevisionId = Guid.NewGuid(), SchemaVersion = ContentRevision.CurrentSchemaVersion + 1, Status = RevisionStatus.Published };
+        var catalog = new InMemoryContentCatalog(temp.App.Store.ListSources(), [.. temp.App.Store.ListRevisions(), future]);
+        var sheet = CharacterCalculator.Calculate(character with { Pins = [future.Reference] }, catalog);
+        Assert.Equal("content.schema-unsupported", Assert.Single(sheet.Diagnostics).Code);
+        Assert.Contains(ContentValidator.Validate(future, temp.App.Store).Errors, e => e.Code == "validate.schema-unsupported");
     }
 
     [Fact]

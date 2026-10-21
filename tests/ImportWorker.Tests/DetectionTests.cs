@@ -412,7 +412,7 @@ public class DetectionTests
         });
         // The class's own references now resolve (the stubs are candidates of the job); no ASI or "... feature" placeholder is linked.
         Assert.Empty(lamplighter.UnresolvedReferences);
-        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is "Ability Score Improvement" or "Fixture Order feature");
+        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is CandidateDetector.ReferenceOnlyFeatureName or "Fixture Order feature");
 
         // The Warden's one-line rows link too: Stormcall is a block of the book, Focus and Resolve are stubs.
         var warden = Named(result.Candidates, "Fixture Warden");
@@ -570,6 +570,12 @@ public class DetectionTests
 
     // 2026-10-14 items 5 and 6: tolerance for third-party layouts. Every block here is invented.
 
+    private static (IReadOnlyList<DraftCandidate> Candidates, IReadOnlyList<CandidateLink> Links) DetectWithLinks(IReadOnlyList<string> families, params TextBlock[] blocks)
+    {
+        var result = CandidateDetector.DetectWithLimit([new DetectionPage(1, "", blocks, false)], new(Source, families, _ => false));
+        return (result.Candidates, result.Links);
+    }
+
     private static IReadOnlyList<DraftCandidate> DetectBlocks(IReadOnlyList<string> families, params TextBlock[] blocks) =>
         CandidateDetector.Detect([new DetectionPage(1, "", blocks, false)], new(Source, families, _ => false));
 
@@ -687,7 +693,7 @@ public class DetectionTests
     [Fact]
     public void A_name_and_a_singular_Prerequisite_line_in_one_block_is_an_option_list_entry_not_a_feat()
     {
-        // The SRDs' Eldritch Invocations have this shape; they measured as 20+ spurious feats.
+        // An option-list entry (a pick-one option with a prerequisite) has this shape; on the SRDs they measured as 20+ spurious feats.
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Fixture Quiet Step\nPrerequisite: 5th level\nYou move without a sound.", 50, 600, 200, 40, 10, false));
 
@@ -699,9 +705,9 @@ public class DetectionTests
     {
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Martial Melee Weapons", 50, 700, 200, 10, 10, false),
-            new TextBlock("Fixture Crossbow, hand  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
+            new TextBlock("Fixture Lantern, small  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
 
-        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Crossbow, hand");
+        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Lantern, small");
     }
 
     [Fact]
@@ -742,6 +748,55 @@ public class DetectionTests
         var warden = Assert.Single(found, c => c.ProposedKind == ContentKind.Class);
         Assert.Equal("Fixture Warden", warden.ProposedName);
         Assert.Equal("Fixture Resolve", warden.Fields["level 2"]);
+    }
+
+    [Fact]
+    public void Two_classes_on_one_page_are_read_each_from_its_own_window_with_stubs_of_their_own()
+    {
+        // Wave 0/1 minors (d): both tables sit on page 1, one under the other; each class takes only the rows of its own window.
+        var (found, links) = DetectWithLinks([RulesFamilies.Srd51],
+            new TextBlock("Fixture Alpha Features", 50, 700, 200, 20, 10, false),
+            new TextBlock("Level", 50, 680, 40, 10, 10, false), new TextBlock("Features", 150, 680, 100, 10, 10, false),
+            new TextBlock("1st", 50, 660, 40, 10, 10, false), new TextBlock("Fixture Alpha Rite", 150, 660, 100, 10, 10, false),
+            new TextBlock("2nd", 50, 640, 40, 10, 10, false), new TextBlock("Fixture Echo", 150, 640, 100, 10, 10, false),
+            new TextBlock("3rd", 50, 620, 40, 10, 10, false), new TextBlock("Fixture Alpha Vigil", 150, 620, 100, 10, 10, false),
+            new TextBlock("Fixture Beta Features", 50, 500, 200, 20, 10, false),
+            new TextBlock("Level", 50, 480, 40, 10, 10, false), new TextBlock("Features", 150, 480, 100, 10, 10, false),
+            new TextBlock("1st", 50, 460, 40, 10, 10, false), new TextBlock("Fixture Beta Rite", 150, 460, 100, 10, 10, false),
+            new TextBlock("2nd", 50, 440, 40, 10, 10, false), new TextBlock("Fixture Beta Vigil", 150, 440, 100, 10, 10, false),
+            new TextBlock("3rd", 50, 420, 40, 10, 10, false), new TextBlock("Fixture Echo", 150, 420, 100, 10, 10, false));
+
+        var alpha = Assert.Single(found, c => c.ProposedKind == ContentKind.Class && c.ProposedName == "Fixture Alpha");
+        var beta = Assert.Single(found, c => c.ProposedKind == ContentKind.Class && c.ProposedName == "Fixture Beta");
+        Assert.Equal(["level 1", "level 2", "level 3"], alpha.Fields.Keys.Where(k => k.StartsWith("level ", StringComparison.Ordinal)));
+        Assert.Equal("Fixture Alpha Vigil", alpha.Fields["level 3"]);
+        Assert.Equal("Fixture Beta Rite", beta.Fields["level 1"]);
+        Assert.Equal("Fixture Echo", beta.Fields["level 3"]);
+        // Each class links only its own names; the shared name gets one stub per class, owned by that class.
+        var alphaStubs = links.Where(l => l.ClassId == alpha.Id).Select(l => found.Single(c => c.Id == l.FeatureId)).ToList();
+        var betaStubs = links.Where(l => l.ClassId == beta.Id).Select(l => found.Single(c => c.Id == l.FeatureId)).ToList();
+        Assert.Equal(3, alphaStubs.Count);
+        Assert.Equal(3, betaStubs.Count);
+        Assert.All(alphaStubs, s => Assert.Equal("Fixture Alpha", s.Fields["class"]));
+        Assert.All(betaStubs, s => Assert.Equal("Fixture Beta", s.Fields["class"]));
+        Assert.Empty(alphaStubs.Select(s => s.Id).Intersect(betaStubs.Select(s => s.Id)));
+        Assert.DoesNotContain(alphaStubs, s => s.ProposedName.Contains("Beta", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Classes_sharing_a_page_split_the_features_that_name_no_class_by_window()
+    {
+        // A feature on the shared page cannot be placed under one of the two classes, so neither links it; one on a later page
+        // (before the next class) belongs to the class whose table comes last on the shared page.
+        var a = Fx(ContentKind.Class, "Fixture Alpha", 10);
+        var b = Fx(ContentKind.Class, "Fixture Beta", 10);
+        var shared = Fx(ContentKind.Feature, "Fixture Spark", 10);
+        var later = Fx(ContentKind.Feature, "Fixture Mid", 12);
+        var (_, links) = LinkFixture([a, b, shared, later], new() { [a.Id] = Table((1, "Fixture Spark"), (2, "Fixture Mid")), [b.Id] = Table((1, "Fixture Spark"), (2, "Fixture Mid")) });
+
+        Assert.DoesNotContain(links, l => l.FeatureId == shared.Id);
+        Assert.DoesNotContain(links, l => l.ClassId == a.Id && l.FeatureId == later.Id);
+        Assert.Contains(links, l => l.ClassId == b.Id && l.FeatureId == later.Id);
     }
 
     [Fact]

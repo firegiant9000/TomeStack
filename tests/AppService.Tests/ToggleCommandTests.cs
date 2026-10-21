@@ -1,3 +1,4 @@
+using TomeStack.AppService.Exports;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -67,6 +68,80 @@ public class ToggleCommandTests
         Assert.Equal(1, Radiance(spent));
     }
 
+    private static ContentReference InstallAutoGrit(TempApp temp)
+    {
+        var source = TempApp.LoadFixture<ContentPack>("fixture-pack-m3-effects.json").Sources[0].Id;
+        var revision = new ContentRevision
+        {
+            ContentId = Guid.Parse("5fb10d00-0000-4000-8000-0000000000a2"), RevisionId = Guid.Parse("5fb10e00-0000-4000-8000-0000000000a2"), Kind = ContentKind.Feat,
+            Name = "Testy Grit", RulesFamilies = [RulesFamilies.Srd521], Provenance = new(source, new(3)), Status = RevisionStatus.Published,
+            Effects =
+            [
+                new ToggleEffect { Id = "grit-toggle", ToggleId = "grit", Label = "Testy grit", AutoWhen = ToggleAutoWhen.Bloodied },
+                new ModifierEffect { Id = "grit-ac", Operation = ModifierOperation.Bonus, Target = FieldIds.ArmorClass, Value = "2", Timing = EffectTiming.WhileActive, Toggle = "grit" },
+            ],
+        };
+        temp.App.Store.AddRevision(revision);
+        return revision.Reference;
+    }
+
+    [Fact]
+    public void An_auto_toggle_refuses_both_directions_writes_nothing_and_follows_the_hit_points()
+    {
+        using var temp = new TempApp();
+        var grit = InstallAutoGrit(temp);
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, grit] }).Character.Id;
+        var healthy = temp.App.GetCharacter(id);
+        var maximum = healthy.Sheet.HitPoints!.Maximum;
+
+        // Turning it on or off by hand is refused, with nothing written (so no use is spent either).
+        var stored = TempApp.Json(healthy.Character);
+        foreach (var action in new[] { PlayActionKind.ToggleOn, PlayActionKind.ToggleOff })
+        {
+            var refused = Assert.Throws<AppValidationException>(() => temp.App.Play(new(id, action, Confirm: true, ContentId: grit.ContentId, ToggleId: "grit")));
+            Assert.Equal("toggle.automatic", refused.Problems[0].Code);
+            Assert.Equal(stored, TempApp.Json(temp.App.GetCharacter(id).Character));
+        }
+
+        // Damage to half switches it on; healing above half switches it off; the stored play state never names it.
+        var bloodied = temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: maximum - maximum / 2));
+        Assert.True(bloodied.Sheet.Bloodied);
+        Assert.Equal((true, true), (bloodied.Sheet.Toggles!.Single(t => t.ToggleId == "grit").On, bloodied.Sheet.Toggles!.Single(t => t.ToggleId == "grit").Auto == true));
+        Assert.Equal(healthy.Sheet.Field(FieldIds.ArmorClass).Value + 2, bloodied.Sheet.Field(FieldIds.ArmorClass).Value);
+        Assert.DoesNotContain(bloodied.Character.Play.Toggles, t => t.ToggleId == "grit");
+        Assert.Equal("toggle.automatic", Assert.Throws<AppValidationException>(() => temp.App.Play(new(id, PlayActionKind.ToggleOff, Confirm: true, ContentId: grit.ContentId, ToggleId: "grit"))).Problems[0].Code);
+
+        var mended = temp.App.Play(new(id, PlayActionKind.Heal, Confirm: true, Amount: 1));
+        Assert.NotEqual(true, mended.Sheet.Bloodied);
+        Assert.False(mended.Sheet.Toggles!.Single(t => t.ToggleId == "grit").On);
+        Assert.Equal(healthy.Sheet.Field(FieldIds.ArmorClass).Value, mended.Sheet.Field(FieldIds.ArmorClass).Value);
+    }
+
+    [Fact]
+    public void The_sheet_export_lists_manual_toggles_but_never_an_auto_toggle_bloodied_or_not()
+    {
+        using var temp = new TempApp();
+        var grit = InstallAutoGrit(temp);
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, Stance, grit] }).Character.Id;
+        string Exported()
+        {
+            var preview = temp.App.PreviewVttExport(id, SheetJson.Target, SheetPurpose.Personal);
+            return System.Text.Encoding.UTF8.GetString(temp.App.VttExportOutput(preview.Token).Bytes);
+        }
+
+        var healthy = Exported();
+        Assert.Contains("Radiant stance", healthy, StringComparison.Ordinal);
+        Assert.DoesNotContain("Testy grit", healthy, StringComparison.Ordinal);
+        var maximum = temp.App.GetCharacter(id).Sheet.HitPoints!.Maximum;
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: maximum - maximum / 2));
+        Assert.True(temp.App.GetCharacter(id).Sheet.Bloodied);
+        var bloodied = Exported();
+        Assert.Contains("Radiant stance", bloodied, StringComparison.Ordinal);
+        Assert.DoesNotContain("Testy grit", bloodied, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_toggle_survives_reopening_and_a_package_round_trip()
     {
@@ -77,7 +152,7 @@ public class ToggleCommandTests
 
         var stored = temp.App.GetCharacter(id);
         Assert.Equal([new ActiveToggle(Stance.ContentId, "stance")], stored.Character.Play.Toggles);
-        Assert.Equal(Character.CurrentSchemaVersion, stored.Character.SchemaVersion);
+        Assert.Equal(Character.PreviousSchemaVersion, stored.Character.SchemaVersion); // no v9 field is set, so it is written as v8 (R73)
         using var clean = new TempApp();
         clean.App.ApplyImport(temp.App.ExportCharacters([id]).Content);
         Assert.True(clean.App.GetCharacter(id).Sheet.Toggles!.Single().On);

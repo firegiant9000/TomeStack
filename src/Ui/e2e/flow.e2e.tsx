@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, inject, it, vi } from 'vitest';
-import { zip } from './zip';
+import { readZipEntry, zip } from './zip';
 import { App } from '../src/App';
 import { client } from '../src/api/client';
 import { downloadBase64 } from '../src/files';
@@ -94,6 +94,23 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
   await within(sheet).findByText('Private session note for the share test.');
 
+  // Item 17, D36: the Details form on Notes. Save is held until something changes; the details then show on Stats.
+  const detailsForm = within(sheet).getByRole('form', { name: 'Details' });
+  const saveDetails = within(detailsForm).getByRole('button', { name: 'Save details' });
+  expect(saveDetails.getAttribute('aria-disabled')).toBe('true');
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Alignment' }), 'E2E neutral');
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Languages' }), 'E2E tongue{Enter}E2E signs');
+  expect(saveDetails.getAttribute('aria-disabled')).toBeNull();
+  await user.click(saveDetails);
+  await expectStatus(/Details saved/);
+  expect(saveDetails.getAttribute('aria-disabled')).toBe('true'); // nothing differs now
+  expect(document.activeElement).toBe(saveDetails); // focus stays on the button
+  await openTab(user, sheet, 'Stats');
+  expect(within(within(sheet).getByRole('list', { name: 'Languages' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['E2E tongue', 'E2E signs']);
+  await user.click(within(sheet).getByRole('button', { name: 'Edit in Notes → Details' }));
+  expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('heading', { name: 'Details' })));
+
   // Export (DevHost has no native dialog: package.saveAs -> unsupported -> download fallback)
   await openTab(user, sheet, 'Manage');
   await user.click(screen.getByRole('button', { name: 'Export package' }));
@@ -109,6 +126,14 @@ it('creates a character, shows its traced sheet, overrides, exports and re-impor
   await user.click(screen.getByRole('button', { name: 'Export package' }));
   await waitFor(() => expect(downloadBase64).toHaveBeenCalledTimes(2));
   expect(vi.mocked(downloadBase64).mock.calls[1]![0]).toBe('E2E-Pell.tomestack.zip');
+  // D36 in the files themselves: the backup holds the details and the journal; the share keeps the details and drops the journal.
+  const characterEntry = /^characters\/.+\.json$/;
+  const backupCharacter = readZipEntry(bytesOf(base64), characterEntry)!;
+  expect(backupCharacter).toContain('E2E tongue');
+  expect(backupCharacter).toContain('Private session note for the share test.');
+  const sharedCharacter = readZipEntry(bytesOf(vi.mocked(downloadBase64).mock.calls[1]![1]), characterEntry)!;
+  expect(sharedCharacter).toContain('E2E tongue');
+  expect(sharedCharacter).not.toContain('Private session note for the share test.');
 
   // Import: preview first, then apply. The character already exists, so the local copy is backed up.
   const file = new File([bytesOf(base64)], fileName, { type: 'application/zip' });
@@ -371,6 +396,57 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '34');
   await user.click(within(hpPanel()).getByRole('button', { name: 'Heal' }));
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+
+  // Wave 3 item 21 (D19 amended): a resistance recorded by hand on Stats halves typed damage on Play, and Undo puts it all back.
+  await openTab(user, sheet, 'Stats');
+  const defences = () => screen.getByRole('region', { name: 'Damage resistances, immunities and vulnerabilities' });
+  await user.selectOptions(within(defences()).getByRole('combobox', { name: 'Damage type' }), 'slashing');
+  await user.click(within(defences()).getByRole('button', { name: 'Add' }));
+  await waitFor(() => expect(within(defences()).getByRole('list', { name: 'Damage defences the sheet applies' }).textContent).toMatch(/Slashing resistance from Entered by hand/));
+  await openTab(user, sheet, 'Play');
+  await user.selectOptions(within(hpPanel()).getByRole('combobox', { name: 'Damage type' }), 'slashing');
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '13');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 29 of 35' })).toBeTruthy()); // 13 halved, rounded down: 6
+  expect(hpPanel().textContent).toMatch(/13 slashing, halved: 6\./);
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 13 slashing (6 taken)' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+  // Untyped damage ignores the resistance.
+  await user.selectOptions(within(hpPanel()).getByRole('combobox', { name: 'Damage type' }), '');
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '4');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 31 of 35' })).toBeTruthy());
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 4' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Hit points: 35 of 35' })).toBeTruthy());
+  await openTab(user, sheet, 'Stats');
+  await user.click(within(defences()).getByRole('button', { name: 'Remove slashing resistance' }));
+  await waitFor(() => expect(screen.queryByRole('list', { name: 'Damage defences the sheet applies' })).toBeNull());
+
+  // Wave 3 item 27: Track XP is off by default; a total at the next level's threshold shows "Level up available" (display only).
+  const xp = () => screen.getByRole('region', { name: 'Experience points' });
+  expect(within(xp()).getByRole<HTMLInputElement>('checkbox', { name: 'Track XP' }).checked).toBe(false);
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' }));
+  const xpBox = await within(xp()).findByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' });
+  expect(xpBox.value).toBe('0');
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  const nextLevelAt = /^Next level at (\d{1,3}(,\d{3})*)$/;
+  const threshold = Number((await within(xp()).findByText(nextLevelAt)).textContent!.replace(nextLevelAt, '$1').replaceAll(',', ''));
+  await user.clear(xpBox);
+  await user.type(xpBox, String(threshold - 1));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  // Wait for the save to land (nothing differs, so Save is aria-disabled and focus is on the heading) before typing again:
+  // a reply that arrives mid-type moves focus off the box and leaves a partial number in it.
+  await waitFor(() => expect(within(xp()).getByRole('button', { name: 'Save experience points' }).getAttribute('aria-disabled')).toBe('true'));
+  expect(within(xp()).getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe(String(threshold - 1));
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  await user.clear(within(xp()).getByRole('spinbutton', { name: 'Experience points' }));
+  await user.type(within(xp()).getByRole('spinbutton', { name: 'Experience points' }), String(threshold));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  await within(xp()).findByText('Level up available');
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' })); // untick: the total and the hint go
+  await waitFor(() => expect(within(xp()).queryByRole('spinbutton', { name: 'Experience points' })).toBeNull());
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  await openTab(user, sheet, 'Play');
 
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
   await openTab(user, sheet, 'Inventory');
@@ -1025,13 +1101,13 @@ it('accepts two fixture candidates in bulk, publishes both through the studio pa
   await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Bulk Book/ }));
   await user.click(await screen.findByRole('button', { name: 'Publish all drafts in this source…' }));
   const region = screen.getByRole('region', { name: 'Publish drafts of E2E Bulk Book' });
-  expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(region).getByRole('heading', { name: 'Publish drafts of E2E Bulk Book' })));
   const publish = await within(region).findByRole('button', { name: 'Publish 2 drafts' });
   await waitFor(() => expect(publish.getAttribute('aria-disabled')).toBeNull());
   await user.click(publish);
 
   const result = await within(region).findByText('Published 2 drafts.');
-  expect(document.activeElement).toBe(result);
+  await waitFor(() => expect(document.activeElement).toBe(result)); // an effect moves focus to the result, so it can land after the text
   expect((await client.contentBySource(source.id)).map((e) => e.latest.status)).toEqual(['published', 'published']);
   // A second press would find nothing pending: the button is gone with the drafts.
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Publish all drafts in this source…' })).toBeNull());
@@ -1057,7 +1133,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   const [job] = await client.listImports(source.id);
   const ember = (await client.candidates(job!.id, { kind: 'spell' })).items.find((c) => c.candidate.proposedName === 'Fixture Ember Lance')!;
   const effects = ember.candidate.proposedEffects.map((e) => (e.type === 'spell' ? { ...e, level: 1 } : e));
-  await client.editCandidate(ember.id, { effects });
+  await client.editCandidate(ember.id, { effects, expected: ember.etag });
 
   // Nothing is ticked: the list button is held with its reason.
   const open = within(panel()).getByRole('button', { name: 'Add to a spell list…' });
@@ -1065,7 +1141,7 @@ it('adds the wizard list to a fixture spell candidate in bulk, accepts and publi
   await user.click(within(panel()).getByRole('checkbox', { name: 'Select Fixture Ember Lance' }));
   await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to a spell list…' }));
   const key = within(panel()).getByRole('combobox', { name: 'Spell list key' });
-  expect(document.activeElement).toBe(key);
+  await waitFor(() => expect(document.activeElement).toBe(key));
   await user.type(key, ' Wizard');
   expect(within(panel()).getByText('Saved as: wizard')).toBeTruthy();
   await user.click(within(panel()).getByRole('button', { name: 'Add 1 spell to this list' }));
@@ -1126,8 +1202,13 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Folk');
   await user.type(within(editor()).getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Speed (feet)' }), '25'); // items 12, 24
   await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
+  // The speed is a content v10 replace modifier, so publishing it writes a v10 revision.
+  const published = (await newestOf(source.id, 'E2E Folk'))!;
+  expect(published.effects.filter((e) => e.type === 'modifier' && e.target === 'speed')).toMatchObject([{ operation: 'replace', value: '25' }]);
+  expect(published.schemaVersion).toBe(10);
 
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   await createCharacter(user, { name: 'E2E Folk Child', family: 'srd-5.1', species: /^E2E Folk/ });
@@ -1720,7 +1801,7 @@ it('reaches the primary actions by keyboard alone', async () => {
 
   await user.keyboard('{Shift>}{Tab}{/Shift}{Enter}');
   expect(await screen.findByRole('heading', { name: 'New character' })).toBeTruthy();
-  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Name' })));
 });
 
 it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions are grouped', async () => {
@@ -1750,6 +1831,56 @@ it('equips a weapon: the attack uses finesse and proficiency, rolls, and actions
   expect(lastRoll.textContent).toMatch(/Fixture Needle to hit \+5/);
   const reactions = within(actions()).getByRole('region', { name: 'Reactions' });
   expect(within(reactions).getByRole('button', { name: 'Roll Riposte damage (1d6)' })).toBeTruthy();
+});
+
+it('adds an attack of your own on Inventory, rolls it on Play with advantage, and the roll shows in Last roll (item 18)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await createCharacter(user, { name: 'E2E Sling', scores: {}, cls: /^Fixture Duelist/ });
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Acrobatics/);
+  await pick(user, /^Fixture Duelist: choose 2/, /^Duelist Skill: Insight/);
+  await user.click(await screen.findByRole('button', { name: 'Create and save' }));
+  const hero = await screen.findByRole('article', { name: 'E2E Sling' });
+
+  // Inventory: an item and an attack of your own. Neither changes a calculation.
+  await openTab(user, hero, 'Inventory');
+  const armorClass = summaryValue(hero, 'Armor Class');
+  const items = () => screen.getByRole('region', { name: 'Your own items' });
+  await user.click(within(items()).getByRole('button', { name: 'Add an item of your own' }));
+  await user.type(within(items()).getByRole('textbox', { name: 'Name' }), 'Testy Rope');
+  await user.click(within(items()).getByRole('button', { name: 'Save item' }));
+  await expectStatus(/^Added Testy Rope\.$/);
+  await waitFor(() => expect(document.activeElement).toBe(within(items()).getByRole('button', { name: 'Edit Testy Rope' }))); // focus can land a tick after the status text
+
+  const own = () => screen.getByRole('region', { name: 'Your own attacks' });
+  await user.click(within(own()).getByRole('button', { name: 'Add an attack of your own' }));
+  await user.type(within(own()).getByRole('textbox', { name: 'Name' }), 'Testy Sling');
+  await user.clear(within(own()).getByRole('spinbutton', { name: 'To hit bonus' }));
+  await user.type(within(own()).getByRole('spinbutton', { name: 'To hit bonus' }), '5');
+  // The dice engine's own message for bad damage, linked to the field; nothing is saved.
+  const damage = within(own()).getByRole('textbox', { name: 'Damage (optional)' });
+  await user.type(damage, '5');
+  await user.click(within(own()).getByRole('button', { name: 'Save attack' }));
+  await waitFor(() => expect(damage.getAttribute('aria-invalid')).toBe('true'));
+  expect(document.getElementById(damage.getAttribute('aria-describedby')!.split(' ').at(-1)!)?.textContent).toMatch(/dice/i);
+  await user.clear(damage);
+  await user.type(damage, '1d6+2');
+  await user.selectOptions(within(own()).getByRole('combobox', { name: 'Damage type (optional)' }), 'Bludgeoning');
+  await user.click(within(own()).getByRole('button', { name: 'Save attack' }));
+  await expectStatus(/^Added Testy Sling\.$/);
+  expect(summaryValue(hero, 'Armor Class')).toBe(armorClass);
+
+  // Play: the attack is listed (the panel shows for a character with only custom attacks) and rolled with advantage.
+  await openTab(user, hero, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  expect(within(actions()).getAllByRole('button', { name: 'Roll Testy Sling attack' })).toHaveLength(1);
+  await user.click(screen.getByRole('radio', { name: 'Advantage' }));
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling attack' }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Sling attack: \d+ \(1d20, advantage\)/));
+  expect(lastRoll.textContent).toMatch(/Testy Sling to hit \+5/);
+  await user.click(within(actions()).getByRole('button', { name: 'Roll Testy Sling damage' }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Sling damage \(bludgeoning\): \d+ \(1d6\+2\)/));
 });
 
 it('switches a toggled effect on and off, spends a chosen amount, and a long rest proposes the toggle off', async () => {
@@ -1816,7 +1947,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   const features = within(screen.getByRole('article', { name: 'E2E Gaps' })).getByRole('region', { name: 'Features' });
   await user.click(within(features).getByRole('button', { name: 'Report a gap: Fixture Quickfoot' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Fixture Quickfoot');
-  expect(document.activeElement).toBe(text);
+  await waitFor(() => expect(document.activeElement).toBe(text));
   expect(within(sheet).getByRole('tab', { name: 'Notes' }).getAttribute('aria-selected')).toBe('true');
   await user.type(text, 'Speed bonus should apply while unarmored only.');
   await user.click(within(form).getByRole('button', { name: 'Save note' }));
@@ -1832,7 +1963,7 @@ it('records a gap note on a field and a feature, resolves one, and deletes one a
   await user.click(within(armor).getByRole('heading'));
   await user.click(within(armor).getByRole('button', { name: 'Report a gap: Armor Class' }));
   expect((about as HTMLSelectElement).selectedOptions[0]!.textContent).toBe('Armor Class');
-  expect(document.activeElement).toBe(text);
+  await waitFor(() => expect(document.activeElement).toBe(text));
   // "Report a gap" left Notes as the remembered tab; move the memory off it so the deep link below is what selects Notes.
   await openTab(user, sheet, 'Play');
 
@@ -1886,10 +2017,14 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   await user.type(within(journal).getByRole('textbox', { name: 'Note' }), 'Private session note for the print test.');
   await user.click(within(journal).getByRole('button', { name: 'Save session note' }));
   await within(sheet).findByText('Private session note for the print test.');
+  const detailsForm = within(sheet).getByRole('form', { name: 'Details' });
+  await user.type(within(detailsForm).getByRole('textbox', { name: 'Backstory' }), 'Private backstory for the print test.');
+  await user.click(within(detailsForm).getByRole('button', { name: 'Save details' }));
+  await expectStatus(/Details saved/);
 
   await user.click(within(sheet).getByRole('button', { name: 'Print…' }));
   const preview = await within(sheet).findByRole('region', { name: 'Print preview' });
-  expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' })); // focus moves to the preview on open
+  await waitFor(() => expect(document.activeElement).toBe(within(preview).getByRole('heading', { name: 'Print character' }))); // focus moves to the preview on open
   expect(within(preview).getByRole('heading', { name: 'E2E Print' })).toBeTruthy();
   expect(within(preview).getByRole('table', { name: 'Abilities' })).toBeTruthy();
   expect(within(preview).getByText(/^Fixture Quickfoot/)).toBeTruthy();
@@ -1905,12 +2040,18 @@ it('prints a sheet with its license notices, and gap notes only when ticked', as
   expect(preview.textContent).not.toContain('Private session note for the print test.');
   await user.click(within(preview).getByRole('checkbox', { name: 'Include session notes (private)' }));
   expect(await within(preview).findByText(/Private session note for the print test\./)).toBeTruthy();
+  // Details have their own tick, unticked by default.
+  const includeDetails = within(preview).getByRole<HTMLInputElement>('checkbox', { name: /^Include details/ });
+  expect(includeDetails.checked).toBe(false);
+  expect(preview.textContent).not.toContain('Private backstory for the print test.');
+  await user.click(includeDetails);
+  expect(await within(preview).findByText(/Private backstory for the print test\./)).toBeTruthy();
 
   await user.click(within(preview).getByRole('button', { name: 'Print…' }));
   expect(print).toHaveBeenCalledTimes(1);
   await user.click(within(preview).getByRole('button', { name: 'Close print preview' }));
   expect(within(sheet).queryByRole('region', { name: 'Print preview' })).toBeNull();
-  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Print…' })));
   print.mockRestore();
 });
 
@@ -2152,7 +2293,13 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   const ink = rule(/^Rule 2: Resource/);
   await user.type(within(ink).getByRole('textbox', { name: 'Resource name' }), 'Ink');
   await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
+  // D61: the formula's preview, worked out by the real service against this draft (proficiency bonus 6 at level 20).
+  await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'PB');
+  expect((await within(ink).findByText(/Level 20: 6/)).textContent).toMatch(/^Level 1: 2 · .* · Level 20: 6$/);
+  expect(within(ink).getByRole('textbox', { name: /^Uses/ }).getAttribute('aria-describedby')).toMatch(/^rule-resource-\d+-maximum-preview$/);
+  await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
   await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'SCALE.ink');
+  expect(await within(ink).findByText(/Level 1: 2 · .* · Level 20: 9$/)).toBeTruthy(); // the draft's own column
   await user.click(within(editor()).getByRole('button', { name: 'Add recovery' })); // all, on a long rest
 
   await user.click(within(editor()).getByRole('button', { name: 'Add spellcasting' }));
@@ -2254,7 +2401,7 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await waitFor(() => expect(document.activeElement).toBe(within(confirm).getByRole('button', { name: 'Archive' })));
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('alertdialog')).toBeNull();
-  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Archive…' })));
   await user.click(within(sheet).getByRole('button', { name: 'Archive…' }));
   confirm = await screen.findByRole('alertdialog', { name: 'Archive E2E Archivist?' });
   await user.click(within(confirm).getByRole('button', { name: 'Keep it' }));
@@ -2281,23 +2428,91 @@ it('archives a character after a preview, lists it apart, and brings it back (SP
   await waitFor(() => expect(document.activeElement).toBe(within(screen.getByRole('article', { name: 'E2E Archivist' })).getByRole('button', { name: 'Archive…' })));
 });
 
-// ---- character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md S4) ----
+// ---- character import from a character sheet PDF: a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md S4, item 14) ----
 // The committed sheet is invented: "Testy McFixture", an original fixture Arcanist 3 / Chanter 2 whose spell "Fixture Veil"
 // is on both casters' lists. The DevHost has no Open dialog, so the file input sends the bytes (ddb.readData).
 
 const ddbSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-ddb-sheet.pdf'));
 
 async function startDdbImport(user: ReturnType<typeof userEvent.setup>) {
-  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import from D&D Beyond PDF…' });
+  const start = await screen.findByRole<HTMLButtonElement>('button', { name: 'Import a character (sheet or text)…' });
   await waitFor(() => expect(start.disabled).toBe(false));
   await user.click(start);
 }
 
+const wotcSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-wotc-sheet.pdf'));
+
 async function readDdbSheet(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
-  await user.upload(screen.getByLabelText('D&D Beyond PDF file'), new File([ddbSheet()], 'fixture-ddb-sheet.pdf', { type: 'application/pdf' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([ddbSheet()], 'fixture-ddb-sheet.pdf', { type: 'application/pdf' }));
   expect(await screen.findByText('Fixture Arcanist 3 / Fixture Chanter 2', {}, { timeout: 30000 })).toBeTruthy();
 }
+
+// ---- item 16 (D16(c)): unmatched features that carry text become reference drafts ----
+
+async function toDdbSummary(user: ReturnType<typeof userEvent.setup>) {
+  await startDdbImport(user);
+  await readDdbSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  const veil = await within(matches).findByRole('combobox', { name: 'Match for Fixture Veil' });
+  await user.selectOptions(veil, '1'); // the option labels are the same for both casters once a character exists, so pick by position
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+}
+
+/** Every revision (drafts too) in the import-derived source, from the call the studio uses; 0 while the source does not exist yet. */
+async function importSourceRevisions(): Promise<number> {
+  const source = (await client.listSources()).find((s) => s.title === 'Characters imported from sheets');
+  return source ? (await client.contentBySource(source.id)).reduce((n, entry) => n + entry.revisions.length, 0) : 0;
+}
+
+/** The Cancel path: tick Publish at the summary, then Cancel; nothing is written (no source, no draft). Unmounts when done. */
+async function cancelAtSummary(user: ReturnType<typeof userEvent.setup>) {
+  const sources = (await client.listSources()).map((s) => s.id).sort();
+  const revisions = await importSourceRevisions();
+  const { unmount } = render(<App />);
+  await toDdbSummary(user);
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  await user.click(within(section).getByRole('checkbox', { name: /^Publish these \d+ reference drafts$/ }));
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  await expectStatus(/Import cancelled\. Nothing was saved\./);
+  expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
+  expect(await importSourceRevisions()).toBe(revisions);
+  unmount();
+}
+
+// One test, Cancel path first and then a fresh import: the service does not draft an entry the import-derived source holds
+// already (R106), so the drafts exist only for the first import of this sheet. No earlier test may import
+// fixture-ddb-sheet.pdf before this one (and none does: the main import test below runs after it).
+it('Cancel writes no reference drafts; a fresh import lists them unticked and publishing makes them studio content', async () => {
+  const user = userEvent.setup();
+  await cancelAtSummary(user);
+  const revisions = await importSourceRevisions();
+  render(<App />);
+  await toDdbSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(section.textContent).toContain('Fixture Steady Breath');
+  expect(section.textContent).toContain('An invented line of fixture description.');
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: /^Publish these \d+ reference drafts$/ });
+  expect(tick.checked).toBe(false);
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(false);
+
+  await user.click(tick);
+  expect(document.activeElement).toBe(tick);
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  expect((await client.listContent('srd-5.1')).some((o) => o.name === 'Fixture Steady Breath')).toBe(true);
+  expect(await importSourceRevisions()).toBeGreaterThan(revisions);
+});
 
 it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an override and creates the character', async () => {
   const user = userEvent.setup();
@@ -2338,11 +2553,41 @@ it('imports a D&D Beyond sheet, resolves a choice, keeps one sheet number as an 
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
 
-  await expectStatus(/Character created from the D&D Beyond sheet: 3 override\(s\), \d+ gap note\(s\)/);
+  await expectStatus(/Character created from the character sheet: 3 override\(s\), \d+ gap note\(s\)/);
   const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
   expect(summaryValue(sheet, 'Armor Class')).toContain('(overridden)');
   await openTab(user, sheet, 'Stats');
   expect(within(sheet).getByRole('heading', { name: /^Armor Class:/ }).textContent).toContain('overridden (calculated');
+});
+
+it('imports the fillable 2014 sheet through the same entry: the layout is named, prose lands in session notes and the details fill', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([wotcSheet()], 'fixture-wotc-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Arcanist 3', {}, { timeout: 30000 })).toBeTruthy();
+  expect(screen.getByText('the fillable 2014 sheet')).toBeTruthy();
+
+  const nextStep = async (name: string) => {
+    const next = await screen.findByRole<HTMLButtonElement>('button', { name });
+    await waitFor(() => expect(next.disabled).toBe(false));
+    await user.click(next);
+  };
+  await nextStep('Next: rules');
+  await nextStep('Next: matches');
+  await nextStep('Next: numbers');
+  await nextStep('Next: summary');
+  expect(await screen.findByRole('region', { name: 'Not brought over' })).toBeTruthy();
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet: \d+ override\(s\), \d+ gap note\(s\)/);
+  const sheet = await screen.findByRole('article', { name: 'Testy McFixture' });
+  await openTab(user, sheet, 'Notes');
+  expect(await within(sheet).findByText(/Testy backstory\./)).toBeTruthy();
+  expect(within(within(sheet).getByRole('form', { name: 'Details' })).getByRole<HTMLInputElement>('textbox', { name: 'Alignment' }).value).toBe('Fixture Neutral');
 });
 
 it('cancelling the D&D Beyond import at each step leaves the character list unchanged', async () => {
@@ -2369,11 +2614,168 @@ it('cancelling the D&D Beyond import at each step leaves the character list unch
   expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(before);
 });
 
+// ---- item 19a (D37): character import from pasted or file text ----
+// The text is invented. "Barbarian 1" is an installed SRD class with no choice to answer at level 1.
+
+const fixtureText = [
+  '# Testy Texter',
+  'Class: Barbarian 1',
+  'STR 16  DEX 14  CON 14  INT 8  WIS 9  CHA 10',
+  'Gold: 12',
+  'Languages: Common, Fixturish',
+  'Some line the reader cannot place',
+].join('\n');
+
+it('imports a character from pasted text: the unreadable line is listed and kept as a session note, and a too-large file is refused by size', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+
+  await user.click(await screen.findByRole('button', { name: 'Import a character from text…' }));
+  const box = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' });
+  await waitFor(() => expect(document.activeElement).toBe(box));
+
+  // A file over the limit is refused by its size alone, before any of it is read.
+  const big = new File(['x'], 'big-fixture.txt', { type: 'text/plain' });
+  Object.defineProperty(big, 'size', { value: 300_000 });
+  await user.upload(screen.getByLabelText('Character text file'), big);
+  expect((await screen.findByRole('alert')).textContent).toContain('300,000');
+  expect(box.value).toBe('');
+
+  await user.click(box);
+  await user.paste(fixtureText);
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  expect(await screen.findByText('pasted or file text')).toBeTruthy();
+
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const notRead = await screen.findByRole('region', { name: 'Lines not read' });
+  expect(notRead.textContent).toContain('Some line the reader cannot place');
+  const tick = within(notRead).getByRole<HTMLInputElement>('checkbox', { name: 'Keep the lines that were not read as session notes' });
+  expect(tick.checked).toBe(true);
+
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  const sheet = await screen.findByRole('article', { name: 'Testy Texter' });
+  await openTab(user, sheet, 'Notes');
+  expect(await within(sheet).findByText(/Some line the reader cannot place/)).toBeTruthy();
+});
+
+// ---- item 19b (D37, ADR-013): a PDF with no form fields is read as text through the same entry ----
+// The committed sheet is a generated text-only PDF (no form): "Testy Printout", an invented Fixture Arcanist 3.
+
+const textSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-text-sheet.pdf'));
+
+it('imports a PDF that has no form fields: its page text is read, the layout says so, and the character is created', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await startDdbImport(user);
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([textSheet()], 'fixture-text-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Arcanist 3', {}, { timeout: 30000 })).toBeTruthy();
+  expect(screen.getByText('text from the PDF')).toBeTruthy();
+
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  expect(await screen.findByRole('article', { name: 'Testy Printout' })).toBeTruthy();
+});
+
+// ---- item 15 (D35): a class the sheet names that TomeStack does not have, offered as a homebrew class ----
+// The generated sheet names the invented "Fixture Tinkerer" 3 with hit dice 3d8; no installed content has it.
+
+const tinkererSheet = () => readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/pdf/fixture-tinkerer-sheet.pdf'));
+
+async function readTinkererSheet(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Choose PDF…' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([tinkererSheet()], 'fixture-tinkerer-sheet.pdf', { type: 'application/pdf' }));
+  expect(await screen.findByText('Fixture Tinkerer 3', {}, { timeout: 30000 })).toBeTruthy();
+}
+
+async function nextWhenReady(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const next = await screen.findByRole<HTMLButtonElement>('button', { name });
+  await waitFor(() => expect(next.disabled).toBe(false));
+  await user.click(next);
+}
+
+it('creates a draft homebrew class from an uninstalled class, leaves Publish it unticked and the character gets nothing from it', async () => {
+  const user = userEvent.setup();
+  const before = new Set((await client.listCharacters()).map((c) => c.id));
+  render(<App />);
+  await startDdbImport(user);
+  await readTinkererSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  const box = await within(matches).findByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ });
+  expect(box.getAttribute('aria-disabled')).toBeNull();
+  await user.click(box);
+  await waitFor(() => expect(within(matches).getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await waitFor(() => expect(within(matches).getByText(/A homebrew class is created for it/)).toBeTruthy());
+
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  const stub = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  for (const text of ['Fixture Tinkerer', 'd8', 'Strength', 'Characters imported from sheets']) expect(stub.textContent).toContain(text);
+  expect(within(stub).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  expect(within(stub).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
+
+  const create = await screen.findByRole<HTMLButtonElement>('button', { name: 'Create character' });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+
+  await expectStatus(/Character created from the character sheet/);
+  await screen.findByRole('article', { name: 'Testy Tinker' });
+  const created = (await client.listCharacters()).find((c) => !before.has(c.id) && c.name === 'Testy Tinker')!;
+  const view = await client.getCharacter(created.id);
+  expect(view.sheet.diagnostics.map((d) => d.code)).toContain('content.unpublished');
+  const source = (await client.listSources()).find((s) => s.title === 'Characters imported from sheets')!;
+  expect(source.importDerived).toBe(true);
+  expect(source.redistributable).toBe(false);
+});
+
+it('cancelling after choosing to create a homebrew class writes nothing: no character, no source', async () => {
+  const user = userEvent.setup();
+  const characters = (await client.listCharacters()).map((c) => c.id).sort();
+  const sources = (await client.listSources()).map((s) => s.id).sort();
+  render(<App />);
+  await startDdbImport(user);
+  await readTinkererSheet(user);
+  await nextWhenReady(user, 'Next: rules');
+  await nextWhenReady(user, 'Next: matches');
+  const matches = await screen.findByRole('region', { name: 'Matches' });
+  await user.click(await within(matches).findByRole('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ }));
+  await waitFor(() => expect(within(matches).getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await nextWhenReady(user, 'Next: numbers');
+  await nextWhenReady(user, 'Next: summary');
+  await screen.findByRole('region', { name: 'Homebrew class to create' });
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  await expectStatus(/Import cancelled\. Nothing was saved\./);
+  expect((await client.listCharacters()).map((c) => c.id).sort()).toEqual(characters);
+  expect((await client.listSources()).map((s) => s.id).sort()).toEqual(sources);
+  // No draft check here: no client call lists drafts without a content id, and listContent shows published content only.
+  // DdbStubClassTests (cancel at every step) counts sources, revisions, characters and notes.
+});
+
 it('keeps the theme picked in Settings when the app is rendered again (ADR-015)', async () => {
   const user = userEvent.setup();
   const { unmount } = render(<App />);
   await user.click(await screen.findByRole('button', { name: 'Settings' }));
-  expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 2, name: 'Settings' })));
   await user.click(screen.getByRole('radio', { name: 'Violet' }));
   expect(document.documentElement.dataset.theme).toBe('violet');
   await user.click(screen.getByRole('radio', { name: 'Dark' }));
@@ -2390,6 +2792,27 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   expect(document.documentElement.dataset.theme).toBe('violet');
   expect(document.documentElement.dataset.appearance).toBe('dark');
   expect(document.documentElement.dataset.textSize).toBe('125');
+});
+
+it('keeps the Custom accent and its hue when the app is rendered again, and a preset replaces it (D40)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Custom accent' }));
+  const slider = screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' });
+  fireEvent.change(slider, { target: { value: '120' } });
+  expect(slider.getAttribute('aria-valuetext')).toBe('Lime, 120 degrees');
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  unmount();
+  delete document.documentElement.dataset.theme;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  expect(screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' }).value).toBe('120');
+  await user.click(screen.getByRole('radio', { name: 'Tide' }));
+  expect(screen.queryByRole('slider')).toBeNull();
+  expect(document.documentElement.dataset.theme).toBe('tide');
 });
 
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
@@ -2421,7 +2844,7 @@ it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out o
   await waitFor(() => expect(newCharacter.disabled).toBe(false));
   newCharacter.focus();
   await user.keyboard('{Control>}b{/Control}');
-  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show sidebar' })));
 
   unmount();
   render(<App />);
@@ -2461,7 +2884,7 @@ it('opens the Characters home screen with a card per character and opens one fro
   expect(await screen.findByRole('article', { name })).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   const back = await screen.findByRole('region', { name: 'Characters' });
-  expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' }));
+  await waitFor(() => expect(document.activeElement).toBe(within(back).getByRole('heading', { level: 2, name: 'Characters' })));
 });
 
 it('creates a character with the standard array (D32)', async () => {
@@ -2519,4 +2942,204 @@ it('rolls ability scores through the dice engine and assigns them (D32)', async 
   await openTab(user, sheet, 'Stats');
   // The sheet's base scores are the assigned rolled totals (increases come from content the draft does not pin).
   for (const [label, value] of assigned) expect(within(sheet).getByRole('heading', { name: new RegExp(`^${label} score: ${value}\\b`) })).toBeTruthy();
+});
+
+it('shows the Bloodied chip and switches an auto toggle on at half hit points, and Undo takes both away (item 20, D38)', async () => {
+  const user = userEvent.setup();
+  // Setup through the client: a homebrew feat (content schema v10) whose toggle switches itself while bloodied, and a character with 20 hit points.
+  const source = await client.createHomebrewSource('E2E Grit Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Grit',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'toggle', id: 'grit-toggle', toggleId: 'grit', label: 'E2E grit', autoWhen: 'bloodied' },
+      { type: 'modifier', id: 'grit-ac', operation: 'bonus', target: 'armorClass', value: '2', timing: 'whileActive', toggle: 'grit' },
+    ],
+  });
+  const feat = (await client.publish(draft)).published;
+  const created = await client.createCharacter({ name: 'E2E Grit Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] });
+  await client.saveCharacter({ ...created.character, overrides: [{ field: 'hitPoints', value: 20 }] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Grit Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Grit Hero' });
+  await openTab(user, sheet, 'Play');
+  const summary = () => within(sheet).getByRole('region', { name: 'Summary' });
+  const effects = () => within(screen.getByRole('region', { name: 'Attacks and actions' })).getByRole('group', { name: /Active effects/ });
+  const armorClass = summaryValue(sheet, 'Armor Class');
+  expect(within(summary()).queryByText('Bloodied')).toBeNull();
+  expect(effects().textContent).toMatch(/E2E grit.*On while bloodied \(off now\)/);
+  expect(within(effects()).queryByRole('checkbox')).toBeNull(); // no switch: the sheet decides
+
+  // Damage to exactly half (10 of 20): the chip, the toggle and its +2 Armor Class.
+  const hpPanel = () => screen.getByRole('region', { name: /^Hit points:/ });
+  await user.type(within(hpPanel()).getByRole('spinbutton', { name: 'Amount' }), '10');
+  await user.click(within(hpPanel()).getByRole('button', { name: 'Take damage' }));
+  await waitFor(() => expect(within(summary()).getByText('Bloodied')).toBeTruthy());
+  expect(effects().textContent).toMatch(/On while bloodied \(on now\)/);
+  expect(Number(summaryValue(sheet, 'Armor Class'))).toBe(Number(armorClass) + 2);
+
+  // Undo puts the hit points back exactly; the chip, the toggle and the bonus go with them.
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: damage 10' }));
+  await waitFor(() => expect(within(summary()).queryByText('Bloodied')).toBeNull());
+  expect(effects().textContent).toMatch(/On while bloodied \(off now\)/);
+  expect(summaryValue(sheet, 'Armor Class')).toBe(armorClass);
+});
+
+it('lists a toggle and a resource with an activation under their group, and switching the toggle keeps focus on it (item 22, R157)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Reflex Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'feat',
+    name: 'E2E Reflex',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'toggle', id: 'guard-toggle', toggleId: 'guard', label: 'E2E guard', activation: 'reaction' },
+      { type: 'modifier', id: 'guard-ac', operation: 'bonus', target: 'armorClass', value: '2', timing: 'whileActive', toggle: 'guard' },
+      { type: 'toggle', id: 'calm-toggle', toggleId: 'calm', label: 'E2E calm' },
+      { type: 'resource', id: 'surge-resource', resourceId: 'surge', label: 'E2E surge', maximum: '2', activation: 'bonusAction' },
+    ],
+  });
+  const feat = (await client.publish(draft)).published;
+  await client.createCharacter({ name: 'E2E Reflex Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [feat] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Reflex Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Reflex Hero' });
+  await openTab(user, sheet, 'Play');
+  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  const armorClass = summaryValue(sheet, 'Armor Class');
+
+  expect(within(within(actions()).getByRole('group', { name: /Active effects/ })).getByRole('checkbox', { name: /E2E calm/ })).toBeTruthy(); // no activation: stays
+  expect(within(within(actions()).getByRole('group', { name: /Active effects/ })).queryByRole('checkbox', { name: /E2E guard/ })).toBeNull();
+  const resources = within(sheet).getByRole('region', { name: 'Resources' });
+  expect(within(within(resources).getByRole('region', { name: 'Bonus actions' })).getByRole('heading', { name: /^E2E surge: 2 of 2/ })).toBeTruthy();
+
+  await user.click(within(within(actions()).getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /E2E guard/ }));
+  await waitFor(() => expect(Number(summaryValue(sheet, 'Armor Class'))).toBe(Number(armorClass) + 2));
+  const guard = within(within(actions()).getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /E2E guard/ }) as HTMLInputElement;
+  expect(guard.checked).toBe(true);
+  expect(document.activeElement).toBe(guard);
+});
+
+it('carries two copies of a charged wand that needs attunement: attuning applies it, charges are separate, and a long rest returns them by the rolled total (item 25)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Wand Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'item',
+    name: 'E2E Wand',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'modifier', id: 'wand-ac', operation: 'bonus', target: 'armorClass', value: '2' },
+      { type: 'item', id: 'wand-use', requiresAttunement: true, charges: { max: 3, recovery: { period: 'longRest', regain: '1d3' } } },
+    ],
+  });
+  await client.publish(draft);
+  await client.createCharacter({ name: 'E2E Wand Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Wand Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Wand Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  const armorClass = () => Number(/^(\d+)/.exec(summaryValue(hero, 'Armor Class'))![1]);
+  const before = armorClass();
+
+  // Two copies: an item with charges is offered again once it is carried.
+  for (const copies of [1, 2]) {
+    await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Wand/ })).toBeTruthy());
+    await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Wand/ }));
+    await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(within(equipment()).getAllByRole('checkbox', { name: /^Equip E2E Wand/ })).toHaveLength(copies));
+  }
+  expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2); // carried: charges show on Inventory too
+
+  // Equipped but not attuned: nothing applies, and the sheet says so. Attuning applies it once.
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip E2E Wand (copy 1 of 2)' }));
+  await within(equipment()).findByText('E2E Wand (copy 1 of 2) is not attuned, so its effects do not apply.');
+  expect(armorClass()).toBe(before);
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Attuned: E2E Wand (copy 1 of 2)' }));
+  await waitFor(() => expect(armorClass()).toBe(before + 2));
+
+  // Separate counts; focus stays on the button that was pressed.
+  const spend = () => within(equipment()).getByRole('button', { name: 'Spend a charge: E2E Wand (copy 1 of 2)' });
+  await user.click(spend());
+  await user.click(spend());
+  await waitFor(() => expect(within(equipment()).getByText('1 of 3 charges left')).toBeTruthy());
+  expect(within(equipment()).getByText('3 of 3 charges left')).toBeTruthy();
+  expect(document.activeElement).toBe(spend());
+
+  // A long rest asks for the 1d3, takes the total as rolled at the table, and returns that many (capped at the two spent).
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  await user.type(await within(rest).findByLabelText('E2E Wand: 1d3 rolled at the table (total)'), '2');
+  await user.click(within(rest).getByRole('button', { name: 'Add the 1d3 total: E2E Wand' }));
+  expect(await within(rest).findByRole('checkbox', { name: /^E2E Wand charges: 1 → 3/ })).toBeTruthy();
+  const finish = within(rest).getByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+  await openTab(user, hero, 'Inventory');
+  await waitFor(() => expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2));
+});
+
+it('adds a companion on Play, damages it, undoes that exactly, and rolls its attack (item 23, D39)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Handler', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Handler/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Handler' });
+  await openTab(user, hero, 'Play');
+
+  const companions = () => screen.getByRole('region', { name: 'Companions' });
+  await user.click(within(companions()).getByRole('button', { name: 'Add a companion' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Name' }), 'Testy Hound');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }), '20');
+  await user.click(within(companions()).getByRole('button', { name: 'Add an attack line' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 name' }), 'Testy Bite');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }), '4');
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 damage (optional)' }), '1d6+2');
+  await user.click(within(companions()).getByRole('button', { name: 'Save companion' }));
+  await expectStatus(/^Added Testy Hound\.$/);
+
+  // Damage goes through the play command; the card shows it and Undo puts the hit points back exactly.
+  const dog = () => screen.getByRole('region', { name: 'Testy Hound' });
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '8');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 12 of 20')).toBeTruthy());
+  expect(document.activeElement).toBe(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: companion damage 8' }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20')).toBeTruthy());
+
+  // Set temporary hit points, then damage takes them first.
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '5');
+  await user.click(within(dog()).getByRole('button', { name: /^Set temporary hit points/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20, 5 temporary')).toBeTruthy());
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '7');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 18 of 20')).toBeTruthy());
+
+  // Its attack rolls through the dice engine and shows in Last roll like an attack of your own.
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite attack/ }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite attack: \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Testy Bite to hit \+4/);
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite damage/ }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite damage: \d+ \(1d6\+2\)/));
 });

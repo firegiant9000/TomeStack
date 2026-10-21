@@ -57,6 +57,19 @@ it('disables the button for the spell being concentrated on and sends startConce
   expect(act).toHaveBeenCalledWith({ action: 'startConcentration', contentId: ref(11).contentId });
 });
 
+it('sends the chosen mode with a spell attack roll and none with its dice (R93)', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const v = view();
+  const caster = v.sheet.spellcasting![0]!;
+  caster.spells = [{ ...spell(20, 'Fixture Bolt', 0, false), attack: 'ranged', dice: '1d10' }];
+  render(<SpellsPanel view={v} act={() => {}} roll={roll} rollMode="advantage" onSave={() => {}} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Bolt attack' }));
+  expect(roll).toHaveBeenLastCalledWith({ spell: ref(20), spellAttack: true, mode: 'advantage' });
+  await user.click(screen.getByRole('button', { name: 'Roll Fixture Bolt (1d10)' }));
+  expect(roll).toHaveBeenLastCalledWith({ spell: ref(20) });
+});
+
 it('filters a caster’s spells by name, keeps the Prepared and Concentrate names of the rows shown, and says how many (D30)', async () => {
   const user = userEvent.setup();
   panel(view());
@@ -105,4 +118,17 @@ it('a marks-only query filters nothing and announces nothing (D30)', async () =>
   await user.type(screen.getByRole('searchbox', { name: /^Search .* spells by name$/ }), '\u0301');
   expect(screen.queryByText(/spells shown/)).toBeNull();
   expect(screen.getByRole('button', { name: 'Concentrate on Fixture Hush' })).toBeTruthy();
+});
+
+it('works out the prepared flag from the latest saved list, and refuses a spell that was removed meanwhile (G10)', async () => {
+  const user = userEvent.setup();
+  const onSave = vi.fn();
+  const v = view();
+  render(<SpellsPanel view={v} act={() => {}} roll={() => {}} onSave={onSave} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Prepared: Fixture Veil' })); // shown prepared
+  const update = onSave.mock.calls[0]![0] as (latest: CharacterView['character']) => CharacterView['character'];
+  const entry = (prepared: boolean) => ({ caster: ref(1).contentId, spell: ref(11), prepared });
+  // The latest saved list has it unprepared (changed elsewhere meanwhile): the press toggles that, not the stale render.
+  expect(update({ ...v.character, spells: [entry(false)] }).spells).toEqual([entry(true)]);
+  expect(() => update({ ...v.character, spells: [] })).toThrow(/removed/);
 });

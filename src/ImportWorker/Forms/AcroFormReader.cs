@@ -43,7 +43,7 @@ public static class AcroFormReader
             var fields = new List<FormField>(pending.Count);
             foreach (var (_, readField) in pending)
             {
-                var read = readField();
+                var read = form.Clip(readField());
                 total += form.Chars(read) ?? throw TooLong(form);
                 if (total > form.MaxTotalValueChars)
                     throw new ExtractionException("ddb.value-too-long", $"The form fields hold more than {form.MaxTotalValueChars} characters in total.");
@@ -199,7 +199,7 @@ public static class AcroFormReader
     };
 
     private static ExtractionException NoForm() =>
-        new("ddb.no-form-fields", "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.");
+        new("ddb.no-form-fields", "This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.");
 
     /// <summary>
     /// The terminal fields in document order with their full names, walked without recursion (a hostile file can nest

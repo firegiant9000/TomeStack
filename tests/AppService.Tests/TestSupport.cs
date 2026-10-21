@@ -8,6 +8,16 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+internal static class AppTestExtensions
+{
+    /// <summary>
+    /// R182: saves a hand-built character as the page would, naming the version now stored (a character with no stored row is
+    /// new and keeps what it carries). For tests that save one fixture again and again.
+    /// </summary>
+    public static CharacterView SaveCurrent(this TomeStackApp app, Character character) =>
+        app.SaveCharacter(app.ListCharacters().FirstOrDefault(c => c.Id == character.Id) is { } stored ? character with { UpdatedAt = stored.UpdatedAt } : character);
+}
+
 /// <summary>A throwaway data directory per test; deleted on dispose.</summary>
 internal sealed class TempApp : IDisposable
 {
@@ -39,6 +49,49 @@ internal sealed class TempApp : IDisposable
     public TomeStackApp App { get; private set; }
 
     public string Directory => _directory;
+
+    /// <summary>The compare-and-swap token of a candidate as stored now (what the UI would send back with its edit).</summary>
+    public string? EtagOf(Guid candidateId) => App.Store.FindImportCandidate(candidateId)?.Etag;
+
+    /// <summary>R134: accepts as the panel does, sending the etag the candidate has now (a stored one; none for an unknown id).</summary>
+    public StoredCandidate Accept(CandidateAcceptRequest request) => App.AcceptCandidate(request with { Expected = EtagOf(request.CandidateId) });
+
+    /// <summary>R134: bulk accept as the panel does, one current etag per id that exists.</summary>
+    public AcceptManyResult AcceptMany(CandidateAcceptManyRequest request) =>
+        App.AcceptMany(request with { Expected = request.CandidateIds.Distinct().Where(id => EtagOf(id) is not null).ToDictionary(id => id, id => EtagOf(id)!) });
+
+    /// <summary>R134: ignores as the panel does, sending the etag the candidate has now.</summary>
+    public StoredCandidate Ignore(Guid candidateId) => App.IgnoreCandidate(new(candidateId, EtagOf(candidateId)));
+
+    /// <summary>
+    /// Waits for the running import to end (30 s unless <paramref name="timeout"/> says otherwise), then fails the test unless the wait
+    /// finished and the job's stored status is <paramref name="expected"/> (a test that expects any end passes <c>null</c>: it must still
+    /// finish). The failure names the status, the failure code, the page counts and whether the wait timed out; never document text.
+    /// </summary>
+    public ImportJobRecord WaitForImport(Guid jobId, ImportJobStatus? expected = ImportJobStatus.Completed, TimeSpan? timeout = null)
+    {
+        var limit = timeout ?? TimeSpan.FromSeconds(30);
+        var finished = true;
+        string? faulted = null;
+        try
+        {
+            if (App.RunningImport is { } task)
+                finished = task.Wait(limit);
+        }
+        catch (AggregateException e)
+        {
+            faulted = e.InnerException?.GetType().Name ?? e.GetType().Name;
+        }
+        var job = App.ImportStatus(jobId);
+        if (!finished || faulted is not null || (expected is { } want && job.Status != want))
+        {
+            Assert.Fail(
+                $"Import job {jobId:D}: expected {(expected?.ToString() ?? "any end")}, status {job.Status}, failure code {job.FailureCode ?? "none"}, " +
+                $"wait timed out: {!finished} (limit {limit.TotalSeconds:F0} s), task faulted: {faulted ?? "no"}, " +
+                $"pages done {job.PagesDone} of {job.PageCount?.ToString() ?? "?"}, failed {job.PagesFailed}, next {job.NextPage?.ToString() ?? "none"}, candidates {job.Candidates}.");
+        }
+        return job;
+    }
 
     private bool _closed;
 

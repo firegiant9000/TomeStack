@@ -70,6 +70,24 @@ public enum PlayActionKind
 
     /// <summary>The Constitution saving throw after damage was made and kept: clears the pending DC.</summary>
     ClearConcentrationCheck,
+
+    /// <summary>Wave 3 item 25 (R160): spends <c>amount</c> charges of one equipment entry (<c>entryId</c>), written to the entry's <c>chargesSpent</c>.</summary>
+    SpendCharge,
+
+    /// <summary>Regains <c>amount</c> spent charges of one equipment entry by hand.</summary>
+    RegainCharge,
+
+    /// <summary>Wave 3 item 23 (D39, R174): a companion (<c>companionId</c>) takes <c>amount</c> damage, untyped: temporary hit points first, then hit points, at least 0.</summary>
+    CompanionDamage,
+
+    /// <summary>A companion regains <c>amount</c> hit points, up to its maximum; temporary hit points are not touched.</summary>
+    CompanionHeal,
+
+    /// <summary>A companion's current hit points become <c>amount</c> (0 to its maximum), and its temporary hit points <c>temporary</c> when that is sent.</summary>
+    CompanionSetHitPoints,
+
+    /// <summary>A companion's temporary hit points become <c>amount</c> (0 to the maximum allowed); its current hit points stay as stored, so a damage that landed first is kept.</summary>
+    CompanionSetTemporaryHitPoints,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -82,7 +100,24 @@ public sealed record PlayCommand(
     Guid? ContentId = null,
     string? ResourceId = null,
     string? Condition = null,
-    string? ToggleId = null);
+    string? ToggleId = null,
+    string? DamageType = null,
+    Guid? EntryId = null,
+    int? EntryIndex = null,
+    Guid? CompanionId = null,
+    int? Temporary = null);
+
+/// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
+public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
+
+/// <summary>
+/// What a <see cref="PlayActionKind.Damage"/> command did, for the result line (Wave 3 item 21, D19 amended).
+/// <paramref name="Amount"/> is what was entered and <paramref name="Type"/> its canonical damage type (null: untyped, so no
+/// defence applies). <paramref name="Adjusted"/> is the amount after defences (what the concentration check uses),
+/// <paramref name="Absorbed"/> what temporary hit points took, <paramref name="Lost"/> what hit points lost.
+/// <paramref name="Warnings"/> carries codes and numbers only (<c>play.massive-damage</c>).
+/// </summary>
+public sealed record DamageOutcome(int Amount, string? Type, DamageEffect Effect, int Adjusted, int Absorbed, int Lost, IReadOnlyList<Diagnostic> Warnings);
 
 public sealed partial class TomeStackApp
 {
@@ -101,15 +136,20 @@ public sealed partial class TomeStackApp
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 
+        if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
+            return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
         var sheet = CharacterCalculator.Calculate(character, _store);
+        if (command.Action is PlayActionKind.SpendCharge or PlayActionKind.RegainCharge)
+            return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
         var play = character.Play;
         var hp = sheet.HitPoints!;
         int? AtMaximumIsNull(int value) => value >= hp.Maximum ? null : value;
+        DamageOutcome? damage = null;
 
         play = command.Action switch
         {
             PlayActionKind.Spend or PlayActionKind.Regain => ChangeResource(play, sheet, command),
-            PlayActionKind.Damage => Damage(play, hp, command.Amount, RulesFamilies.Get(character.RulesFamily)),
+            PlayActionKind.Damage => Damage(play, sheet, command, RulesFamilies.Get(character.RulesFamily), out damage),
             PlayActionKind.Heal => play with { CurrentHitPoints = AtMaximumIsNull(hp.Current + command.Amount) },
             PlayActionKind.SetTemporaryHitPoints => play with { TemporaryHitPoints = command.Amount },
             PlayActionKind.SetHitPoints => command.Amount <= hp.Maximum
@@ -152,13 +192,95 @@ public sealed partial class TomeStackApp
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
-        return SaveWithPlay(character with { Play = play });
+        var view = SaveWithPlay(character with { Play = play });
+        return damage is null ? view : view with { Damage = damage };
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
+    /// position and item. The entry gets its id here if it had none. The inverse of a spend is the regain of the same amount (D23).
+    /// </summary>
+    private static Character ChangeCharges(Character character, CharacterSheet sheet, PlayCommand command)
+    {
+        var use = (command.EntryId is { } id
+                ? sheet.ItemUses?.FirstOrDefault(u => u.EntryId == id)
+                : command.EntryIndex is { } index
+                    ? sheet.ItemUses?.FirstOrDefault(u => u.EntryIndex == index && u.EntryId is null && u.Item.ContentId == command.ContentId)
+                    : null)
+            ?? throw new AppValidationException([new("play.entry-unknown", "This character has no such item entry with charges.")]);
+        if (use.ChargesMax is null)
+            throw new AppValidationException([new("play.entry-unknown", "This character has no such item entry with charges.", use.Item)]);
+        if (command.Amount < 1)
+            throw new AppValidationException([new("play.amount-out-of-range", "Spend or regain at least one charge.", use.Item)]);
+        int spent;
+        if (command.Action == PlayActionKind.SpendCharge)
+        {
+            if (command.Amount > use.ChargesLeft)
+                throw new AppValidationException([new("play.charges-none-left", $"This item entry has {use.ChargesLeft} of {use.ChargesMax} charges left; {command.Amount} cannot be spent.", use.Item)]);
+            spent = use.ChargesSpent + command.Amount;
+        }
+        else
+        {
+            if (command.Amount > use.ChargesSpent)
+                throw new AppValidationException([new("play.charges-full", $"This item entry has {use.ChargesSpent} charge(s) spent; {command.Amount} cannot be regained.", use.Item)]);
+            spent = use.ChargesSpent - command.Amount;
+        }
+        var equipment = character.Equipment.ToList();
+        equipment[use.EntryIndex] = equipment[use.EntryIndex] with { ChargesSpent = spent == 0 ? null : spent, Id = equipment[use.EntryIndex].Id ?? Guid.NewGuid() };
+        return character with { Equipment = equipment };
+    }
+
+    /// <summary>
+    /// Wave 3 item 23 (D39, R174): a companion's hit points, in <see cref="PlayState.Companions"/>. Damage is untyped (no defences,
+    /// concentration, death saves or warnings): temporary hit points absorb first, then current, at least 0. Heal caps at the maximum
+    /// and leaves temporary alone. Set takes exact current (0 to the maximum) and temporary (0 to <see cref="PlayState.MaxHitPoints"/>,
+    /// unchanged when not sent). Set temporary takes only the temporary hit points and keeps the stored current. Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
+    /// Errors are codes only; the companion's name never appears in them.
+    /// </summary>
+    private static PlayState ChangeCompanion(Character character, PlayCommand command)
+    {
+        var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
+        if (companion is null)
+            throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companion.Id);
+        var maximum = companion.HitPointMaximum;
+        var current = Math.Min(recorded?.Current ?? maximum, maximum); // a maximum lowered since is respected
+        var temporary = recorded?.Temporary ?? 0;
+        switch (command.Action)
+        {
+            case PlayActionKind.CompanionDamage:
+                var absorbed = Math.Min(temporary, command.Amount);
+                temporary -= absorbed;
+                current = Math.Max(current - (command.Amount - absorbed), 0);
+                break;
+            case PlayActionKind.CompanionHeal:
+                current = Math.Min(current + command.Amount, maximum);
+                break;
+            case PlayActionKind.CompanionSetTemporaryHitPoints:
+                temporary = command.Amount; // current stays as stored: a damage that landed since the page drew its view is kept
+                break;
+            default:
+                if (command.Amount > maximum)
+                    throw new AppValidationException([new("play.companion-hit-points-above-maximum", $"A companion's current hit points cannot be above its maximum ({maximum}).")]);
+                if (command.Temporary is < 0 or > PlayState.MaxHitPoints)
+                    throw new AppValidationException([new("play.amount-out-of-range", $"The temporary hit points must be between 0 and {PlayState.MaxHitPoints}.")]);
+                current = command.Amount;
+                temporary = command.Temporary ?? temporary;
+                break;
+        }
+        var entry = new CompanionPlay(companion.Id, current >= maximum ? null : current, temporary);
+        var others = character.Play.Companions?.Where(p => p.Id != companion.Id).ToList() ?? [];
+        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.Id == companion.Id ? entry : p).ToList();
+        return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
     private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)
     {
         var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
             ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
+        // D38: an auto toggle follows the hit points; it has no state to switch, in either direction.
+        if (toggle.Auto == true)
+            throw new AppValidationException([new("toggle.automatic", "This toggle switches itself while the character is bloodied; it cannot be switched by hand.")]);
         var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
         if (command.Action == PlayActionKind.ToggleOff)
         {
@@ -205,14 +327,59 @@ public sealed partial class TomeStackApp
             : play with { DeathSaves = play.DeathSaves.After(outcome) };
     }
 
-    private static PlayState Damage(PlayState play, HitPointState hp, int amount, RulesFamilyPolicy family)
+    /// <summary>
+    /// Wave 3 item 21 (D19 amended, R169). The order: the damage type must be one of the thirteen (case-insensitive) or the
+    /// command is refused; immunity gives 0, otherwise resistance halves (rounding down) and then vulnerability doubles, each
+    /// kind counting once however many sources give it; then temporary hit points absorb; then hit points. Untyped damage
+    /// ignores every defence. Damage that is 0 after defences changes nothing and asks for no concentration check.
+    /// </summary>
+    private static PlayState Damage(PlayState play, CharacterSheet sheet, PlayCommand command, RulesFamilyPolicy family, out DamageOutcome outcome)
     {
+        string? type = null;
+        if (command.DamageType is { } written)
+        {
+            if (!DamageTypes.TryNormalize(written, out var canonical))
+                throw new AppValidationException([new("play.damage-type-unknown", $"Damage type must be one of: {string.Join(", ", DamageTypes.All)}.")]);
+            type = canonical;
+        }
+        var hp = sheet.HitPoints!;
+        var kinds = type is null
+            ? new HashSet<DamageDefenceKind>()
+            : (sheet.DamageDefences ?? []).Where(d => d.Type == type).Select(d => d.Kind).ToHashSet();
+        var halved = kinds.Contains(DamageDefenceKind.Resistance);
+        var doubled = kinds.Contains(DamageDefenceKind.Vulnerability);
+        var effect = kinds.Contains(DamageDefenceKind.Immunity) ? DamageEffect.Immune
+            : halved && doubled ? DamageEffect.HalvedThenDoubled
+            : halved ? DamageEffect.Halved
+            : doubled ? DamageEffect.Doubled
+            : DamageEffect.None;
+        var amount = effect switch
+        {
+            DamageEffect.Immune => 0,
+            DamageEffect.Halved => command.Amount / 2,
+            DamageEffect.Doubled => command.Amount * 2,
+            DamageEffect.HalvedThenDoubled => command.Amount / 2 * 2,
+            _ => command.Amount,
+        };
+        if (amount == 0)
+        {
+            outcome = new(command.Amount, type, effect, 0, 0, 0, []);
+            return play;
+        }
+
         var absorbed = Math.Min(play.TemporaryHitPoints, amount);
         var current = Math.Max(hp.Current - (amount - absorbed), 0);
-        // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11): damage while concentrating asks for a Constitution save, DC 10 or half the
-        // damage dealt (the amount, before temporary hit points), whichever is higher; at 0 hit points the spell simply ends.
-        // The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a huge hit is still applied.
-        var concentration = play.Concentration is { } con && amount > 0
+        // Massive damage is a warning, never an automatic death: the damage left over once hit points reach 0 equals or exceeds the maximum.
+        var leftOver = amount - absorbed - (hp.Current - current);
+        var warnings = hp.Maximum >= 1 && leftOver >= hp.Maximum
+            ? new List<Diagnostic> { new("play.massive-damage", $"{leftOver} damage was left over after reaching 0 hit points, which equals or exceeds the hit point maximum of {hp.Maximum}.") }
+            : [];
+        outcome = new(command.Amount, type, effect, amount, absorbed, hp.Current - current, warnings);
+        // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11), amended: damage while concentrating asks for a Constitution save, DC 10 or half the
+        // damage after resistance, immunity and vulnerability (before temporary hit points), whichever is higher; at 0 hit points the
+        // spell simply ends. The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a
+        // huge hit is still applied.
+        var concentration = play.Concentration is { } con
             ? current == 0 ? null : con with { PendingSaveDc = Math.Min(Math.Max(10, amount / 2), Math.Min(family.ConcentrationSaveMaximumDc ?? int.MaxValue, PlayState.MaxConcentrationSaveDc)) }
             : play.Concentration;
         return play with { TemporaryHitPoints = play.TemporaryHitPoints - absorbed, CurrentHitPoints = current >= hp.Maximum ? null : current, Concentration = concentration };

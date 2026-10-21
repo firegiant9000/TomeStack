@@ -45,6 +45,153 @@ internal static class FixtureSheets
     /// <summary>The 2024 sheet (parsed only, never imported) names a subclass.</summary>
     public static IReadOnlyList<FormSpec> Fields2024 { get; } = Character(Placeholder2024, "Fixture Fighter 3 (Fixture Vanguard)");
 
+    /// <summary>
+    /// The field names of the fillable 2014 sheet layout (<c>wotc-2014</c>), exactly as the form spells them, trailing and
+    /// double spaces included (names only: item 14 read them from the owner's sheet, never a value). The check boxes are
+    /// numbered by the form: 11 and 18 to 22 are the six saves in sheet order, 23 to 40 the eighteen skills in sheet order
+    /// (alphabetical), 12 to 17 the death saves (three successes, then three failures).
+    /// </summary>
+    public static class Wotc
+    {
+        public static readonly string[] AbilityKeys = ["str", "dex", "con", "int", "wis", "cha"];
+        // R95: on the owner's sheet the form names its boxes the other way round: "STR" holds the modifier and "STRmod" the score.
+        public static readonly string[] Scores = ["STRmod", "DEXmod ", "CONmod", "INTmod", "WISmod", "CHamod"];
+        public static readonly string[] Mods = ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
+        public static readonly string[] SaveBoxes = ["Check Box 11", "Check Box 18", "Check Box 19", "Check Box 20", "Check Box 21", "Check Box 22"];
+        public static readonly string[] SaveBonuses = ["ST Strength", "ST Dexterity", "ST Constitution", "ST Intelligence", "ST Wisdom", "ST Charisma"];
+        public static readonly string[] DeathSuccessBoxes = ["Check Box 12", "Check Box 13", "Check Box 14"];
+        public static readonly string[] DeathFailureBoxes = ["Check Box 15", "Check Box 16", "Check Box 17"];
+
+        /// <summary>The skills in sheet order: the key, the bonus field, and the proficiency box (23 to 40).</summary>
+        public static readonly (string Key, string Bonus, string Box)[] Skills =
+        [
+            ("acrobatics", "Acrobatics", "Check Box 23"), ("animalHandling", "Animal", "Check Box 24"), ("arcana", "Arcana", "Check Box 25"),
+            ("athletics", "Athletics", "Check Box 26"), ("deception", "Deception ", "Check Box 27"), ("history", "History ", "Check Box 28"),
+            ("insight", "Insight", "Check Box 29"), ("intimidation", "Intimidation", "Check Box 30"), ("investigation", "Investigation ", "Check Box 31"),
+            ("medicine", "Medicine", "Check Box 32"), ("nature", "Nature", "Check Box 33"), ("perception", "Perception ", "Check Box 34"),
+            ("performance", "Performance", "Check Box 35"), ("persuasion", "Persuasion", "Check Box 36"), ("religion", "Religion", "Check Box 37"),
+            ("sleightOfHand", "SleightofHand", "Check Box 38"), ("stealth", "Stealth ", "Check Box 39"), ("survival", "Survival", "Check Box 40"),
+        ];
+
+        /// <summary>The three weapon rows: name, attack bonus and damage (the form's irregular spacing is kept).</summary>
+        public static readonly (string Name, string Bonus, string Damage)[] Weapons =
+        [
+            ("Wpn Name", "Wpn1 AtkBonus", "Wpn1 Damage"),
+            ("Wpn Name 2", "Wpn2 AtkBonus ", "Wpn2 Damage "),
+            ("Wpn Name 3", "Wpn3 AtkBonus  ", "Wpn3 Damage "),
+        ];
+
+        public static readonly string[] Appearance = ["Age", "Height", "Weight", "Eyes", "Skin", "Hair"];
+
+        /// <summary>The free-text fields that go to session notes, with the layout's clip list.</summary>
+        public static readonly string[] Prose = ["PersonalityTraits ", "Ideals", "Bonds", "Flaws", "Backstory", "Features and Traits", "Feat+Traits", "Treasure"];
+    }
+
+    /// <summary>The committed fillable-2014-shaped fixture's path in the test output.</summary>
+    public static string WotcCommittedPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-wotc-sheet.pdf");
+
+    /// <summary>
+    /// Testy McFixture on the fillable 2014 sheet's field names: invented values only. The class text uses the form's
+    /// "LVL" spelling, the abilities have both boxes, and the weapon rows, equipment and proficiencies are filled in the
+    /// ways a player writes them. <c>PlayerName</c> is filled so tests can prove it is never read.
+    /// </summary>
+    public static IReadOnlyList<FormSpec> FieldsWotc2014 { get; } = WotcCharacter();
+
+    public static byte[] SheetWotc2014() => Write(FieldsWotc2014, pages: 3);
+
+    /// <summary>The committed stub-class fixture's path in the test output (item 15, D35).</summary>
+    public static string TinkererCommittedPath => Path.Combine(AppContext.BaseDirectory, "RulesFixtures", "pdf", "fixture-tinkerer-sheet.pdf");
+
+    /// <summary>
+    /// "Testy Tinker" on the fillable 2014 sheet with one class TomeStack does not have, the invented "Fixture Tinkerer" 3
+    /// (hit dice total 3d8, the Strength save ticked). The e2e flow creates a homebrew class from it.
+    /// </summary>
+    public static IReadOnlyList<FormSpec> FieldsTinkerer { get; } =
+    [
+        .. FieldsWotc2014.Select(f => f.Name switch
+        {
+            "ClassLevel" => f with { Text = "Fixture Tinkerer LVL 3" },
+            "CharacterName" => f with { Text = "Testy Tinker" },
+            _ => f,
+        }),
+    ];
+
+    public static byte[] SheetTinkerer() => Write(FieldsTinkerer, pages: 3);
+
+    private static List<FormSpec> WotcCharacter()
+    {
+        var fields = new List<FormSpec>();
+        void Text(string name, string value, int page = 1) => fields.Add(new(name, value, Page: page));
+        void Box(string name, bool on, int page = 1) => fields.Add(new(name, Checked: on, Page: page));
+
+        Text("ClassLevel", "Fixture Arcanist LVL 3");
+        Text("Background", "Fixture Archivist");
+        Text("PlayerName", "Testy Player");
+        Text("CharacterName", "Testy McFixture");
+        Text("Race ", "Fixture Quickfoot");
+        Text("Alignment", "Fixture Neutral");
+        Text("XP", "900");
+        string[] scores = ["16", "14", "15", "10", "12", "8"];
+        string[] mods = ["+3", "+2", "+2", "+0", "+1", "-1"];
+        for (var i = 0; i < 6; i++)
+        {
+            Text(Wotc.Scores[i], scores[i]);
+            Text(Wotc.Mods[i], mods[i]);
+            Text(Wotc.SaveBonuses[i], mods[i]);
+            Box(Wotc.SaveBoxes[i], i == 0);
+        }
+        Text("ProfBonus", "+2");
+        Text("AC", "16");
+        Text("Initiative", "+2");
+        Text("Speed", "30 ft");
+        Text("HPMax", "28");
+        Text("HPCurrent", "21");
+        Text("HPTemp", "3");
+        Text("HDTotal", "3d8");
+        Text("HD", "2d8");
+        Text("Passive", "11");
+        Text("CP", "5");
+        Text("SP", "");
+        Text("EP", "");
+        Text("GP", "12");
+        Text("PP", "");
+        for (var i = 0; i < 3; i++)
+        {
+            Box(Wotc.DeathSuccessBoxes[i], i == 0);
+            Box(Wotc.DeathFailureBoxes[i], i < 2);
+        }
+        foreach (var (key, bonus, box) in Wotc.Skills)
+        {
+            Text(bonus, key == "athletics" ? "+5" : "+0");
+            Box(box, key == "athletics");
+        }
+        (string Name, string Bonus, string Damage)[] weapons = [("Testy Longblade", "+5", "1d8+3 slashing"), ("Testy Dagger", "+4", "1d4+2 piercing"), ("", "", "")];
+        for (var i = 0; i < 3; i++)
+        {
+            Text(Wotc.Weapons[i].Name, weapons[i].Name);
+            Text(Wotc.Weapons[i].Bonus, weapons[i].Bonus);
+            Text(Wotc.Weapons[i].Damage, weapons[i].Damage);
+        }
+        Text("AttacksSpellcasting", "Fixture attack notes.");
+        Text("Equipment", "Fixture Rope Coil (3)\n2 x Fixture Lantern\nFixture Waterskin");
+        Text("ProficienciesLang", "Languages: Common, Fixture Tongue\nTools: Fixture Kit");
+        Text("PersonalityTraits ", "Testy personality.");
+        Text("Ideals", "Testy ideals.");
+        Text("Bonds", "Testy bonds.");
+        Text("Flaws", "Testy flaws.");
+        Text("Features and Traits", "Fixture Steady Breath\nFixture Bold Surge");
+        string[] looks = ["25", "5 ft 8 in", "150 lb", "Fixture Green", "Fixture Pale", "Fixture Dark"];
+        for (var i = 0; i < looks.Length; i++)
+            Text(Wotc.Appearance[i], looks[i], 2);
+        Text("CharacterName 2", "Testy McFixture", 2);
+        Text("Allies", "Testy allies.", 2);
+        Text("Backstory", "Testy backstory.", 2);
+        Text("Feat+Traits", "Fixture Keen Watcher", 2);
+        Text("Treasure", "Testy treasure.", 2);
+        Text("Spells 1014", "Fixture Frost Ring", 3);
+        return fields;
+    }
+
     public static byte[] Sheet2014() => Write(Fields2014, pages: 3);
 
     public static byte[] Sheet2024() => Write(Fields2024, pages: 3, nested: true);

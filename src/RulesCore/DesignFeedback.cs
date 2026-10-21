@@ -143,25 +143,13 @@ public static class DesignFeedback
     private static List<(ResourceEffect Resource, int First, int Last)> Growths(ContentRevision revision)
     {
         var allowScales = revision.SchemaVersion >= ScaleEffect.SchemaVersion;
-        var scales = allowScales
-            ? revision.Effects.OfType<ScaleEffect>()
-                .Where(s => s.Automation == AutomationStatus.Automatic && s.Values.Count == Character.MaxLevel)
-                .GroupBy(s => s.ScaleId).ToDictionary(g => g.Key, g => g.First().Values, StringComparer.Ordinal)
-            : [];
+        var scales = allowScales ? FormulaPreview.Scales(revision) : FormulaPreview.Scales(null);
         var growths = new List<(ResourceEffect, int, int)>();
         foreach (var resource in revision.Effects.OfType<ResourceEffect>().Where(r => r.Automation != AutomationStatus.Reference))
         {
             if (!Formula.TryParse(resource.Maximum, allowScales, out var formula, out _))
                 continue; // validation reports it
-            int? At(int level) => formula!.TryEvaluate(id => id switch
-            {
-                FormulaIdentifiers.ProficiencyBonus => ProficiencyBonus(level),
-                FormulaIdentifiers.Level or FormulaIdentifiers.ClassLevel => level,
-                _ when FormulaIdentifiers.IsScale(id) => scales.TryGetValue(FormulaIdentifiers.ScaleId(id), out var values) ? values[level - 1] : null,
-                _ when id.EndsWith(".MOD", StringComparison.Ordinal) => 0,
-                _ when id.EndsWith(".SCORE", StringComparison.Ordinal) => 10,
-                _ => null,
-            }, out var value, out _) ? value : null;
+            int? At(int level) => formula!.TryEvaluate(id => FormulaPreview.Resolve(id, level, scales), out var value, out _) ? value : null;
             if (At(Character.MinLevel) is { } first && At(Character.MaxLevel) is { } last)
                 growths.Add((resource, first, last));
         }

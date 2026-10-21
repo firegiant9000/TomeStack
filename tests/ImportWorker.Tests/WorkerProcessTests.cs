@@ -14,10 +14,40 @@ public class WorkerProcessTests
 {
     private static string Worker => Path.Combine(AppContext.BaseDirectory, "TomeStack.ImportWorker.Host.exe");
 
-    private static async Task<List<ExtractionEvent>> Run(string path, ExtractionLimits? limits = null, PageScope? scope = null, Action<int>? started = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// A stand-in worker that reads nothing and writes nothing until it is killed (R173). The page-timeout tests run
+    /// against it, not against the real worker, which on a fast runner answers before any short timeout fires.
+    /// </summary>
+    private sealed class SilentWorker : IDisposable
+    {
+        private readonly string _folder = Path.Combine(Path.GetTempPath(), "tomestack-silent-" + Guid.NewGuid().ToString("N"));
+
+        public SilentWorker()
+        {
+            Directory.CreateDirectory(_folder);
+            Script = Path.Combine(_folder, "silent-worker.cmd");
+            File.WriteAllText(Script, "@echo off\r\nping -n 60 127.0.0.1 >nul\r\n");
+        }
+
+        public string Script { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(_folder, recursive: true);
+            }
+            catch (IOException)
+            {
+                // The killed child may still hold the folder for a moment; the temp folder is cleaned up later.
+            }
+        }
+    }
+
+    private static async Task<List<ExtractionEvent>> Run(string path, ExtractionLimits? limits = null, PageScope? scope = null, Action<int>? started = null, CancellationToken cancellationToken = default, string? worker = null)
     {
         var events = new List<ExtractionEvent>();
-        var extractor = new WorkerProcessExtractor(Worker, limits) { ProcessStarted = started };
+        var extractor = new WorkerProcessExtractor(worker ?? Worker, limits) { ProcessStarted = started };
         await foreach (var item in extractor.ExtractAsync(path, scope ?? PageScope.WholeDocument, cancellationToken))
             events.Add(item);
         return events;
@@ -88,8 +118,11 @@ public class WorkerProcessTests
     [Fact]
     public async Task A_worker_that_sends_nothing_in_time_is_stopped()
     {
-        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.ImportPath, new ExtractionLimits { PageTimeout = TimeSpan.FromMilliseconds(1) }));
+        using var silent = new SilentWorker();
+        var pid = 0;
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.ImportPath, new ExtractionLimits { PageTimeout = TimeSpan.FromMilliseconds(200) }, started: id => pid = id, worker: silent.Script));
         Assert.Equal("worker.page-timeout", refused.Code);
+        Assert.True(Gone(pid), "the worker process ended");
     }
 
     [Fact]
@@ -225,6 +258,7 @@ public class WorkerProcessTests
 
         var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker).ReadAsync(file.Path, CancellationToken.None));
         Assert.Equal("ddb.no-form-fields", refused.Code);
+        Assert.Equal("This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.", refused.Message);
     }
 
     [Fact]
@@ -233,6 +267,96 @@ public class WorkerProcessTests
         using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
         var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(Worker, form: new FormLimits { MaxFields = 1 }).ReadAsync(file.Path, CancellationToken.None));
         Assert.Equal("ddb.too-many-fields", refused.Code);
+    }
+
+    [Fact]
+    public async Task A_formFields_request_carries_the_clip_names_to_the_worker_which_cuts_the_value()
+    {
+        // R78: the worker reads before any layout is recognised, so the clip names travel in the form limits.
+        var form = new FormLimits { MaxValueChars = 20, ClipFields = ["fixture.prose"] };
+        using var file = FixturePdfs.Write(FormPdfWriter.Write([new("fixture.prose", new string('F', 30)), new("fixture.other", "Testy")]));
+
+        var fields = await new WorkerFormReader(Worker, form: form).ReadAsync(file.Path, CancellationToken.None);
+
+        Assert.Equal((20, true), (fields[0].Value!.Length, fields[0].Clipped));
+        Assert.False(fields[1].Clipped);
+    }
+
+    [Theory]
+    [InlineData("fixture.plain", 21, false)] // over the limit, not a clip name
+    [InlineData("fixture.prose", 21, false)] // a clip name, but the worker did not cut it
+    [InlineData("fixture.plain", 20, true)] // flagged as cut, but not a clip name
+    public async Task A_formFields_worker_that_breaks_the_clip_contract_is_a_protocol_error(string name, int length, bool clipped)
+    {
+        var form = new FormLimits { MaxFields = 1, MaxValueChars = 20, ClipFields = ["fixture.prose"] };
+        var field = $"{{\"name\":\"{name}\",\"type\":\"text\",\"value\":\"{new string('F', length)}\"{(clipped ? ",\"clipped\":true" : "")}}}";
+        using var fake = FakeWorker("{\"type\":\"worker\",\"heapLimit\":1}", $"{{\"type\":\"fields\",\"fields\":[{field}]}}", "{\"type\":\"done\"}");
+        using var file = FixturePdfs.Write(FormPdfWriter.Write(FixtureForm));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => new WorkerFormReader(fake.Path, form: form).ReadAsync(file.Path, CancellationToken.None));
+
+        Assert.Equal("worker.protocol", refused.Code);
+    }
+
+    // Item 19b (R114): a PDF without form fields is read with the existing extract request under the sheet limits; no new kind.
+
+    [Fact]
+    public async Task An_extract_under_the_sheet_limits_gives_the_text_sheets_pages_in_the_child_process()
+    {
+        var events = await Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits, new PageScope(1, 20));
+
+        Assert.Equal(FixturePdfs.TextSheetPages.Count, Assert.IsType<DocumentOpened>(events[0]).PageCount);
+        var pages = events.OfType<ExtractedPage>().ToList();
+        Assert.Equal(FixturePdfs.TextSheetPages.Count, pages.Count);
+        Assert.Equal(FixturePdfs.TextSheetPages[0].Where(l => l.Length > 0), pages[0].Text.Split('\n').Where(l => l.Length > 0));
+    }
+
+    [Fact]
+    public async Task An_extract_of_pages_one_to_twenty_reads_no_more_than_twenty_pages_of_a_longer_document()
+    {
+        using var file = FixturePdfs.Write(FixturePdfs.Pages(25));
+
+        var events = await Run(file.Path, WorkerFormReader.DefaultLimits, new PageScope(1, 20));
+
+        Assert.Equal(25, Assert.IsType<DocumentOpened>(events[0]).PageCount); // the caller counts the pages it did not read
+        Assert.Equal(Enumerable.Range(1, 20), events.OfType<ExtractedPage>().Select(p => p.PageNumber));
+    }
+
+    [Fact]
+    public async Task The_sheet_limits_refuse_a_document_of_more_than_fifty_pages()
+    {
+        using var file = FixturePdfs.Write(FixturePdfs.Pages(51));
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(file.Path, WorkerFormReader.DefaultLimits, new PageScope(1, 20)));
+
+        Assert.Equal("pdf.too-many-pages", refused.Code);
+    }
+
+    [Fact]
+    public async Task An_extract_under_the_sheet_limits_stops_a_worker_that_sends_nothing_within_the_page_timeout()
+    {
+        // What is distinct from the book-limits test above: the sheet limits (30 s page and run timeouts, 50 pages, 256 MB heap) with
+        // only the page timeout shortened. The 200 ms page timeout, not the sheet's 30 s run timeout, is what stops the worker.
+        using var silent = new SilentWorker();
+        var limits = WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(200) };
+        Assert.Equal((50, TimeSpan.FromSeconds(30)), (limits.MaxPages, limits.RunTimeout));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, limits, new PageScope(1, 20), worker: silent.Script));
+
+        Assert.Equal("worker.page-timeout", refused.Code);
+        Assert.InRange(clock.Elapsed, TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(20));
+    }
+
+    [Fact]
+    public async Task An_extract_request_stores_nothing_and_the_worker_has_no_page_text_kind()
+    {
+        // R114: the allowed set is unchanged; "pageText" is refused as any unknown kind is.
+        using var file = FixturePdfs.Write(FixturePdfs.TextSheet());
+        var (exit, lines) = await RunInProcess(new WorkerRequest(file.Path, null, null, WorkerFormReader.DefaultLimits, Kind: "pageText"));
+        Assert.Equal(3, exit);
+        Assert.Equal("worker.bad-request", Assert.Single(lines).Code);
+        Assert.Equal([Path.GetFileName(file.Path)], Directory.EnumerateFiles(Path.GetDirectoryName(file.Path)!).Select(Path.GetFileName));
     }
 
     [Fact]

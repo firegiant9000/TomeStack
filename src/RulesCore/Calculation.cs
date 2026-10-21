@@ -99,10 +99,40 @@ public sealed record CharacterSheet(
     SlotValue? PactSlots = null,
     IReadOnlyList<AttackEntry>? Attacks = null,
     IReadOnlyList<ToggleValue>? Toggles = null,
-    IReadOnlyList<ScaleValue>? Scales = null)
+    IReadOnlyList<ScaleValue>? Scales = null,
+    bool? Bloodied = null,
+    IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
+    IReadOnlyList<ItemUseValue>? ItemUses = null,
+    bool? LevelUpAvailable = null,
+    int? XpForNextLevel = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>Wave 3 item 25: when an item's charges come back (content v10 <c>item.charges.recovery</c>). Null <paramref name="Regain"/>: all of them.</summary>
+public sealed record ItemChargeRecoveryInfo(RestPeriod On, string? Regain);
+
+/// <summary>
+/// Wave 3 item 25 (R158, R159, R171): one equipment entry of an item with a v10 <c>item</c> effect that needs attunement or has
+/// charges, carried or equipped alike. <paramref name="EntryKey"/> names the entry for a change: its <c>id</c>, or <c>#</c> and its
+/// position in the list while it has none (<paramref name="EntryId"/> null). <paramref name="Attuned"/> is what is recorded; the item's
+/// other effects apply only while it is equipped and, when <paramref name="RequiresAttunement"/>, attuned. Charges are per entry:
+/// <paramref name="ChargesMax"/> is null when the item has none; <paramref name="ChargesLeft"/> is the maximum less
+/// <paramref name="ChargesSpent"/>, never below 0.
+/// </summary>
+public sealed record ItemUseValue(
+    ContentReference Item,
+    string Name,
+    string EntryKey,
+    Guid? EntryId,
+    int EntryIndex,
+    bool Equipped,
+    bool RequiresAttunement,
+    bool Attuned,
+    int? ChargesMax,
+    int ChargesSpent,
+    int? ChargesLeft,
+    ItemChargeRecoveryInfo? Recovery);
 
 /// <summary>
 /// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
@@ -129,7 +159,8 @@ public sealed record ResourceValue(
     IReadOnlyList<Diagnostic> Warnings,
     AutomationStatus Automation,
     IReadOnlyList<RecoveryInfo> Recoveries,
-    string? Text);
+    string? Text,
+    Activation? Activation = null);
 
 /// <summary>
 /// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
@@ -167,8 +198,21 @@ public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
     Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
 
-/// <summary>Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now.</summary>
-public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text);
+/// <summary>
+/// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
+/// D38): true when the sheet switches it itself (<c>autoWhen</c>); it has no switch, is never stored and never spends a use.
+/// Null otherwise, so nothing is written for an ordinary toggle.
+/// </summary>
+public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null);
+
+/// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
+public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
+
+/// <summary>
+/// Wave 3 item 21 (D19 amended): one damage resistance, immunity or vulnerability the character has. <paramref name="Type"/> is
+/// the canonical lower-case name from <see cref="DamageTypes.All"/>; several sources of the same type and kind are one entry.
+/// </summary>
+public sealed record DamageDefenceValue(string Type, DamageDefenceKind Kind, IReadOnlyList<DamageDefenceSource> Sources);
 
 /// <summary>A calculated field id and its display label.</summary>
 public sealed record FieldInfo(string Id, string Label);
@@ -309,13 +353,18 @@ public static class CharacterCalculator
     public static bool IsField(string field) => SpecIndex.ContainsKey(field);
 
     /// <summary>
-    /// D24 (2026-10-06): speed and the passive scores are calculated and overridable on the sheet, but no content-schema
-    /// version carries them as targets yet, and an older build would read such content as supported and drop its bonus
-    /// silently. Content may not target them until a version allows it: the validator refuses it, and the calculator
-    /// ignores such modifiers and restrictions with a diagnostic whatever the revision's schema version. Character
-    /// overrides do not pass through either.
+    /// D24 (2026-10-06): speed and the passive scores are calculated and overridable on the sheet, but a build before
+    /// content schema v10 would read content that targets them as supported and drop its bonus silently. So content may
+    /// target them only in a v10 (or newer) revision: below v10 the validator refuses it, and the calculator ignores such
+    /// modifiers and restrictions with a diagnostic, exactly as those builds do. From v10 they are ordinary targets (D42).
+    /// A character's own override (Stats) stays final for them, as for every field.
     /// </summary>
-    public static bool IsCharacterOnlyField(string field) =>
+    /// <param name="schemaVersion">The schema version of the revision that targets the field.</param>
+    public static bool IsCharacterOnlyField(string field, int schemaVersion) =>
+        IsSpeedOrPassive(field) && schemaVersion < ContentRevision.PlayDetailsSchemaVersion;
+
+    /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
+    public static bool IsSpeedOrPassive(string field) =>
         field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
 
     /// <summary>
@@ -335,7 +384,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -355,15 +404,37 @@ public static class CharacterCalculator
         ArgumentNullException.ThrowIfNull(character);
         ArgumentNullException.ThrowIfNull(catalog);
 
-        var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>());
+        // D38 / R154: Bloodied is decided by a first pass in which auto toggles are off, so the maximum is the pre-toggle one
+        // and an auto toggle can never move the line it is judged by. Only when the character is bloodied and has an auto
+        // toggle is the sheet calculated again with those toggles on (the common case costs one pass).
+        var pass = CalculateSheet(character, catalog, autoOn: false);
+        if (pass.Bloodied != true || pass.Toggles is not { } toggles || !toggles.Any(t => t.Auto == true))
+            return WithItemUses(pass, character, catalog);
+        return WithItemUses(CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true }, character, catalog);
+    }
+
+    /// <summary>
+    /// The item uses read the catalog once per equipment entry (a lookup and a deserialise each), and nothing in the passes depends on
+    /// them, so they are collected once for the sheet that is returned, not in every inner pass (the restriction and Bloodied passes).
+    /// </summary>
+    private static CharacterSheet WithItemUses(CharacterSheet sheet, Character character, IContentCatalog catalog)
+    {
+        var itemUses = CollectItemUses(character, catalog);
+        return itemUses.Count > 0 ? sheet with { ItemUses = itemUses } : sheet;
+    }
+
+    /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
+    private static CharacterSheet CalculateSheet(Character character, IContentCatalog catalog, bool autoOn)
+    {
+        var first = Calculate(character, catalog, excluded: new HashSet<ContentReference>(), autoOn);
         var unmet = new List<(ContentReference Content, Diagnostic Diagnostic)>();
         foreach (var restricted in first.Active.Where(a => a.Revision.Effects.OfType<RestrictionEffect>().Any(IsPrerequisite)))
         {
-            var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference });
+            var without = Calculate(character, catalog, excluded: new HashSet<ContentReference> { restricted.Revision.Reference }, autoOn);
             foreach (var failed in Unmet(restricted.Revision, restricted.Revision.Effects.OfType<RestrictionEffect>().Where(IsPrerequisite), without.Sheet, "without it", "Its effects are not applied."))
                 unmet.Add((restricted.Revision.Reference, failed));
         }
-        var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet());
+        var final = unmet.Count == 0 ? first : Calculate(character, catalog, excluded: unmet.Select(u => u.Content).ToHashSet(), autoOn);
 
         // D04: multiclass prerequisites are checked once the character has two or more classes, against the sheet as it is
         // (a class's own features count: its levels are already taken). Unmet ones warn; the class stays applied.
@@ -410,7 +481,7 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
-                if (IsCharacterOnlyField(restriction.Field))
+                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion))
                 {
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
@@ -451,7 +522,7 @@ public static class CharacterCalculator
     private sealed record Calculation(CharacterSheet Sheet, IReadOnlyList<ActiveContent> Active);
 
     /// <param name="excluded">Revisions left out (restriction checks); anything they would grant or offer is left out with them.</param>
-    private static Calculation Calculate(Character character, IContentCatalog catalog, IReadOnlySet<ContentReference> excluded)
+    private static Calculation Calculate(Character character, IContentCatalog catalog, IReadOnlySet<ContentReference> excluded, bool autoOn)
     {
         var policy = RulesFamilies.Get(character.RulesFamily);
         var family = character.RulesFamily;
@@ -490,7 +561,7 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, autoOn);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -566,10 +637,13 @@ public static class CharacterCalculator
         var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
-                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, character.Play.IsOn(item.Revision.ContentId, t.ToggleId), t.ResourceId, t.Text)))
+                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(item.Revision, t, character, autoOn), t.ResourceId, t.Text,
+                IsAuto(item.Revision, t) ? true : null, ActivationOf(item.Revision, t.Activation))))
             .ToList();
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
+        // R168: bloodied = a maximum of at least 1 and current hit points at or below half of it, rounded down. Temporary hit points do not count.
+        var bloodied = maximum >= 1 && hitPoints.Current <= maximum / 2;
         var hitDice = resolved.Classes
             .Where(c => c.Die is not null && c.Level > 0)
             .GroupBy(c => c.Die!.Die)
@@ -599,6 +673,7 @@ public static class CharacterCalculator
             : null;
 
         var attacks = CollectAttacks(active, values, family, weaponProficiencies);
+        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -609,10 +684,92 @@ public static class CharacterCalculator
                 return new ScaleValue(s.Key.Class, className, s.Value.Content.Revision.Reference, s.Key.ScaleId, s.Value.Effect.Label, classLevel, s.Value.Effect.Values[Math.Clamp(classLevel, 1, s.Value.Effect.Values.Count) - 1]);
             })
             .ToList();
+        // Wave 3 item 27 (R177): display only. Judged by the total character level; absent when XP is not tracked or there is no next level.
+        var xpForNextLevel = character.Xp is null ? null : Advancement.XpForNextLevel(character.TotalLevel);
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
-            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null), active);
+            spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
+            damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
     }
+
+    /// <summary>
+    /// Wave 3 item 25 (R158 to R160, R171): every equipment entry of a published item whose v10 <c>item</c> effect needs attunement or
+    /// has charges, equipped or only carried, in list order. Charges belong to the entry, not the item: two copies have two counts.
+    /// The spent count is recorded as the player says; the sheet only shows what is left (never below 0).
+    /// </summary>
+    private static List<ItemUseValue> CollectItemUses(Character character, IContentCatalog catalog)
+    {
+        var uses = new List<ItemUseValue>();
+        for (var index = 0; index < character.Equipment.Count; index++)
+        {
+            var entry = character.Equipment[index];
+            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision
+                || revision.Effects.OfType<ItemEffect>().FirstOrDefault() is not { } item
+                || (item.RequiresAttunement != true && item.Charges is null))
+                continue;
+            var spent = entry.ChargesSpent ?? 0;
+            var recovery = item.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
+            uses.Add(new(
+                entry.Item, revision.Name, entry.Id is { } id ? id.ToString("D") : $"#{index}", entry.Id, index, entry.Equipped,
+                item.RequiresAttunement == true, entry.Attuned == true, item.Charges?.Max, spent,
+                item.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery));
+        }
+        return uses;
+    }
+
+    /// <summary>
+    /// Wave 3 item 21 (D19 amended): the character's own <c>damageDefences</c> (character v9) and the damage grants of content
+    /// v10, merged. A grant counts only when the calculator can apply it by itself (automatic, always on) and its <c>level</c>
+    /// and <c>onlyAs</c> are met, the same rules as the other grants. Grants are stored as written, so the type is normalised
+    /// here. Several sources of one type and kind are one entry (R169), ordered by damage type, then kind. A damage grant in
+    /// a revision below v10 is an unknown effect (Task 1) and never arrives here.
+    /// </summary>
+    private static List<DamageDefenceValue> CollectDamageDefences(List<ActiveContent> active, Character character, ClassLevelMap classLevels)
+    {
+        var found = new List<(string Type, DamageDefenceKind Kind, DamageDefenceSource Source)>();
+        foreach (var defence in character.DamageDefences ?? [])
+        {
+            if (defence is not null && DamageTypes.TryNormalize(defence.Type, out var type))
+                found.Add((type, defence.Kind, new("Entered by hand")));
+        }
+        foreach (var item in active)
+        {
+            foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
+            {
+                if (!GrantEffect.IsDamageDefence(grant.Grant) || grant.Automation != AutomationStatus.Automatic || grant.Timing != EffectTiming.Always)
+                    continue;
+                if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
+                    continue;
+                if (!EntryApplies(item, grant.OnlyAs, character) || !DamageTypes.TryNormalize(grant.DamageType, out var type))
+                    continue;
+                var kind = grant.Grant switch
+                {
+                    GrantKind.DamageImmunity => DamageDefenceKind.Immunity,
+                    GrantKind.DamageVulnerability => DamageDefenceKind.Vulnerability,
+                    _ => DamageDefenceKind.Resistance,
+                };
+                found.Add((type, kind, new(item.Revision.Name, item.Revision.Reference, grant.Id)));
+            }
+        }
+        var order = DamageTypes.All.ToList();
+        return [.. found
+            .GroupBy(f => (f.Type, f.Kind))
+            .OrderBy(g => order.IndexOf(g.Key.Type)).ThenBy(g => g.Key.Kind)
+            .Select(g => new DamageDefenceValue(g.Key.Type, g.Key.Kind, [.. g.Select(f => f.Source).Distinct()]))];
+    }
+
+    /// <summary>Content v10 (D38): a toggle that switches itself while the character is bloodied. Below v10 <c>autoWhen</c> is extension data and never reaches here.</summary>
+    private static bool IsAuto(ContentRevision revision, ToggleEffect toggle) =>
+        toggle.AutoWhen == ToggleAutoWhen.Bloodied && revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion;
+
+    /// <summary>Wave 3 item 22: a toggle's or resource's <c>activation</c> reaches the sheet from v10 only (below it the key is extension data and is never read).</summary>
+    private static Activation? ActivationOf(ContentRevision revision, Activation? activation) =>
+        revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion ? activation : null;
+
+    /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
+    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, Character character, bool autoOn) =>
+        IsAuto(revision, toggle) ? autoOn : character.Play.IsOn(revision.ContentId, toggle.ToggleId);
 
     /// <summary>
     /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
@@ -946,7 +1103,7 @@ public static class CharacterCalculator
                     : effect.Automation;
                 resources.Add(new(
                     revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
-                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text));
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation)));
             }
         }
         return resources;
@@ -1008,6 +1165,9 @@ public static class CharacterCalculator
                 bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
+            // A damage defence that is conditional is not applied by the calculator: the player applies it (D19 amended).
+            GrantEffect { Timing: not EffectTiming.Always } grant when GrantEffect.IsDamageDefence(grant.Grant) =>
+                new FeatureEffect(e.Id, e.Type, e.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : e.Automation, e.Text),
             _ => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text),
         }).ToList();
         var automation = effects.Count == 0 ? AutomationStatus.Reference : effects.Max(e => e.Automation);
@@ -1191,19 +1351,41 @@ public static class CharacterCalculator
             return true;
         }
 
+        // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
+        bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        // R189: content a grant or a choice brings in passes the same gate, through an attuned equipped copy.
+        bool AttunedCopyEquipped(ContentReference reference) => character.Equipment.Any(e => e.Equipped && e.Item == reference && e.Attuned == true);
+        void NotAttuned(ContentReference reference) =>
+            diagnostics.Add(new("item.not-attuned", "An equipped or pinned item needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", reference));
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
         {
-            if (seen.Add(pin) && Admit(pin, null) is { } item)
-                active.Add(item);
+            if (!seen.Add(pin) || Admit(pin, null) is not { } item)
+                continue;
+            // An item-kind pin passes the same gate as an equipped item (an attuned entry of it, equipped or not), so a package pin
+            // or a pin that is also equipped cannot bypass attunement.
+            if (NeedsAttunement(item) && !character.Equipment.Any(e => e.Item == pin && e.Attuned == true))
+            {
+                NotAttuned(pin);
+                continue;
+            }
+            active.Add(item);
         }
         // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
-        foreach (var entry in character.Equipment.Where(e => e.Equipped))
+        // Wave 3 item 25 (R159): an item equipped twice applies once, and an item that needs attunement (content v10, Q13) applies only
+        // while at least one equipped entry of it is attuned. A revision below v10 has no typed item effect, so no gate.
+        var equipped = character.Equipment.Where(e => e.Equipped).ToList();
+        foreach (var entry in equipped)
         {
             if (!seen.Add(entry.Item) || Admit(entry.Item, null) is not { } item)
                 continue;
             if (item.Revision.Kind != ContentKind.Item)
             {
                 diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
+                continue;
+            }
+            if (NeedsAttunement(item) && !equipped.Any(e => e.Item == entry.Item && e.Attuned == true))
+            {
+                NotAttuned(entry.Item);
                 continue;
             }
             active.Add(item);
@@ -1263,6 +1445,11 @@ public static class CharacterCalculator
                         continue;
                     if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot, parentOrigin: item.Origin) is { } granted)
                     {
+                        if (NeedsAttunement(granted) && !AttunedCopyEquipped(reference))
+                        {
+                            NotAttuned(reference);
+                            continue;
+                        }
                         active.Add(granted);
                         pending.Enqueue(granted);
                         foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
@@ -1318,6 +1505,11 @@ public static class CharacterCalculator
                     {
                         if (Admit(option, null, item.ClassRoot, revision, item.Origin) is not { } chosen)
                             continue;
+                        if (NeedsAttunement(chosen) && !AttunedCopyEquipped(option))
+                        {
+                            NotAttuned(option);
+                            continue;
+                        }
                         active.Add(chosen);
                         pending.Enqueue(chosen);
                     }
@@ -1492,7 +1684,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual)
+        HashSet<string> manual, bool autoOn)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -1503,9 +1695,9 @@ public static class CharacterCalculator
                 // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
                 // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
                 if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
-                    && revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                    && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
                 {
-                    if (!character.Play.IsOn(revision.ContentId, toggle))
+                    if (!ToggleIsOn(revision, named, character, autoOn))
                         continue;
                 }
                 else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
@@ -1519,7 +1711,7 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (IsCharacterOnlyField(effect.Target))
+                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion))
                 {
                     diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
@@ -1641,7 +1833,8 @@ public static class CharacterCalculator
         {
             foreach (var grant in item.Revision.Effects.OfType<GrantEffect>())
             {
-                if (grant.Grant == GrantKind.Content)
+                // Damage defences (content v10) are display data here: not a proficiency, and nothing to calculate yet.
+                if (grant.Grant == GrantKind.Content || GrantEffect.IsDamageDefence(grant.Grant))
                     continue;
                 if (grant.Level is { } needed && gateLevel(item) < needed)
                     continue;
@@ -2047,8 +2240,8 @@ public static class CharacterCalculator
             specs.Add(Proficient(FieldIds.Save(ability), $"{AbilityNames[ability]} saving throw", ability));
         foreach (var (key, label, ability) in Skills)
             specs.Add(Proficient(FieldIds.Skill(key), label, ability));
-        // D24: passive scores (SRD: 10 + the skill's total). Content may not target them until a content-schema
-        // version allows it; the calculator ignores such modifiers and restrictions with a diagnostic (IsCharacterOnlyField).
+        // D24: passive scores (SRD: 10 + the skill's total). Content may target them from schema v10; in an older revision the
+        // calculator ignores such modifiers and restrictions with a diagnostic (IsCharacterOnlyField).
         foreach (var (key, label, _) in Skills.Where(s => s.Key is "perception" or "insight" or "investigation"))
         {
             var skill = FieldIds.Skill(key);
@@ -2059,11 +2252,12 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data yet, so the base is the SRD's common 30 feet by rules policy;
-        // a species with another speed is an override on Stats until content breadth adds it (after T2).
+        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
+        // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {
-            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy: species speed is not in the bundled content yet; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
+            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>

@@ -80,8 +80,9 @@ public sealed partial class TomeStackApp : IDisposable
     /// </param>
     /// <param name="extractor">PDF extraction for imports (ADR-009); by default the isolated worker next to the app.</param>
     /// <param name="formReader">Character-sheet import: reads a PDF's form fields; by default the isolated worker next to the app.</param>
+    /// <param name="appVersion">The version to stamp the data folder with (R75); the running build's, unless a test says otherwise.</param>
     /// <exception cref="DataFolderInUseException">Another process has the folder open (M2.1); nothing was read or changed.</exception>
-    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null)
+    public static TomeStackApp Open(string dataDirectory, TimeProvider? time = null, IEnumerable<string>? syncRoots = null, bool devFixtures = false, ImportWorker.IDocumentExtractor? extractor = null, ImportWorker.Forms.IFormReader? formReader = null, string? appVersion = null)
     {
         // Before the database opens: migration, the leftover-import check and the file cleanup below all assume this
         // process is the only one using the folder.
@@ -89,8 +90,11 @@ public sealed partial class TomeStackApp : IDisposable
         TomeStackApp? app = null;
         try
         {
+            // R75: the one-time copy for the build being left, before anything (BackupBeforeUpgrade, a migration, seeding) writes.
+            var version = appVersion ?? AppVersionStamp.CurrentVersion;
+            AppVersionStamp.CopyBeforeOpen(dataDirectory, Path.Combine(dataDirectory, DatabaseFileName), version, SqliteStore.LatestSchemaVersion);
             var warning = DataFolder.SyncRootWarning(dataDirectory, syncRoots ?? DataFolder.DiscoverSyncRoots());
-            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _formReader = formReader, _folderLock = folderLock };
+            app = new TomeStackApp(dataDirectory, time ?? TimeProvider.System, warning is null ? [] : [warning]) { _extractor = extractor, _sheetExtractor = extractor, _formReader = formReader, _folderLock = folderLock };
             app.DeleteLeftoverDdbFiles(); // a crash during ddb.readData can leave its temporary copy
             app.InterruptLeftoverImports();
             var bundled = new HashSet<Guid>();
@@ -115,6 +119,15 @@ public sealed partial class TomeStackApp : IDisposable
                 app.Seed("TomeStack.FixturePackM3Effects.json"); // original test toggles and shared, variable-cost resources (M3 B2)
             }
             AttachmentFiles.DeleteUnusedManagedFiles(app._store); // copies a failed delete or a rolled-back migration left (ADR-005)
+            try
+            {
+                AppVersionStamp.Write(dataDirectory, version); // only after a successful open
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The app is open and usable; the next launch only repeats the check (and keeps the first copy). Never block on it.
+                app.ErrorLog.Record(FileErrorLog.NewCorrelationId(), "app.version-stamp", ex);
+            }
             return app;
         }
         catch
@@ -151,7 +164,7 @@ public sealed partial class TomeStackApp : IDisposable
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), folderName);
 
     public AppInfo GetInfo() => new(
-        typeof(TomeStackApp).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+        AppVersionStamp.CurrentVersion,
         _store.SchemaVersion,
         RulesFamilies.All,
         _warnings,
@@ -263,14 +276,55 @@ public sealed partial class TomeStackApp : IDisposable
     /// Only <see cref="Play"/> and <see cref="Rest"/>, which need a confirmation, write it. A new character keeps the
     /// play state it is saved with. The archive mark (SPEC C-08) is kept as stored too: only <c>character.archive</c> and
     /// <c>character.unarchive</c> change it. Currency and session notes (v8) are ordinary saved fields: the payload wins,
-    /// as for equipment and overrides.
+    /// as for equipment and overrides. The one change to the kept play state: hit points recorded for a companion (v9) that the
+    /// payload no longer has go with it, so removing a companion is never refused for the hit points it leaves behind.
+    /// <para>
+    /// Wave 3 (R161, R182): compare-and-set. A save of an existing character names the version it edited by the payload's own
+    /// <c>updatedAt</c> (no new field); if that is not the stored <c>UpdatedAt</c> the save is refused with
+    /// <c>character.stale</c> and nothing is written. Every command that writes the character (play, rest, restore, companions,
+    /// charges) stamps <c>UpdatedAt</c>, so a sheet that missed one of them is refused rather than written back over it. A new
+    /// character (no stored row) has no version to compare. The server's own callers pass the copy they just read from the store
+    /// (<see cref="Choose"/>, <c>ApplyUpdate</c>), or create a new character (<see cref="CreateCharacter"/>, the sheet import), so they
+    /// match by construction. Both timestamps are the same stored 100 ns value (the <c>json</c> column round-trips it exactly), so
+    /// they compare as instants. The message names no character and quotes no text.
+    /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
-            ? character with { Play = stored.Play, ArchivedAt = stored.ArchivedAt }
-            : character with { ArchivedAt = null }); // a save never creates an archived character
+        if (_store.FindCharacter(character.Id) is not { } stored)
+            return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
+        if (character.UpdatedAt != stored.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
+        return SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+    }
+
+    /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
+    public const string StaleMessage = "This character changed since you opened it. Your change wasn't saved; the current copy is shown.";
+
+    /// <summary>
+    /// Wave 3 item 25 (R160): charges spent are play state on the equipment entry, so a save keeps the stored <c>chargesSpent</c> of
+    /// every entry the payload still has (matched by id), whatever the payload says; only the play and rest commands change it.
+    /// An entry the stored character does not have keeps what it carries. R182: the pairing of id-less payload entries with stored
+    /// entries by position and content that stood here (R160, R175) is gone. It existed for a stale copy that had not yet seen an
+    /// entry's id; compare-and-set now refuses every stale copy, and a save that passes was made from the current stored copy,
+    /// whose entries carry their ids. An id-less entry in a current save is therefore a new one the player added, with its own id
+    /// and full charges: a delete and a re-add of one item at the same position no longer inherits the old spent count (R175 (1)),
+    /// and a shifted stale copy is refused instead of reset (R175 (2)).
+    /// </summary>
+    private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
+    {
+        if (payload is null || stored is null || payload.Any(e => e is null) || stored.Any(e => e is null))
+            return payload!;
+        return [.. payload.Select(e => e.Id is { } id && stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e)];
+    }
+
+    private static PlayState WithoutOrphanedCompanionPlay(PlayState play, Character payload)
+    {
+        if (play.Companions is not { } recorded)
+            return play;
+        var remaining = recorded.Where(p => payload.Companions?.Any(c => c?.Id == p.Id) ?? false).ToList();
+        return remaining.Count == recorded.Count ? play : play with { Companions = remaining };
     }
 
     /// <summary>Saves the character with the play state it carries: for the confirmed play and rest commands only.</summary>
@@ -301,14 +355,15 @@ public sealed partial class TomeStackApp : IDisposable
     /// The character with one choice answered (or cleared), after the checks <see cref="Choose"/> documents. Shared by
     /// <see cref="Choose"/> (saved) and <see cref="PreviewChoice"/> (a builder draft, never saved).
     /// </summary>
-    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull)
+    private Character WithChoice(Character character, ContentReference? source, string choiceId, IReadOnlyList<ContentReference>? selectedOrNull, IContentCatalog? catalog = null)
     {
+        catalog ??= _store;
         var selected = selectedOrNull ?? [];
         if (source is null || selected.Any(o => o is null))
             throw new AppValidationException([new("choice.empty-entry", "The choice source and every selected option must be set.")]);
         var request = (Source: source, ChoiceId: choiceId);
         var without = character with { Choices = [.. character.Choices.Where(c => !(c.Source == request.Source && c.ChoiceId == request.ChoiceId))] };
-        var offered = CharacterCalculator.Calculate(without, _store).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
+        var offered = CharacterCalculator.Calculate(without, catalog).Choices?.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)
             ?? throw new AppValidationException([new("choice.not-offered", $"Choice '{request.ChoiceId}' is not offered to this character: its content is not active or its level is not reached.", request.Source)]);
 
         var problems = new List<Diagnostic>();
@@ -330,7 +385,7 @@ public sealed partial class TomeStackApp : IDisposable
         var recorded = character.Choices.FirstOrDefault(c => c.Source == request.Source && c.ChoiceId == request.ChoiceId)?.Selected ?? [];
         foreach (var option in selected.Where(o => offered.Options.Contains(o) && !recorded.Contains(o)))
         {
-            var revision = _store.FindRevision(option);
+            var revision = catalog.FindRevision(option);
             if (revision is null || revision.Status != RevisionStatus.Published || !revision.RulesFamilies.Contains(character.RulesFamily))
                 problems.Add(new("choice.option-unavailable", $"Option {revision?.Name ?? option.RevisionId.ToString()} is not a published revision for {character.RulesFamily}.", option));
         }
@@ -463,7 +518,8 @@ public sealed record SpellSummary(int Level, IReadOnlyList<string> Lists, string
 public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, DateTimeOffset UpdatedAt, DateTimeOffset? ArchivedAt = null, IReadOnlyList<Guid>? ExceptionContentIds = null, int Level = 1);
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
-public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null);
+/// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 

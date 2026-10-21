@@ -5,6 +5,7 @@ import type {
   AutomationStatus,
   CharacterView,
   ContentKind,
+  DamageOutcome,
   FeatureEntry,
   PageRef,
   PlayAction,
@@ -12,10 +13,12 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
+  ToggleValue,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
 import { diceLine } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
+import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -80,9 +83,41 @@ export const pageText =(page?: PageRef) =>
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
 type Act = (action: PlayAction) => void;
 
-export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act }) {
+const effectWords: Record<DamageOutcome['effect'], string> = {
+  none: 'no defence',
+  immune: 'immune',
+  halved: 'halved',
+  doubled: 'doubled',
+  halvedThenDoubled: 'halved, then doubled',
+};
+
+/** Wave 3 item 21: "13 slashing, halved: 6". Plain text, not a live region (the hit points heading above already changes). */
+export function damageResultText(damage: DamageOutcome): string {
+  const what = `${damage.amount} ${damage.type ?? 'untyped'}`;
+  const taken = damage.type ? `${what}, ${effectWords[damage.effect]}: ${damage.adjusted}` : `${what}: ${damage.adjusted}`;
+  return damage.absorbed > 0 ? `${taken}. Temporary hit points took ${damage.absorbed}.` : `${taken}.`;
+}
+
+/**
+ * The damage type, first option "Untyped" (no defence applies). `onDamageType` makes it controlled, so a weapon's damage
+ * roll elsewhere on the Play tab can pre-fill it; alone it keeps its own value.
+ */
+export function HitPointsPanel({
+  view,
+  act,
+  damageType,
+  onDamageType,
+}: {
+  view: CharacterView;
+  act: Act;
+  damageType?: string;
+  onDamageType?: (type: string) => void;
+}) {
   const hp = view.sheet.hitPoints;
   const [amount, setAmount] = useState('');
+  const [ownType, setOwnType] = useState('');
+  const type = damageType ?? ownType;
+  const setType = onDamageType ?? setOwnType;
   if (!hp) return null;
   const n = Number(amount);
   const valid = amount !== '' && Number.isInteger(n) && n >= 0;
@@ -93,7 +128,7 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
 
   function apply(action: PlayAction['action']) {
     if (!valid) return;
-    act({ action, amount: n });
+    act({ action, amount: n, ...(action === 'damage' && type ? { damageType: type } : {}) });
     setAmount('');
   }
 
@@ -108,6 +143,17 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           Amount
           <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
         </label>
+        <label className="field">
+          Damage type
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">Untyped</option>
+            {damageTypes.map((t) => (
+              <option key={t} value={t}>
+                {damageTypeLabel(t)}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" disabled={!valid} onClick={() => apply('damage')}>
           Take damage
         </button>
@@ -118,7 +164,20 @@ export function HitPointsPanel({ view, act }: { view: CharacterView; act: Act })
           Set temporary hit points
         </button>
       </form>
-      <p className="hint">Temporary hit points absorb damage first. They do not stack: setting them replaces the old value.</p>
+      {view.damage && (
+        <>
+          <p className="damage-result">{damageResultText(view.damage)}</p>
+          {view.damage.warnings.map((w) => (
+            <p key={w.code} className="warn">
+              {w.message}
+            </p>
+          ))}
+        </>
+      )}
+      <p className="hint">
+        A damage type applies the character&apos;s resistances, immunities and vulnerabilities first (Untyped ignores them). Temporary hit points absorb the
+        rest. They do not stack: setting them replaces the old value.
+      </p>
       {(view.sheet.hitDice ?? []).length > 0 && (
         <p>
           Hit dice: {hitDiceText(view.sheet.hitDice ?? [])}
@@ -286,16 +345,17 @@ export function ConditionsPanel({ view, act }: { view: CharacterView; act: Act }
   );
 }
 
-function ResourceCard({ resource, act }: { resource: ResourceValue; act: Act }) {
+function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; act: Act; level?: 4 | 5 }) {
   const key = { contentId: resource.content.contentId, resourceId: resource.resourceId };
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
+  const Heading = level === 4 ? 'h4' : 'h5';
   return (
     <li className="resource">
-      <h4 id={headingId}>
+      <Heading id={headingId}>
         {resource.label}: {tracked ? `${resource.current} of ${resource.maximum}` : 'tracked by hand'}
         {tracked && <Pips filled={resource.current!} total={resource.maximum!} />}
-      </h4>
+      </Heading>
       <p className="hint">
         From {resource.contentName} · {automationLabels[resource.automation]}
         {resource.recoveries.length > 0 &&
@@ -362,14 +422,25 @@ export function ClassColumnsPanel({ view }: { view: CharacterView }) {
 export function ResourcesPanel({ view, act }: { view: CharacterView; act: Act }) {
   const resources = view.sheet.resources ?? [];
   if (resources.length === 0) return null;
+  // Wave 3 item 22 (R157): a resource with an activation sits under the same group headings as the actions; the rest are listed as before.
+  const ungrouped = resources.filter((r) => !r.activation);
+  const card = (resource: ResourceValue, level?: 4 | 5) => (
+    <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} level={level} />
+  );
   return (
     <section aria-labelledby="resources-heading" className="play-panel">
       <h3 id="resources-heading">Resources</h3>
-      <ul className="resources">
-        {resources.map((resource) => (
-          <ResourceCard key={`${resource.content.revisionId}-${resource.resourceId}`} resource={resource} act={act} />
-        ))}
-      </ul>
+      {ungrouped.length > 0 && <ul className="resources">{ungrouped.map((resource) => card(resource))}</ul>}
+      {activationGroups.map(({ key, title }) => {
+        const group = resources.filter((r) => r.activation === key);
+        if (group.length === 0) return null;
+        return (
+          <section key={key} aria-labelledby={`resources-${key}`}>
+            <h4 id={`resources-${key}`}>{title}</h4>
+            <ul className="resources">{group.map((resource) => card(resource, 5))}</ul>
+          </section>
+        );
+      })}
     </section>
   );
 }
@@ -384,37 +455,79 @@ const activationGroups: { key: Activation; title: string }[] = [
 const signed = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
 
 /**
+ * One toggle of the active effects. D38: an auto toggle follows the hit points, so it shows its state as text and has no switch
+ * (there is nothing to confirm). Kept small so activation groups can take it over.
+ */
+function ToggleRow({ toggle: t, act }: { toggle: ToggleValue; act: Act }) {
+  if (t.auto) {
+    return (
+      <div className="choice">
+        {t.label}
+        <span className="option-source">
+          {t.contentName} · On while bloodied ({t.on ? 'on now' : 'off now'})
+          {t.text ? ` · ${t.text}` : ''}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <label className="choice">
+      <input
+        type="checkbox"
+        checked={t.on}
+        onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
+      />
+      {t.label}
+      <span className="option-source">
+        {t.contentName}
+        {t.resourceId ? ' · turning it on spends 1 use' : ''}
+        {t.text ? ` · ${t.text}` : ''}
+      </span>
+    </label>
+  );
+}
+
+/**
  * SPEC C-04: attacks and feature rolls grouped by action, bonus action, reaction and other. Rolling never spends anything;
  * a roll that names a resource offers "Spend" in its record.
  */
-export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (target: RollTarget) => void; act: Act }) {
+export function ActionsPanel({
+  view,
+  roll,
+  act,
+  rollMode = 'normal',
+  onDamageType,
+}: {
+  view: CharacterView;
+  roll: (target: RollTarget) => void;
+  act: Act;
+  /** The summary's advantage / disadvantage choice. Used by the attack rolls of weapons and of the character's own attacks (R93); damage is always normal. */
+  rollMode?: RollMode;
+  /** Wave 3 item 21: a damage roll pre-fills the Hit points damage type with the attack's type ('' when it names none of the thirteen). */
+  onDamageType?: (type: string) => void;
+}) {
   const [critical, setCritical] = useState(false);
+  const rollDamage = (target: RollTarget, type?: string) => {
+    onDamageType?.(normalizeDamageType(type));
+    roll(target);
+  };
   const attacks = view.sheet.attacks ?? [];
+  const customAttacks = view.character.customAttacks ?? [];
   const toggles = view.sheet.toggles ?? [];
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
     feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
   );
-  if (attacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
+  if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
+  // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
+  const ungroupedToggles = toggles.filter((t) => !t.activation);
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
-      {toggles.length > 0 && (
+      {ungroupedToggles.length > 0 && (
         <fieldset>
-          <legend>Active effects (switching one is a confirmed change)</legend>
-          {toggles.map((t) => (
-            <label key={`${t.content.revisionId}-${t.toggleId}`} className="choice">
-              <input
-                type="checkbox"
-                checked={t.on}
-                onChange={() => act({ action: t.on ? 'toggleOff' : 'toggleOn', contentId: t.content.contentId, toggleId: t.toggleId })}
-              />
-              {t.label}
-              <span className="option-source">
-                {t.contentName}
-                {t.resourceId ? ' · turning it on spends 1 use' : ''}
-                {t.text ? ` · ${t.text}` : ''}
-              </span>
-            </label>
+          <legend>Active effects (a switch is a confirmed change)</legend>
+          {ungroupedToggles.map((t) => (
+            <ToggleRow key={`${t.content.revisionId}-${t.toggleId}`} toggle={t} act={act} />
           ))}
         </fieldset>
       )}
@@ -424,14 +537,31 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
       </label>
       {activationGroups.map(({ key, title }) => {
         const groupAttacks = key === 'action' ? attacks : [];
+        const groupCustom = key === 'action' ? customAttacks : [];
         const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
-        if (groupAttacks.length === 0 && groupRolls.length === 0) return null;
+        const groupToggles = toggles.filter((t) => t.activation === key);
+        if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
               {groupAttacks.map((attack) => (
-                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} roll={roll} />
+                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} rollMode={rollMode} roll={roll} rollDamage={rollDamage} />
+              ))}
+              {groupCustom.map((attack) => (
+                <li key={attack.id} className="feature">
+                  <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit
+                  {attack.damage ? `, ${attack.damage}${attack.damageType ? ` ${attack.damageType}` : ''}` : ''}
+                  {attack.note ? <span className="hint"> · {attack.note}</span> : null}{' '}
+                  <button type="button" onClick={() => roll({ customAttack: attack.id, mode: rollMode })}>
+                    Roll {attack.name} attack
+                  </button>
+                  {attack.damage && (
+                    <button type="button" onClick={() => rollDamage({ customAttack: attack.id, damage: true, critical }, attack.damageType)}>
+                      Roll {attack.name} damage
+                    </button>
+                  )}
+                </li>
               ))}
               {groupRolls.map(({ feature, effect }) => (
                 <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
@@ -445,6 +575,11 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
                   </span>
                 </li>
               ))}
+              {groupToggles.map((t) => (
+                <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
+                  <ToggleRow toggle={t} act={act} />
+                </li>
+              ))}
             </ul>
           </section>
         );
@@ -453,7 +588,19 @@ export function ActionsPanel({ view, roll, act }: { view: CharacterView; roll: (
   );
 }
 
-function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical: boolean; roll: (target: RollTarget) => void }) {
+function AttackItem({
+  attack,
+  critical,
+  rollMode,
+  roll,
+  rollDamage,
+}: {
+  attack: AttackEntry;
+  critical: boolean;
+  rollMode: RollMode;
+  roll: (target: RollTarget) => void;
+  rollDamage: (target: RollTarget, type?: string) => void;
+}) {
   return (
     <li className="feature">
       <details>
@@ -483,14 +630,14 @@ function AttackItem({ attack, critical, roll }: { attack: AttackEntry; critical:
           </ul>
         )}
       </details>
-      <button type="button" onClick={() => roll({ weapon: attack.item })}>
+      <button type="button" onClick={() => roll({ weapon: attack.item, mode: rollMode })}>
         Roll {attack.name} attack
       </button>
-      <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, critical })}>
+      <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, critical }, attack.damageType)}>
         Roll {attack.name} damage ({attack.damage})
       </button>
       {attack.versatileDamage && (
-        <button type="button" onClick={() => roll({ weapon: attack.item, damage: true, versatile: true, critical })}>
+        <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
           Roll {attack.name} two-handed damage ({attack.versatileDamage})
         </button>
       )}

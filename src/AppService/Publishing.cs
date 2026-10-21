@@ -396,13 +396,15 @@ public sealed partial class TomeStackApp
     {
         // Ruling R50: the preview runs the real publish (same ordering, re-pointing, SaveDraft and validating Publish) inside
         // a transaction and rolls it back, so it cannot say "can publish" for something the publish would refuse.
-        PublishPlan? plan = null;
+        // The plan is read-only and is the slow part (validation and the debugger), so it is made once, before the
+        // transaction: the store lock is held only for the dry run's writes, not on every tick of the planning. A change
+        // between the two only makes a preview stale; the real publish re-plans inside its own transaction.
+        var plan = PlanPublishMany(contentIds, expected: null, withFindings: true);
         List<BatchItem> run = [];
         try
         {
             _store.InTransaction(() =>
             {
-                plan = PlanPublishMany(contentIds, expected: null, withFindings: true);
                 if (!plan.HasCycle) // a cycle has no order to run in
                     run = RunBatch(plan, dryRun: true);
                 throw new DryRunRollback();
@@ -425,11 +427,11 @@ public sealed partial class TomeStackApp
             var report = new ValidationReport(item.Revision.Reference, errors, warnings) { RequiredSchemaVersion = done?.Result?.Report.RequiredSchemaVersion ?? item.Report.RequiredSchemaVersion };
             return new(
                 item.Revision.Reference, item.Revision.Name, item.Revision.Kind, report,
-                plan!.Findings.TryGetValue(item.Revision.Reference, out var found) ? [.. found] : [],
+                plan.Findings.TryGetValue(item.Revision.Reference, out var found) ? [.. found] : [],
                 plan.HasPublished.Contains(item.Revision.ContentId),
                 done is null || done.Grants + done.Options == 0 ? [] : [new(item.Revision.Reference, item.Revision.Name, done.Grants, done.Options)]);
         }
-        var entries = plan!.Ordered.Where(i => i.IsEntry).Select(Entry).ToList();
+        var entries = plan.Ordered.Where(i => i.IsEntry).Select(Entry).ToList();
         var dependents = plan.Ordered.Where(i => !i.IsEntry).Concat(plan.Blocked).Select(Entry).ToList();
         return new(entries, dependents, entries.Concat(dependents).All(e => e.Report.CanPublish));
     }

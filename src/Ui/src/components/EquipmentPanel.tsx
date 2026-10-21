@@ -1,22 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../api/client';
-import type { CharacterView, ContentOption, EquipmentEntry } from '../api/types';
+import type { CharacterView, ContentOption, EquipmentEntry, ItemUseValue, PlayAction } from '../api/types';
+import { Pips } from './Pips';
+import { directSave, EntryGone, type SheetSave } from './sheetSave';
 
 interface Props {
   view: CharacterView;
   onChanged: (view: CharacterView) => void;
   onError: (error: unknown) => void;
+  /** Polite status (4.1.3): a refused change is announced here, not as an error. */
+  onStatus: (text: string) => void;
+  /** The sheet's one save queue (R132); a panel mounted alone saves directly. */
+  saveCharacter?: SheetSave;
+  /** The sheet's play command (so an Undo is offered, D23). A panel mounted alone sends the command itself. */
+  act?: (action: PlayAction) => void | Promise<void>;
 }
 
 const sameRef = (a: { contentId: string; revisionId: string }, b: { contentId: string; revisionId: string }) =>
   a.contentId === b.contentId && a.revisionId === b.revisionId;
 
 /**
+ * R159: an entry is named by its id; an entry without one (a plain item, which can be carried once) by its item. Two copies of a
+ * wand therefore never act on each other.
+ */
+const sameEntry = (a: EquipmentEntry, b: EquipmentEntry) => (a.id || b.id ? a.id === b.id : sameRef(a.item, b.item));
+
+/** The rules allow attuning to three items at a time (both SRDs); more is a warning, never a refusal. */
+const attunementLimit = 3;
+
+/**
  * M2 item 4: items carried, and which are equipped. Equipped armor sets the Armor Class (the trace says which item);
  * each change is one explicit action saved with the character.
  */
-export function EquipmentPanel({ view, onChanged, onError }: Props) {
+export function EquipmentPanel({ view, onChanged, onError, onStatus, saveCharacter, act }: Props) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const equipment = character.equipment ?? [];
   const [items, setItems] = useState<ContentOption[]>([]);
   const [adding, setAdding] = useState('');
@@ -30,16 +48,57 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
 
   const nameOf = (entry: EquipmentEntry) => items.find((o) => sameRef(o.reference, entry.item))?.name ?? `Item ${entry.item.revisionId}`;
 
-  async function save(next: EquipmentEntry[]) {
+  // The change is applied to the latest saved list (R132), so entries are matched by their item, not by object identity.
+  async function save(change: (list: EquipmentEntry[]) => EquipmentEntry[]) {
     try {
-      onChanged(await client.saveCharacter({ ...character, equipment: next }));
+      onChanged(await persist((latest) => ({ ...latest, equipment: change(latest.equipment ?? []) })));
+    } catch (error) {
+      if (error instanceof EntryGone) onStatus(error.message);
+      else onError(error);
+    }
+  }
+
+  // The new value is the opposite of the latest saved one, not of what this render shows (G10); an item that is gone is refused (G9).
+  function toggled(list: EquipmentEntry[], entry: EquipmentEntry): EquipmentEntry[] {
+    if (!list.some((e) => sameEntry(e, entry))) throw new EntryGone(`${nameOf(entry)} was removed meanwhile, so nothing was saved.`);
+    return list.map((e) => (sameEntry(e, entry) ? { ...e, equipped: !e.equipped } : e));
+  }
+
+  // Attunement is an ordinary saved field of the entry; the service gives the entry its id when it has none (R158).
+  function attuned(list: EquipmentEntry[], entry: EquipmentEntry): EquipmentEntry[] {
+    if (!list.some((e) => sameEntry(e, entry))) throw new EntryGone(`${nameOf(entry)} was removed meanwhile, so nothing was saved.`);
+    return list.map((e) => (sameEntry(e, entry) ? { ...e, attuned: e.attuned ? undefined : true } : e));
+  }
+
+  // Charges are play state: they change only by the play command (R160), never by the save above.
+  async function charge(use: ItemUseValue, kind: 'spendCharge' | 'regainCharge', label: string) {
+    const left = use.chargesLeft ?? 0;
+    if (kind === 'spendCharge' ? left < 1 : use.chargesSpent < 1) {
+      onStatus(kind === 'spendCharge' ? `${label} has no charges left.` : `${label} has no spent charges to regain.`);
+      return;
+    }
+    const command: PlayAction = {
+      action: kind,
+      amount: 1,
+      ...(use.entryId ? { entryId: use.entryId } : { entryIndex: use.entryIndex, contentId: use.item.contentId }),
+    };
+    if (act) {
+      await act(command);
+      return;
+    }
+    try {
+      onChanged(await client.play(character.id, command));
     } catch (error) {
       onError(error);
     }
   }
 
   // Carried items keep their names from every revision; new items are offered at their newest revision (SPEC I-06).
-  const addable = items.filter((o) => o.compatible && !o.superseded && !equipment.some((e) => sameRef(e.item, o.reference)));
+  // R159: an item with charges or attunement may be carried again as a separate entry; any other item is one entry with a quantity.
+  const uses = view.sheet.itemUses ?? [];
+  const repeatable = (o: ContentOption) => uses.some((u) => sameRef(u.item, o.reference));
+  const addable = items.filter((o) => o.compatible && !o.superseded && (!equipment.some((e) => sameRef(e.item, o.reference)) || repeatable(o)));
+  const attunedCount = uses.filter((u) => u.attuned).length;
 
   // Investigation 2026-10-05: an imported 2014 sheet creates every item unequipped, and only equipped items apply.
   const unequipped = equipment.filter((e) => !e.equipped).length;
@@ -53,30 +112,60 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
         // Investigation 2026-10-06 item 8: equipped and carried apart, as a paper sheet lists them. Names are unchanged.
         (
           [
-            ['Equipped', equipment.filter((e) => e.equipped)],
-            ['Carried', equipment.filter((e) => !e.equipped)],
+            ['Equipped', equipment.map((entry, index) => ({ entry, index })).filter((p) => p.entry.equipped)],
+            ['Carried', equipment.map((entry, index) => ({ entry, index })).filter((p) => !p.entry.equipped)],
           ] as const
         ).map(([title, group]) =>
           group.length === 0 ? null : (
             <section key={title} className="equipment-group" aria-labelledby={`equipment-${title.toLowerCase()}`}>
               <h4 id={`equipment-${title.toLowerCase()}`}>{title}</h4>
               <ul className="resources">
-                {group.map((entry) => (
-                  <li key={entry.item.revisionId} className="resource">
-                    <label className="choice">
-                      <input
-                        type="checkbox"
-                        checked={entry.equipped}
-                        onChange={() => save(equipment.map((e) => (e === entry ? { ...e, equipped: !e.equipped } : e)))}
-                      />
-                      Equip {nameOf(entry)}
-                      {entry.quantity > 1 ? ` (${entry.quantity})` : ''}
-                    </label>
-                    <button type="button" onClick={() => save(equipment.filter((e) => e !== entry))}>
-                      Remove {nameOf(entry)}
-                    </button>
-                  </li>
-                ))}
+                {group.map(({ entry, index }) => {
+                  const use = uses.find((u) => u.entryIndex === index);
+                  const copies = equipment.filter((e) => sameRef(e.item, entry.item));
+                  const name = `${nameOf(entry)}${copies.length > 1 ? ` (copy ${copies.indexOf(entry) + 1} of ${copies.length})` : ''}`;
+                  const left = use?.chargesLeft ?? 0;
+                  return (
+                    <li key={entry.id ?? `item-${entry.item.revisionId}`} className="resource">
+                      <label className="choice">
+                        <input type="checkbox" checked={entry.equipped} onChange={() => save((list) => toggled(list, entry))} />
+                        Equip {name}
+                        {entry.quantity > 1 ? ` (${entry.quantity})` : ''}
+                      </label>
+                      <button type="button" onClick={() => save((list) => list.filter((e) => !sameEntry(e, entry)))}>
+                        Remove {name}
+                      </button>
+                      {use?.requiresAttunement && entry.equipped && (
+                        <label className="choice">
+                          <input type="checkbox" checked={use.attuned} onChange={() => save((list) => attuned(list, entry))} />
+                          Attuned: {name}
+                        </label>
+                      )}
+                      {use?.requiresAttunement && entry.equipped && !use.attuned && (
+                        <p className="hint">{name} is not attuned, so its effects do not apply.</p>
+                      )}
+                      {use?.chargesMax !== undefined && use.chargesMax !== null && (
+                        <div className="charges">
+                          <span>
+                            {left} of {use.chargesMax} charges left
+                          </span>
+                          <Pips filled={left} total={use.chargesMax} />
+                          <button type="button" aria-disabled={left < 1} onClick={() => void charge(use, 'spendCharge', name)}>
+                            Spend a charge: {name}
+                          </button>
+                          <button type="button" aria-disabled={use.chargesSpent < 1} onClick={() => void charge(use, 'regainCharge', name)}>
+                            Regain a charge: {name}
+                          </button>
+                          {use.recovery && (
+                            <span className="hint">
+                              Regains {use.recovery.regain ?? 'all charges'} on a {use.recovery.on === 'shortRest' ? 'short' : 'long'} rest.
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           ),
@@ -102,12 +191,17 @@ export function EquipmentPanel({ view, onChanged, onError }: Props) {
             const option = addable.find((o) => o.reference.revisionId === adding);
             if (!option) return;
             setAdding('');
-            void save([...equipment, { item: option.reference, equipped: false, quantity: 1 }]);
+            void save((list) => [...list, { item: option.reference, equipped: false, quantity: 1 }]);
           }}
         >
           Add
         </button>
       </div>
+      {attunedCount > attunementLimit && (
+        <p className="warnings" role="status">
+          {attunedCount} items are attuned. The rules allow attuning to {attunementLimit} at a time; TomeStack does not stop you.
+        </p>
+      )}
       {unequipped > 0 && (
         <p className="hint">
           {unequipped === 1 ? '1 carried item is' : `${unequipped} carried items are`} not equipped. Equip a weapon to list its
@@ -132,8 +226,9 @@ type Coin = (typeof coins)[number][0];
 const emptyCurrency = { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
 /** Character schema v8 (D21): coins, saved with the character like equipment. Plain counts; nothing is converted. */
-export function CurrencyPanel({ view, onChanged, onError }: Props) {
+export function CurrencyPanel({ view, onChanged, onError, saveCharacter }: Omit<Props, 'onStatus'>) {
   const { character } = view;
+  const persist = saveCharacter ?? directSave(character);
   const stored = character.currency ?? emptyCurrency;
   const seed = (c: typeof stored) => Object.fromEntries(coins.map(([k]) => [k, String(c[k])])) as Record<Coin, string>;
   const [draft, setDraft] = useState<Record<Coin, string>>(() => seed(stored));
@@ -156,7 +251,7 @@ export function CurrencyPanel({ view, onChanged, onError }: Props) {
   async function save() {
     if (!valid) return;
     try {
-      onChanged(await client.saveCharacter({ ...character, currency: parsed }));
+      onChanged(await persist((latest) => ({ ...latest, currency: parsed })));
       heading.current?.focus(); // "Save currency" is disabled now that nothing differs: focus goes to the section
     } catch (error) {
       onError(error);

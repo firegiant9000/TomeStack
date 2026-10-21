@@ -40,7 +40,7 @@ public static partial class CandidateDetector
 
     private static readonly string[] Schools = ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation"];
 
-    private sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr);
+    internal sealed record Unit(int Page, int Index, TextBlock Block, string[] Lines, bool FromOcr);
 
     private sealed record Row(int Page, double Y, List<TextLine> Cells);
 
@@ -74,7 +74,7 @@ public static partial class CandidateDetector
             var lines = PageLines(page, boilerplate);
             found.AddRange(Weapons(page, lines, context));
             found.AddRange(Armor(page, lines, context));
-            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures, () => FollowingText(pages, page, boilerplate), pages.Where(p => p.Page == page.Page - 1).Select(p => PageLines(p, boilerplate)).FirstOrDefault() ?? []));
+            found.AddRange(ClassTables(page, lines, units.Where(u => u.Page == page.Page).ToList(), context, classFeatures, () => FollowingText(pages, page, boilerplate), pages.Where(p => p.Page == page.Page - 1).Select(p => PageLines(p, boilerplate)).FirstOrDefault() ?? [], cancellationToken));
         }
 
         // Item 11 (R54): what each class's Features column names becomes a link to a detected feature, or to a reference stub.
@@ -95,12 +95,14 @@ public static partial class CandidateDetector
     /// Item 11 (R54, review fix): each class links the features its table names, owner-aware. Target order for a class C at page P with
     /// the next class table at page N: a detected feature whose class field names C; else the nearest detected feature with no class
     /// field in [P, N); else (R67) no link when exactly one installed feature has the name; else a stub owned by C. A detected feature
-    /// that names another class is never C's target, and a stub is never shared between classes. New stubs are appended to <paramref name="found"/>.
+    /// that names another class is never C's target, and a stub is never shared between classes. Two classes on one page have no window of
+    /// their own on that page (a feature there is placed under neither), and the pages after it belong to the last of them. New stubs are appended to <paramref name="found"/>.
     /// </summary>
     internal static List<CandidateLink> LinkClasses(List<DraftCandidate> found, IReadOnlyDictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, DetectionContext context, CancellationToken cancellationToken = default)
     {
         var owners = found.Where(c => c.ProposedKind == ContentKind.Class).ToDictionary(c => c.Id);
         var classPages = owners.Values.Select(c => c.Page.Start).Distinct().Order().ToList();
+        var onPage = owners.Values.GroupBy(c => c.Page.Start).ToDictionary(g => g.Key, g => g.Select(c => c.Id).ToList()); // in detection order: top to bottom
         var detected = found.Where(c => c.ProposedKind == ContentKind.Feature).OrderBy(c => c.Page.Start).ToLookup(c => Key(c.ProposedName));
         var links = new List<CandidateLink>();
         foreach (var (classId, features) in classFeatures)
@@ -110,11 +112,15 @@ public static partial class CandidateDetector
             var classKey = Key(owner.ProposedName);
             var start = owner.Page.Start;
             var next = classPages.Where(p => p > start).Select(p => (int?)p).FirstOrDefault();
+            // Classes sharing a page: a feature on that page cannot be placed under one of them, and the pages after it belong to the last.
+            var sharesPage = onPage[start].Count > 1;
+            var lastOnPage = onPage[start][^1] == classId;
+            bool InWindow(DraftCandidate c) => c.Page.Start == start ? !sharesPage : c.Page.Start > start && (next is null || c.Page.Start < next) && lastOnPage;
             foreach (var name in features.SelectMany(f => f.Value.Select(n => (Name: n, Level: f.Key))).Where(f => IsLinkable(f.Name)).GroupBy(f => Key(f.Name)).Select(g => (g.First().Name, Levels: g.Select(x => x.Level).Distinct().Order().ToList())))
             {
                 var candidates = detected[Key(name.Name)].ToList();
                 var target = candidates.FirstOrDefault(c => c.Fields.TryGetValue("class", out var named) && Key(named) == classKey)
-                    ?? candidates.FirstOrDefault(c => !c.Fields.ContainsKey("class") && c.Page.Start >= start && (next is null || c.Page.Start < next));
+                    ?? candidates.FirstOrDefault(c => !c.Fields.ContainsKey("class") && InWindow(c));
                 if (target is null)
                 {
                     // R67: one installed feature of that name is granted from at accept; two, or none, and the name gets a stub (R54).
@@ -129,9 +135,15 @@ public static partial class CandidateDetector
         return links;
     }
 
-    /// <summary>A feature name worth a link: not "Ability Score Improvement" and not a subclass placeholder ("Fixture Order feature").</summary>
+    /// <summary>
+    /// The one feature name the detector never links or proposes as a reference (R181): a class table lists it at the
+    /// levels that grant it, and it has no text of its own to import. A test of the exclusion names it through this.
+    /// </summary>
+    public const string ReferenceOnlyFeatureName = "Ability Score Improvement";
+
+    /// <summary>A feature name worth a link: not the reference-only feature and not a subclass placeholder ("Fixture Order feature").</summary>
     public static bool IsLinkable(string name) =>
-        !name.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
+        !name.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A feature the class table names that no block of the job describes: the name and the class page only, reference.</summary>
     private static DraftCandidate FeatureStub(DraftCandidate owner, string name, int level, DetectionContext context)
@@ -674,7 +686,7 @@ public static partial class CandidateDetector
 
     /// <summary>
     /// A block whose first line is a name and whose second line is the plural "Prerequisites: …" (the singular form heads
-    /// option lists such as the SRDs' Eldritch Invocations, which are not feats). A body paragraph that merely starts
+    /// option lists such as a class's list of pick-one options, which are not feats). A body paragraph that merely starts
     /// with "Prerequisites:" has no name line above it in its block, so it is never a feat on its own. The prerequisite
     /// may be at most 400 characters.
     /// </summary>
@@ -802,7 +814,7 @@ public static partial class CandidateDetector
             var properties = WeaponProperty().Matches(rest).Select(m => m.Value.ToLowerInvariant().Replace(' ', '-')).Distinct().ToList();
             var range = WeaponRange().Match(rest);
             var versatile = Versatile().Match(rest);
-            var mastery = Masteries.FirstOrDefault(m => Regex.IsMatch(rest, $@"\b{m}\b", RegexOptions.None, TimeSpan.FromMilliseconds(100)));
+            var mastery = Masteries.FirstOrDefault(m => Regex.IsMatch(rest, $@"\b{m}\b", RegexOptions.None, TimeSpan.FromMilliseconds(DetectionLimits.RegexTimeoutMs)));
             var uncertainties = new List<string> { "Read from a table row; check the columns against the page." };
             var low = new List<string>();
             if (category is null)
@@ -929,7 +941,7 @@ public static partial class CandidateDetector
         return following;
     }
 
-    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, Func<List<string>> followingFor, List<(int Page, TextLine Line)> previous)
+    private static IEnumerable<DraftCandidate> ClassTables(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, Func<List<string>> followingFor, List<(int Page, TextLine Line)> previous, CancellationToken cancellationToken)
     {
         // "The Bard" (SRD 5.1) or "Bard Features" (SRD 5.2.1); "Class Features" and "Bard Class Features" are section headings.
         var titles = pageUnits.Select(u => u.Lines[0]).Select(t => ClassTableTitle().Match(t)).Where(m => m.Success)
@@ -939,23 +951,115 @@ public static partial class CandidateDetector
             return [];
         var className = titles[0];
         var following = followingFor();
+
+        // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
+        var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
+            ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
+        if (titles.Select(Key).Distinct(StringComparer.Ordinal).Count() > 1 && SplitClasses(page, lines, pageUnits, className, titleLine, cancellationToken) is { Count: > 1 } split)
+        {
+            // Wave 0/1 minors (d): two classes on one page are read each from its own window, and the page's text after them goes to the last.
+            return [.. split.Select((s, i) => ClassCandidate(page, s.Name, s.Read.Features, s.Read.Table, s.Read.TextLines, context, classFeatures, i == split.Count - 1 ? following : [], previous))];
+        }
+        return ReadClassTable(page, lines, _ => true, titleLine, WholePageLines(page), cancellationToken) is { } read
+            ? [ClassCandidate(page, className, read.Features, read.Table, read.TextLines, context, classFeatures, following, previous)]
+            : [];
+    }
+
+    /// <summary>Most class titles on one page that are split into windows (R127); more are read as one page.</summary>
+    internal const int MaxSplitClasses = 8;
+
+    internal sealed record ClassRead(IReadOnlyDictionary<int, IReadOnlyList<string>> Features, ClassTable? Table, List<TextLine> TextLines);
+
+    /// <summary>
+    /// The classes of a page with more than one class table, top to bottom, each with the read of its own window: from its
+    /// heading (its "Core … Traits" heading when that is printed above it) to the next class's. A title whose window holds no
+    /// table is not a class and is left out; null when the page cannot be split, and the whole page is read as one class.
+    /// </summary>
+    internal static List<(string Name, ClassRead Read)>? SplitClasses(DetectionPage page, List<(int Page, TextLine Line)> lines, List<Unit> pageUnits, string className, string className0Title, CancellationToken cancellationToken)
+    {
+        var names = new List<(string Name, string Title)> { (className, className0Title) };
+        foreach (var unit in pageUnits)
+        {
+            var title = unit.Lines[0];
+            if (ClassTableTitle().Match(title) is not { Success: true } m)
+                continue;
+            var name = TitleCase(m.Groups["name"].Value.Trim());
+            name = name.EndsWith(" Class", StringComparison.Ordinal) ? name[..^" Class".Length] : name;
+            if (name.Length == 0 || name == "Class" || names.Any(n => Key(n.Name) == Key(name)))
+                continue;
+            names.Add((name, pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{name} Features" || t.Trim() == $"The {name}") ?? title));
+            // R127: more class titles than any real page holds is not split; the page is read whole (the merged read).
+            if (names.Count > MaxSplitClasses)
+                return null;
+        }
+        var anchored = new List<(string Name, string Title, double Y)>();
+        foreach (var (name, title) in names)
+        {
+            if (lines.Where(l => l.Line.Text == title).Select(l => l.Line).OrderByDescending(l => l.Y).FirstOrDefault() is not { } titleAt)
+                return null;
+            var core = lines.Select(l => l.Line).Where(l => l.Y > titleAt.Y && l.Text.Trim().Equals($"Core {name} Traits", StringComparison.OrdinalIgnoreCase)).Select(l => l.Y).DefaultIfEmpty(titleAt.Y).Max();
+            anchored.Add((name, title, core));
+        }
+        // A class whose own window holds no table is dropped, and the windows are drawn again without it.
+        // The page's whole text is built once, and a window that did not change between passes is not read again.
+        var wholePage = WholePageLines(page);
+        var memo = new Dictionary<(string Name, double Upper, double Lower), ClassRead?>();
+        while (anchored.Count > 1)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ordered = anchored.OrderByDescending(a => a.Y).ToList();
+            var anchorYs = ordered.Select(o => o.Y).ToList();
+            var reads = ordered.Select((a, i) =>
+            {
+                var key = (a.Name, i == 0 ? double.PositiveInfinity : anchorYs[i], i == anchorYs.Count - 1 ? double.NegativeInfinity : anchorYs[i + 1]);
+                if (!memo.TryGetValue(key, out var read))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    memo[key] = read = ReadClassTable(page, lines, WindowOf(anchorYs, i), a.Title, wholePage, cancellationToken);
+                }
+                return (a.Name, Read: read);
+            }).ToList();
+            if (reads.All(r => r.Read is not null))
+                return [.. reads.Select(r => (r.Name, r.Read!))];
+            var drop = reads.Select((r, i) => (r, i)).FirstOrDefault(x => x.r.Read is null && x.r.Name != className);
+            if (drop.r.Name is null)
+                return null; // the first class itself cannot be read in its window: read the page whole
+            anchored.RemoveAll(a => a.Name == drop.r.Name);
+        }
+        return null;
+    }
+
+    /// <summary>The lines from the <paramref name="index"/>th anchor down to the next (the first window also takes everything above it).</summary>
+    private static Func<TextLine, bool> WindowOf(List<double> anchors, int index) =>
+        l => (index == 0 || l.Y <= anchors[index] + 1) && (index == anchors.Count - 1 || l.Y > anchors[index + 1] + 1);
+
+    /// <summary>Every non-blank line of the page's blocks, trimmed, boilerplate included.</summary>
+    private static List<TextLine> WholePageLines(DetectionPage page) =>
+        page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
+
+    /// <summary>One class table read from the lines in a window: whole by position (D34), else by the legacy readers; null when no table is found.</summary>
+    internal static ClassRead? ReadClassTable(DetectionPage page, List<(int Page, TextLine Line)> allLines, Func<TextLine, bool> inWindow, string titleLine, List<TextLine> wholePageLines, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var lines = allLines.Where(l => inWindow(l.Line)).ToList();
         var byLevel = new SortedDictionary<int, List<string>>();
 
         // Item 11 (D34): the whole table, read back by position; the legacy readers below stay for layouts it cannot read.
         var pageTextLines = lines.Select(l => l.Line).ToList();
-        // The line that names this class's own table ("Bard Features", "The Bard") is the title; other headings with the same shape are not.
-        var titleLine = pageUnits.Select(u => u.Lines[0]).FirstOrDefault(t => t.Trim() == $"{className} Features" || t.Trim() == $"The {className}")
-            ?? pageUnits.Select(u => u.Lines[0]).First(t => ClassTableTitle().IsMatch(t));
-        if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine) is { Complete: true } table)
-            return [ClassCandidate(page, className, table.FeaturesByLevel, table, pageTextLines, context, classFeatures, following, previous)];
+        if (ClassTableReconstruction.Reconstruct(pageTextLines, titleLine, cancellationToken) is { Complete: true } table)
+            return new(table.FeaturesByLevel, table, pageTextLines);
         // A cell the running-header rule took for boilerplate (text repeated on many pages) can break the table: read it again whole.
-        var wholePage = page.Blocks.SelectMany(b => b.Lines is { Count: > 0 } l ? l : [new TextLine(b.Text, b.X, b.Y, b.Width, b.Height)]).Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
-        if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine) is { Complete: true } whole)
-            return [ClassCandidate(page, className, whole.FeaturesByLevel, whole, wholePage, context, classFeatures, following, previous)];
+        var wholePage = wholePageLines.Where(inWindow).ToList();
+        if (wholePage.Count > pageTextLines.Count && ClassTableReconstruction.Reconstruct(wholePage, titleLine, cancellationToken) is { Complete: true } whole)
+            return new(whole.FeaturesByLevel, whole, wholePage);
 
         // The "Level" header cell, alone or fused with the next header ("Level Bonus" under "Proficiency").
-        var header = lines.Select(l => l.Line).FirstOrDefault(l => (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
-            && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X));
+        var header = lines.Select(l => l.Line).FirstOrDefault(l =>
+        {
+            cancellationToken.ThrowIfCancellationRequested(); // the row scan below is quadratic in the window's lines
+            return (l.Text is "Level" or "LEVEL" || l.Text.StartsWith("Level ", StringComparison.Ordinal) && l.Text.Length < 20 || l.Text.StartsWith("LEVEL ", StringComparison.Ordinal) && l.Text.Length < 20)
+                && SameRow(lines, l).Any(c => IsFeaturesCell(c.Text) && c.X > l.X);
+        });
         if (header is not null)
         {
             // Columns: rows are keyed by the level column; wrapped feature lines belong to the row just above them.
@@ -963,6 +1067,7 @@ public static partial class CandidateDetector
             var levels = lines.Select(l => l.Line).Where(l => Math.Abs(l.X - header.X) < 15 && l.Y < header.Y && LevelCell().IsMatch(l.Text)).OrderByDescending(l => l.Y).ToList();
             foreach (var cell in lines.Select(l => l.Line).Where(l => l.X >= featuresHeader.X - 5 && l.X < featuresHeader.X + 150 && l.Y < header.Y))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var row = levels.Where(l => l.Y + Math.Max(2.5, l.Height * 0.4) >= cell.Y).OrderBy(l => l.Y - cell.Y).FirstOrDefault();
                 if (row is null)
                     continue;
@@ -978,16 +1083,20 @@ public static partial class CandidateDetector
                 byLevel[int.Parse(row.Groups["level"].Value, CultureInfo.InvariantCulture)] = [row.Groups["features"].Value];
         }
         if (byLevel.Count == 0)
-            return [];
+        {
+            // A window emptied because the token fired mid-call is a cancel, not a finished read of "no table" (R147).
+            cancellationToken.ThrowIfCancellationRequested();
+            return null;
+        }
         var features = byLevel.ToDictionary(r => r.Key, r => (IReadOnlyList<string>)Join(r.Value).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Where(f => f != "—" && f != "-").ToList());
-        return [ClassCandidate(page, className, features, null, pageTextLines, context, classFeatures, following, previous)];
+        return new(features, null, pageTextLines);
     }
 
     /// <summary>A class candidate: the Features column by level, plus the effects its page supports (<see cref="ClassProposals"/>).</summary>
     private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, List<string> following, List<(int Page, TextLine Line)> previous)
     {
         var ordered = features.OrderBy(f => f.Key).ToList();
-        var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
+        var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
         var (families, uncertainties, familyUnsure) = NeutralFamily(context);
         var proposal = ClassProposals.Propose(className, table, ClassProposals.LabelledLines(pageTextLines, previous.Select(l => l.Line).ToList(), className), features, following);
         uncertainties.AddRange(proposal.Uncertainties);
@@ -1016,116 +1125,116 @@ public static partial class CandidateDetector
 
     // ---- patterns (anchored, with a match timeout) ----
 
-    [GeneratedRegex(@"^(?:Level (?<level>[1-9]) (?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \((?<lists>[^()]+)\)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Level (?<level>[1-9]) (?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?<school>Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \((?<lists>[^()]+)\)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Spell521();
 
-    [GeneratedRegex(@"^(?:(?<level>[1-9])(?:st|nd|rd|th)-level (?<school>abjuration|conjuration|divination|enchantment|evocation|illusion|necromancy|transmutation)|(?<school>[Aa]bjuration|[Cc]onjuration|[Dd]ivination|[Ee]nchantment|[Ee]vocation|[Ii]llusion|[Nn]ecromancy|[Tt]ransmutation) cantrip)(?<ritual> \(ritual\))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:(?<level>[1-9])(?:st|nd|rd|th)-level (?<school>abjuration|conjuration|divination|enchantment|evocation|illusion|necromancy|transmutation)|(?<school>[Aa]bjuration|[Cc]onjuration|[Dd]ivination|[Ee]nchantment|[Ee]vocation|[Ii]llusion|[Nn]ecromancy|[Tt]ransmutation) cantrip)(?<ritual> \(ritual\))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Spell51();
 
-    [GeneratedRegex(@"^(?<label>Casting Time|Range|Components|Duration):\s*(?<value>.*)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<label>Casting Time|Range|Components|Duration):\s*(?<value>.*)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex StatLine();
 
-    [GeneratedRegex(@"^(?<category>Origin|General|Fighting Style|Epic Boon) Feat(?: \(Prerequisite: (?<prerequisite>[^()]+)\))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<category>Origin|General|Fighting Style|Epic Boon) Feat(?: \(Prerequisite: (?<prerequisite>[^()]+)\))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Feat521();
 
-    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20): (?<name>[A-Z][^:]{1,60})$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20): (?<name>[A-Z][^:]{1,60})$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelFeature();
 
-    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20) (?<owner>[A-Z][\w' ]{1,40}?) Feature$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level (?<level>[1-9]|1[0-9]|20) (?<owner>[A-Z][\w' ]{1,40}?) Feature$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex OwnedFeature();
 
-    [GeneratedRegex(@"^(?:Starting at|Beginning at|At|When you reach|Beginning when you reach) (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Starting at|Beginning at|At|When you reach|Beginning when you reach) (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelSentence();
 
-    [GeneratedRegex(@"\b\d{1,2}d(?:4|6|8|10|12|20|100)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b\d{1,2}d(?:4|6|8|10|12|20|100)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex DiceExpression();
 
-    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b(?<ability>Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) saving throw", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SavingThrow();
 
-    [GeneratedRegex(@"\+(?<amount>[1-9]) bonus to (?<target>[Ii]nitiative|AC|Armor Class)\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\+(?<amount>[1-9]) bonus to (?<target>[Ii]nitiative|AC|Armor Class)\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Bonus();
 
-    [GeneratedRegex(@"proficiency in the (?<skill>[A-Z][a-z]+(?: of [A-Z][a-z]+| [A-Z][a-z]+)?) skill", RegexOptions.None, 100)]
+    [GeneratedRegex(@"proficiency in the (?<skill>[A-Z][a-z]+(?: of [A-Z][a-z]+| [A-Z][a-z]+)?) skill", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SkillProficiency();
 
-    [GeneratedRegex(@"\bcast (?:the )?(?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4})\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\bcast (?:the )?(?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4})\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CastsSpell();
 
-    [GeneratedRegex(@"\bthe (?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4}) spell\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\bthe (?<name>[A-Z][\w'’]*(?: (?:of |the )?[A-Z][\w'’]*){0,4}) spell\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NamedSpell();
 
-    [GeneratedRegex(@"^(?<name>\p{L}[\p{L}\p{N}'’ -]{0,48}?) Spells$", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^(?<name>\p{L}[\p{L}\p{N}'’ -]{0,48}?) Spells$", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellListHeading();
 
-    [GeneratedRegex(@"^(?:Cantrips|\d(?:st|nd|rd|th) Level)\b", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"^(?:Cantrips|\d(?:st|nd|rd|th) Level)\b", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellLevelGroup();
 
-    [GeneratedRegex(@"^(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponDamageCell();
 
-    [GeneratedRegex(@"^(?<name>[A-Z][\w,' ]{1,40}?)\s+(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)(?:\s+(?<rest>.*))?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<name>[A-Z][\w,' ]{1,40}?)\s+(?<dice>\d{1,2}d(?:4|6|8|10|12)|1) (?<type>[Bb]ludgeoning|[Pp]iercing|[Ss]lashing)(?:\s+(?<rest>.*))?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponRowLine();
 
-    [GeneratedRegex(@"\b[Aa]t (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\b[Aa]t (?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th) level\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex EarlyLevel();
 
-    [GeneratedRegex(@"^(?:\d+(?:/\d+)? lb\.|\d+ (?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)|—|-)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:\d+(?:/\d+)? lb\.|\d+ (?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)|—|-)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex CostOrWeight();
 
-    [GeneratedRegex(@"^(?:Simple|Martial) (?:Melee|Ranged) Weapons", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Simple|Martial) (?:Melee|Ranged) Weapons", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponSection();
 
-    [GeneratedRegex(@"\b(?:Ammunition|Finesse|Heavy|Light|Loading|Reach|Special|Thrown|Two-Handed|Versatile)\b", RegexOptions.IgnoreCase, 100)]
+    [GeneratedRegex(@"\b(?:Ammunition|Finesse|Heavy|Light|Loading|Reach|Special|Thrown|Two-Handed|Versatile)\b", RegexOptions.IgnoreCase, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponProperty();
 
-    [GeneratedRegex(@"[Rr]ange (?<range>\d{1,3}/\d{1,4})", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[Rr]ange (?<range>\d{1,3}/\d{1,4})", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex WeaponRange();
 
-    [GeneratedRegex(@"[Vv]ersatile \((?<dice>\d{1,2}d(?:4|6|8|10|12))\)", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[Vv]ersatile \((?<dice>\d{1,2}d(?:4|6|8|10|12))\)", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Versatile();
 
-    [GeneratedRegex(@"^(?:1[0-9](?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:1[0-9](?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorClassCell();
 
-    [GeneratedRegex(@"^(?<name>[A-Z][\w' ]{1,40}?)\s+(?<ac>\d{1,2}(?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])\s+(?:-|—|Str \d+)", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<name>[A-Z][\w' ]{1,40}?)\s+(?<ac>\d{1,2}(?: \+ Dex modifier(?: \(max 2\))?)?|\+[1-5])\s+(?:-|—|Str \d+)", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorRowLine();
 
-    [GeneratedRegex(@"^(?:Light|Medium|Heavy) Armor\b|^Shield\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Light|Medium|Heavy) Armor\b|^Shield\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ArmorCategoryLine();
 
-    [GeneratedRegex(@"^(?:(?:The|THE) (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) (?:Features|FEATURES))$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:(?:The|THE) (?<name>[A-Z][\w' ]{1,40})|(?<name>[A-Z][\w' ]{1,40}?) (?:Features|FEATURES))$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableTitle();
 
     /// <summary>A feat's prerequisite line: "Prerequisite: …" or "Prerequisites: …".</summary>
-    [GeneratedRegex(@"^Prerequisites?:\s*(?<p>.+)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Prerequisites?:\s*(?<p>.+)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex PrerequisitesLine();
 
     /// <summary>
     /// An item name that holds a price ("5 gp") or continues as a sentence (", which counts as": a comma, then two or more
-    /// lower-case words). One word after the comma stays a name: the SRD's "Crossbow, hand".
+    /// lower-case words). One word after the comma stays a name ("Fixture Lantern, small").
     /// </summary>
-    [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex JunkItemName();
 
-    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelCell();
 
-    [GeneratedRegex(@"^Level\s+Proficiency Bonus\b.*\bFeatures$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^Level\s+Proficiency Bonus\b.*\bFeatures$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableHeaderLine();
 
-    [GeneratedRegex(@"^(?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th)?\s+\+[2-6]\s+(?<features>[A-Z—-].*)$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<level>[1-9]|1[0-9]|20)(?:st|nd|rd|th)?\s+\+[2-6]\s+(?<features>[A-Z—-].*)$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex ClassTableRowLine();
 
-    [GeneratedRegex(@"\d+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\d+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Digits();
 
-    [GeneratedRegex(@"^(?:Level [1-9] (?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \(", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Level [1-9] (?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation)|(?:Abjuration|Conjuration|Divination|Enchantment|Evocation|Illusion|Necromancy|Transmutation) Cantrip) \(", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex SpellLineStart();
 
-    [GeneratedRegex(@"^(?:Origin|General|Fighting Style|Epic Boon) Feat\b", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:Origin|General|Fighting Style|Epic Boon) Feat\b", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex FeatLineStart();
 
-    [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NonWord();
 }

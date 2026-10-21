@@ -51,6 +51,31 @@ html[data-theme='violet'] {
   --accent-2: light-dark(#075f78, #86e3f5);
   --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
+/* D40 / R163: three more presets, each on the same tokens. Every pairing meets WCAG AA (accessibility-checklist.md item 5):
+   --bg text on an accent fill is 6.1:1 or better in the three Wave 3 presets and in the custom accent. The older forest theme
+   in its light mode measures 6.08 and 5.87 (still AA). Dark --bg stays Canvas.
+   "Custom accent" has no block here: accentClamp.ts generates it and adopts it as a stylesheet at run time. */
+html[data-theme='ember'] {
+  --bg: light-dark(#fdf1ea, Canvas);
+  --surface: light-dark(#f6d9c8, #261c17);
+  --accent: light-dark(#9c3410, #ffb08f);
+  --accent-2: light-dark(#1d5a86, #8cc6f2);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
+}
+html[data-theme='rose'] {
+  --bg: light-dark(#fdf0f5, Canvas);
+  --surface: light-dark(#f6d6e3, #2a1b23);
+  --accent: light-dark(#a01f5c, #ffb3d1);
+  --accent-2: light-dark(#1f6444, #92e3b8);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
+}
+html[data-theme='tide'] {
+  --bg: light-dark(#ebf7f7, Canvas);
+  --surface: light-dark(#c9e8e8, #16252a);
+  --accent: light-dark(#0a6068, #7fdfe6);
+  --accent-2: light-dark(#9a3a20, #ffab94);
+  --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
+}
 /* Investigation 2026-10-06 (ADR-015 §4 amended): preferences as html[data-*] attributes. Appearance overrides the OS scheme:
    light-dark() and Canvas/CanvasText resolve against the element's used color-scheme, so every token flips with no JS. */
 html[data-appearance='light'] { color-scheme: light; }
@@ -167,7 +192,27 @@ article.sheet > .sheet-body { grid-column: main; grid-row: body; display: grid; 
 fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
 fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .field { display: grid; gap: 0.2rem; font-weight: 500; }
+/* Item 17 (D36): the Details form on Notes. Boxes fill their column and the appearance fields wrap at any width (reflow at 400%, WCAG 1.4.10). */
+.details-form fieldset { min-width: 0; margin: var(--space-3) 0 0; display: grid; gap: var(--space-3); }
+.details-form textarea, .details-form input[type='text'] { width: 100%; max-width: 100%; box-sizing: border-box; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.details-form textarea { resize: vertical; }
+.details-form [aria-invalid='true'] { border: 2px solid var(--error); }
+.details-form .field p { margin: 0; overflow-wrap: anywhere; }
+.details-form input[type='number'], .details-form select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+/* Item 18: a row of Your own items / attacks: the text first, the buttons after it, wrapping at any width (reflow at 400%). */
+.own-entry-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; justify-content: space-between; }
+.own-entry-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr)); gap: var(--space-3) var(--space-4); }
+.print-details dt { font-weight: 600; }
+.print-details dd { margin: 0 0 0.4rem; white-space: pre-line; }
 .choice { display: block; padding: 0.15rem 0; }
+/* D40: the Custom accent controls. The slider is a 24px+ target and everything wraps, so it reflows at 400% (WCAG 1.4.10, 2.5.8). */
+.accent-custom { display: grid; gap: var(--space-3); max-width: 28rem; }
+.accent-custom input[type='range'] { width: 100%; min-height: 1.5rem; margin: 0; }
+.accent-sample { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.accent-sample-text { color: var(--accent); font-weight: 600; }
+.accent-sample-chip { background: var(--accent); color: var(--bg); border-radius: var(--radius); padding: 0.1rem 0.6rem; font-weight: 600; }
+.accent-sample-ring { width: 1.5rem; height: 1.5rem; border-radius: var(--radius); outline: 3px solid var(--accent); outline-offset: 2px; }
 .source-decision { margin: 0.75rem 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
@@ -248,6 +293,24 @@ span.warn { color: var(--warn); }
 .play-panel { border-top: 1px solid var(--line); padding-top: 0.5rem; }
 .play-panel h3 { margin: 0.25rem 0; }
 .inline-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; }
+/* Wave 3 item 21: the damage type and defence selects (24px targets, WCAG 2.5.8; wrap at 400%). */
+.play-panel .inline-form select, .defences select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.defences button { min-height: 1.75rem; }
+/* Wave 3 item 27: the Track XP checkbox, the total and its button are at least 24 CSS px (WCAG 2.5.8); the text wraps at 400%. */
+.experience input[type='checkbox'] { width: 1.5rem; height: 1.5rem; margin: 0 0.35rem 0 0; vertical-align: middle; }
+.experience input[type='number'] { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.experience button { min-height: 1.75rem; }
+.experience p { overflow-wrap: anywhere; }
+.experience .level-up { margin: 0.25rem 0; }
+.damage-result { margin: 0.25rem 0; overflow-wrap: anywhere; }
+/* Wave 3 item 23: a companion's card on Play. Text wraps and the number box and buttons are at least 24 CSS px (WCAG 2.5.8), so the card reflows at 400%. */
+.companion-card section > h4 { margin: 0 0 var(--space-1); overflow-wrap: anywhere; }
+.companion-card p { margin: var(--space-1) 0; overflow-wrap: anywhere; }
+.companion-stats { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.companion-card input[type='number'], .companion-card select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.companion-card .inline-form input[type='number'] { width: 7rem; }
+.companion-card button { max-width: 100%; overflow-wrap: anywhere; }
+.companion-line { display: grid; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--line); min-width: 0; }
 /* Conditions as outlined chips (still native checkboxes); the checked chip is accent-filled like the d20 segment. */
 .conditions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .conditions .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 1rem; }
@@ -256,6 +319,10 @@ span.warn { color: var(--warn); }
 .resources, .features { list-style: none; padding: 0; margin: 0; }
 .resource, .feature { padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
 .resource h4 { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+/* Wave 3 item 25: an item's charges on Inventory. The row wraps (400% reflow); each button is at least 24 CSS px (WCAG 2.5.8). */
+.charges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); min-width: 0; }
+.charges button { min-height: 1.5rem; min-width: 1.5rem; max-width: 100%; overflow-wrap: anywhere; }
+.charges .hint { overflow-wrap: anywhere; }
 .feature summary { cursor: pointer; }
 .feature button { margin: 0.25rem 0.5rem 0 0; }
 .roll-result { font-variant-numeric: tabular-nums; }
@@ -353,7 +420,9 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .roll-log ol { margin: var(--space-1) 0 0; padding-left: 1.5rem; font-size: var(--text-sm); }
 .roll-time { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* ADR-015: quick HP is a pair of small buttons in a second <dd> (the roll buttons and the d20 row are PR A's). */
-.quick-hp { display: inline-flex; gap: var(--space-1); }
+.quick-hp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+/* D38: the Bloodied chip is the word in a bordered box (text and shape, never colour alone); the text is the page colour (4.5:1). */
+.sheet-summary .bloodied-chip { font-family: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--fg); border: 1px solid var(--error); border-radius: 4px; padding: 0 0.4em; }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
 .quick-hp button[aria-disabled='true'],
 .origin-basics button[aria-disabled='true'],
@@ -469,7 +538,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
 .text-diff .diff-removed { color: var(--error); text-decoration: line-through; }
 
 /* ADR-015: the dice display. Filled polygons by clip-path; the face by attr(), so the live region's text never changes.
-   Text on a filled shape is --bg (F3): 6.1:1 or better on --accent and --accent-2 in every theme, light and dark. */
+   Text on a filled shape is --bg (F3): AA (4.5:1) or better on --accent and --accent-2 in every theme, light and dark. That is
+   6.1:1 or better in the Wave 3 presets and the custom accent; forest light measures 6.08 and 5.87. */
 .dice { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-1); }
 .die { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--bg); font-family: var(--font-numbers); font-weight: 700; font-variant-numeric: tabular-nums; animation: tumble 0.6s ease-out; }
 .die::after { content: attr(data-value); }
@@ -502,3 +572,14 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .dice:has(.die[data-kept='false']) .die[data-kept='true'][data-sides='20'], .die[data-critical='true'] { background: Highlight; color: HighlightText; }
   .die.die[data-kept='false'] { opacity: 1; background: GrayText; color: Canvas; }
 }
+/* Item 19a (D37): import from text. The box and the file field fill their column and the text wraps at any width (reflow at 400%, WCAG 1.4.10). */
+.ddb-text-entry { margin-top: var(--space-3); }
+.ddb-text-entry textarea, .ddb-text-entry input[type='file'] { width: 100%; max-width: 100%; box-sizing: border-box; font: inherit; }
+.ddb-text-entry textarea { resize: vertical; padding: 0.3rem 0.4rem; }
+.ddb-text-entry [aria-invalid='true'] { border: 2px solid var(--error); }
+#ddb-not-read li { overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* D61: the formula preview keeps room for its levels row and caption while the answer is on its way. */
+.formula-preview { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.formula-preview.reserved { min-height: 3rem; }
+.formula-preview > small { display: block; color: var(--muted); }

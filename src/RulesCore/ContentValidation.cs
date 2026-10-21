@@ -62,7 +62,8 @@ public static class ContentValidator
         return null;
     }
 
-    private static bool IsCharacterOnlyField(string field) => CharacterCalculator.IsCharacterOnlyField(field);
+    private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
+        CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
     /// <summary>Spell fields (content v5) as modifier or restriction targets; an older build does not calculate them.</summary>
     private static bool IsSpellField(string field) =>
@@ -117,6 +118,7 @@ public static class ContentValidator
         var needsV6 = false;
         var needsV8 = false;
         var needsV9 = false;
+        var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
@@ -132,8 +134,23 @@ public static class ContentValidator
                     if (revision.SchemaVersion >= ScaleEffect.SchemaVersion)
                         Error("validate.scale-incomplete", $"Scale '{unknownScale.Id}' does not match the scale shape: it needs a scaleId, a label and {Character.MaxLevel} whole-number values.", unknownScale.Id);
                     break;
+                // From v10 an item effect is typed; one that stays unknown did not match the shape (a max that is not a whole
+                // number, a period that is not a rest), so its charges would silently not exist. Below v10 it stays what a v9
+                // build made of it: an unsupported effect, a warning (hand-written v9 content is never newly refused).
+                case UnknownEffect { DeclaredType: ItemEffect.TypeName } unknownItem when revision.SchemaVersion >= ItemEffect.SchemaVersion:
+                    needsV10 = true;
+                    Error("validate.item-incomplete", $"Item effect '{unknownItem.Id}' does not match the item shape: charges need a whole-number max and, if present, a recovery with a shortRest or longRest period.", unknownItem.Id);
+                    break;
+                // From v10 a toggle, resource or grant that stays unknown did not read (an activation, autoWhen or grant kind that
+                // is not one of the allowed names). Publishing would write it at a lower version, where it reads back as a
+                // different, typed effect, so it blocks. Below v10 it is what it always was: a warning.
+                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName } malformed
+                    when revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion:
+                    needsV10 = true;
+                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                    break;
                 case UnknownEffect unknown:
-                    Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
+                    Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
                     break;
                 case ModifierEffect modifier:
                     needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -141,8 +158,10 @@ public static class ContentValidator
                     spellTargets |= IsSpellField(modifier.Target);
                     if (!CharacterCalculator.IsField(modifier.Target))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
-                    else if (IsCharacterOnlyField(modifier.Target))
-                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs a content schema version).", modifier.Id);
+                    else if (IsCharacterOnlyField(modifier.Target, revision))
+                        Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
+                    else
+                        needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
                     // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
                     // bonus (such as -1 for Improved Critical) can lower it.
                     if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -165,15 +184,38 @@ public static class ContentValidator
                     break;
                 case ToggleEffect toggleEffect:
                     needsV6 = true;
+                    needsV10 |= toggleEffect.AutoWhen is not null || toggleEffect.Activation is not null;
                     if (string.IsNullOrWhiteSpace(toggleEffect.ToggleId) || string.IsNullOrWhiteSpace(toggleEffect.Label))
                         Error("validate.toggle-incomplete", $"Toggle '{toggleEffect.Id}' needs a toggleId and a label.", toggleEffect.Id);
                     if (toggleEffect.ResourceId is { } spends && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
                         Error("validate.toggle-resource", $"Toggle '{toggleEffect.Id}' spends '{spends}', which this revision does not define.", toggleEffect.Id);
+                    if (toggleEffect.AutoWhen is not null)
+                    {
+                        // D38: an auto toggle follows the hit points, so it never spends a use, and it may not change the values
+                        // Bloodied is judged by (the hit point maximum, an ability score or modifier), which would feed back.
+                        if (toggleEffect.ResourceId is not null)
+                            Error("validate.toggle-auto-resource", $"Toggle '{toggleEffect.Id}' switches itself, so it cannot spend a use of a resource.", toggleEffect.Id);
+                        foreach (var changes in revision.Effects.OfType<ModifierEffect>().Where(m =>
+                            m.Toggle == toggleEffect.ToggleId && m.Timing == EffectTiming.WhileActive
+                            && (m.Target == FieldIds.HitPoints || m.Target.StartsWith("ability.", StringComparison.Ordinal))))
+                            Error("validate.toggle-auto-target", $"Modifier '{changes.Id}' belongs to toggle '{toggleEffect.ToggleId}', which switches itself; it cannot change hit points or an ability.", changes.Id);
+                    }
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
                     CheckLevel(grant.Level, grant.Id);
-                    if (grant.Grant == GrantKind.Content)
+                    needsV10 |= GrantEffect.IsDamageDefence(grant.Grant) || grant.DamageType is not null;
+                    if (grant.DamageType is not null && !GrantEffect.IsDamageDefence(grant.Grant))
+                        Error("validate.grant-damage-type-kind", $"Effect '{grant.Id}' has a damageType, which only a damageResistance, damageImmunity or damageVulnerability grant takes.", grant.Id);
+                    if (GrantEffect.IsDamageDefence(grant.Grant))
+                    {
+                        // Content v10: a resistance, immunity or vulnerability names a damage type and no target or content.
+                        if (!DamageTypes.TryNormalize(grant.DamageType, out _))
+                            Error("validate.grant-damage-type", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} and needs a damageType: one of {string.Join(", ", DamageTypes.All)}.", grant.Id);
+                        if (grant.Target is not null || grant.Content is not null)
+                            Error("validate.grant-damage-fields", $"Effect '{grant.Id}' grants a damage defence, which names a damageType only: it takes no target and no content.", grant.Id);
+                    }
+                    else if (grant.Grant == GrantKind.Content)
                     {
                         if (grant.Content is not { } granted)
                             Error("validate.grant-content-missing", $"Effect '{grant.Id}' grants content but names none.", grant.Id);
@@ -233,12 +275,27 @@ public static class ContentValidator
                         Warn("validate.multiclass-kind", $"A multiclass prerequisite belongs on a class; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", restriction.Id);
                     if (!CharacterCalculator.IsField(restriction.Field))
                         Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which is not a calculated field.", restriction.Id);
-                    else if (IsCharacterOnlyField(restriction.Field))
-                        Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which cannot be targeted by content yet (needs a content schema version).", restriction.Id);
+                    else if (IsCharacterOnlyField(restriction.Field, revision))
+                        Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", restriction.Id);
+                    else
+                        needsV10 |= CharacterCalculator.IsSpeedOrPassive(restriction.Field);
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;
+                case ItemEffect item:
+                    needsV10 = true;
+                    if (revision.Kind != ContentKind.Item)
+                        Error("validate.item-kind", $"An item effect (attunement, charges) belongs on an item; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", item.Id);
+                    if (item.Charges is { } charges)
+                    {
+                        if (charges.Max is < 1 or > ItemCharges.MaxCharges)
+                            Error("validate.item-charges", $"Item '{item.Id}' has {charges.Max} charges; it must be 1 to {ItemCharges.MaxCharges}.", item.Id);
+                        if (charges.Recovery?.Regain is { } regain && !DiceExpression.TryParse(regain, out _, out var regainError))
+                            Error("validate.dice-invalid", $"Item '{item.Id}' regain is not a dice expression such as 1d4+1 ({regainError!.Code})", item.Id);
+                    }
+                    break;
                 case ResourceEffect resource:
+                    needsV10 |= resource.Activation is not null;
                     if (string.IsNullOrWhiteSpace(resource.ResourceId) || string.IsNullOrWhiteSpace(resource.Label))
                         Error("validate.resource-incomplete", $"Resource effect '{resource.Id}' needs a resourceId and a label.", resource.Id);
                     CheckFormula(resource.Maximum, resource.Id, "maximum");
@@ -349,6 +406,8 @@ public static class ContentValidator
             Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
         if (revision.Effects.OfType<SpellEffect>().Count() > 1)
             Error("validate.spell-duplicate", "A spell revision declares its spell data once.");
+        if (revision.Effects.OfType<ItemEffect>().Count() > 1)
+            Error("validate.item-duplicate", "An item declares its attunement and charges once.");
         if (revision.Kind == ContentKind.Spell && !revision.Effects.OfType<SpellEffect>().Any())
             Warn("validate.spell-data-missing", "This spell has no spell data (level, lists), so no caster can use it from the sheet.");
         if (revision.Effects.Any(e => e is SpellcastingEffect or SpellEffect or WeaponEffect) && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
@@ -359,6 +418,10 @@ public static class ContentValidator
             Error("validate.requires-v7", $"This revision says how its caster levels combine (multiclassCaster, content schema v7) but declares v{revision.SchemaVersion}; an older build would ignore it.");
         if (needsV8 && revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion)
             Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
+        // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
+        // revision built in code can still declare an older version, and an older build would ignore or refuse them.
+        if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
+            Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
         if (needsV9 && revision.SchemaVersion < ScaleEffect.SchemaVersion)
             Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable, a choice with no options of its own) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
@@ -401,7 +464,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV9 ? ScaleEffect.SchemaVersion
+            needsV10 ? ContentRevision.PlayDetailsSchemaVersion
+            : needsV9 ? ScaleEffect.SchemaVersion
             : needsV8 ? ContentRevision.CombatDetailsSchemaVersion
             : revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) ? SpellcastingEffect.MulticlassSchemaVersion
             : needsV6 ? ToggleEffect.SchemaVersion

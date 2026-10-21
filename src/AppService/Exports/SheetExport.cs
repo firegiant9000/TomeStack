@@ -235,7 +235,8 @@ public static class SheetExportBuilder
         List<SheetToggle> toggles = [];
         foreach (var toggle in sheet.Toggles ?? [])
         {
-            if (Out(toggle.Content, out var source))
+            // D38: an auto toggle is computed from the hit points, not switchable state, so the export leaves it out.
+            if (toggle.Auto != true && Out(toggle.Content, out var source))
                 toggles.Add(new(toggle.Label, toggle.ContentName, toggle.On, toggle.Content, source));
         }
         List<SheetScale> scales = [];

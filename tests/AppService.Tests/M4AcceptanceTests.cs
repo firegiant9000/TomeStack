@@ -72,20 +72,20 @@ public class M4AcceptanceTests(ITestOutputHelper output)
         temp.App.AttachPdf(source.Id, "book.pdf", pdf);
         var before = temp.App.ListContent(family).Count(o => o.SourceId == source.Id);
         var job = temp.App.StartImport(new(source.Id, WholeDocument: true));
-        temp.App.RunningImport?.Wait(TimeSpan.FromMinutes(30));
-        job = temp.App.ImportStatus(job.Id);
+        // Any end is reported (a failed read is carried in the outcome's failure code), but the job must have ended.
+        job = temp.WaitForImport(job.Id, expected: null, timeout: TimeSpan.FromMinutes(30));
         var candidates = job.Status == ImportJobStatus.Completed ? temp.App.ListCandidates(new(job.Id)) : [];
 
         foreach (var first in candidates.GroupBy(c => c.Candidate.ProposedKind).Select(g => g.First()))
         {
             var check = temp.App.CheckCandidate(first.Id);
             if (check.CanAccept && first.Candidate.ProposedKind != ContentKind.Class)
-                temp.App.AcceptCandidate(new(first.Id, Confirm: true));
+                temp.Accept(new(first.Id, Confirm: true));
             else if (check.CanAcceptAsReference) // a class needs its hit die confirmed (ADR-016); this reviewer confirms nothing
-                temp.App.AcceptCandidate(new(first.Id, AsReference: true, Confirm: true));
+                temp.Accept(new(first.Id, AsReference: true, Confirm: true));
         }
         if (candidates.Count > 1 && temp.App.ListCandidates(new(job.Id, Status: CandidateStatus.Pending)).LastOrDefault() is { } last)
-            temp.App.IgnoreCandidate(last.Id);
+            temp.Ignore(last.Id);
 
         var reviewed = temp.App.ListCandidates(new(job.Id));
         // Active without approval: anything from the source that the calculator would apply although nobody published it.

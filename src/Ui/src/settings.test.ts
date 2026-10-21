@@ -2,8 +2,11 @@
 // Preferences of this app on this machine (theme, dice animation, sidebar) live in the page's own storage; bad or
 // missing storage never breaks the app, and an unknown theme falls back to the default.
 import { afterEach, expect, it, vi } from 'vitest';
+import { clampAccent, DEFAULT_ACCENT_HUE } from './accentClamp';
 import {
   abilityOrder,
+  accentHue,
+  setAccentHue,
   announceRollsOn,
   appearance,
   applyPreferences,
@@ -77,6 +80,70 @@ it('ignores a stored theme that is not one of the three and never applies it', (
   expect(theme()).toBe('forest');
   applyTheme(theme());
   expect(document.documentElement.dataset.theme).toBe('forest');
+});
+
+it('round-trips the three new presets and the custom accent as theme ids', () => {
+  for (const id of ['ember', 'rose', 'tide', 'custom'] as const) {
+    setTheme(id);
+    expect(localStorage.getItem('tomestack.theme')).toBe(id);
+    expect(theme()).toBe(id);
+    applyTheme(theme());
+    expect(document.documentElement.dataset.theme).toBe(id);
+  }
+});
+
+it('keeps the custom accent hue under its own key, and falls back to the default hue when it is missing or invalid', () => {
+  expect(accentHue()).toBe(DEFAULT_ACCENT_HUE);
+  setAccentHue(200);
+  expect(localStorage.getItem('tomestack.accentHue')).toBe('200');
+  expect(accentHue()).toBe(200);
+  for (const junk of ['', 'teal', '-5', '360', '12.5', '1e2', ' 90', '900', 'NaN']) {
+    localStorage.setItem('tomestack.accentHue', junk);
+    expect(accentHue(), `stored ${JSON.stringify(junk)}`).toBe(DEFAULT_ACCENT_HUE);
+  }
+  setAccentHue(0);
+  expect(accentHue()).toBe(0);
+  setAccentHue(359.6); // a slider never sends this, but the setter keeps the stored value an integer 0-359
+  expect(localStorage.getItem('tomestack.accentHue')).toBe('0');
+});
+
+it('adds the custom accent as an adopted stylesheet only while Custom accent is the theme, and removes it again', () => {
+  const sheets = () => document.adoptedStyleSheets as unknown as { text: string }[];
+  class FakeSheet {
+    text = '';
+    replaceSync(text: string) {
+      this.text = text;
+    }
+  }
+  vi.stubGlobal('CSSStyleSheet', FakeSheet);
+  Object.defineProperty(document, 'adoptedStyleSheets', { configurable: true, writable: true, value: [] });
+  try {
+    applyPreferences();
+    expect(sheets()).toHaveLength(0); // forest: nothing adopted
+    setTheme('custom');
+    setAccentHue(200);
+    applyPreferences();
+    expect(sheets()).toHaveLength(1);
+    expect(sheets()[0]!.text).toContain("html[data-theme='custom']");
+    expect(sheets()[0]!.text).toContain(clampAccent(200, 'light').accent);
+    setAccentHue(10);
+    applyPreferences();
+    expect(sheets()).toHaveLength(1); // replaced, not stacked
+    expect(sheets()[0]!.text).toContain(clampAccent(10, 'light').accent);
+    setTheme('cool');
+    applyPreferences();
+    expect(sheets()).toHaveLength(0);
+  } finally {
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(document, 'adoptedStyleSheets');
+  }
+});
+
+it('ignores a stored accent hue and shows forest when a build without the custom accent reads theme "custom" (the downgrade story)', () => {
+  // An older build's isThemeId has no 'custom': simulate it with the unknown-id path (same fallback), then check the hue key alone changes nothing.
+  localStorage.setItem('tomestack.theme', 'custom-from-the-future');
+  localStorage.setItem('tomestack.accentHue', '200');
+  expect(theme()).toBe('forest');
 });
 
 it('applies a theme as a data attribute on the root element', () => {

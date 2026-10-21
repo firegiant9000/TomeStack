@@ -24,16 +24,22 @@ internal sealed class ImportPlanner
     private readonly HashSet<string> _chosenByUser = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ContentReference> _classes = [];
     private readonly bool _equipMatched;
+    private readonly StubRequest _stub;
+    private readonly List<StubOffer> _offers = [];
+    private readonly List<string> _lines = [];
     private Character _character;
 
     /// <param name="options">The listing for the chosen family and campaign: published, compatible and current only.</param>
-    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find, bool equipMatched = false)
+    /// <param name="find">Finds a revision through the catalog the calculation uses (the overlay that holds the stub class, item 15).</param>
+    /// <param name="stub">Item 15 (D35): the stub class request; its row is created only when the sheet's hit dice settle its die.</param>
+    public ImportPlanner(Character start, IReadOnlyList<ContentOption> options, IReadOnlyList<Resolution> resolutions, Func<Character, CharacterSheet> calculate, Choose choose, Func<ContentReference, ContentRevision?> find, bool equipMatched, StubRequest stub)
     {
         _character = start;
         _calculate = calculate;
         _choose = choose;
         _find = find;
         _equipMatched = equipMatched;
+        _stub = stub;
         foreach (var option in options)
         {
             var key = (option.Kind, Normalise.Name(option.Name));
@@ -50,13 +56,25 @@ internal sealed class ImportPlanner
 
     public IReadOnlyList<MatchRow> Rows => _rows;
 
+    /// <summary>Every class row no installed class matched, with whether a stub can be created for it (item 15).</summary>
+    public IReadOnlyList<StubOffer> StubOffers => _offers;
+
+    /// <summary>Report lines the stub adds (saves from the first class only; an unreadable hit dice total). Labels only, never sheet text.</summary>
+    public IReadOnlyList<string> Lines => _lines;
+
+    /// <summary>The stub class as a draft, when the user asked for it and the sheet settled its die.</summary>
+    public ContentRevision? StubRevision { get; private set; }
+
+    /// <summary>The stub's whole content, for the review (D35).</summary>
+    public StubClassReview? StubReview { get; private set; }
+
     /// <summary>Rows the user's resolution matched (the report's "chosen").</summary>
     public int ChosenByUser => _rows.Count(r => r.Status == MatchStatus.Matched && _chosenByUser.Contains(r.RowId));
 
     public void Plan(DdbSheet sheet)
     {
         ArgumentNullException.ThrowIfNull(sheet);
-        Classes(sheet.Classes);
+        Classes(sheet);
         Content("species", MatchKind.Species, ContentKind.Species, sheet.Species);
         Content("background", MatchKind.Background, ContentKind.Background, sheet.Background);
         Subclasses(sheet.Classes, sheet.Features);
@@ -70,12 +88,15 @@ internal sealed class ImportPlanner
 
     // ---- the steps ----
 
-    private void Classes(Read<IReadOnlyList<ClassText>> read)
+    private void Classes(DdbSheet sheet)
     {
+        var read = sheet.Classes;
         if (read.Status == ReadStatus.Unreadable)
             _rows.Add(new("classes", MatchKind.Class, UnreadableLabel(MatchKind.Class), MatchStatus.Unreadable, [], null, null));
         if (read.Status != ReadStatus.Ok)
             return;
+        // First the rows as the installed content settles them; then (item 15) the class rows nothing matched may be offered a stub.
+        var parts = new List<ClassPart>();
         var levels = new List<ClassLevel>();
         for (var i = 0; i < read.Value!.Count; i++)
         {
@@ -88,12 +109,77 @@ internal sealed class ImportPlanner
             if (status == MatchStatus.Matched)
             {
                 levels.Add(new(chosen!.Reference, text.Level));
-                _classes[i] = chosen.Reference;
                 note ??= CampaignNote(chosen);
             }
-            _rows.Add(new(rowId, MatchKind.Class, $"{text.Name} {text.Level}", status, candidates, status == MatchStatus.Matched ? chosen : null, note));
+            parts.Add(new(i, text, rowId, candidates, status, status == MatchStatus.Matched ? chosen : null, note));
         }
-        _character = _character with { Classes = levels };
+
+        var unmatched = parts.Where(p => p.Status == MatchStatus.NotFound).ToList();
+        if (unmatched.Count > 0)
+        {
+            var matched = parts.Where(p => p.Status == MatchStatus.Matched).Select(p => (p.Text.Level, DieOf(p.Chosen!.Reference))).ToList();
+            var hitDice = sheet.HitDiceTotal is { Status: ReadStatus.Ok } total ? total.Value : null;
+            var unmatchedLevels = unmatched.Sum(p => p.Text.Level);
+            var offers = unmatched.Select(p => (Part: p, Read: StubClasses.ReadHitDie(hitDice, matched, unmatchedLevels))).ToList();
+            var chosenOffer = offers.FirstOrDefault(o => o.Part.RowId == _stub.RowId && o.Read.Note is null);
+            foreach (var (part, die) in offers)
+            {
+                // R100: one stub class per import (the overlay holds one draft); the others keep the gap-note path.
+                var note = die.Note ?? (chosenOffer.Part is not null && chosenOffer.Part != part ? StubClasses.NoteOnePerImport : null);
+                _offers.Add(new(part.RowId, part.Text.Name.Trim(), die.Die, note));
+            }
+            if (offers.Any(o => o.Read.Note == StubClasses.NoteUnreadable))
+                _lines.Add(StubClasses.HitDiceLine);
+            if (chosenOffer.Part is { } stubPart)
+                CreateStub(sheet, stubPart, chosenOffer.Read.Die!.Value);
+        }
+
+        var stubReference = StubRevision?.Reference;
+        var order = new List<ClassLevel>();
+        foreach (var part in parts)
+        {
+            if (stubReference is not null && part.RowId == _stub.RowId && part.Status == MatchStatus.NotFound)
+            {
+                var candidate = new MatchCandidate(stubReference, StubRevision!.Name, _stub.Source.Title, [_stub.Family], _stub.AllowedInCampaign, new(PlacementKind.Class));
+                order.Add(new(stubReference, part.Text.Level));
+                _classes[part.Index] = stubReference;
+                // Like any candidate, a source the campaign does not allow shows the campaign note.
+                _rows.Add(new(part.RowId, MatchKind.Class, $"{part.Text.Name} {part.Text.Level}", MatchStatus.Matched, [candidate], candidate, CampaignNote(candidate) ?? "stub.created"));
+                continue;
+            }
+            if (part.Status == MatchStatus.Matched)
+            {
+                order.Add(new(part.Chosen!.Reference, part.Text.Level));
+                _classes[part.Index] = part.Chosen.Reference;
+            }
+            _rows.Add(new(part.RowId, MatchKind.Class, $"{part.Text.Name} {part.Text.Level}", part.Status, part.Candidates, part.Chosen, part.Note));
+        }
+        _character = _character with { Classes = order };
+    }
+
+    private sealed record ClassPart(int Index, ClassText Text, string RowId, List<MatchCandidate> Candidates, MatchStatus Status, MatchCandidate? Chosen, string? Note);
+
+    /// <summary>The die of a matched class (0 when its revision has none, so the sheet's total cannot be reduced by it).</summary>
+    private int DieOf(ContentReference reference) =>
+        _find(reference)?.Effects.OfType<HitDieEffect>().FirstOrDefault(d => d.Automation == AutomationStatus.Automatic)?.Die ?? 0;
+
+    /// <summary>
+    /// Builds the stub (D35): the hit die read from the sheet, and the sheet's ticked saves only when it is the first class
+    /// (R101). Tells the catalog about the draft before anything is calculated, and lists it as an option for the lookups.
+    /// </summary>
+    private void CreateStub(DdbSheet sheet, ClassPart part, int die)
+    {
+        var name = part.Text.Name.Trim();
+        var saves = part.Index == 0
+            ? Enum.GetValues<Ability>().Where(a => sheet.SaveProficient.TryGetValue(a, out var s) && s is { Status: ReadStatus.Ok, Value: true }).ToList()
+            : [];
+        if (part.Index != 0)
+            _lines.Add(StubClasses.SavesLine);
+        var draft = StubClasses.Build(name, _stub.Family, _stub.Source.Id, die, saves);
+        StubRevision = draft;
+        StubReview = new(part.RowId, name, _stub.Family, die, [.. saves.Select(FieldIds.Key)], _stub.Source.Title);
+        _stub.Created(draft);
+        _byContent.TryAdd(draft.ContentId, new ContentOption(draft.Reference, ContentKind.Class, name, draft.RulesFamilies, true, _stub.Source.Id, _stub.Source.Title, null, draft.Summary));
     }
 
     /// <summary>

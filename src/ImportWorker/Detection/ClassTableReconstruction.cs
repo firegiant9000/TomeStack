@@ -120,13 +120,18 @@ public static partial class ClassTableReconstruction
 
     private sealed record Parsed(ClassTable Table, double TableRight, double TableLeft, double Pitch, double LevelCentre, List<(TextLine Line, int Level)> Levels, List<(TextLine Line, int Level)>? Next);
 
-    public static ClassTable? Reconstruct(IReadOnlyList<TextLine> pageLines, string? titleText = null)
+    /// <remarks>
+    /// Not linear: the row cells are found by scanning the lines once per level (up to 20), the column and level-run grouping
+    /// compares each cell with the groups so far, so a window of many lines is quadratic in the worst case. The token is
+    /// checked in those outer loops (H1/R145).
+    /// </remarks>
+    public static ClassTable? Reconstruct(IReadOnlyList<TextLine> pageLines, string? titleText = null, CancellationToken cancellationToken = default)
     {
         var lines = pageLines.Where(l => l.Text.Trim().Length > 0).Select(l => l with { Text = l.Text.Trim() }).ToList();
-        if (Read(lines, titleText) is not { } parsed)
+        if (Read(lines, titleText, cancellationToken) is not { } parsed)
             return null;
         // A table that carries on in the next column of the same page, without a header of its own.
-        if (!parsed.Table.Complete && Continued(lines, parsed) is { } joined && Read(joined, titleText) is { Table.Complete: true } whole)
+        if (!parsed.Table.Complete && Continued(lines, parsed) is { } joined && Read(joined, titleText, cancellationToken) is { Table.Complete: true } whole)
             return whole.Table;
         return parsed.Table;
     }
@@ -152,9 +157,9 @@ public static partial class ClassTableReconstruction
         return [.. lines.Where(l => !band.Contains(l)), .. band.Select(l => l with { X = l.X - shiftX, Y = l.Y + shiftY })];
     }
 
-    private static Parsed? Read(List<TextLine> lines, string? titleText)
+    private static Parsed? Read(List<TextLine> lines, string? titleText, CancellationToken cancellationToken)
     {
-        if (LevelColumn(lines) is not { } levels)
+        if (LevelColumn(lines, cancellationToken) is not { } levels)
             return null;
         var first = levels[0].Line;
         var tolerance = Math.Max(2.5, first.Height * 0.4);
@@ -163,7 +168,7 @@ public static partial class ClassTableReconstruction
         var levelRight = levels.Max(l => l.Line.X + l.Line.Width);
         var levelCentre = levels.Average(l => Centre(l.Line));
         // The next levels, one above the other to the right: the table carries on in the next column of the page.
-        var next = LevelRuns(lines).Where(r => r[0].Level == levels[^1].Level + 1 && r[0].Line.X > levelRight).OrderBy(r => r[0].Line.X).FirstOrDefault();
+        var next = LevelRuns(lines, cancellationToken).Where(r => r[0].Level == levels[^1].Level + 1 && r[0].Line.X > levelRight).OrderBy(r => r[0].Line.X).FirstOrDefault();
         var cap = next is null ? double.MaxValue : next.Min(r => r.Line.X) - 6;
 
         var header = lines.Where(l => IsFeaturesHeader(l.Text) && l.Y > first.Y + tolerance && l.Y <= first.Y + 4 * pitch && l.X > levelRight).OrderBy(l => l.Y).FirstOrDefault();
@@ -183,6 +188,7 @@ public static partial class ClassTableReconstruction
         var featureParts = levels.Select(_ => new List<TextLine>()).ToList();
         for (var r = 0; r < levels.Count; r++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (var cell in CandidateDetector.SameRow(lines, levels[r].Line))
             {
                 if (anchors.Contains(cell) || cell.X < tableLeft || cell.X >= cap)
@@ -223,6 +229,7 @@ public static partial class ClassTableReconstruction
         var lastBound = rowOf[^1].Y - 2.4 * pitch;
         foreach (var line in lines.Where(l => InFeatures(l) && l.Y < header.Y - tolerance && l.X >= tableLeft && !anchors.Contains(l)))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (rowOf.Any(a => Math.Abs(a.Y - line.Y) <= Math.Max(2.5, a.Height * 0.4)))
                 continue;
             var above = Enumerable.Range(0, rowOf.Count).Where(i => rowOf[i].Y > line.Y).DefaultIfEmpty(-1).Max();
@@ -253,7 +260,10 @@ public static partial class ClassTableReconstruction
 
         var values = levels.Select(_ => new string[columnCount]).ToList();
         foreach (var (row, line) in singles)
+        {
+            cancellationToken.ThrowIfCancellationRequested(); // NearestColumn scans every column per cell
             values[row][NearestColumn(Centre(line))] = NormaliseCell(line.Text);
+        }
         var digitWidth = DigitWidth(singles.Select(s => s.Line));
         foreach (var (row, line, tokens) in fused)
         {
@@ -268,6 +278,7 @@ public static partial class ClassTableReconstruction
         var labelParts = Enumerable.Range(0, columnCount).Select(_ => new List<(double Y, string Text)>()).ToList();
         foreach (var line in headerZone.Where(l => !IsDash(l.Text)))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (Math.Abs(Centre(line) - levelCentre) <= 6 || line.X + line.Width <= levelRight + 1)
                 continue;
             var covered = Enumerable.Range(0, columnCount).Where(c => CentreOf(c) >= line.X - 1 && CentreOf(c) <= line.X + line.Width + 1).ToList();
@@ -426,11 +437,12 @@ public static partial class ClassTableReconstruction
     }
 
     /// <summary>Every run of two or more consecutive levels (1st or 1) one above the other in one column.</summary>
-    private static List<List<(TextLine Line, int Level)>> LevelRuns(List<TextLine> lines)
+    private static List<List<(TextLine Line, int Level)>> LevelRuns(List<TextLine> lines, CancellationToken cancellationToken)
     {
         var clusters = new List<List<TextLine>>();
         foreach (var line in lines.Where(l => LevelCell().IsMatch(l.Text)).OrderBy(l => l.X))
         {
+            cancellationToken.ThrowIfCancellationRequested(); // each cell is compared with every cluster so far
             var home = clusters.FirstOrDefault(c => Math.Abs(Centre(c[0]) - Centre(line)) <= 5 || Math.Abs(c[0].X - line.X) <= 2);
             if (home is null)
                 clusters.Add([line]);
@@ -460,18 +472,18 @@ public static partial class ClassTableReconstruction
     }
 
     /// <summary>The longest run of consecutive levels (1st or 1) one above the other in one column, leftmost on a tie; at least three.</summary>
-    private static List<(TextLine Line, int Level)>? LevelColumn(List<TextLine> lines) =>
-        LevelRuns(lines).Where(r => r.Count >= 3).OrderByDescending(r => r.Count).ThenBy(r => r[0].Line.X).FirstOrDefault();
+    private static List<(TextLine Line, int Level)>? LevelColumn(List<TextLine> lines, CancellationToken cancellationToken) =>
+        LevelRuns(lines, cancellationToken).Where(r => r.Count >= 3).OrderByDescending(r => r.Count).ThenBy(r => r[0].Line.X).FirstOrDefault();
 
-    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?:[1-9]|1[0-9]|20)(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex LevelCell();
 
-    [GeneratedRegex(@"^(?<n>[1-9])(?:st|nd|rd|th)?$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^(?<n>[1-9])(?:st|nd|rd|th)?$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex OrdinalHeader();
 
-    [GeneratedRegex(@"^\+?[0-9]{1,3}$", RegexOptions.None, 100)]
+    [GeneratedRegex(@"^\+?[0-9]{1,3}$", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex NumberToken();
 
-    [GeneratedRegex(@"\S+", RegexOptions.None, 100)]
+    [GeneratedRegex(@"\S+", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex Words();
 }

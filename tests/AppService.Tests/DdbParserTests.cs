@@ -32,7 +32,7 @@ public class DdbParserTests
     [Fact]
     public void Every_layout_map_is_valid_names_only_known_semantics_and_its_patterns_compile()
     {
-        Assert.Equal(["ddb-2014", "ddb-2024"], LayoutMaps.All.Select(m => m.Id));
+        Assert.Equal(["ddb-2014", "ddb-2024", "wotc-2014"], LayoutMaps.All.Select(m => m.Id));
         Assert.All(LayoutMaps.All, map => Assert.Empty(LayoutMaps.Problems(map)));
         Assert.All(LayoutMaps.All, map => Assert.NotEmpty(map.Required));
     }
@@ -209,15 +209,18 @@ public class DdbParserTests
         new(id, 1, RulesFamilies.Srd51, required, fields, "Yes", []);
 
     [Fact]
-    public void Two_layouts_whose_required_names_are_all_present_in_equal_number_are_ambiguous_and_neither_is_picked()
+    public void Two_layouts_whose_required_names_are_all_present_are_ambiguous_unless_one_holds_the_others()
     {
+        // R72 (item 14): the larger set wins only when it contains every other match's set; otherwise the sheet is refused.
         var a = Custom(["fixture name", "fixture a"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-a");
         var b = Custom(["fixture name", "fixture b"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-b");
         var c = Custom(["fixture name", "fixture a", "fixture c"], new Dictionary<string, FieldRule> { ["fixture name"] = new("name") }, "fixture-c");
         FormField[] both = [new("fixture name", "text", 1, "Testy"), new("fixture a", "text", 1, ""), new("fixture b", "text", 1, "")];
+        FormField[] all = [.. both, new("fixture c", "text", 1, "")];
 
         Assert.Null(DdbParser.Recognise(both, [a, b]));
-        Assert.Equal("fixture-c", DdbParser.Recognise([.. both, new("fixture c", "text", 1, "")], [a, b, c])?.Id);
+        Assert.Null(DdbParser.Recognise(all, [a, b, c])); // c holds a, not b
+        Assert.Equal("fixture-c", DdbParser.Recognise(all, [a, c])?.Id); // a superset pair picks the larger
         Assert.Equal("fixture-a", DdbParser.Recognise(both, [a])?.Id);
     }
 

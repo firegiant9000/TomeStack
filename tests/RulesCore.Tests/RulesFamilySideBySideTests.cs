@@ -162,6 +162,27 @@ public class RulesFamilySideBySideTests
     }
 
     [Fact]
+    public void Bloodied_and_an_auto_toggle_behave_the_same_in_both_families()
+    {
+        // D38 (Q8): a display rule in both families, so no RulesFamilyPolicy field.
+        foreach (var family in new[] { RulesFamilies.Srd51, RulesFamilies.Srd521 })
+        {
+            var revision = ToggleAndCostTests.AutoRevision(family);
+            var catalog = ToggleAndCostTests.CatalogWith(revision);
+            var results = new[] { 21, 11, 10, 0 }
+                .Select(hp => CharacterCalculator.Calculate(ToggleAndCostTests.Hero(revision, hp), catalog))
+                .Select(s => (Bloodied: s.Bloodied == true, On: s.Toggles!.Single().On, Auto: s.Toggles!.Single().Auto == true, Ac: s.Field(FieldIds.ArmorClass).Value))
+                .ToArray();
+
+            Assert.Equal([false, false, true, true], results.Select(r => r.Bloodied));
+            Assert.Equal([false, false, true, true], results.Select(r => r.On));
+            Assert.All(results, r => Assert.True(r.Auto));
+            Assert.Equal(results[1].Ac + 2, results[2].Ac); // +2 Armor Class while bloodied, in this family too
+            Assert.Equal(results[2].Ac, results[3].Ac);
+        }
+    }
+
+    [Fact]
     public void Policy_differences_are_named_fields_not_inferred()
     {
         var p2014 = RulesFamilies.Get(RulesFamilies.Srd51);

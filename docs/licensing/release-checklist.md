@@ -2,19 +2,25 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) |
-|---|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) |
+|---|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided |
+
+## 0.6.0 re-check (2026-10-21)
+
+- **Dependencies:** no shipped dependency was added or changed since the `v0.5.0` tag. `src/Ui/package.json`, `src/Ui/package-lock.json`, `.config/dotnet-tools.json`, the workflows and the packing scripts are unchanged, and no package reference in a project file changed (the only project-file change copies a test fixture in `TomeStack.AppService.Tests`).
+- **`npm audit`: one high advisory, does not ship.** It is in Vite 8.3.1, a development-only package (`devDependencies`; the app ships the built `dist`, not Vite). Vite 8.3.0 to 8.3.2 bundles a `launch-editor` with three advisories (GHSA-587h-7wmj-h5pm, high; GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw, moderate), reachable only through the dev server's open-in-editor endpoint while `npm run dev` is running. It was already present in 0.5.0. Fix: Vite 8.3.3 or later, in a separate development-dependency change after this release.
+- **Trademark:** the same search as 0.5.0, over the changes since the `v0.5.0` tag in `src/` (excluding the SRD packs). The product name, window title, installer title, exe metadata and README tagline are unchanged. Every new "D&D Beyond" is one the 0.5.0 re-check already lists for 0.6.0: the layout names in the report, the importer's first step and its family-step hint quoting the override reason, and the texts written into a character made from a D&D Beyond sheet. The text importer and the fillable 2014 sheet write no "D&D Beyond" text. The first step's "TomeStack is not affiliated with D&D Beyond or Wizards of the Coast." stays. No new "Wizards of the Coast", "Dungeons", "fifth edition" or "5e".
 
 ## 0.5.0 re-check (2026-10-12)
 
 - **Dependencies:** no shipped dependency was added or changed since 0.4.0. No package reference in a project file changed (the only project-file change embeds the importer's layout maps), and `.config/dotnet-tools.json` is unchanged; the only `package-lock.json` change is `source-map-js` 1.2.1 → 1.2.2, a development-only package.
 - **Trademark:** the same search as 0.4.0, over `src/` (excluding build output, dependencies and the SRD packs).
   - The product name, window title, installer title, exe metadata and README tagline are unchanged: "TomeStack", "5E-compatible".
-  - **"D&D Beyond" is new in the product,** all of it from the character importer (D16): the sidebar's "Import from D&D Beyond PDF…", the importer's heading, steps and hints, the file picker title, two refusal messages, and two texts written into the characters it creates (the override reason "Imported from D&D Beyond" and the import gap-note text), which therefore also appear in prints and exports.
+  - **"D&D Beyond" is new in the product,** all of it from the character importer (D16): the sidebar's "Import from D&D Beyond PDF…", the importer's heading, steps and hints, the file picker title, two refusal messages, and two texts written into the characters it creates (the override reason "Imported from D&D Beyond" and the import gap-note text), which therefore also appear in prints and exports. (From 0.6.0 the sidebar entry reads "Import a character (sheet or text)…" (it read "Import a character sheet (PDF)…" before the text entry joined it, R133) because a second layout, the fillable 2014 sheet, uses the same flow; "D&D Beyond" then appears only in the first step's wording that names the export it reads, the not-affiliated line, the family step's hint that quotes the two override reasons, the layout's name in the report of a D&D Beyond sheet, and the three texts written into a character made from a D&D Beyond sheet (the override reason, the differing-number note and the import gap note). The file picker's title ("Character sheet") and the no-form refusal are neutral, and a character made from the fillable sheet gets no "D&D Beyond" text anywhere: "Imported from the character sheet", "The character sheet showed a different number here…" and "Not brought over from the character sheet: …" (tested in `WotcImportTests`). No Wizards logo or mark is used.)
   - **Decided (owner, 2026-10-12): keep it.** Every use names the source of the file being imported, as the Foundry export names `dnd5e`; none uses the mark as TomeStack's name or branding. The importer's first step now says "TomeStack is not affiliated with D&D Beyond or Wizards of the Coast." (tested in `DdbImportPanel.test.tsx`), and the 0.5.0 release notes say the same. This is an owner decision, not legal advice.
   - "Wizards of the Coast" otherwise appears only where it did in 0.4.0 (the SRD attribution and the non-affiliation statements).
 
@@ -96,12 +102,12 @@ Velopack (MIT, Caelan Sayler) builds `Setup.exe` and `Update.exe` in Rust, with 
 
 **Decided: a manual update.**
 - TomeStack never creates a Velopack `UpdateManager`, so it never checks for, downloads or applies updates (ADR-001: local-only, no network calls; ADR-006: no listening socket).
-- To update, the user downloads the newer `Setup.exe` from the release page and runs it. Velopack installs over the old version, the data folder is untouched, and a database upgrade backs it up first (ADR-008 R3).
+- To update, the user downloads the newer `Setup.exe` from the release page and runs it. Velopack installs over the old version, the data folder is untouched, and a database upgrade backs it up first (ADR-008 R3). Two copies can result on the first start of a new version: `tomestack.db.v<N>.bak` (the database at the version it was opened with, before a migration) and `tomestack.db.app-<from>-to-<to>.bak` (the database as the previous app version left it, before anything changes). A 0.5.0 folder has no version stamp, so opening it with 0.6.0 leaves `tomestack.db.v10.bak` and `tomestack.db.app-pre-0.6.0-to-0.6.0.bak`; both hold the database as 0.5.0 left it (version 10, before the move to 11).
 - The release still carries Velopack's `releases.win.json` and `.nupkg`. An opt-in update check could use them later, but that would need its own decision against ADR-001.
 
 ## Release procedure (owner)
 
-1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this.
+1. Merge the release PR. `Directory.Build.props`, the `## <version>` changelog heading and the tag must agree; the workflow checks this. (For 0.6.0 the `<Version>` bump to `0.6.0` is already done on the Wave 2 branch, ruling R130; the owner confirms it in the PR. Tagging and releasing stay the owner's.)
 2. Tag and push from an up-to-date `main`: `git tag -a v0.4.0 -m "TomeStack 0.4.0"`, then `git push origin v0.4.0`.
 3. The **Release** workflow (`.github/workflows/release.yml`) runs:
    1. the full gate;

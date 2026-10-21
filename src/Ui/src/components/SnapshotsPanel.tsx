@@ -172,7 +172,11 @@ export function SnapshotsPanel({ character, onChanged, onError, onStatus }: Prop
             {preview.playChanges ? 'Hit points, spent uses and conditions go back to the snapshot too.' : 'Play state is the same.'}
             {preview.nameAfter ? ` The name goes back to ${preview.nameAfter}.` : ''}
             {preview.exceptionsChange ? ' Recorded cross-family exceptions go back to the snapshot too.' : ''}
-            {preview.currencyAfter && preview.currencyNow ? ` Coins go back to ${coinsText(preview.currencyAfter)} (now ${coinsText(preview.currencyNow)}).` : ''} Its campaign stays as it is now.
+            {preview.currencyAfter && preview.currencyNow ? ` Coins go back to ${coinsText(preview.currencyAfter)} (now ${coinsText(preview.currencyNow)}).` : ''}
+            {(preview.detailsChange ?? []).length > 0 ? ` Details go back to the snapshot too: ${preview.detailsChange!.join(', ')}.` : ''}
+            {preview.customItemsChange ? ' Your own items go back to the snapshot too.' : ''}
+            {preview.customAttacksChange ? ' Your own attacks go back to the snapshot too.' : ''}
+            {preview.otherSheetValuesChange ? ' Experience points, damage resistances, companions, and attunement and charges spent on equipment go back to the snapshot too.' : ''} Its campaign stays as it is now.
           </p>
           {(preview.campaignWarnings ?? []).length > 0 && (
             <ul className="warnings" aria-label="Campaign warnings after the restore">

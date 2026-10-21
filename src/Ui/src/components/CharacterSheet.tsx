@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type {
@@ -17,8 +17,14 @@ import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { CompanionsPanel } from './CompanionsPanel';
+import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
+import { EntryGone, useSheetSave } from './sheetSave';
+import { DefencesPanel } from './DefencesPanel';
+import { DetailsPanel } from './DetailsPanel';
+import { ExperiencePanel } from './ExperiencePanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
@@ -226,8 +232,36 @@ interface Props {
   initialTab?: SheetTabId;
 }
 
-export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
+export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
   const { character, sheet } = view;
+  // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
+  // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
+  // the user was on stays, and what they typed stays in its field for them to apply again.
+  // R132: every sheet save goes through this one queue, each as an updater applied to the latest saved character.
+  // R188: play actions, Undo and a rest finish run in the same queue (`run`), so a save never starts from a stamp they replaced.
+  const { save: saveCharacter, adopt, run: runQueued } = useSheetSave(view);
+  const characterId = character.id;
+  // The wrapper's identity must not change when the app passes a new inline `onChanged`: panels list `onError` in their effect
+  // dependencies, so a new identity on every render would refetch (and loop on a failing fetch). It reads the props through a ref.
+  const latestProps = useRef({ reportError, onChanged, adopt });
+  useEffect(() => {
+    latestProps.current = { reportError, onChanged, adopt };
+  });
+  const onError = useCallback(
+    (error: unknown) => {
+      latestProps.current.reportError(error);
+      if (error instanceof TomeStackError && error.code === 'character.stale') {
+        client
+          .getCharacter(characterId)
+          .then((fresh) => {
+            latestProps.current.adopt(fresh); // unconditionally: the stored copy is the truth, whatever its stamp sorts like
+            return latestProps.current.onChanged(fresh);
+          })
+          .catch((failure: unknown) => latestProps.current.reportError(failure));
+      }
+    },
+    [characterId],
+  );
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
   const printButton = useRef<HTMLButtonElement>(null);
@@ -247,6 +281,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
   const [undo, setUndo] = useState<UndoEntry>();
+  // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
+  const [damageType, setDamageType] = useState('');
   const compactToggle = useRef<HTMLInputElement>(null);
   const [gapAbout, setGapAbout] = useState('');
   const gapText = useRef<HTMLTextAreaElement>(null);
@@ -301,6 +337,17 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   useEffect(() => {
     if (gapFocus > 0) gapText.current?.focus();
   }, [gapFocus]);
+  // Item 17: Stats lists languages and tools read-only; its link opens Notes and focuses the Details heading. A counter, like
+  // the gap focus, so a second press moves focus again.
+  const [detailsFocus, setDetailsFocus] = useState(0);
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (detailsFocus > 0) detailsHeading.current?.focus();
+  }, [detailsFocus]);
+  function editDetails() {
+    setTab('notes');
+    setDetailsFocus((n) => n + 1);
+  }
   const [pdfSources, setPdfSources] = useState<ReadonlySet<string>>(new Set());
 
   // ADR-005: which cited sources have an available PDF, so features can offer "Open page".
@@ -330,9 +377,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
   }
 
   async function changeOverride(field: string, change: FieldOverride | undefined) {
-    const overrides = [...character.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])];
     try {
-      onChanged(await client.saveCharacter({ ...character, overrides }));
+      onChanged(
+        await saveCharacter((latest) => ({
+          ...latest,
+          overrides: [...latest.overrides.filter((o) => o.field !== field), ...(change ? [change] : [])],
+        })),
+      );
     } catch (error) {
       onError(error);
     }
@@ -361,7 +412,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     const startedWhileRunning = running.current > 0;
     running.current += 1;
     try {
-      const after = await client.play(character.id, action);
+      const after = await runQueued(() => client.play(character.id, action), (reply) => reply.character);
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
@@ -385,18 +436,33 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     const refocus = () => {
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
-        steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
-          ? document.getElementById('hp-heading')
-          : concentrationOnly && current?.character.play?.concentration
-            ? document.getElementById('concentration-heading')
-            : null;
+        steps[0]?.action === 'companionSetHitPoints'
+          ? document.getElementById(`companion-${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card
+          : steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
+            ? document.getElementById('hp-heading')
+            : concentrationOnly && current?.character.play?.concentration
+              ? document.getElementById('concentration-heading')
+              : null;
       (target ?? compactToggle.current)?.focus();
     };
     // An Undo in flight counts as a running change, so a play change started meanwhile gets no entry.
     started.current += 1;
     running.current += 1;
     try {
-      for (const step of steps) current = await client.play(character.id, step);
+      // One queue entry for all the steps, so no save slips in between them. A step that fails after another succeeded still
+      // leaves that step's stamp as the latest.
+      await runQueued(
+        async () => {
+          try {
+            for (const step of steps) current = await client.play(character.id, step);
+          } catch (error) {
+            if (current) adopt(current);
+            throw error;
+          }
+          return current;
+        },
+        (reply) => reply?.character,
+      );
       if (current) onChanged(current);
     } catch (error) {
       // A step that succeeded before the failure has changed the character: show it, so the sheet is not stale.
@@ -473,6 +539,19 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       </section>
     );
 
+  // Item 17: a read-only list of the details' languages or tools; nothing when it is empty.
+  const detailList = (id: string, title: string, entries: readonly string[] = []) =>
+    entries.length === 0 ? null : (
+      <div>
+        <h4 id={`${id}-heading`}>{title}</h4>
+        <ul aria-labelledby={`${id}-heading`}>
+          {entries.map((entry, index) => (
+            <li key={`${index}-${entry}`}>{entry}</li>
+          ))}
+        </ul>
+      </div>
+    );
+
   return (
     <article className="panel sheet" aria-labelledby="sheet-heading">
       <header className="sheet-header">
@@ -521,6 +600,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             hitDice={sheet.hitDice ?? []}
             version={view}
             onError={onError}
+            run={(command) => runQueued(command, (reply) => reply.character)}
             onRoll={logRoll}
             onCancel={() => closeRest(resting)}
             onRested={(rested, applied) => {
@@ -613,7 +693,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </div>
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
-          <HitPointsPanel view={view} act={act} />
+          <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} />
           <DeathSavesPanel view={view} act={act} roll={roll} lastRoll={lastRoll} />
           <ConcentrationPanel view={view} act={act} roll={roll} />
           <ConditionsPanel view={view} act={act} />
@@ -621,7 +701,8 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           <ClassColumnsPanel view={view} />
         </div>
         <div className="play-column">
-          <ActionsPanel view={view} roll={roll} act={act} />
+          <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
+          <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>
       </TabPanel>
 
@@ -631,11 +712,11 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             view={view}
             act={act}
             roll={roll}
-            onSave={(changed) =>
-              client
-                .saveCharacter(changed)
+            rollMode={rollMode}
+            onSave={(update) =>
+              saveCharacter(update)
                 .then(onChanged)
-                .catch(onError)
+                .catch((error) => (error instanceof EntryGone ? onStatus(error.message) : onError(error)))
             }
           />
           {fieldGroup('Spellcasting', spellFields)}
@@ -643,8 +724,10 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
       )}
 
       <TabPanel idPrefix="sheet" id="inventory" active={active === 'inventory'}>
-        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} />
-        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} />
+        <EquipmentPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} act={act} />
+        <CustomItemsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
+        <CustomAttacksPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
+        <CurrencyPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="features" active={active === 'features'}>
@@ -659,11 +742,24 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
             sheet.fields.filter((f) => group.match(f.field)),
           ),
         )}
+        <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
+        <ExperiencePanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
+        {((character.details?.languages ?? []).length > 0 || (character.details?.toolsAndOther ?? []).length > 0) && (
+          <section aria-labelledby="stats-details-heading" className="field-group">
+            <h3 id="stats-details-heading">Languages and tools</h3>
+            {detailList('stats-languages', 'Languages', character.details?.languages)}
+            {detailList('stats-tools', 'Tools and other', character.details?.toolsAndOther)}
+            <button type="button" onClick={editDetails}>
+              Edit in Notes → Details
+            </button>
+          </section>
+        )}
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="notes" active={active === 'notes'}>
-        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} />
+        <SessionNotesPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         <GapNotesPanel view={view} onError={onError} onStatus={onStatus} about={gapAbout} onAboutChange={setGapAbout} textRef={gapText} />
+        <DetailsPanel view={view} onChanged={onChanged} onError={onError} onStatus={onStatus} headingRef={detailsHeading} shown={active === 'notes'} saveCharacter={saveCharacter} />
       </TabPanel>
 
       <TabPanel idPrefix="sheet" id="manage" active={active === 'manage'}>

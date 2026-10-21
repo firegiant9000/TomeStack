@@ -10,12 +10,19 @@ namespace TomeStack.RulesCore;
 public sealed class DraftOverlayCatalog : IContentCatalog
 {
     private readonly IContentCatalog _inner;
+    private readonly SourceRecord? _source;
 
-    public DraftOverlayCatalog(IContentCatalog inner, ContentRevision draft)
+    /// <param name="source">
+    /// Item 15 (D35): the draft's source when it is not stored yet (the import's stub class, whose source is written only at
+    /// apply). Found by its id, in memory only; every other source comes from <paramref name="inner"/>. Null (the sandbox and
+    /// compare) changes nothing.
+    /// </param>
+    public DraftOverlayCatalog(IContentCatalog inner, ContentRevision draft, SourceRecord? source = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(draft);
         _inner = inner;
+        _source = source;
         Draft = draft with { Status = RevisionStatus.Published };
     }
 
@@ -24,7 +31,7 @@ public sealed class DraftOverlayCatalog : IContentCatalog
 
     public ContentRevision? FindRevision(ContentReference reference) => reference == Draft.Reference ? Draft : _inner.FindRevision(reference);
 
-    public SourceRecord? FindSource(Guid sourceId) => _inner.FindSource(sourceId);
+    public SourceRecord? FindSource(Guid sourceId) => _inner.FindSource(sourceId) ?? (_source?.Id == sourceId ? _source : null);
 
     public IEnumerable<ContentRevision> ChoiceExtensions(Guid contentId, string choiceId) =>
         _inner.ChoiceExtensions(contentId, choiceId)

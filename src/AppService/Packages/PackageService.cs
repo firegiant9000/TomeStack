@@ -119,7 +119,7 @@ public sealed partial class PackageService(SqliteStore store, TimeProvider time,
         if (tooLarge.Count > 0)
         {
             throw new PackageException(
-                [new("package.entry-too-large", $"'{tooLarge[0]}' is larger than a package entry can be ({MaxEntryBytes / (1024 * 1024)} MB), so a package holding it could not be imported. Nothing was written. For a character, shorten its session notes.")]);
+                [new("package.entry-too-large", $"'{tooLarge[0]}' is larger than a package entry can be ({MaxEntryBytes / (1024 * 1024)} MB), so a package holding it could not be imported. Nothing was written. For a character, shorten the long text it holds (its journal, backstory and other details).")]);
         }
     }
 

@@ -205,6 +205,33 @@ public class SrdClassTableTests(ITestOutputHelper output)
         Assert.True(failures.Count == 0, string.Join("; ", failures));
     }
 
+    /// <summary>
+    /// Wave 0/1 minor (R81): the "add spellcasting by hand" note is for a class whose table has no spell slot columns. On both SRDs
+    /// no class is in that state: every caster's table is read with its slot columns, and a non-caster never mentions spellcasting.
+    /// Counts only, never names.
+    /// </summary>
+    [SrdPdfFact]
+    public async Task No_SRD_class_gets_the_add_spellcasting_by_hand_note()
+    {
+        const string Note = "add spellcasting by hand";
+        var failures = new List<string>();
+        foreach (var (family, file, _, version) in Pdfs)
+        {
+            var pages = new List<DetectionPage>();
+            await foreach (var item in new PdfPigExtractor().ExtractAsync(Path.Combine(Folder!, file), PageScope.WholeDocument, CancellationToken.None))
+            {
+                if (item is ExtractedPage page)
+                    pages.Add(new(page.PageNumber, page.Text, page.Blocks ?? [], page.FromOcr));
+            }
+            var classes = CandidateDetector.Detect(pages, new(Guid.NewGuid(), [family], _ => false)).Where(c => c.ProposedKind == ContentKind.Class).ToList();
+            var noted = classes.Count(c => c.Uncertainties.Any(u => u.Contains(Note, StringComparison.OrdinalIgnoreCase)));
+            output.WriteLine($"{version}: classes {classes.Count}, with the slotless note {noted}");
+            Assert.NotEmpty(classes);
+            if (noted != 0) failures.Add($"{version} {noted} of {classes.Count} classes carry the slotless note");
+        }
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
     /// <summary>The table names a feature with a qualifier ("Rage (2 dice)") or in the plural where the pack does not.</summary>
     private static bool SameFeature(string tableName, string packName)
     {

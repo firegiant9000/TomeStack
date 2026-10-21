@@ -226,7 +226,8 @@ public class FormReaderTests
     {
         var refused = Refused(FixturePdfs.Pages(2));
         Assert.Equal("ddb.no-form-fields", refused.Code);
-        Assert.Contains("Export the sheet again", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.", refused.Message);
+        Assert.DoesNotContain("Beyond", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -266,6 +267,44 @@ public class FormReaderTests
         Assert.Equal("ddb.value-too-long", refused.Code);
         Assert.DoesNotContain("Fixture value", refused.Message, StringComparison.Ordinal);
         Assert.Single(Read(Write([new("fixture.long", value)]), form: new FormLimits { MaxValueChars = value.Length }));
+    }
+
+    [Fact]
+    public void A_clip_field_over_the_value_limit_is_cut_and_flagged_and_a_plain_field_is_still_refused()
+    {
+        // Item 14, R78: the layout's free-text names are cut to the limit instead of failing the whole read.
+        var form = new FormLimits { MaxValueChars = 20, ClipFields = ["Fixture Prose "] };
+        var pdf = Write([new("Fixture Prose ", new string('F', 30)), new("Fixture Plain", "short"), new("Fixture Exact ", "Testy")]);
+
+        var fields = Read(pdf, form: form);
+
+        var prose = fields.Single(f => f.Name == "Fixture Prose ");
+        Assert.Equal(new string('F', 20), prose.Value);
+        Assert.True(prose.Clipped);
+        Assert.All(fields.Where(f => f.Name != "Fixture Prose "), f => Assert.False(f.Clipped));
+
+        var plain = Refused(Write([new("Fixture Plain", new string('F', 30))]), form: form);
+        Assert.Equal("ddb.value-too-long", plain.Code);
+        Assert.DoesNotContain("FFFF", plain.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_clip_name_matches_exactly_so_a_name_without_its_trailing_space_is_still_refused()
+    {
+        var form = new FormLimits { MaxValueChars = 20, ClipFields = ["Fixture Prose "] };
+        Assert.Equal("ddb.value-too-long", Refused(Write([new("Fixture Prose", new string('F', 30))]), form: form).Code);
+    }
+
+    [Fact]
+    public void A_clip_field_at_the_limit_is_not_flagged_and_a_clip_never_splits_a_surrogate_pair()
+    {
+        var form = new FormLimits { MaxValueChars = 20, ClipFields = ["Fixture Prose"] };
+        Assert.False(Read(Write([new("Fixture Prose", new string('F', 20))]), form: form).Single().Clipped);
+
+        var cut = Read(Write([new("Fixture Prose", new string('F', 19) + "\U0001F600" + "tail")]), form: form).Single();
+
+        Assert.True(cut.Clipped);
+        Assert.Equal(new string('F', 19), cut.Value);
     }
 
     [Fact]
@@ -338,7 +377,7 @@ public class FormReaderTests
     [Fact]
     public void The_fixture_sheets_read_exactly_as_generated()
     {
-        foreach (var (pdf, specs) in new[] { (FixtureSheets.Sheet2014(), FixtureSheets.Fields2014), (FixtureSheets.Sheet2024(), FixtureSheets.Fields2024) })
+        foreach (var (pdf, specs) in new[] { (FixtureSheets.Sheet2014(), FixtureSheets.Fields2014), (FixtureSheets.Sheet2024(), FixtureSheets.Fields2024), (FixtureSheets.SheetWotc2014(), FixtureSheets.FieldsWotc2014) })
         {
             var expected = specs.Select(s => s.Checked is { } on
                 ? new FormField(s.Name, "checkbox", s.Page, Checked: on, OnState: "Yes")
@@ -361,6 +400,40 @@ public class FormReaderTests
             File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-ddb-sheet.pdf"), generated);
         }
         Assert.Equal(Read(generated), AcroFormReader.Read(FixtureSheets.CommittedPath, Sheet, FormLimits.Default));
+    }
+
+    [Fact]
+    public void The_committed_wotc_fixture_sheet_has_exactly_the_generators_fields()
+    {
+        // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-wotc-sheet.pdf). The names are the
+        // wotc-2014 layout map's, invented values only; regenerate when the map or the generator changes.
+        var generated = FixtureSheets.SheetWotc2014();
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-wotc-sheet.pdf"), generated);
+        }
+        Assert.Equal(Read(generated), AcroFormReader.Read(FixtureSheets.WotcCommittedPath, Sheet, FormLimits.Default));
+        Assert.Equal(generated, File.ReadAllBytes(FixtureSheets.WotcCommittedPath));
+    }
+
+    [Fact]
+    public void The_committed_tinkerer_fixture_sheet_has_exactly_the_generators_fields()
+    {
+        // Regenerate with TOMESTACK_WRITE_FIXTURES=1 (writes tests/RulesFixtures/pdf/fixture-tinkerer-sheet.pdf): the fillable
+        // 2014 fixture with a class TomeStack does not have, for the stub-class e2e flow (item 15).
+        var generated = FixtureSheets.SheetTinkerer();
+        if (Environment.GetEnvironmentVariable("TOMESTACK_WRITE_FIXTURES") == "1")
+        {
+            var repo = new DirectoryInfo(AppContext.BaseDirectory);
+            while (!File.Exists(Path.Combine(repo.FullName, "TomeStack.slnx")))
+                repo = repo.Parent!;
+            File.WriteAllBytes(Path.Combine(repo.FullName, "tests", "RulesFixtures", "pdf", "fixture-tinkerer-sheet.pdf"), generated);
+        }
+        Assert.Equal(Read(generated), AcroFormReader.Read(FixtureSheets.TinkererCommittedPath, Sheet, FormLimits.Default));
+        Assert.Equal(generated, File.ReadAllBytes(FixtureSheets.TinkererCommittedPath));
     }
 
     [Fact]

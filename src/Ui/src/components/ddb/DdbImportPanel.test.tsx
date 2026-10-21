@@ -7,11 +7,13 @@ import { client } from '../../api/client';
 import { TomeStackError } from '../../api/transport';
 import type { DdbPreview, DdbReadResult, MatchRow, RulesFamilyPolicy } from '../../api/types';
 import { DdbImportPanel } from './DdbImportPanel';
+import { DdbSummaryStep } from './DdbSummaryStep';
 
 vi.mock('../../api/client', () => ({
   client: {
     ddbRead: vi.fn(),
     ddbReadData: vi.fn(),
+    ddbReadText: vi.fn(),
     ddbPreview: vi.fn(),
     ddbApply: vi.fn(),
     ddbDiscard: vi.fn(),
@@ -93,8 +95,9 @@ afterEach(() => {
 function renderPanel() {
   const onCancel = vi.fn();
   const onCreated = vi.fn();
-  render(<DdbImportPanel rulesFamilies={families} onError={vi.fn()} onCancel={onCancel} onCreated={onCreated} />);
-  return { onCancel, onCreated };
+  const onError = vi.fn();
+  render(<DdbImportPanel rulesFamilies={families} onError={onError} onCancel={onCancel} onCreated={onCreated} />);
+  return { onCancel, onCreated, onError };
 }
 
 async function toMatches(user: ReturnType<typeof userEvent.setup>) {
@@ -211,7 +214,7 @@ it('falls back to a file input when the host has no dialog', async () => {
   renderPanel();
 
   await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
-  await user.upload(screen.getByLabelText('D&D Beyond PDF file'), new File([new Uint8Array([37, 80, 68, 70])], 'fixture.pdf', { type: 'application/pdf' }));
+  await user.upload(screen.getByLabelText('Character sheet PDF file'), new File([new Uint8Array([37, 80, 68, 70])], 'fixture.pdf', { type: 'application/pdf' }));
 
   await waitFor(() => expect(client.ddbReadData).toHaveBeenCalledWith('fixture.pdf', 'JVBERg=='));
   expect(await screen.findByRole('button', { name: 'Next: rules' })).toBeTruthy();
@@ -511,4 +514,695 @@ it('discards the token of a read that resolves after Cancel', async () => {
 
   pending.resolve(read);
   await waitFor(() => expect(client.ddbDiscard).toHaveBeenCalledWith('fixture-token'));
+});
+
+// ---- item 14: one entry for D&D Beyond exports and the fillable 2014 sheet ----
+
+it('titles the import as a sheet or text import (R133) and names the layout it read in words', async () => {
+  vi.mocked(client.ddbRead).mockResolvedValue({ ...read, layout: 'wotc-2014', layoutName: 'the fillable 2014 sheet' });
+  const user = userEvent.setup();
+  renderPanel();
+
+  expect(screen.getByRole('heading', { name: 'Import a character (sheet or text)', hidden: true })).toBeTruthy();
+  // Step 1's first line names both entries: a fillable sheet PDF, or pasted text or a .txt/.md file.
+  expect(screen.getByText(/a fillable character sheet PDF.*pasted text or a \.txt or \.md file/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+
+  const layout = (await screen.findByText('Layout')).nextElementSibling;
+  expect(layout?.textContent).toBe('the fillable 2014 sheet');
+  // The id is the fallback for a build that sends no name.
+  expect(screen.queryByText('wotc-2014')).toBeNull();
+});
+
+it.each([
+  ['D&D Beyond 2014', 'D&D Beyond 2014'],
+  ['the fillable 2014 sheet', 'the fillable 2014 sheet'],
+])('names the layout %s in the summary step', (layoutName, shown) => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep
+      family="srd-5.1"
+      suggested="srd-5.1"
+      includePlayState={false}
+      onIncludePlayState={vi.fn()}
+      publishClass={false}
+      onPublishClass={vi.fn()}
+      preview={{ ...base, report: { ...base.report, layoutName } }}
+    />,
+  );
+
+  expect(screen.getByText('Layout read').nextElementSibling?.textContent).toBe(shown);
+});
+
+it('leaves the layout row out of the summary when the build sends no layout name', () => {
+  const base = preview(true);
+  render(
+    <DdbSummaryStep family="srd-5.1" suggested="srd-5.1" includePlayState={false} onIncludePlayState={vi.fn()} publishClass={false} onPublishClass={vi.fn()} preview={{ ...base, report: { ...base.report, layoutName: undefined } }} />,
+  );
+
+  expect(screen.queryByText('Layout read')).toBeNull();
+});
+
+it('shows the report lines of the summary step, and nothing when the sheet gave none', () => {
+  const base = preview(true);
+  const props = { family: 'srd-5.1' as const, suggested: 'srd-5.1' as const, includePlayState: false, onIncludePlayState: vi.fn(), publishClass: false, onPublishClass: vi.fn() };
+  const { rerender } = render(<DdbSummaryStep {...props} preview={base} />);
+  expect(screen.queryByRole('heading', { name: 'From reading the sheet' })).toBeNull();
+
+  const lines = ['Backstory was cut to 20,000 characters.', 'Weapon row 3: the attack bonus could not be read, so the row is in the import note only.'];
+  rerender(<DdbSummaryStep {...props} preview={{ ...base, report: { ...base.report, layoutName: 'the fillable 2014 sheet', lines } }} />);
+
+  const section = screen.getByRole('region', { name: 'From reading the sheet' });
+  expect(within(section).getAllByRole('listitem').map((li) => li.textContent)).toEqual(lines);
+});
+
+// ---- D35: the import's stub class ----
+
+const stubRow: MatchRow = { rowId: 'class:0', kind: 'class', label: 'Fixture Tinkerer 3', status: 'notFound', candidates: [] };
+const stubReview = { rowId: 'class:0', name: 'Fixture Tinkerer', rulesFamily: 'srd-5.1' as const, hitDie: 8, saves: ['str', 'con'], sourceTitle: 'Characters imported from sheets' };
+
+/** A preview whose only class row is not installed; `note` makes the offer unavailable (R100 or a hit die that cannot be read). */
+function stubPreview(creating: boolean, note: 'stub.one-per-import' | 'stub.hit-die-unreadable' | null = null): DdbPreview {
+  const base = preview(true);
+  const matched: MatchRow = { ...stubRow, status: 'matched', note: 'stub.created', candidates: [candidate(7, 'Fixture Tinkerer')], chosen: candidate(7, 'Fixture Tinkerer') };
+  return {
+    ...base,
+    matches: [creating ? matched : stubRow],
+    stubOffers: [{ rowId: 'class:0', name: 'Fixture Tinkerer', hitDie: note ? null : 8, note }],
+    stub: creating ? stubReview : null,
+    canApply: creating,
+  };
+}
+
+const wantsStub = (request: { createClassRow?: string }) => request.createClassRow === 'class:0';
+
+async function toStubMatches(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: matches' }));
+  await screen.findByRole('heading', { name: 'Matches' });
+}
+
+async function toStubSummary(user: ReturnType<typeof userEvent.setup>) {
+  await toStubMatches(user);
+  await user.click(await screen.findByRole('checkbox', { name: /Create a homebrew class/ }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+}
+
+it('offers to create a homebrew class for an uninstalled class and sends the row with the preview', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubMatches(user);
+
+  const box = await screen.findByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ });
+  expect(box.checked).toBe(false);
+  await user.click(box);
+
+  await waitFor(() => expect(client.ddbPreview).toHaveBeenLastCalledWith(expect.objectContaining({ createClassRow: 'class:0' })));
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: /Create a homebrew class/ }));
+});
+
+it('holds a second class: aria-disabled, still focusable, with its reason linked, and a click changes nothing (R100)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => stubPreview(false, 'stub.one-per-import'));
+  renderPanel();
+  await toStubMatches(user);
+
+  const box = await screen.findByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ });
+  expect(box.getAttribute('aria-disabled')).toBe('true');
+  expect(box.disabled).toBe(false);
+  const reason = document.getElementById(box.getAttribute('aria-describedby')!);
+  expect(reason?.textContent).toContain('One class per import can be created here; the others become gap notes.');
+
+  const calls = vi.mocked(client.ddbPreview).mock.calls.length;
+  await user.click(box);
+  expect(box.checked).toBe(false);
+  expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(calls);
+});
+
+it('says why a class cannot be created when its hit die cannot be read', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => stubPreview(false, 'stub.hit-die-unreadable'));
+  renderPanel();
+  await toStubMatches(user);
+
+  const box = await screen.findByRole('checkbox', { name: /Create a homebrew class Fixture Tinkerer/ });
+  expect(box.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(box.getAttribute('aria-describedby')!)?.textContent).toContain('hit dice total');
+});
+
+it('shows the stub in full on the summary, leaves Publish it unticked and says the class is a draft', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  vi.mocked(client.ddbApply).mockResolvedValue({ characterId: 'new-id', overrides: 0, gapNotes: 0, gapNotesNotStored: 0, report: preview(true).report, createdClass: 'class-id' });
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  const text = section.textContent ?? '';
+  for (const part of ['Fixture Tinkerer', 'srd-5.1', 'd8', 'Strength, Constitution', 'Characters imported from sheets']) expect(text).toContain(part);
+  const publish = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  expect(publish.checked).toBe(false);
+  expect(within(section).getByRole('note').textContent).toBe('The class is a draft: the character gets nothing from it until you publish it in the studio and accept the update on the character.');
+
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]).toEqual([expect.objectContaining({ createClassRow: 'class:0' }), false, false, false]); // the last is the publish choice the shown preview was calculated for (R141)
+});
+
+it('sends publishClass true once Publish it is ticked, and the draft line goes away', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  expect(screen.queryByText(/The class is a draft/)).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(true);
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[3]).toBe(true); // the displayed preview was calculated with the class published (R141)
+});
+
+it('re-previews when Publish it is toggled (R129) and holds both publish ticks, with a linked reason and focus kept, until the new preview is in', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(false);
+  expect(tick.getAttribute('aria-disabled')).toBeNull();
+
+  const pending = deferred<DdbPreview>();
+  vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
+  await user.click(tick);
+
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].publishClass).toBe(true));
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  expect(held.getAttribute('aria-disabled')).toBe('true');
+  expect(held.disabled).toBe(false);
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  expect(document.activeElement).toBe(held);
+  const calls = vi.mocked(client.ddbPreview).mock.calls.length;
+  await user.click(held); // a click while held changes nothing
+  expect(held.checked).toBe(true);
+  expect(vi.mocked(client.ddbPreview).mock.calls.length).toBe(calls);
+
+  pending.resolve(stubPreview(true));
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).getAttribute('aria-disabled')).toBeNull());
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+});
+
+it('puts Publish it back to unticked whenever the created class is cleared or chosen again', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
+  await user.click(screen.getByRole('button', { name: 'Back' })); // matches
+  await user.click(await screen.findByRole('checkbox', { name: /Create a homebrew class/ })); // clear it
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(false));
+  await user.click(screen.getByRole('checkbox', { name: /Create a homebrew class/ })); // choose it again
+  await waitFor(() => expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Create a homebrew class/ }).checked).toBe(true));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(false);
+});
+
+/** A second, ambiguous class row whose choice decides the stub's hit die: the first candidate leaves d8, the second makes d10. */
+function twoClassStubPreview(request: { createClassRow?: string; resolutions?: { rowId: string; chosen?: { contentId: string } }[] }): DdbPreview {
+  const base = stubPreview(wantsStub(request));
+  const picked = (request.resolutions ?? []).find((r) => r.rowId === 'class:1');
+  const second: MatchRow = {
+    rowId: 'class:1',
+    kind: 'class',
+    label: 'Fixture Arcanist 2',
+    status: picked ? 'matched' : 'choose',
+    candidates: [candidate(5, 'Fixture Arcanist'), candidate(6, 'Fixture Arcanist')],
+  };
+  const d10 = picked?.chosen?.contentId === ref(6).contentId;
+  return { ...base, matches: [...base.matches, second], stub: base.stub ? { ...base.stub, hitDie: d10 ? 10 : 8 } : null };
+}
+
+async function backToMatches(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Back' })); // numbers
+  await user.click(screen.getByRole('button', { name: 'Back' })); // matches
+}
+
+async function forwardToSummary(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+}
+
+it('puts Publish it back to unticked when another class row changes the hit die of the reviewed class', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(true);
+
+  await backToMatches(user);
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1'); // d8 becomes d10
+  await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
+  await forwardToSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(section.textContent).toContain('d10');
+  expect(within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish it' }).checked).toBe(false);
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[1]).toBe(false);
+});
+
+it('keeps Publish it as the user set it when a change elsewhere leaves the reviewed class identical', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => twoClassStubPreview(request));
+  renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish it' }));
+
+  await backToMatches(user);
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '0'); // still d8
+  await waitFor(() => expect(vi.mocked(client.ddbPreview)).toHaveBeenLastCalledWith(expect.objectContaining({ resolutions: [expect.objectContaining({ rowId: 'class:1' })] })));
+  await forwardToSummary(user);
+
+  expect((await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' })).checked).toBe(true);
+});
+
+it('holds Next while the shown preview is not for the current choices, also after a failed re-preview, and a retry frees it', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return twoClassStubPreview(request);
+  });
+  renderPanel();
+  await toStubSummary(user);
+  await backToMatches(user);
+  failing = true;
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Match for Fixture Arcanist 2' }), '1');
+
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Fixture preview failed.');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(true);
+
+  failing = false;
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Next: numbers' }).disabled).toBe(false));
+});
+
+it('holds Create after a failed re-preview on the summary, never applies, and a retry frees it', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return twoClassStubPreview(request);
+  });
+  renderPanel();
+  await toStubSummary(user);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+
+  failing = true;
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  const alert = await screen.findByRole('alert');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  expect(client.ddbApply).not.toHaveBeenCalled();
+
+  failing = false;
+  await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+});
+
+it('frees the publish tick after a failed re-preview (Create stays held) and keeps its reason in one place, so nothing shifts (R142)', async () => {
+  const user = userEvent.setup();
+  let failing = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => {
+    if (failing) throw new TomeStackError({ code: 'fixture.failed', message: 'Fixture preview failed.' });
+    return stubPreview(wantsStub(request));
+  });
+  renderPanel();
+  await toStubSummary(user);
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish it' });
+  const slot = document.getElementById('ddb-publish-held-class');
+  expect(slot).not.toBeNull(); // the reason's place exists before anything is held
+  expect(slot!.textContent).toBe('');
+
+  failing = true;
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(true);
+  expect(tick.getAttribute('aria-disabled')).toBeNull(); // not loading any more: the tick is free
+  expect(document.getElementById('ddb-publish-held-class')).toBe(slot); // the same node, never inserted or removed
+  expect(slot!.textContent).toBe('');
+});
+
+it('says on the summary that the created class lives in a source that is never shared, and how to share one (D35)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(section.textContent).toContain('It lives in a source that is never shared, so your later work on it cannot be shared or moved; to share your own version, make a new class.');
+});
+
+it('Cancel with a class chosen discards the sheet and never applies', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  const { onCancel } = renderPanel();
+  await toStubMatches(user);
+  await user.click(await screen.findByRole('checkbox', { name: /Create a homebrew class/ }));
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  expect(client.ddbDiscard).toHaveBeenCalledWith('fixture-token');
+  expect(client.ddbApply).not.toHaveBeenCalled();
+  expect(onCancel).toHaveBeenCalled();
+});
+
+// ---- Item 16 (D16(c)): reference drafts for unmatched feats and features ----
+
+function draftInfo(index: number, kind: 'feat' | 'feature' = 'feature') {
+  return { rowId: `${kind}:${index}`, kind, name: `Fixture Knack ${index}`, firstLine: `Fixture first line ${index}.`, length: 40 };
+}
+
+/** A summary-ready preview that also lists `count` reference drafts. */
+function draftsPreview(count: number, offset = 0): DdbPreview {
+  return { ...stubPreview(true), referenceDrafts: Array.from({ length: count }, (_, i) => draftInfo(i + offset)) };
+}
+
+it('lists the reference drafts on the summary with an unticked Publish tick, the first 10 and "and N more"', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(13));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(within(section).getAllByRole('listitem')).toHaveLength(11);
+  expect(section.textContent).toContain('Fixture Knack 0');
+  expect(section.textContent).toContain('Fixture first line 0.');
+  expect(section.textContent).not.toContain('Fixture Knack 10');
+  expect(section.textContent).toContain('and 3 more');
+  const tick = within(section).getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 13 reference drafts' });
+  expect(tick.checked).toBe(false);
+  expect(within(section).getByRole('note').textContent).toContain('Features are kept as reference content in the studio; the gap notes stay on the character.');
+});
+
+it('shows no reference section when the import has no drafts', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => stubPreview(wantsStub(request)));
+  renderPanel();
+  await toStubSummary(user);
+
+  await screen.findByRole('region', { name: 'Homebrew class to create' });
+  expect(screen.queryByRole('region', { name: 'Reference drafts' })).toBeNull();
+});
+
+it('sends publishReferences true only once the tick is given, and false otherwise', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  // the consent token: the row ids the summary showed
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toEqual(['feature:0', 'feature:1']);
+});
+
+it('says in one sentence, before Create, that the campaign does not allow the source the drafts are saved in', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => ({ ...draftsPreview(2), referenceNote: 'campaign.source-not-allowed' }));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(within(section).getAllByRole('note').map((n) => n.textContent)).toContain(
+    "This character's campaign does not allow the source these drafts are saved in. A published feat is still pinned.",
+  );
+});
+
+it('has no campaign sentence when the service gives no note', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  const section = await screen.findByRole('region', { name: 'Reference drafts' });
+  expect(section.textContent).not.toContain('campaign');
+  expect(section.textContent).toContain('Published feats (if any) are pinned on the character.');
+});
+
+it('sends publishReferences false when the tick is left alone', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(2));
+  renderPanel();
+  await toStubSummary(user);
+
+  await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' });
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(client.ddbApply).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.ddbApply).mock.calls[0]?.[2]).toBe(false);
+});
+
+it('puts the reference tick back to unticked when the set of drafts shown changes, and keeps focus on the tick', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async (request) => draftsPreview(request.includePlayState ? 3 : 2));
+  renderPanel();
+  await toStubSummary(user);
+
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  await user.click(tick);
+  expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' }).checked).toBe(true);
+  expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+
+  await user.click(screen.getByRole('checkbox', { name: /Bring over current hit points/ }));
+  const changed = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  expect(changed.checked).toBe(false);
+});
+
+it('uses the singular for one reference draft', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(1));
+  renderPanel();
+  await toStubSummary(user);
+
+  expect(await screen.findByRole('checkbox', { name: 'Publish this reference draft' })).toBeTruthy();
+});
+
+it('after ddb.references-changed unticks the publish tick, keeps the error and asks for a new preview so the new set is reviewed', async () => {
+  const user = userEvent.setup();
+  let changed = false;
+  vi.mocked(client.ddbPreview).mockImplementation(async () => draftsPreview(changed ? 3 : 2));
+  vi.mocked(client.ddbApply).mockRejectedValueOnce(new TomeStackError({ code: 'ddb.references-changed', message: 'Fixture: the drafts changed.' }));
+  const { onError } = renderPanel();
+  await toStubSummary(user);
+  await user.click(await screen.findByRole('checkbox', { name: 'Publish these 2 reference drafts' }));
+  const previews = vi.mocked(client.ddbPreview).mock.calls.length;
+  changed = true;
+  const pending = deferred<DdbPreview>();
+  vi.mocked(client.ddbPreview).mockReturnValueOnce(pending.promise);
+
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+
+  await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  expect((onError.mock.calls[0]![0] as TomeStackError).code).toBe('ddb.references-changed');
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.calls.length).toBeGreaterThan(previews));
+  // R129: while the new set is on its way, the tick is held (aria-disabled, reason linked) and the old set cannot be ticked again.
+  const held = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Publish these 2 reference drafts' });
+  expect(held.getAttribute('aria-disabled')).toBe('true');
+  expect(held.disabled).toBe(false);
+  expect(document.getElementById(held.getAttribute('aria-describedby')!)?.textContent).toContain('publish choices wait');
+  await user.click(held);
+  expect(held.checked).toBe(false);
+
+  pending.resolve(draftsPreview(3));
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Publish these 3 reference drafts' });
+  expect(tick.checked).toBe(false);
+  expect(tick.getAttribute('aria-disabled')).toBeNull();
+});
+
+// Item 19a (D37): character import from pasted or file text.
+const textRead: DdbReadResult = { ...read, layout: 'text', layoutName: 'pasted or file text', summary: { ...read.summary, notRead: 2 } };
+
+function notReadPreview(): DdbPreview {
+  return { ...preview(true), notRead: [{ line: 3, text: '<b>Fixture odd line</b>' }, { line: 9, text: 'Another fixture line' }] };
+}
+
+async function openText(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Import a character from text…' }));
+  return screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' });
+}
+
+async function textToSummary(user: ReturnType<typeof userEvent.setup>) {
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: rules' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: matches' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: numbers' }));
+  await user.click(await screen.findByRole('button', { name: 'Next: summary' }));
+}
+
+it('opens a labelled textarea, moves focus into it, and returns focus to the button on close', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const button = screen.getByRole('button', { name: 'Import a character from text…' });
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  const box = await openText(user);
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  await waitFor(() => expect(document.activeElement).toBe(box));
+  expect(box.maxLength).toBe(-1);
+  await user.click(button);
+  expect(screen.queryByRole('textbox', { name: 'Character text' })).toBeNull();
+  expect(document.activeElement).toBe(button);
+});
+
+it('says the text itself is not kept and that unreadable lines become session notes if the tick stays on (R131)', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const hint = screen.getByText(/lists any line it could not read/).textContent ?? '';
+  expect(hint).toContain("The text itself isn't kept. Lines that can't be read become session notes if you keep the tick.");
+  expect(hint).not.toContain('read once');
+});
+
+it('names what is not kept by the source it was read from, and never says "read once" (R131)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  renderPanel();
+  const header = () => screen.getByText(/^Step \d of 5\./).textContent ?? '';
+  expect(header()).toContain("The PDF or text itself isn't kept.");
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await screen.findByText('pasted or file text');
+  expect(header()).toContain("The text itself isn't kept.");
+  expect(header()).not.toContain('PDF');
+  expect(header()).not.toContain('read once');
+  cleanup();
+
+  renderPanel();
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await screen.findByText('ddb-2014');
+  expect(header()).toContain("The PDF itself isn't kept.");
+  expect(header()).not.toContain('read once');
+});
+
+it('names the source by how it was chosen, not by the layout read, and step 1 says nothing of "once" (R143)', async () => {
+  const user = userEvent.setup();
+  const header = () => screen.getByText(/^Step \d of 5\./).textContent ?? '';
+  // A PDF with no form fields comes back with the text layout; it is still a PDF.
+  vi.mocked(client.ddbRead).mockResolvedValue({ ...read, layout: 'text', layoutName: 'text layout of a PDF' });
+  renderPanel();
+  expect(screen.getByText(/Choose a fillable character sheet PDF/).textContent).not.toMatch(/\bonce\b/);
+  await user.click(screen.getByRole('button', { name: 'Choose PDF…' }));
+  await screen.findByText('text layout of a PDF');
+  expect(header()).toContain("The PDF itself isn't kept.");
+  cleanup();
+
+  // Pasted text is text whatever layout id the service names.
+  vi.mocked(client.ddbReadText).mockResolvedValue({ ...read, layout: 'ddb-2014', layoutName: 'a named layout' });
+  renderPanel();
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('Name: Fixture Text');
+  await user.click(screen.getByRole('button', { name: 'Read the text' }));
+  await screen.findByText('a named layout');
+  expect(header()).toContain("The text itself isn't kept.");
+});
+
+it('keeps Read the text disabled until there is text and sends the pasted text unchanged', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  renderPanel();
+  const box = await openText(user);
+  const readButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Read the text' });
+  expect(readButton.disabled).toBe(true);
+  await user.click(box);
+  await user.paste('Name: Fixture Text\nClass: Fixture 1');
+  expect(readButton.disabled).toBe(false);
+  await user.click(readButton);
+  await waitFor(() => expect(client.ddbReadText).toHaveBeenCalledWith('Name: Fixture Text\nClass: Fixture 1'));
+  expect(await screen.findByText('pasted or file text')).toBeTruthy();
+  expect(screen.getByText('2 lines')).toBeTruthy();
+});
+
+it('refuses text over the limit without sending it', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const box = await openText(user);
+  await user.click(box);
+  await user.paste('x'.repeat(262_145));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Read the text' }).disabled).toBe(true);
+  expect(screen.getByRole('alert').textContent).toContain('262,145');
+  expect(client.ddbReadText).not.toHaveBeenCalled();
+});
+
+it('refuses a file over the limit by its size alone, before reading it', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const file = new File(['x'], 'secret-name.txt', { type: 'text/plain' });
+  Object.defineProperty(file, 'size', { value: 300_000 });
+  const textSpy = vi.spyOn(file, 'text');
+  await user.upload(screen.getByLabelText('Character text file'), file);
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('300,000');
+  expect(alert.textContent).not.toContain('secret-name');
+  expect(textSpy).not.toHaveBeenCalled();
+  expect(client.ddbReadText).not.toHaveBeenCalled();
+});
+
+it('reads a file within the limit into the textarea and keeps focus on the textarea', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await openText(user);
+  const file = new File(['Name: From File'], 'fixture.md', { type: 'text/markdown' });
+  await user.upload(screen.getByLabelText('Character text file'), file);
+  await waitFor(() => expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Character text' }).value).toBe('Name: From File'));
+  expect(client.ddbReadText).not.toHaveBeenCalled(); // reviewing the text comes first
+});
+
+it('lists the lines that were not read as plain text, ticked by default, and the tick is part of the request', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.ddbReadText).mockResolvedValue(textRead);
+  vi.mocked(client.ddbPreview).mockImplementation(async () => notReadPreview());
+  renderPanel();
+  await textToSummary(user);
+
+  const tick = await screen.findByRole<HTMLInputElement>('checkbox', { name: 'Keep the lines that were not read as session notes' });
+  expect(tick.checked).toBe(true);
+  expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].keepNotRead).toBe(true);
+  expect(screen.getByText(/<b>Fixture odd line<\/b>/)).toBeTruthy(); // text, never markup
+  expect(document.querySelector('b')).toBeNull();
+  await user.click(tick);
+  await waitFor(() => expect(vi.mocked(client.ddbPreview).mock.lastCall?.[0].keepNotRead).toBe(false));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Create character' }).disabled).toBe(false));
+  await user.click(screen.getByRole('button', { name: 'Create character' }));
+  await waitFor(() => expect(vi.mocked(client.ddbApply).mock.calls[0]?.[0].keepNotRead).toBe(false));
+});
+
+it('does not offer the Not read section for a PDF import', async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  await toMatches(user);
+  expect(screen.queryByRole('checkbox', { name: /lines that were not read/ })).toBeNull();
 });

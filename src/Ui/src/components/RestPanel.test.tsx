@@ -94,3 +94,104 @@ it('keeps Cancel rest inert, focus on it, and the panel open while a Finish is i
   expect(screen.getByRole('region', { name: 'Short rest' })).toBeTruthy();
   expect(document.activeElement).toBe(cancel);
 });
+
+// Wave 3 item 25 (R160, R171): the dice an item regains charges with are rolled here, like a hit die, and the proposal follows them.
+const waiting = {
+  id: 'charges:entry-1',
+  kind: 'charges',
+  label: 'Fixture wand charges',
+  from: 3,
+  to: 3,
+  reason: 'Fixture wand: roll 1d6+1 for the charges it regains on a long rest',
+  origin: { kind: 'content' },
+  resourceId: 'entry-1',
+  dice: '1d6+1',
+};
+const rolled = { ...waiting, to: 7, reason: 'Fixture wand: regain 4 charge(s) on a long rest (1d6+1 showed 5)', spentAfter: 0, amount: 4 };
+
+it('asks for the regain dice, rolls them through the roller, logs the roll, and previews and finishes with the total', async () => {
+  const user = userEvent.setup();
+  const rolls: unknown[] = [];
+  const logged: RollRecord[] = [];
+  vi.mocked(client.restPreview).mockImplementation(
+    async (...[, kind, , chargeRolls = []]) =>
+      ({ kind, changes: [chargeRolls.length > 0 ? rolled : waiting], manual: [], basis: chargeRolls.length > 0 ? 'with-roll' : 'without' }) as never,
+  );
+  vi.mocked(client.roll).mockImplementation(async (_id, target) => {
+    rolls.push(target);
+    return { rollId: 'r2', total: 5, dice: [{ die: 6, value: 4 }] } as unknown as RollRecord;
+  });
+  vi.mocked(client.rest).mockResolvedValue({} as CharacterView);
+  const rested: unknown[] = [];
+  panel({ kind: 'longRest', hitDice: [], onRoll: (r) => logged.push(r), onRested: (_v, applied) => rested.push(applied) });
+
+  const roll = await screen.findByRole('button', { name: 'Roll 1d6+1: Fixture wand' });
+  await user.click(roll);
+
+  expect(rolls).toEqual([{ chargeEntry: 'entry-1' }]);
+  expect(logged).toHaveLength(1);
+  await waitFor(() => expect(client.restPreview).toHaveBeenLastCalledWith('fixture-2', 'longRest', [], [{ entry: 'entry-1', roll: 5 }]));
+  const box = await screen.findByRole('checkbox', { name: /Fixture wand charges: 3 → 7/ });
+  expect((box as HTMLInputElement).checked).toBe(true);
+
+  const finish = screen.getByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+
+  await waitFor(() => expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'with-roll', [], [], [{ entry: 'entry-1', roll: 5 }]));
+  expect(rested).toEqual([1]);
+});
+
+it('lets a roll that went stale mid-rest be cleared, instead of leaving only Cancel (the charges regained to 0 elsewhere)', async () => {
+  const user = userEvent.setup();
+  let stale = false;
+  vi.mocked(client.restPreview).mockImplementation(async (...[, kind, , chargeRolls = []]) => {
+    if (stale && chargeRolls.length > 0) throw new Error('rest.charge-roll-unknown');
+    return { kind, changes: [chargeRolls.length > 0 ? rolled : waiting], manual: [], basis: 'b' } as never;
+  });
+  const errors: unknown[] = [];
+  const first = { version: 1 };
+  const { rerender } = panel({ kind: 'longRest', hitDice: [], version: first, onError: (e) => errors.push(e) });
+
+  await user.type(await screen.findByLabelText('Fixture wand: 1d6+1 rolled at the table (total)'), '5');
+  await user.click(screen.getByRole('button', { name: 'Add the 1d6+1 total: Fixture wand' }));
+  await screen.findByRole('button', { name: 'Clear the roll: Fixture wand charges' });
+
+  // The character changed under the open rest: the stored roll no longer has a dice row, so the proposal is refused.
+  stale = true;
+  rerender(<RestPanel characterId="fixture-2" kind="longRest" hitDice={[]} version={{ version: 2 }} onRested={noop} onCancel={noop} onError={(e) => errors.push(e)} />);
+  await screen.findByText('Could not work out this rest. Cancel and try again.');
+  expect(errors).toHaveLength(1);
+
+  const clear = screen.getByRole('button', { name: 'Clear the roll: Fixture wand charges' });
+  expect(clear.getAttribute('aria-disabled')).not.toBe('true');
+  await user.click(clear);
+
+  await screen.findByRole('button', { name: 'Roll 1d6+1: Fixture wand' });
+  expect(screen.queryByText('Could not work out this rest. Cancel and try again.')).toBeNull();
+  await waitFor(() => expect(vi.mocked(client.restPreview)).toHaveBeenLastCalledWith('fixture-2', 'longRest', [], []));
+});
+
+it('takes a total rolled at the table, can clear it, and counts a row still waiting for its roll as nothing applied', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.restPreview).mockImplementation(
+    async (...[, kind, , chargeRolls = []]) => ({ kind, changes: [chargeRolls.length > 0 ? rolled : waiting], manual: [], basis: 'b' }) as never,
+  );
+  vi.mocked(client.rest).mockResolvedValue({} as CharacterView);
+  const rested: number[] = [];
+  panel({ kind: 'longRest', hitDice: [], onRested: (_v, applied) => rested.push(applied) });
+
+  await user.type(await screen.findByLabelText('Fixture wand: 1d6+1 rolled at the table (total)'), '5');
+  await user.click(screen.getByRole('button', { name: 'Add the 1d6+1 total: Fixture wand' }));
+  const clear = await screen.findByRole('button', { name: 'Clear the roll: Fixture wand charges' });
+  await waitFor(() => expect(vi.mocked(client.restPreview)).toHaveBeenLastCalledWith('fixture-2', 'longRest', [], [{ entry: 'entry-1', roll: 5 }]));
+
+  await waitFor(() => expect(clear.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(clear);
+  const finish = await screen.findByRole('button', { name: 'Roll 1d6+1: Fixture wand' }).then(() => screen.getByRole('button', { name: 'Finish long rest' }));
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+
+  await waitFor(() => expect(rested).toEqual([0])); // finished without the roll: the charges are left as they were
+  expect(client.rest).toHaveBeenCalledWith('fixture-2', 'longRest', 'b', [], [], []);
+});

@@ -44,6 +44,23 @@ export const noteLabels: Record<string, string> = {
   'resolution.not-found': 'Your earlier pick is no longer available (a newer version, or another kind); pick again.',
   'character.spells-too-many': 'Past the 500 spells a character can hold.',
   'character.class-duplicate': 'The same class is listed twice.',
+  'stub.created': 'A homebrew class is created for it (a draft until you publish it).',
+};
+
+/** D35 / R100: why a class TomeStack lacks cannot be created from the sheet. */
+export const stubReasons: Record<string, string> = {
+  'stub.hit-die-missing': 'The sheet has no hit dice total, so the hit die is unknown.',
+  'stub.hit-die-unreadable': 'The hit dice total on the sheet could not be matched to this class, so the hit die is unknown.',
+  'stub.one-per-import': 'One class per import can be created here; the others become gap notes.',
+};
+
+export const abilityNames: Record<string, string> = {
+  str: 'Strength',
+  dex: 'Dexterity',
+  con: 'Constitution',
+  int: 'Intelligence',
+  wis: 'Wisdom',
+  cha: 'Charisma',
 };
 
 export const notBroughtOverLabels: Record<string, string> = {

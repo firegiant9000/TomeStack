@@ -74,7 +74,9 @@ public sealed record DdbPlay(
 /// What the parser read from a character sheet's form fields (<c>features/ddb-pdf-import.md</c>): semantic values only,
 /// each typed or marked. Fields the layout map does not name never reach it. <see cref="Numbers"/> is keyed by calculated
 /// field id (<c>proficiencyBonus</c>, <c>armorClass</c>, <c>save.str</c>, <c>skill.athletics</c>, <c>spellSlots.1</c>, …) and
-/// holds only the ids the map names. <see cref="Currency"/> is keyed <c>cp</c>…<c>pp</c>, only the coins the map names (empty when
+/// holds only the ids the map names. <see cref="LayoutName"/> (item 19b) overrides the layout's name in words when the text came from a PDF ("text from the PDF"). <see cref="HitDiceTotal"/> (item 15) is the hit dice total box as typed ("3d10 + 2d8"), null when the
+/// layout has none; only the stub class reads it, and <c>ToString</c> never prints it. <see cref="FeatureTexts"/> (item 16, R104) holds
+/// the lines under each listed feat or feature that has any, null for a layout whose features are one prose block. <see cref="Currency"/> is keyed <c>cp</c>…<c>pp</c>, only the coins the map names (empty when
 /// it names none); an unreadable or negative count is <see cref="ReadStatus.Unreadable"/>. <see cref="Abilities"/> and <see cref="SaveProficient"/> hold all six abilities and
 /// <see cref="SkillProficient"/> all 18 skills, <see cref="ReadStatus.Missing"/> where the map has no field.
 /// </summary>
@@ -94,8 +96,45 @@ public sealed record DdbSheet(
     IReadOnlyList<Read<string>> Features,
     IReadOnlyDictionary<string, Read<int>> Numbers,
     DdbPlay Play,
-    IReadOnlyDictionary<string, Read<int>> Currency)
+    IReadOnlyDictionary<string, Read<int>> Currency,
+    IReadOnlyList<string>? Lines = null,
+    DdbTexts? Texts = null,
+    Read<string>? HitDiceTotal = null,
+    IReadOnlyList<FeatureText>? FeatureTexts = null,
+    IReadOnlyList<NotReadLine>? NotRead = null,
+    string? LayoutName = null)
 {
     public override string ToString() =>
-        $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, Numbers = {Numbers.Count} }}";
+        $"DdbSheet {{ Layout = {Layout}, Name = {Name.Status}, Classes = {Classes.Status}, Feats = {Feats.Count}, Spells = {Spells.Count}, Items = {Items.Count}, Features = {Features.Count}, FeatureTexts = {FeatureTexts?.Count ?? 0}, Numbers = {Numbers.Count}, NotRead = {NotRead?.Count ?? 0} }}";
+}
+
+/// <summary>
+/// Item 19a (D37): a line of pasted or file text the text importer did not understand, with its 1-based line number, clipped to
+/// 2,000 characters. The user's own text, so <c>ToString</c> prints the number only. Only a text-layout <see cref="DdbSheet"/> has any.
+/// </summary>
+public sealed record NotReadLine(int Line, string Text)
+{
+    public override string ToString() => $"NotReadLine {{ Line = {Line} }}";
+}
+
+/// <summary>One weapon row of the fillable sheet, as the text the player typed (R83 splits it later).</summary>
+public sealed record WeaponRow(Read<string> Name, Read<string> ToHit, Read<string> Damage)
+{
+    public override string ToString() => $"WeaponRow {{ Name = {Name.Status}, ToHit = {ToHit.Status}, Damage = {Damage.Status} }}";
+}
+
+/// <summary>
+/// The free text of the fillable 2014 sheet (item 14): short <see cref="Details"/> (keyed <c>alignment</c>, <c>age</c>, <c>height</c>,
+/// <c>weight</c>, <c>eyes</c>, <c>skin</c>, <c>hair</c>), <see cref="Prose"/> for session notes (keyed as <see cref="DdbSemantics.Prose"/>),
+/// the weapon rows, and the equipment and proficiency texts. Only the keys the layout maps are present; line breaks are
+/// <c>\n</c>. <c>ToString</c> prints counts only.
+/// </summary>
+public sealed record DdbTexts(
+    IReadOnlyDictionary<string, Read<string>> Details,
+    IReadOnlyDictionary<string, Read<string>> Prose,
+    IReadOnlyList<WeaponRow> Weapons,
+    Read<string> Equipment,
+    Read<string> LanguagesAndTools)
+{
+    public override string ToString() => $"DdbTexts {{ Details = {Details.Count}, Prose = {Prose.Count}, Weapons = {Weapons.Count} }}";
 }

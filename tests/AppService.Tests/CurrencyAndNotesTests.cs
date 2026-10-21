@@ -92,6 +92,101 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void The_restore_preview_names_the_detail_fields_that_differ_and_never_quotes_their_text()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")
+            with { Details = new(Alignment: "Fixture-old-alignment", Languages: ["Fixture-old-tongue"]) }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "with details"));
+
+        var same = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Null(same.DetailsChange);
+
+        temp.App.SaveCharacter(saved with { Details = new(Alignment: "Fixture-new-alignment", Appearance: new(Hair: "Fixture-new-hair"), Languages: ["Fixture-old-tongue"]) });
+        var changed = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.Equal(["alignment", "hair"], changed.DetailsChange);
+        Assert.DoesNotContain("Fixture-", string.Join(' ', changed.DetailsChange!), StringComparison.Ordinal);
+
+        temp.App.SaveCharacter(saved with { Details = null });
+        Assert.Equal(["alignment", "languages"], temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).DetailsChange);
+        var restored = temp.App.RestoreSnapshot(new(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).Token, Confirm: true)).View.Character.Details;
+        Assert.Equal(JsonSerializer.Serialize(saved.Details, RulesJson.Options), JsonSerializer.Serialize(restored, RulesJson.Options)); // semantics unchanged: details roll back
+    }
+
+    [Fact]
+    public void The_restore_preview_flags_custom_entries_and_other_sheet_values_without_naming_them()
+    {
+        using var temp = new TempApp();
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "plain"));
+
+        var same = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.False(same.CustomItemsChange);
+        Assert.False(same.CustomAttacksChange);
+        Assert.False(same.OtherSheetValuesChange);
+
+        var item = new CustomItem(Guid.NewGuid(), "Fixture-rope", 1, null, false);
+        var attack = new CustomAttack(Guid.NewGuid(), "Fixture-stick", 2, "1d4", "bludgeoning", null);
+        var companion = new Companion(Guid.NewGuid(), "Fixture-pony", null, null, 5, null, null, null);
+        temp.App.SaveCharacter(saved with { CustomItems = [item], CustomAttacks = [attack] });
+        var custom = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.True(custom.CustomItemsChange);
+        Assert.True(custom.CustomAttacksChange);
+        Assert.False(custom.OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Xp = 300 });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+        temp.App.SaveCharacter(saved with { DamageDefences = [new("fire", DamageDefenceKind.Resistance)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+        temp.App.SaveCharacter(saved with { Companions = [companion] });
+        var others = temp.App.PreviewRestore(new(saved.Id, snapshot.Id));
+        Assert.True(others.OtherSheetValuesChange);
+        Assert.False(others.CustomItemsChange);
+        Assert.DoesNotContain("Fixture-", JsonSerializer.Serialize(others, RulesJson.Options), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_restore_preview_flags_attunement_and_charges_on_equipment_but_not_the_pre_v9_fields()
+    {
+        // G2/R138: attuned and chargesSpent are v9 fields of an equipment entry and roll back with the snapshot; quantity and
+        // equipped are older and are covered by the sheet changes, so they do not set the "other sheet values" flag.
+        using var temp = new TempApp();
+        var item = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")
+            with { Equipment = [new(item, Equipped: false, Quantity: 1)] }).Character;
+        var snapshot = temp.App.Snapshot(new(saved.Id, "plain equipment"));
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: true, Quantity: 4)] });
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: false, Quantity: 1, Attuned: true)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.SaveCharacter(saved with { Equipment = [new(item, Equipped: false, Quantity: 1, ChargesSpent: 2)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+    }
+
+    [Fact]
+    public void The_restore_preview_sees_a_change_in_the_second_copy_of_an_item_with_charges()
+    {
+        // Review fix (Wave 3): two copies of one item are told apart by entry id, not merged by item.
+        using var temp = new TempApp();
+        var item = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var (first, second) = (Guid.NewGuid(), Guid.NewGuid());
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")).Character;
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first), new(item, Id: second)] });
+        var snapshot = temp.App.Snapshot(new(saved.Id, "two copies"));
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first), new(item, Id: second, ChargesSpent: 2)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first, ChargesSpent: 1), new(item, Id: second)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+    }
+
+    [Fact]
     public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
     {
         using var temp = new TempApp();

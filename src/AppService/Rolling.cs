@@ -9,7 +9,9 @@ namespace TomeStack.AppService;
 /// throw (<paramref name="DeathSave"/>: a d20 with no modifier), or one of the character's spells (<paramref name="Spell"/>:
 /// its attack roll with the caster's spell attack bonus when <paramref name="SpellAttack"/>, else its dice), or an
 /// equipped weapon (<paramref name="Weapon"/>: its attack roll, or its damage when <paramref name="Damage"/>, two-handed
-/// when <paramref name="Versatile"/>).
+/// when <paramref name="Versatile"/>), or one of the character's own hand-typed attacks (<paramref name="CustomAttack"/>:
+/// d20 plus its typed to-hit, or its damage dice when <paramref name="Damage"/>), or an attack line of one of the character's
+/// companions (<paramref name="CompanionAttack"/>: rolled the same way).
 /// </summary>
 public sealed record RollCommand(
     Guid CharacterId,
@@ -24,7 +26,13 @@ public sealed record RollCommand(
     bool SpellAttack = false,
     ContentReference? Weapon = null,
     bool Damage = false,
-    bool Versatile = false);
+    bool Versatile = false,
+    Guid? CustomAttack = null,
+    string? ChargeEntry = null,
+    CompanionAttackTarget? CompanionAttack = null);
+
+/// <summary>Wave 3 item 23: one attack line of one of the character's companions (<see cref="Companion.Attacks"/>).</summary>
+public sealed record CompanionAttackTarget(Guid CompanionId, Guid AttackId);
 
 public sealed partial class TomeStackApp
 {
@@ -45,10 +53,27 @@ public sealed partial class TomeStackApp
 
         RollRequest request;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
-            + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0);
+            + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
+            + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0) + (command.CompanionAttack is not null ? 1 : 0);
         if (targets > 1)
-            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell or a weapon.")]);
-        if (command.Weapon is { } weaponReference)
+            throw new AppValidationException([new("roll.ambiguous", "Roll one thing: a content effect, a field, a hit die, a death saving throw, a spell, a weapon, your own attack or a companion's attack.")]);
+        if (command.CustomAttack is { } customId)
+        {
+            // Hand-typed attacks (D42): the name goes only into the provenance label; no message below quotes it.
+            var custom = character.CustomAttacks?.FirstOrDefault(a => a.Id == customId)
+                ?? throw new AppValidationException([new("roll.custom-attack-unknown", "This character has no such attack of their own.")]);
+            request = CustomAttackRequest(custom, command, "custom", custom.Name, "roll.custom-attack-no-damage");
+        }
+        else if (command.CompanionAttack is { } companionAttack)
+        {
+            // Wave 3 item 23 (D39): a companion's attack line is a CustomAttack, rolled the same way; the names go only into the label.
+            var companion = character.Companions?.FirstOrDefault(c => c.Id == companionAttack.CompanionId)
+                ?? throw new AppValidationException([new("roll.companion-unknown", "This character has no such companion.")]);
+            var line = companion.Attacks?.FirstOrDefault(a => a.Id == companionAttack.AttackId)
+                ?? throw new AppValidationException([new("roll.companion-attack-unknown", "This companion has no such attack.")]);
+            request = CustomAttackRequest(line, command, "companion", $"{companion.Name}: {line.Name}", "roll.companion-attack-no-damage");
+        }
+        else if (command.Weapon is { } weaponReference)
         {
             var attack = sheet.Attacks?.FirstOrDefault(a => a.Item == weaponReference)
                 ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);
@@ -91,6 +116,15 @@ public sealed partial class TomeStackApp
                     ? new RollRequest(dice, RollMode.Normal, command.Critical, [], provenance)
                     : throw new AppValidationException([new("roll.spell-no-dice", $"'{spell.Name}' has no dice to roll.", spellReference)]);
             }
+        }
+        else if (command.ChargeEntry is { } entry)
+        {
+            // Wave 3 item 25 (R171): the dice an item regains charges with on a rest, rolled here so they appear in the roll strip. Nothing is saved.
+            var use = sheet.ItemUses?.FirstOrDefault(u => u.EntryKey == entry)
+                ?? throw new AppValidationException([new("roll.charges-unknown", "This character has no such item entry with charges.")]);
+            var dice = use.Recovery?.Regain
+                ?? throw new AppValidationException([new("roll.charges-no-dice", "This item entry has no dice to roll for its charges.", use.Item)]);
+            request = new RollRequest(dice, RollMode.Normal, false, [], new RollProvenance("charges.regain", $"{use.Name} charges", use.Item, use.Name));
         }
         else if (command.HitDie is { } die)
         {
@@ -141,6 +175,22 @@ public sealed partial class TomeStackApp
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
         return record!;
+    }
+
+    /// <summary>
+    /// A hand-typed attack line (the character's own, D42, or a companion's, D39): d20 plus its typed to-hit, or its damage dice. The
+    /// names go only into labels; the refusal says nothing but its code.
+    /// </summary>
+    private static RollRequest CustomAttackRequest(CustomAttack attack, RollCommand command, string rollIdPrefix, string displayName, string noDamageCode)
+    {
+        if (!command.Damage)
+        {
+            return new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit)],
+                new RollProvenance($"{rollIdPrefix}.attack", $"{displayName} attack"));
+        }
+        var dice = attack.Damage ?? throw new AppValidationException([new(noDamageCode, "This attack has no damage dice to roll.")]);
+        var label = string.IsNullOrWhiteSpace(attack.DamageType) ? $"{displayName} damage" : $"{displayName} damage ({attack.DamageType})";
+        return new RollRequest(dice, RollMode.Normal, command.Critical, [], new RollProvenance($"{rollIdPrefix}.damage", label));
     }
 
     private static bool IsD20Field(string field) =>

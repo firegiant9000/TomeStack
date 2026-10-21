@@ -28,6 +28,7 @@ vi.mock('./api/client', () => ({
     roll: vi.fn(),
     restPreview: vi.fn(),
     rest: vi.fn(),
+    listSources: vi.fn(),
   },
 }));
 
@@ -62,6 +63,7 @@ beforeEach(() => {
   vi.mocked(client.listContent).mockResolvedValue([]);
   vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
+  vi.mocked(client.listSources).mockResolvedValue([]);
   vi.mocked(client.snapshots).mockResolvedValue({ items: [], hasMore: false });
 });
 afterEach(() => {
@@ -236,4 +238,14 @@ it("a late rest reply for the first character leaves the second character's shee
   expect(blake().getAttribute('aria-current')).toBe('page');
   expect(avery().getAttribute('aria-current')).toBeNull();
   expect(screen.queryByText(/rest finished/)).toBeNull();
+});
+
+it('a code-split screen arrives after a plain Loading status, and focus stays on the button that opened it (R161 d)', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const campaigns = await screen.findByRole('button', { name: 'Campaigns' });
+  await user.click(campaigns);
+  expect(await screen.findByRole('heading', { name: 'Campaigns' })).toBeTruthy();
+  expect(screen.queryByText('Loading…')).toBeNull();
+  expect(document.activeElement).toBe(campaigns);
 });

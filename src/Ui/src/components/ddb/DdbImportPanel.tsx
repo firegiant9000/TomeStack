@@ -12,7 +12,7 @@ import type {
   RulesFamilyId,
   RulesFamilyPolicy,
 } from '../../api/types';
-import { DdbChooseStep } from './DdbChooseStep';
+import { DdbChooseStep, type ReadSource } from './DdbChooseStep';
 import { DdbFamilyStep } from './DdbFamilyStep';
 import type { NumberPreset } from './ddbLabels';
 import { DdbMatchesStep } from './DdbMatchesStep';
@@ -33,13 +33,15 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const titles: Record<Step, string> = { 1: 'Choose the sheet', 2: 'Rules and campaign', 3: 'Matches', 4: 'Numbers', 5: 'Create' };
 
 /**
- * Character import from a D&D Beyond PDF sheet (features/ddb-pdf-import.md "Flow"): a step view, not a modal. Every step
+ * Character import from a character sheet PDF, a D&D Beyond export or the fillable 2014 sheet (features/ddb-pdf-import.md "Flow"): a step view, not a modal. Every step
  * can go back; Cancel at any step sends `ddb.discard` and writes nothing. Only "Create character" writes. Each step is a
  * labelled region, and focus moves to its heading on every step change.
  */
 export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [read, setRead] = useState<DdbReadResult>();
+  /** How the sheet was chosen (R143): the header hint names this, not the layout the service read it as. */
+  const [source, setSource] = useState<ReadSource>('pdf');
   const [family, setFamily] = useState<RulesFamilyId>();
   const [campaignId, setCampaignId] = useState<string>();
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
@@ -48,9 +50,23 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const [answers, setAnswers] = useState<ChoiceSelection[]>([]);
   const [includePlayState, setIncludePlayState] = useState(false);
   const [equipMatched, setEquipMatched] = useState(true);
+  /** Item 19a: keep the lines a text import could not read as session notes. Part of the request, so the stale-preview hold covers it. */
+  const [keepNotRead, setKeepNotRead] = useState(true);
+  /** D35: the class row to create a homebrew class for; part of the preview request. */
+  const [createClassRow, setCreateClassRow] = useState<string>();
+  /** D35: publish the created class with the character. Off by default. R129: part of the request, so ticking it re-previews. */
+  const [publishClass, setPublishClass] = useState(false);
+  /** The stub content `publishClass` was last reconciled with; see `stubKey`. */
+  const [publishKey, setPublishKey] = useState('');
+  /** Item 16: publish the reference drafts with the character. Off by default; sent with Create only. */
+  const [publishReferences, setPublishReferences] = useState(false);
+  /** The set of drafts `publishReferences` was last reconciled with; see `referencesKey`. */
+  const [referencesKey, setReferencesKey] = useState('');
   const [preview, setPreview] = useState<DdbPreview>();
   /** The request the shown preview answers; while it differs from the current one, a newer preview is on its way. */
   const [previewFor, setPreviewFor] = useState<string>();
+  /** R141: the publish choice the shown preview was calculated with; Create sends it, so the service can tell a changed choice from the one shown. */
+  const [previewedPublish, setPreviewedPublish] = useState(false);
   /** A preview that failed, keyed to the request it answered; it ends the loading state and offers "Try again". */
   const [previewError, setPreviewError] = useState<{ key: string; message: string }>();
   const [retry, setRetry] = useState(0);
@@ -82,7 +98,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   const presetAction: NumberAction | undefined = numberPreset === 'sheet' ? 'keepSheet' : numberPreset === 'sources' ? 'useTomeStack' : undefined;
   const effectiveNumbers: Record<string, NumberAction> = { ...numbers };
   if (preview) {
-    // Speed is the exception: TomeStack's number is only the placeholder 30 feet until species content carries one, so a
+    // Speed is the exception: TomeStack's number is only the placeholder 30 feet unless the species' content sets one, so a
     // sheet's speed is kept by default whatever the preset, Manual included (a row choice of the user's still wins).
     for (const row of preview.comparison) {
       if (!row.differs || row.field in numbers) continue;
@@ -102,6 +118,10 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           includePlayState,
           answers,
           equipMatched,
+          createClassRow,
+          keepNotRead,
+          // R129: the numbers describe the saved character, so the stub counts only when it will be published.
+          publishClass: publishClass && createClassRow !== undefined,
         }
       : undefined;
   const requestKey = JSON.stringify(request ?? null);
@@ -116,7 +136,13 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         if (!current) return;
         setPreview(next);
         setPreviewFor(requestKey);
+        setPreviewedPublish(request.publishClass ?? false);
         setPreviewError(undefined);
+        // A class that can no longer be created (the family changed what is installed, or its hit die is not readable) is let go.
+        if (request.createClassRow && !next.stub) {
+          setCreateClassRow(undefined);
+          setPublishClass(false);
+        }
         // An answer stays while its choice is still offered (answered ones stay listed); a changed match that takes the
         // choice away drops it, so it cannot re-add an option the user since left out.
         setAnswers((all) => {
@@ -144,9 +170,24 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     // requestKey stands for the request's content.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, requestKey, retry]);
+  // D35 consent: "Publish it" belongs to the exact class that was reviewed. Whatever the cause (a resolution elsewhere, a family
+  // change, a new preview), once the stub's content differs the tick is gone and must be given again.
+  const stubKey = preview?.stub ? JSON.stringify([preview.stub.rowId, preview.stub.name, preview.stub.rulesFamily, preview.stub.hitDie, preview.stub.saves]) : '';
+  if (publishKey !== stubKey) {
+    setPublishKey(stubKey);
+    setPublishClass(false);
+  }
+  // Item 16 consent: "Publish these reference drafts" belongs to the exact set shown. When the set changes the tick is gone.
+  const referencesNow = preview?.referenceDrafts?.length ? JSON.stringify(preview.referenceDrafts.map((d) => [d.rowId, d.kind, d.name, d.length])) : '';
+  if (referencesKey !== referencesNow) {
+    setReferencesKey(referencesNow);
+    setPublishReferences(false);
+  }
   const failed = previewError?.key === requestKey ? previewError : undefined;
   const loading = step >= 3 && request !== undefined && previewFor !== requestKey && !failed;
   const busy = loading || applying;
+  /** The shown preview does not answer the current choices (still loading, or the re-preview failed): nothing may move on or apply from it. */
+  const stale = step >= 3 && request !== undefined && previewFor !== requestKey;
 
   /** A changed match drops every answer that holds one of that row's options: it was made with the earlier match. */
   function dropAnswersHolding(rowId: string) {
@@ -155,7 +196,7 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     setAnswers((all) => all.filter((a) => !a.selected.some((s) => revisions.has(s.revisionId))));
   }
 
-  function onRead(result: DdbReadResult) {
+  function onRead(result: DdbReadResult, how: ReadSource) {
     if (!open.current) {
       void client.ddbDiscard(result.token).catch(() => undefined); // cancelled while the sheet was being read
       return;
@@ -164,10 +205,14 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (live.current && live.current !== result.token) void client.ddbDiscard(live.current).catch(() => undefined);
     live.current = result.token;
     setRead(result);
+    setSource(how);
     setFamily((current) => current ?? result.suggestedFamily ?? rulesFamilies[0]?.id);
     setResolutions({});
     setNumbers({});
     setAnswers([]);
+    setCreateClassRow(undefined);
+    setPublishClass(false);
+    setPublishReferences(false);
     setPreview(undefined);
     setPreviewFor(undefined);
   }
@@ -184,11 +229,18 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
     if (!request || created || applying) return;
     try {
       setApplying(true);
-      const result = await client.ddbApply(request);
+      const result = await client.ddbApply(request, publishClass && request.createClassRow !== undefined, publishReferences && referencesNow !== '' ? (preview?.referenceDrafts ?? []).map((d) => d.rowId) : false, previewedPublish);
       live.current = undefined; // spent
       setCreated(true);
       await onCreated(result.characterId, result);
     } catch (error) {
+      // The drafts changed since the summary showed them: the tick is gone and the preview is fetched again (the request itself is
+      // unchanged, so only a retry bump reloads it), so the new set is reviewed before anything is published.
+      if (error instanceof TomeStackError && error.code === 'ddb.references-changed') {
+        setPublishReferences(false);
+        setPreviewFor(undefined);
+        setRetry((n) => n + 1);
+      }
       onError(error);
     } finally {
       setApplying(false);
@@ -201,10 +253,11 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
   return (
     <section className="ddb-import" aria-labelledby="ddb-import-title">
       <h2 id="ddb-import-title" className="visually-hidden">
-        Import from D&amp;D Beyond PDF
+        Import a character (sheet or text)
       </h2>
       <p className="hint">
-        Step {step} of 5. Nothing is saved until you choose “Create character”. The PDF is read once and not kept.
+        Step {step} of 5. Nothing is saved until you choose “Create character”.{' '}
+        {read === undefined ? "The PDF or text itself isn't kept." : source === 'text' ? "The text itself isn't kept." : "The PDF itself isn't kept."}
       </p>
       <section aria-labelledby={headingId}>
         <h3 id={headingId} ref={heading} tabIndex={-1}>
@@ -236,6 +289,8 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
               setCampaignId(undefined); // campaigns belong to one family; the select only lists the new family's
               setResolutions({});
               setAnswers([]);
+              setCreateClassRow(undefined);
+              setPublishClass(false);
               setPreview(undefined);
               setPreviewFor(undefined);
             }}
@@ -254,6 +309,11 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
             campaignId={campaignId}
             resolutions={resolutions}
             answers={answers}
+            createClassRow={createClassRow}
+            onCreateClassRow={(rowId) => {
+              setCreateClassRow(rowId);
+              setPublishClass(false); // a cleared or changed class starts again unpublished
+            }}
             onResolve={(resolution) => {
               // A new class match makes an earlier pick for that class's subclass row stale (its choice may differ).
               setResolutions((all) => {
@@ -278,7 +338,20 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
         )}
         {step === 4 && <DdbNumbersStep preview={preview} numbers={effectiveNumbers} onChange={(field, action) => setNumbers((all) => ({ ...all, [field]: action }))} equipMatched={equipMatched} onEquipMatched={setEquipMatched} preset={numberPreset} />}
         {step === 5 && (
-          <DdbSummaryStep preview={preview} family={family} suggested={read?.suggestedFamily} includePlayState={includePlayState} onIncludePlayState={setIncludePlayState} />
+          <DdbSummaryStep
+            preview={preview}
+            family={family}
+            suggested={read?.suggestedFamily}
+            includePlayState={includePlayState}
+            onIncludePlayState={setIncludePlayState}
+            held={loading}
+            publishClass={publishClass}
+            onPublishClass={setPublishClass}
+            publishReferences={publishReferences}
+            onPublishReferences={setPublishReferences}
+            keepNotRead={keepNotRead}
+            onKeepNotRead={setKeepNotRead}
+          />
         )}
       </section>
       <p aria-live="polite" className="hint">
@@ -291,12 +364,12 @@ export function DdbImportPanel({ rulesFamilies, onError, onCancel, onCreated }: 
           </button>
         )}
         {step < 5 && (
-          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || loading)} onClick={() => setStep((s) => (s + 1) as Step)}>
+          <button type="button" disabled={step === 1 ? !read : step > 2 && (!preview || stale)} onClick={() => setStep((s) => (s + 1) as Step)}>
             {step === 1 ? 'Next: rules' : step === 2 ? 'Next: matches' : step === 3 ? 'Next: numbers' : 'Next: summary'}
           </button>
         )}
         {step === 5 && (
-          <button type="button" disabled={busy || created || !preview?.canApply} onClick={create}>
+          <button type="button" disabled={busy || stale || created || !preview?.canApply} onClick={create}>
             Create character
           </button>
         )}

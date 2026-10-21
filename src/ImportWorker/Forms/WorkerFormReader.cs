@@ -62,18 +62,24 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
     /// The child is trusted with nothing: an error keeps its code only when it is one the reader can raise, with the app's
     /// own message for it (built from the limits, never from the child's text). Any other code is <c>worker.protocol</c>.
     /// </summary>
-    private string? KnownError(string code) => code switch
+    private string? KnownError(string code) => KnownMessage(code, _limits, _form);
+
+    /// <summary>
+    /// The app's own message for a code a child may send, or null for any other. Shared with the app's text read, which also
+    /// receives a child's error and must not forward its code or message unfiltered.
+    /// </summary>
+    public static string? KnownMessage(string code, ExtractionLimits limits, FormLimits form) => code switch
     {
         "worker.bad-request" => "The import worker could not read the request. Reinstall TomeStack if this keeps happening.",
         "pdf.missing" => "The PDF file is missing.",
-        "pdf.too-large" => $"The PDF is larger than {_limits.MaxBytes / (1024 * 1024)} MB.",
+        "pdf.too-large" => $"The PDF is larger than {limits.MaxBytes / (1024 * 1024)} MB.",
         "pdf.not-a-pdf" => "The file is not a PDF.",
         "pdf.encrypted" => "The PDF is encrypted. Remove the password in another program, then import it again.",
         "pdf.unreadable" => "The PDF could not be read. It may be damaged, or open in another program.",
-        "pdf.too-many-pages" => $"The PDF has more than {_limits.MaxPages} pages, the most that can be read.",
-        "ddb.no-form-fields" => "This PDF has no form fields. Export the sheet again from D&D Beyond as a PDF, not printed to PDF.",
-        "ddb.too-many-fields" => $"The PDF has more than {_form.MaxFields} form fields.",
-        "ddb.value-too-long" => $"The form fields hold more text than can be read (at most {_form.MaxValueChars} characters in one, {_form.MaxTotalValueChars} in all).",
+        "pdf.too-many-pages" => $"The PDF has more than {limits.MaxPages} pages, the most that can be read.",
+        "ddb.no-form-fields" => "This PDF has no form fields. Save the sheet as a fillable PDF, not printed to PDF.",
+        "ddb.too-many-fields" => $"The PDF has more than {form.MaxFields} form fields.",
+        "ddb.value-too-long" => $"The form fields hold more text than can be read (at most {form.MaxValueChars} characters in one, {form.MaxTotalValueChars} in all).",
         _ => null,
     };
 
@@ -87,7 +93,7 @@ public sealed class WorkerFormReader(string workerPath, ExtractionLimits? limits
         {
             // JSON can send null where the record says it cannot.
             if (field?.Name is null || field.Type is null || !Types.Contains(field.Type) || field.Page is < 1 || field.Page > _limits.MaxPages
-                || field.Selected?.Any(s => s is null) == true || _form.Chars(field) is not { } chars)
+                || field.Selected?.Any(s => s is null) == true || !_form.ClipFlagHolds(field) || _form.Chars(field) is not { } chars)
                 return false;
             total += chars;
         }

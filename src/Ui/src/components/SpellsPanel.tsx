@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Ability, Character, CharacterView, PlayAction, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
+import type { Ability, Character, CharacterView, KnownSpell, PlayAction, RollMode, RollTarget, SlotValue, SpellcastingEntry, SpellEntry } from '../api/types';
+import { EntryGone } from './sheetSave';
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
@@ -26,13 +27,16 @@ export function SpellsPanel({
   view,
   act,
   roll,
+  rollMode = 'normal',
   onSave,
 }: {
   view: CharacterView;
   act: Act;
   roll: (target: RollTarget) => void;
-  /** Saves a changed spell list (preparing is a choice, not play state). */
-  onSave: (character: Character) => void;
+  /** The summary's advantage / disadvantage choice, sent with spell attack rolls (R93); spell dice are always normal. */
+  rollMode?: RollMode;
+  /** Saves a changed spell list (preparing is a choice, not play state); the change is applied to the latest saved character (R132). */
+  onSave: (update: (latest: Character) => Character) => void;
 }) {
   // D30: the search text per caster. The sheet is keyed by character in App, so this remounts (and resets) per character.
   const [queries, setQueries] = useState<Record<string, string>>({});
@@ -55,10 +59,13 @@ export function SpellsPanel({
   }
 
   function togglePrepared(entry: SpellcastingEntry, spell: SpellEntry) {
-    const spells = (view.character.spells ?? []).map((s) =>
-      s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId ? { ...s, prepared: !spell.prepared } : s,
-    );
-    onSave({ ...view.character, spells });
+    // The new value comes from the latest saved list, not from what this render shows (G10).
+    const here = (s: KnownSpell) => s.caster === entry.content.contentId && s.spell.revisionId === spell.spell.revisionId;
+    onSave((latest) => {
+      const list = latest.spells ?? [];
+      if (!list.some(here)) throw new EntryGone(`${spell.name} was removed meanwhile, so nothing was saved.`);
+      return { ...latest, spells: list.map((s) => (here(s) ? { ...s, prepared: !s.prepared } : s)) };
+    });
   }
 
   return (
@@ -145,7 +152,7 @@ export function SpellsPanel({
                     </label>
                   )}
                   {spell.attack !== 'none' && (
-                    <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true })}>
+                    <button type="button" onClick={() => roll({ spell: spell.spell, spellAttack: true, mode: rollMode })}>
                       Roll {spell.name} attack
                     </button>
                   )}

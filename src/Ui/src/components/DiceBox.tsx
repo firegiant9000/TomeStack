@@ -2,7 +2,7 @@ import { useId, useRef, useState, type SubmitEvent } from 'react';
 import { TomeStackError } from '../api/transport';
 
 /** Tester feedback item 8: roll any dice from the summary. The engine owns the limits; a refusal is shown here, linked to the box. */
-function refusalText(error: unknown): string {
+export function refusalText(error: unknown): string {
   if (error instanceof TomeStackError) {
     const messages = error.diagnostics.map((d) => d.message).filter((m) => m.length > 0);
     return messages.length > 0 ? messages.join(' ') : error.message;

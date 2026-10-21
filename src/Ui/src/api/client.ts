@@ -54,12 +54,14 @@ import type {
   ExportedPackage,
   ExportPreview,
   ExportPurpose,
+  FormulaPreviewResult,
   GapNote,
   GapNoteListing,
   GapNoteStatus,
   GapTarget,
   ImportResult,
   HitDieRoll,
+  ChargeRoll,
   LibraryBackupOutcome,
   LibraryBackupPreview,
   LibraryRestoreChoice,
@@ -127,6 +129,9 @@ export function createClient(transport: Transport) {
     tree: (revision: ContentRevision) => call<ContentTreeView>('content.tree', { revision }),
     /** Design hints for the unsaved revision on screen (M5 slice 7), asked only while the setting is on. Writes nothing. */
     feedback: (revision: ContentRevision) => call<DesignHint[]>('content.feedback', { revision }),
+    /** A formula's value at sample class levels (D61). Read-only; `revision` is the unsaved draft whose scales `SCALE.<id>` reads. */
+    previewFormula: (formula: string, revision?: ContentRevision, floorAtZero?: boolean) =>
+      call<FormulaPreviewResult>('content.previewFormula', { formula, revision, floorAtZero }),
     listSources: () => call<SourceRecord[]>('source.list'),
     createHomebrewSource: (title: string, rulesFamilies: RulesFamilyId[]) =>
       call<SourceRecord>('source.createHomebrew', { title, rulesFamilies }),
@@ -171,15 +176,16 @@ export function createClient(transport: Transport) {
     checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
     editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
     /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
-    acceptCandidate: (candidateId: string, asReference: boolean, confirmedEffectIds?: string[]) =>
-      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
-    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
-    acceptCandidates: (candidateIds: string[], asReference: boolean) =>
-      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),
+    /** R134: `expected` is the candidate's etag as the panel last read it; the service refuses the accept when the row has moved on (or none is sent). */
+    acceptCandidate: (candidateId: string, asReference: boolean, expected: string | undefined, confirmedEffectIds?: string[]) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, expected, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
+    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. R134: `expected` maps each id to its etag; one stale row refuses the whole batch. */
+    acceptCandidates: (candidateIds: string[], asReference: boolean, expected: Record<string, string>) =>
+      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true, expected }),
     /** Item 10: adds the list key to the spell candidates' edits; other unsure fields stay unsure. */
     addCandidatesToSpellList: (candidateIds: string[], listKey: string) =>
       call<CandidateSpellListResult>('import.candidate.addToSpellList', { candidateIds, listKey }),
-    ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
+    ignoreCandidate: (candidateId: string, expected: string | undefined) => call<StoredCandidate>('import.candidate.ignore', { candidateId, expected }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>
       call<UpdateReview>('character.reviewUpdate', { characterId, from, to }),
@@ -213,11 +219,11 @@ export function createClient(transport: Transport) {
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
     /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
-    restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = []) =>
-      call<RestPreview>('character.restPreview', { characterId, kind, hitDice }),
+    restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
+      call<RestPreview>('character.restPreview', { characterId, kind, hitDice, chargeRolls }),
     /** Applies exactly the previewed rest (same hit dice), minus the unticked changes. Only the "Finish … rest" button calls this. */
-    rest: (characterId: string, kind: RestPeriod, basis: string, skip: string[], hitDice: HitDieRoll[] = []) =>
-      call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, confirm: true }),
+    rest: (characterId: string, kind: RestPeriod, basis: string, skip: string[], hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
+      call<CharacterView>('character.rest', { characterId, kind, basis, skip, hitDice, chargeRolls, confirm: true }),
     /** Rolls and returns the record; never changes the character, even when the roll names a resource (SPEC C-04). */
     roll: (characterId: string, target: RollTarget) => call<RollRecord>('roll', { characterId, ...target }),
     /** D32: a labelled roll with no character (the builder's scores); writes nothing. */
@@ -288,15 +294,27 @@ export function createClient(transport: Transport) {
     /** `campaignChoices`: for a campaign pack whose campaign differs from yours (M6 slice 2). */
     applyImport: (base64: string, sourceChoices: Record<string, SourceChoice> = {}, campaignChoices: Record<string, SourceChoice> = {}) =>
       call<ImportResult>('package.apply', { base64, sourceChoices, campaignChoices }),
-    // ---- character import from a D&D Beyond PDF sheet: read once, preview, then one confirmed create ----
+    // ---- character import from a character sheet PDF (D&D Beyond export or the fillable 2014 sheet): read, preview, then one confirmed create ----
     /** Native Open dialog in the shell; the path never reaches the page. `unsupported` elsewhere. No timeout: it waits for the dialog and the worker. */
     ddbRead: () => call<DdbReadResult>('ddb.read', {}, { timeoutMs: null }),
-    /** Browser development and e2e: the chosen file's bytes, read once and not kept. No timeout, as for `ddbRead`. */
+    /** Browser development and e2e: the chosen file's bytes, not kept. No timeout, as for `ddbRead`. */
     ddbReadData: (fileName: string, base64: string) => call<DdbReadResult>('ddb.readData', { fileName, data: base64 }, { timeoutMs: null }),
+    /** Item 19a (D37): pasted or file text read into the same sheet; the caps (256 KB, 5,000 lines) are refused with a code and counts. */
+    ddbReadText: (text: string) => call<DdbReadResult>('ddb.readText', { text }),
     /** The proposed character for the chosen family, campaign and answers; writes nothing. */
     ddbPreview: (request: DdbPreviewRequest) => call<DdbPreview>('ddb.preview', request),
     /** Only the summary's "Create character" button calls this. */
-    ddbApply: (request: DdbPreviewRequest) => call<DdbApplyResult>('ddb.apply', { ...request, confirm: true }),
+    /** `references`: false for no publish, else the row ids of the reference drafts the summary showed (the consent token the service re-checks). */
+    ddbApply: (request: DdbPreviewRequest, publishClass: boolean, references: string[] | false, previewedPublishClass: boolean) =>
+      call<DdbApplyResult>('ddb.apply', {
+        ...request,
+        confirm: true,
+        publishClass,
+        // R129/R141: the publish choice of the preview the user was shown (not of the request state); the service refuses an apply that differs.
+        previewedPublishClass,
+        publishReferences: references !== false,
+        ...(references === false ? {} : { expectedReferences: references }),
+      }),
     /** Cancel at any step: drops the read sheet. */
     ddbDiscard: (token: string) => call<{ discarded: boolean }>('ddb.discard', { token }),
     // ---- full library backup (M2.1): native dialogs only; no path or backup bytes cross the bridge ----

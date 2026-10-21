@@ -36,7 +36,8 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "extension.chooseInput", "extension.runPreview", "extension.runImport", "extension.runExport", "extension.runSaveAs",
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
-        "ddb.read", "ddb.readData", "ddb.preview", "ddb.apply", "ddb.discard",
+        "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
+        "content.previewFormula",
     ];
 
     /// <summary>
@@ -115,6 +116,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.compare" => app.Compare(Payload<CompareRequest>(payload)),
         "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
         "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
+        "content.previewFormula" => app.PreviewFormula(Payload<FormulaPreviewRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),
@@ -123,6 +125,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "source.attachPdfData" => AttachPdfData(Payload<AttachDataPayload>(payload)),
         "ddb.read" => ReadDdbSheet(),
         "ddb.readData" => ReadDdbSheetData(Payload<DdbDataPayload>(payload)),
+        "ddb.readText" => app.ReadDdbText(Payload<DdbTextPayload>(payload).Text ?? throw new JsonException("ddb.readText needs text.")),
         "ddb.preview" => app.PreviewDdbImport(Payload<DdbPreviewRequest>(payload)),
         "ddb.apply" => app.ApplyDdbImport(Payload<DdbApplyRequest>(payload)),
         "ddb.discard" => new { discarded = app.DiscardDdbSheet(Payload<DdbTokenPayload>(payload).Token) },
@@ -169,7 +172,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "import.candidate.accept" => app.AcceptCandidate(Payload<CandidateAcceptRequest>(payload)),
         "import.candidate.acceptMany" => app.AcceptMany(Payload<CandidateAcceptManyRequest>(payload)),
         "import.candidate.addToSpellList" => app.AddCandidatesToSpellList(Payload<CandidateSpellListRequest>(payload)),
-        "import.candidate.ignore" => app.IgnoreCandidate(Payload<CandidateRequest>(payload).CandidateId),
+        "import.candidate.ignore" => app.IgnoreCandidate(Payload<CandidateIgnoreRequest>(payload)),
         "gap.add" => app.AddGapNote(Payload<AddGapNoteRequest>(payload)),
         "gap.setStatus" => app.SetGapNoteStatus(Payload<GapNoteStatusRequest>(payload)),
         "gap.delete" => DeleteGapNote(Payload<DeleteGapNoteRequest>(payload)),
@@ -241,7 +244,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private SnapshotPage ListSnapshots(SnapshotsPayload payload) => app.Snapshots(payload.CharacterId, payload.Before);
 
-    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice, payload.ChargeRolls);
 
     /// <summary>ADR-005: the native Open dialog picks the PDF; its path never crosses the bridge.</summary>
     private AttachOutcome AttachPdf(AttachPayload payload)
@@ -263,11 +266,12 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     {
         if (host is null || !host.CanOpenFiles)
             throw new AppValidationException([new("host.unsupported", "Choosing a character sheet needs the desktop app's Open dialog.")], "unsupported");
-        var path = host.ChooseOpenFile("D&D Beyond character sheet", ".pdf");
+        var path = host.ChooseOpenFile("Character sheet", ".pdf");
         if (path is null)
             return new { chosen = false };
+        LocalDrivePath.Require(path, ".pdf"); // R116: the worker reads this path, so a network or device path is refused first
         var read = app.ReadDdbSheet(path);
-        return new { chosen = true, read.Token, read.Layout, read.SuggestedFamily, read.Summary };
+        return new { chosen = true, read.Token, read.Layout, read.SuggestedFamily, read.Summary, read.LayoutName };
     }
 
     private DdbReadResult ReadDdbSheetData(DdbDataPayload payload) =>
@@ -599,7 +603,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record SnapshotsPayload(Guid CharacterId, Guid? Before = null);
 
-    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null, IReadOnlyList<ChargeRoll>? ChargeRolls = null);
 
     private sealed record ContentIdPayload(Guid ContentId);
 
@@ -610,6 +614,9 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
     private sealed record AttachDataPayload(Guid SourceId, string FileName, string Base64);
 
     private sealed record DdbDataPayload(string? FileName, string? Data);
+
+    /// <summary>Item 19a: the pasted or file text; its caps are the parser's, checked before anything is read.</summary>
+    private sealed record DdbTextPayload(string? Text);
 
     private sealed record DdbTokenPayload(Guid Token);
 
