@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction, type SubmitEvent } from 'react';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type {
   Ability,
   AbilityScores,
@@ -1157,7 +1158,15 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
     return [...new Set(names)];
   }
   const reasonNames = (refs: (ContentReference | undefined)[]) => needReason(refs.filter((r): r is ContentReference => !!r).map(plain));
-  const commitHint = view ? reasonHint(needReason(picksOf(view.character))) : undefined;
+  // R182: the saved character changed after this screen opened, so its save is refused for good (the draft names a version that is
+  // gone). The smaller safe option: say so in plain words and stop offering a save that cannot succeed; Cancel and reopen starts from
+  // the current copy.
+  const [stale, setStale] = useState(false);
+  const commitHint = stale
+    ? 'This character changed after you opened this screen, so it cannot be saved from here. Cancel, then open it again to start from the current copy.'
+    : view
+      ? reasonHint(needReason(picksOf(view.character)))
+      : undefined;
 
   /**
    * Previews the draft and moves to the choices. The reply applies only if it is the latest request and the player is still
@@ -1242,7 +1251,10 @@ export function CharacterBuilder({ mode, rulesFamilies, onCommitted, onCancel, o
       // awaits anything, so a second press cannot reach a builder that is leaving; one that stays is usable again below.
       await Promise.resolve(onCommitted(saved));
     } catch (error) {
-      fail(error);
+      if (mode.kind !== 'create' && error instanceof TomeStackError && error.code === 'character.stale') {
+        if (mounted.current) setStale(true);
+        fail(new Error('This character changed after you opened this screen, so your changes were not saved. Cancel, then open it again to start from the current copy.'));
+      } else fail(error);
     } finally {
       committing.current = false;
       setBusy(false);

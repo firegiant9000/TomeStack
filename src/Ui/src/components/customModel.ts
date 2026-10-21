@@ -1,4 +1,4 @@
-import type { CustomAttack, CustomItem } from '../api/types';
+import type { CharacterView, Companion, CustomAttack, CustomItem } from '../api/types';
 
 /**
  * Tester feedback item 18 (character schema v9, D42): the drafts behind "Your own items" and "Your own attacks" on Inventory.
@@ -118,7 +118,83 @@ export function buildAttack(id: string, draft: AttackDraft): CustomAttack {
   };
 }
 
-export const signedBonus = (n: number) => `${n >= 0 ? '+' : ''}${n}`;
+// ---- Wave 3 item 23 (D39): companions on Play. Limits mirror `Character` in RulesCore; the service stays the authority. ----
+export const maxCompanions = 10;
+export const maxCompanionAttacks = 5;
+export const maxCompanionText = 80;
+export const maxCompanionArmorClass = 50;
+export const maxHitPoints = 10_000;
+
+/** One attack line of a companion's draft: an attack draft with the id it keeps through edits. */
+export interface AttackLine extends AttackDraft {
+  id: string;
+}
+
+export interface CompanionDraft {
+  [key: string]: string | boolean;
+  name: string;
+  kind: string;
+  armorClass: string;
+  hitPointMaximum: string;
+  speed: string;
+  note: string;
+  /** JSON of `AttackLine[]`: the form edits the lines through this one string, so the shared entry editor needs no nested drafts. */
+  attacks: string;
+}
+
+export const attackLines = (draft: CompanionDraft): AttackLine[] => JSON.parse(draft.attacks) as AttackLine[];
+
+export const companionDraft = (companion?: Companion): CompanionDraft => ({
+  name: companion?.name ?? '',
+  kind: companion?.kind ?? '',
+  armorClass: companion?.armorClass === undefined ? '' : String(companion.armorClass),
+  hitPointMaximum: String(companion?.hitPointMaximum ?? 1),
+  speed: companion?.speed ?? '',
+  note: companion?.note ?? '',
+  attacks: JSON.stringify((companion?.attacks ?? []).map((a): AttackLine => ({ ...attackDraft(a), id: a.id }))),
+});
+
+export function companionProblems(draft: CompanionDraft): Problems {
+  const errors: Record<string, string> = {};
+  common(draft.name, draft.note, errors);
+  if (draft.kind.trim().length > maxCompanionText) errors.kind = `The kind can have at most ${maxCompanionText} characters.`;
+  if (draft.speed.trim().length > maxCompanionText) errors.speed = `The speed can have at most ${maxCompanionText} characters.`;
+  if (draft.armorClass.trim() !== '') {
+    const ac = wholeNumber(draft.armorClass);
+    if (ac === undefined || ac < 0 || ac > maxCompanionArmorClass) errors.armorClass = `The Armor Class must be a whole number from 0 to ${maxCompanionArmorClass}.`;
+  }
+  const max = wholeNumber(draft.hitPointMaximum);
+  if (max === undefined || max < 0 || max > maxHitPoints) errors.hitPointMaximum = `The hit point maximum must be a whole number from 0 to ${maxHitPoints}.`;
+  let incomplete = draft.name.trim() === '';
+  attackLines(draft).forEach((line, i) => {
+    const problems = attackProblems(line);
+    for (const [field, message] of Object.entries(problems.errors)) errors[`attack${i}-${field}`] = message;
+    incomplete ||= problems.incomplete;
+  });
+  return { errors, incomplete };
+}
+
+export function buildCompanion(id: string, draft: CompanionDraft): Companion {
+  const attacks = attackLines(draft).map((line) => buildAttack(line.id, line));
+  return {
+    id,
+    name: draft.name.trim(),
+    kind: text(draft.kind),
+    armorClass: text(draft.armorClass) === undefined ? undefined : Number(draft.armorClass),
+    hitPointMaximum: Number(draft.hitPointMaximum),
+    speed: text(draft.speed),
+    attacks: attacks.length > 0 ? attacks : undefined,
+    note: text(draft.note),
+  };
+}
+
+/** A companion's hit points as the card shows them: no recorded current means at the maximum, and a lowered maximum caps the record. */
+export function companionHitPoints(view: CharacterView, companion: Companion): { current: number; temporary: number } {
+  const recorded = view.character.play?.companions?.find((p) => p.id === companion.id);
+  return { current: Math.min(recorded?.current ?? companion.hitPointMaximum, companion.hitPointMaximum), temporary: recorded?.temporary ?? 0 };
+}
+
+export const signedBonus =(n: number) => `${n >= 0 ? '+' : ''}${n}`;
 
 /** One line for a list row: "Testy Sling: +5 to hit, 1d6+2 bludgeoning". */
 export const attackSummary = (a: CustomAttack) =>

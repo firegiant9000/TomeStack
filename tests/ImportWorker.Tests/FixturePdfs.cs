@@ -148,12 +148,15 @@ internal static class FixturePdfs
     /// <summary>The Fixture Lamplighter's invented level table: for the tests, which read it back.</summary>
     internal static class Lamplighter
     {
+        /// <summary>The table's reference-only feature (R181): the detector's exclusion is what these rows test.</summary>
+        private const string Ref = TomeStack.ImportWorker.Detection.CandidateDetector.ReferenceOnlyFeatureName;
+
         public static readonly string[] Features =
         [
-            "Spellcasting, Fixture Lantern Rite", "Fixture Glow", "Fixture Order feature", "Ability Score Improvement", "Fixture Beacon",
-            "Fixture Order feature", "Fixture Glow", "Ability Score Improvement", "Fixture Sconce", "Fixture Order feature",
-            "Fixture Beacon", "Ability Score Improvement", "-", "Fixture Order feature", "Fixture Dusk Step",
-            "Ability Score Improvement", "-", "Fixture Order feature", "Ability Score Improvement", "Fixture Final Light",
+            "Spellcasting, Fixture Lantern Rite", "Fixture Glow", "Fixture Order feature", Ref, "Fixture Beacon",
+            "Fixture Order feature", "Fixture Glow", Ref, "Fixture Sconce", "Fixture Order feature",
+            "Fixture Beacon", Ref, "-", "Fixture Order feature", "Fixture Dusk Step",
+            Ref, "-", "Fixture Order feature", Ref, "Fixture Final Light",
         ];
 
         public static int[] Cantrips { get; } = [.. Enumerable.Range(1, 20).Select(l => 2 + l / 6)];

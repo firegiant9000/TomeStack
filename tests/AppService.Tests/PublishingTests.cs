@@ -119,6 +119,30 @@ public class PublishingTests
     }
 
     [Fact]
+    public void Task_8_a_species_draft_with_a_speed_replace_publishes_at_v10_and_one_without_it_does_not()
+    {
+        var (temp, _, _) = Setup();
+        using var _t = temp;
+        var increase = new ModifierEffect { Id = "str-increase", Operation = ModifierOperation.Bonus, Target = "ability.str.score", Value = "2" };
+        var folk = Draft2 with { Kind = ContentKind.Species, Name = "Fixture Folk", Effects = [increase] };
+
+        var plain = temp.App.Publish(temp.App.SaveDraft(folk with { RevisionId = Guid.NewGuid() }));
+        Assert.True(plain.Report.CanPublish);
+        var previous = temp.App.Store.FindRevision(plain.Published)!.SchemaVersion;
+        Assert.InRange(previous, 1, 9); // whatever the draft needed before v10; the page reference sets it, not the species
+        Assert.Equal(previous, plain.Report.RequiredSchemaVersion);
+
+        var swift = folk with
+        {
+            RevisionId = Guid.NewGuid(),
+            Effects = [increase, new ModifierEffect { Id = "speed", Operation = ModifierOperation.Replace, Target = FieldIds.Speed, Value = "25" }],
+        };
+        var v10 = temp.App.Publish(temp.App.SaveDraft(swift));
+        Assert.True(v10.Report.CanPublish);
+        Assert.Equal((10, 10), (temp.App.Store.FindRevision(v10.Published)!.SchemaVersion, v10.Report.RequiredSchemaVersion));
+    }
+
+    [Fact]
     public void Publishing_refuses_an_invalid_draft_or_a_published_revision_and_adds_nothing()
     {
         var (temp, _, _) = Setup();
@@ -236,6 +260,29 @@ public class PublishingTests
         Assert.Equal(newWarden, Assert.Single(updated.Character.Choices).Source);
         Assert.Equal(newWarden, Assert.Single(updated.Character.Classes).Class);
         Assert.All(updated.Sheet.Choices!, c => Assert.True(c.Resolved));
+    }
+
+    [Fact]
+    public void R182_the_servers_own_saves_Choose_and_ApplyUpdate_pass_compare_and_set_when_the_clock_has_moved()
+    {
+        var clock = new MutableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var pack = temp.AddPack("fixture-pack-m1.json");
+        var warden = pack.Revisions.Single(r => r.Name == "Fixture Warden");
+        var athletics = pack.Revisions.Single(r => r.Name == "Fixture Warden Skill: Athletics").Reference;
+        var survival = pack.Revisions.Single(r => r.Name == "Fixture Warden Skill: Survival").Reference;
+        var character = TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [], Classes = [new(warden.Reference, 1)] };
+        var id = temp.App.SaveCharacter(character).Character.Id;
+        var newWarden = temp.App.Publish(temp.App.SaveDraft(warden with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Summary = "Revised" })).Published;
+
+        clock.Now = clock.Now.AddSeconds(5);
+        var chosen = temp.App.Choose(new(id, warden.Reference, "warden-skills", [athletics, survival]));
+        clock.Now = clock.Now.AddSeconds(5);
+        var updated = temp.App.ApplyUpdate(id, warden.Reference, newWarden, confirm: true); // Publishing.cs ReplaceReference save
+
+        Assert.Equal(TempApp.Now.AddSeconds(5), chosen.Character.UpdatedAt);
+        Assert.Equal(clock.Now, updated.Character.UpdatedAt);
+        Assert.Equal(newWarden, Assert.Single(updated.Character.Classes).Class);
     }
 
     [Fact]

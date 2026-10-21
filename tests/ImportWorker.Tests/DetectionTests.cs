@@ -412,7 +412,7 @@ public class DetectionTests
         });
         // The class's own references now resolve (the stubs are candidates of the job); no ASI or "... feature" placeholder is linked.
         Assert.Empty(lamplighter.UnresolvedReferences);
-        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is "Ability Score Improvement" or "Fixture Order feature");
+        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is CandidateDetector.ReferenceOnlyFeatureName or "Fixture Order feature");
 
         // The Warden's one-line rows link too: Stormcall is a block of the book, Focus and Resolve are stubs.
         var warden = Named(result.Candidates, "Fixture Warden");
@@ -693,7 +693,7 @@ public class DetectionTests
     [Fact]
     public void A_name_and_a_singular_Prerequisite_line_in_one_block_is_an_option_list_entry_not_a_feat()
     {
-        // The SRDs' Eldritch Invocations have this shape; they measured as 20+ spurious feats.
+        // An option-list entry (a pick-one option with a prerequisite) has this shape; on the SRDs they measured as 20+ spurious feats.
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Fixture Quiet Step\nPrerequisite: 5th level\nYou move without a sound.", 50, 600, 200, 40, 10, false));
 
@@ -705,9 +705,9 @@ public class DetectionTests
     {
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Martial Melee Weapons", 50, 700, 200, 10, 10, false),
-            new TextBlock("Fixture Crossbow, hand  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
+            new TextBlock("Fixture Lantern, small  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
 
-        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Crossbow, hand");
+        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Lantern, small");
     }
 
     [Fact]

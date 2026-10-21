@@ -168,6 +168,25 @@ public class CurrencyAndNotesTests
     }
 
     [Fact]
+    public void The_restore_preview_sees_a_change_in_the_second_copy_of_an_item_with_charges()
+    {
+        // Review fix (Wave 3): two copies of one item are told apart by entry id, not merged by item.
+        using var temp = new TempApp();
+        var item = new ContentReference(Guid.NewGuid(), Guid.NewGuid());
+        var (first, second) = (Guid.NewGuid(), Guid.NewGuid());
+        var saved = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json")).Character;
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first), new(item, Id: second)] });
+        var snapshot = temp.App.Snapshot(new(saved.Id, "two copies"));
+        Assert.False(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first), new(item, Id: second, ChargesSpent: 2)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+
+        temp.App.Store.SaveCharacter(saved with { Equipment = [new(item, Id: first, ChargesSpent: 1), new(item, Id: second)] });
+        Assert.True(temp.App.PreviewRestore(new(saved.Id, snapshot.Id)).OtherSheetValuesChange);
+    }
+
+    [Fact]
     public void The_restore_preview_names_the_coin_change_and_stays_quiet_when_coins_are_the_same()
     {
         using var temp = new TempApp();

@@ -27,7 +27,7 @@ function lightDarkPairs(source: string): [string, string][] {
   return pairs;
 }
 
-it('keeps every dark value exactly as the owner set it on 2026-10-06 (D27: light changes only)', () => {
+it('keeps every dark value exactly as the owner set it on 2026-10-06 (D27: light changes only), plus the three D40 presets', () => {
   const dark = lightDarkPairs(css).map(([, b]) => b);
   expect(dark.sort()).toEqual(
     [
@@ -37,10 +37,14 @@ it('keeps every dark value exactly as the owner set it on 2026-10-06 (D27: light
       '#1e2230', '#aeb8ff', '#73ebdb',
       // violet
       '#211a2c', '#d6beff', '#86e3f5',
-      // --bg (three themes) and --line-strong and --header-bg carry today's dark expressions
-      'Canvas', 'Canvas', 'Canvas',
+      // ember, rose, tide (D40, R163): new dark values, pinned the same way
+      '#261c17', '#ffb08f', '#8cc6f2',
+      '#2a1b23', '#ffb3d1', '#92e3b8',
+      '#16252a', '#7fdfe6', '#ffab94',
+      // --bg (six themes) and --line-strong and --header-bg carry today's dark expressions
+      'Canvas', 'Canvas', 'Canvas', 'Canvas', 'Canvas', 'Canvas',
       'color-mix(in srgb, CanvasText 50%, Canvas)',
-      'color-mix(in srgb, var(--accent) 12%, var(--bg))', 'color-mix(in srgb, var(--accent) 12%, var(--bg))', 'color-mix(in srgb, var(--accent) 12%, var(--bg))',
+      ...Array<string>(6).fill('color-mix(in srgb, var(--accent) 12%, var(--bg))'),
     ].sort(),
   );
 });
@@ -100,6 +104,32 @@ it('maps each token to the light value the spec computed, per theme block (secti
     '--accent-2': ['#075f78', '#86e3f5'],
     '--header-bg': [headerLight, headerDark],
   });
+});
+
+it('maps the three D40 presets (ember, rose, tide) token by token, and the custom theme owns no static block', () => {
+  expect(tokenPairs(blockAfter(css, "html[data-theme='ember'] {"))).toEqual({
+    '--bg': ['#fdf1ea', 'Canvas'],
+    '--surface': ['#f6d9c8', '#261c17'],
+    '--accent': ['#9c3410', '#ffb08f'],
+    '--accent-2': ['#1d5a86', '#8cc6f2'],
+    '--header-bg': [headerLight, headerDark],
+  });
+  expect(tokenPairs(blockAfter(css, "html[data-theme='rose'] {"))).toEqual({
+    '--bg': ['#fdf0f5', 'Canvas'],
+    '--surface': ['#f6d6e3', '#2a1b23'],
+    '--accent': ['#a01f5c', '#ffb3d1'],
+    '--accent-2': ['#1f6444', '#92e3b8'],
+    '--header-bg': [headerLight, headerDark],
+  });
+  expect(tokenPairs(blockAfter(css, "html[data-theme='tide'] {"))).toEqual({
+    '--bg': ['#ebf7f7', 'Canvas'],
+    '--surface': ['#c9e8e8', '#16252a'],
+    '--accent': ['#0a6068', '#7fdfe6'],
+    '--accent-2': ['#9a3a20', '#ffab94'],
+    '--header-bg': [headerLight, headerDark],
+  });
+  // The custom accent is generated and adopted at run time (accentClamp.ts): the stylesheet carries no block for it.
+  expect(css).not.toContain("data-theme='custom'");
 });
 
 it('forced colours and print both reset --bg and --header-bg, and reach themed pages (html[data-theme])', () => {

@@ -1,24 +1,27 @@
 // @vitest-environment jsdom
 // Settings: a radio group for the theme and a checkbox for the dice animation, both kept in the page's own storage.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { clampAccent } from '../accentClamp';
 import type { AppInfo } from '../api/types';
 import { SettingsPanel } from './SettingsPanel';
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, 'adoptedStyleSheets');
   localStorage.clear();
   delete document.documentElement.dataset.theme;
   for (const key of Object.keys(document.documentElement.dataset)) delete document.documentElement.dataset[key];
 });
 
-it('offers the three themes as a radio group, applies the pick at once and remembers it', async () => {
+it('offers the presets and Custom accent as a radio group, applies the pick at once and remembers it', async () => {
   const user = userEvent.setup();
   render(<SettingsPanel />);
   expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeTruthy();
   const group = screen.getByRole('radiogroup', { name: 'Theme' });
-  expect(within(group).getAllByRole('radio').map((r) => r.closest('label')?.textContent?.trim())).toEqual(['Cool', 'Forest', 'Violet']);
+  expect(within(group).getAllByRole('radio').map((r) => r.closest('label')?.textContent?.trim())).toEqual(['Cool', 'Ember', 'Forest', 'Rose', 'Tide', 'Violet', 'Custom accent']);
   expect(screen.getByRole<HTMLInputElement>('radio', { name: 'Forest' }).checked).toBe(true);
   await user.click(screen.getByRole('radio', { name: 'Cool' }));
   expect(document.documentElement.dataset.theme).toBe('cool');
@@ -99,4 +102,72 @@ it('offers the accessibility settings as labelled controls that apply at once', 
   expect(announce.checked).toBe(true);
   await user.click(announce);
   expect(localStorage.getItem('tomestack.announceRolls')).toBe('off');
+});
+
+function stubAdoptedSheets() {
+  class FakeSheet {
+    text = '';
+    replaceSync(text: string) {
+      this.text = text;
+    }
+  }
+  vi.stubGlobal('CSSStyleSheet', FakeSheet);
+  Object.defineProperty(document, 'adoptedStyleSheets', { configurable: true, writable: true, value: [] });
+  return () => (document.adoptedStyleSheets as unknown as { text: string }[]).map((x) => x.text).join(' ');
+}
+
+it('applies each new preset at once and remembers it, with no hue slider', async () => {
+  const user = userEvent.setup();
+  render(<SettingsPanel />);
+  for (const id of ['ember', 'rose', 'tide']) {
+    await user.click(screen.getByRole('radio', { name: id[0]!.toUpperCase() + id.slice(1) }));
+    expect(document.documentElement.dataset.theme).toBe(id);
+    expect(localStorage.getItem('tomestack.theme')).toBe(id);
+    expect(screen.queryByRole('slider')).toBeNull();
+  }
+});
+
+it('shows the Accent hue slider only while Custom accent is chosen, and hides it again for a preset', async () => {
+  const user = userEvent.setup();
+  stubAdoptedSheets();
+  render(<SettingsPanel />);
+  expect(screen.queryByRole('slider')).toBeNull();
+  await user.click(screen.getByRole('radio', { name: 'Custom accent' }));
+  const slider = screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' });
+  expect(slider.type).toBe('range');
+  expect([slider.min, slider.max, slider.step]).toEqual(['0', '359', '1']);
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  expect(localStorage.getItem('tomestack.theme')).toBe('custom');
+  await user.click(screen.getByRole('radio', { name: 'Tide' }));
+  expect(screen.queryByRole('slider')).toBeNull();
+  expect(localStorage.getItem('tomestack.theme')).toBe('tide');
+  expect(localStorage.getItem('tomestack.accentHue')).toBeNull(); // nothing was dragged
+});
+
+it('reads the hue as a colour word and a number, stores it, and re-applies the generated accent as it moves', () => {
+  localStorage.setItem('tomestack.theme', 'custom');
+  localStorage.setItem('tomestack.accentHue', '180');
+  const applied = stubAdoptedSheets();
+  render(<SettingsPanel />);
+  const slider = screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' });
+  expect(slider.value).toBe('180');
+  expect(slider.getAttribute('aria-valuetext')).toBe('Teal, 180 degrees');
+  fireEvent.change(slider, { target: { value: '30' } });
+  expect(slider.getAttribute('aria-valuetext')).toBe('Red, 30 degrees');
+  expect(localStorage.getItem('tomestack.accentHue')).toBe('30');
+  expect(applied()).toContain(clampAccent(30, 'light').accent);
+  expect(applied()).not.toContain(`--accent: light-dark(${clampAccent(180, 'light').accent},`); // (hue 30's accent-2 is hue 180's accent: 150 degrees apart)
+});
+
+it('offers a live sample: a line in the accent, a filled chip and a focus-ring swatch, hidden from assistive technology', () => {
+  localStorage.setItem('tomestack.theme', 'custom');
+  stubAdoptedSheets();
+  render(<SettingsPanel />);
+  const sample = screen.getByTestId('accent-sample');
+  expect(sample.getAttribute('aria-hidden')).toBe('true');
+  expect(sample.querySelector('.accent-sample-text')).not.toBeNull();
+  expect(sample.querySelector('.accent-sample-chip')).not.toBeNull();
+  expect(sample.querySelector('.accent-sample-ring')).not.toBeNull();
+  expect(sample.hasAttribute('style')).toBe(false);
+  expect(sample.querySelector('[style]')).toBeNull();
 });

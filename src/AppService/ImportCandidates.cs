@@ -170,6 +170,9 @@ public sealed partial class TomeStackApp
 
     internal int DetectionCandidateCap { get; set; } = CandidateDetector.MaxCandidates;
 
+    /// <summary>Test seam (R161 a): runs at the start of every detection attempt, so a test can time one out or count the runs.</summary>
+    internal Action? BeforeDetectionAttempt { get; set; }
+
     /// <summary>Test seam (fix round 1, item 7): runs after an accept (or accept-many) is planned and checked, just before its writes.</summary>
     internal Action? BeforeAcceptWrites { get; set; }
 
@@ -186,6 +189,22 @@ public sealed partial class TomeStackApp
     /// </summary>
     private ImportJobRecord DetectCandidates(ImportJobRecord job, CancellationToken cancellationToken)
     {
+        try
+        {
+            return DetectOnce(job, cancellationToken);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            // R161 a: a timeout can be a paused thread on a busy computer, so detection runs once more with a fresh budget
+            // per pattern match (DetectionLimits.RegexTimeoutMs). No candidate is written before detection finishes, so the retry
+            // starts clean (a "detection-limited" audit note may appear twice). A second timeout propagates and fails the job with detect.timeout, so a hostile page costs two runs.
+            return DetectOnce(job, cancellationToken);
+        }
+    }
+
+    private ImportJobRecord DetectOnce(ImportJobRecord job, CancellationToken cancellationToken)
+    {
+        BeforeDetectionAttempt?.Invoke();
         var source = _store.FindSource(job.SourceId);
         if (source is null)
             return job;

@@ -39,7 +39,7 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
   const duplicate = own.some((d) => sameDefence(d, { type, kind }));
 
   // The change is applied to the latest saved list (R132). Focus goes to the section heading: the button that was pressed
-  // may be gone (Remove) or disabled (Add, now a duplicate), and focus must not drop to the page body (WCAG 2.4.3).
+  // may be gone (Remove) or held (Add, now a duplicate), and focus must not drop to the page body (WCAG 2.4.3).
   async function save(change: (list: DamageDefence[]) => DamageDefence[]) {
     try {
       onChanged(await persist((latest) => ({ ...latest, damageDefences: change(latest.damageDefences ?? []) })));
@@ -104,9 +104,12 @@ export function DefencesPanel({ view, onChanged, onError, saveCharacter }: Props
         </label>
         <button
           type="button"
-          disabled={duplicate}
+          aria-disabled={duplicate || undefined}
           aria-describedby={duplicate ? 'defences-duplicate' : undefined}
-          onClick={() => save((list) => (list.some((x) => sameDefence(x, { type, kind })) ? list : [...list, { type, kind }]))}
+          onClick={() => {
+            if (duplicate) return; // held: a press sends nothing and stamps nothing
+            void save((list) => (list.some((x) => sameDefence(x, { type, kind })) ? list : [...list, { type, kind }]));
+          }}
         >
           Add
         </button>

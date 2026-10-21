@@ -17,7 +17,11 @@ public class AppVersionCopyTests
     {
         var app = TomeStackApp.Open(directory, new FixedTime(TempApp.Now), syncRoots: [], devFixtures: true, appVersion: version);
         if (save)
-            app.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        {
+            // R182: a second save of the same fixture names the version already stored.
+            var fixture = TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json");
+            app.SaveCharacter(fixture with { UpdatedAt = app.ListCharacters().FirstOrDefault(c => c.Id == fixture.Id)?.UpdatedAt ?? fixture.UpdatedAt });
+        }
         return app;
     }
 

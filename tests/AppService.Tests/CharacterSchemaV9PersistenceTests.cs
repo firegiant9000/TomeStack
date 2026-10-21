@@ -164,8 +164,9 @@ public class CharacterSchemaV9PersistenceTests
         var v9 = V9();
         var bare = v9 with { Details = null, CustomItems = null, CustomAttacks = null, DamageDefences = null, Companions = null, Xp = null, Play = new PlayState() };
 
-        var withV9 = temp.App.SaveCharacter(v9).Sheet;
-        var without = temp.App.SaveCharacter(bare).Sheet;
+        var firstSave = temp.App.SaveCharacter(v9);
+        var withV9 = firstSave.Sheet;
+        var without = temp.App.SaveCharacter(bare with { UpdatedAt = firstSave.Character.UpdatedAt }).Sheet; // R182: names the version it edits
 
         Assert.Equal(TempApp.Json(without.Fields), TempApp.Json(withV9.Fields)); // nothing in v9 is calculated
     }

@@ -8,6 +8,16 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+internal static class AppTestExtensions
+{
+    /// <summary>
+    /// R182: saves a hand-built character as the page would, naming the version now stored (a character with no stored row is
+    /// new and keeps what it carries). For tests that save one fixture again and again.
+    /// </summary>
+    public static CharacterView SaveCurrent(this TomeStackApp app, Character character) =>
+        app.SaveCharacter(app.ListCharacters().FirstOrDefault(c => c.Id == character.Id) is { } stored ? character with { UpdatedAt = stored.UpdatedAt } : character);
+}
+
 /// <summary>A throwaway data directory per test; deleted on dispose.</summary>
 internal sealed class TempApp : IDisposable
 {
