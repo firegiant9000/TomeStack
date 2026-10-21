@@ -2290,7 +2290,13 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   const ink = rule(/^Rule 2: Resource/);
   await user.type(within(ink).getByRole('textbox', { name: 'Resource name' }), 'Ink');
   await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
+  // D61: the formula's preview, worked out by the real service against this draft (proficiency bonus 6 at level 20).
+  await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'PB');
+  expect((await within(ink).findByText(/Level 20: 6/)).textContent).toMatch(/^Level 1: 2 · .* · Level 20: 6$/);
+  expect(within(ink).getByRole('textbox', { name: /^Uses/ }).getAttribute('aria-describedby')).toMatch(/^rule-resource-\d+-maximum-preview$/);
+  await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
   await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'SCALE.ink');
+  expect(await within(ink).findByText(/Level 1: 2 · .* · Level 20: 9$/)).toBeTruthy(); // the draft's own column
   await user.click(within(editor()).getByRole('button', { name: 'Add recovery' })); // all, on a long rest
 
   await user.click(within(editor()).getByRole('button', { name: 'Add spellcasting' }));
