@@ -202,8 +202,14 @@ public sealed record FeatureEffect(
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
 /// D38): true when the sheet switches it itself (<c>autoWhen</c>); it has no switch, is never stored and never spends a use.
 /// Null otherwise, so nothing is written for an ordinary toggle.
+/// Content v11 (D43): <paramref name="Group"/>, <paramref name="GroupContent"/> and <paramref name="Layer"/> name the form group the toggle
+/// joins (null for an ungrouped toggle); <paramref name="Cost"/> is its pool cost for this character (null when it has none, or the
+/// formula fails) spent from <paramref name="CostResourceContent"/>'s pool; <paramref name="Available"/> is false, with a reason, when
+/// an overlay may not be switched on with the form that is on now.
 /// </summary>
-public sealed record ToggleValue(ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null);
+public sealed record ToggleValue(
+    ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
+    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -561,7 +567,10 @@ public static class CharacterCalculator
         // Fields with an effect the calculator could not apply (not automatic, invalid or disabled): the user may need to
         // account for it by hand, so the field and its dependents are only assisted.
         var manual = new HashSet<string>(StringComparer.Ordinal);
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, autoOn);
+        // Content v11 (D43): one primary per form group and the allowed overlays, resolved in every pass.
+        var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
+        var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -636,10 +645,30 @@ public static class CharacterCalculator
                 : null;
         var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
         var toggles = active
-            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>().Where(t => t.Automation != AutomationStatus.Reference).Select(t => new ToggleValue(
-                item.Revision.Reference, item.Revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(item.Revision, t, character, autoOn), t.ResourceId, t.Text,
-                IsAuto(item.Revision, t) ? true : null, ActivationOf(item.Revision, t.Activation))))
+            .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
+                .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
+                .Select(t => ToggleOf(item, t)))
             .ToList();
+        ToggleValue ToggleOf(ActiveContent item, ToggleEffect t)
+        {
+            var revision = item.Revision;
+            var allowed = effective.IsAllowed(revision.ContentId, t.ToggleId);
+            int? cost = null;
+            if (t.Cost is { } source)
+            {
+                // Like a resource maximum: a formula that fails gives no cost and the invalid-formula warning.
+                if (!Formula.TryParse(source, AllowsScales(revision), out var formula, out var failure)
+                    || !formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var amount, out failure))
+                    diagnostics.Add(InvalidFormula(revision, t, failure!));
+                else
+                    cost = Math.Max(amount, 0);
+            }
+            return new ToggleValue(
+                revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(revision, t, effective, autoOn), t.ResourceId, t.Text,
+                IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
+                t.Group, t.Group is null ? null : t.GroupContent ?? revision.ContentId, t.Group is null ? null : t.Layer ?? ToggleLayer.Primary,
+                cost, t.Cost is null ? null : t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t));
+        }
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
         // R168: bloodied = a maximum of at least 1 and current hit points at or below half of it, rounded down. Temporary hit points do not count.
@@ -768,8 +797,31 @@ public static class CharacterCalculator
         revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion ? activation : null;
 
     /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
-    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, Character character, bool autoOn) =>
-        IsAuto(revision, toggle) ? autoOn : character.Play.IsOn(revision.ContentId, toggle.ToggleId);
+    private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, EffectiveToggles effective, bool autoOn) =>
+        IsAuto(revision, toggle) ? autoOn : effective.IsOn(revision.ContentId, toggle.ToggleId);
+
+    /// <summary>Content v11 (D43): why an overlay cannot be switched on now, naming the form content it needs.</summary>
+    private static string UnavailableReason(List<ActiveContent> active, ActiveContent item, ToggleEffect overlay)
+    {
+        var needed = (overlay.AllowedWith ?? [])
+            .Select(r => active.FirstOrDefault(a => a.Revision.ContentId == (r.ContentId ?? item.Revision.ContentId))?.Revision.Name ?? r.ToggleId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (needed.Count == 0)
+            return "Only available when no other form of its group is on.";
+        return $"Needs {string.Join(" or ", needed)}" + (overlay.AllowedInBase == true ? ", or no other form of its group on." : ".");
+    }
+
+    /// <summary>Content v11 (D43): the toggles the groups are resolved over. Automatic toggles follow their condition and a toggle whose <c>level</c> is not reached is not offered.</summary>
+    private static List<DeclaredToggle> DeclaredToggles(List<ActiveContent> active, Character character, ClassLevelMap classLevels) =>
+    [
+        .. active.SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
+            .Where(t => !IsAuto(item.Revision, t) && LevelReached(item, t, character, classLevels))
+            .Select(t => new DeclaredToggle(item.Revision.ContentId, item.Revision.Name, t, item.Revision.Reference))),
+    ];
+
+    private static bool LevelReached(ActiveContent item, ToggleEffect toggle, Character character, ClassLevelMap classLevels) =>
+        toggle.Level is not { } needed || GateLevel(item, character, classLevels) >= needed;
 
     /// <summary>
     /// Content v8 (M2.2): the attack count is at least 1, and the critical range is a d20 roll, 1 to 20. Content that takes
@@ -1684,7 +1736,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, bool autoOn)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -1697,7 +1749,7 @@ public static class CharacterCalculator
                 if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
                     && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
                 {
-                    if (!ToggleIsOn(revision, named, character, autoOn))
+                    if (!ToggleIsOn(revision, named, effective, autoOn))
                         continue;
                 }
                 else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)

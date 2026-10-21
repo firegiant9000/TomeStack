@@ -64,6 +64,23 @@ public class ToggleGroupValidationTests
     }
 
     [Fact]
+    public void An_allowedWith_holder_present_only_in_the_batch_is_found_without_a_warning_or_error()
+    {
+        // The holder content is in the batch being validated, not in the catalog: the local.OfContent half of the check.
+        var holderId = Guid.Parse("6f0dc000-0000-4000-8000-0000000000ee");
+        var holder = Fixtures.RevisionWithEffect("""{"type":"toggle","id":"tide","toggleId":"tide","label":"Tide"}""", schemaVersion: 11)
+            with { ContentId = holderId, RevisionId = Guid.Parse("6f0de000-0000-4000-8000-0000000000ee") };
+        var surge = ToggleGroupVariants.Make("allowed-with-unknown-content");
+        Assert.Contains(((ToggleEffect)surge.Effects[0]).AllowedWith!, r => r.ContentId == holderId);
+
+        var report = ContentValidator.Validate(surge, Fixtures.PlayMechanicsCatalog(), [surge, holder]);
+
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-allowed-with-content-missing");
+        Assert.DoesNotContain(report.Errors, e => e.Code == "validate.toggle-allowed-with");
+        Assert.Empty(report.Errors);
+    }
+
+    [Fact]
     public void The_forms_pack_toggleGroup_raises_no_incomplete_error()
     {
         var discipline = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.FormDiscipline)!;
