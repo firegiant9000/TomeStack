@@ -22,7 +22,7 @@ public class RevisionHashProperties
     internal static string Hash(string json) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
 
     /// <summary>The toggle keys content v11 adds (D43). Written out here on purpose: a key added to the build must be added here too.</summary>
-    private static readonly string[] ToggleV11Keys = ["group", "groupContent", "layer", "allowedWith", "allowedInBase", "cost", "resourceContent", "level"];
+    internal static readonly string[] ToggleV11Keys = ["group", "groupContent", "layer", "allowedWith", "allowedInBase", "cost", "resourceContent", "level"];
 
     public static TheoryData<int> Versions => [.. Enumerable.Range(1, ContentRevision.CurrentSchemaVersion)];
 
