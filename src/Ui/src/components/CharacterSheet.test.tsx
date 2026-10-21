@@ -225,6 +225,23 @@ it('does not offer Undo once another view is shown, such as a rest result (D23)'
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo last change' }).disabled).toBe(true);
 });
 
+it('leaves the information-only toggle.group-absent out of "Content not applied" and keeps real diagnostics (D43)', () => {
+  renderSheet(
+    view({
+      diagnostics: [
+        { code: 'toggle.group-absent', message: 'Toggle joins a group whose content is not here; it is a group of one.' },
+        { code: 'effect.invalid-formula', message: 'A formula does not read.' },
+      ],
+    }),
+  );
+  expect(screen.getByRole('heading', { name: 'Content not applied' })).toBeTruthy();
+  expect(screen.getByText('A formula does not read.')).toBeTruthy();
+  expect(screen.queryByText(/group of one/)).toBeNull();
+  cleanup();
+  renderSheet(view({ diagnostics: [{ code: 'toggle.group-absent', message: 'group of one' }] }));
+  expect(screen.queryByRole('heading', { name: 'Content not applied' })).toBeNull();
+});
+
 it('offers a compact view on Play that is remembered as a preference (D20)', async () => {
   const user = userEvent.setup();
   renderSheet(view());

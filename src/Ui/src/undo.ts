@@ -10,7 +10,19 @@ export interface UndoEntry {
 }
 
 const hp = (view: CharacterView) => view.sheet.hitPoints;
-const findToggle = (view: CharacterView, toggle: PlayAction) =>
+/**
+ * D43: switching a primary on or off also drops the overlays its group no longer allows, and the client cannot restore them. True
+ * when a toggle other than the one acted on was on before and is off after, so the change has no client undo.
+ */
+const droppedOthers = (action: PlayAction, before: CharacterView, after: CharacterView) =>
+  (before.sheet.toggles ?? []).some(
+    (o) =>
+      o.on &&
+      !o.auto &&
+      !(o.content.contentId === action.contentId && o.toggleId === action.toggleId) &&
+      after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
+  );
+const findToggle =(view: CharacterView, toggle: PlayAction) =>
   view.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
 
 /**
@@ -74,7 +86,7 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       return entry([{ action: 'spendPactSlot' }]);
     case 'toggleOn': {
       // D43 slice 1: a replace switch also turned another form off (and maybe its overlays), which the client cannot restore: no undo until slice 2.
-      if (action.replace) return undefined;
+      if (action.replace || droppedOthers(action, before, after)) return undefined;
       const t = findToggle(before, action);
       const resourceId = t?.resourceId;
       // A resource-backed toggle spent its cost when it went on (1 when it names a pool but no cost, D43), from the pool it names
@@ -86,13 +98,7 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       if (backing(action)) return undefined;
-      // Turning a primary off also drops the overlays that need it (D43), and the client cannot restore them: no undo
-      // when another toggle that was on is now off.
-      const dropped = (before.sheet.toggles ?? []).some(
-        (o) => o.on && !o.auto && !(o.content.contentId === action.contentId && o.toggleId === action.toggleId)
-          && after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
-      );
-      return dropped ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+      return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
     }
     case 'companionDamage':
     case 'companionHeal':

@@ -209,7 +209,7 @@ public sealed record FeatureEffect(
 /// </summary>
 public sealed record ToggleValue(
     ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
-    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null);
+    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -667,7 +667,7 @@ public static class CharacterCalculator
                 revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(revision, t, effective, autoOn), t.ResourceId, t.Text,
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 t.Group, t.Group is null ? null : t.GroupContent ?? revision.ContentId, t.Group is null ? null : t.Layer ?? ToggleLayer.Primary,
-                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t));
+                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t));
         }
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
@@ -799,6 +799,13 @@ public static class CharacterCalculator
     /// <summary>An auto toggle is on only when the pass says so; a stored <c>ActiveToggle</c> naming it is ignored. Any other toggle follows the play state.</summary>
     private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, EffectiveToggles effective, bool autoOn) =>
         IsAuto(revision, toggle) ? autoOn : effective.IsOn(revision.ContentId, toggle.ToggleId);
+
+    /// <summary>Content v11 (D43): the label of the <c>toggleGroup</c> effect that declares the toggle's group, found on the group content among the active content; null when ungrouped or the declarer is not active.</summary>
+    private static string? GroupLabelOf(List<ActiveContent> active, ActiveContent item, ToggleEffect toggle) =>
+        toggle.Group is not { } group
+            ? null
+            : active.FirstOrDefault(a => a.Revision.ContentId == (toggle.GroupContent ?? item.Revision.ContentId))?.Revision.Effects
+                .OfType<ToggleGroupEffect>().FirstOrDefault(g => g.GroupId == group)?.Label;
 
     /// <summary>Content v11 (D43): why an overlay cannot be switched on now, naming the form content it needs.</summary>
     private static string UnavailableReason(List<ActiveContent> active, ActiveContent item, ToggleEffect overlay)

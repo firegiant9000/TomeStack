@@ -126,6 +126,14 @@ it('a replace switch has no client undo', () => {
   expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't', replace: true }, v, v)).toBeUndefined();
 });
 
+it('turning on a primary that dropped an overlay the new form does not allow has no client undo', () => {
+  const before = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
+  const after = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 'p' }, before, after)).toBeUndefined();
+  const kept = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 'p' }, before, kept)!.inverse).toEqual([{ action: 'toggleOff', contentId: 'c', toggleId: 'p' }]);
+});
+
 it('turning off a primary that also dropped an overlay has no client undo, and turning off a costed toggle is not undoable', () => {
   const before = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
   const after = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });

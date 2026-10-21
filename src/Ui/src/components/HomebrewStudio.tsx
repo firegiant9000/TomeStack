@@ -1073,7 +1073,7 @@ function EntryEditor(props: {
                 e.type === 'modifier' && removedToggle !== undefined && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
                   : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
-                    ? { ...e, resourceId: undefined }
+                    ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
                     : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
                       e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
                       ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
@@ -1557,7 +1557,7 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             Turning it on spends
-            <select value={effect.resourceId ?? ''} onChange={(e) => onChange({ ...effect, resourceId: e.target.value || undefined })}>
+            <select value={effect.resourceId ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, resourceId: e.target.value, resourceContent: undefined } : { ...effect, resourceId: undefined, cost: undefined, resourceContent: undefined })}>
               <option value="">Nothing</option>
               {props.resources.map((r) => (
                 <option key={r.id} value={r.resourceId}>
@@ -1584,7 +1584,7 @@ function EffectEditor(props: {
                 // Leaving the group drops what only means something inside one; a group of this revision is named without a content.
                 onChange(
                   e.target.value
-                    ? { ...effect, group: e.target.value, groupContent: undefined }
+                    ? { ...effect, group: e.target.value, groupContent: undefined, allowedWith: undefined }
                     : { ...effect, group: undefined, groupContent: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined },
                 )
               }

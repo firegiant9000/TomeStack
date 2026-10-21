@@ -209,6 +209,14 @@ public class ToggleGroupTests
     }
 
     [Fact]
+    public void The_sheet_carries_the_label_of_the_declaring_group_even_for_a_toggle_of_another_source()
+    {
+        var toggles = Sheet(Base() with { Pins = [.. Base().Pins, Fixtures.LineageForm] }).Toggles!;
+        Assert.All(toggles.Where(t => t.Group == "forms"), t => Assert.Equal("Forms", t.GroupLabel));
+        Assert.Equal("Forms", toggles.Single(t => t.ToggleId == "lineage").GroupLabel); // declared by the Form Discipline, not by its own content
+    }
+
+    [Fact]
     public void The_sheet_lists_group_layer_cost_and_availability()
     {
         var surge = Sheet(Forms(Ember)).Toggles!.Single(t => t.ToggleId == "surge");

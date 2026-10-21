@@ -234,6 +234,8 @@ interface Props {
 
 export function CharacterSheet({ view, onChanged, onError: reportError, onStatus, onLevelUp, onMakeChoices, onArchiveChanged, initialTab }: Props) {
   const { character, sheet } = view;
+  // D43: `toggle.group-absent` is information (the toggle works as a group of one), not content that failed to apply.
+  const notApplied = sheet.diagnostics.filter((d) => d.code !== 'toggle.group-absent');
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.
@@ -658,11 +660,11 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         </section>
       )}
 
-      {sheet.diagnostics.length > 0 && (
+      {notApplied.length > 0 && (
         <section aria-labelledby="diagnostics-heading">
           <h3 id="diagnostics-heading">Content not applied</h3>
           <ul className="warnings">
-            {sheet.diagnostics.map((d) => (
+            {notApplied.map((d) => (
               <li key={`${d.code}-${d.content?.revisionId ?? ''}-${d.effectId ?? ''}`}>{d.message}</li>
             ))}
           </ul>

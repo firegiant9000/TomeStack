@@ -293,6 +293,8 @@ export interface ToggleValue {
   /** Content v11 (D43): the form group the toggle belongs to (`group` id and the content that declares it); absent when ungrouped. */
   group?: string;
   groupContent?: string;
+  /** The label of the toggleGroup effect that declares the group (a calculated sheet field); absent when the declarer is not on the character. */
+  groupLabel?: string;
   /** A primary is the form itself (one on at a time); an overlay stacks on a primary. Always present when `group` is. */
   layer?: 'primary' | 'overlay';
   /** What switching it on spends from `costResourceContent`'s pool of `resourceId`; absent with a pool means 1. */

@@ -18,6 +18,7 @@ const toggle = (toggleId: string, label: string, extra: Partial<ToggleValue> = {
   on: false,
   resourceId: 'focus',
   group: 'forms',
+  groupLabel: 'Forms',
   groupContent: GROUP,
   layer: 'primary',
   cost: 5,
@@ -40,7 +41,7 @@ it('renders one radio group per form group with Base first, overlays as checkbox
   expect(screen.getByRole('radio', { name: 'Base' })).toBe(radios[0]);
   expect(group.contains(radios[0] ?? null)).toBe(true);
   expect(radios).toHaveLength(3);
-  expect((radios[0] as HTMLInputElement).checked).toBe(true);
+  expect(radios[0]?.getAttribute('aria-checked')).toBe('true');
   expect(screen.getByRole('radio', { name: /Fixture Tide Form.*5 Focus/ })).toBeTruthy();
   expect(screen.getByRole('radio', { name: /Fixture Ember Form.*3 Focus/ })).toBeTruthy();
   expect(screen.getByRole('checkbox', { name: /Fixture Surge Overlay.*1 Focus/ })).toBeTruthy();
@@ -74,6 +75,57 @@ it('an unavailable overlay is disabled and says why', () => {
 
 it('disables every control while busy and leaves ungrouped toggles to the caller', () => {
   render(<FormGroups toggles={[...toggles(), toggle('plain', 'Fixture Plain', { group: undefined, groupContent: undefined, layer: undefined })]} act={vi.fn()} busy />);
-  for (const control of [...screen.getAllByRole('radio'), ...screen.getAllByRole('checkbox')]) expect((control as HTMLInputElement).disabled).toBe(true);
+  for (const radio of screen.getAllByRole('radio')) expect(radio.getAttribute('aria-disabled')).toBe('true');
+  for (const box of screen.getAllByRole('checkbox')) expect((box as HTMLInputElement).disabled).toBe(true);
   expect(screen.queryByText('Fixture Plain')).toBeNull();
+});
+
+it('names the group by the sheet label, and falls back to the key in words', () => {
+  const view = render(<FormGroups toggles={toggles()} act={vi.fn()} busy={false} />);
+  expect(screen.getByRole('radiogroup', { name: 'Forms' })).toBeTruthy();
+  view.rerender(<FormGroups toggles={toggles().map((t) => ({ ...t, groupLabel: undefined, group: 'form-kinds' }))} act={vi.fn()} busy={false} />);
+  expect(screen.getByRole('radiogroup', { name: 'Form kinds' })).toBeTruthy();
+});
+
+it('shows the default cost of one use from the toggle\'s own pool, and finds the pool by content and id', () => {
+  const own = { ...toggle('solo', 'Fixture Solo Form'), cost: undefined, costResourceContent: undefined, content: { contentId: 'c-own', revisionId: 'r-own' } };
+  const pool = (contentId: string, label: string) => ({ content: { contentId, revisionId: 'r' }, resourceId: 'focus', label }) as never;
+  render(<FormGroups toggles={[own]} act={vi.fn()} busy={false} resources={[pool('c-other', 'Wrong'), pool('c-own', 'Own Focus')]} />);
+  expect(screen.getByRole('radio', { name: /Fixture Solo Form.*1 Own Focus/ })).toBeTruthy();
+});
+
+it('arrow keys only move focus; Space chooses the focused form, and Home and End skip nothing enabled', async () => {
+  const act = vi.fn();
+  const user = userEvent.setup();
+  render(<FormGroups toggles={toggles()} act={act} busy={false} />);
+  const base = screen.getByRole('radio', { name: 'Base' });
+  const tide = screen.getByRole('radio', { name: /Fixture Tide Form/ });
+  const ember = screen.getByRole('radio', { name: /Fixture Ember Form/ });
+  expect([base, tide, ember].map((r) => r.tabIndex)).toEqual([0, -1, -1]);
+  base.focus();
+  await user.keyboard('{ArrowDown}');
+  expect(document.activeElement).toBe(tide);
+  await user.keyboard('{ArrowDown}');
+  expect(document.activeElement).toBe(ember);
+  await user.keyboard('{ArrowDown}');
+  expect(document.activeElement).toBe(base);
+  await user.keyboard('{End}');
+  expect(document.activeElement).toBe(ember);
+  await user.keyboard('{ArrowUp}{Home}{ArrowRight}');
+  expect(document.activeElement).toBe(tide);
+  expect(act).not.toHaveBeenCalled();
+  await user.keyboard(' ');
+  expect(act).toHaveBeenCalledTimes(1);
+  expect(act).toHaveBeenLastCalledWith({ action: 'toggleOn', contentId: 'c-tide', toggleId: 'tide' });
+});
+
+it('ignores a second choice while the first is still being confirmed', async () => {
+  let finish: () => void = () => undefined;
+  const act = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+  const user = userEvent.setup();
+  render(<FormGroups toggles={toggles()} act={act} busy={false} />);
+  await user.click(screen.getByRole('radio', { name: /Fixture Tide Form/ }));
+  await user.click(screen.getByRole('radio', { name: /Fixture Ember Form/ }));
+  expect(act).toHaveBeenCalledTimes(1);
+  finish();
 });

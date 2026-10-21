@@ -82,29 +82,29 @@ it('authors a form group and two forms in the studio, switches between them on P
   const sheet = await screen.findByRole('article', { name: 'E2E Forms Hero' });
   await openTab(user, sheet, 'Play');
   const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
-  // The sheet carries the group's key, not its label, so the group is found by role (see the task report).
-  const picker = () => within(actions()).getByRole('radiogroup');
-  const form = (name: RegExp) => within(picker()).getByRole<HTMLInputElement>('radio', { name });
+  // The group is named by the label authored in the studio (the sheet's groupLabel).
+  const picker = () => within(actions()).getByRole('radiogroup', { name: 'Forms' });
+  const form = (name: RegExp) => within(picker()).getByRole('radio', { name });
   const resources = () => screen.getByRole('region', { name: 'Resources' });
 
   // Base is chosen at first; each form names its cost and the pool it comes from.
-  expect(within(picker()).getByRole<HTMLInputElement>('radio', { name: 'Base' }).checked).toBe(true);
+  expect(within(picker()).getByRole('radio', { name: 'Base' }).getAttribute('aria-checked')).toBe('true');
   expect(form(/^E2E Tide.*3 Focus/)).toBeTruthy();
 
   await user.click(form(/^E2E Tide/));
-  await waitFor(() => expect(form(/^E2E Tide/).checked).toBe(true));
+  await waitFor(() => expect(form(/^E2E Tide/).getAttribute('aria-checked')).toBe('true'));
   expect(within(resources()).getByRole('heading', { name: 'Focus: 4 of 7' })).toBeTruthy();
 
   // Choosing the other form switches the first off and the second on as one change; the second spends its own cost.
   await user.click(form(/^E2E Ember/));
-  await waitFor(() => expect(form(/^E2E Ember/).checked).toBe(true));
-  expect(form(/^E2E Tide/).checked).toBe(false);
+  await waitFor(() => expect(form(/^E2E Ember/).getAttribute('aria-checked')).toBe('true'));
+  expect(form(/^E2E Tide/).getAttribute('aria-checked')).toBe('false');
   expect(within(resources()).getByRole('heading', { name: 'Focus: 1 of 7' })).toBeTruthy();
 
   // 1 Focus is left and Tide costs 3: the switch is refused and nothing changes.
   await user.click(form(/^E2E Tide/));
   expect((await screen.findByRole('alert')).textContent).toMatch(/1 of 7 left/);
-  expect(form(/^E2E Ember/).checked).toBe(true);
-  expect(form(/^E2E Tide/).checked).toBe(false);
+  expect(form(/^E2E Ember/).getAttribute('aria-checked')).toBe('true');
+  expect(form(/^E2E Tide/).getAttribute('aria-checked')).toBe('false');
   expect(within(resources()).getByRole('heading', { name: 'Focus: 1 of 7' })).toBeTruthy();
 });
