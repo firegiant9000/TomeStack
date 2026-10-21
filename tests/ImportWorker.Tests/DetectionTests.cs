@@ -412,7 +412,7 @@ public class DetectionTests
         });
         // The class's own references now resolve (the stubs are candidates of the job); no ASI or "... feature" placeholder is linked.
         Assert.Empty(lamplighter.UnresolvedReferences);
-        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is "Ability Score Improvement" or "Fixture Order feature");
+        Assert.DoesNotContain(result.Candidates, c => c.ProposedName is CandidateDetector.ReferenceOnlyFeatureName or "Fixture Order feature");
 
         // The Warden's one-line rows link too: Stormcall is a block of the book, Focus and Resolve are stubs.
         var warden = Named(result.Candidates, "Fixture Warden");
@@ -705,9 +705,9 @@ public class DetectionTests
     {
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Martial Melee Weapons", 50, 700, 200, 10, 10, false),
-            new TextBlock("Fixture Crossbow, hand  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
+            new TextBlock("Fixture Lantern, small  1d6 piercing  Light", 50, 680, 300, 10, 10, false));
 
-        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Crossbow, hand");
+        Assert.Contains(found, c => c.ProposedKind == ContentKind.Item && c.ProposedName == "Fixture Lantern, small");
     }
 
     [Fact]

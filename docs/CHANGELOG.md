@@ -46,6 +46,7 @@
 
 ### Fixed
 
+- **Test fixtures and notes no longer carry book item and feature names (R152, R149):** the importer tests use invented names; the one reference-only feature name the detector skips is a single named constant (R181). No behaviour change.
 - **The worker page-timeout tests no longer race (R173):** they now run against a stand-in worker that sends nothing, so a fast computer cannot answer before the timeout fires (test-only change).
 - **The mechanics report no longer lists scale values as unsupported (G3):** a per-level scale (`SCALE.<id>`) and an item's charges are known effect types, so the report counts them as automatic instead of flagging them as gaps.
 - **An import no longer fails with "took too long" on a busy computer (R151):** each search the importer runs to find entries may now take up to 1 second. Some searches cover a whole block or page of text. The limit was 0.1 s, which a busy computer could exceed on any search. A pattern that runs longer still stops the import with `detect.timeout`.

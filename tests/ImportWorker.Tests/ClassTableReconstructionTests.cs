@@ -41,7 +41,7 @@ public class ClassTableReconstructionTests
         var features = Enumerable.Range(1, 20).Select(level => level switch
         {
             1 => new[] { names[0], names[1] },
-            4 or 8 or 12 or 16 or 19 => new[] { "Ability Score Improvement" },
+            4 or 8 or 12 or 16 or 19 => new[] { "Fixture Training" },
             3 => new[] { "Testy Order feature" },
             _ => level % 3 == 0 ? new[] { names[level % names.Length] } : level % 5 == 0 ? new[] { names[level % names.Length], names[(level + 2) % names.Length], "Fixture Capstone Trial of Long Name" } : [],
         }).ToArray();

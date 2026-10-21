@@ -135,9 +135,15 @@ public static partial class CandidateDetector
         return links;
     }
 
-    /// <summary>A feature name worth a link: not "Ability Score Improvement" and not a subclass placeholder ("Fixture Order feature").</summary>
+    /// <summary>
+    /// The one feature name the detector never links or proposes as a reference (R181): a class table lists it at the
+    /// levels that grant it, and it has no text of its own to import. A test of the exclusion names it through this.
+    /// </summary>
+    public const string ReferenceOnlyFeatureName = "Ability Score Improvement";
+
+    /// <summary>A feature name worth a link: not the reference-only feature and not a subclass placeholder ("Fixture Order feature").</summary>
     public static bool IsLinkable(string name) =>
-        !name.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
+        !name.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) &&!name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A feature the class table names that no block of the job describes: the name and the class page only, reference.</summary>
     private static DraftCandidate FeatureStub(DraftCandidate owner, string name, int level, DetectionContext context)
@@ -1090,7 +1096,7 @@ public static partial class CandidateDetector
     private static DraftCandidate ClassCandidate(DetectionPage page, string className, IReadOnlyDictionary<int, IReadOnlyList<string>> features, ClassTable? table, List<TextLine> pageTextLines, DetectionContext context, Dictionary<Guid, IReadOnlyDictionary<int, IReadOnlyList<string>>> classFeatures, List<string> following, List<(int Page, TextLine Line)> previous)
     {
         var ordered = features.OrderBy(f => f.Key).ToList();
-        var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals("Ability Score Improvement", StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
+        var references = ordered.SelectMany(f => f.Value).Where(f => !f.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) && !f.EndsWith("feature", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
         var (families, uncertainties, familyUnsure) = NeutralFamily(context);
         var proposal = ClassProposals.Propose(className, table, ClassProposals.LabelledLines(pageTextLines, previous.Select(l => l.Line).ToList(), className), features, following);
         uncertainties.AddRange(proposal.Uncertainties);
@@ -1206,7 +1212,7 @@ public static partial class CandidateDetector
 
     /// <summary>
     /// An item name that holds a price ("5 gp") or continues as a sentence (", which counts as": a comma, then two or more
-    /// lower-case words). One word after the comma stays a name: the SRD's "Crossbow, hand".
+    /// lower-case words). One word after the comma stays a name ("Fixture Lantern, small").
     /// </summary>
     [GeneratedRegex(@"\d+\s*(?:cp|sp|ep|gp|pp|CP|SP|EP|GP|PP)\b|,\s+[a-z]+\s+[a-z]", RegexOptions.None, DetectionLimits.RegexTimeoutMs)]
     private static partial Regex JunkItemName();
