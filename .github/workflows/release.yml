@@ -48,7 +48,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "Releasing $version (vpk and Velopack $vpk)"
 
-      # The gate (CLAUDE.md), in order.
+      # The gate (CONTRIBUTING.md), in order.
       - name: UI install
         working-directory: src/Ui
         run: npm ci

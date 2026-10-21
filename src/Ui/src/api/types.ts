@@ -1903,3 +1903,18 @@ export interface DdbApplyResult {
   /** The content ids of the reference drafts written, when any were. */
   referenceDrafts?: string[] | null;
 }
+
+/** One sample class level of a formula preview (D61): a value, or the problem at that level. The server omits null fields. */
+export interface FormulaPreviewPoint {
+  level: number;
+  value?: number | null;
+  problem?: string | null;
+}
+
+/** The value of a formula at the sample levels (D61, `content.previewFormula`). Read-only; writes nothing. */
+export interface FormulaPreviewResult {
+  formula: string;
+  error?: { code: string; message: string } | null;
+  unavailable?: string | null;
+  points: FormulaPreviewPoint[];
+}

@@ -1,6 +1,6 @@
 # Implementation plan: character import from a D&D Beyond PDF sheet
 
-Spec: [ddb-pdf-import.md](ddb-pdf-import.md) (reviewed 2026-10-02). Status: **built as planned in slices S0 to S4 and S6 (PRs #57 to #63); the contract additions and deviations are in the LIVING_SPECS change history, and this plan is kept as written for the record** · D16f and D16g added 2026-10-05 (PR `ddb-subclass-equip`). Every slice lands on its own branch off `main`, as a PR, with tests written first, the doc updates LIVING_SPECS asks for, and the full CLAUDE.md gate green (warning budget 0, `TreatWarningsAsErrors`).
+Spec: [ddb-pdf-import.md](ddb-pdf-import.md) (reviewed 2026-10-02). Status: **built as planned in slices S0 to S4 and S6 (PRs #57 to #63); the contract additions and deviations are in the LIVING_SPECS change history, and this plan is kept as written for the record** · D16f and D16g added 2026-10-05 (PR `ddb-subclass-equip`). Every slice lands on its own branch off `main`, as a PR, with tests written first, the doc updates LIVING_SPECS asks for, and the full CONTRIBUTING.md gate green (warning budget 0, `TreatWarningsAsErrors`).
 
 The gate, for every slice:
 
@@ -32,7 +32,7 @@ Schema or migration changes: **S4 only** (gap-note schema v2, D16b). No database
 
 Branches: `ddb-s0-spike`, `ddb-s1-reader`, `ddb-s2-parser`, `ddb-s3-proposal`, `ddb-s4-apply-ui`, `ddb-s6-acceptance`. S2 stacks on S1 and S3 on S2 if they are in flight together; otherwise each off `main`.
 
-## Global constraints (from the spec and CLAUDE.md)
+## Global constraints (from the spec and CONTRIBUTING.md)
 
 - `RulesCore` gains nothing. `src/ImportWorker` stays `net10.0` with no Windows references.
 - The UI calls `src/Ui/src/api/client.ts` only; `fetch` stays in `transport.ts`.
