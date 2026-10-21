@@ -165,6 +165,18 @@ it('the Filters button sets aria-expanded and shows the group only while open', 
   expect(button.getAttribute('aria-expanded')).toBe('false');
 });
 
+it('the Filters button name announces the on state only while a filter is active', async () => {
+  const user = userEvent.setup();
+  panel(filterView());
+  expect(screen.queryByRole('button', { name: /Filters:.*, on$/ })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Filters: Fixture Arcanist spells' })).toBeTruthy();
+  const group = await openFilters(user);
+  await user.click(group.getByRole('checkbox', { name: 'Cantrip' }));
+  expect(screen.getByRole('button', { name: 'Filters: Fixture Arcanist spells, on' })).toBeTruthy();
+  await user.click(group.getByRole('checkbox', { name: 'Cantrip' }));
+  expect(screen.queryByRole('button', { name: /Filters:.*, on$/ })).toBeNull();
+});
+
 it('ticking Cantrip and Ritual Yes leaves exactly the matching spells, and says how many', async () => {
   const user = userEvent.setup();
   panel(filterView());

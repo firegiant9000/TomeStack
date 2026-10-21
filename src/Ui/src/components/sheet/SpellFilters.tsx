@@ -68,7 +68,7 @@ export function SpellFilters(props: {
   );
   return (
     <div className="spell-filters">
-      <button type="button" aria-expanded={props.open} aria-controls={panelId} aria-label={`Filters: ${props.casterName} spells`} onClick={props.onToggle}>
+      <button type="button" aria-expanded={props.open} aria-controls={panelId} aria-label={`Filters: ${props.casterName} spells${filtersActive(value) ? ', on' : ''}`} onClick={props.onToggle}>
         Filters{filtersActive(value) ? ' (on)' : ''}
       </button>
       {props.open && (
