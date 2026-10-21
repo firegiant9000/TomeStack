@@ -34,7 +34,7 @@ import { SpellListForm } from './SpellListForm';
 import { TreeView } from './TreeView';
 import { fromTemplate, templates, type TemplateId } from '../templates';
 import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
-import { abilities, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
+import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 import {
   grantOfKind,
   isBackgroundBasic,
@@ -859,7 +859,7 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting' | 'toggle' | 'toggleGroup') {
     const id = nextId(type);
     const effect: Effect =
       type === 'modifier'
@@ -878,7 +878,13 @@ function EntryEditor(props: {
                     { type, id, scaleId: nextScaleKey(revision.effects), label: '', values: Array<number>(20).fill(1) }
                   : type === 'spellcasting'
                     ? { type, id, ability: 'int', preparation: 'prepared', spellList: '', slotKind: 'spellSlots', slots: Array.from({ length: 20 }, () => [] as number[]) }
-                    : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
+                    : type === 'toggle'
+                      ? // Set once like a resource's id: modifiers, overlays and saved play state name it.
+                        { type, id, toggleId: id, label: '' }
+                      : type === 'toggleGroup'
+                        ? // Content v11 (D43): a key like a scale's (a lowercase letter, then letters and digits), set once; the label is for the sheet.
+                          { type, id, groupId: nextGroupKey(revision.effects), label: '' }
+                        : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
     update({ effects: [...revision.effects, effect] });
   }
 
@@ -1049,6 +1055,7 @@ function EntryEditor(props: {
           fields={props.info.fields}
           resources={resources}
           toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
+          groups={revision.effects.filter((e): e is Extract<Effect, { type: 'toggleGroup' }> => e.type === 'toggleGroup')}
           grantable={grantable}
           previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
@@ -1057,6 +1064,7 @@ function EntryEditor(props: {
             // Rules that named the removed one no longer do (review fix): a modifier switched by a removed toggle is always
             // on again, and a toggle that spent a removed resource spends nothing.
             const removedToggle = effect.type === 'toggle' ? effect.toggleId : undefined;
+            const removedGroup = effect.type === 'toggleGroup' ? effect.groupId : undefined;
             const removedResource = effect.type === 'resource' ? effect.resourceId : undefined;
             const remaining = revision.effects.filter((_, i) => i !== index);
             const resourceStillDefined = remaining.some((e) => e.type === 'resource' && e.resourceId === removedResource);
@@ -1066,7 +1074,12 @@ function EntryEditor(props: {
                   ? { ...e, toggle: undefined, timing: undefined }
                   : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
                     ? { ...e, resourceId: undefined }
-                    : e,
+                    : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
+                      e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
+                      ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
+                      : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
+                        ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
+                        : e,
               ),
             });
             // Field keys start with the effect id: a removed rule's problems no longer block saving.
@@ -1087,6 +1100,12 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('roll')}>
           Add roll or action
+        </button>
+        <button type="button" onClick={() => add('toggle')}>
+          Add toggle
+        </button>
+        <button type="button" onClick={() => add('toggleGroup')}>
+          Add form group
         </button>
         {(classLike || revision.kind === 'feat') && (
           <button type="button" onClick={() => add('grant')} disabled={grantable.length === 0}>
@@ -1447,6 +1466,8 @@ function EffectEditor(props: {
   fields: { id: string; label: string }[];
   resources: Extract<Effect, { type: 'resource' }>[];
   toggles: Extract<Effect, { type: 'toggle' }>[];
+  /** Content v11 (D43): the form groups this revision declares. */
+  groups: Extract<Effect, { type: 'toggleGroup' }>[];
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
@@ -1470,6 +1491,7 @@ function EffectEditor(props: {
     spellcasting: 'Spellcasting',
     spell: 'Spell data',
     toggle: 'Toggle',
+    toggleGroup: 'Form group',
     item: 'Item rules',
   };
   const toggles = props.toggles;
@@ -1544,6 +1566,104 @@ function EffectEditor(props: {
               ))}
             </select>
           </label>
+          {/* Content v11 (D43). The version is not chosen here: the check and publish pick it from what the rules use. */}
+          {effect.resourceId && (
+            <>
+              <label className="field">
+                Cost (a number or a formula; empty is one use)
+                <input value={effect.cost ?? ''} aria-describedby={`rule-${effect.id}-cost-preview`} onChange={(e) => onChange({ ...effect, cost: e.target.value || undefined })} />
+              </label>
+              <FormulaPreview id={`rule-${effect.id}-cost-preview`} formula={effect.cost ?? ''} revision={props.previewRevision} floorAtZero />
+            </>
+          )}
+          <label className="field">
+            Form group
+            <select
+              value={effect.group ?? ''}
+              onChange={(e) =>
+                // Leaving the group drops what only means something inside one; a group of this revision is named without a content.
+                onChange(
+                  e.target.value
+                    ? { ...effect, group: e.target.value, groupContent: undefined }
+                    : { ...effect, group: undefined, groupContent: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined },
+                )
+              }
+            >
+              <option value="">Not in a group</option>
+              {props.groups.map((g) => (
+                <option key={g.id} value={g.groupId}>
+                  {g.label || g.groupId}
+                </option>
+              ))}
+              {/* A group declared by other content is kept as it is, not silently moved. */}
+              {effect.group && (effect.groupContent || !props.groups.some((g) => g.groupId === effect.group)) && <option value={effect.group}>{effect.group} (other content)</option>}
+            </select>
+          </label>
+          {effect.group && (
+            <>
+              <label className="field">
+                Kind
+                <select
+                  value={effect.layer ?? 'primary'}
+                  onChange={(e) =>
+                    onChange(e.target.value === 'overlay' ? { ...effect, layer: 'overlay' } : { ...effect, layer: undefined, allowedWith: undefined, allowedInBase: undefined })
+                  }
+                >
+                  <option value="primary">Form (one at a time)</option>
+                  <option value="overlay">Overlay (on top of a form)</option>
+                </select>
+              </label>
+              {effect.layer === 'overlay' && (
+                <>
+                  <label className="choice">
+                    <input type="checkbox" checked={effect.allowedInBase ?? false} onChange={(e) => onChange({ ...effect, allowedInBase: e.target.checked || undefined })} />
+                    Can be on with no form chosen (Base)
+                  </label>
+                  <fieldset>
+                    <legend>Can be on with these forms</legend>
+                    {toggles
+                      .filter((t) => t.id !== effect.id && t.group === effect.group && t.layer !== 'overlay')
+                      .map((t) => {
+                        const on = (effect.allowedWith ?? []).some((r) => !r.contentId && r.toggleId === t.toggleId);
+                        return (
+                          <label key={t.id} className="choice">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={(e) => {
+                                const others = (effect.allowedWith ?? []).filter((r) => r.contentId || r.toggleId !== t.toggleId);
+                                const next = e.target.checked ? [...others, { toggleId: t.toggleId }] : others;
+                                onChange({ ...effect, allowedWith: next.length > 0 ? next : undefined });
+                              }}
+                            />
+                            {t.label || t.toggleId}
+                          </label>
+                        );
+                      })}
+                  </fieldset>
+                </>
+              )}
+            </>
+          )}
+          <label className="field">
+            Available from character level
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={effect.level ?? ''}
+              onChange={(e) => onChange({ ...effect, level: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </label>
+        </>
+      )}
+      {effect.type === 'toggleGroup' && (
+        <>
+          <label className="field">
+            Group name (shown on the sheet)
+            <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
+          </label>
+          <p className="hint">Key: {effect.groupId}. Toggles join this group from their own Form group choice.</p>
         </>
       )}
       {effect.type === 'resource' && (

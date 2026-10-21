@@ -19,6 +19,7 @@ import { hitDiceText, rollBonus } from '../format';
 import { diceLine } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
+import { FormGroups } from './FormGroups';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -519,7 +520,7 @@ export function ActionsPanel({
   );
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
-  const ungroupedToggles = toggles.filter((t) => !t.activation);
+  const ungroupedToggles = toggles.filter((t) => !t.activation && !t.group);
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
@@ -531,6 +532,13 @@ export function ActionsPanel({
           ))}
         </fieldset>
       )}
+      {/* D43 slice 1: grouped toggles are the form picker, whatever their activation. */}
+      {toggles.some((t) => t.group) && (
+        <section aria-labelledby="forms-heading">
+          <h4 id="forms-heading">Forms (a switch is a confirmed change)</h4>
+          <FormGroups toggles={toggles} act={act} busy={false} resources={view.sheet.resources} />
+        </section>
+      )}
       <label className="choice">
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
@@ -539,7 +547,7 @@ export function ActionsPanel({
         const groupAttacks = key === 'action' ? attacks : [];
         const groupCustom = key === 'action' ? customAttacks : [];
         const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
-        const groupToggles = toggles.filter((t) => t.activation === key);
+        const groupToggles = toggles.filter((t) => t.activation === key && !t.group);
         if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>

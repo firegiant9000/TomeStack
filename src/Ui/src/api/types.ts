@@ -290,6 +290,17 @@ export interface ToggleValue {
   auto?: boolean;
   /** Content v10 (Wave 3 item 22): the group the toggle is listed under on Play; absent below v10 and when the content names none. */
   activation?: Activation;
+  /** Content v11 (D43): the form group the toggle belongs to (`group` id and the content that declares it); absent when ungrouped. */
+  group?: string;
+  groupContent?: string;
+  /** A primary is the form itself (one on at a time); an overlay stacks on a primary. Always present when `group` is. */
+  layer?: 'primary' | 'overlay';
+  /** What switching it on spends from `costResourceContent`'s pool of `resourceId`; absent with a pool means 1. */
+  cost?: number;
+  costResourceContent?: string;
+  /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
+  available: boolean;
+  unavailableReason?: string;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
@@ -513,6 +524,8 @@ export interface PlayAction {
   condition?: string;
   /** Content v6: the toggle to switch on or off (with `contentId`). */
   toggleId?: string;
+  /** With `toggleOn` (content v11): switch the form already on in the same group off first. Without it the server refuses with `toggle.group-occupied`. */
+  replace?: boolean;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
@@ -1257,7 +1270,25 @@ export type Effect =
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
   // kinds with a damageType, and the item effect. All optional; a revision below v10 never carries them.
-  | (EffectBase & { type: 'toggle'; toggleId: string; label: string; resourceId?: string; autoWhen?: 'bloodied'; activation?: Activation })
+  | (EffectBase & {
+      type: 'toggle';
+      toggleId: string;
+      label: string;
+      resourceId?: string;
+      autoWhen?: 'bloodied';
+      activation?: Activation;
+      // Content v11 (D43): the form group (id, and the content that declares it; absent: this revision), layer, the primaries an
+      // overlay may be on with (absent contentId: this revision), a cost formula, the pool's content and the level it opens at.
+      group?: string;
+      groupContent?: string;
+      layer?: 'primary' | 'overlay';
+      allowedWith?: { contentId?: string; toggleId: string }[];
+      allowedInBase?: boolean;
+      cost?: string;
+      resourceContent?: string;
+      level?: number;
+    })
+  | (EffectBase & { type: 'toggleGroup'; groupId: string; label: string })
   | (EffectBase & {
       type: 'grant';
       grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
