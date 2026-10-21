@@ -76,6 +76,15 @@ public enum PlayActionKind
 
     /// <summary>Regains <c>amount</c> spent charges of one equipment entry by hand.</summary>
     RegainCharge,
+
+    /// <summary>Wave 3 item 23 (D39, R174): a companion (<c>companionId</c>) takes <c>amount</c> damage, untyped: temporary hit points first, then hit points, at least 0.</summary>
+    CompanionDamage,
+
+    /// <summary>A companion regains <c>amount</c> hit points, up to its maximum; temporary hit points are not touched.</summary>
+    CompanionHeal,
+
+    /// <summary>A companion's current hit points become <c>amount</c> (0 to its maximum), and its temporary hit points <c>temporary</c> when that is sent.</summary>
+    CompanionSetHitPoints,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -91,7 +100,9 @@ public sealed record PlayCommand(
     string? ToggleId = null,
     string? DamageType = null,
     Guid? EntryId = null,
-    int? EntryIndex = null);
+    int? EntryIndex = null,
+    Guid? CompanionId = null,
+    int? Temporary = null);
 
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
@@ -122,6 +133,8 @@ public sealed partial class TomeStackApp
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 
+        if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints)
+            return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
         var sheet = CharacterCalculator.Calculate(character, _store);
         if (command.Action is PlayActionKind.SpendCharge or PlayActionKind.RegainCharge)
             return SaveWithPlay(ChangeCharges(character, sheet, command)); // charges live on the equipment entry, not in the play state
@@ -212,6 +225,47 @@ public sealed partial class TomeStackApp
         var equipment = character.Equipment.ToList();
         equipment[use.EntryIndex] = equipment[use.EntryIndex] with { ChargesSpent = spent == 0 ? null : spent, Id = equipment[use.EntryIndex].Id ?? Guid.NewGuid() };
         return character with { Equipment = equipment };
+    }
+
+    /// <summary>
+    /// Wave 3 item 23 (D39, R174): a companion's hit points, in <see cref="PlayState.Companions"/>. Damage is untyped (no defences,
+    /// concentration, death saves or warnings): temporary hit points absorb first, then current, at least 0. Heal caps at the maximum
+    /// and leaves temporary alone. Set takes exact current (0 to the maximum) and temporary (0 to <see cref="PlayState.MaxHitPoints"/>,
+    /// unchanged when not sent). Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
+    /// Errors are codes only; the companion's name never appears in them.
+    /// </summary>
+    private static PlayState ChangeCompanion(Character character, PlayCommand command)
+    {
+        var companion = command.CompanionId is { } id ? character.Companions?.FirstOrDefault(c => c.Id == id) : null;
+        if (companion is null)
+            throw new AppValidationException([new("play.companion-unknown", "This character has no such companion.")]);
+        var recorded = character.Play.Companions?.FirstOrDefault(p => p.Id == companion.Id);
+        var maximum = companion.HitPointMaximum;
+        var current = Math.Min(recorded?.Current ?? maximum, maximum); // a maximum lowered since is respected
+        var temporary = recorded?.Temporary ?? 0;
+        switch (command.Action)
+        {
+            case PlayActionKind.CompanionDamage:
+                var absorbed = Math.Min(temporary, command.Amount);
+                temporary -= absorbed;
+                current = Math.Max(current - (command.Amount - absorbed), 0);
+                break;
+            case PlayActionKind.CompanionHeal:
+                current = Math.Min(current + command.Amount, maximum);
+                break;
+            default:
+                if (command.Amount > maximum)
+                    throw new AppValidationException([new("play.companion-hit-points-above-maximum", $"A companion's current hit points cannot be above its maximum ({maximum}).")]);
+                if (command.Temporary is < 0 or > PlayState.MaxHitPoints)
+                    throw new AppValidationException([new("play.amount-out-of-range", $"The temporary hit points must be between 0 and {PlayState.MaxHitPoints}.")]);
+                current = command.Amount;
+                temporary = command.Temporary ?? temporary;
+                break;
+        }
+        var entry = new CompanionPlay(companion.Id, current >= maximum ? null : current, temporary);
+        var others = character.Play.Companions?.Where(p => p.Id != companion.Id).ToList() ?? [];
+        List<CompanionPlay> all = recorded is null ? [.. others, entry] : character.Play.Companions!.Select(p => p.Id == companion.Id ? entry : p).ToList();
+        return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
     private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)

@@ -265,6 +265,14 @@ span.warn { color: var(--warn); }
 .play-panel .inline-form select, .defences select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
 .defences button { min-height: 1.75rem; }
 .damage-result { margin: 0.25rem 0; overflow-wrap: anywhere; }
+/* Wave 3 item 23: a companion's card on Play. Text wraps and the number box and buttons are at least 24 CSS px (WCAG 2.5.8), so the card reflows at 400%. */
+.companion-card section > h4 { margin: 0 0 var(--space-1); overflow-wrap: anywhere; }
+.companion-card p { margin: var(--space-1) 0; overflow-wrap: anywhere; }
+.companion-stats { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.companion-card input[type='number'], .companion-card select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.companion-card .inline-form input[type='number'] { width: 7rem; }
+.companion-card button { max-width: 100%; overflow-wrap: anywhere; }
+.companion-line { display: grid; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--line); min-width: 0; }
 /* Conditions as outlined chips (still native checkboxes); the checked chip is accent-filled like the d20 segment. */
 .conditions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .conditions .choice { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.6rem; border: 1px solid var(--line-strong); border-radius: 1rem; }

@@ -495,7 +495,10 @@ export type PlayActionKind =
   | 'endConcentration'
   | 'clearConcentrationCheck'
   | 'spendCharge'
-  | 'regainCharge';
+  | 'regainCharge'
+  | 'companionDamage'
+  | 'companionHeal'
+  | 'companionSetHitPoints';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -510,6 +513,9 @@ export interface PlayAction {
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
+  /** With a `companion*` action (Wave 3 item 23): the companion, by its id. `companionSetHitPoints` takes the current hit points in `amount` and, when sent, the temporary ones in `temporary`. */
+  companionId?: string;
+  temporary?: number;
 }
 
 export interface RestChange {
@@ -606,6 +612,8 @@ export interface RollTarget {
   customAttack?: string;
   /** The entry key of an item whose `regain` dice to roll for its charges (Wave 3 item 25). */
   chargeEntry?: string;
+  /** One attack line of one of the character's companions (Wave 3 item 23): its attack roll, or its damage (`damage`). */
+  companionAttack?: { companionId: string; attackId: string };
 }
 
 /** SPEC P-01: a local campaign profile. It never changes calculation; it warns about content outside it. */

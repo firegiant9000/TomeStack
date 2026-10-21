@@ -36,12 +36,14 @@ interface Props {
 type Draft = Record<string, string | boolean>;
 
 /** A refusal the dice engine gave for one field, shown linked to it. It goes when that field changes. */
-interface FieldRefusal {
+export interface FieldRefusal {
   field: string;
   message: string;
+  /** The id to focus when the refusal is shown, when it is not `{prefix}-{field}` (a field inside a repeated line). */
+  focus?: string;
 }
 
-interface Config<T extends { id: string; name: string }, D extends Draft> {
+export interface Config<T extends { id: string; name: string }, D extends Draft> {
   /** Element ids start with this. */
   prefix: string;
   /** The section heading (focusable), the last place focus can fall back to. */
@@ -76,7 +78,7 @@ interface Editing {
  * - Text typed while a save is in flight is kept: the form then stays open on the saved entry instead of closing over it.
  * - Focus after add, save, cancel and remove always lands on a control that exists (never the page body).
  */
-function useEntryEditor<T extends { id: string; name: string }, D extends Draft>(config: Config<T, D>) {
+export function useEntryEditor<T extends { id: string; name: string }, D extends Draft>(config: Config<T, D>) {
   const { entries, draftOf } = config;
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draft, setDraft] = useState<D>(() => draftOf());
@@ -171,7 +173,7 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
       const verdict = await config.check?.(submitted);
       if (verdict) {
         setRefusal(verdict);
-        focusOn(`${config.prefix}-${verdict.field}`);
+        focusOn(verdict.focus ?? `${config.prefix}-${verdict.field}`);
       } else {
         const entry = config.build(target.id, submitted);
         saved = await config.persist((list) => {
@@ -224,10 +226,16 @@ function useEntryEditor<T extends { id: string; name: string }, D extends Draft>
     if (refusal?.field === key) setRefusal(undefined);
   };
 
-  return { editing, draft, errors, reason, saving, busy, refusal, atCap, rowId, begin, cancel, save, remove, set };
+  /** Replaces the whole draft (a form that adds or removes lines changes more than one key at once). */
+  const replace = (next: D) => {
+    setDraft(next);
+    setRefusal(undefined);
+  };
+
+  return { editing, draft, errors, reason, saving, busy, refusal, atCap, rowId, begin, cancel, save, remove, set, replace };
 }
 
-function TextBox({
+export function TextBox({
   id,
   label,
   value,
@@ -282,7 +290,7 @@ function TextBox({
   );
 }
 
-function EntryForm({
+export function EntryForm({
   prefix,
   noun,
   title,
@@ -321,7 +329,7 @@ function EntryForm({
   );
 }
 
-function AddButton({ prefix, label, atCap, capText, onClick }: { prefix: string; label: string; atCap: boolean; capText: string; onClick: () => void }) {
+export function AddButton({ prefix, label, atCap, capText, onClick }: { prefix: string; label: string; atCap: boolean; capText: string; onClick: () => void }) {
   return (
     <>
       <div className="actions">

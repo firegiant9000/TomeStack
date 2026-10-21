@@ -3039,3 +3039,50 @@ it('carries two copies of a charged wand that needs attunement: attuning applies
   await openTab(user, hero, 'Inventory');
   await waitFor(() => expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2));
 });
+
+it('adds a companion on Play, damages it, undoes that exactly, and rolls its attack (item 23, D39)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Handler', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Handler/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Handler' });
+  await openTab(user, hero, 'Play');
+
+  const companions = () => screen.getByRole('region', { name: 'Companions' });
+  await user.click(within(companions()).getByRole('button', { name: 'Add a companion' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Name' }), 'Testy Hound');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }), '20');
+  await user.click(within(companions()).getByRole('button', { name: 'Add an attack line' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 name' }), 'Testy Bite');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }), '4');
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 damage (optional)' }), '1d6+2');
+  await user.click(within(companions()).getByRole('button', { name: 'Save companion' }));
+  await expectStatus(/^Added Testy Hound\.$/);
+
+  // Damage goes through the play command; the card shows it and Undo puts the hit points back exactly.
+  const dog = () => screen.getByRole('region', { name: 'Testy Hound' });
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '8');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 12 of 20')).toBeTruthy());
+  expect(document.activeElement).toBe(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: companion damage 8' }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20')).toBeTruthy());
+
+  // Set temporary hit points, then damage takes them first.
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '5');
+  await user.click(within(dog()).getByRole('button', { name: /^Set temporary hit points/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20, 5 temporary')).toBeTruthy());
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '7');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 18 of 20')).toBeTruthy());
+
+  // Its attack rolls through the dice engine and shows in Last roll like an attack of your own.
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite attack/ }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite attack: \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Testy Bite to hit \+4/);
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite damage/ }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite damage: \d+ \(1d6\+2\)/));
+});

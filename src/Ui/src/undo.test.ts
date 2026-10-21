@@ -120,6 +120,30 @@ it('has no inverse for death saves and for ending concentration', () => {
   expect(inverseOf({ action: 'endConcentration' }, view(1, 0), view(1, 0))).toBeUndefined();
 });
 
+// Wave 3 item 23 (D23): a companion's hit points are put back exactly, current and temporary both.
+const withCompanion = (play?: { current?: number | null; temporary: number }): CharacterView =>
+  ({
+    character: { companions: [{ id: 'k1', name: 'Testy Hound', hitPointMaximum: 20 }], play: { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, ...(play ? { companions: [{ id: 'k1', ...play }] } : {}) } },
+    sheet: { hitPoints: { maximum: 35, current: 35, temporary: 0 } },
+  }) as unknown as CharacterView;
+
+it('undoes companion damage, healing and setting with an exact companionSetHitPoints (current and temporary)', () => {
+  const damaged = inverseOf({ action: 'companionDamage', companionId: 'k1', amount: 9 }, withCompanion({ current: 15, temporary: 4 }), withCompanion({ current: 10, temporary: 0 }))!;
+  expect(damaged.label).toBe('companion damage 9');
+  expect(damaged.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 15, temporary: 4 }]);
+  const healed = inverseOf({ action: 'companionHeal', companionId: 'k1', amount: 5 }, withCompanion({ current: 3, temporary: 2 }), withCompanion({ current: 8, temporary: 2 }))!;
+  expect(healed.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 3, temporary: 2 }]);
+  const set = inverseOf({ action: 'companionSetHitPoints', companionId: 'k1', amount: 1, temporary: 7 }, withCompanion({ current: 12, temporary: 0 }), withCompanion({ current: 1, temporary: 7 }))!;
+  expect(set.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 12, temporary: 0 }]);
+});
+
+it('reads a companion with no recorded hit points as at its maximum with none temporary, and offers nothing when nothing changed', () => {
+  const entry = inverseOf({ action: 'companionDamage', companionId: 'k1', amount: 6 }, withCompanion(), withCompanion({ current: 14, temporary: 0 }))!;
+  expect(entry.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 20, temporary: 0 }]);
+  expect(inverseOf({ action: 'companionHeal', companionId: 'k1', amount: 6 }, withCompanion(), withCompanion())).toBeUndefined();
+  expect(inverseOf({ action: 'companionDamage', companionId: 'gone', amount: 6 }, withCompanion(), withCompanion({ current: 14, temporary: 0 }))).toBeUndefined();
+});
+
 // Wave 3 item 25 (D23): charges are put back by the other direction with the same amount on the same entry.
 const withUses = (uses: unknown[]): CharacterView => ({ character: { play: { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0 } }, sheet: { itemUses: uses } }) as unknown as CharacterView;
 const wandUse = (entryId?: string) => ({ item: { contentId: 'c-wand', revisionId: 'r-wand' }, entryIndex: 1, ...(entryId ? { entryId } : {}) });

@@ -17,6 +17,7 @@ import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
+import { CompanionsPanel } from './CompanionsPanel';
 import { CustomAttacksPanel, CustomItemsPanel } from './CustomEntries';
 import { CurrencyPanel, EquipmentPanel } from './EquipmentPanel';
 import { SessionNotesPanel } from './SessionNotesPanel';
@@ -408,11 +409,13 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
     const refocus = () => {
       const concentrationOnly = steps.every((s) => s.action === 'endConcentration' || s.action === 'startConcentration');
       const target =
-        steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
-          ? document.getElementById('hp-heading')
-          : concentrationOnly && current?.character.play?.concentration
-            ? document.getElementById('concentration-heading')
-            : null;
+        steps[0]?.action === 'companionSetHitPoints'
+          ? document.getElementById(`companion-${steps[0].companionId}-heading`) // Wave 3 item 23: the companion's card
+          : steps[0]?.action === 'setHitPoints' || steps[0]?.action === 'setTemporaryHitPoints'
+            ? document.getElementById('hp-heading')
+            : concentrationOnly && current?.character.play?.concentration
+              ? document.getElementById('concentration-heading')
+              : null;
       (target ?? compactToggle.current)?.focus();
     };
     // An Undo in flight counts as a running change, so a play change started meanwhile gets no entry.
@@ -658,6 +661,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
         </div>
         <div className="play-column">
           <ActionsPanel view={view} roll={roll} act={act} rollMode={rollMode} onDamageType={setDamageType} />
+          <CompanionsPanel view={view} act={act} roll={roll} rollMode={rollMode} onChanged={onChanged} onError={onError} onStatus={onStatus} saveCharacter={saveCharacter} />
         </div>
       </TabPanel>
 
