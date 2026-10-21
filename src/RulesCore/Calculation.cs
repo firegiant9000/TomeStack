@@ -102,7 +102,9 @@ public sealed record CharacterSheet(
     IReadOnlyList<ScaleValue>? Scales = null,
     bool? Bloodied = null,
     IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
-    IReadOnlyList<ItemUseValue>? ItemUses = null)
+    IReadOnlyList<ItemUseValue>? ItemUses = null,
+    bool? LevelUpAvailable = null,
+    int? XpForNextLevel = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -673,10 +675,13 @@ public static class CharacterCalculator
                 return new ScaleValue(s.Key.Class, className, s.Value.Content.Revision.Reference, s.Key.ScaleId, s.Value.Effect.Label, classLevel, s.Value.Effect.Values[Math.Clamp(classLevel, 1, s.Value.Effect.Values.Count) - 1]);
             })
             .ToList();
+        // Wave 3 item 27 (R177): display only. Judged by the total character level; absent when XP is not tracked or there is no next level.
+        var xpForNextLevel = character.Xp is null ? null : Advancement.XpForNextLevel(character.TotalLevel);
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
-            damageDefences.Count > 0 ? damageDefences : null, itemUses.Count > 0 ? itemUses : null), active);
+            damageDefences.Count > 0 ? damageDefences : null, itemUses.Count > 0 ? itemUses : null,
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
     }
 
     /// <summary>

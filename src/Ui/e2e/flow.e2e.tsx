@@ -421,6 +421,28 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await openTab(user, sheet, 'Stats');
   await user.click(within(defences()).getByRole('button', { name: 'Remove slashing resistance' }));
   await waitFor(() => expect(screen.queryByRole('list', { name: 'Damage defences the sheet applies' })).toBeNull());
+
+  // Wave 3 item 27: Track XP is off by default; a total at the next level's threshold shows "Level up available" (display only).
+  const xp = () => screen.getByRole('region', { name: 'Experience points' });
+  expect(within(xp()).getByRole<HTMLInputElement>('checkbox', { name: 'Track XP' }).checked).toBe(false);
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' }));
+  const xpBox = await within(xp()).findByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' });
+  expect(xpBox.value).toBe('0');
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  const nextLevelAt = /^Next level at (\d{1,3}(,\d{3})*)$/;
+  const threshold = Number((await within(xp()).findByText(nextLevelAt)).textContent!.replace(nextLevelAt, '$1').replaceAll(',', ''));
+  await user.clear(xpBox);
+  await user.type(xpBox, String(threshold - 1));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  await waitFor(() => expect(within(xp()).getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe(String(threshold - 1)));
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  await user.clear(within(xp()).getByRole('spinbutton', { name: 'Experience points' }));
+  await user.type(within(xp()).getByRole('spinbutton', { name: 'Experience points' }), String(threshold));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  await within(xp()).findByText('Level up available');
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' })); // untick: the total and the hint go
+  await waitFor(() => expect(within(xp()).queryByRole('spinbutton', { name: 'Experience points' })).toBeNull());
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
   await openTab(user, sheet, 'Play');
 
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.

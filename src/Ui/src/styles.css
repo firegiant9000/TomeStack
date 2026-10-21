@@ -264,6 +264,12 @@ span.warn { color: var(--warn); }
 /* Wave 3 item 21: the damage type and defence selects (24px targets, WCAG 2.5.8; wrap at 400%). */
 .play-panel .inline-form select, .defences select { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
 .defences button { min-height: 1.75rem; }
+/* Wave 3 item 27: the Track XP checkbox, the total and its button are at least 24 CSS px (WCAG 2.5.8); the text wraps at 400%. */
+.experience input[type='checkbox'] { width: 1.5rem; height: 1.5rem; margin: 0 0.35rem 0 0; vertical-align: middle; }
+.experience input[type='number'] { box-sizing: border-box; max-width: 100%; font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
+.experience button { min-height: 1.75rem; }
+.experience p { overflow-wrap: anywhere; }
+.experience .level-up { margin: 0.25rem 0; }
 .damage-result { margin: 0.25rem 0; overflow-wrap: anywhere; }
 /* Wave 3 item 23: a companion's card on Play. Text wraps and the number box and buttons are at least 24 CSS px (WCAG 2.5.8), so the card reflows at 400%. */
 .companion-card section > h4 { margin: 0 0 var(--space-1); overflow-wrap: anywhere; }

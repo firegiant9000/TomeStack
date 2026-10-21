@@ -377,6 +377,10 @@ export interface CharacterSheet {
   damageDefences?: DamageDefenceValue[];
   /** Wave 3 item 25: each equipment entry of an item that needs attunement or has charges, carried or equipped; absent when there are none. */
   itemUses?: ItemUseValue[];
+  /** Wave 3 item 27: experience points are tracked and the total has reached the next level's threshold. Display only; absent otherwise. */
+  levelUpAvailable?: boolean;
+  /** Wave 3 item 27: the total needed for the next level while experience points are tracked and the level is 1 to 19; absent otherwise. */
+  xpForNextLevel?: number;
 }
 
 /** When an item's charges come back; absent `regain` means all of them. */

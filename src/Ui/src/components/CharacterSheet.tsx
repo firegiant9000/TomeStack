@@ -24,6 +24,7 @@ import { SessionNotesPanel } from './SessionNotesPanel';
 import { EntryGone, useSheetSave } from './sheetSave';
 import { DefencesPanel } from './DefencesPanel';
 import { DetailsPanel } from './DetailsPanel';
+import { ExperiencePanel } from './ExperiencePanel';
 import { GapNotesPanel, gapAboutFeature, gapAboutField } from './GapNotesPanel';
 import { PrintView } from './PrintView';
 import { RestPanel } from './RestPanel';
@@ -702,6 +703,7 @@ export function CharacterSheet({ view, onChanged, onError, onStatus, onLevelUp, 
           ),
         )}
         <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
+        <ExperiencePanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />
         {((character.details?.languages ?? []).length > 0 || (character.details?.toolsAndOther ?? []).length > 0) && (
           <section aria-labelledby="stats-details-heading" className="field-group">
             <h3 id="stats-details-heading">Languages and tools</h3>
