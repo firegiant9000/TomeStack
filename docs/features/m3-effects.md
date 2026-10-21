@@ -20,7 +20,7 @@ Validation:
 - `validate.toggle-unknown` and `validate.toggle-timing`: a modifier's toggle must be defined in the revision, and its timing must be `whileActive`.
 - `validate.toggle-resource`: a toggle's resource must be defined in the revision.
 - `validate.toggle-auto-resource` (content v10, D38): a toggle with `autoWhen` cannot name a `resourceId`, so an auto toggle never spends a use.
-- `validate.toggle-auto-target` (v10, D38): a `whileActive` modifier of a toggle with `autoWhen` cannot target `hitPoints` or any `ability.*` field (score or modifier), so the toggle cannot move the line Bloodied is judged by. Both are errors.
+- `validate.toggle-auto-target` (v10, D38): a `whileActive` modifier of a toggle with `autoWhen` cannot target `hitPoints` or any `ability.*` field (score or modifier), so the toggle cannot move the line Bloodied is judged by. Both are errors. The check looks at direct targets only: a modifier on some other field that is itself worked out from hit points or an ability is not caught.
 - `validate.roll-cost`: a cost needs a resource.
 - `validate.roll-resource-content`: the shared resource must exist in its content.
 - `validate.requires-v6`: any of these below v6.
