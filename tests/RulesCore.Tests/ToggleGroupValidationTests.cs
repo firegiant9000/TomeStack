@@ -45,6 +45,7 @@ public class ToggleGroupValidationTests
     public void A_group_content_that_is_installed_but_declares_no_such_group_is_an_error_not_a_warning()
     {
         var report = Validate(ToggleGroupVariants.Make("unknown-group"));
+        Assert.Contains(report.Errors, e => e.Code == "validate.toggle-group-unknown");
         Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-group-content-missing");
     }
 
@@ -137,7 +138,7 @@ public class ToggleGroupValidationTests
     }
 
     [Fact]
-    public void Every_toggle_property_added_after_v10_is_in_the_production_v11_key_list()
+    public void The_v11_toggle_properties_are_exactly_the_production_v11_key_list()
     {
         // Pinned: everything a v6 to v10 toggle already carries. A property outside this set is new, so it must be a v11 key.
         HashSet<string> pinned = new(StringComparer.OrdinalIgnoreCase)
@@ -150,10 +151,67 @@ public class ToggleGroupValidationTests
             .ToList();
 
         Assert.NotEmpty(added);
-        var listed = Properties.RevisionHashProperties.ToggleV11Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Assert.All(added, name => Assert.Contains(name, listed));
-        // And the other way: the pinned set must not hide a listed key.
-        Assert.All(listed, key => Assert.DoesNotContain(key, pinned));
+        // The list the build uses to keep these keys out of older revisions (ToggleEffect.V11Keys, internal), read by reflection.
+        var field = typeof(ToggleEffect).GetField("V11Keys", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+        var production = ((IEnumerable<string>)field.GetValue(null)!).OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        Assert.Equal(production, added.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+        // The hash tests keep their own copy; it must not drift from the production list either.
+        Assert.Equal(production, Properties.RevisionHashProperties.ToggleV11Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_resource_defined_by_a_later_revision_of_the_holder_content_is_found()
+    {
+        var holder = Guid.Parse("6f0dc000-0000-4000-8000-0000000000e1");
+        var discipline = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.FormDiscipline)!;
+        var first = discipline with { ContentId = holder, RevisionId = Guid.Parse("6f0de000-0000-4000-8000-0000000000e1"), Effects = [] };
+        var second = discipline with { ContentId = holder, RevisionId = Guid.Parse("6f0de000-0000-4000-8000-0000000000e2"), Effects = [.. discipline.Effects.Where(e => e is ResourceEffect)] };
+        var ember = ToggleGroupVariants.Make("resource-content-lacks-resource");
+        ember = ember with { Effects = [.. ember.Effects.Select(e => e is ToggleEffect t ? t with { ResourceContent = holder } : e)] };
+
+        var report = ContentValidator.Validate(ember, Fixtures.PlayMechanicsCatalog(), [first, second]);
+
+        Assert.DoesNotContain(report.Errors, e => e.Code == "validate.toggle-resource-content");
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-resource-content-missing");
+    }
+
+    [Fact]
+    public void A_group_content_without_a_group_is_a_group_unknown_error()
+    {
+        var revision = ToggleGroupVariants.Make("layer-without-group");
+        revision = revision with { Effects = [.. revision.Effects.Select(e => e is ToggleEffect t ? t with { Layer = null, GroupContent = Fixtures.FormDiscipline.ContentId } : e)] };
+        Assert.Contains(Validate(revision).Errors, e => e.Code == "validate.toggle-group-unknown");
+    }
+
+    [Fact]
+    public void A_resource_content_without_a_resource_id_raises_no_diagnostic()
+    {
+        var revision = ToggleGroupVariants.Make("cost-without-resource");
+        revision = revision with { Effects = [.. revision.Effects.Select(e => e is ToggleEffect t ? t with { Cost = null, ResourceId = null, ResourceContent = Fixtures.FormDiscipline.ContentId } : e)] };
+        var report = Validate(revision);
+        Assert.Empty(report.Errors);
+        Assert.Empty(report.Warnings);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","group":"forms","layer":"overlay","cost":"3","allowedWith":[],"level":2}""", 6)]
+    [InlineData("""{"type":"toggle","id":"t","toggleId":"t","label":"T","group":"forms","layer":"overlay","cost":"3","activation":"reaction"}""", 10)]
+    public void A_v10_toggle_carrying_v11_keys_keeps_its_old_version_and_gets_no_v11_diagnostic(string json, int required)
+    {
+        var report = Validate(Fixtures.RevisionWithEffect(json, schemaVersion: 10));
+        Assert.Equal(required, report.RequiredSchemaVersion);
+        Assert.DoesNotContain(report.Errors.Concat(report.Warnings), d => d.Code.StartsWith("validate.toggle-group", StringComparison.Ordinal)
+            || d.Code is "validate.toggle-layer" or "validate.toggle-cost" or "validate.toggle-allowed-with" or "validate.toggle-overlay-unreachable" or "validate.requires-v11" or "validate.level");
+    }
+
+    [Fact]
+    public void A_v10_toggle_with_a_v11_key_and_a_bad_activation_still_requires_v10_not_v11()
+    {
+        var revision = Fixtures.RevisionWithEffect("""{"type":"toggle","id":"t","toggleId":"t","label":"T","group":"forms","activation":"sideways"}""", schemaVersion: 10);
+        var report = Validate(revision);
+        Assert.Contains(report.Errors, e => e.Code == "validate.effect-malformed");
+        Assert.Equal(10, report.RequiredSchemaVersion);
     }
 }
 

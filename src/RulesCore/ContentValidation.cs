@@ -586,7 +586,7 @@ public static class ContentValidator
                     if (declarers.Count == 0)
                         Warn("validate.toggle-group-content-missing", $"Toggle '{id}' joins group '{toggle.Group}' of content {holder}, which is not installed; it acts alone until that content is.", id);
                     else if (!declarers.Any(r => r.Effects.OfType<ToggleGroupEffect>().Any(g => g.GroupId == toggle.Group)))
-                        Error("validate.toggle-group-unknown", $"Toggle '{id}' joins group '{toggle.Group}', which '{declarers[^1].Name}' does not declare.", id);
+                        Error("validate.toggle-group-unknown", $"Toggle '{id}' joins group '{toggle.Group}', which content {holder} does not declare.", id);
                 }
             }
 
@@ -621,11 +621,11 @@ public static class ContentValidator
             }
             if (toggle.ResourceContent is { } resourceHolder && resourceHolder != revision.ContentId && toggle.ResourceId is { } shared)
             {
-                var definer = local.OfContent(resourceHolder).Concat(catalog.RevisionsOf(resourceHolder)).FirstOrDefault(r => r.ContentId == resourceHolder);
-                if (definer is null)
+                var definers = local.OfContent(resourceHolder).Concat(catalog.RevisionsOf(resourceHolder)).Where(r => r.ContentId == resourceHolder).ToList();
+                if (definers.Count == 0)
                     Warn("validate.toggle-resource-content-missing", $"Toggle '{id}' spends '{shared}' of content {resourceHolder}, which is not installed.", id);
-                else if (!definer.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared))
-                    Error("validate.toggle-resource-content", $"Toggle '{id}': '{definer.Name}' defines no resource '{shared}'.", id);
+                else if (!definers.Any(d => d.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared)))
+                    Error("validate.toggle-resource-content", $"Toggle '{id}': content {resourceHolder} defines no resource '{shared}'.", id);
             }
             CheckLevel(toggle.Level, id);
         }
