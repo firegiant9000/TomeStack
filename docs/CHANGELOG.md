@@ -34,6 +34,7 @@
 
 ### Changed
 
+- **The app starts with less to load (R161):** the Homebrew studio, sources, the character builder, the sheet importer, campaigns, backups, extensions and the package preview now load when you open them, and the page says "Loading…" while one does. Nothing else changes; the app still works offline.
 - **PDFs on network shares can no longer be attached or imported:** a PDF you choose to attach, link or import as a character sheet must be a file on a local drive (a full path with a drive letter, no network share, device path or `..`). Otherwise it is refused (`pdf.path-not-local`) before anything opens it, because Windows would connect to the other computer just to read the file. Copy the file to this computer first. A drive letter you mapped to a share is not detected.
 - **One importer entry for every character sheet PDF:** the sidebar button, the step title, the file input's name and the status after creating read "character sheet" instead of "D&D Beyond". "D&D Beyond" now appears in the layout's name ("D&D Beyond 2014"), the not-affiliated line, and, for a D&D Beyond sheet, the override reason and note text written into the character. A PDF with no known layout is refused with "do not match a known character sheet layout".
 - **A caster without spell slots says so:** spellcasting is proposed only from a class table's spell slot columns. When a class's table has none but its text mentions spellcasting, the class candidate now says "add spellcasting by hand if it casts spells", so it no longer imports silently with no spellcasting.
