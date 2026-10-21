@@ -483,6 +483,65 @@ public class ImportJobTests
     }
 
     [Fact]
+    public void Detection_that_times_out_once_runs_again_and_the_job_completes_from_the_second_run()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var expected = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id).Candidates;
+        Assert.True(expected > 0);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            if (++attempts == 1)
+                throw new System.Text.RegularExpressions.RegexMatchTimeoutException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id);
+
+        Assert.Equal(2, attempts);
+        Assert.Null(job.FailureCode);
+        Assert.Equal(expected, job.Candidates);
+        Assert.Equal(expected, temp.App.ListCandidatesPage(new(job.Id)).Total);
+    }
+
+    [Fact]
+    public void Detection_that_times_out_twice_fails_with_detect_timeout_after_exactly_two_runs()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            attempts++;
+            throw new System.Text.RegularExpressions.RegexMatchTimeoutException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal("detect.timeout", job.FailureCode);
+        Assert.NotNull(temp.App.Store.FindImportPage(job.Sha256, 2)); // the pages stay stored
+    }
+
+    [Fact]
+    public void Detection_that_fails_for_another_reason_is_not_retried()
+    {
+        using var temp = new TempApp();
+        var sourceId = SourceWithBook(temp);
+        var attempts = 0;
+        temp.App.BeforeDetectionAttempt = () =>
+        {
+            attempts++;
+            throw new InvalidOperationException();
+        };
+
+        var job = Settle(temp, temp.App.StartImport(new(sourceId, WholeDocument: true)).Id, ImportJobStatus.Failed);
+
+        Assert.Equal(1, attempts);
+        Assert.Equal("import.internal", job.FailureCode);
+    }
+
+    [Fact]
     public void A_job_stored_without_written_for_reads_back_null_and_detects_with_the_sources_families()
     {
         using var temp = new TempApp();
