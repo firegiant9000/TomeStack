@@ -332,6 +332,26 @@ export interface FeatureEntry {
   grantedByName?: string;
 }
 
+/** M3 B1 (`character.mechanics`): one effect of a feature, how far TomeStack automates it, and what the player does by hand. */
+export interface MechanicEntry {
+  content: ContentReference;
+  featureName: string;
+  kind: ContentKind;
+  effectId?: string;
+  /** The effect's type; `"text"` for a feature with no effects. */
+  effectType: string;
+  automation: AutomationStatus;
+  manualStep?: string;
+  sourceId?: string;
+  page?: PageRef;
+}
+
+/** `Unsupported` is a subset of `mechanics`: effects of a type this build does not know. */
+export interface MechanicsReport {
+  mechanics: MechanicEntry[];
+  unsupported: MechanicEntry[];
+}
+
 export interface HitPointState {
   maximum: number;
   current: number;

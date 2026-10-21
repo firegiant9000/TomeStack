@@ -112,6 +112,17 @@ Play's second column ends with a "Companions" section: one card per companion (a
 - The count ("N of M spells shown") is the search box's existing polite status, now also shown while any filter is set. It changes only when the count changes. When the filters hide every spell the list says "No spells match these filters. Clear filters to see all M."
 - The choices are kept per caster while the sheet is open (a second caster has its own) and are not saved. The builder's spell pickers are unchanged. The logic is `filterSpells` and `castingBucket` in `src/Ui/src/spellSearch.ts`.
 
+## What needs you by hand (P18, D69)
+
+The end of the Features tab has "TomeStack won't do these for you" (`ByHandPanel.tsx`), with the line "TomeStack never acts on its own; these need you." Each row names the feature and its source page. Groups with nothing in them are not shown, and a sheet with nothing to list says "Everything on this sheet is calculated."
+
+- **Spend by hand:** a feature's roll that names a resource (read from the sheet, the same test the mechanics report uses for limited-use actions).
+- **Reference only:** effects TomeStack knows but does not apply. A feature that is only text is never listed (an SRD sheet would list hundreds).
+- **Partly automatic:** effects that need the player, including one that has a problem (a formula that fails).
+- **Not understood:** effects of a type this build does not know. A row here is not repeated in another group.
+
+It is UI only: it reads the existing `character.mechanics` command (`client.characterMechanics`) for the sources the sheet's features come from. It asks only while the Features tab is open and again when the sheet is recalculated; a reply for an older sheet or another character is ignored. A sheet with no sources makes no call. If the read fails the panel shows "Couldn't list what needs you by hand." and nothing else.
+
 ## Not in this slice
 
 Conditions that change calculations, and damage at 0 hit points adding a death save failure by itself (the player presses "Add a failure").

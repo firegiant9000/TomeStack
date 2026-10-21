@@ -57,6 +57,7 @@ import type {
   FormulaPreviewResult,
   GapNote,
   GapNoteListing,
+  MechanicsReport,
   GapNoteStatus,
   GapTarget,
   ImportResult,
@@ -229,6 +230,8 @@ export function createClient(transport: Transport) {
     /** D32: a labelled roll with no character (the builder's scores); writes nothing. */
     rollDice: (formula: string, keepHighest?: number, label?: string) => call<RollRecord>('dice.roll', { formula, keepHighest, label }),
     /** The character's gap notes, open first (M3 B3). Stored locally; never sent anywhere. */
+    /** `character.mechanics`: every mechanic of the given sources with its automation level. An empty `sourceIds` would make the server list homebrew only, so callers never send one. */
+    characterMechanics: (characterId: string, sourceIds: string[]) => call<MechanicsReport>('character.mechanics', { characterId, sourceIds }),
     listGapNotes: (characterId: string) => call<GapNote[]>('gap.list', { characterId }),
     /** Every character's notes with the character's name, open first (M3 C5). Writes nothing. */
     listAllGapNotes: () => call<GapNoteListing[]>('gap.listAll'),
