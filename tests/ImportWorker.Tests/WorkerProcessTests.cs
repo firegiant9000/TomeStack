@@ -14,10 +14,40 @@ public class WorkerProcessTests
 {
     private static string Worker => Path.Combine(AppContext.BaseDirectory, "TomeStack.ImportWorker.Host.exe");
 
-    private static async Task<List<ExtractionEvent>> Run(string path, ExtractionLimits? limits = null, PageScope? scope = null, Action<int>? started = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// A stand-in worker that reads nothing and writes nothing until it is killed (R173). The page-timeout tests run
+    /// against it, not against the real worker, which on a fast runner answers before any short timeout fires.
+    /// </summary>
+    private sealed class SilentWorker : IDisposable
+    {
+        private readonly string _folder = Path.Combine(Path.GetTempPath(), "tomestack-silent-" + Guid.NewGuid().ToString("N"));
+
+        public SilentWorker()
+        {
+            Directory.CreateDirectory(_folder);
+            Script = Path.Combine(_folder, "silent-worker.cmd");
+            File.WriteAllText(Script, "@echo off\r\nping -n 60 127.0.0.1 >nul\r\n");
+        }
+
+        public string Script { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(_folder, recursive: true);
+            }
+            catch (IOException)
+            {
+                // The killed child may still hold the folder for a moment; the temp folder is cleaned up later.
+            }
+        }
+    }
+
+    private static async Task<List<ExtractionEvent>> Run(string path, ExtractionLimits? limits = null, PageScope? scope = null, Action<int>? started = null, CancellationToken cancellationToken = default, string? worker = null)
     {
         var events = new List<ExtractionEvent>();
-        var extractor = new WorkerProcessExtractor(Worker, limits) { ProcessStarted = started };
+        var extractor = new WorkerProcessExtractor(worker ?? Worker, limits) { ProcessStarted = started };
         await foreach (var item in extractor.ExtractAsync(path, scope ?? PageScope.WholeDocument, cancellationToken))
             events.Add(item);
         return events;
@@ -88,8 +118,11 @@ public class WorkerProcessTests
     [Fact]
     public async Task A_worker_that_sends_nothing_in_time_is_stopped()
     {
-        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.ImportPath, new ExtractionLimits { PageTimeout = TimeSpan.FromMilliseconds(1) }));
+        using var silent = new SilentWorker();
+        var pid = 0;
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.ImportPath, new ExtractionLimits { PageTimeout = TimeSpan.FromMilliseconds(200) }, started: id => pid = id, worker: silent.Script));
         Assert.Equal("worker.page-timeout", refused.Code);
+        Assert.True(Gone(pid), "the worker process ended");
     }
 
     [Fact]
@@ -302,7 +335,8 @@ public class WorkerProcessTests
     [Fact]
     public async Task An_extract_under_the_sheet_limits_stops_a_worker_that_sends_nothing_within_the_page_timeout()
     {
-        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(1) }, new PageScope(1, 20)));
+        using var silent = new SilentWorker();
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(200) }, new PageScope(1, 20), worker: silent.Script));
 
         Assert.Equal("worker.page-timeout", refused.Code);
     }
