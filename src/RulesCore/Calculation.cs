@@ -1353,6 +1353,8 @@ public static class CharacterCalculator
 
         // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
         bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        // R189: content a grant or a choice brings in passes the same gate, through an attuned equipped copy.
+        bool AttunedCopyEquipped(ContentReference reference) => character.Equipment.Any(e => e.Equipped && e.Item == reference && e.Attuned == true);
         void NotAttuned(ContentReference reference) =>
             diagnostics.Add(new("item.not-attuned", "An equipped or pinned item needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", reference));
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
@@ -1443,6 +1445,11 @@ public static class CharacterCalculator
                         continue;
                     if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot, parentOrigin: item.Origin) is { } granted)
                     {
+                        if (NeedsAttunement(granted) && !AttunedCopyEquipped(reference))
+                        {
+                            NotAttuned(reference);
+                            continue;
+                        }
                         active.Add(granted);
                         pending.Enqueue(granted);
                         foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
@@ -1498,6 +1505,11 @@ public static class CharacterCalculator
                     {
                         if (Admit(option, null, item.ClassRoot, revision, item.Origin) is not { } chosen)
                             continue;
+                        if (NeedsAttunement(chosen) && !AttunedCopyEquipped(option))
+                        {
+                            NotAttuned(option);
+                            continue;
+                        }
                         active.Add(chosen);
                         pending.Enqueue(chosen);
                     }

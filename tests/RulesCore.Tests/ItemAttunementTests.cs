@@ -129,6 +129,62 @@ public class ItemAttunementTests
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "item.not-attuned");
     }
 
+    // R189: content a feature grants, or a choice selects, passes the same gate: an attuned equipped copy is needed.
+    private static (Character Hero, ContentRevision Root) Bringing(string family, ContentRevision wand, bool viaChoice)
+    {
+        Effect bring = viaChoice
+            ? new ChoiceEffect { Id = "pick", ChoiceId = "pick", Options = [wand.Reference] }
+            : new GrantEffect { Id = "give", Grant = GrantKind.Content, Content = wand.Reference };
+        var root = ChoiceTests.Homebrew(91, ContentKind.Feature, bring);
+        var hero = Hero(family);
+        hero = hero with { Pins = [.. hero.Pins, root.Reference], Choices = viaChoice ? [new(root.Reference, "pick", [wand.Reference])] : [] };
+        return (hero, root);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51, false)]
+    [InlineData(RulesFamilies.Srd521, false)]
+    [InlineData(RulesFamilies.Srd51, true)]
+    [InlineData(RulesFamilies.Srd521, true)]
+    public void A_granted_or_chosen_item_that_needs_attunement_applies_nothing_until_an_equipped_copy_is_attuned(string family, bool viaChoice)
+    {
+        var wand = Wand(family);
+        var (hero, root) = Bringing(family, wand, viaChoice);
+        var before = ChoiceTests.SheetWith(Hero(family)).Field(FieldIds.Skill("stealth")).Value;
+
+        var bare = ChoiceTests.SheetWith(hero, root, wand);
+        Assert.Equal(before, bare.Field(FieldIds.Skill("stealth")).Value);
+        var note = Assert.Single(bare.Diagnostics, d => d.Code == "item.not-attuned");
+        Assert.Equal(wand.Reference, note.Content);
+        Assert.DoesNotContain("Fixture wand", note.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(wand.Reference, bare.Active!);
+
+        // Carried, attuned but not equipped: still nothing.
+        var carried = ChoiceTests.SheetWith(hero with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: false, Id: Id(1), Attuned: true)] }, root, wand);
+        Assert.Equal(before, carried.Field(FieldIds.Skill("stealth")).Value);
+        Assert.Contains(carried.Diagnostics, d => d.Code == "item.not-attuned");
+
+        // An equipped, attuned copy: it applies, with no note.
+        var attuned = ChoiceTests.SheetWith(hero with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: true, Id: Id(1), Attuned: true)] }, root, wand);
+        Assert.Equal(before + 2, attuned.Field(FieldIds.Skill("stealth")).Value);
+        Assert.DoesNotContain(attuned.Diagnostics, d => d.Code == "item.not-attuned");
+        Assert.Contains(wand.Reference, attuned.Active!);
+    }
+
+    [Theory]
+    [MemberData(nameof(Families))]
+    public void A_granted_item_that_does_not_need_attunement_still_applies_without_an_equipped_copy(string family)
+    {
+        var wand = Wand(family, attune: false);
+        var (hero, root) = Bringing(family, wand, viaChoice: false);
+        var before = ChoiceTests.SheetWith(Hero(family)).Field(FieldIds.Skill("stealth")).Value;
+
+        var sheet = ChoiceTests.SheetWith(hero, root, wand);
+
+        Assert.Equal(before + 2, sheet.Field(FieldIds.Skill("stealth")).Value);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "item.not-attuned");
+    }
+
     [Theory]
     [MemberData(nameof(Families))]
     public void A_v9_item_revision_applies_when_equipped_exactly_as_before_and_its_item_effect_stays_unknown(string family)
@@ -352,6 +408,25 @@ public class ItemAttunementTests
         Assert.Equal("rest.charge-roll-unknown", Assert.Single(RestPlanner.CheckChargeRolls(sheet, RestPeriod.ShortRest, [new(key1, 3)])).Code); // wrong rest
         Assert.Equal("rest.charge-roll-unknown", Assert.Single(RestPlanner.CheckChargeRolls(sheet, RestPeriod.LongRest, [new(key2, 3)])).Code); // nothing spent on it
         Assert.Equal("rest.charge-roll-unknown", RestPlanner.CheckChargeRolls(sheet, RestPeriod.LongRest, [new(key1, 3), new(key1, 4)]).Single().Code); // twice
+    }
+
+    [Theory]
+    [MemberData(nameof(Families))]
+    public void More_charge_rolls_than_the_sheet_has_item_uses_are_refused_once_with_counts_only(string family)
+    {
+        var wand = Wand(family);
+        var (_, sheet) = Spent(family, wand, 5, 0);
+        var uses = sheet.ItemUses!.Count;
+        var key1 = Id(1).ToString("D");
+        var rolls = Enumerable.Range(0, uses + 1).Select(_ => new ChargeRoll(key1, 3)).ToList(); // one more than there are items with uses
+
+        var problem = Assert.Single(RestPlanner.CheckChargeRolls(sheet, RestPeriod.LongRest, rolls));
+
+        Assert.Equal("rest.charge-rolls-too-many", problem.Code);
+        Assert.Contains($"{uses + 1} charge rolls", problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(key1, problem.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Fixture wand", problem.Message, StringComparison.Ordinal);
+        Assert.Single(RestPlanner.CheckChargeRolls(sheet, RestPeriod.LongRest, [new("nope", 1), .. rolls])); // however many are bad, still one problem
     }
 
     [Fact]

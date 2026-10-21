@@ -14,6 +14,8 @@ interface Props {
   onError: (error: unknown) => void;
   /** Every hit-die roll and every item-charge roll, so the sheet can log it (D28); a rest never shows it as the Last roll. */
   onRoll?: (record: RollRecord) => void;
+  /** R188: runs the finishing command in the sheet's save queue, so a save never starts from the stamp it replaces. Direct when absent. */
+  run?: (command: () => Promise<CharacterView>) => Promise<CharacterView>;
 }
 
 /**
@@ -21,7 +23,7 @@ interface Props {
  * no food and drink) and confirms; nothing changes before "Finish … rest". A short rest first asks which hit dice to
  * spend: each is rolled here or entered from the table, and the proposal follows the dice chosen.
  */
-export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll }: Props) {
+export function RestPanel({ characterId, kind, hitDice, version, onRested, onCancel, onError, onRoll, run }: Props) {
   // The proposal belongs to the view and the hit dice it was worked out for: after any other change (for example "Lose 1 hit
   // point" in the summary, or a die added or removed) it is stale and fetched again. The last proposal stays on screen
   // meanwhile (so a focused control is not unmounted) but "Finish" waits for the one for the current view and dice.
@@ -129,7 +131,8 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
     try {
       // A charges row still waiting for its roll applies nothing, so it is not counted.
       const applied = preview.changes.filter((c) => !skipped.includes(c.id) && !(c.kind === 'charges' && c.spentAfter == null && c.dice)).length;
-      onRested(await client.rest(characterId, kind, preview.basis, skipped, rolls, chargeRolls), applied);
+      const finishing = () => client.rest(characterId, kind, preview.basis, skipped, rolls, chargeRolls);
+      onRested(await (run ? run(finishing) : finishing()), applied);
     } catch (error) {
       onError(error);
     } finally {

@@ -1064,6 +1064,59 @@ it('shows the refusal, brings in the current copy and leaves focus where it was 
   expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' }).value).toBe('20'); // what was typed stays
 });
 
+it('sends a save started while a play reply is pending with the play reply\'s updatedAt, keeping both changes (R188)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const hit = pending();
+  const played: CharacterView = {
+    ...v,
+    character: { ...v.character, updatedAt: '2026-10-03T00:00:05.5000000+00:00', play: { temporaryHitPoints: 3, resources: [], conditions: [], exhaustion: 0 } },
+  };
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValueOnce(hit.promise);
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...v, character: { ...c, updatedAt: '2026-10-03T00:00:09.0000000+00:00' } }));
+  renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' })); // its reply is held
+  await user.click(screen.getByRole('tab', { name: 'Inventory' }));
+  const gold = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
+  await user.clear(gold);
+  await user.type(gold, '20');
+  await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  expect(client.saveCharacter).not.toHaveBeenCalled(); // waits behind the play command
+  hit.settle(played);
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(1));
+  const sent = vi.mocked(client.saveCharacter).mock.calls[0]![0];
+  expect(sent.updatedAt).toBe('2026-10-03T00:00:05.5000000+00:00'); // the stamp the play left, not the one the sheet showed
+  expect(sent.play?.temporaryHitPoints).toBe(3);
+  expect(sent.currency?.gp).toBe(20);
+});
+
+it('runs a rest finish in the save queue, so a save started meanwhile names the rest\'s stamp (R188)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const held = pending();
+  const rested: CharacterView = { ...v, character: { ...v.character, updatedAt: '2026-10-03T00:00:06.0000000+00:00' } };
+  vi.mocked(client.rest).mockReturnValueOnce(held.promise);
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter).mockImplementation(async (c) => ({ ...v, character: { ...c, updatedAt: '2026-10-03T00:00:09.0000000+00:00' } }));
+  renderSheet(v);
+  await user.click(screen.getByRole('button', { name: 'Short rest…' }));
+  const finish = await screen.findByRole('button', { name: 'Finish short rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+  await waitFor(() => expect(client.rest).toHaveBeenCalled());
+  await user.click(screen.getByRole('tab', { name: 'Inventory' }));
+  const gold = screen.getByRole('spinbutton', { name: 'Gold (gp)' });
+  await user.clear(gold);
+  await user.type(gold, '20');
+  await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  expect(client.saveCharacter).not.toHaveBeenCalled();
+  held.settle(rested);
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.saveCharacter).mock.calls[0]![0].updatedAt).toBe('2026-10-03T00:00:06.0000000+00:00');
+});
+
 it('keeps the same onError identity when the app passes a new onChanged, so no panel refetches (R182)', async () => {
   const v = view();
   const props = { onError: noop, onStatus: noop, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop, initialTab: 'inventory' as const };

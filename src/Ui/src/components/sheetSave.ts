@@ -35,6 +35,12 @@ export type QueuedSheetSave = {
    * so no later save is wedged on a version the store no longer has.
    */
   adopt: (view: CharacterView) => void;
+  /**
+   * R188: runs a command that is not a sheet save (a play action, an Undo, a rest finish) in the same order as the saves. It starts
+   * after every earlier entry has finished, and its reply's character becomes the queue's latest, so a save started meanwhile
+   * names the stamp the command left. A failed command changes nothing in the queue.
+   */
+  run: <T>(command: () => Promise<T>, characterOf: (reply: T) => Character | undefined) => Promise<T>;
 };
 
 export function useSheetSave(view: CharacterView): QueuedSheetSave {
@@ -56,18 +62,19 @@ export function useSheetSave(view: CharacterView): QueuedSheetSave {
     shown.current = fresh.character;
   }, []);
 
-  const save = useCallback<SheetSave>((update) => {
+  const run = useCallback(<T,>(command: () => Promise<T>, characterOf: (reply: T) => Character | undefined): Promise<T> => {
     pending.current += 1;
-    const run = async () => {
-      // Ties go to the queue's own latest. R182: character.save is compare-and-set on updatedAt, so each save names the version it
-      // edits: the queue's latest is always the previous save's returned character, and its updatedAt is passed on verbatim. A newer
-      // shown view replaces it; a save that is refused as stale rejects here and the sheet reads the current copy.
-      if ((shown.current.updatedAt ?? '') > (latest.current.updatedAt ?? '')) latest.current = shown.current;
-      const saved = await client.saveCharacter(update(latest.current));
-      latest.current = saved.character;
-      return saved;
+    const step = async () => {
+      const reply = await command();
+      // R188: the command stamped the character itself, so the next save must name that stamp, not the one before it.
+      const next = characterOf(reply);
+      if (next) {
+        latest.current = next;
+        shown.current = next;
+      }
+      return reply;
     };
-    const result = tail.current.then(run);
+    const result = tail.current.then(step);
     tail.current = result.then(
       () => undefined,
       () => undefined,
@@ -77,5 +84,26 @@ export function useSheetSave(view: CharacterView): QueuedSheetSave {
     });
   }, []);
 
-  return { save, adopt };
+  const save = useCallback<SheetSave>((update) => {
+    pending.current += 1;
+    const step = async () => {
+      // Ties go to the queue's own latest. R182: character.save is compare-and-set on updatedAt, so each save names the version it
+      // edits: the queue's latest is always the previous save's returned character, and its updatedAt is passed on verbatim. A newer
+      // shown view replaces it; a save that is refused as stale rejects here and the sheet reads the current copy.
+      if ((shown.current.updatedAt ?? '') > (latest.current.updatedAt ?? '')) latest.current = shown.current;
+      const saved = await client.saveCharacter(update(latest.current));
+      latest.current = saved.character;
+      return saved;
+    };
+    const result = tail.current.then(step);
+    tail.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result.finally(() => {
+      pending.current -= 1;
+    });
+  }, []);
+
+  return { save, adopt, run };
 }

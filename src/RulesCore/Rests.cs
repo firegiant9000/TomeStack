@@ -216,6 +216,10 @@ public static class RestPlanner
     {
         ArgumentNullException.ThrowIfNull(sheet);
         ArgumentNullException.ThrowIfNull(rolls);
+        // R190: more rolls than the sheet has items with uses cannot all be valid (one roll per entry), so refuse once, with counts only.
+        var allowed = sheet.ItemUses?.Count ?? 0;
+        if (rolls.Count > allowed)
+            return [new("rest.charge-rolls-too-many", $"{rolls.Count} charge rolls were sent for {allowed} item{(allowed == 1 ? "" : "s")} with uses; at most one roll per item can be used.")];
         var problems = new List<Diagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var roll in rolls)

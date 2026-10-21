@@ -657,6 +657,23 @@ public class ItemChargesTests
         Assert.Equal(before, TempApp.Json(Get(s).Character));
     }
 
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void More_charge_rolls_than_the_character_has_items_with_uses_are_refused_with_one_code_and_nothing_is_written(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var id = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        Spend(s, id, 4);
+        var before = TempApp.Json(Get(s).Character);
+        var rolls = Enumerable.Range(0, 50).Select(_ => new ChargeRoll(id.ToString("D"), 3)).ToList();
+
+        Assert.Equal("rest.charge-rolls-too-many", CodeOf(() => s.Temp.App.PreviewRest(s.Id, RestPeriod.LongRest, null, rolls)));
+        Assert.Equal("rest.charge-rolls-too-many", CodeOf(() => s.Temp.App.Rest(new(s.Id, RestPeriod.LongRest, Confirm: true, ChargeRolls: rolls))));
+        Assert.Equal(before, TempApp.Json(Get(s).Character));
+    }
+
     // ---- rolling the regain dice ---------------------------------------------------------------------------------------------
 
     private sealed class ScriptedRandom(params int[] faces) : IRandomSource

@@ -238,7 +238,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.
   // R132: every sheet save goes through this one queue, each as an updater applied to the latest saved character.
-  const { save: saveCharacter, adopt } = useSheetSave(view);
+  // R188: play actions, Undo and a rest finish run in the same queue (`run`), so a save never starts from a stamp they replaced.
+  const { save: saveCharacter, adopt, run: runQueued } = useSheetSave(view);
   const characterId = character.id;
   // The wrapper's identity must not change when the app passes a new inline `onChanged`: panels list `onError` in their effect
   // dependencies, so a new identity on every render would refetch (and loop on a failing fetch). It reads the props through a ref.
@@ -411,7 +412,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     const startedWhileRunning = running.current > 0;
     running.current += 1;
     try {
-      const after = await client.play(character.id, action);
+      const after = await runQueued(() => client.play(character.id, action), (reply) => reply.character);
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
@@ -448,7 +449,20 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     started.current += 1;
     running.current += 1;
     try {
-      for (const step of steps) current = await client.play(character.id, step);
+      // One queue entry for all the steps, so no save slips in between them. A step that fails after another succeeded still
+      // leaves that step's stamp as the latest.
+      await runQueued(
+        async () => {
+          try {
+            for (const step of steps) current = await client.play(character.id, step);
+          } catch (error) {
+            if (current) adopt(current);
+            throw error;
+          }
+          return current;
+        },
+        (reply) => reply?.character,
+      );
       if (current) onChanged(current);
     } catch (error) {
       // A step that succeeded before the failure has changed the character: show it, so the sheet is not stale.
@@ -586,6 +600,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             hitDice={sheet.hitDice ?? []}
             version={view}
             onError={onError}
+            run={(command) => runQueued(command, (reply) => reply.character)}
             onRoll={logRoll}
             onCancel={() => closeRest(resting)}
             onRested={(rested, applied) => {
