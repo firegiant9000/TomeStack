@@ -57,8 +57,14 @@ public sealed partial class TomeStackApp
         var problems = character.Validate().ToList();
         // R159: a second copy of an item is allowed only for items that need an entry of their own (charges or attunement), which the
         // pure Validate cannot tell without the catalog. An id given by the caller does not make a plain item repeatable.
+        // R184: the rule is enforced only for copies the payload adds. A group whose every entry carries an id the stored character
+        // already holds is accepted as it is, whatever the revision lookup says now (a share can omit the item's source, and an
+        // update can drop the item effect), so a stored character is never left unable to save or take a play action.
+        var storedIds = _store.FindCharacter(character.Id)?.Equipment?.Where(e => e?.Id is not null).Select(e => e.Id!.Value).ToHashSet();
         foreach (var group in character.Equipment.Where(e => e?.Item is not null).GroupBy(e => e.Item).Where(g => g.Count() > 1))
         {
+            if (storedIds is not null && group.All(e => e.Id is { } id && storedIds.Contains(id)))
+                continue;
             if (!NeedsEntryId(group.Key) && !problems.Any(p => p.Code == "character.equipment-duplicate" && p.Content == group.Key))
                 problems.Add(new("character.equipment-duplicate", "An item is recorded more than once; record one entry with its quantity.", group.Key));
         }

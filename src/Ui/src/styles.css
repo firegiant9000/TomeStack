@@ -51,8 +51,9 @@ html[data-theme='violet'] {
   --accent-2: light-dark(#075f78, #86e3f5);
   --header-bg: light-dark(color-mix(in srgb, var(--accent) 30%, var(--bg)), color-mix(in srgb, var(--accent) 12%, var(--bg)));
 }
-/* D40 / R163: three more presets, each on the same tokens. Every pairing meets the floors the three above meet, 6.1:1 or
-   better for --bg text on an accent fill (computed in the PR; accessibility-checklist.md item 5). Dark --bg stays Canvas.
+/* D40 / R163: three more presets, each on the same tokens. Every pairing meets WCAG AA (accessibility-checklist.md item 5):
+   --bg text on an accent fill is 6.1:1 or better in the three Wave 3 presets and in the custom accent. The older forest theme
+   in its light mode measures 6.08 and 5.87 (still AA). Dark --bg stays Canvas.
    "Custom accent" has no block here: accentClamp.ts generates it and adopts it as a stylesheet at run time. */
 html[data-theme='ember'] {
   --bg: light-dark(#fdf1ea, Canvas);
@@ -537,7 +538,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
 .text-diff .diff-removed { color: var(--error); text-decoration: line-through; }
 
 /* ADR-015: the dice display. Filled polygons by clip-path; the face by attr(), so the live region's text never changes.
-   Text on a filled shape is --bg (F3): 6.1:1 or better on --accent and --accent-2 in every theme, light and dark. */
+   Text on a filled shape is --bg (F3): AA (4.5:1) or better on --accent and --accent-2 in every theme, light and dark. That is
+   6.1:1 or better in the Wave 3 presets and the custom accent; forest light measures 6.08 and 5.87. */
 .dice { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-1); }
 .die { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--accent); color: var(--bg); font-family: var(--font-numbers); font-weight: 700; font-variant-numeric: tabular-nums; animation: tumble 0.6s ease-out; }
 .die::after { content: attr(data-value); }

@@ -142,6 +142,36 @@ it('asks for the regain dice, rolls them through the roller, logs the roll, and 
   expect(rested).toEqual([1]);
 });
 
+it('lets a roll that went stale mid-rest be cleared, instead of leaving only Cancel (the charges regained to 0 elsewhere)', async () => {
+  const user = userEvent.setup();
+  let stale = false;
+  vi.mocked(client.restPreview).mockImplementation(async (...[, kind, , chargeRolls = []]) => {
+    if (stale && chargeRolls.length > 0) throw new Error('rest.charge-roll-unknown');
+    return { kind, changes: [chargeRolls.length > 0 ? rolled : waiting], manual: [], basis: 'b' } as never;
+  });
+  const errors: unknown[] = [];
+  const first = { version: 1 };
+  const { rerender } = panel({ kind: 'longRest', hitDice: [], version: first, onError: (e) => errors.push(e) });
+
+  await user.type(await screen.findByLabelText('Fixture wand: 1d6+1 rolled at the table (total)'), '5');
+  await user.click(screen.getByRole('button', { name: 'Add the 1d6+1 total: Fixture wand' }));
+  await screen.findByRole('button', { name: 'Clear the roll: Fixture wand charges' });
+
+  // The character changed under the open rest: the stored roll no longer has a dice row, so the proposal is refused.
+  stale = true;
+  rerender(<RestPanel characterId="fixture-2" kind="longRest" hitDice={[]} version={{ version: 2 }} onRested={noop} onCancel={noop} onError={(e) => errors.push(e)} />);
+  await screen.findByText('Could not work out this rest. Cancel and try again.');
+  expect(errors).toHaveLength(1);
+
+  const clear = screen.getByRole('button', { name: 'Clear the roll: Fixture wand charges' });
+  expect(clear.getAttribute('aria-disabled')).not.toBe('true');
+  await user.click(clear);
+
+  await screen.findByRole('button', { name: 'Roll 1d6+1: Fixture wand' });
+  expect(screen.queryByText('Could not work out this rest. Cancel and try again.')).toBeNull();
+  await waitFor(() => expect(vi.mocked(client.restPreview)).toHaveBeenLastCalledWith('fixture-2', 'longRest', [], []));
+});
+
 it('takes a total rolled at the table, can clear it, and counts a row still waiting for its roll as nothing applied', async () => {
   const user = userEvent.setup();
   vi.mocked(client.restPreview).mockImplementation(

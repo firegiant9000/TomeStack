@@ -137,6 +137,12 @@ it('undoes companion damage, healing and setting with an exact companionSetHitPo
   expect(set.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 12, temporary: 0 }]);
 });
 
+it('undoes a companion temporary-only set with an exact companionSetHitPoints (current and temporary)', () => {
+  const set = inverseOf({ action: 'companionSetTemporaryHitPoints', companionId: 'k1', amount: 5 }, withCompanion({ current: 12, temporary: 1 }), withCompanion({ current: 12, temporary: 5 }))!;
+  expect(set.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 12, temporary: 1 }]);
+  expect(inverseOf({ action: 'companionSetTemporaryHitPoints', companionId: 'k1', amount: 5 }, withCompanion({ current: 12, temporary: 5 }), withCompanion({ current: 12, temporary: 5 }))).toBeUndefined();
+});
+
 it('reads a companion with no recorded hit points as at its maximum with none temporary, and offers nothing when nothing changed', () => {
   const entry = inverseOf({ action: 'companionDamage', companionId: 'k1', amount: 6 }, withCompanion(), withCompanion({ current: 14, temporary: 0 }))!;
   expect(entry.inverse).toEqual([{ action: 'companionSetHitPoints', companionId: 'k1', amount: 20, temporary: 0 }]);

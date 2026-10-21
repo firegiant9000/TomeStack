@@ -150,7 +150,7 @@ public static class ContentValidator
                     Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen or grant kind, or a missing field); fix it before publishing.", malformed.Id);
                     break;
                 case UnknownEffect unknown:
-                    Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' has type '{unknown.DeclaredType}', which this version does not automate; it stays reference-only.", unknown.Id);
+                    Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
                     break;
                 case ModifierEffect modifier:
                     needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -285,7 +285,7 @@ public static class ContentValidator
                 case ItemEffect item:
                     needsV10 = true;
                     if (revision.Kind != ContentKind.Item)
-                        Error("validate.item-kind", $"An item effect (attunement, charges) belongs on an item; '{revision.Name}' is {revision.Kind.ToString().ToLowerInvariant()} content.", item.Id);
+                        Error("validate.item-kind", $"An item effect (attunement, charges) belongs on an item; this revision is {revision.Kind.ToString().ToLowerInvariant()} content.", item.Id);
                     if (item.Charges is { } charges)
                     {
                         if (charges.Max is < 1 or > ItemCharges.MaxCharges)

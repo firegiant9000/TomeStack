@@ -502,7 +502,8 @@ export type PlayActionKind =
   | 'regainCharge'
   | 'companionDamage'
   | 'companionHeal'
-  | 'companionSetHitPoints';
+  | 'companionSetHitPoints'
+  | 'companionSetTemporaryHitPoints';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -517,7 +518,7 @@ export interface PlayAction {
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
   entryId?: string;
   entryIndex?: number;
-  /** With a `companion*` action (Wave 3 item 23): the companion, by its id. `companionSetHitPoints` takes the current hit points in `amount` and, when sent, the temporary ones in `temporary`. */
+  /** With a `companion*` action (Wave 3 item 23): the companion, by its id. `companionSetHitPoints` takes the current hit points in `amount` and, when sent, the temporary ones in `temporary`; `companionSetTemporaryHitPoints` takes only the temporary ones in `amount` and keeps the stored current. */
   companionId?: string;
   temporary?: number;
 }

@@ -90,6 +90,24 @@ public class CompanionPlayTests
     }
 
     [Fact]
+    public void Set_temporary_changes_only_temporary_and_keeps_the_stored_current_so_an_overlapping_damage_is_kept()
+    {
+        var (temp, id) = Start(RulesFamilies.Srd51);
+        using var _ = temp;
+        Act(temp, id, PlayActionKind.CompanionDamage, HoundId, 8); // current 12 of 20
+
+        // The page built this from the view it showed before the damage landed: it can only say "temporary 5".
+        var set = Act(temp, id, PlayActionKind.CompanionSetTemporaryHitPoints, HoundId, 5);
+        Assert.Equal(new CompanionPlay(HoundId, 12, 5), PlayOf(set, HoundId));
+
+        var cleared = Act(temp, id, PlayActionKind.CompanionSetTemporaryHitPoints, HoundId, 0);
+        Assert.Equal(new CompanionPlay(HoundId, 12, 0), PlayOf(cleared, HoundId));
+
+        Assert.Equal("play.amount-out-of-range", CodeOf(() => Act(temp, id, PlayActionKind.CompanionSetTemporaryHitPoints, HoundId, PlayState.MaxHitPoints + 1)));
+        Assert.Equal("play.companion-unknown", CodeOf(() => Act(temp, id, PlayActionKind.CompanionSetTemporaryHitPoints, Guid.NewGuid(), 1)));
+    }
+
+    [Fact]
     public void Set_above_the_maximum_or_out_of_range_is_refused_and_nothing_changes()
     {
         var (temp, id) = Start(RulesFamilies.Srd51);

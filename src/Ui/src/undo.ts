@@ -81,7 +81,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
       return backing(action) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
     case 'companionDamage':
     case 'companionHeal':
-    case 'companionSetHitPoints': {
+    case 'companionSetHitPoints':
+    case 'companionSetTemporaryHitPoints': {
       // Wave 3 item 23: a companion's hit points are put back exactly, current and temporary both. No recorded entry means at the
       // maximum with none temporary. A change that left both as they were, or a companion the view no longer has, has no entry.
       const state = (v: CharacterView) => {

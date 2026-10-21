@@ -112,8 +112,10 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
   }
 
   function clearChargeRoll(change: RestChange) {
-    // The row asks for a roll again once the new proposal arrives, so focus moves to the heading now (WCAG 2.4.3).
-    if (!ready) return;
+    // The row asks for a roll again once the new proposal arrives, so focus moves to the heading now (WCAG 2.4.3). While the
+    // proposal for the current view was refused (a stored roll whose dice row is gone, for example after a charge was regained
+    // elsewhere mid-rest), Clear must still work: it is the way out other than Cancel.
+    if (!ready && !failed) return;
     heading.current?.focus();
     setChargeRolls((r) => r.filter((c) => c.entry !== change.resourceId));
   }
@@ -194,7 +196,7 @@ export function RestPanel({ characterId, kind, hitDice, version, onRested, onCan
                       {change.label}: {change.from} → {change.to}
                       <span className="option-source">{change.reason}</span>
                     </label>
-                    <button type="button" aria-disabled={!ready} onClick={() => clearChargeRoll(change)}>
+                    <button type="button" aria-disabled={!ready && !failed} onClick={() => clearChargeRoll(change)}>
                       Clear the roll: {change.label}
                     </button>
                   </div>

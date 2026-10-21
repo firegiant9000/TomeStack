@@ -409,8 +409,18 @@ public static class CharacterCalculator
         // toggle is the sheet calculated again with those toggles on (the common case costs one pass).
         var pass = CalculateSheet(character, catalog, autoOn: false);
         if (pass.Bloodied != true || pass.Toggles is not { } toggles || !toggles.Any(t => t.Auto == true))
-            return pass;
-        return CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true };
+            return WithItemUses(pass, character, catalog);
+        return WithItemUses(CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true }, character, catalog);
+    }
+
+    /// <summary>
+    /// The item uses read the catalog once per equipment entry (a lookup and a deserialise each), and nothing in the passes depends on
+    /// them, so they are collected once for the sheet that is returned, not in every inner pass (the restriction and Bloodied passes).
+    /// </summary>
+    private static CharacterSheet WithItemUses(CharacterSheet sheet, Character character, IContentCatalog catalog)
+    {
+        var itemUses = CollectItemUses(character, catalog);
+        return itemUses.Count > 0 ? sheet with { ItemUses = itemUses } : sheet;
     }
 
     /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
@@ -664,7 +674,6 @@ public static class CharacterCalculator
 
         var attacks = CollectAttacks(active, values, family, weaponProficiencies);
         var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
-        var itemUses = CollectItemUses(character, catalog);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -680,7 +689,7 @@ public static class CharacterCalculator
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
-            damageDefences.Count > 0 ? damageDefences : null, itemUses.Count > 0 ? itemUses : null,
+            damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
             xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
     }
 
@@ -1342,10 +1351,22 @@ public static class CharacterCalculator
             return true;
         }
 
+        // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
+        bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        void NotAttuned(ContentReference reference) =>
+            diagnostics.Add(new("item.not-attuned", "An equipped or pinned item needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", reference));
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
         {
-            if (seen.Add(pin) && Admit(pin, null) is { } item)
-                active.Add(item);
+            if (!seen.Add(pin) || Admit(pin, null) is not { } item)
+                continue;
+            // An item-kind pin passes the same gate as an equipped item (an attuned entry of it, equipped or not), so a package pin
+            // or a pin that is also equipped cannot bypass attunement.
+            if (NeedsAttunement(item) && !character.Equipment.Any(e => e.Item == pin && e.Attuned == true))
+            {
+                NotAttuned(pin);
+                continue;
+            }
+            active.Add(item);
         }
         // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
         // Wave 3 item 25 (R159): an item equipped twice applies once, and an item that needs attunement (content v10, Q13) applies only
@@ -1360,9 +1381,9 @@ public static class CharacterCalculator
                 diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
                 continue;
             }
-            if (item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true) && !equipped.Any(e => e.Item == entry.Item && e.Attuned == true))
+            if (NeedsAttunement(item) && !equipped.Any(e => e.Item == entry.Item && e.Attuned == true))
             {
-                diagnostics.Add(new("item.not-attuned", $"'{item.Revision.Name}' is equipped but needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", entry.Item));
+                NotAttuned(entry.Item);
                 continue;
             }
             active.Add(item);

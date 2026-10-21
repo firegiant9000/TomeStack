@@ -77,6 +77,34 @@ public class ItemAttunementTests
 
     [Theory]
     [MemberData(nameof(Families))]
+    public void A_pinned_item_that_needs_attunement_is_gated_like_an_equipped_one_and_the_message_quotes_no_name(string family)
+    {
+        var wand = Wand(family);
+        var hero = Hero(family);
+        var before = Sheet(hero).Field(FieldIds.Skill("stealth")).Value;
+        var pinned = hero with { Pins = [.. hero.Pins, wand.Reference] };
+
+        // Pinned alone, not attuned: nothing applies.
+        var bare = Sheet(pinned, wand);
+        Assert.Equal(before, bare.Field(FieldIds.Skill("stealth")).Value);
+        var note = Assert.Single(bare.Diagnostics, d => d.Code == "item.not-attuned");
+        Assert.Equal(wand.Reference, note.Content);
+        Assert.DoesNotContain("Fixture wand", note.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(wand.Reference, bare.Active!);
+
+        // Pinned and equipped, not attuned: still nothing, and the note appears once.
+        var both = Sheet(pinned with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: true, Id: Id(1))] }, wand);
+        Assert.Equal(before, both.Field(FieldIds.Skill("stealth")).Value);
+        Assert.Single(both.Diagnostics, d => d.Code == "item.not-attuned");
+
+        // Pinned with an attuned entry: it applies.
+        var attuned = Sheet(pinned with { Equipment = [new EquipmentEntry(wand.Reference, Equipped: true, Id: Id(1), Attuned: true)] }, wand);
+        Assert.Equal(before + 2, attuned.Field(FieldIds.Skill("stealth")).Value);
+        Assert.DoesNotContain(attuned.Diagnostics, d => d.Code == "item.not-attuned");
+    }
+
+    [Theory]
+    [MemberData(nameof(Families))]
     public void An_attuned_item_that_is_not_equipped_applies_nothing_and_is_not_reported_as_unattuned(string family)
     {
         var wand = Wand(family);
@@ -240,6 +268,21 @@ public class ItemAttunementTests
         var (character2, sheet2) = Spent(family, none, 5, 0);
         Assert.Null(ChargeChange(RestPlanner.LongRest(character2, sheet2), Id(1)));
         Assert.Null(ChargeChange(RestPlanner.ShortRest(character2, sheet2, []), Id(1)));
+    }
+
+    [Theory]
+    [MemberData(nameof(Families))]
+    public void An_unreadable_regain_is_a_manual_step_that_quotes_no_item_name(string family)
+    {
+        var wand = Wand(family, RestPeriod.LongRest, "not dice");
+        var (character, sheet) = Spent(family, wand, 5, 0);
+
+        var plan = RestPlanner.LongRest(character, sheet);
+
+        var step = Assert.Single(plan.Manual, m => m.Code == "rest.recover-by-hand");
+        Assert.Equal(wand.Reference, step.Content);
+        Assert.DoesNotContain("Fixture wand", step.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not dice", step.Message, StringComparison.Ordinal);
     }
 
     [Theory]

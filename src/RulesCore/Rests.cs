@@ -257,7 +257,7 @@ public static class RestPlanner
             }
             if (!DiceExpression.TryParse(recovery.Regain, out _, out _))
             {
-                manual.Add(new("rest.recover-by-hand", $"'{use.Name}' regains charges on a {rest}, but its dice could not be read; recover them by hand.", use.Item));
+                manual.Add(new("rest.recover-by-hand", $"An item entry regains charges on a {rest}, but its dice could not be read; recover them by hand.", use.Item));
                 continue;
             }
             var roll = rolls.FirstOrDefault(r => r.Entry == use.EntryKey);

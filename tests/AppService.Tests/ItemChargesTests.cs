@@ -720,4 +720,61 @@ public class ItemChargesTests
         // A second copy of it is refused like any plain item.
         Assert.Equal("character.equipment-duplicate", CodeOf(() => Save(s, new EquipmentEntry(old.Reference), new EquipmentEntry(old.Reference))));
     }
+
+    // ---- R184: R159 is enforced only for copies a payload adds ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R184_a_stored_character_with_two_ided_copies_of_an_item_whose_revision_is_absent_can_still_play_and_save(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        // As a share or import leaves it: the item's revision never arrived, the copies carry their ids, and the store wrote it.
+        var absent = new ContentReference(Guid.Parse("5fa5a000-0000-4000-8000-0000000000c1"), Guid.Parse("5fa5e000-0000-4000-8000-0000000000c1"));
+        s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new(absent, Id: Id(1)), new(absent, Id: Id(2))] });
+
+        var damaged = s.Temp.App.Play(new(s.Id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character);
+
+        Assert.Equal(2, damaged.Character.Equipment.Count);
+        Assert.Equal([Id(1), Id(2)], saved.Character.Equipment.Select(e => e.Id));
+        // A third copy the payload adds is still refused (R159): it is not a copy the stored character already holds.
+        Assert.Equal("character.equipment-duplicate", CodeOf(() => Save(s, [.. Get(s).Character.Equipment, new EquipmentEntry(absent, Id: Id(3))])));
+        Assert.Equal(2, Get(s).Character.Equipment.Count);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R184_a_new_second_copy_of_a_plain_item_is_still_refused_next_to_a_stored_one(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        var stored = Save(s, new EquipmentEntry(s.Cup)).Character.Equipment;
+
+        Assert.Equal("character.equipment-duplicate", CodeOf(() => Save(s, [.. stored, new EquipmentEntry(s.Cup)])));
+        Assert.Equal("character.equipment-duplicate", CodeOf(() => Save(s, [.. stored, new EquipmentEntry(s.Cup, Id: Id(5))])));
+        Assert.Single(Get(s).Character.Equipment);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R184_an_update_to_a_revision_that_drops_the_item_effect_does_not_wedge_later_writes(string family)
+    {
+        var s = Start(family);
+        using var _ = s.Temp;
+        Save(s, new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand));
+        var wand = s.Temp.App.Store.FindRevision(s.Wand)!;
+        var plain = s.Temp.App.Publish(s.Temp.App.SaveDraft(wand with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Effects = [] })).Published;
+
+        var updated = s.Temp.App.ApplyUpdate(s.Id, s.Wand, plain, confirm: true);
+
+        Assert.All(updated.Character.Equipment, e => Assert.Equal(plain, e.Item));
+        var damaged = s.Temp.App.Play(new(s.Id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character);
+        Assert.Equal(2, damaged.Character.Equipment.Count);
+        Assert.Equal(2, saved.Character.Equipment.Count);
+    }
 }

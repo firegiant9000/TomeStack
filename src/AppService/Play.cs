@@ -85,6 +85,9 @@ public enum PlayActionKind
 
     /// <summary>A companion's current hit points become <c>amount</c> (0 to its maximum), and its temporary hit points <c>temporary</c> when that is sent.</summary>
     CompanionSetHitPoints,
+
+    /// <summary>A companion's temporary hit points become <c>amount</c> (0 to the maximum allowed); its current hit points stay as stored, so a damage that landed first is kept.</summary>
+    CompanionSetTemporaryHitPoints,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -133,7 +136,7 @@ public sealed partial class TomeStackApp
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 
-        if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints)
+        if (command.Action is PlayActionKind.CompanionDamage or PlayActionKind.CompanionHeal or PlayActionKind.CompanionSetHitPoints or PlayActionKind.CompanionSetTemporaryHitPoints)
             return SaveWithPlay(character with { Play = ChangeCompanion(character, command) }); // a companion's hit points are not the character's: no sheet needed
         var sheet = CharacterCalculator.Calculate(character, _store);
         if (command.Action is PlayActionKind.SpendCharge or PlayActionKind.RegainCharge)
@@ -231,7 +234,7 @@ public sealed partial class TomeStackApp
     /// Wave 3 item 23 (D39, R174): a companion's hit points, in <see cref="PlayState.Companions"/>. Damage is untyped (no defences,
     /// concentration, death saves or warnings): temporary hit points absorb first, then current, at least 0. Heal caps at the maximum
     /// and leaves temporary alone. Set takes exact current (0 to the maximum) and temporary (0 to <see cref="PlayState.MaxHitPoints"/>,
-    /// unchanged when not sent). Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
+    /// unchanged when not sent). Set temporary takes only the temporary hit points and keeps the stored current. Current at the maximum is stored as null, and an entry that says nothing (null, 0) is dropped.
     /// Errors are codes only; the companion's name never appears in them.
     /// </summary>
     private static PlayState ChangeCompanion(Character character, PlayCommand command)
@@ -252,6 +255,9 @@ public sealed partial class TomeStackApp
                 break;
             case PlayActionKind.CompanionHeal:
                 current = Math.Min(current + command.Amount, maximum);
+                break;
+            case PlayActionKind.CompanionSetTemporaryHitPoints:
+                temporary = command.Amount; // current stays as stored: a damage that landed since the page drew its view is kept
                 break;
             default:
                 if (command.Amount > maximum)

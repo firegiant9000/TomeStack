@@ -118,7 +118,7 @@ public class PassiveAndSpeedTests
             new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" },
             new ModifierEffect { Id = "pp", Operation = ModifierOperation.Bonus, Target = FieldIds.Passive("perception"), Value = "5" });
         var plain = CharacterCalculator.Calculate(Fixtures.Srd51Character(), Fixtures.Catalog());
-        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Dwarf"), new(FieldIds.Passive("perception"), 12, "Keen")] }, quick);
+        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Fixture reason"), new(FieldIds.Passive("perception"), 12, "Fixture reason")] }, quick);
         Assert.Equal((25, 40), (sheet.Field(FieldIds.Speed).Value, sheet.Field(FieldIds.Speed).ComputedValue));
         Assert.Equal((12, plain.Field(FieldIds.Passive("perception")).Value + 5), (sheet.Field(FieldIds.Passive("perception")).Value, sheet.Field(FieldIds.Passive("perception")).ComputedValue));
     }
@@ -137,7 +137,7 @@ public class PassiveAndSpeedTests
     public void A_character_override_on_speed_still_applies_beside_content_that_targets_it()
     {
         var quick = Feat(3, "Fixture Quickness", 2, new ModifierEffect { Id = "fast", Operation = ModifierOperation.Bonus, Target = FieldIds.Speed, Value = "10" });
-        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Dwarf")] }, quick);
+        var sheet = Calc(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Fixture reason")] }, quick);
         Assert.Equal((25, 30), (sheet.Field(FieldIds.Speed).Value, sheet.Field(FieldIds.Speed).ComputedValue));
     }
 
@@ -148,7 +148,7 @@ public class PassiveAndSpeedTests
         var speed = sheet.Field(FieldIds.Speed);
         Assert.Equal((30, "feet"), (speed.Value, speed.Units));
         Assert.Equal(TraceOriginKind.RulesPolicy, speed.Trace[0].Origin.Kind);
-        var dwarf = CharacterCalculator.Calculate(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Dwarf")] }, Fixtures.Catalog());
+        var dwarf = CharacterCalculator.Calculate(Fixtures.Srd51Character() with { Overrides = [new(FieldIds.Speed, 25, "Fixture reason")] }, Fixtures.Catalog());
         Assert.Equal((25, 30), (dwarf.Field(FieldIds.Speed).Value, dwarf.Field(FieldIds.Speed).ComputedValue));
     }
 

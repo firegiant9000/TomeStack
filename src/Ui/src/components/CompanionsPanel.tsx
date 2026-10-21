@@ -288,7 +288,7 @@ function CompanionCard({
   const key = `companion-${companion.id}`;
   const n = Number(amount);
   const entered = amount !== '' && Number.isInteger(n) && n >= 0 && n <= maxHitPoints;
-  const amountReason = amount !== '' && !entered ? `Enter a whole number from 0 to ${maxHitPoints}.` : '';
+  const amountReason = amount === '' ? 'Enter an amount first.' : !entered ? `Enter a whole number from 0 to ${maxHitPoints}.` : '';
   const aboveMaximum = entered && n > companion.hitPointMaximum;
   const setReason = aboveMaximum ? `Current hit points cannot be above the maximum (${companion.hitPointMaximum}).` : '';
   const target = { companionId: companion.id };
@@ -330,7 +330,7 @@ function CompanionCard({
                 min={0}
                 max={maxHitPoints}
                 value={amount}
-                aria-invalid={amountReason ? true : undefined}
+                aria-invalid={amount !== '' && !entered ? true : undefined}
                 aria-describedby={amountReason ? `${key}-reason` : undefined}
                 onChange={(e) => setAmount(e.target.value)}
               />
@@ -341,7 +341,7 @@ function CompanionCard({
               apply({ action: 'companionSetHitPoints', ...target, amount: n }),
             )}
             {heldButton('Set temporary hit points', !entered, `${key}-reason`, () =>
-              apply({ action: 'companionSetHitPoints', ...target, amount: hp.current, temporary: n }),
+              apply({ action: 'companionSetTemporaryHitPoints', ...target, amount: n }), // temporary only: the server keeps the stored current
             )}
           </form>
           {amountReason && (

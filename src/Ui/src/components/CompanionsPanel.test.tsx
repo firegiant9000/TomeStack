@@ -112,8 +112,18 @@ it('sends damage, heal and set as play actions for that companion, clears the am
   expect(acted.slice(1)).toEqual([
     { action: 'companionHeal', companionId: 'k1', amount: 3 },
     { action: 'companionSetHitPoints', companionId: 'k1', amount: 9 },
-    { action: 'companionSetHitPoints', companionId: 'k1', amount: 13, temporary: 2 }, // current stays exactly as shown
+    { action: 'companionSetTemporaryHitPoints', companionId: 'k1', amount: 2 }, // only the temporary hit points: the server keeps the stored current
   ]);
+});
+
+it('points every held button at "Enter an amount first." while the amount is blank', () => {
+  show();
+  const dog = within(card('Testy Hound'));
+  for (const name of [/^Take damage/, /^Heal/, /^Set hit points/, /^Set temporary hit points/]) {
+    const button = dog.getByRole('button', { name });
+    expect(held(button)).toBe(true);
+    expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Enter an amount first.');
+  }
 });
 
 it('refuses a press with no amount, a bad amount, or a current above the maximum, with a linked reason and focus kept', async () => {

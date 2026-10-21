@@ -3,6 +3,7 @@
 // The client is mocked; values are invented.
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet, CharacterView } from '../api/types';
@@ -101,6 +102,22 @@ it.each([['-1'], ['1000001'], ['12.5'], ['']])('refuses %j in text and does not 
   expect(client.saveCharacter).not.toHaveBeenCalled();
   expect(screen.getByText('Experience points must be a whole number from 0 to 1,000,000.')).toBeTruthy();
   expect(box.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('shows 0 after an untick and a retick, and offers no Save for the stale total', async () => {
+  echo();
+  const user = userEvent.setup();
+  function Held() {
+    const [current, setCurrent] = useState(viewOf(1200));
+    return <ExperiencePanel view={current} onChanged={setCurrent} onError={() => {}} />;
+  }
+  render(<Held />);
+  await user.click(screen.getByRole('checkbox', { name: 'Track XP' }));
+  expect(vi.mocked(client.saveCharacter).mock.lastCall![0].xp).toBeUndefined();
+  await user.click(screen.getByRole('checkbox', { name: 'Track XP' }));
+  expect(vi.mocked(client.saveCharacter).mock.lastCall![0].xp).toBe(0);
+  expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe('0');
+  expect(screen.getByRole('button', { name: 'Save experience points' }).getAttribute('aria-disabled')).toBe('true');
 });
 
 it('re-seeds the field when the stored total changes (a restore keeps the character id)', () => {
