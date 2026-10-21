@@ -125,11 +125,25 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// <c>damageImmunity</c> and <c>damageVulnerability</c> with <c>grant.damageType</c>, and the <c>item</c> effect (attunement
     /// and charges). All are optional, so older revisions serialize unchanged; each is read only in a v10 revision, and below
     /// v10 a key stays extension data (an <c>item</c> or a damage grant stays an unknown effect) and does nothing.
+    /// v11 (play mechanics, D43) adds the <c>toggleGroup</c> effect and the toggle fields <c>group</c>, <c>groupContent</c>,
+    /// <c>layer</c>, <c>allowedWith</c>, <c>allowedInBase</c>, <c>cost</c>, <c>resourceContent</c> and <c>level</c>. All are
+    /// optional, so older revisions serialize unchanged; each is read only in a v11 revision, and below v11 a key stays
+    /// extension data (a <c>toggleGroup</c> stays an unknown effect) and does nothing.
     /// </summary>
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
 
-    /// <summary>The content schema version that adds the Wave 3 details listed above (v10).</summary>
+    /// <summary>
+    /// The content schema version that adds the Wave 3 details listed above: <b>v10</b> (speed and passive targets,
+    /// <c>autoWhen</c>, <c>activation</c>, damage defences, <c>item</c>). Not the play mechanics version, which is
+    /// <see cref="PlayMechanicsSchemaVersion"/> (v11).
+    /// </summary>
     public const int PlayDetailsSchemaVersion = 10;
+
+    /// <summary>
+    /// The content schema version that adds the play mechanics details (D43): <b>v11</b> (toggle groups, overlays and costs).
+    /// Not the Wave 3 version, which is <see cref="PlayDetailsSchemaVersion"/> (v10). A test pins that this is that plus one.
+    /// </summary>
+    public const int PlayMechanicsSchemaVersion = 11;
 
     /// <summary>The content schema version that adds the M2.2 combat details listed above.</summary>
     public const int CombatDetailsSchemaVersion = 8;

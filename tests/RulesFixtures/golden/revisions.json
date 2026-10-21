@@ -175,5 +175,26 @@
       { "type": "modifier", "id": "ember-pace", "operation": "bonus", "target": "speed", "value": "10" },
       { "type": "restriction", "id": "ember-watch", "field": "passive.perception", "minimum": 8 }
     ]
+  },
+  {
+    "contentId": "6a7e000b-0000-4000-8000-000000000001",
+    "revisionId": "6a7e000b-0000-4000-8000-000000000101",
+    "schemaVersion": 11,
+    "kind": "feature",
+    "name": "Fixture Tidebinder",
+    "rulesFamilies": ["srd-5.2.1"],
+    "provenance": { "sourceId": "6a7e0000-0000-4000-8000-000000000001" },
+    "status": "published",
+    "effects": [
+      { "type": "toggleGroup", "id": "tide-group", "groupId": "tides", "label": "Tides" },
+      { "type": "resource", "id": "tide-pool", "resourceId": "swell", "label": "Swell", "maximum": "4" },
+      { "type": "toggle", "id": "tide-low", "toggleId": "low", "label": "Low tide", "group": "tides", "groupContent": "6a7e000b-0000-4000-8000-000000000001", "cost": "2", "resourceContent": "6a7e000b-0000-4000-8000-000000000001", "resourceId": "swell", "level": 3 },
+      {
+        "type": "toggle", "id": "tide-foam", "toggleId": "foam", "label": "Foam", "autoWhen": "bloodied", "activation": "reaction",
+        "group": "tides", "groupContent": "6a7e000b-0000-4000-8000-000000000001", "layer": "overlay", "allowedInBase": true,
+        "allowedWith": [{ "contentId": "6a7e000b-0000-4000-8000-000000000001", "toggleId": "low" }], "cost": "1"
+      },
+      { "type": "modifier", "id": "tide-low-ac", "timing": "whileActive", "toggle": "low", "operation": "bonus", "target": "armorClass", "value": "1" }
+    ]
   }
 ]

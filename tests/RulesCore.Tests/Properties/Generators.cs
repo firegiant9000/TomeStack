@@ -89,6 +89,7 @@ internal static class Generators
         [ToggleEffect.TypeName] = ToggleEffect.SchemaVersion,
         [ScaleEffect.TypeName] = ScaleEffect.SchemaVersion,
         [ItemEffect.TypeName] = ItemEffect.SchemaVersion,
+        [ToggleGroupEffect.TypeName] = ToggleGroupEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -206,8 +207,26 @@ internal static class Generators
                 // Any version: below v10 the keys must stay extension data, written back where they were.
                 from autoWhen in Gen.Elements<string?>(null, null, "bloodied")
                 from activation in Gen.Elements<string?>(null, null, "bonusAction", "other")
+                // Any version: below v11 the keys must stay extension data, written back where they were.
+                from groupName in Gen.Elements<string?>(null, null, "forms")
+                from groupContent in OptionalValue(Guids)
+                from layer in Gen.Elements<string?>(null, null, "primary", "overlay")
+                from allowedWith in Gen.Elements<bool>(false, false, true)
+                from partner in Guids
+                from allowedInBase in OptionalValue(Gen.Elements(true, false))
+                from toggleCost in Optional(Gen.Elements("1", "2", "PB"))
+                from costContent in OptionalValue(Guids)
+                from toggleLevel in OptionalValue(Gen.Choose(1, 20))
                 select new JsonObject { ["toggleId"] = id, ["label"] = label }.With("resourceId", resource)
-                    .With("autoWhen", autoWhen).With("activation", activation)),
+                    .With("autoWhen", autoWhen).With("activation", activation)
+                    .With("group", groupName).With("groupContent", groupContent?.ToString()).With("layer", layer)
+                    .With("allowedWith", allowedWith ? new JsonArray(new JsonObject { ["contentId"] = partner.ToString(), ["toggleId"] = "tide" }) : null)
+                    .With("allowedInBase", allowedInBase).With("cost", toggleCost).With("resourceContent", costContent?.ToString())
+                    .With("level", toggleLevel)),
+            Common(ToggleGroupEffect.TypeName,
+                from groupId in Keys
+                from label in Names
+                select new JsonObject { ["groupId"] = groupId, ["label"] = label }),
             Common(ItemEffect.TypeName,
                 from attune in OptionalValue(Gen.Elements(true, false))
                 from max in OptionalValue(Gen.Choose(1, 99))

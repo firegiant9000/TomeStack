@@ -148,6 +148,15 @@ public sealed record ModifierEffect : Effect
     /// shield alone does not count), for example the Defense fighting style. Null or false: always.
     /// </summary>
     public bool? WhileArmored { get; init; }
+
+    /// <summary>The keys content schema v11 adds to this effect (none yet); below v11 they stay extension data.</summary>
+    internal static readonly string[] V11Keys = [];
+
+    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+            ? VersionedEffects.Typed<ModifierEffect>(unknown)
+            : VersionedEffects.TypedWithout<ModifierEffect>(unknown, V11Keys);
 }
 
 /// <summary>Grants a proficiency or expertise in a field (<c>save.dex</c>, <c>skill.stealth</c>), or another content revision.</summary>
@@ -211,6 +220,12 @@ public sealed record GrantEffect : Effect
         return typed is GrantEffect { Grant: var kind } && (int)kind > (int)GrantKind.Content ? unknown : typed;
     }
 
+    /// <summary>
+    /// The keys content schema v11 adds to this effect (none yet). A slice that adds one also strips it below v11 in
+    /// <see cref="FromUnknown"/>, as <see cref="ToggleEffect"/> does.
+    /// </summary>
+    internal static readonly string[] V11Keys = [];
+
     /// <summary>The names a v9 build could read (the converter hands over any grant whose kind is not exactly one of them).</summary>
     internal static bool IsPreV10Name(string? name) =>
         name is not null && Enum.GetValues<GrantKind>().Where(k => !IsDamageDefence(k)).Any(k => string.Equals(k.ToString(), name, StringComparison.OrdinalIgnoreCase));
@@ -246,6 +261,12 @@ public sealed record ResourceEffect : Effect
     /// (Wave 3 item 24); null: ungrouped. Below v10 the key stays extension data and does nothing.
     /// </summary>
     public Activation? Activation { get; init; }
+
+    /// <summary>
+    /// The keys content schema v11 adds to this effect (none yet). A slice that adds one also strips it below v11 in
+    /// <see cref="FromUnknown"/>, as <see cref="ToggleEffect"/> does.
+    /// </summary>
+    internal static readonly string[] V11Keys = [];
 
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
         revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
@@ -347,6 +368,15 @@ public sealed record RollEffect : Effect
     /// for Second Wind's "1d10 plus your Fighter level"). It is a roll modifier: never doubled on a critical.
     /// </summary>
     public string? Bonus { get; init; }
+
+    /// <summary>The keys content schema v11 adds to this effect (none yet); below v11 they stay extension data.</summary>
+    internal static readonly string[] V11Keys = [];
+
+    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
+        revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+            ? VersionedEffects.Typed<RollEffect>(unknown)
+            : VersionedEffects.TypedWithout<RollEffect>(unknown, V11Keys);
 }
 
 /// <summary>
@@ -379,19 +409,85 @@ public sealed record ToggleEffect : Effect
     /// <summary>Content schema v10 (D42): the kind of action that switches the toggle, so the sheet can group it. Display only.</summary>
     public Activation? Activation { get; init; }
 
+    /// <summary>
+    /// Content schema v11 (D43): the form group this toggle belongs to (a <see cref="ToggleGroupEffect.GroupId"/>). Toggles of one
+    /// group exclude each other as primaries. Null: not in a group. Below v11 the key stays extension data and does nothing.
+    /// </summary>
+    public string? Group { get; init; }
+
+    /// <summary>Content schema v11 (D43): the content that declares <see cref="Group"/>; it may be another source's. Null: this revision.</summary>
+    public Guid? GroupContent { get; init; }
+
+    /// <summary>Content schema v11 (D43): <see cref="ToggleLayer.Primary"/> (the default when absent) or an overlay on a primary.</summary>
+    public ToggleLayer? Layer { get; init; }
+
+    /// <summary>Content schema v11 (D43): the primaries an overlay may be on with. Null or empty: none.</summary>
+    public IReadOnlyList<ToggleRef>? AllowedWith { get; init; }
+
+    /// <summary>Content schema v11 (D43): an overlay may be on while no primary of its group is. Null: false.</summary>
+    public bool? AllowedInBase { get; init; }
+
+    /// <summary>Content schema v11 (D43): a formula, the amount of the pool turning the toggle on spends. Validated and evaluated later.</summary>
+    public string? Cost { get; init; }
+
+    /// <summary>Content schema v11 (D43): the content that declares <see cref="ResourceId"/>, when it is not this revision.</summary>
+    public Guid? ResourceContent { get; init; }
+
+    /// <summary>Content schema v11 (D43): the toggle is available from this level on (character level; see <see cref="GrantEffect.Level"/>).</summary>
+    public int? Level { get; init; }
+
     internal const string AutoWhenProperty = "autoWhen";
 
     internal const string ActivationProperty = "activation";
 
+    internal const string LayerProperty = "layer";
+
+    /// <summary>The keys content schema v11 adds (matched in every spelling, like the serializer).</summary>
+    internal static readonly string[] V11Keys = ["group", "groupContent", LayerProperty, "allowedWith", "allowedInBase", "cost", "resourceContent", "level"];
+
     /// <summary>
-    /// Typed from v6. Below v10, <c>autoWhen</c> and <c>activation</c> (every spelling, any value) stay extension data in
-    /// document order, exactly as a v9 build reads them: never typed, so they do nothing, and written back in the same place.
+    /// Typed from v6, in tiers. Below v10, <c>autoWhen</c> and <c>activation</c> stay extension data; below v11, so do the
+    /// v11 keys (<see cref="V11Keys"/>). Every spelling of a key, with any value, stays in document order, exactly as the
+    /// older build reads it: never typed, so it does nothing, and written back in the same place (the hash is unchanged).
+    /// From a version, an enum value that names no member leaves the whole effect untyped.
     /// </summary>
-    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
-        revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
-            ? (VersionedEffects.NamesMember<ToggleAutoWhen>(unknown.Raw, AutoWhenProperty) && VersionedEffects.NamesMember<Activation>(unknown.Raw, ActivationProperty)
-                ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown)
-            : VersionedEffects.TypedWithout<ToggleEffect>(unknown, AutoWhenProperty, ActivationProperty);
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, [AutoWhenProperty, ActivationProperty, .. V11Keys]);
+        if (!VersionedEffects.NamesMember<ToggleAutoWhen>(unknown.Raw, AutoWhenProperty) || !VersionedEffects.NamesMember<Activation>(unknown.Raw, ActivationProperty))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+            return VersionedEffects.TypedWithout<ToggleEffect>(unknown, V11Keys);
+        return VersionedEffects.NamesMember<ToggleLayer>(unknown.Raw, LayerProperty) ? VersionedEffects.Typed<ToggleEffect>(unknown) : unknown;
+    }
+}
+
+/// <summary>Content schema v11 (D43): whether a toggle is a form (primary) or sits on top of one (overlay).</summary>
+public enum ToggleLayer { Primary, Overlay }
+
+/// <summary>Content schema v11 (D43): a toggle named by the content that declares it (null: the same revision).</summary>
+public sealed record ToggleRef(Guid? ContentId, string ToggleId);
+
+/// <summary>
+/// Content schema v11 (D43): declares a form group a feature's toggles can join, with a label for the sheet. The group has
+/// no behaviour of its own; <see cref="ToggleEffect.Group"/> names it. Typed only in a v11 revision: in an older revision a
+/// <c>toggleGroup</c> stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record ToggleGroupEffect : Effect
+{
+    public const string TypeName = "toggleGroup";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary>A key like a scale id (<see cref="ScaleEffect.IsValidScaleId"/>); validated in the content validator.</summary>
+    public required string GroupId { get; init; }
+
+    public required string Label { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ToggleGroupEffect>(unknown);
 }
 
 /// <summary>
@@ -693,10 +789,14 @@ internal static class VersionedEffects
             [ToggleEffect.TypeName] = (ToggleEffect.SchemaVersion, ToggleEffect.FromUnknown),
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
-            // Always typed, except that the converter hands these over when they carry a v10 key or value (see
-            // EffectJsonConverter.CarriesV10Detail), so the revision's version decides how they read.
+            [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
+            // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
+            // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
+            // gives one of them a v11 key adds it to that type's V11Keys, and nothing else.
+            [ModifierEffect.TypeName] = (1, ModifierEffect.FromUnknown),
             [GrantEffect.TypeName] = (1, GrantEffect.FromUnknown),
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
+            [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
         };
 
     /// <summary>
@@ -807,11 +907,12 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         {
             return type switch
             {
+                // An always-typed effect that carries a detail added after v9 (v10 grant and resource keys, any v11 key) is
+                // typed by the revision, which knows its version (ContentRevision.OnDeserialized); the others are typed
+                // here, as in every earlier build.
+                ModifierEffect.TypeName or GrantEffect.TypeName or ResourceEffect.TypeName or RollEffect.TypeName
+                    when CarriesDetailAbove(element, type, UngatedVersion) => UnknownEffect.From(element),
                 ModifierEffect.TypeName => (Effect?)element.Deserialize<ModifierEffect>(options),
-                // A grant or resource that carries a content schema v10 detail is typed by the revision, which knows its
-                // version (ContentRevision.OnDeserialized); the others are typed here, as in every earlier build.
-                GrantEffect.TypeName when CarriesV10Detail(element, type) => UnknownEffect.From(element),
-                ResourceEffect.TypeName when CarriesV10Detail(element, type) => UnknownEffect.From(element),
                 GrantEffect.TypeName => element.Deserialize<GrantEffect>(options),
                 ResourceEffect.TypeName => element.Deserialize<ResourceEffect>(options),
                 ChoiceEffect.TypeName => element.Deserialize<ChoiceEffect>(options),
@@ -820,7 +921,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
@@ -833,23 +934,42 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
         }
     }
 
+    /// <summary>The newest content schema version before the first always-typed effect gained a gated key (v9: the last that read none).</summary>
+    private const int UngatedVersion = ContentRevision.PlayDetailsSchemaVersion - 1;
+
     /// <summary>
-    /// Whether a <c>grant</c> or <c>resource</c> has something a v9 build did not read: a grant that names a damage kind (a
-    /// value the v9 enum cannot hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any
-    /// spelling), or a resource with an <c>activation</c> key. The names are the ones the serializer binds to the v10 properties.
+    /// Whether an always-typed effect (<c>modifier</c>, <c>grant</c>, <c>resource</c>, <c>roll</c>) has something a build of
+    /// content schema <paramref name="version"/> did not read, so the revision, which knows its own version, must type it
+    /// (<see cref="VersionedEffects.ByName"/>). Detail from v10: a grant that names a damage kind (a value the v9 enum cannot
+    /// hold, matched case-insensitively like the serializer) or has a <c>damageType</c> key (any spelling), or a resource with
+    /// an <c>activation</c> key. Detail from v11: any key in the type's <c>V11Keys</c> (empty until a later slice adds one).
+    /// The names are the ones the serializer binds to those properties.
     /// </summary>
-    private static bool CarriesV10Detail(JsonElement element, string type)
+    private static bool CarriesDetailAbove(JsonElement element, string type, int version)
     {
+        var newest = type switch
+        {
+            ModifierEffect.TypeName => ModifierEffect.V11Keys,
+            GrantEffect.TypeName => GrantEffect.V11Keys,
+            ResourceEffect.TypeName => ResourceEffect.V11Keys,
+            RollEffect.TypeName => RollEffect.V11Keys,
+            _ => [],
+        };
         foreach (var property in element.EnumerateObject())
         {
+            if (version < ContentRevision.PlayMechanicsSchemaVersion && newest.Any(k => string.Equals(property.Name, k, StringComparison.OrdinalIgnoreCase)))
+                return true;
+            if (version >= ContentRevision.PlayDetailsSchemaVersion)
+                continue;
             if (type == ResourceEffect.TypeName)
             {
                 if (string.Equals(property.Name, ToggleEffect.ActivationProperty, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
-            else if (string.Equals(property.Name, GrantEffect.DamageTypeProperty, StringComparison.OrdinalIgnoreCase)
-                || (string.Equals(property.Name, "grant", StringComparison.OrdinalIgnoreCase)
-                    && !(property.Value.ValueKind == JsonValueKind.String && GrantEffect.IsPreV10Name(property.Value.GetString()))))
+            else if (type == GrantEffect.TypeName
+                && (string.Equals(property.Name, GrantEffect.DamageTypeProperty, StringComparison.OrdinalIgnoreCase)
+                    || (string.Equals(property.Name, "grant", StringComparison.OrdinalIgnoreCase)
+                        && !(property.Value.ValueKind == JsonValueKind.String && GrantEffect.IsPreV10Name(property.Value.GetString())))))
             {
                 return true;
             }

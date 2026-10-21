@@ -252,10 +252,11 @@ public class SchemaTests
 
     [Theory]
     [InlineData(10, false)]
-    [InlineData(11, true)]
-    public void A_package_content_entry_at_content_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    [InlineData(11, false)]
+    [InlineData(12, true)]
+    public void A_package_content_entry_at_content_schema_v11_is_accepted_and_v12_is_refused(int version, bool refused)
     {
-        // Content schema v10 (Wave 3, D42) is the current version; v11 is reserved for a later build and is refused here.
+        // Content schema v11 (play mechanics, D43) is the current version; v12 is reserved for a later build and is refused here.
         using var origin = new TempApp();
         var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
         var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
@@ -267,7 +268,7 @@ public class SchemaTests
         var errors = preview.Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
         Assert.Equal(refused, errors.Count > 0);
         if (refused)
-            Assert.All(errors, e => Assert.Contains("content schema v11", e.Message, StringComparison.Ordinal));
+            Assert.All(errors, e => Assert.Contains("content schema v12", e.Message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -280,7 +281,7 @@ public class SchemaTests
         {
             ContentId = Guid.Parse("c10a0000-0000-4000-8000-0000000000a1"), RevisionId = Guid.Parse("c10b0000-0000-4000-8000-0000000000a1"),
             Kind = ContentKind.Item, Name = "Fixture Charged Rod", RulesFamilies = [RulesFamilies.Srd51], Provenance = new(source.Id, new PageRef(1)),
-            Status = RevisionStatus.Published,
+            Status = RevisionStatus.Published, SchemaVersion = ContentRevision.PlayDetailsSchemaVersion,
             Effects =
             [
                 new ItemEffect { Id = "rod", RequiresAttunement = true, Charges = new ItemCharges { Max = 4, Recovery = new ItemChargeRecovery { Period = RestPeriod.LongRest, Regain = "1d4" } } },

@@ -93,6 +93,45 @@ internal static class Fixtures
     private static ContentReference ChroniclerRef(int n) =>
         new(Guid.Parse($"5fc0c000-0000-4000-8000-{n:D12}"), Guid.Parse($"5fc0e000-0000-4000-8000-{n:D12}"));
 
+    // Play mechanics slice 1 fixtures (fixture-pack-forms.json, content v11, D43): a form group, primaries, overlays, a pool.
+    public static readonly ContentReference FormDiscipline = FormsRef(1);
+    public static readonly ContentReference EmberForm = FormsRef(2);
+    public static readonly ContentReference TideForm = FormsRef(3);
+    public static readonly ContentReference SurgeOverlay = FormsRef(4);
+    public static readonly ContentReference BoundOverlay = FormsRef(5);
+    public static readonly ContentReference DeepForm = FormsRef(6);
+    public static readonly ContentReference CalmOverlay = FormsRef(7);
+    public static readonly ContentReference CalmTideOverlay = FormsRef(8);
+    public static readonly ContentReference LineageForm = FormsRef(9);
+
+    public static ContentPack FormsPack() => Load<ContentPack>("fixture-pack-forms.json");
+
+    private static ContentReference FormsRef(int n) =>
+        new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:D12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:D12}"));
+
+    /// <summary>
+    /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
+    /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
+    /// </summary>
+    public static InMemoryContentCatalog PlayMechanicsCatalog()
+    {
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack()];
+        return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
+    }
+
+    /// <summary>A minimal feature revision at <paramref name="schemaVersion"/> holding the effect as written, read back through the serializer so the revision types it as a stored one would be.</summary>
+    public static ContentRevision RevisionWithEffect(string effectJson, int schemaVersion)
+    {
+        const string head = "{\"contentId\":\"6f0dc000-0000-4000-8000-0000000000f1\",\"revisionId\":\"6f0de000-0000-4000-8000-0000000000f1\",\"schemaVersion\":";
+        const string body = ",\"kind\":\"feature\",\"name\":\"Fixture Effect Holder\",\"rulesFamilies\":[\"srd-5.2.1\"],"
+            + "\"provenance\":{\"sourceId\":\"6f0d5000-0000-4000-8000-000000000001\",\"page\":{\"start\":1}},\"status\":\"published\",\"effects\":[";
+        var json = head + schemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture) + body + effectJson + "]}";
+        return JsonSerializer.Deserialize<ContentRevision>(json, RulesJson.Options)!;
+    }
+
+    /// <summary>The effect as a revision stores it (compact).</summary>
+    public static string EffectJson(Effect effect) => JsonSerializer.Serialize(effect, RulesJson.Compact);
+
     /// <summary>Every fixture pack: M0, M1, spellcasting and combat.</summary>
     public static InMemoryContentCatalog AllCatalog()
     {
