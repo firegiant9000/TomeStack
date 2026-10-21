@@ -154,12 +154,20 @@ public class ItemChargesTests
     [InlineData(RulesFamilies.Srd521)]
     public void R160_a_save_carrying_an_older_charges_spent_keeps_the_stored_value(string family)
     {
-        var s = Start(family);
+        // R182: a save from before a spend is now refused outright (see the R182 tests); this is the current-copy case: the payload names
+        // the stored version but carries older spent counts, and the stored counts win.
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
         using var _ = s.Temp;
-        var stale = Save(s, new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)).Character; // what a slow sheet still holds: nothing spent
-        var (a, b) = (stale.Equipment[0].Id!.Value, stale.Equipment[1].Id!.Value);
+        Tick(clock);
+        var first = Save(s, new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)).Character;
+        var (a, b) = (first.Equipment[0].Id!.Value, first.Equipment[1].Id!.Value);
+        Tick(clock);
         Spend(s, a, 2);
+        Tick(clock);
         Spend(s, b, 1);
+        Tick(clock);
+        var stale = Get(s).Character with { Equipment = first.Equipment }; // the current version stamp with older spent counts (none)
 
         var saved = s.Temp.App.SaveCharacter(stale with { Equipment = [stale.Equipment[0] with { Equipped = true, Attuned = true, Quantity = 2 }, stale.Equipment[1] with { ChargesSpent = 0 }] });
 
@@ -301,6 +309,165 @@ public class ItemChargesTests
 
         Assert.Equal("character.stale", code);
         Assert.Equal(before, TempApp.Json(Get(s).Character));
+    }
+
+    // ---- R161/R182: compare-and-set on save. A save names the version it edited by its updatedAt. These use a moving clock:
+    // a fixed one stamps every write alike and would hide a stale save. ----------------------------------------------------
+
+    private static void Tick(MutableTime clock) => clock.Now = clock.Now.AddSeconds(5);
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_a_stale_save_after_a_spend_is_refused_with_character_stale_and_the_spent_count_stays(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        Tick(clock);
+        var wandId = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        var stale = Get(s).Character;
+        Tick(clock);
+        Spend(s, wandId, 2); // the play path stamps UpdatedAt too
+        var before = TempApp.Json(Get(s).Character);
+        Tick(clock);
+
+        var refused = Assert.Throws<AppValidationException>(() => s.Temp.App.SaveCharacter(stale with { Equipment = [stale.Equipment[0] with { ChargesSpent = 0, Equipped = true }] }));
+
+        Assert.Equal("character.stale", refused.Code);
+        Assert.Equal("character.stale", refused.Problems[0].Code);
+        Assert.DoesNotContain("Test Wielder", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(before, TempApp.Json(Get(s).Character)); // nothing written
+        Assert.Equal(2, Get(s).Character.Equipment[0].ChargesSpent);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_a_save_made_from_the_current_copy_is_accepted_and_still_cannot_change_the_spent_count(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        Tick(clock);
+        var wandId = Save(s, new EquipmentEntry(s.Wand), new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        Tick(clock);
+        Spend(s, wandId, 2);
+        var current = Get(s).Character;
+        Tick(clock);
+
+        // R160 holds for a current payload that says otherwise (a hand-built one): only play and rest change a spend.
+        var saved = s.Temp.App.SaveCharacter(current with { Equipment = [current.Equipment[0] with { Equipped = true, ChargesSpent = 0 }, current.Equipment[1] with { ChargesSpent = 5 }] });
+
+        Assert.Equal((2, true), (saved.Character.Equipment[0].ChargesSpent, saved.Character.Equipment[0].Equipped));
+        Assert.Null(saved.Character.Equipment[1].ChargesSpent);
+        Assert.Equal(clock.Now, saved.Character.UpdatedAt);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_a_stale_id_less_copy_shifted_out_of_its_stored_position_is_refused_not_reset(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        Tick(clock);
+        s.Temp.App.Store.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Ring), new EquipmentEntry(s.Wand)], UpdatedAt = clock.Now }); // both id-less, as an older copy holds them
+        var stale = Get(s).Character;
+        Tick(clock);
+        var spent = s.Temp.App.Play(new(s.Id, PlayActionKind.SpendCharge, Confirm: true, Amount: 2, ContentId: s.Wand.ContentId, EntryIndex: 1));
+        var before = TempApp.Json(Get(s).Character);
+        Tick(clock);
+
+        var code = CodeOf(() => s.Temp.App.SaveCharacter(stale with { Equipment = [new EquipmentEntry(s.Wand), .. stale.Equipment] }));
+
+        Assert.Equal("character.stale", code);
+        Assert.Equal(before, TempApp.Json(Get(s).Character));
+        Assert.Equal(2, spent.Character.Equipment[1].ChargesSpent);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_a_delete_and_re_add_of_a_charged_item_at_the_same_position_is_a_new_entry_with_full_charges(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        Tick(clock);
+        var wandId = Save(s, new EquipmentEntry(s.Wand)).Character.Equipment[0].Id!.Value;
+        Tick(clock);
+        Spend(s, wandId, 2);
+        Tick(clock);
+
+        // The payload is current (it names the stored version), so the id-less wand at index 0 is one the player added.
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Equipment = [new EquipmentEntry(s.Wand)] });
+
+        Assert.Null(saved.Character.Equipment[0].ChargesSpent);
+        Assert.NotEqual(wandId, saved.Character.Equipment[0].Id!.Value);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_updatedAt_round_trips_at_100_ns_through_the_real_store_and_the_json_the_page_sends_back(string family)
+    {
+        var clock = new MutableTime(TempApp.Now.AddTicks(1234567)); // the finest precision the clock gives
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        var created = Get(s).Character;
+        Assert.Equal(clock.Now, created.UpdatedAt);
+        Assert.Equal(1234567, (created.UpdatedAt - TempApp.Now).Ticks);
+        clock.Now = clock.Now.AddTicks(7);
+
+        // The page sends the character back as it got it: parsed from JSON text, not the in-memory record.
+        var viaJson = JsonSerializer.Deserialize<Character>(JsonSerializer.Serialize(created, RulesJson.Compact), RulesJson.Compact)!;
+        var response = Dispatch(s, "character.save", viaJson with { Name = "Test Wielder II" });
+
+        Assert.True(response.GetProperty("ok").GetBoolean());
+        Assert.Equal(clock.Now, Get(s).Character.UpdatedAt);
+        Assert.Equal("Test Wielder II", Get(s).Character.Name);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_through_the_dispatcher_a_stale_save_is_a_character_stale_error_with_no_text_of_the_character(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        var stale = Get(s).Character;
+        Tick(clock);
+        s.Temp.App.SaveCharacter(stale with { Name = "Changed Elsewhere" });
+        Tick(clock);
+
+        var response = Dispatch(s, "character.save", stale with { Name = "Test Wielder Late" });
+
+        Assert.False(response.GetProperty("ok").GetBoolean());
+        var text = response.GetProperty("error").ToString();
+        Assert.Equal("character.stale", response.GetProperty("error").GetProperty("code").GetString());
+        Assert.DoesNotContain("Test Wielder", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Changed Elsewhere", text, StringComparison.Ordinal);
+        Assert.Equal("Changed Elsewhere", Get(s).Character.Name);
+    }
+
+    [Theory]
+    [InlineData(RulesFamilies.Srd51)]
+    [InlineData(RulesFamilies.Srd521)]
+    public void R182_a_new_character_is_not_compared_and_a_save_of_the_stored_copy_goes_through(string family)
+    {
+        var clock = new MutableTime(TempApp.Now);
+        var s = Start(family, time: clock);
+        using var _ = s.Temp;
+        Tick(clock);
+
+        var other = s.Temp.App.CreateCharacter(new("Test Other", family, new(8, 14, 12, 16, 10, 10), null, Classes: Get(s).Character.Classes)); // no stored row: no version to compare
+        Assert.Equal(clock.Now, other.Character.UpdatedAt);
+        Tick(clock);
+        var saved = s.Temp.App.SaveCharacter(Get(s).Character with { Name = "Test Wielder" });
+        Assert.Equal(clock.Now, saved.Character.UpdatedAt);
     }
 
     [Theory]

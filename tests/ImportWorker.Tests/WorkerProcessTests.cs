@@ -335,10 +335,17 @@ public class WorkerProcessTests
     [Fact]
     public async Task An_extract_under_the_sheet_limits_stops_a_worker_that_sends_nothing_within_the_page_timeout()
     {
+        // What is distinct from the book-limits test above: the sheet limits (30 s page and run timeouts, 50 pages, 256 MB heap) with
+        // only the page timeout shortened. The 200 ms page timeout, not the sheet's 30 s run timeout, is what stops the worker.
         using var silent = new SilentWorker();
-        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(200) }, new PageScope(1, 20), worker: silent.Script));
+        var limits = WorkerFormReader.DefaultLimits with { PageTimeout = TimeSpan.FromMilliseconds(200) };
+        Assert.Equal((50, TimeSpan.FromSeconds(30)), (limits.MaxPages, limits.RunTimeout));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var refused = await Assert.ThrowsAsync<ExtractionException>(() => Run(FixturePdfs.TextSheetPath, limits, new PageScope(1, 20), worker: silent.Script));
 
         Assert.Equal("worker.page-timeout", refused.Code);
+        Assert.InRange(clock.Elapsed, TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(20));
     }
 
     [Fact]

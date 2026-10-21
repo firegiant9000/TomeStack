@@ -693,7 +693,7 @@ public class DetectionTests
     [Fact]
     public void A_name_and_a_singular_Prerequisite_line_in_one_block_is_an_option_list_entry_not_a_feat()
     {
-        // The SRDs' Eldritch Invocations have this shape; they measured as 20+ spurious feats.
+        // An option-list entry (a pick-one option with a prerequisite) has this shape; on the SRDs they measured as 20+ spurious feats.
         var found = DetectBlocks([RulesFamilies.Srd51],
             new TextBlock("Fixture Quiet Step\nPrerequisite: 5th level\nYou move without a sound.", 50, 600, 200, 40, 10, false));
 

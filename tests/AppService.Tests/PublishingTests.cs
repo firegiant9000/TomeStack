@@ -263,6 +263,29 @@ public class PublishingTests
     }
 
     [Fact]
+    public void R182_the_servers_own_saves_Choose_and_ApplyUpdate_pass_compare_and_set_when_the_clock_has_moved()
+    {
+        var clock = new MutableTime(TempApp.Now);
+        using var temp = new TempApp(time: clock);
+        var pack = temp.AddPack("fixture-pack-m1.json");
+        var warden = pack.Revisions.Single(r => r.Name == "Fixture Warden");
+        var athletics = pack.Revisions.Single(r => r.Name == "Fixture Warden Skill: Athletics").Reference;
+        var survival = pack.Revisions.Single(r => r.Name == "Fixture Warden Skill: Survival").Reference;
+        var character = TempApp.LoadFixture<Character>("characters/srd521-ash-m1.json") with { Pins = [], Classes = [new(warden.Reference, 1)] };
+        var id = temp.App.SaveCharacter(character).Character.Id;
+        var newWarden = temp.App.Publish(temp.App.SaveDraft(warden with { RevisionId = Guid.NewGuid(), Status = RevisionStatus.Draft, Summary = "Revised" })).Published;
+
+        clock.Now = clock.Now.AddSeconds(5);
+        var chosen = temp.App.Choose(new(id, warden.Reference, "warden-skills", [athletics, survival]));
+        clock.Now = clock.Now.AddSeconds(5);
+        var updated = temp.App.ApplyUpdate(id, warden.Reference, newWarden, confirm: true); // Publishing.cs ReplaceReference save
+
+        Assert.Equal(TempApp.Now.AddSeconds(5), chosen.Character.UpdatedAt);
+        Assert.Equal(clock.Now, updated.Character.UpdatedAt);
+        Assert.Equal(newWarden, Assert.Single(updated.Character.Classes).Class);
+    }
+
+    [Fact]
     public void An_updated_character_round_trips_through_a_package_to_a_clean_machine()
     {
         var (temp, first, _) = Setup();

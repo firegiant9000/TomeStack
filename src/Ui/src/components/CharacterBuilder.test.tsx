@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
+import { TomeStackError } from '../api/transport';
 import type { Character, CharacterView, ContentOption, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
 import { CharacterBuilder, campaignLabel } from './CharacterBuilder';
 
@@ -1401,6 +1402,25 @@ describe('a pick that needs a campaign exception reason after the reason is clea
     expect(screen.queryByText(/needs a campaign exception reason/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Save choices' })); // nothing new to explain
     await waitFor(() => expect(vi.mocked(client.saveCharacter)).toHaveBeenCalledTimes(1));
+  });
+
+  it('a save refused as stale says to cancel and reopen, and stops offering a save that cannot succeed (R182)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(client.listContent).mockResolvedValue(spells);
+    vi.mocked(client.saveCharacter).mockReset();
+    vi.mocked(client.saveCharacter).mockRejectedValue(new TomeStackError({ code: 'character.stale', message: 'stale' }));
+    const onError = vi.fn();
+    render(<CharacterBuilder mode={{ kind: 'choices', view: viewWith([]) }} rulesFamilies={families} onCommitted={() => {}} onCancel={() => {}} onError={onError} />);
+    const save = await screen.findByRole('button', { name: 'Save choices' });
+    await user.click(save);
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(String((onError.mock.calls[0]![0] as Error).message)).toMatch(/Cancel, then open it again/);
+    expect(String((onError.mock.calls[0]![0] as Error).message)).not.toMatch(/current copy is shown/);
+    expect(screen.getByRole('button', { name: 'Save choices' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText(/Cancel, then open it again to start from the current copy./)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save choices' })); // refused locally: no second request
+    expect(client.saveCharacter).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save choices' }));
   });
 });
 

@@ -27,7 +27,17 @@ export const directSave = (character: Character): SheetSave => (update) => clien
  * The sheet container's save: every save runs after the one before it finishes, and each starts from the character that
  * save returned. Each caller still gets its own result (or its own failure), so each panel keeps its own status and focus.
  */
-export function useSheetSave(view: CharacterView): SheetSave {
+export type QueuedSheetSave = {
+  save: SheetSave;
+  /**
+   * R182: takes this view as the queue's latest and shown copy, unconditionally. For the copy read after a `character.stale`
+   * refusal: it is the stored truth even when its stamp sorts lower than the queue's (a clock stepped back, or "Z" against "+00:00"),
+   * so no later save is wedged on a version the store no longer has.
+   */
+  adopt: (view: CharacterView) => void;
+};
+
+export function useSheetSave(view: CharacterView): QueuedSheetSave {
   const latest = useRef(view.character);
   const pending = useRef(0);
   const tail = useRef<Promise<unknown>>(Promise.resolve());
@@ -41,7 +51,12 @@ export function useSheetSave(view: CharacterView): SheetSave {
     if (pending.current === 0 && (view.character.updatedAt ?? '') >= (latest.current.updatedAt ?? '')) latest.current = view.character;
   }, [view.character]);
 
-  return useCallback<SheetSave>((update) => {
+  const adopt = useCallback((fresh: CharacterView) => {
+    latest.current = fresh.character;
+    shown.current = fresh.character;
+  }, []);
+
+  const save = useCallback<SheetSave>((update) => {
     pending.current += 1;
     const run = async () => {
       // Ties go to the queue's own latest. R182: character.save is compare-and-set on updatedAt, so each save names the version it
@@ -61,4 +76,6 @@ export function useSheetSave(view: CharacterView): SheetSave {
       pending.current -= 1;
     });
   }, []);
+
+  return { save, adopt };
 }

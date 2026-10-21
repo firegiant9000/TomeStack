@@ -143,7 +143,7 @@ public static partial class CandidateDetector
 
     /// <summary>A feature name worth a link: not the reference-only feature and not a subclass placeholder ("Fixture Order feature").</summary>
     public static bool IsLinkable(string name) =>
-        !name.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) &&!name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
+        !name.Equals(ReferenceOnlyFeatureName, StringComparison.OrdinalIgnoreCase) && !name.EndsWith("feature", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A feature the class table names that no block of the job describes: the name and the class page only, reference.</summary>
     private static DraftCandidate FeatureStub(DraftCandidate owner, string name, int level, DetectionContext context)
@@ -686,7 +686,7 @@ public static partial class CandidateDetector
 
     /// <summary>
     /// A block whose first line is a name and whose second line is the plural "Prerequisites: …" (the singular form heads
-    /// option lists such as the SRDs' Eldritch Invocations, which are not feats). A body paragraph that merely starts
+    /// option lists such as a class's list of pick-one options, which are not feats). A body paragraph that merely starts
     /// with "Prerequisites:" has no name line above it in its block, so it is never a feat on its own. The prerequisite
     /// may be at most 400 characters.
     /// </summary>

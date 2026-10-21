@@ -13,6 +13,8 @@ import type { SheetTabId } from './sheetTab';
 
 // Code-split (R161 d): the screens that are not the first paint load when they are opened, from the same dist folder
 // (relative asset paths, no network, no inline script). The home list, the sheet and settings stay in the main chunk.
+import { ScreenBoundary } from './components/ScreenBoundary';
+
 const BackupsPanel = lazy(() => import('./components/BackupsPanel').then((m) => ({ default: m.BackupsPanel })));
 const CampaignsPanel = lazy(() => import('./components/CampaignsPanel').then((m) => ({ default: m.CampaignsPanel })));
 const CharacterBuilder = lazy(() => import('./components/CharacterBuilder').then((m) => ({ default: m.CharacterBuilder })));
@@ -316,6 +318,7 @@ export function App() {
             </p>
           )}
         </div>
+        <ScreenBoundary key={screen.kind}>
         <Suspense fallback={<p role="status">Loading…</p>}>
           {screen.kind === 'home' && (
             <HomePanel
@@ -493,6 +496,7 @@ export function App() {
             />
           )}
         </Suspense>
+        </ScreenBoundary>
       </main>
     </div>
   );

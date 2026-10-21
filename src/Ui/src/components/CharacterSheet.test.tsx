@@ -1063,3 +1063,42 @@ it('shows the refusal, brings in the current copy and leaves focus where it was 
   expect(document.activeElement).toBe(save); // not <body>
   expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Gold (gp)' }).value).toBe('20'); // what was typed stays
 });
+
+it('keeps the same onError identity when the app passes a new onChanged, so no panel refetches (R182)', async () => {
+  const v = view();
+  const props = { onError: noop, onStatus: noop, onLevelUp: noop, onMakeChoices: noop, onArchiveChanged: noop, initialTab: 'inventory' as const };
+  const { rerender } = render(<CharacterSheet view={v} onChanged={() => {}} {...props} />);
+  await waitFor(() => expect(client.listContent).toHaveBeenCalled());
+  const counts = () => [client.listContent, client.snapshots, client.availableUpdates, client.listGapNotes, client.attachment].map((f) => vi.mocked(f).mock.calls.length);
+  const before = counts();
+  for (let i = 0; i < 3; i += 1) rerender(<CharacterSheet view={v} onChanged={() => {}} {...props} />); // a new inline onChanged each time, as the app does
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(counts()).toEqual(before);
+});
+
+it('adopts the current copy after a stale refusal even when its stamp sorts lower than the queue latest (R182)', async () => {
+  const user = userEvent.setup();
+  const v = view();
+  const high = withUpdatedAt(v, '2026-10-03T00:10:00Z', 20);
+  const fresh = withUpdatedAt(v, '2026-10-03T00:05:00+00:00', 7); // sorts lower: a clock stepped back, and Z against +00:00
+  vi.mocked(client.saveCharacter).mockReset();
+  vi.mocked(client.saveCharacter)
+    .mockResolvedValueOnce(high)
+    .mockRejectedValueOnce(new TomeStackError({ code: 'character.stale', message: 'stale' }))
+    .mockResolvedValueOnce(withUpdatedAt(v, '2026-10-03T00:06:00+00:00', 9));
+  vi.mocked(client.getCharacter).mockResolvedValue(fresh);
+  const onChanged = vi.fn();
+  render(<CharacterSheet view={v} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} initialTab="inventory" />);
+  const setGold = async (n: string) => {
+    await user.clear(screen.getByRole('spinbutton', { name: 'Gold (gp)' }));
+    await user.type(screen.getByRole('spinbutton', { name: 'Gold (gp)' }), n);
+    await user.click(screen.getByRole('button', { name: 'Save currency' }));
+  };
+  await setGold('20');
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(1));
+  await setGold('30');
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(fresh));
+  await setGold('9');
+  await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(3));
+  expect(vi.mocked(client.saveCharacter).mock.calls[2]![0].updatedAt).toBe('2026-10-03T00:05:00+00:00'); // not wedged on the higher stamp
+});

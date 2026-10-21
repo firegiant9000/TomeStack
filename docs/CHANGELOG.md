@@ -47,6 +47,8 @@
 
 - **Saving a character that changed elsewhere is refused and the current copy is shown** (R161, R182). `character.save` compares the `updatedAt` it carries with the stored one and refuses a mismatch with `character.stale`, writing nothing. The sheet shows the refusal, reads the current copy and keeps focus where it was. A new entry that takes the place of a removed copy of the same item now starts with full charges, and the earlier id pairing for stale copies is gone (a stale copy is refused instead). Details in `features/sheet-play.md` and `features/equipment.md`.
 
+- **A screen whose code cannot load says so** ("This screen couldn't be loaded.") and the navigation stays usable, instead of a blank window.
+
 ### Fixed
 
 - **A slow search while finding entries is retried once (R161):** if a search takes longer than 1 second, the importer finds entries once more, and only a second timeout fails the import with `detect.timeout`. The pages stay searchable either way.

@@ -237,21 +237,30 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   // R161/R182: one handler for every save path. A save refused as stale (the character changed since this sheet's copy was read)
   // shows its words in the usual alert and brings in the current copy, so the next edit starts from it. Focus is not touched: whatever
   // the user was on stays, and what they typed stays in its field for them to apply again.
+  // R132: every sheet save goes through this one queue, each as an updater applied to the latest saved character.
+  const { save: saveCharacter, adopt } = useSheetSave(view);
   const characterId = character.id;
+  // The wrapper's identity must not change when the app passes a new inline `onChanged`: panels list `onError` in their effect
+  // dependencies, so a new identity on every render would refetch (and loop on a failing fetch). It reads the props through a ref.
+  const latestProps = useRef({ reportError, onChanged, adopt });
+  useEffect(() => {
+    latestProps.current = { reportError, onChanged, adopt };
+  });
   const onError = useCallback(
     (error: unknown) => {
-      reportError(error);
+      latestProps.current.reportError(error);
       if (error instanceof TomeStackError && error.code === 'character.stale') {
         client
           .getCharacter(characterId)
-          .then(onChanged)
-          .catch(reportError);
+          .then((fresh) => {
+            latestProps.current.adopt(fresh); // unconditionally: the stored copy is the truth, whatever its stamp sorts like
+            return latestProps.current.onChanged(fresh);
+          })
+          .catch((failure: unknown) => latestProps.current.reportError(failure));
       }
     },
-    [characterId, onChanged, reportError],
+    [characterId],
   );
-  // R132: every sheet save goes through this one queue, each as an updater applied to the latest saved character.
-  const saveCharacter = useSheetSave(view);
   const labels = new Map(sheet.fields.map((f) => [f.field, f.label]));
   const heading = useRef<HTMLHeadingElement>(null);
   const printButton = useRef<HTMLButtonElement>(null);
