@@ -44,7 +44,13 @@ The base is 10 + Dexterity modifier. Alternatives such as Unarmored Defense are 
 
 ## Skills
 
-All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill) and `speed` (feet; 30 by rules policy until species content carries one): calculated; overridable on Stats; content cannot target them until a content schema version allows it (validation refuses it). A save or skill carries a proficiency mark (none, proficient, expertise).
+All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill) and `speed` (feet; 30 by rules policy unless a homebrew species sets one): calculated; overridable on Stats; content can target them only from content schema v10 (validation refuses it below that). A save or skill carries a proficiency mark (none, proficient, expertise).
+
+## Experience points (Wave 3 item 27, R162, R177)
+
+XP is optional and off by default: the character's `xp` (character schema v9, `null` = not tracked, 0 to 1,000,000) is the on/off switch, so "Track XP" on Stats sets it to 0 and unticking it drops the total. The thresholds are one shared rules constant, `Advancement.XpThresholds` in `src/RulesCore/Advancement.cs`, indexed by level - 1: 0, 300, 900, 2,700, 6,500, 14,000, 23,000, 34,000, 48,000, 64,000, 85,000, 100,000, 120,000, 140,000, 165,000, 195,000, 225,000, 265,000, 305,000, 355,000. Like the proficiency bonus by total level, it is not a `RulesFamilyPolicy` field: a policy field encodes a difference, and the two bundled families print the same table. If a family is ever found to differ, the table becomes a policy field then.
+
+The sheet gains two optional values, both absent unless `xp` is set: `xpForNextLevel` (the threshold for the level after the character's total level, absent at level 20 and with no level yet) and `levelUpAvailable` (true when `xp` has reached it). They are judged by the **total** character level, so a multiclass character uses the sum of its class levels. "Level up available" is display only: it never changes the level or the classes, and milestone levelling is untouched. Stats shows it as plain text beside the field, next to "Next level at 2,700".
 
 ## Importing a class from a PDF (item 11, D34, ADR-016)
 
@@ -54,4 +60,4 @@ Each proposed effect has its own confirm tick. Accepting as a draft needs the hi
 
 ## Not in scope (M2+)
 
-Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and species speed data. Equipment-based armor class is M2 item 4.
+Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and speed data in the bundled species (they carry none, so speed is 30 feet by rules policy; a homebrew species can set one from content v10). Equipment-based armor class is M2 item 4.

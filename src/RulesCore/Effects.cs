@@ -46,7 +46,7 @@ public static class FieldIds
     /// <summary>D24: passive score of a skill (10 + the skill).</summary>
     public static string Passive(string skill) => $"passive.{skill}";
 
-    /// <summary>D24: walking speed in feet. Base 30 by rules policy until species content carries a speed; override it on Stats.</summary>
+    /// <summary>D24: walking speed in feet. Base 30 by rules policy unless a species sets it (a v10 replace modifier); override it on Stats.</summary>
     public const string Speed = "speed";
 
     public static string Key(Ability ability) => ability.ToString().ToLowerInvariant();

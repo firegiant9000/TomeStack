@@ -184,8 +184,17 @@ it('removes a defence of its own, and refuses a duplicate before it is sent', as
 
   // Acid is the first type and Resistance the first kind: pick the recorded pair to make it a duplicate.
   await user.selectOptions(screen.getByRole('combobox', { name: 'Damage type' }), 'slashing');
-  expect((screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByText('Already recorded.')).toBeTruthy();
+  const add = screen.getByRole('button', { name: 'Add' }) as HTMLButtonElement;
+  // Held, not disabled: it stays in the tab order and focusable, its reason is linked, and a press sends nothing.
+  expect(add.disabled).toBe(false);
+  expect(add.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(add.getAttribute('aria-describedby')!)?.textContent).toBe('Already recorded.');
+  add.focus();
+  expect(document.activeElement).toBe(add);
+  await user.click(add);
+  expect(save).not.toHaveBeenCalled();
+  expect(onChanged).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(add);
 
   await user.click(screen.getByRole('button', { name: 'Remove slashing resistance' }));
   expect(onChanged.mock.calls[0]?.[0].character.damageDefences).toEqual([]);

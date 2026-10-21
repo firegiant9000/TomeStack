@@ -421,6 +421,31 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await openTab(user, sheet, 'Stats');
   await user.click(within(defences()).getByRole('button', { name: 'Remove slashing resistance' }));
   await waitFor(() => expect(screen.queryByRole('list', { name: 'Damage defences the sheet applies' })).toBeNull());
+
+  // Wave 3 item 27: Track XP is off by default; a total at the next level's threshold shows "Level up available" (display only).
+  const xp = () => screen.getByRole('region', { name: 'Experience points' });
+  expect(within(xp()).getByRole<HTMLInputElement>('checkbox', { name: 'Track XP' }).checked).toBe(false);
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' }));
+  const xpBox = await within(xp()).findByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' });
+  expect(xpBox.value).toBe('0');
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  const nextLevelAt = /^Next level at (\d{1,3}(,\d{3})*)$/;
+  const threshold = Number((await within(xp()).findByText(nextLevelAt)).textContent!.replace(nextLevelAt, '$1').replaceAll(',', ''));
+  await user.clear(xpBox);
+  await user.type(xpBox, String(threshold - 1));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  // Wait for the save to land (nothing differs, so Save is aria-disabled and focus is on the heading) before typing again:
+  // a reply that arrives mid-type moves focus off the box and leaves a partial number in it.
+  await waitFor(() => expect(within(xp()).getByRole('button', { name: 'Save experience points' }).getAttribute('aria-disabled')).toBe('true'));
+  expect(within(xp()).getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe(String(threshold - 1));
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
+  await user.clear(within(xp()).getByRole('spinbutton', { name: 'Experience points' }));
+  await user.type(within(xp()).getByRole('spinbutton', { name: 'Experience points' }), String(threshold));
+  await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
+  await within(xp()).findByText('Level up available');
+  await user.click(within(xp()).getByRole('checkbox', { name: 'Track XP' })); // untick: the total and the hint go
+  await waitFor(() => expect(within(xp()).queryByRole('spinbutton', { name: 'Experience points' })).toBeNull());
+  expect(within(xp()).queryByText('Level up available')).toBeNull();
   await openTab(user, sheet, 'Play');
 
   // M2 item 4: armor replaces Unarmored Defense (13); a shield adds to it. Original fixture equipment.
@@ -1177,8 +1202,13 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Folk');
   await user.type(within(editor()).getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Speed (feet)' }), '25'); // items 12, 24
   await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
+  // The speed is a content v10 replace modifier, so publishing it writes a v10 revision.
+  const published = (await newestOf(source.id, 'E2E Folk'))!;
+  expect(published.effects.filter((e) => e.type === 'modifier' && e.target === 'speed')).toMatchObject([{ operation: 'replace', value: '25' }]);
+  expect(published.schemaVersion).toBe(10);
 
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   await createCharacter(user, { name: 'E2E Folk Child', family: 'srd-5.1', species: /^E2E Folk/ });
@@ -2263,7 +2293,13 @@ it('authors a class in the studio and builds it at levels 1, 20 and 5/3 with an 
   const ink = rule(/^Rule 2: Resource/);
   await user.type(within(ink).getByRole('textbox', { name: 'Resource name' }), 'Ink');
   await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
+  // D61: the formula's preview, worked out by the real service against this draft (proficiency bonus 6 at level 20).
+  await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'PB');
+  expect((await within(ink).findByText(/Level 20: 6/)).textContent).toMatch(/^Level 1: 2 · .* · Level 20: 6$/);
+  expect(within(ink).getByRole('textbox', { name: /^Uses/ }).getAttribute('aria-describedby')).toMatch(/^rule-resource-\d+-maximum-preview$/);
+  await user.clear(within(ink).getByRole('textbox', { name: /^Uses/ }));
   await user.type(within(ink).getByRole('textbox', { name: /^Uses/ }), 'SCALE.ink');
+  expect(await within(ink).findByText(/Level 1: 2 · .* · Level 20: 9$/)).toBeTruthy(); // the draft's own column
   await user.click(within(editor()).getByRole('button', { name: 'Add recovery' })); // all, on a long rest
 
   await user.click(within(editor()).getByRole('button', { name: 'Add spellcasting' }));
@@ -2758,6 +2794,27 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   expect(document.documentElement.dataset.textSize).toBe('125');
 });
 
+it('keeps the Custom accent and its hue when the app is rendered again, and a preset replaces it (D40)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Custom accent' }));
+  const slider = screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' });
+  fireEvent.change(slider, { target: { value: '120' } });
+  expect(slider.getAttribute('aria-valuetext')).toBe('Lime, 120 degrees');
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  unmount();
+  delete document.documentElement.dataset.theme;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  expect(screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' }).value).toBe('120');
+  await user.click(screen.getByRole('radio', { name: 'Tide' }));
+  expect(screen.queryByRole('slider')).toBeNull();
+  expect(document.documentElement.dataset.theme).toBe('tide');
+});
+
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
   const user = userEvent.setup();
   const { unmount } = render(<App />);
@@ -2972,4 +3029,117 @@ it('lists a toggle and a resource with an activation under their group, and swit
   const guard = within(within(actions()).getByRole('region', { name: 'Reactions' })).getByRole('checkbox', { name: /E2E guard/ }) as HTMLInputElement;
   expect(guard.checked).toBe(true);
   expect(document.activeElement).toBe(guard);
+});
+
+it('carries two copies of a charged wand that needs attunement: attuning applies it, charges are separate, and a long rest returns them by the rolled total (item 25)', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Wand Book', ['srd-5.2.1']);
+  const draft = await client.saveDraft({
+    contentId: crypto.randomUUID(),
+    revisionId: '00000000-0000-0000-0000-000000000000',
+    kind: 'item',
+    name: 'E2E Wand',
+    rulesFamilies: ['srd-5.2.1'],
+    provenance: { sourceId: source.id },
+    status: 'draft',
+    effects: [
+      { type: 'modifier', id: 'wand-ac', operation: 'bonus', target: 'armorClass', value: '2' },
+      { type: 'item', id: 'wand-use', requiresAttunement: true, charges: { max: 3, recovery: { period: 'longRest', regain: '1d3' } } },
+    ],
+  });
+  await client.publish(draft);
+  await client.createCharacter({ name: 'E2E Wand Hero', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Wand Hero/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Wand Hero' });
+  await openTab(user, hero, 'Inventory');
+  const equipment = () => screen.getByRole('region', { name: 'Equipment' });
+  const armorClass = () => Number(/^(\d+)/.exec(summaryValue(hero, 'Armor Class'))![1]);
+  const before = armorClass();
+
+  // Two copies: an item with charges is offered again once it is carried.
+  for (const copies of [1, 2]) {
+    await waitFor(() => expect(within(equipment()).getByRole('option', { name: /^E2E Wand/ })).toBeTruthy());
+    await user.selectOptions(within(equipment()).getByRole('combobox', { name: 'Add an item' }), within(equipment()).getByRole('option', { name: /^E2E Wand/ }));
+    await user.click(within(equipment()).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(within(equipment()).getAllByRole('checkbox', { name: /^Equip E2E Wand/ })).toHaveLength(copies));
+  }
+  expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2); // carried: charges show on Inventory too
+
+  // Equipped but not attuned: nothing applies, and the sheet says so. Attuning applies it once.
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Equip E2E Wand (copy 1 of 2)' }));
+  await within(equipment()).findByText('E2E Wand (copy 1 of 2) is not attuned, so its effects do not apply.');
+  expect(armorClass()).toBe(before);
+  await user.click(within(equipment()).getByRole('checkbox', { name: 'Attuned: E2E Wand (copy 1 of 2)' }));
+  await waitFor(() => expect(armorClass()).toBe(before + 2));
+
+  // Separate counts; focus stays on the button that was pressed.
+  const spend = () => within(equipment()).getByRole('button', { name: 'Spend a charge: E2E Wand (copy 1 of 2)' });
+  await user.click(spend());
+  await user.click(spend());
+  await waitFor(() => expect(within(equipment()).getByText('1 of 3 charges left')).toBeTruthy());
+  expect(within(equipment()).getByText('3 of 3 charges left')).toBeTruthy();
+  expect(document.activeElement).toBe(spend());
+
+  // A long rest asks for the 1d3, takes the total as rolled at the table, and returns that many (capped at the two spent).
+  await user.click(screen.getByRole('button', { name: 'Long rest…' }));
+  const rest = await screen.findByRole('region', { name: 'Long rest' });
+  await user.type(await within(rest).findByLabelText('E2E Wand: 1d3 rolled at the table (total)'), '2');
+  await user.click(within(rest).getByRole('button', { name: 'Add the 1d3 total: E2E Wand' }));
+  expect(await within(rest).findByRole('checkbox', { name: /^E2E Wand charges: 1 → 3/ })).toBeTruthy();
+  const finish = within(rest).getByRole('button', { name: 'Finish long rest' });
+  await waitFor(() => expect(finish.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(finish);
+
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Long rest' })).toBeNull());
+  await openTab(user, hero, 'Inventory');
+  await waitFor(() => expect(within(equipment()).getAllByText('3 of 3 charges left')).toHaveLength(2));
+});
+
+it('adds a companion on Play, damages it, undoes that exactly, and rolls its attack (item 23, D39)', async () => {
+  const user = userEvent.setup();
+  await client.createCharacter({ name: 'E2E Handler', rulesFamily: 'srd-5.2.1', baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, pins: [] });
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Handler/ }));
+  const hero = await screen.findByRole('article', { name: 'E2E Handler' });
+  await openTab(user, hero, 'Play');
+
+  const companions = () => screen.getByRole('region', { name: 'Companions' });
+  await user.click(within(companions()).getByRole('button', { name: 'Add a companion' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Name' }), 'Testy Hound');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Hit point maximum' }), '20');
+  await user.click(within(companions()).getByRole('button', { name: 'Add an attack line' }));
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 name' }), 'Testy Bite');
+  await user.clear(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }));
+  await user.type(within(companions()).getByRole('spinbutton', { name: 'Attack 1 to hit bonus' }), '4');
+  await user.type(within(companions()).getByRole('textbox', { name: 'Attack 1 damage (optional)' }), '1d6+2');
+  await user.click(within(companions()).getByRole('button', { name: 'Save companion' }));
+  await expectStatus(/^Added Testy Hound\.$/);
+
+  // Damage goes through the play command; the card shows it and Undo puts the hit points back exactly.
+  const dog = () => screen.getByRole('region', { name: 'Testy Hound' });
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '8');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 12 of 20')).toBeTruthy());
+  expect(document.activeElement).toBe(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await user.click(await screen.findByRole('button', { name: 'Undo last change: companion damage 8' }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20')).toBeTruthy());
+
+  // Set temporary hit points, then damage takes them first.
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '5');
+  await user.click(within(dog()).getByRole('button', { name: /^Set temporary hit points/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 20 of 20, 5 temporary')).toBeTruthy());
+  await user.type(within(dog()).getByRole('spinbutton', { name: 'Amount' }), '7');
+  await user.click(within(dog()).getByRole('button', { name: /^Take damage/ }));
+  await waitFor(() => expect(within(dog()).getByText('Hit points: 18 of 20')).toBeTruthy());
+
+  // Its attack rolls through the dice engine and shows in Last roll like an attack of your own.
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite attack/ }));
+  const lastRoll = screen.getByRole('region', { name: 'Last roll' });
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite attack: \d+ \(1d20\)/));
+  expect(lastRoll.textContent).toMatch(/Testy Bite to hit \+4/);
+  await user.click(within(dog()).getByRole('button', { name: /^Roll Testy Bite damage/ }));
+  await waitFor(() => expect(lastRoll.textContent).toMatch(/Testy Hound: Testy Bite damage: \d+ \(1d6\+2\)/));
 });

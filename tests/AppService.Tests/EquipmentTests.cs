@@ -18,7 +18,7 @@ public class EquipmentTests
     private static readonly ContentReference TomeOfMight = Fixture(5, 5);
 
     private static CharacterSheet Brenna(TempApp temp, params EquipmentEntry[] equipment) =>
-        temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Equipment = equipment }).Sheet;
+        temp.App.SaveCurrent(TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json") with { Equipment = equipment }).Sheet;
 
     [Theory]
     [InlineData(1, 12)] // light: 11 + Dex 1; Unarmored Defense (13) does not apply while armor is worn

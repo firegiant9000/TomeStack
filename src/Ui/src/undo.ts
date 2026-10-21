@@ -79,6 +79,32 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff':
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       return backing(action) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+    case 'companionDamage':
+    case 'companionHeal':
+    case 'companionSetHitPoints':
+    case 'companionSetTemporaryHitPoints': {
+      // Wave 3 item 23: a companion's hit points are put back exactly, current and temporary both. No recorded entry means at the
+      // maximum with none temporary. A change that left both as they were, or a companion the view no longer has, has no entry.
+      const state = (v: CharacterView) => {
+        const companion = v.character.companions?.find((c) => c.id === action.companionId);
+        if (!companion) return undefined;
+        const recorded = v.character.play?.companions?.find((c) => c.id === action.companionId);
+        return { current: Math.min(recorded?.current ?? companion.hitPointMaximum, companion.hitPointMaximum), temporary: recorded?.temporary ?? 0 };
+      };
+      const was = state(before);
+      const now = state(after);
+      if (!was || !now || (was.current === now.current && was.temporary === now.temporary)) return undefined;
+      return entry([{ action: 'companionSetHitPoints', companionId: action.companionId, amount: was.current, temporary: was.temporary }]);
+    }
+    case 'spendCharge':
+    case 'regainCharge': {
+      // Wave 3 item 25: the exact inverse is the other direction with the same amount on the same entry. An entry that had no id gets one
+      // by the first change, so the inverse names the id the view after it shows. A rest's charge recovery is not undoable (a rest is
+      // not a play command; the view it produces makes any earlier entry stale).
+      const entryId = action.entryId ?? after.sheet.itemUses?.find((u) => u.entryIndex === action.entryIndex && u.item.contentId === action.contentId)?.entryId;
+      if (!entryId) return undefined;
+      return entry([{ action: action.action === 'spendCharge' ? 'regainCharge' : 'spendCharge', amount: action.amount, entryId }]);
+    }
     case 'startConcentration': {
       const held = b?.concentration?.spell.contentId;
       if (held === action.contentId) return undefined; // already concentrating on it: nothing changed

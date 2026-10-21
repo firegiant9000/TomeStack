@@ -20,7 +20,7 @@ Validation:
 - `validate.toggle-unknown` and `validate.toggle-timing`: a modifier's toggle must be defined in the revision, and its timing must be `whileActive`.
 - `validate.toggle-resource`: a toggle's resource must be defined in the revision.
 - `validate.toggle-auto-resource` (content v10, D38): a toggle with `autoWhen` cannot name a `resourceId`, so an auto toggle never spends a use.
-- `validate.toggle-auto-target` (v10, D38): a `whileActive` modifier of a toggle with `autoWhen` cannot target `hitPoints` or any `ability.*` field (score or modifier), so the toggle cannot move the line Bloodied is judged by. Both are errors.
+- `validate.toggle-auto-target` (v10, D38): a `whileActive` modifier of a toggle with `autoWhen` cannot target `hitPoints` or any `ability.*` field (score or modifier), so the toggle cannot move the line Bloodied is judged by. Both are errors. The check looks at direct targets only: a modifier on some other field that is itself worked out from hit points or an ability is not caught.
 - `validate.roll-cost`: a cost needs a resource.
 - `validate.roll-resource-content`: the shared resource must exist in its content.
 - `validate.requires-v6`: any of these below v6.
@@ -41,6 +41,14 @@ Like `armor` (v4) and the v5 types, `toggle` is typed only in a v6 revision. In 
 - **Long rest:** every active toggle is proposed off (`toggle:<content>:<id>`). The player can untick one to keep it. Auto toggles are left out.
 - **Rolls:** the record names the resource's defining content (`linkedResourceContent`), so "Spend" finds a shared pool. It spends `cost`, or offers "<resource> to spend (1 to N)" for a variable cost. Rolling still spends nothing by itself.
 - `sheet.toggles` lists each toggle with its state, and the feature effects carry `cost`, `variableCost` and `resourceContent`.
+
+## The `item` effect (content v10, Wave 3 item 25)
+
+`{ type: "item", id, requiresAttunement?, charges?: { max: 1 to 99, recovery?: { period: shortRest | longRest, regain?: dice } } }`, on an item revision only, at most one per revision (`validate.item-*`, `validate.requires-v10`). In a revision below v10 it is an unknown effect: the item's other effects apply when equipped, as before. It is computed now:
+
+- `requiresAttunement`: the item's effects apply only while an equipped entry is attuned (`item.not-attuned` otherwise). The same in `srd-5.1` and `srd-5.2.1`; the three-item limit is a text warning on Inventory, not a policy field.
+- `charges`: `max` is the per-entry maximum; `chargesSpent` on the entry is the play state. `recovery.regain` omitted means all charges back on that rest; dice mean the player rolls them (see [rests.md](rests.md)).
+- `sheet.itemUses` lists each entry of an item with attunement or charges (carried or equipped): `entryKey`, `entryId`, `entryIndex`, `equipped`, `requiresAttunement`, `attuned`, `chargesMax`, `chargesSpent`, `chargesLeft`, `recovery`. See [equipment.md](equipment.md) for ids, second copies and the play and save paths. The mechanics inventory reports the `item` effect as automatic, since it is applied.
 
 ## Not yet
 

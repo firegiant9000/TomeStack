@@ -2,12 +2,18 @@
 
 The four items ADR-008 left open before the first published installer (LIVING_SPECS D08), closed in writing for **0.4.0** on 2026-10-01. Re-check each one for every later release, and record the result here.
 
-| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) |
-|---|---|---|---|
-| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) |
-| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 |
-| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands |
-| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided |
+| # | Item | Result for 0.4.0 | Result for 0.5.0 (2026-10-12) | Result for 0.6.0 (2026-10-21) |
+|---|---|---|---|---|
+| 1 | Trademark | **Pass.** No D&D mark in the product | **Pass, with a recorded exception.** The name and branding carry no mark; the importer names "D&D Beyond" only to say which sheet it reads, with a non-affiliation line (owner, 2026-10-12; see [0.5.0 re-check](#050-re-check-2026-10-12)) | **Pass, same exception.** No new kind of use (see [0.6.0 re-check](#060-re-check-2026-10-21)) |
+| 2 | Windows SDK binaries (OCR) | **Done.** Allowed to ship; the owner accepted the license's conditions (option (a), 2026-10-02) and the end-user terms are in `ATTRIBUTION.md` | **Unchanged.** Same package and DLLs as 0.4.0 | **Unchanged.** Same package and DLLs as 0.5.0 |
+| 3 | Velopack `Setup.exe` / `Update.exe` notices | **Done.** Generated and installed | **Unchanged.** Same Velopack version (1.2.161); the notices file stands | **Unchanged.** Same Velopack version (1.2.161) |
+| 4 | Code signing | **Decided: unsigned** (owner, 2026-10-01) | **Unsigned**, as decided | **Unsigned**, as decided |
+
+## 0.6.0 re-check (2026-10-21)
+
+- **Dependencies:** no shipped dependency was added or changed since the `v0.5.0` tag. `src/Ui/package.json`, `src/Ui/package-lock.json`, `.config/dotnet-tools.json`, the workflows and the packing scripts are unchanged, and no package reference in a project file changed (the only project-file change copies a test fixture in `TomeStack.AppService.Tests`).
+- **`npm audit`: one high advisory, does not ship.** It is in Vite 8.3.1, a development-only package (`devDependencies`; the app ships the built `dist`, not Vite). Vite 8.3.0 to 8.3.2 bundles a `launch-editor` with three advisories (GHSA-587h-7wmj-h5pm, high; GHSA-698v-4r3x-3vcv and GHSA-r825-w8mm-5pxw, moderate), reachable only through the dev server's open-in-editor endpoint while `npm run dev` is running. It was already present in 0.5.0. Fix: Vite 8.3.3 or later, in a separate development-dependency change after this release.
+- **Trademark:** the same search as 0.5.0, over the changes since the `v0.5.0` tag in `src/` (excluding the SRD packs). The product name, window title, installer title, exe metadata and README tagline are unchanged. Every new "D&D Beyond" is one the 0.5.0 re-check already lists for 0.6.0: the layout names in the report, the importer's first step and its family-step hint quoting the override reason, and the texts written into a character made from a D&D Beyond sheet. The text importer and the fillable 2014 sheet write no "D&D Beyond" text. The first step's "TomeStack is not affiliated with D&D Beyond or Wizards of the Coast." stays. No new "Wizards of the Coast", "Dungeons", "fifth edition" or "5e".
 
 ## 0.5.0 re-check (2026-10-12)
 

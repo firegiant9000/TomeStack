@@ -278,13 +278,45 @@ public sealed partial class TomeStackApp : IDisposable
     /// <c>character.unarchive</c> change it. Currency and session notes (v8) are ordinary saved fields: the payload wins,
     /// as for equipment and overrides. The one change to the kept play state: hit points recorded for a companion (v9) that the
     /// payload no longer has go with it, so removing a companion is never refused for the hit points it leaves behind.
+    /// <para>
+    /// Wave 3 (R161, R182): compare-and-set. A save of an existing character names the version it edited by the payload's own
+    /// <c>updatedAt</c> (no new field); if that is not the stored <c>UpdatedAt</c> the save is refused with
+    /// <c>character.stale</c> and nothing is written. Every command that writes the character (play, rest, restore, companions,
+    /// charges) stamps <c>UpdatedAt</c>, so a sheet that missed one of them is refused rather than written back over it. A new
+    /// character (no stored row) has no version to compare. The server's own callers pass the copy they just read from the store
+    /// (<see cref="Choose"/>, <c>ApplyUpdate</c>), or create a new character (<see cref="CreateCharacter"/>, the sheet import), so they
+    /// match by construction. Both timestamps are the same stored 100 ns value (the <c>json</c> column round-trips it exactly), so
+    /// they compare as instants. The message names no character and quotes no text.
+    /// </para>
     /// </summary>
     public CharacterView SaveCharacter(Character character)
     {
         ArgumentNullException.ThrowIfNull(character);
-        return SaveWithPlay(_store.FindCharacter(character.Id) is { } stored
-            ? character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt }
-            : character with { ArchivedAt = null }); // a save never creates an archived character
+        if (_store.FindCharacter(character.Id) is not { } stored)
+            return SaveWithPlay(character with { ArchivedAt = null }); // a save never creates an archived character
+        if (character.UpdatedAt != stored.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
+        return SaveWithPlay(character with { Play = WithoutOrphanedCompanionPlay(stored.Play, character), ArchivedAt = stored.ArchivedAt, Equipment = WithStoredCharges(stored.Equipment, character.Equipment) });
+    }
+
+    /// <summary>The words of the <c>character.stale</c> refusal (codes and plain words only; the page re-reads the current copy).</summary>
+    public const string StaleMessage = "This character changed since you opened it. Your change wasn't saved; the current copy is shown.";
+
+    /// <summary>
+    /// Wave 3 item 25 (R160): charges spent are play state on the equipment entry, so a save keeps the stored <c>chargesSpent</c> of
+    /// every entry the payload still has (matched by id), whatever the payload says; only the play and rest commands change it.
+    /// An entry the stored character does not have keeps what it carries. R182: the pairing of id-less payload entries with stored
+    /// entries by position and content that stood here (R160, R175) is gone. It existed for a stale copy that had not yet seen an
+    /// entry's id; compare-and-set now refuses every stale copy, and a save that passes was made from the current stored copy,
+    /// whose entries carry their ids. An id-less entry in a current save is therefore a new one the player added, with its own id
+    /// and full charges: a delete and a re-add of one item at the same position no longer inherits the old spent count (R175 (1)),
+    /// and a shifted stale copy is refused instead of reset (R175 (2)).
+    /// </summary>
+    private static IReadOnlyList<EquipmentEntry> WithStoredCharges(IReadOnlyList<EquipmentEntry> stored, IReadOnlyList<EquipmentEntry> payload)
+    {
+        if (payload is null || stored is null || payload.Any(e => e is null) || stored.Any(e => e is null))
+            return payload!;
+        return [.. payload.Select(e => e.Id is { } id && stored.FirstOrDefault(s => s.Id == id) is { } kept ? e with { ChargesSpent = kept.ChargesSpent } : e)];
     }
 
     private static PlayState WithoutOrphanedCompanionPlay(PlayState play, Character payload)

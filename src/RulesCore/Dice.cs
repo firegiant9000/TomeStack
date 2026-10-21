@@ -83,6 +83,12 @@ public sealed class DiceExpression
     /// <summary>True for a single <c>1d20</c> plus constants: the only shape advantage/disadvantage applies to.</summary>
     public bool IsD20Test => Terms.Count(t => t.IsDice) == 1 && Terms.Single(t => t.IsDice) is { Count: 1, Sides: 20, Sign: 1 };
 
+    /// <summary>The lowest total the expression can show (every die at 1; subtracted dice at their highest).</summary>
+    public int Minimum => Terms.Sum(t => t.IsDice ? t.Sign * t.Count * (t.Sign > 0 ? 1 : t.Sides) : t.Sign * t.Constant);
+
+    /// <summary>The highest total the expression can show (every die at its highest; subtracted dice at 1).</summary>
+    public int Maximum => Terms.Sum(t => t.IsDice ? t.Sign * t.Count * (t.Sign > 0 ? t.Sides : 1) : t.Sign * t.Constant);
+
     public static bool TryParse(string? source, out DiceExpression? expression, out FormulaError? error)
     {
         expression = null;

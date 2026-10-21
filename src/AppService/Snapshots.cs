@@ -148,13 +148,32 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
-    /// Whether the v9 fields of the equipment (attuned, charges spent) differ, matched by item. Quantity and equipped are older
-    /// than v9 and are not part of this flag (R138). An item on one side only counts as unattuned with no charges spent there.
+    /// Whether the v9 fields of the equipment (attuned, charges spent) differ. Quantity and equipped are older than v9 and are not
+    /// part of this flag (R138). Entries are matched by entry id (two copies of one item are two entries, R159), and an entry with no
+    /// id by its position among the id-less entries of that item. An entry on one side only counts as unattuned with no charges
+    /// spent there.
     /// </summary>
     private static bool EquipmentV9Differs(IReadOnlyList<EquipmentEntry>? now, IReadOnlyList<EquipmentEntry>? then)
     {
-        static Dictionary<ContentReference, (bool? Attuned, int? Charges)> Of(IReadOnlyList<EquipmentEntry>? list) =>
-            (list ?? []).GroupBy(e => e.Item).ToDictionary(g => g.Key, g => (g.First().Attuned, g.First().ChargesSpent));
+        static Dictionary<(ContentReference Item, string Key), (bool? Attuned, int? Charges)> Of(IReadOnlyList<EquipmentEntry>? list)
+        {
+            var found = new Dictionary<(ContentReference, string), (bool?, int?)>();
+            var idless = new Dictionary<ContentReference, int>();
+            foreach (var entry in list ?? [])
+            {
+                string key;
+                if (entry.Id is { } id)
+                    key = id.ToString("D");
+                else
+                {
+                    var position = idless.GetValueOrDefault(entry.Item);
+                    idless[entry.Item] = position + 1;
+                    key = $"#{position}";
+                }
+                found[(entry.Item, key)] = (entry.Attuned, entry.ChargesSpent);
+            }
+            return found;
+        }
         var a = Of(now);
         var b = Of(then);
         return a.Keys.Union(b.Keys).Any(k => a.GetValueOrDefault(k) != b.GetValueOrDefault(k));

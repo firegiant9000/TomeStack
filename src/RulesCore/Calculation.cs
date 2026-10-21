@@ -101,10 +101,38 @@ public sealed record CharacterSheet(
     IReadOnlyList<ToggleValue>? Toggles = null,
     IReadOnlyList<ScaleValue>? Scales = null,
     bool? Bloodied = null,
-    IReadOnlyList<DamageDefenceValue>? DamageDefences = null)
+    IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
+    IReadOnlyList<ItemUseValue>? ItemUses = null,
+    bool? LevelUpAvailable = null,
+    int? XpForNextLevel = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
+
+/// <summary>Wave 3 item 25: when an item's charges come back (content v10 <c>item.charges.recovery</c>). Null <paramref name="Regain"/>: all of them.</summary>
+public sealed record ItemChargeRecoveryInfo(RestPeriod On, string? Regain);
+
+/// <summary>
+/// Wave 3 item 25 (R158, R159, R171): one equipment entry of an item with a v10 <c>item</c> effect that needs attunement or has
+/// charges, carried or equipped alike. <paramref name="EntryKey"/> names the entry for a change: its <c>id</c>, or <c>#</c> and its
+/// position in the list while it has none (<paramref name="EntryId"/> null). <paramref name="Attuned"/> is what is recorded; the item's
+/// other effects apply only while it is equipped and, when <paramref name="RequiresAttunement"/>, attuned. Charges are per entry:
+/// <paramref name="ChargesMax"/> is null when the item has none; <paramref name="ChargesLeft"/> is the maximum less
+/// <paramref name="ChargesSpent"/>, never below 0.
+/// </summary>
+public sealed record ItemUseValue(
+    ContentReference Item,
+    string Name,
+    string EntryKey,
+    Guid? EntryId,
+    int EntryIndex,
+    bool Equipped,
+    bool RequiresAttunement,
+    bool Attuned,
+    int? ChargesMax,
+    int ChargesSpent,
+    int? ChargesLeft,
+    ItemChargeRecoveryInfo? Recovery);
 
 /// <summary>
 /// Content v9 (ADR-010): one column of a class table at the character's level in that class, for example "Ink 4" for a
@@ -381,8 +409,18 @@ public static class CharacterCalculator
         // toggle is the sheet calculated again with those toggles on (the common case costs one pass).
         var pass = CalculateSheet(character, catalog, autoOn: false);
         if (pass.Bloodied != true || pass.Toggles is not { } toggles || !toggles.Any(t => t.Auto == true))
-            return pass;
-        return CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true };
+            return WithItemUses(pass, character, catalog);
+        return WithItemUses(CalculateSheet(character, catalog, autoOn: true) with { Bloodied = true }, character, catalog);
+    }
+
+    /// <summary>
+    /// The item uses read the catalog once per equipment entry (a lookup and a deserialise each), and nothing in the passes depends on
+    /// them, so they are collected once for the sheet that is returned, not in every inner pass (the restriction and Bloodied passes).
+    /// </summary>
+    private static CharacterSheet WithItemUses(CharacterSheet sheet, Character character, IContentCatalog catalog)
+    {
+        var itemUses = CollectItemUses(character, catalog);
+        return itemUses.Count > 0 ? sheet with { ItemUses = itemUses } : sheet;
     }
 
     /// <param name="autoOn">Whether the toggles that switch themselves (<c>autoWhen</c>) are on for this pass.</param>
@@ -646,10 +684,38 @@ public static class CharacterCalculator
                 return new ScaleValue(s.Key.Class, className, s.Value.Content.Revision.Reference, s.Key.ScaleId, s.Value.Effect.Label, classLevel, s.Value.Effect.Values[Math.Clamp(classLevel, 1, s.Value.Effect.Values.Count) - 1]);
             })
             .ToList();
+        // Wave 3 item 27 (R177): display only. Judged by the total character level; absent when XP is not tracked or there is no next level.
+        var xpForNextLevel = character.Xp is null ? null : Advancement.XpForNextLevel(character.TotalLevel);
         return new(new CharacterSheet(
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
-            damageDefences.Count > 0 ? damageDefences : null), active);
+            damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
+    }
+
+    /// <summary>
+    /// Wave 3 item 25 (R158 to R160, R171): every equipment entry of a published item whose v10 <c>item</c> effect needs attunement or
+    /// has charges, equipped or only carried, in list order. Charges belong to the entry, not the item: two copies have two counts.
+    /// The spent count is recorded as the player says; the sheet only shows what is left (never below 0).
+    /// </summary>
+    private static List<ItemUseValue> CollectItemUses(Character character, IContentCatalog catalog)
+    {
+        var uses = new List<ItemUseValue>();
+        for (var index = 0; index < character.Equipment.Count; index++)
+        {
+            var entry = character.Equipment[index];
+            if (catalog.FindRevision(entry.Item) is not { Kind: ContentKind.Item, Status: RevisionStatus.Published } revision
+                || revision.Effects.OfType<ItemEffect>().FirstOrDefault() is not { } item
+                || (item.RequiresAttunement != true && item.Charges is null))
+                continue;
+            var spent = entry.ChargesSpent ?? 0;
+            var recovery = item.Charges?.Recovery is { } r ? new ItemChargeRecoveryInfo(r.Period, r.Regain) : null;
+            uses.Add(new(
+                entry.Item, revision.Name, entry.Id is { } id ? id.ToString("D") : $"#{index}", entry.Id, index, entry.Equipped,
+                item.RequiresAttunement == true, entry.Attuned == true, item.Charges?.Max, spent,
+                item.Charges is { } charges ? Math.Max(charges.Max - spent, 0) : null, recovery));
+        }
+        return uses;
     }
 
     /// <summary>
@@ -1285,19 +1351,41 @@ public static class CharacterCalculator
             return true;
         }
 
+        // The attunement gate (Wave 3 item 25): an item that needs attunement applies only while an entry of it is recorded as attuned.
+        bool NeedsAttunement(ActiveContent item) => item.Revision.Kind == ContentKind.Item && item.Revision.Effects.OfType<ItemEffect>().Any(e => e.RequiresAttunement == true);
+        // R189: content a grant or a choice brings in passes the same gate, through an attuned equipped copy.
+        bool AttunedCopyEquipped(ContentReference reference) => character.Equipment.Any(e => e.Equipped && e.Item == reference && e.Attuned == true);
+        void NotAttuned(ContentReference reference) =>
+            diagnostics.Add(new("item.not-attuned", "An equipped or pinned item needs attunement, which is not recorded; its effects are not applied. Mark it attuned in the Inventory.", reference));
         foreach (var pin in character.Pins.Concat(character.Classes.Select(c => c.Class)))
         {
-            if (seen.Add(pin) && Admit(pin, null) is { } item)
-                active.Add(item);
+            if (!seen.Add(pin) || Admit(pin, null) is not { } item)
+                continue;
+            // An item-kind pin passes the same gate as an equipped item (an attuned entry of it, equipped or not), so a package pin
+            // or a pin that is also equipped cannot bypass attunement.
+            if (NeedsAttunement(item) && !character.Equipment.Any(e => e.Item == pin && e.Attuned == true))
+            {
+                NotAttuned(pin);
+                continue;
+            }
+            active.Add(item);
         }
         // Equipped items apply like pins (M2 item 4); carried but unequipped items do not.
-        foreach (var entry in character.Equipment.Where(e => e.Equipped))
+        // Wave 3 item 25 (R159): an item equipped twice applies once, and an item that needs attunement (content v10, Q13) applies only
+        // while at least one equipped entry of it is attuned. A revision below v10 has no typed item effect, so no gate.
+        var equipped = character.Equipment.Where(e => e.Equipped).ToList();
+        foreach (var entry in equipped)
         {
             if (!seen.Add(entry.Item) || Admit(entry.Item, null) is not { } item)
                 continue;
             if (item.Revision.Kind != ContentKind.Item)
             {
                 diagnostics.Add(new("equipment.not-an-item", $"'{item.Revision.Name}' is equipped but is {item.Revision.Kind.ToString().ToLowerInvariant()} content, not an item; it is not applied.", entry.Item));
+                continue;
+            }
+            if (NeedsAttunement(item) && !equipped.Any(e => e.Item == entry.Item && e.Attuned == true))
+            {
+                NotAttuned(entry.Item);
                 continue;
             }
             active.Add(item);
@@ -1357,6 +1445,11 @@ public static class CharacterCalculator
                         continue;
                     if (seen.Add(reference) && Admit(reference, revision, item.ClassRoot, parentOrigin: item.Origin) is { } granted)
                     {
+                        if (NeedsAttunement(granted) && !AttunedCopyEquipped(reference))
+                        {
+                            NotAttuned(reference);
+                            continue;
+                        }
                         active.Add(granted);
                         pending.Enqueue(granted);
                         foreach (var nested in granted.Revision.Effects.OfType<GrantEffect>().Where(g => g.Grant == GrantKind.Content))
@@ -1412,6 +1505,11 @@ public static class CharacterCalculator
                     {
                         if (Admit(option, null, item.ClassRoot, revision, item.Origin) is not { } chosen)
                             continue;
+                        if (NeedsAttunement(chosen) && !AttunedCopyEquipped(option))
+                        {
+                            NotAttuned(option);
+                            continue;
+                        }
                         active.Add(chosen);
                         pending.Enqueue(chosen);
                     }
@@ -2154,11 +2252,12 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data yet, so the base is the SRD's common 30 feet by rules policy;
-        // a species with another speed is an override on Stats until content breadth adds it (after T2).
+        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
+        // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {
-            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy: species speed is not in the bundled content yet; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
+            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>

@@ -37,6 +37,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "export.preview", "export.saveAs", "export.download",
         "library.backupPreview", "library.backupSaveAs", "library.restoreChoose", "library.restoreApply",
         "ddb.read", "ddb.readData", "ddb.readText", "ddb.preview", "ddb.apply", "ddb.discard",
+        "content.previewFormula",
     ];
 
     /// <summary>
@@ -115,6 +116,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
         "content.compare" => app.Compare(Payload<CompareRequest>(payload)),
         "content.tree" => app.Tree(Payload<DiagnoseRequest>(payload)),
         "content.feedback" => app.Feedback(Payload<DiagnoseRequest>(payload)),
+        "content.previewFormula" => app.PreviewFormula(Payload<FormulaPreviewRequest>(payload)),
         "source.list" => app.ListSources(),
         "source.createHomebrew" => app.CreateHomebrewSource(Payload<HomebrewSourceRequest>(payload)),
         "source.setShareable" => app.SetShareable(Payload<ShareableRequest>(payload)),
@@ -242,7 +244,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private SnapshotPage ListSnapshots(SnapshotsPayload payload) => app.Snapshots(payload.CharacterId, payload.Before);
 
-    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice);
+    private RestPreview PreviewRest(RestPreviewPayload payload) => app.PreviewRest(payload.CharacterId, payload.Kind, payload.HitDice, payload.ChargeRolls);
 
     /// <summary>ADR-005: the native Open dialog picks the PDF; its path never crosses the bridge.</summary>
     private AttachOutcome AttachPdf(AttachPayload payload)
@@ -601,7 +603,7 @@ public sealed class CommandDispatcher(TomeStackApp app, IErrorLog? errorLog = nu
 
     private sealed record SnapshotsPayload(Guid CharacterId, Guid? Before = null);
 
-    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null);
+    private sealed record RestPreviewPayload(Guid CharacterId, RestPeriod Kind = RestPeriod.LongRest, IReadOnlyList<HitDieRoll>? HitDice = null, IReadOnlyList<ChargeRoll>? ChargeRolls = null);
 
     private sealed record ContentIdPayload(Guid ContentId);
 

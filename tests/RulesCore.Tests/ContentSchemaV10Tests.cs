@@ -292,6 +292,19 @@ public class ContentSchemaV10Tests
     }
 
     [Fact]
+    public void The_item_kind_and_unsupported_effect_messages_quote_no_document_text()
+    {
+        var wrongKind = Validate(Draft(ContentKind.Feat, ChargedItem())).Errors.Single(e => e.Code == "validate.item-kind");
+        Assert.DoesNotContain("Fixture V10", wrongKind.Message, StringComparison.Ordinal);
+
+        var json = JsonSerializer.Serialize(Draft(ContentKind.Feat, ChargedItem()), RulesJson.Compact).Replace("\"type\":\"item\"", "\"type\":\"zzmarkerzz\"", StringComparison.Ordinal);
+        var unknown = JsonSerializer.Deserialize<ContentRevision>(json, RulesJson.Compact)!;
+        Assert.IsType<UnknownEffect>(unknown.Effects[0]);
+        var warning = Validate(unknown).Warnings.Single(w => w.Code == "validate.effect-unsupported");
+        Assert.DoesNotContain("zzmarkerzz", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void At_most_one_item_effect_is_allowed_per_revision()
     {
         Assert.Contains("validate.item-duplicate", Errors(Draft(ContentKind.Item, new ItemEffect { Id = "a" }, new ItemEffect { Id = "b" })));
