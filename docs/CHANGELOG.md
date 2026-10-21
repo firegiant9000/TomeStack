@@ -2,7 +2,7 @@
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
 
-Everything from the 2026-10-14 tester feedback plan (Waves 0 to 3, D33 to D42), listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print, the upgrade from 0.5.0).
+Everything from the 2026-10-14 tester feedback plan (Waves 0 to 3, D33 to D42) and the studio's formula preview (D61), listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print, the upgrade from 0.5.0).
 
 **Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
 
