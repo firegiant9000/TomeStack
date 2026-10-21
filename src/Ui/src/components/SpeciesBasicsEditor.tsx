@@ -1,12 +1,24 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { abilities } from '../classBasics';
-import { abilityIncreases, addContentGrant, contentGrants, removeContentGrant, setAbilityIncrease, type AbilityKey } from '../entryBasics';
+import {
+  abilityIncreases,
+  addContentGrant,
+  contentGrants,
+  hasForeignSpeedReplace,
+  hasOtherSpeedRules,
+  removeContentGrant,
+  setAbilityIncrease,
+  setSpeciesSpeed,
+  speciesSpeed,
+  speedRange,
+  type AbilityKey,
+} from '../entryBasics';
 import { familyName, joinNames, NewFeatureForm, SkillFieldset, StalePin, type SpeciesProps } from './OriginPieces';
 
 /**
  * Tester feedback item 12: the parts of a species that need no formula, written as the effects the bundled packs use
  * (`entryBasics.ts`): a bonus `modifier` on `ability.<x>.score` per increase, a `grant proficiency` on `skill.<x>` per skill,
- * and a `grant` of a feature per trait. Size, darkvision and languages are text, as in the bundled packs. Which family counts
+ * and a `grant` of a feature per trait, plus an optional speed: one v10 `replace` modifier on `speed` (items 12, 24). Size, darkvision and languages are text, as in the bundled packs. Which family counts
  * ability increases comes from the family's policy in the app info, never from its name. Every other effect of the species
  * stays in the studio's rule list.
  */
@@ -45,6 +57,18 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
     },
     [onProblem],
   );
+
+  // Speed (items 12, 24): text outside 5 to 120 is kept as typed, marked invalid and blocks saving; the stored speed stays as it was.
+  const speed = speciesSpeed(effects);
+  const foreignSpeed = hasForeignSpeedReplace(effects);
+  const otherSpeedRules = hasOtherSpeedRules(effects);
+  const [speedDraft, setSpeedDraft] = useState<string | undefined>(undefined);
+  const speedProblem = `Speed: a whole number of feet from ${speedRange.min} to ${speedRange.max}, or empty for none.`;
+  const speedInvalid = speedDraft !== undefined;
+  useEffect(() => {
+    onProblem('species-speed', speedInvalid ? speedProblem : undefined);
+  }, [speedInvalid, speedProblem, onProblem]);
+  useEffect(() => () => onProblem('species-speed', undefined), [onProblem]);
 
   const granted = new Set(traits.map((t) => t.content.contentId));
   const features = props.known.filter((k) => k.own && k.kind === 'feature' && k.contentId !== revision.contentId && !granted.has(k.contentId));
@@ -196,7 +220,39 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
         />
       </fieldset>
 
-      <p className="hint">Speed: set it on the character&apos;s Stats until species speed arrives.</p>
+      <div id="species-basics-speed" className="field" tabIndex={-1}>
+        <label htmlFor={`${idBase}-speed`}>Speed (feet)</label>
+        <input
+          id={`${idBase}-speed`}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={speedDraft ?? speed ?? ''}
+          readOnly={foreignSpeed || undefined}
+          aria-invalid={speedDraft !== undefined ? true : undefined}
+          aria-describedby={[`${idBase}-speed-hint`, speedDraft !== undefined ? `${idBase}-speed-error` : undefined].filter(Boolean).join(' ')}
+          onChange={(e) => {
+            const text = e.target.value;
+            const feet = /^[1-9]\d{0,2}$/.test(text) ? Number(text) : undefined;
+            if (text === '' || (feet !== undefined && feet >= speedRange.min && feet <= speedRange.max)) {
+              setSpeedDraft(undefined);
+              onEffects((current) => setSpeciesSpeed(current, feet));
+            } else {
+              setSpeedDraft(text);
+            }
+          }}
+        />
+        {speedDraft !== undefined && (
+          <span id={`${idBase}-speed-error`} className="error">
+            {speedProblem}
+          </span>
+        )}
+        <span id={`${idBase}-speed-hint`} className="hint">
+          {otherSpeedRules
+            ? 'This species has other speed rules; edit them in the effects list.'
+            : 'A whole number from 5 to 120, or empty for the rules’ 30 feet. Needs content version 10 when published.'}
+        </span>
+      </div>
     </section>
   );
 }

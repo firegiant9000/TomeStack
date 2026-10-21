@@ -152,6 +152,41 @@ public class PassiveAndSpeedTests
         Assert.Equal((25, 30), (dwarf.Field(FieldIds.Speed).Value, dwarf.Field(FieldIds.Speed).ComputedValue));
     }
 
+    // ---- Task 8 (items 12, 24): a species sets its speed with a v10 replace; a feat's bonus still adds on top --------------
+
+    private static ContentRevision Source(int n, ContentKind kind, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"a1000000-0000-4000-8000-00000000020{n}"), RevisionId = Guid.Parse($"b1000000-0000-4000-8000-00000000020{n}"),
+        Kind = kind, Name = $"Fixture Speed Source {n}", RulesFamilies = [RulesFamilies.Srd51, RulesFamilies.Srd521],
+        Provenance = new(Fixtures.SourceShared, new PageRef(32)), Status = RevisionStatus.Published, SchemaVersion = 10, Effects = effects,
+    };
+
+    private static ModifierEffect SpeedEffect(string id, ModifierOperation operation, string value) => new() { Id = id, Operation = operation, Target = FieldIds.Speed, Value = value };
+
+    [Theory]
+    [InlineData("srd-5.1")]
+    [InlineData("srd-5.2.1")]
+    public void A_species_speed_replace_sets_the_base_and_a_bonus_from_other_content_adds_on_top(string family)
+    {
+        var character = family == RulesFamilies.Srd51 ? Fixtures.Srd51Character() : Fixtures.Srd521Character();
+        var folk = Source(1, ContentKind.Species, SpeedEffect("speed", ModifierOperation.Replace, "25"));
+        var quick = Source(2, ContentKind.Feat, SpeedEffect("fast", ModifierOperation.Bonus, "10"));
+
+        Assert.Equal(30, CharacterCalculator.Calculate(character, Fixtures.Catalog()).Field(FieldIds.Speed).Value);
+        var alone = Calc(character, folk).Field(FieldIds.Speed);
+        Assert.Equal(25, alone.Value);
+        Assert.Contains(alone.Trace, s => s.Origin.Kind == TraceOriginKind.Content && s.Operation == "replace");
+        Assert.Equal(35, Calc(character, folk, quick).Field(FieldIds.Speed).Value);
+    }
+
+    [Fact]
+    public void Of_several_speed_replaces_the_highest_wins()
+    {
+        var slow = Source(3, ContentKind.Species, SpeedEffect("speed", ModifierOperation.Replace, "25"));
+        var fast = Source(4, ContentKind.Feat, SpeedEffect("speed", ModifierOperation.Replace, "40"));
+        Assert.Equal(40, Calc(Fixtures.Srd51Character(), slow, fast).Field(FieldIds.Speed).Value);
+    }
+
     [Fact]
     public void A_granted_feature_names_what_granted_it()
     {

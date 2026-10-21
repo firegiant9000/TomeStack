@@ -61,21 +61,15 @@ A caster can use only a spell that names the caster's list. A spell that names n
 
 A spell that was accepted or published without a list: in the studio, tick it and choose "Add N spells to a spell list…". That saves a new draft of each spell with the key and opens the publish panel on exactly those drafts, all ticked; nothing is published until you confirm. Characters keep the spell revisions they recorded until you review an update for each one.
 
-## Familiars, custom weapons and backstory
+## Custom weapons and backstory
 
-TomeStack has no place for these yet. Until later waves land, write them in the sheet's **Notes** tab, in "Session notes": enter a "Session date" and a "Note", then choose "Save session note". Session notes stay on this computer and in your personal backups.
+Familiars and mounts have a Companions card on Play. TomeStack has no place for custom weapons or backstory yet. Until later waves land, write them in the sheet's **Notes** tab, in "Session notes": enter a "Session date" and a "Note", then choose "Save session note". Session notes stay on this computer and in your personal backups.
 
 ## What is still manual at the table
 
-- Familiars and companions.
 - Hand-typed weapons (name, bonus, damage).
 - Backstory and personality text.
-- Bloodied or other condition-based toggles.
-- Reactions (switch the toggle on, then off again).
-- Damage resistance.
-- Attunement and item charges.
-- XP.
 
-Later waves strike lines from this list as they land.
+Built and struck from this list: companions (a card on Play), Bloodied and other automatic toggles, reactions and bonus actions (grouped on Play), damage resistance and typed damage, attunement and item charges, XP tracking, and species speed (a homebrew species sets it in the studio). Later waves strike more lines as they land.
 
 Use the sheet's Report a gap for anything that blocks you; the notes shape what comes next.

@@ -2219,11 +2219,12 @@ public static class CharacterCalculator
                 return value;
             }));
         }
-        // D24: speed. The bundled species carry no speed data yet, so the base is the SRD's common 30 feet by rules policy;
-        // a species with another speed is an override on Stats until content breadth adds it (after T2).
+        // D24: speed. The bundled species carry no speed data, so the base is the SRD's common 30 feet by rules policy. From
+        // content v10 a species (homebrew) sets its own with a `replace` modifier on speed, which replaces this base before
+        // bonuses; otherwise a different speed is an override on Stats.
         specs.Add(new(FieldIds.Speed, "Speed", "feet", [], (c, steps) =>
         {
-            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy: species speed is not in the bundled content yet; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
+            steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>

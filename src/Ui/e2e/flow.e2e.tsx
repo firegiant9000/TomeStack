@@ -1199,8 +1199,13 @@ it('authors a species with a Strength increase and a skill in the studio, publis
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Folk');
   await user.type(within(editor()).getByRole('textbox', { name: 'Strength' }), '2');
   await user.click(within(editor()).getByRole('checkbox', { name: 'Athletics' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Speed (feet)' }), '25'); // items 12, 24
   await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
   await waitFor(async () => expect((await newestOf(source.id, 'E2E Folk'))?.status).toBe('published'));
+  // The speed is a content v10 replace modifier, so publishing it writes a v10 revision.
+  const published = (await newestOf(source.id, 'E2E Folk'))!;
+  expect(published.effects.filter((e) => e.type === 'modifier' && e.target === 'speed')).toMatchObject([{ operation: 'replace', value: '25' }]);
+  expect(published.schemaVersion).toBe(10);
 
   await user.click(screen.getByRole('button', { name: 'Characters' }));
   await createCharacter(user, { name: 'E2E Folk Child', family: 'srd-5.1', species: /^E2E Folk/ });

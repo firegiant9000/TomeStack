@@ -40,6 +40,7 @@ import {
   isIncreaseChoice,
   isSkillGrant,
   isSpeciesBasic,
+  isSpeciesSpeed,
   isSpellBasic,
   knownContent,
   pinnedDrafts,
@@ -1235,7 +1236,7 @@ const ruleElementId = (effectId: string) => `rule-${effectId}`;
 function originElementId(revision: ContentRevision, effect: Effect, kindOf: (r: ContentReference) => ContentKind | undefined): string | undefined {
   const effects = revision.effects;
   if (revision.kind === 'species' && isSpeciesBasic(effect, effects)) {
-    return effect.type === 'modifier' ? 'species-basics-increases' : isSkillGrant(effect, effects) ? 'species-basics-skills' : 'species-basics-traits';
+    return effect.type === 'modifier' ? (isSpeciesSpeed(effect, effects) ? 'species-basics-speed' : 'species-basics-increases') : isSkillGrant(effect, effects) ? 'species-basics-skills' : 'species-basics-traits';
   }
   if (revision.kind === 'background' && isBackgroundBasic(effect, effects, kindOf)) {
     if (isSkillGrant(effect, effects)) return 'background-basics-skills';

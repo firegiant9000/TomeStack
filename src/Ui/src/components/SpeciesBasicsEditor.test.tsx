@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Item 12: the species editor. Ability increases follow the family's policy (never its name); traits are grants of features.
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -131,11 +131,98 @@ it('ticks skills as grant effects on skill.<x>', async () => {
   expect(latest.effects[0]).toMatchObject({ type: 'grant', grant: 'proficiency', target: 'skill.athletics' });
 });
 
-it('says speed is set on Stats, and offers no speed field', () => {
+const speedEffects = (r: ContentRevision) => r.effects.filter((e) => e.type === 'modifier' && e.target === 'speed');
+
+it('items 12 and 24: offers a Speed (feet) field and no longer says speed is set on Stats', () => {
   render(<Harness initial={revisionOf(['srd-5.1'])} />);
-  expect(screen.getByText("Speed: set it on the character's Stats until species speed arrives.")).toBeTruthy();
-  expect(screen.queryByRole('spinbutton', { name: /speed/i })).toBeNull();
-  expect(screen.queryByRole('textbox', { name: /speed/i })).toBeNull();
+  expect(screen.queryByText(/until species speed arrives/)).toBeNull();
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  expect(speed).toHaveProperty('value', '');
+  expect(speed.getAttribute('aria-invalid')).toBeNull();
+});
+
+it('items 12 and 24: entering 25 writes one replace modifier on speed, and clearing removes it', async () => {
+  const user = userEvent.setup();
+  render(<Harness initial={revisionOf(['srd-5.2.1'])} onChange={(r) => (latest = r)} />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  await user.type(speed, '25');
+  expect(speedEffects(latest)).toEqual([{ type: 'modifier', id: 'speed', operation: 'replace', target: 'speed', value: '25' }]);
+  await user.type(speed, '5'); // 255 is out of range: nothing is written, the last good value stays
+  expect(speedEffects(latest)).toEqual([{ type: 'modifier', id: 'speed', operation: 'replace', target: 'speed', value: '25' }]);
+  await user.clear(speed);
+  expect(speedEffects(latest)).toEqual([]);
+  expect(speed.getAttribute('aria-invalid')).toBeNull();
+});
+
+// Typing is one character at a time, so "121" passes through the valid 12 and keeps it; it never stores 121.
+it.each([
+  ['4', 0],
+  ['121', 12],
+  ['2.5', 0],
+  ['x', 0],
+] as [string, number][])('items 12 and 24: refuses %s with visible linked text, blocks saving and stores nothing out of range', async (text, stored) => {
+  const user = userEvent.setup();
+  const onProblem = vi.fn();
+  const lastFor = (field: string) => onProblem.mock.calls.filter((c) => c[0] === field).at(-1)?.[1];
+  render(<Harness initial={revisionOf(['srd-5.1'])} onChange={(r) => (latest = r)} onProblem={onProblem} />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  await user.type(speed, text);
+  expect(speed).toHaveProperty('value', text);
+  expect(speed.getAttribute('aria-invalid')).toBe('true');
+  const described = (speed.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
+  expect(described).toContain('Speed: a whole number of feet from 5 to 120, or empty for none.');
+  expect(lastFor('species-speed')).toBe('Speed: a whole number of feet from 5 to 120, or empty for none.');
+  expect(speedEffects(latest).map((e) => (e as { value: string }).value)).toEqual(stored === 0 ? [] : [String(stored)]);
+
+  await user.clear(speed);
+  await user.type(speed, '30');
+  expect(speed.getAttribute('aria-invalid')).toBeNull();
+  expect(lastFor('species-speed')).toBeUndefined();
+  expect(speedEffects(latest)).toMatchObject([{ operation: 'replace', value: '30' }]);
+});
+
+it('items 12 and 24: a draft holding a speed replace of 40 shows 40 and edits it in place', () => {
+  const effects: Effect[] = [
+    { type: 'modifier', id: 'pace', operation: 'replace', target: 'speed', value: '40' },
+    { type: 'grant', id: 's', grant: 'proficiency', target: 'skill.stealth' },
+  ];
+  render(<Harness initial={revisionOf(['srd-5.1'], effects)} onChange={(r) => (latest = r)} />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  expect(speed).toHaveProperty('value', '40');
+  expect(screen.queryByText(/other speed rules/)).toBeNull();
+  fireEvent.change(speed, { target: { value: '35' } });
+  expect(latest.effects[0]).toEqual({ type: 'modifier', id: 'pace', operation: 'replace', target: 'speed', value: '35' });
+  expect(latest.effects).toHaveLength(2);
+});
+
+it('items 12 and 24: a speed bonus is left untouched, the field stays blank and a replace is added beside it', async () => {
+  const user = userEvent.setup();
+  const bonus: Effect = { type: 'modifier', id: 'fast', operation: 'bonus', target: 'speed', value: '10' };
+  render(<Harness initial={revisionOf(['srd-5.1'], [bonus])} onChange={(r) => (latest = r)} />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  expect(speed).toHaveProperty('value', '');
+  expect(screen.getByText('This species has other speed rules; edit them in the effects list.')).toBeTruthy();
+  await user.type(speed, '25');
+  expect(latest.effects[0]).toBe(bonus);
+  expect(speedEffects(latest)).toHaveLength(2);
+  expect(latest.effects[1]).toMatchObject({ operation: 'replace', value: '25' });
+});
+
+it.each([
+  ['a formula', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: 'PB + 20' }]],
+  ['several replaces', [
+    { type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '25' },
+    { type: 'modifier', id: 'b', operation: 'replace', target: 'speed', value: '35' },
+  ]],
+] as [string, Effect[]][])('items 12 and 24: %s on speed is not claimed, stays as it is, and the field cannot add another', async (_name, effects) => {
+  const user = userEvent.setup();
+  render(<Harness initial={revisionOf(['srd-5.1'], effects)} onChange={(r) => (latest = r)} />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  expect(speed).toHaveProperty('value', '');
+  expect(speed).toHaveProperty('readOnly', true);
+  expect(screen.getByText('This species has other speed rules; edit them in the effects list.')).toBeTruthy();
+  await user.type(speed, '25');
+  expect(latest.effects).toEqual(effects);
 });
 
 it('adds an existing feature as a trait grant, removes it, and offers each feature once', async () => {

@@ -44,7 +44,7 @@ The base is 10 + Dexterity modifier. Alternatives such as Unarmored Defense are 
 
 ## Skills
 
-All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill) and `speed` (feet; 30 by rules policy until species content carries one): calculated; overridable on Stats; content cannot target them until a content schema version allows it (validation refuses it). A save or skill carries a proficiency mark (none, proficient, expertise).
+All 18 skills of both SRDs are fields (`skill.<key>`: `acrobatics`, `animalHandling`, `arcana`, `athletics`, `deception`, `history`, `insight`, `intimidation`, `investigation`, `medicine`, `nature`, `perception`, `performance`, `persuasion`, `religion`, `sleightOfHand`, `stealth`, `survival`). Each is its ability modifier plus the proficiency bonus when proficient (doubled for expertise). The sheet now has 40 fields. Since 2026-10-06 (D24) it also has `passive.perception`, `passive.insight`, `passive.investigation` (10 + the skill) and `speed` (feet; 30 by rules policy unless a homebrew species sets one): calculated; overridable on Stats; content can target them only from content schema v10 (validation refuses it below that). A save or skill carries a proficiency mark (none, proficient, expertise).
 
 ## Experience points (Wave 3 item 27, R162, R177)
 
@@ -60,4 +60,4 @@ Each proposed effect has its own confirm tick. Accepting as a draft needs the hi
 
 ## Not in scope (M2+)
 
-Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and species speed data. Equipment-based armor class is M2 item 4.
+Spellcasting (D04 in LIVING_SPECS), multiclass prerequisites and multiclass proficiency rules (the data model supports several classes; the SRD multiclass tables are M2 builder work), rolled hit points, and speed data in the bundled species (they carry none, so speed is 30 feet by rules policy; a homebrew species can set one from content v10). Equipment-based armor class is M2 item 4.
