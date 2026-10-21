@@ -216,8 +216,10 @@ public static class ContentValidator
                     }
                     CheckToggleV11(toggleEffect);
                     break;
-                case ToggleGroupEffect:
+                case ToggleGroupEffect group:
                     needsV11 = true;
+                    if (!ScaleEffect.IsValidScaleId(group.GroupId) || string.IsNullOrWhiteSpace(group.Label))
+                        Error("validate.toggle-group-incomplete", $"Toggle group '{group.Id}' needs a label and a groupId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits.", group.Id);
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -606,10 +608,15 @@ public static class ContentValidator
             foreach (var allowed in toggle.AllowedWith ?? [])
             {
                 var holder = allowed.ContentId ?? revision.ContentId;
-                var toggles = holder == revision.ContentId
-                    ? revision.Effects.OfType<ToggleEffect>()
-                    : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).SelectMany(r => r.Effects.OfType<ToggleEffect>());
-                if (!toggles.Any(t => t.ToggleId == allowed.ToggleId))
+                var declarers = holder == revision.ContentId
+                    ? new List<ContentRevision> { revision }
+                    : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).ToList();
+                if (declarers.Count == 0)
+                {
+                    Warn("validate.toggle-allowed-with-content-missing", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not installed; the pairing is unchecked until that content is.", id);
+                    continue;
+                }
+                if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == allowed.ToggleId))
                     Error("validate.toggle-allowed-with", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not defined there.", id);
             }
 

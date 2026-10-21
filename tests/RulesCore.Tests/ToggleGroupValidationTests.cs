@@ -17,7 +17,8 @@ public class ToggleGroupValidationTests
     [InlineData("allowed-with-on-primary", "validate.toggle-allowed-with")]
     [InlineData("allowed-in-base-on-primary", "validate.toggle-allowed-with")]
     [InlineData("allowed-with-unknown", "validate.toggle-allowed-with")]
-    [InlineData("allowed-with-unknown-content", "validate.toggle-allowed-with")]
+    [InlineData("group-bad-id", "validate.toggle-group-incomplete")]
+    [InlineData("group-blank-label", "validate.toggle-group-incomplete")]
     [InlineData("cost-without-resource", "validate.toggle-cost")]
     [InlineData("cost-formula-invalid", "validate.formula-invalid")]
     [InlineData("resource-content-lacks-resource", "validate.toggle-resource-content")]
@@ -31,6 +32,7 @@ public class ToggleGroupValidationTests
     [Theory]
     [InlineData("group-content-missing", "validate.toggle-group-content-missing")]
     [InlineData("resource-content-missing", "validate.toggle-resource-content-missing")]
+    [InlineData("allowed-with-unknown-content", "validate.toggle-allowed-with-content-missing")]
     [InlineData("overlay-unreachable", "validate.toggle-overlay-unreachable")]
     [InlineData("overlay-unreachable-absent", "validate.toggle-overlay-unreachable")]
     public void Toggle_group_oddities_are_warnings_and_do_not_block(string variant, string code)
@@ -47,6 +49,26 @@ public class ToggleGroupValidationTests
         var report = Validate(ToggleGroupVariants.Make("unknown-group"));
         Assert.Contains(report.Errors, e => e.Code == "validate.toggle-group-unknown");
         Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-group-content-missing");
+    }
+
+    [Fact]
+    public void An_allowedWith_on_absent_content_is_a_warning_and_on_present_content_without_the_toggle_an_error()
+    {
+        var absent = Validate(ToggleGroupVariants.Make("allowed-with-unknown-content"));
+        Assert.DoesNotContain(absent.Errors, e => e.Code == "validate.toggle-allowed-with");
+        Assert.Contains(absent.Warnings, w => w.Code == "validate.toggle-allowed-with-content-missing");
+
+        var present = Validate(ToggleGroupVariants.Make("allowed-with-unknown"));
+        Assert.Contains(present.Errors, e => e.Code == "validate.toggle-allowed-with");
+        Assert.DoesNotContain(present.Warnings, w => w.Code == "validate.toggle-allowed-with-content-missing");
+    }
+
+    [Fact]
+    public void The_forms_pack_toggleGroup_raises_no_incomplete_error()
+    {
+        var discipline = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.FormDiscipline)!;
+        Assert.Contains(discipline.Effects, e => e is ToggleGroupEffect);
+        Assert.DoesNotContain(Validate(discipline).Errors, e => e.Code == "validate.toggle-group-incomplete");
     }
 
     [Fact]
@@ -229,6 +251,12 @@ internal static class ToggleGroupVariants
         return revision with { Effects = [.. revision.Effects.Select(e => e is ToggleEffect t ? change(t) : e)] };
     }
 
+    private static ContentRevision WithGroup(Func<ToggleGroupEffect, ToggleGroupEffect> change)
+    {
+        var revision = Pack(Fixtures.FormDiscipline);
+        return revision with { Effects = [.. revision.Effects.Select(e => e is ToggleGroupEffect g ? change(g) : e)] };
+    }
+
     public static ContentRevision Make(string variant) => variant switch
     {
         "unknown-group" => WithToggle(Fixtures.EmberForm, t => t with { Group = "nonesuch" }),
@@ -238,6 +266,8 @@ internal static class ToggleGroupVariants
         "allowed-in-base-on-primary" => WithToggle(Fixtures.EmberForm, t => t with { AllowedInBase = true }),
         "allowed-with-unknown" => WithToggle(Fixtures.SurgeOverlay, t => t with { AllowedWith = [new ToggleRef(Tide, "nonesuch")] }),
         "allowed-with-unknown-content" => WithToggle(Fixtures.SurgeOverlay, t => t with { AllowedWith = [new ToggleRef(Guid.Parse("6f0dc000-0000-4000-8000-0000000000ee"), "tide")] }),
+        "group-bad-id" => WithGroup(g => g with { GroupId = "Bad Id" }),
+        "group-blank-label" => WithGroup(g => g with { Label = "  " }),
         "cost-without-resource" => WithToggle(Fixtures.EmberForm, t => t with { ResourceId = null, ResourceContent = null }),
         "cost-formula-invalid" => WithToggle(Fixtures.EmberForm, t => t with { Cost = "3 +" }),
         "resource-content-lacks-resource" => WithToggle(Fixtures.EmberForm, t => t with { ResourceContent = Tide }),
