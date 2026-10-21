@@ -3,13 +3,17 @@
  * data folder), so they are in no package, share or library backup, and nothing else reads them. Same pattern as
  * `designFeedback.ts` and `sheetTab.ts`: a missing or throwing storage means the default.
  */
-export const themeIds = ['cool', 'forest', 'violet'] as const;
+import { customAccentCss, DEFAULT_ACCENT_HUE } from './accentClamp';
+
+/** D40: presets in name order, then the generated `custom` (Custom accent, hue in `tomestack.accentHue`). A build that predates `custom` reads it as unknown, so it shows forest and ignores the hue key. */
+export const themeIds = ['cool', 'ember', 'forest', 'rose', 'tide', 'violet', 'custom'] as const;
 export type ThemeId = (typeof themeIds)[number];
 
 const isThemeId = (value: unknown): value is ThemeId => typeof value === 'string' && (themeIds as readonly string[]).includes(value);
 
 const keys = {
   theme: 'tomestack.theme',
+  accentHue: 'tomestack.accentHue',
   dice: 'tomestack.diceAnimation',
   sidebar: 'tomestack.sidebar',
   appearance: 'tomestack.appearance',
@@ -61,9 +65,42 @@ export function setTheme(id: ThemeId): void {
   write(keys.theme, id === 'forest' ? null : id);
 }
 
-/** The themes are CSS: `:root` holds forest; `html[data-theme='cool']` and `html[data-theme='violet']` override it. */
+/** The presets are CSS: `:root` holds forest; `html[data-theme='…']` blocks override it. `custom` is generated from the stored hue (see `applyCustomAccent`). */
 export function applyTheme(id: ThemeId): void {
   document.documentElement.dataset.theme = id;
+}
+
+/** The custom accent's hue: an integer 0-359 in page storage; anything else (missing, junk, out of range) is the default hue. */
+export function accentHue(): number {
+  const stored = read(keys.accentHue);
+  if (stored === null || !/^\d{1,3}$/.test(stored)) return DEFAULT_ACCENT_HUE;
+  const hue = Number(stored);
+  return hue < 360 ? hue : DEFAULT_ACCENT_HUE;
+}
+
+export function setAccentHue(hue: number): void {
+  write(keys.accentHue, String(((Math.round(hue) % 360) + 360) % 360));
+}
+
+let customSheet: CSSStyleSheet | undefined;
+
+/**
+ * D40: the custom accent is a stylesheet built in code and adopted through the CSSOM, so no `style` attribute or element is
+ * needed and the CSP (`style-src 'self'`) is unchanged. Forced colours and print win because the generated rules sit in media
+ * queries those modes do not match (accentClamp.ts). Where `adoptedStyleSheets` is missing the custom theme keeps the
+ * default colours rather than writing inline styles.
+ */
+export function applyCustomAccent(on: boolean): void {
+  if (typeof CSSStyleSheet === 'undefined' || !('adoptedStyleSheets' in document)) return;
+  const others = document.adoptedStyleSheets.filter((sheet) => sheet !== customSheet);
+  if (!on) {
+    customSheet = undefined;
+    if (others.length !== document.adoptedStyleSheets.length) document.adoptedStyleSheets = others;
+    return;
+  }
+  customSheet ??= new CSSStyleSheet();
+  customSheet.replaceSync(customAccentCss(accentHue()));
+  document.adoptedStyleSheets = [...others, customSheet];
 }
 
 export function diceAnimationOn(): boolean {
@@ -153,6 +190,7 @@ export const setCompactPlay = (on: boolean): void => write(keys.compactPlay, on 
 /** Applied once at start (`App.tsx`) and by the Settings screen after every change. */
 export function applyPreferences(): void {
   applyTheme(theme());
+  applyCustomAccent(theme() === 'custom');
   applyAppearance(appearance());
   applyTextSize(textSize());
   applyAbilityOrder(abilityOrder());

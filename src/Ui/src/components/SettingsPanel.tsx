@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { hueName } from '../accentClamp';
 import type { AppInfo } from '../api/types';
 import {
   abilityOrder,
   abilityOrderIds,
+  accentHue,
   appearance,
   appearanceIds,
   announceRollsOn,
@@ -13,6 +15,7 @@ import {
   motion,
   motionIds,
   setAbilityOrder,
+  setAccentHue,
   setAnnounceRolls,
   setAppearance,
   setContrast,
@@ -40,7 +43,7 @@ import {
   type ThemeId,
 } from '../settings';
 
-const themeLabels: Record<ThemeId, string> = { cool: 'Cool', forest: 'Forest', violet: 'Violet' };
+const themeLabels: Record<ThemeId, string> = { cool: 'Cool', ember: 'Ember', forest: 'Forest', rose: 'Rose', tide: 'Tide', violet: 'Violet', custom: 'Custom accent' };
 const appearanceLabels: Record<AppearanceId, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 const abilityOrderLabels: Record<AbilityOrderId, string> = { modifier: 'Modifier first', score: 'Score first' };
 
@@ -66,6 +69,7 @@ function Choice<Id extends string>({ legend, ids, labels, value, onPick }: { leg
  */
 export function SettingsPanel({ info }: { info?: AppInfo }) {
   const [current, setCurrent] = useState<ThemeId>(theme());
+  const [hue, setHue] = useState(accentHue());
   const [scheme, setScheme] = useState<AppearanceId>(appearance());
   const [size, setSize] = useState<TextSizeId>(textSize());
   const [order, setOrder] = useState<AbilityOrderId>(abilityOrder());
@@ -89,6 +93,12 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
     };
   }
 
+  function moveHue(value: number) {
+    setAccentHue(value);
+    setHue(accentHue());
+    applyPreferences();
+  }
+
   function toggleDice(on: boolean) {
     setDiceAnimation(on);
     setDice(on);
@@ -103,6 +113,20 @@ export function SettingsPanel({ info }: { info?: AppInfo }) {
       <h3>Appearance</h3>
       <Choice legend="Colour scheme" ids={appearanceIds} labels={appearanceLabels} value={scheme} onPick={pick(setAppearance, setScheme)} />
       <Choice legend="Theme" ids={themeIds} labels={themeLabels} value={current} onPick={pick(setTheme, setCurrent)} />
+      {current === 'custom' && (
+        <div className="accent-custom">
+          <label className="field">
+            Accent hue
+            <input type="range" min={0} max={359} step={1} value={hue} aria-valuetext={`${hueName(hue)}, ${hue} degrees`} onChange={(e) => moveHue(Number(e.target.value))} />
+          </label>
+          <div className="accent-sample" data-testid="accent-sample" aria-hidden="true">
+            <span className="accent-sample-text">Sample text</span>
+            <span className="accent-sample-chip">Filled</span>
+            <span className="accent-sample-ring" />
+          </div>
+          <p className="hint">The colour is adjusted to stay readable in light and dark, so a pale or bright hue comes out deeper or lighter. Windows high contrast uses its own colours instead.</p>
+        </div>
+      )}
       <label className="field">
         Text size
         <select value={size} onChange={(e) => pick(setTextSize, setSize)(e.target.value as TextSizeId)}>

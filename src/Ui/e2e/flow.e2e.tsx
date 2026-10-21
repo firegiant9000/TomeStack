@@ -2785,6 +2785,27 @@ it('keeps the theme picked in Settings when the app is rendered again (ADR-015)'
   expect(document.documentElement.dataset.textSize).toBe('125');
 });
 
+it('keeps the Custom accent and its hue when the app is rendered again, and a preset replaces it (D40)', async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
+  await user.click(screen.getByRole('radio', { name: 'Custom accent' }));
+  const slider = screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' });
+  fireEvent.change(slider, { target: { value: '120' } });
+  expect(slider.getAttribute('aria-valuetext')).toBe('Lime, 120 degrees');
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  unmount();
+  delete document.documentElement.dataset.theme;
+  render(<App />);
+  await screen.findByRole('button', { name: 'Settings' });
+  expect(document.documentElement.dataset.theme).toBe('custom');
+  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  expect(screen.getByRole<HTMLInputElement>('slider', { name: 'Accent hue' }).value).toBe('120');
+  await user.click(screen.getByRole('radio', { name: 'Tide' }));
+  expect(screen.queryByRole('slider')).toBeNull();
+  expect(document.documentElement.dataset.theme).toBe('tide');
+});
+
 it('hides and shows the sidebar from the header and by Ctrl+B, moves focus out of a hidden sidebar, and remembers the state (ADR-015)', async () => {
   const user = userEvent.setup();
   const { unmount } = render(<App />);
