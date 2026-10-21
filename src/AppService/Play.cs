@@ -310,7 +310,9 @@ public sealed partial class TomeStackApp
         var next = others;
         if (isPrimary)
         {
-            var occupants = (sheet.Toggles ?? []).Where(t => t.On && t.Group == toggle.Group && t.GroupContent == toggle.GroupContent && t.Layer != ToggleLayer.Overlay
+            // A toggle whose group's declaring content is not on the character is a group of one (C6): it shares the group with nothing.
+            var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
+            var occupants = !groupPresent ? [] : (sheet.Toggles ?? []).Where(t => t.On && t.Group == toggle.Group && t.GroupContent == toggle.GroupContent && t.Layer != ToggleLayer.Overlay
                 && !(t.Content.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
             if (occupants.Count > 0 && !command.Replace)
                 throw new AppValidationException([new("toggle.group-occupied", $"Group '{toggle.Group}' already has '{occupants[0].Label}' ({occupants[0].ContentName}) on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
@@ -321,6 +323,10 @@ public sealed partial class TomeStackApp
         if (isPrimary)
             candidate = WithoutDisallowedOverlays(character, candidate);
         // The cost comes from the pool the toggle names (a shared pool lives in another content); a v6 toggle with a resource and no cost spends one use of its own.
+        // A declared cost that did not evaluate (the calculator left it null and warned) refuses; only a toggle with no cost spends the default 1.
+        var declaresCost = _store.FindRevision(toggle.Content)?.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.Id == toggle.EffectId)?.Cost is not null;
+        if (declaresCost && toggle.Cost is null)
+            throw new AppValidationException([new("effect.invalid-formula", $"The cost of '{toggle.Label}' ({toggle.ToggleId}) could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
         var amount = toggle.Cost ?? 1;
         if (toggle.ResourceId is { } resourceId && amount > 0)
             candidate = ChangeResource(candidate, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: amount, ContentId: toggle.CostResourceContent ?? toggle.Content.ContentId, ResourceId: resourceId));

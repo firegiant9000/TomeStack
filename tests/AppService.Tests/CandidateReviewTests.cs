@@ -396,6 +396,11 @@ public class CandidateReviewTests
         Assert.Contains(check.Dependencies, d => d.Kind == "missing-content" && d.Reference == missing);
         Assert.Contains(check.Report.Errors, e => e.Code.StartsWith("validate.", StringComparison.Ordinal)); // the missing reference is an error
         Assert.False(check.CanAccept);
+
+        // A toggle that spends a pool of installed content, or is allowed with it, lists that content too.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
     }
 
     [Fact]

@@ -156,6 +156,72 @@ public class ToggleGroupCommandTests
         Assert.True(IsOn(On(temp, id, 8, "calm-tide"), "calm-tide"));
     }
 
+    private static ContentRevision Extra(int n, string name, params Effect[] effects) => new()
+    {
+        ContentId = Guid.Parse($"6f0dc000-0000-4000-8000-0000000001{n:D2}"), RevisionId = Guid.Parse($"6f0de000-0000-4000-8000-0000000001{n:D2}"),
+        Kind = ContentKind.Feature, Name = name, RulesFamilies = [RulesFamilies.Srd521], Status = RevisionStatus.Published, SchemaVersion = 11,
+        Provenance = new(Guid.Parse("6f0d5000-0000-4000-8000-000000000001"), new(1)), Effects = effects,
+    };
+
+    private static (TempApp Temp, Guid Id) With(IReadOnlyList<ContentRevision> revisions)
+    {
+        var temp = new TempApp();
+        temp.AddPack("fixture-pack-forms.json");
+        foreach (var revision in revisions)
+            temp.App.Store.AddRevision(revision);
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        return (temp, temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, .. revisions.Select(r => r.Reference)] }).Character.Id);
+    }
+
+    private static CharacterView OnOf(TempApp temp, Guid id, ContentRevision revision, string toggle) =>
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: revision.ContentId, ToggleId: toggle));
+
+    [Fact]
+    public void Without_the_group_content_two_primaries_are_a_group_of_one_and_nothing_is_refused_or_removed()
+    {
+        var absent = Guid.Parse("6f0dc000-0000-4000-8000-0000000001ee");
+        ToggleEffect Form(string id) => new() { Id = id, ToggleId = id, Label = id, Group = "forms", GroupContent = absent };
+        var one = Extra(1, "Test Solo One", Form("one"));
+        var two = Extra(2, "Test Solo Two", Form("two"));
+        var (temp, id) = With([one, two]);
+        using var _ = temp;
+
+        OnOf(temp, id, one, "one");
+        var both = OnOf(temp, id, two, "two");
+
+        Assert.True(IsOn(both, "one"));
+        Assert.True(IsOn(both, "two"));
+        Assert.Equal(2, both.Character.Play.Toggles.Count);
+    }
+
+    [Fact]
+    public void A_cost_formula_that_fails_refuses_and_writes_nothing()
+    {
+        var broken = Extra(3, "Test Broken Cost",
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "5" },
+            new ToggleEffect { Id = "bad", ToggleId = "bad", Label = "Bad", Cost = "NOT_A_NAME + 1", ResourceId = "pool" });
+        var (temp, id) = With([broken]);
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        Assert.Equal("effect.invalid-formula", Refusal(() => OnOf(temp, id, broken, "bad")));
+
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void A_toggle_with_a_pool_in_another_content_and_no_cost_spends_one_from_that_pool()
+    {
+        var pool = Extra(4, "Test Pool Owner", new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "5" });
+        var user = Extra(5, "Test Pool User", new ToggleEffect { Id = "use", ToggleId = "use", Label = "Use", ResourceId = "pool", ResourceContent = pool.ContentId });
+        var (temp, id) = With([pool, user]);
+        using var _ = temp;
+
+        var on = OnOf(temp, id, user, "use");
+
+        Assert.Equal(4, on.Sheet.Resources!.Single(r => r.ResourceId == "pool").Current!.Value);
+    }
+
     [Fact]
     public void A_cost_of_zero_spends_nothing_and_a_second_source_toggle_joins_the_group()
     {

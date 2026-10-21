@@ -667,7 +667,7 @@ public static class CharacterCalculator
                 revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(revision, t, effective, autoOn), t.ResourceId, t.Text,
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 t.Group, t.Group is null ? null : t.GroupContent ?? revision.ContentId, t.Group is null ? null : t.Layer ?? ToggleLayer.Primary,
-                cost, t.Cost is null ? null : t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t));
+                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t));
         }
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
