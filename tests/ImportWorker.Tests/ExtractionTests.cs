@@ -9,6 +9,26 @@ namespace TomeStack.ImportWorker.Tests;
 /// </summary>
 public class ExtractionTests
 {
+    // 2026-10-14 item 5: a third-party book's headings use a heavier face that is not named "Bold".
+    [Theory]
+    [InlineData("ABCDEF+Fixture-Bold", true)]
+    [InlineData("Fixture-Semibold", true)]
+    [InlineData("FixtureSans-DemiItalic", true)]
+    [InlineData("fixture-heavy", true)]
+    [InlineData("Fixture-BLACK", true)]
+    [InlineData("Fixture-Black", true)]
+    [InlineData("FixtureSans-Heavy", true)]
+    [InlineData("FixtureSerifDemi", true)]
+    [InlineData("FixtureSansBlackItalic", true)]
+    [InlineData("Academic-Regular", false)]
+    [InlineData("Blackadder-Regular", false)]
+    [InlineData("Academia", false)]
+    [InlineData("Fixture-Regular", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void A_weight_word_in_the_font_name_marks_bold_text(string? fontName, bool expected) =>
+        Assert.Equal(expected, PdfPigExtractor.IsBoldFontName(fontName));
+
     private static async Task<List<ExtractionEvent>> Extract(string path, PageScope? scope = null, ExtractionLimits? limits = null, IOcrEngine? ocr = null)
     {
         var events = new List<ExtractionEvent>();
@@ -90,7 +110,7 @@ public class ExtractionTests
     public async Task A_page_scope_extracts_only_its_pages_and_clips_to_the_document()
     {
         var pages = (await Extract(FixturePdfs.ImportPath, new(4, 99))).OfType<ExtractedPage>().Select(p => p.PageNumber);
-        Assert.Equal([4, 5, 6], pages);
+        Assert.Equal([4, 5, 6, 7], pages);
     }
 
     [Fact]

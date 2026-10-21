@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
+import { TomeStackError } from '../api/transport';
 import { CharacterSheet } from './CharacterSheet';
 
 vi.mock('../api/client', () => ({
@@ -21,6 +22,7 @@ vi.mock('../api/client', () => ({
     info: vi.fn(),
     play: vi.fn(),
     roll: vi.fn(),
+    rollDice: vi.fn(),
     restPreview: vi.fn(),
     rest: vi.fn(),
   },
@@ -851,6 +853,35 @@ it('moves the replaced Last roll into Previous rolls (D28)', async () => {
   const log = await screen.findByText('Previous rolls (1)');
   expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dexterity check: 15/)).toBeTruthy();
   expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
+});
+
+it('rolls typed dice into Last roll, labelled Dice, and moves the field roll into the log (item 8)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValueOnce(rollRecord('Dexterity check', 9));
+  vi.mocked(client.rollDice).mockReset();
+  vi.mocked(client.rollDice).mockResolvedValueOnce(rollRecord('Dice', 11, 6));
+  renderSheet(view());
+  await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+  await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '2d6+3');
+  await user.click(screen.getByRole('button', { name: 'Roll dice' }));
+  expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('2d6+3', undefined, 'Dice');
+  const log = await screen.findByText('Previous rolls (1)');
+  expect(within(screen.getByRole('region', { name: 'Last roll' })).getByText(/Dice: 11/)).toBeTruthy();
+  expect(log.closest('details')!.textContent).toMatch(/Dexterity check: 9/);
+});
+
+it('a refused dice roll changes neither Last roll nor the log, and the sheet shows no banner for it', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  vi.mocked(client.rollDice).mockReset();
+  vi.mocked(client.rollDice).mockRejectedValueOnce(new TomeStackError({ code: 'bad-request', message: 'Too many dice.', diagnostics: [{ code: 'dice.too-many-dice', message: 'Too many dice.' }] }));
+  render(<CharacterSheet view={view()} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.type(screen.getByRole('textbox', { name: 'Dice to roll' }), '1000d6{Enter}');
+  expect(await screen.findByText('Too many dice.')).toBeTruthy();
+  expect(onError).not.toHaveBeenCalled();
+  expect(screen.queryByText(/^Previous rolls/)).toBeNull();
+  expect(vi.mocked(client.rollDice)).toHaveBeenCalledWith('1000d6', undefined, 'Dice');
 });
 
 it('logs a rest hit die without showing it, and keeps the log newest first by time when the Last roll is replaced (D28)', async () => {

@@ -117,3 +117,7 @@ it('forced colours and print both reset --bg and --header-bg, and reach themed p
   expect(rule).toMatch(/--surface:\s*Canvas;/);
   expect(rule).toMatch(/--header-bg:\s*Canvas;/);
 });
+
+it('colours the dice box placeholder with the measured --muted at full opacity (1.4.3: the browser default is unmeasured)', () => {
+  expect(css).toMatch(/\.dice-box input::placeholder\s*\{\s*color:\s*var\(--muted\);\s*opacity:\s*1;\s*\}/);
+});

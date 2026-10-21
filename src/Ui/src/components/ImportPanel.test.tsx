@@ -1,0 +1,220 @@
+// @vitest-environment jsdom
+// Item 3: a two-family source asks what the book is written for before it is read. Item 2: a finished job offers the studio.
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { client } from '../api/client';
+import type { ImportJob, SourceRecord } from '../api/types';
+import { ImportPanel } from './ImportPanel';
+
+vi.mock('../api/client', () => ({ client: { listImports: vi.fn(), startImport: vi.fn(), resumeImport: vi.fn(), cancelImport: vi.fn(), candidates: vi.fn() } }));
+
+const both = { id: 'src-2', title: 'Testy Both', rulesFamilies: ['srd-5.1', 'srd-5.2.1'] } as SourceRecord;
+const single = { id: 'src-1', title: 'Testy Tome', rulesFamilies: ['srd-5.1'] } as SourceRecord;
+const completed = (id: string, candidates: number) =>
+  ({ id, sourceId: 'src-2', firstPage: 1, wholeDocument: true, status: 'completed', pagesDone: 6, pagesFailed: 0, pagesFromOcr: 0, pagesWithoutText: 0, candidates }) as ImportJob;
+
+beforeEach(() => {
+  vi.mocked(client.listImports).mockResolvedValue([]);
+  vi.mocked(client.startImport).mockResolvedValue({} as ImportJob);
+});
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+async function renderPanel(forSource: SourceRecord) {
+  const onStatus = vi.fn();
+  render(<ImportPanel source={forSource} onError={() => {}} onStatus={onStatus} onOpenStudio={() => {}} />);
+  await vi.waitFor(() => expect(client.listImports).toHaveBeenCalled());
+  return userEvent.setup();
+}
+
+it('asks what a two-family book is written for, with no default', async () => {
+  await renderPanel(both);
+  const group = screen.getByRole('group', { name: 'This book is written for' });
+  const radios = within(group).getAllByRole('radio');
+  expect(radios.map((r) => (r as HTMLInputElement).labels?.[0]?.textContent?.trim())).toEqual(['2014 rules (SRD 5.1)', '2024 rules (SRD 5.2.1)', 'Both']);
+  expect(radios.map((r) => (r as HTMLInputElement).checked)).toEqual([false, false, false]);
+});
+
+it('holds the Read buttons, with a linked reason, until it is answered', async () => {
+  const user = await renderPanel(both);
+  const whole = screen.getByRole('button', { name: 'Read the whole document' });
+  expect(whole.getAttribute('aria-disabled')).toBe('true');
+  expect(whole).toHaveProperty('disabled', false); // reachable by keyboard, never `disabled`
+  const reason = document.getElementById(whole.getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toBe('Say what the book is written for.');
+
+  await user.click(whole);
+  expect(client.startImport).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('radio', { name: '2014 rules (SRD 5.1)' }));
+  expect(whole.getAttribute('aria-disabled')).toBeNull();
+  expect(screen.queryByText('Say what the book is written for.')).toBeNull();
+});
+
+it('links each panel to its own reason when two sources are listed', async () => {
+  const other = { ...both, id: 'src-3', title: 'Testy Other' } as SourceRecord;
+  render(
+    <>
+      <ImportPanel source={both} onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />
+      <ImportPanel source={other} onError={() => {}} onStatus={() => {}} onOpenStudio={() => {}} />
+    </>,
+  );
+  await vi.waitFor(() => expect(client.listImports).toHaveBeenCalledTimes(2));
+  for (const title of ['Testy Both', 'Testy Other']) {
+    const panel = screen.getByRole('region', { name: `Read the text of ${title}` });
+    for (const name of ['Read the whole document', 'Read these pages']) {
+      const id = within(panel).getByRole('button', { name }).getAttribute('aria-describedby') ?? '';
+      const reasons = document.querySelectorAll(`[id="${id}"]`);
+      expect(reasons).toHaveLength(1);
+      expect(panel.contains(reasons[0] ?? null)).toBe(true);
+      expect(reasons[0]?.textContent).toBe('Say what the book is written for.');
+    }
+  }
+});
+
+it('sends the answer with the read', async () => {
+  const user = await renderPanel(both);
+  await user.click(screen.getByRole('radio', { name: '2014 rules (SRD 5.1)' }));
+  await user.click(screen.getByRole('button', { name: 'Read the whole document' }));
+  expect(client.startImport).toHaveBeenLastCalledWith('src-2', { wholeDocument: true, writtenFor: ['srd-5.1'] });
+
+  await user.click(screen.getByRole('radio', { name: 'Both' }));
+  await user.click(screen.getByRole('button', { name: 'Read the whole document' }));
+  expect(client.startImport).toHaveBeenLastCalledWith('src-2', { wholeDocument: true, writtenFor: ['srd-5.1', 'srd-5.2.1'] });
+});
+
+it('holds Read these pages too, and sends the answer with the range', async () => {
+  const user = await renderPanel(both);
+  await user.type(screen.getByLabelText('From page'), '2');
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(pages.getAttribute('aria-disabled')).toBe('true');
+  await user.click(pages);
+  expect(client.startImport).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole('radio', { name: '2024 rules (SRD 5.2.1)' }));
+  await user.click(pages);
+  expect(client.startImport).toHaveBeenCalledWith('src-2', { firstPage: 2, lastPage: 2, writtenFor: ['srd-5.2.1'] });
+});
+
+it('says a one-family source is written for that family, with no question and no writtenFor', async () => {
+  const user = await renderPanel(single);
+  expect(screen.getByText('Written for SRD 5.1 (from the source).')).toBeTruthy();
+  expect(screen.queryByRole('radio')).toBeNull();
+  const whole = screen.getByRole('button', { name: 'Read the whole document' });
+  expect(whole.getAttribute('aria-disabled')).toBeNull();
+  await user.click(whole);
+  expect(client.startImport).toHaveBeenCalledWith('src-1', { wholeDocument: true });
+});
+
+const running = (id: string) => ({ ...completed(id, 0), status: 'running' }) as ImportJob;
+const cancelled = (id: string) => ({ ...completed(id, 0), status: 'cancelled' }) as ImportJob;
+
+it('keeps focus on the pressed Read button when the job starts, and refuses a press while it runs (2.4.3)', async () => {
+  const user = await renderPanel(single);
+  const whole = screen.getByRole('button', { name: 'Read the whole document' });
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a')]);
+  await user.click(whole);
+  await vi.waitFor(() => expect(whole.getAttribute('aria-disabled')).toBe('true'));
+  expect(whole).toHaveProperty('disabled', false);
+  expect(document.activeElement).toBe(whole);
+  const reason = document.getElementById(whole.getAttribute('aria-describedby') ?? '');
+  expect(reason?.textContent).toBe('Reading… — cancel it first or wait.');
+
+  await user.click(whole);
+  expect(client.startImport).toHaveBeenCalledTimes(1);
+});
+
+it('holds Read these pages without a first page, with a linked reason, and never natively disables it', async () => {
+  const user = await renderPanel(single);
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(pages.getAttribute('aria-disabled')).toBe('true');
+  expect(pages).toHaveProperty('disabled', false);
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Enter a first page.');
+  await user.click(pages);
+  expect(client.startImport).not.toHaveBeenCalled();
+  await user.type(screen.getByLabelText('From page'), '3');
+  expect(pages.getAttribute('aria-disabled')).toBeNull();
+});
+
+it('moves focus to the job line when Resume is pressed and the button goes away (2.4.3)', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([cancelled('job-a')]);
+  vi.mocked(client.resumeImport).mockResolvedValue({} as ImportJob);
+  const user = await renderPanel(single);
+  const resume = await screen.findByRole('button', { name: 'Resume' });
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a')]);
+  await user.click(resume);
+  await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+  expect(client.resumeImport).toHaveBeenCalledWith('job-a');
+  expect(document.activeElement?.id).toBe('import-progress-job-a');
+});
+
+it('holds Resume while another job runs: aria-disabled, a linked reason, and the press does nothing', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([running('job-a'), cancelled('job-b')]);
+  const user = await renderPanel(single);
+  const resume = await screen.findByRole('button', { name: 'Resume' });
+  expect(resume.getAttribute('aria-disabled')).toBe('true');
+  expect(resume).toHaveProperty('disabled', false);
+  expect(document.getElementById(resume.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Reading… — cancel it first or wait.');
+  await user.click(resume);
+  expect(client.resumeImport).not.toHaveBeenCalled();
+});
+
+it('shows one studio button while a job is under review: the panel\'s own, not also the job line\'s', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3)]);
+  vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
+  const user = await renderPanel(both);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  expect(buttons).toHaveLength(1);
+  expect(region.contains(buttons[0] ?? null)).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' })); // closing the review brings the job line's back
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(1);
+  expect(screen.queryByRole('region', { name: 'Candidates from Testy Both' })).toBeNull();
+});
+
+it('hides every job line\'s studio button while any review is open, so no unsaved edit can be left behind', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 2)]);
+  vi.mocked(client.candidates).mockResolvedValue({ items: [], total: 0 });
+  const user = await renderPanel(both);
+  expect(await screen.findAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  const region = await screen.findByRole('region', { name: 'Candidates from Testy Both' });
+  const buttons = screen.getAllByRole('button', { name: 'Open Testy Both in the studio' });
+  expect(buttons).toHaveLength(1);
+  expect(region.contains(buttons[0] ?? null)).toBe(true);
+
+  await user.click(screen.getByRole('button', { name: 'Review 3 candidates' }));
+  expect(screen.getAllByRole('button', { name: 'Open Testy Both in the studio' })).toHaveLength(2);
+});
+
+it.each(['0', '-2', '1.5'])('says the first page is 1 or more for From page "%s", not the last-page text', async (value) => {
+  const user = await renderPanel(single);
+  await user.type(screen.getByLabelText('From page'), value);
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(pages.getAttribute('aria-disabled')).toBe('true');
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('The first page is 1 or more.');
+});
+
+it('keeps the last-page text for a last page before a valid first page', async () => {
+  const user = await renderPanel(single);
+  await user.type(screen.getByLabelText('From page'), '5');
+  await user.type(screen.getByLabelText('To page (optional)'), '3');
+  const pages = screen.getByRole('button', { name: 'Read these pages' });
+  expect(document.getElementById(pages.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Check the pages: the last page cannot be before the first.');
+});
+
+it('offers the studio from a finished job that found candidates, and not from one that found none', async () => {
+  vi.mocked(client.listImports).mockResolvedValue([completed('job-a', 3), completed('job-b', 0)]);
+  await renderPanel(both);
+  const [withCandidates, withNone] = await screen.findAllByRole('listitem');
+  expect(within(withCandidates!).getByRole('button', { name: 'Open Testy Both in the studio' })).toBeTruthy();
+  expect(within(withNone!).queryByRole('button', { name: 'Open Testy Both in the studio' })).toBeNull();
+});

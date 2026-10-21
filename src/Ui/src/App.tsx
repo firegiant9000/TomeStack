@@ -21,7 +21,7 @@ import type { SheetTabId } from './sheetTab';
 type Screen =
   | { kind: 'home'; focus?: boolean } // focus: false only for the start screen (the first Tab must reach the header)
   | { kind: 'builder'; mode: BuilderMode }
-  | { kind: 'studio' }
+  | { kind: 'studio'; sourceId?: string }
   | { kind: 'sources' }
   | { kind: 'campaigns' }
   | { kind: 'gaps' }
@@ -376,6 +376,7 @@ export function App() {
         {screen.kind === 'studio' && info && (
           <HomebrewStudio
             info={info}
+            initialSourceId={screen.sourceId}
             onError={onError}
             onStatus={(text) => {
               setMessage({ tone: 'status', text });
@@ -386,7 +387,16 @@ export function App() {
         {screen.kind === 'campaigns' && info && (
           <CampaignsPanel rulesFamilies={info.rulesFamilies} onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />
         )}
-        {screen.kind === 'sources' &&<SourcesPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} />}
+        {screen.kind === 'sources' && (
+          <SourcesPanel
+            onError={onError}
+            onStatus={(text) => setMessage({ tone: 'status', text })}
+            onOpenStudio={(sourceId) => {
+              setMessage(undefined);
+              setScreen({ kind: 'studio', sourceId });
+            }}
+          />
+        )}
         {screen.kind === 'gaps' && <AllGapNotesPanel onError={onError} onOpenCharacter={(id) => open(id, 'notes')} />}
         {screen.kind === 'backups' && (
           <BackupsPanel onError={onError} onStatus={(text) => setMessage({ tone: 'status', text })} onRestored={() => void refresh()} />

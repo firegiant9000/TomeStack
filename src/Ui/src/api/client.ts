@@ -8,13 +8,21 @@ import type {
   CandidateCheck,
   CandidateEdit,
   CandidateFilter,
+  CandidatePage,
   ImportJob,
   ImportSearchHit,
   StoredCandidate,
   DetachPreview,
   OpenPageOutcome,
+  ContentKind,
   ContentRevision,
   PublishResult,
+  PublishManyPreview,
+  PublishManyResult,
+  AcceptManyResult,
+  CandidateSpellListResult,
+  ContentSpellListResult,
+  SpellListKeyCount,
   SourcePackPreview,
   CampaignPackPreview,
   ExtensionInstallPreview,
@@ -81,6 +89,8 @@ export function createClient(transport: Transport) {
     info: () => call<AppInfo>('app.info'),
     /** With a campaign, every option says whether the campaign allows its source (SPEC P-01). */
     listContent: (rulesFamily: RulesFamilyId, campaignId?: string) => call<ContentOption[]>('content.list', { rulesFamily, campaignId }),
+    /** Item 1: entries of each kind in the family with no published revision (counts only). */
+    draftCounts: (rulesFamily: RulesFamilyId) => call<Partial<Record<ContentKind, number>>>('content.draftCounts', { rulesFamily }),
     listCampaigns: () => call<Campaign[]>('campaign.list'),
     /** Creates (empty id) or updates a campaign profile. */
     saveCampaign: (campaign: Campaign) => call<Campaign>('campaign.save', campaign),
@@ -93,6 +103,16 @@ export function createClient(transport: Transport) {
     saveDraft: (revision: ContentRevision) => call<ContentReference>('content.saveDraft', { revision }),
     /** Validates again and publishes a new immutable revision; no character changes (SPEC I-06). */
     publish: (reference: ContentReference) => call<PublishResult>('content.publish', { reference }),
+    /** Item 9, D33: what publishing these contents' pending drafts would do, with re-pointed dependents; writes nothing. */
+    publishManyPreview: (contentIds: string[]) => call<PublishManyPreview>('content.publishManyPreview', { contentIds }),
+    /** Item 9, D33: one transaction; `expected` is the pending draft revision ids the preview showed. Only the panel's button calls this. */
+    /** `expectedDependents` is the preview's dependents (content id to newest revision id); a change since is refused as `content.publish-set-changed`. */
+    publishMany: (contentIds: string[], expected: string[], expectedDependents?: Record<string, string>) =>
+      call<PublishManyResult>('content.publishMany', { contentIds, expected, expectedDependents, confirm: true }),
+    /** Item 10: new drafts (never published) with the list key added; publish them through the previewed publish panel. */
+    addToSpellList: (contentIds: string[], listKey: string) => call<ContentSpellListResult>('content.addToSpellList', { contentIds, listKey }),
+    /** Item 10: every spell list key in published content with its spell count; read only. */
+    spellListKeys: () => call<SpellListKeyCount[]>('content.spellListKeys', {}),
     contentRevisions: (contentId: string) => call<ContentRevision[]>('content.revisions', { contentId }),
     affected: (contentId: string) => call<AffectedCharacter[]>('content.affected', { contentId }),
     contentBySource: (sourceId: string) => call<StudioEntry[]>('content.bySource', { sourceId }),
@@ -136,7 +156,7 @@ export function createClient(transport: Transport) {
     importPages: (sourceId: string, request: { start?: number; end?: number; title?: string; wholeDocument?: boolean }) =>
       call<ContentRevision>('source.importPages', { sourceId, ...request }),
     // ---- PDF import (M4): extraction jobs, search and candidate review. Accepting creates a draft only (ADR-004). ----
-    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean }) =>
+    startImport: (sourceId: string, request: { firstPage?: number; lastPage?: number; wholeDocument?: boolean; writtenFor?: RulesFamilyId[] }) =>
       call<ImportJob>('import.start', { sourceId, ...request }),
     importStatus: (jobId: string) => call<ImportJob>('import.status', { jobId }),
     listImports: (sourceId: string) => call<ImportJob[]>('import.list', { sourceId }),
@@ -144,13 +164,21 @@ export function createClient(transport: Transport) {
     resumeImport: (jobId: string) => call<ImportJob>('import.resume', { jobId }),
     /** SPEC I-03: pages of one source whose extracted text contains the query; writes nothing. */
     searchImport: (sourceId: string, query: string) => call<ImportSearchHit[]>('import.search', { sourceId, query }),
-    candidates: (jobId: string, filter: CandidateFilter = {}) => call<StoredCandidate[]>('import.candidates', { jobId, ...filter }),
+    /** One page (50 unless `limit` says; at most 200) of a job's candidates in page order, and the total the filter matches. */
+    candidates: (jobId: string, filter: CandidateFilter = {}, paging: { offset?: number; limit?: number } = {}) =>
+      call<CandidatePage>('import.candidates', { jobId, ...filter, ...paging }),
     /** Validation, dependencies and blockers of accepting; writes nothing. */
     checkCandidate: (candidateId: string) => call<CandidateCheck>('import.candidate.check', { candidateId }),
     editCandidate: (candidateId: string, edit: CandidateEdit) => call<StoredCandidate>('import.candidate.edit', { candidateId, ...edit }),
     /** Only the "Accept" buttons call this; the result is a draft revision, never active until published. */
-    acceptCandidate: (candidateId: string, asReference: boolean) =>
-      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true }),
+    acceptCandidate: (candidateId: string, asReference: boolean, confirmedEffectIds?: string[]) =>
+      call<StoredCandidate>('import.candidate.accept', { candidateId, asReference, confirm: true, ...(confirmedEffectIds ? { confirmedEffectIds } : {}) }),
+    /** Item 9: the "Accept selected" buttons; blocked ones come back with their codes and nothing is forced. */
+    acceptCandidates: (candidateIds: string[], asReference: boolean) =>
+      call<AcceptManyResult>('import.candidate.acceptMany', { candidateIds, asReference, confirm: true }),
+    /** Item 10: adds the list key to the spell candidates' edits; other unsure fields stay unsure. */
+    addCandidatesToSpellList: (candidateIds: string[], listKey: string) =>
+      call<CandidateSpellListResult>('import.candidate.addToSpellList', { candidateIds, listKey }),
     ignoreCandidate: (candidateId: string) => call<StoredCandidate>('import.candidate.ignore', { candidateId }),
     /** What moving a character to another revision would change; writes nothing. */
     reviewUpdate: (characterId: string, from: ContentReference, to: ContentReference) =>

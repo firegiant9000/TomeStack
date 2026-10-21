@@ -135,9 +135,18 @@ public static class CandidateQuarantine
     /// Converts a candidate into a <see cref="RevisionStatus.Draft"/> revision. There is deliberately no
     /// overload that produces a published revision: publishing is a separate, user-confirmed command.
     /// </summary>
-    public static ContentRevision ToDraftRevision(DraftCandidate candidate)
+    public static ContentRevision ToDraftRevision(DraftCandidate candidate) => ToDraftRevision(candidate, []);
+
+    /// <summary>
+    /// Item 11 (D34, ADR-016): the same draft, with the effects the reviewer confirmed by id keeping the automation the
+    /// detector proposed (after the read-back that types them); every other effect is still forced to reference. Nothing here
+    /// publishes: the draft stays a draft, and only a published revision affects a character. Ids that name no effect are
+    /// ignored here; the service refuses them before it calls this.
+    /// </summary>
+    public static ContentRevision ToDraftRevision(DraftCandidate candidate, IReadOnlyCollection<string> confirmedEffectIds)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(confirmedEffectIds);
         var draft = new ContentRevision
         {
             ContentId = Guid.NewGuid(),
@@ -155,7 +164,7 @@ public static class CandidateQuarantine
         // their raw JSON, where "with" cannot reach it. Read the draft back so they are typed, then force every effect to
         // reference (M4 D4 review: without this, an imported weapon became automatic once its draft was re-read).
         var typed = JsonSerializer.Deserialize<ContentRevision>(JsonSerializer.Serialize(draft, RulesJson.Compact), RulesJson.Compact)!;
-        return typed with { Effects = [.. typed.Effects.Select(e => e with { Automation = AutomationStatus.Reference })] };
+        return typed with { Effects = [.. typed.Effects.Select(e => confirmedEffectIds.Contains(e.Id, StringComparer.Ordinal) ? e : e with { Automation = AutomationStatus.Reference })] };
     }
 
     /// <summary>The candidate with its effects typed as a current revision would type them (for review; still a proposal).</summary>

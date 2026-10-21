@@ -178,7 +178,7 @@ function SourcePackForm({ sources, onError, onStatus }: { sources: SourceRecord[
  * data folder by default (a managed copy survives moving or renaming the original), or linked where it is. Removing it
  * shows what breaks first and keeps all content.
  */
-export function SourcesPanel({ onError, onStatus }: Props) {
+export function SourcesPanel({ onError, onStatus, onOpenStudio }: Props & { onOpenStudio: (sourceId: string) => void }) {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [attachments, setAttachments] = useState<Record<string, AttachmentInfo | undefined>>({});
   const [removing, setRemoving] = useState<DetachPreview>();
@@ -346,7 +346,7 @@ export function SourcesPanel({ onError, onStatus }: Props) {
               {pdf && pdf.status !== 'missing' && source.editionVersion === 'homebrew' && (
                 <>
                   <PageImportForm source={source} onError={onError} onStatus={onStatus} />
-                  <ImportPanel source={source} onError={onError} onStatus={onStatus} />
+                  <ImportPanel source={source} onError={onError} onStatus={onStatus} onOpenStudio={onOpenStudio} />
                 </>
               )}
               {removing?.sourceId === source.id && (

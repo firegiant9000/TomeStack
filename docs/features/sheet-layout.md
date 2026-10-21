@@ -36,6 +36,8 @@ A definition list, not headings or named regions, so it never shares a name with
 - Conditions and exhaustion, only when there are any;
 - the d20 roll mode (Normal, Advantage, Disadvantage) as one row of radios with 3:1 boundaries (`--line-strong`) and the "Last roll" live region, moved here from the old "Rolls" section so they are reachable from every tab.
 
+- the **dice box** (tester feedback item 8; a form named "Roll dice" with a "Dice to roll" text box) sits under the d20 mode row in the same grid cell, outside the fixed roll strip, so the strip's `min-height` is unchanged. It wraps onto further lines in a narrow column (headless Edge, measured again on 2026-10-15 against the current markup, with the box's row wrapper, the always-mounted empty message, the result's dice, text and detail lines, and the closed "Previous rolls" line: at 1280 px the strip is 152 px with a short result and 169 px with a long one; at a true 320 px viewport it is 152 px and 238 px; each is the same with or without the box, and an open refusal under the box, which grows the box from 64 px to 109 px at 320 px, leaves the short strip at 152 px). See [dice-engine.md](dice-engine.md) "Rolling from the summary".
+
 Traces, overrides and "Report a gap" stay on the field cards.
 
 ## Tabs

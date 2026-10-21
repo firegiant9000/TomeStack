@@ -200,12 +200,45 @@ public sealed partial class PdfPigExtractor(IOcrEngine? ocr = null, ExtractionLi
             {
                 var letters = block.TextLines.SelectMany(l => l.Words).SelectMany(w => w.Letters).ToList();
                 var size = letters.Count == 0 ? 0 : letters.GroupBy(l => Math.Round(l.PointSize, 1)).MaxBy(g => g.Count())!.Key;
-                var bold = letters.Count > 0 && letters.Count(l => l.FontName?.Contains("Bold", StringComparison.OrdinalIgnoreCase) == true) * 2 > letters.Count;
+                var bold = letters.Count > 0 && letters.Count(l => IsBoldFontName(l.FontName)) * 2 > letters.Count;
                 var box = block.BoundingBox;
                 var lines = block.TextLines.Select(l => new TextLine(Normalize(l.Text), l.BoundingBox.Left, l.BoundingBox.Bottom, l.BoundingBox.Width, l.BoundingBox.Height)).ToList();
                 return new TextBlock(Normalize(block.Text), box.Left, box.Bottom, box.Width, box.Height, size, bold, lines);
             }),
         ];
+    }
+
+    private static readonly string[] StyleWords = ["Black", "Heavy", "Semibold", "Demi"];
+
+    /// <summary>
+    /// A font draws bold text when its name says "Bold", or carries Black, Heavy, Semibold or Demi as a style token: the
+    /// word starts the part after the last '-', ',' or '+', or sits at a camel-case boundary ("FixtureSansBlack"), and
+    /// ends at the end or before a capital ("DemiItalic"). "Academic" and "Blackadder" are not bold.
+    /// </summary>
+    internal static bool IsBoldFontName(string? fontName)
+    {
+        if (fontName is null)
+            return false;
+        if (fontName.Contains("Bold", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var style = fontName.AsSpan(fontName.AsSpan().LastIndexOfAny('-', ',', '+') + 1);
+        foreach (var word in StyleWords)
+        {
+            for (var from = 0; from <= style.Length - word.Length;)
+            {
+                var found = style[from..].IndexOf(word, StringComparison.OrdinalIgnoreCase);
+                if (found < 0)
+                    break;
+                var start = from + found;
+                var end = start + word.Length;
+                var startsToken = start == 0 || (char.IsUpper(style[start]) && char.IsLower(style[start - 1]));
+                var endsToken = end == style.Length || char.IsUpper(style[end]);
+                if (startsToken && endsToken)
+                    return true;
+                from = start + 1;
+            }
+        }
+        return false;
     }
 
     /// <summary>

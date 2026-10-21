@@ -172,6 +172,21 @@ fieldset.bare-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .abilities { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: 0.5rem; }
 /* D32: the standard array and rolled scores are assigned with one select per ability (24px targets, WCAG 2.5.8). */
+/* Item 11 (D34): the class confirmations are 24px targets (WCAG 2.5.8); a wide slot table scrolls inside its own box. */
+.confirm-effects input[type='checkbox'] { width: 1.5rem; height: 1.5rem; margin: 0 0.35rem 0 0; vertical-align: middle; }
+.class-table { overflow-x: auto; }
+.class-table td, .class-table th[scope='row'] { font-variant-numeric: tabular-nums; }
+/* Item 9: the row checkboxes of the review list and the publish table are 24px targets (WCAG 2.5.8). */
+.row-select, .publish-table input[type='checkbox'] { width: 1.5rem; height: 1.5rem; padding: 0; margin: 0 0.25rem 0 0; vertical-align: middle; }
+/* Item 12: the species, background and spell editors in the studio. Checkboxes are 24px targets (WCAG 2.5.8); the groups wrap at any width. */
+.origin-basics fieldset { margin: var(--space-3) 0 0; }
+.origin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr)); gap: var(--space-2) var(--space-4); align-items: end; }
+.origin-basics .choice input[type='checkbox'] { width: 1.5rem; height: 1.5rem; margin: 0 0.35rem 0 0; vertical-align: middle; }
+.origin-basics .field input, .origin-basics .field select { min-height: 1.75rem; max-width: 100%; }
+.origin-basics button { min-height: 1.75rem; }
+.origin-list { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: grid; gap: var(--space-2); }
+.origin-new { display: grid; gap: var(--space-2); margin-top: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.publish-table th, .publish-table td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .assign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-2) var(--space-4); }
 .assign-grid select { font: inherit; padding: 0.3rem 0.4rem; min-height: 1.75rem; }
 .rolled-sets { list-style: none; margin: 0 0 var(--space-3); padding: 0; display: grid; gap: var(--space-2); }
@@ -319,7 +334,19 @@ html[data-ability-order='score'] .sheet-summary dd.ability .derived { order: 2; 
 html[data-ability-order='score'] .sheet-summary dd.ability .score { order: 1; font-size: var(--text-3xl); color: inherit; line-height: 1.1; }
 html[data-ability-order='score'] .sheet-summary dd.ability .roll { order: 3; }
 html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { order: 4; }
-.sheet-summary > .roll-mode { grid-area: mode; align-self: start; }
+.sheet-summary > .roll-controls { grid-area: mode; align-self: start; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+/* Item 8: the free dice box sits under the d20 mode row, outside the fixed .roll-strip (whose height is unchanged). The label,
+   box and button wrap onto further lines when the column is narrow; the refusal is a full-width line under them. */
+.dice-box { margin: 0; }
+.dice-box-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.dice-box label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-weight: 600; font-size: 0.9rem; color: var(--muted); }
+.dice-box input { width: 9rem; max-width: 100%; min-height: 1.5rem; font-family: var(--font-numbers); }
+.dice-box input[aria-invalid='true'] { border: 2px solid var(--error); }
+.dice-box input::placeholder { color: var(--muted); opacity: 1; }
+/* width: 0 with min-width: 100% keeps the message out of the column's max-content, so a long refusal wraps under the box instead of widening
+   the d20 column and squeezing the Last roll. */
+.dice-box p.error { width: 0; min-width: 100%; margin: var(--space-1) 0 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.dice-box p.error:empty { margin: 0; } /* the status stays mounted (so a refusal is announced) but takes no room while empty */
 .sheet-summary > .hint { grid-area: hint; }
 .sheet-summary > .roll-strip { grid-area: result; min-height: 9.5rem; } /* the Last roll (7.5rem) plus the closed Previous rolls line, so logging the first roll does not move the tabs */
 .roll-log { margin-top: var(--space-2); }
@@ -329,8 +356,11 @@ html[data-ability-order='score'] .sheet-summary dd.ability > .override-label { o
 .quick-hp { display: inline-flex; gap: var(--space-1); }
 .quick-hp button { padding: 0 0.6rem; line-height: 1.4; font-size: var(--text-md); min-height: 1.5rem; min-width: 1.5rem; }
 .quick-hp button[aria-disabled='true'],
+.origin-basics button[aria-disabled='true'],
 .play-panel .actions button[aria-disabled='true'],
 .play-panel .inline-form button[aria-disabled='true'],
+.play-panel .inline-form input[aria-disabled='true'],
+.play-panel .inline-form select[aria-disabled='true'],
 .play-panel li button[aria-disabled='true'],
 .sheet-header button[aria-disabled='true'],
 section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { background: var(--bg); color: var(--muted); border-color: var(--line-strong); border-style: dashed; cursor: not-allowed; }
@@ -360,8 +390,11 @@ button.roll:hover { background: var(--accent); color: var(--bg); }
   .sheet-summary .roll-mode .choice:has(:checked) input { accent-color: HighlightText; }
   /* The forced palette would repaint the dimmed label as ButtonText, so an inactive button paints as a disabled one (GrayText). */
   .quick-hp button[aria-disabled='true'],
+  .origin-basics button[aria-disabled='true'],
   .play-panel .actions button[aria-disabled='true'],
   .play-panel .inline-form button[aria-disabled='true'],
+  .play-panel .inline-form input[aria-disabled='true'],
+  .play-panel .inline-form select[aria-disabled='true'],
   .play-panel li button[aria-disabled='true'],
   .sheet-header button[aria-disabled='true'],
   section[aria-labelledby='builder-heading'] button[aria-disabled='true'] { forced-color-adjust: none; color: GrayText; border-color: GrayText; }

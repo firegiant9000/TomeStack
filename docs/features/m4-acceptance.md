@@ -26,17 +26,40 @@ Automated means it runs in the gate (CONTRIBUTING.md): `dotnet test`, `npm run t
 
 > pages 6 (1 by OCR); candidates 9 (class 1, feature 1, feat 1, spell 2, item 4); accepted 3, accepted as reference 2, ignored 1, pending 3; **active without approval: 0**
 
+Re-run 2026-10-16 (item 11 added a seventh page, a class with a spell table, and the features it names): pages 7 (1 by OCR); candidates 18 (class 2, feature 9, feat 1, spell 2, item 4); 5 accepted (one of each kind, the class only as reference because the harness confirms nothing), ignored 1, pending 12; **active without approval: 0**.
+
+Re-run 2026-10-16 after the Task 5 review fixes: candidates 19 (class 2, feature 10, feat 1, spell 2, item 4); the extra feature is a "Spellcasting" stub, because the SRD installs several features of that name, so it is not one installed feature (R67). 5 accepted as before, ignored 1, pending 13; **active without approval: 0**. The run now also prints class counts: classes 2, hit die 1, saves 1, armor 1, weapons 1, spellcasting 1, subclass choice 1; links 10; uncertainties 9.
+
 Every accepted candidate is a draft, and every effect in it is reference-only.
 
 ### The third-party test PDF (local)
 
 `M4AcceptanceTests.A_third_party_test_PDF_produces_reviewable_candidates_and_no_unapproved_active_rules` reads every PDF in the gitignored `tests/RulesFixtures/local/third-party/`. It skips when there is none. Its output, and the `report.md` it writes in that folder, are counts only: pages, candidates by kind, accepted, accepted as reference, ignored, pending, and "active without approval". PDFs are numbered by position, never named.
 
-**Not run:** the folder is not on the development machine. To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PDF`, then record the counts here:
+To run it, put the PDF there and run `dotnet test --filter A_third_party_test_PDF`, then record the counts here. Counts only, never names:
 
 | Date | Build | PDF | Candidates by kind | Accepted | As reference | Ignored | Active without approval |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | | | | | | | |
+| 2026-10-14, before | branch `wave-0`, before the detector change | 1 | 186: spell 116, item 69, feature 1 | 2 | 1 | 1 | 0 |
+| 2026-10-14, after | branch `wave-0`, with the detector change | 1 | 238: spell 116, feat 47, item 66, class 8, feature 1 | 3 | 2 | 1 | 0 |
+
+**2026-10-14 run (a third-party book, local, counts only).** 385 pages, 5 of them by OCR, 0 page errors; extraction about 20 s, detection 0.35 s. The book has 17 fonts; 7 carry a weight word, and 1 of those carries one only as Black, Heavy, Semibold or Demi (about 4,400 letters, none of it counted as bold before), so the extractor now accepts those words as style tokens (not as bare substrings, which would flag faces such as "Academic"); the same 7 fonts are still recognised after that narrowing, and the after-counts below did not move.
+
+- **Before** the change: spell 116, item 69 (2 of them not items), feature 1 (spurious), class, feat, species, background and subclass 0. Spell recall was about 84 % (116 of about 138 spell headers).
+- **After** the change: spell 116 (recall unchanged, about 84 %), item 66 (3 fewer: rows whose name held a price or read as a sentence), feat 47, class 8, feature 1. The feats and classes are new and their precision is **not reviewed**: the numbers show only that the detector now finds more, not that what it finds is right. Several of the 47 may be other kinds of entry in the same layout.
+- **SRD floors re-run the same day** with both PDFs hash-checked: every floor holds, and every number is the same as before the change (spells 100 % / 100 % on both SRDs; weapons 97.2 % / 100 % (5.1) and 97.4 % / 100 % (5.2.1); armor 100 % / 100 %; classes 83.3 % / 100 %; class features recall 88.2 % (5.1) and 100 % (5.2.1); feats recall 100 % with 1 candidate (5.1) and 17 (5.2.1)). A first draft of the feat rule took the SRDs' Eldritch Invocations for feats (+21 and +23 candidates), and a first draft of the junk-row rule dropped the SRD's "Crossbow, hand" rows (5.1 weapon recall 91.4 %). Both were narrowed until the numbers matched the baseline again.
+- **The gate stays not met.** It needs the owner to review precision on the book (accepted and ignored candidates, kind by kind), which this run does not replace.
+
+**2026-10-16 run (the same third-party book, local, counts only; branch `wave-1`, assisted class import, item 11).** 385 pages, 5 of them by OCR; candidates 332: class 8, feature 95, feat 47, spell 116, item 66 (before: 238, with feature 1). The review sample (the first of each kind, a class only as reference because the harness confirms nothing) gave accepted 3, accepted as reference 2, ignored 1, pending 326; **active without approval: 0**. The 94 new feature candidates are mostly reference stubs for the feature names the class tables list, not features found on their own pages, so they are not detection recall and their precision is **not reviewed**. The gate stays not met.
+
+**2026-10-16 re-run after the Task 5 review fixes (the same book, local, counts only).** The test now also prints, for the class candidates, how many carry each proposal, their links and their uncertainties. "Before" is the Task 5 build (`a581a02`) measured with the same counting; "after" is the fixed build.
+
+| | Candidates | Classes | Hit die | Saves | Armor | Weapons | Spellcasting | Subclass choice | Links | Uncertainties | Active without approval |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Before | 332 (feature 95) | 8 | 8 | 8 | 7 | 8 | 0 | 7 | 95 | 16 | 0 |
+| After | 336 (feature 99) | 8 | 8 | 8 | 7 | 8 | 0 | 7 | 104 | 16 | 0 |
+
+The other kinds did not move (class 8, feat 47, spell 116, item 66); review sample accepted 3, as reference 2, ignored 1, pending 330. The 4 extra feature stubs and 9 extra links are names that match installed content but not exactly one installed feature in the class's families, which R67 now stubs instead of dropping. No class on this book gets a `spellcasting` proposal before or after: why (no slot table read, or a casting sentence the reader does not match) is **not reviewed**, and neither is the precision of any proposal here.
 
 ## Precision and recall (D3)
 
@@ -68,7 +91,7 @@ The class precision floor went from 70 % to 80 %; the other floors are unchanged
 
 ## Could not be verified here
 
-- **The third-party test PDF run** (above). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
+- **The third-party test PDF's precision** (above: the run of 2026-10-14 has counts only; the owner has not reviewed the candidates). Detection was written against SRD layouts, so a third-party book will score lower, especially on class features and tables. Every candidate is still only a proposal (ADR-004).
 - **The review screen by keyboard only and with Narrator** (`accessibility-checklist.md`, items 3 and 15).
 - **OCR on a clean machine:** it needs an installed Windows OCR language. Without one, pages without text are reported (`ocr.unavailable`) and stay empty.
 - **The installer growth** was measured on a self-contained publish (+31.4 MB, ADR-009), not on the Velopack package.

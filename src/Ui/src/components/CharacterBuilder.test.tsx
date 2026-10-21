@@ -8,7 +8,7 @@ import { client } from '../api/client';
 import type { Character, CharacterView, ContentOption, RulesFamilyPolicy, SpellcastingEntry } from '../api/types';
 import { CharacterBuilder, campaignLabel } from './CharacterBuilder';
 
-vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
+vi.mock('../api/client', () => ({ client: { listCampaigns: vi.fn(), listContent: vi.fn(), draftCounts: vi.fn(), preview: vi.fn(), previewChoice: vi.fn(), createCharacter: vi.fn(), saveCharacter: vi.fn(), rollDice: vi.fn() } }));
 
 const caster = { contentId: 'fixture-caster', revisionId: 'fixture-caster-r1' };
 const spell = (id: string, name: string, level: number): ContentOption => ({
@@ -64,6 +64,7 @@ beforeEach(() => {
   vi.mocked(client.rollDice).mockReset();
   vi.mocked(client.listCampaigns).mockResolvedValue([]);
   vi.mocked(client.listContent).mockResolvedValue(spells);
+  vi.mocked(client.draftCounts).mockResolvedValue({});
   vi.mocked(client.preview).mockImplementation(async (draft) => viewWith(draft.spells));
 });
 afterEach(cleanup);
@@ -815,6 +816,66 @@ it('shows no few-options hint after a failed listing', async () => {
   await user.click(nextSpecies());
   await waitFor(() => expect(onError).toHaveBeenCalled());
   expect(screen.queryByText(/installed for/)).toBeNull();
+});
+
+// Item 1 (2026-10-14 plan): the pick steps say why content is missing, in plain text, counts only.
+async function toClassStep(user: ReturnType<typeof userEvent.setup>, onError: () => void = () => {}) {
+  await toScores(user, onError);
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(nextSpecies());
+  await user.click(await screen.findByRole('button', { name: 'Next: class' }));
+  expect(screen.getByRole('form', { name: 'Class' })).toBeTruthy();
+}
+
+it('says on the class step how many classes are drafts or written for the other family, without names', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.draftCounts).mockResolvedValue({ class: 2 });
+  vi.mocked(client.listContent).mockResolvedValue([
+    content(1, 'class', 'Fixture Fighter', 'srd-5.1'),
+    content(2, 'class', 'Fixture Other Mage', 'srd-5.2.1'),
+  ]);
+  await toClassStep(user);
+  const hint = await screen.findByText(/2 classes are drafts in the Homebrew studio/);
+  expect(hint.textContent).toMatch(/publish them there to use them/);
+  expect(screen.getByText(/1 class is written for SRD 5\.2\.1 only/)).toBeTruthy();
+  expect(screen.queryByText(/Fixture Other Mage/)).toBeNull();
+  expect(hint.querySelector('a, button')).toBeNull(); // R18: text only
+});
+
+it('shows no missing-content hint while the listing loads', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.draftCounts).mockResolvedValue({ species: 2 });
+  vi.mocked(client.listContent).mockImplementation(() => new Promise(() => {}));
+  await toScores(user);
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(nextSpecies());
+  await waitFor(() => expect(vi.mocked(client.draftCounts)).toHaveBeenCalled());
+  await new Promise((r) => setTimeout(r, 20));
+  expect(screen.queryByText(/drafts in the Homebrew studio|written for/)).toBeNull();
+});
+
+it('shows no missing-content hint after the listing fails', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.draftCounts).mockResolvedValue({ species: 2 });
+  vi.mocked(client.listContent).mockRejectedValue(new Error('fixture failure'));
+  const onError = vi.fn();
+  await toScores(user, onError);
+  await user.click(screen.getByRole('radio', { name: 'Enter by hand' }));
+  await user.click(nextSpecies());
+  await waitFor(() => expect(onError).toHaveBeenCalled());
+  expect(screen.queryByText(/drafts in the Homebrew studio|written for/)).toBeNull();
+});
+
+it('shows no missing-content line when nothing is hidden, and no draft line or error when the counts fail', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.listContent).mockResolvedValue([content(1, 'class', 'Fixture Fighter', 'srd-5.1'), content(3, 'class', 'Fixture Rogue', 'srd-5.1')]);
+  vi.mocked(client.draftCounts).mockRejectedValue(new Error('fixture failure'));
+  const onError = vi.fn();
+  await toClassStep(user, onError);
+  await screen.findByRole('radio', { name: /^Fixture Fighter/ });
+  await waitFor(() => expect(vi.mocked(client.draftCounts)).toHaveBeenCalled());
+  expect(screen.queryByText(/drafts in the Homebrew studio|written for|installed for/)).toBeNull();
+  expect(onError).not.toHaveBeenCalled();
 });
 
 // Checkpoint B fixes G2 (2.4.3, async): Next, the roll, the preview and the commit never act on a draft that has moved on.
