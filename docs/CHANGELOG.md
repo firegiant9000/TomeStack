@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
+
+Everything from the 2026-10-14 tester feedback plan (Waves 0 to 3, D33 to D42), listed below. It is checked on test data (automated tests and the desktop smoke); the owner checks on an installed build are still open (zoom, Narrator, High Contrast, print, the upgrade from 0.5.0).
+
+**Unsigned:** Windows shows "Windows protected your PC" the first time you run `TomeStack.App-win-Setup.exe`. Choose **More info**, then **Run anyway**. Some workplace PCs, and Windows 11 with Smart App Control on, block unsigned apps entirely.
+
+**Updating from 0.5.0: back up your data folder first. 0.5.0 can't open a data folder that 0.6.0 has opened.** Download the newer `Setup.exe` and run it; TomeStack never checks for updates and makes no network calls. On first start, 0.6.0 copies the database (`tomestack.db.v10.bak` and `tomestack.db.app-pre-0.6.0-to-0.6.0.bak`, both the database as 0.5.0 left it) and moves the data folder to database version 11. 0.5.0 also refuses a backup or share that holds a character using a new field (character schema v9) or content using content schema v10, so everyone at the table who swaps packages should upgrade together.
+
+**Not affiliated:** TomeStack names D&D Beyond only to say which character-sheet PDF it imports. It is not affiliated with D&D Beyond or Wizards of the Coast, and the importer says so on its first step.
 
 ### Added
 - **Theme presets and a custom accent (item 26, D40):** Settings > Theme now offers three more presets, **Ember** (rust and slate blue), **Rose** (berry and green) and **Tide** (teal and coral), each in light and dark, and **Custom accent**: pick a hue 0 to 359 on a labelled slider (the value reads as a colour word and a number, for example "Teal, 180 degrees"), with a live sample. The app moves only the lightness of the colour, in code, until text, the focus outline and filled shapes keep their contrast in light and dark at every hue. The new presets and the custom accent keep text on a filled shape (`--bg`) at 6.1:1 or better; the older themes are unchanged. Windows High Contrast and printing still win over every theme.
@@ -90,6 +98,7 @@
 - Import jobs may record what a book is written for (`writtenFor`; 0.5.0 ignores it), and a stored candidate may carry `familiesReviewed` (set when you save a family; absent otherwise; 0.5.0 does not read it and keeps it unchanged when it saves the row). A candidate this version leaves without a rules family cannot be edited or accepted by 0.5.0; ignore it there or read the document again.
 - Import jobs may record `truncatedCandidates` and `detectionLimitedFromPage` (optional, omitted when absent; 0.5.0 ignores them). `import.candidates` now returns `{ items, total }` and takes `offset`, `limit`, `firstPage` and `lastPage`; the app and its service ship together.
 - **Custom accent (page storage, no migration):** the theme stays in `tomestack.theme` (`custom` for Custom accent; `ember`, `rose` and `tide` for the presets) and the hue in `tomestack.accentHue` (an integer 0 to 359; anything else reads as the default blue, 265). A build older than this one reads `custom`, `ember`, `rose` and `tide` as unknown, shows forest and ignores the hue key; nothing is lost and nothing needs converting. No package, share, database or schema change.
+- **Upgrade everyone at the table together:** 0.5.0 refuses a v9 character and v10 content in a package (`package.schema-unsupported`), and can't open a data folder 0.6.0 has opened. Players who swap shares or content packs should all move to 0.6.0 at the same time.
 
 ## 0.5.0 (the tabbed sheet, a refreshed look, the guided builder and the D&D Beyond PDF import)
 
