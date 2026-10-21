@@ -434,7 +434,10 @@ it('builds an SRD 5.2.1 Barbarian as drafts: create, cancel a level-up, level to
   await user.clear(xpBox);
   await user.type(xpBox, String(threshold - 1));
   await user.click(within(xp()).getByRole('button', { name: 'Save experience points' }));
-  await waitFor(() => expect(within(xp()).getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe(String(threshold - 1)));
+  // Wait for the save to land (nothing differs, so Save is aria-disabled and focus is on the heading) before typing again:
+  // a reply that arrives mid-type moves focus off the box and leaves a partial number in it.
+  await waitFor(() => expect(within(xp()).getByRole('button', { name: 'Save experience points' }).getAttribute('aria-disabled')).toBe('true'));
+  expect(within(xp()).getByRole<HTMLInputElement>('spinbutton', { name: 'Experience points' }).value).toBe(String(threshold - 1));
   expect(within(xp()).queryByText('Level up available')).toBeNull();
   await user.clear(within(xp()).getByRole('spinbutton', { name: 'Experience points' }));
   await user.type(within(xp()).getByRole('spinbutton', { name: 'Experience points' }), String(threshold));
