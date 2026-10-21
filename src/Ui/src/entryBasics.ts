@@ -55,6 +55,8 @@ export function setAbilityIncrease(effects: Effect[], key: AbilityKey, amount: n
 
 // ---- species: speed (content v10; items 12 and 24) ----
 
+export const speedRange = { min: 5, max: 120 } as const;
+
 /** Any modifier on the character's walking speed. Below content v10 the calculator ignores these; publishing one writes v10. */
 const isSpeedModifier = (e: Effect): e is Modifier => e.type === 'modifier' && e.target === 'speed';
 
@@ -65,9 +67,11 @@ const speedReplaces = (effects: Effect[]) => effects.filter((e): e is Modifier =
  * sets the base before bonuses (the highest replacement wins), so a feat's bonus still adds on top. Anything else on speed
  * (a bonus, a formula, a toggle, several replaces) is not claimed: it stays in the studio's rule list.
  */
-export const isSpeciesSpeed = (e: Effect, effects: Effect[]): e is Modifier => {
+const isSpeedValue = (value: string) => /^[1-9]\d{0,2}$/.test(value) && Number(value) >= speedRange.min && Number(value) <= speedRange.max;
+
+export const isSpeciesSpeed =(e: Effect, effects: Effect[]): e is Modifier => {
   const replaces = speedReplaces(effects);
-  return replaces.length === 1 && replaces[0] === e && /^\d+$/.test(e.value) && e.toggle === undefined && (e.timing === undefined || e.timing === 'always');
+  return replaces.length === 1 && replaces[0] === e && isSpeedValue(e.value) && e.toggle === undefined && (e.timing === undefined || e.timing === 'always');
 };
 
 export const speciesSpeed = (effects: Effect[]): number | undefined => {
@@ -83,8 +87,6 @@ export const hasForeignSpeedReplace = (effects: Effect[]): boolean => {
 
 /** True when the species has any speed effect the editor does not show, so it can say where to find it. */
 export const hasOtherSpeedRules = (effects: Effect[]): boolean => effects.some((e) => isSpeedModifier(e) && !isSpeciesSpeed(e, effects));
-
-export const speedRange = { min: 5, max: 120 } as const;
 
 /** Sets the species speed in place (or last, when it has none); `undefined` removes it. Other speed effects stay as they were. */
 export function setSpeciesSpeed(effects: Effect[], feet: number | undefined): Effect[] {

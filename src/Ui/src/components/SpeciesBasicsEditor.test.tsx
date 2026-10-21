@@ -40,11 +40,23 @@ function Harness(props: {
   newerPublished?: (r: ContentReference) => ContentReference | undefined;
   /** Adds a button that unticks the rules families, as the studio's family boxes do. */
   untick?: boolean;
+  /** Adds a button that adds one more speed replace, as an edit in the effects list would. */
+  addReplace?: boolean;
 }) {
   const [revision, setRevision] = useState(props.initial);
   props.onChange?.(revision);
   return (
     <>
+      {props.addReplace && (
+        <button
+          type="button"
+          onClick={() =>
+            setRevision((r) => ({ ...r, effects: [...r.effects, { type: 'modifier', id: `other-${r.effects.length}`, operation: 'replace', target: 'speed', value: '35' }] }))
+          }
+        >
+          Add another speed replace
+        </button>
+      )}
       {props.untick && (
         <button type="button" onClick={() => setRevision((r) => ({ ...r, rulesFamilies: ['srd-5.2.1'] }))}>
           Untick older rules
@@ -208,8 +220,32 @@ it('items 12 and 24: a speed bonus is left untouched, the field stays blank and 
   expect(latest.effects[1]).toMatchObject({ operation: 'replace', value: '25' });
 });
 
+it('review fix: an invalid speed draft is dropped, with its problem, when the field turns read-only', async () => {
+  const user = userEvent.setup();
+  const onProblem = vi.fn();
+  const lastFor = (field: string) => onProblem.mock.calls.filter((c) => c[0] === field).at(-1)?.[1];
+  render(<Harness initial={revisionOf(['srd-5.1'])} onProblem={onProblem} addReplace />);
+  const speed = screen.getByRole('textbox', { name: 'Speed (feet)' });
+  await user.type(speed, '4');
+  expect(speed.getAttribute('aria-invalid')).toBe('true');
+  expect(lastFor('species-speed')).toBeTruthy();
+  const add = screen.getByRole('button', { name: 'Add another speed replace' });
+  await user.click(add); // one replace of 35 is still the field's own
+  expect(speed).toHaveProperty('readOnly', false);
+  expect(speed.getAttribute('aria-invalid')).toBe('true');
+  await user.click(add); // two replaces: not the field's
+  expect(speed).toHaveProperty('readOnly', true);
+  expect(speed.getAttribute('aria-invalid')).toBeNull();
+  expect(speed).toHaveProperty('value', '');
+  expect(lastFor('species-speed')).toBeUndefined();
+});
+
 it.each([
   ['a formula', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: 'PB + 20' }]],
+  ['a stored 0', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '0' }]],
+  ['a stored 200', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '200' }]],
+  ['a stored 007', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '007' }]],
+  ['a stored 4', [{ type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '4' }]],
   ['several replaces', [
     { type: 'modifier', id: 'a', operation: 'replace', target: 'speed', value: '25' },
     { type: 'modifier', id: 'b', operation: 'replace', target: 'speed', value: '35' },

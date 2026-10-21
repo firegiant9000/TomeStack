@@ -62,7 +62,10 @@ export function SpeciesBasicsEditor(props: SpeciesProps) {
   const speed = speciesSpeed(effects);
   const foreignSpeed = hasForeignSpeedReplace(effects);
   const otherSpeedRules = hasOtherSpeedRules(effects);
-  const [speedDraft, setSpeedDraft] = useState<string | undefined>(undefined);
+  const [typedSpeed, setTypedSpeed] = useState<{ revisionId: string; text: string } | undefined>(undefined);
+  // A read-only field (a foreign replace appeared) shows no stale invalid text, and another revision starts clean.
+  const speedDraft = foreignSpeed || typedSpeed?.revisionId !== revision.revisionId ? undefined : typedSpeed.text;
+  const setSpeedDraft = (text: string | undefined) => setTypedSpeed(text === undefined ? undefined : { revisionId: revision.revisionId, text });
   const speedProblem = `Speed: a whole number of feet from ${speedRange.min} to ${speedRange.max}, or empty for none.`;
   const speedInvalid = speedDraft !== undefined;
   useEffect(() => {

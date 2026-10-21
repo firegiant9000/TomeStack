@@ -61,15 +61,12 @@ A caster can use only a spell that names the caster's list. A spell that names n
 
 A spell that was accepted or published without a list: in the studio, tick it and choose "Add N spells to a spell list…". That saves a new draft of each spell with the key and opens the publish panel on exactly those drafts, all ticked; nothing is published until you confirm. Characters keep the spell revisions they recorded until you review an update for each one.
 
-## Custom weapons and backstory
+## Companions, your own attacks and backstory
 
-Familiars and mounts have a Companions card on Play. TomeStack has no place for custom weapons or backstory yet. Until later waves land, write them in the sheet's **Notes** tab, in "Session notes": enter a "Session date" and a "Note", then choose "Save session note". Session notes stay on this computer and in your personal backups.
+Familiars and mounts have a Companions card on Play. Your own attacks (name, bonus, damage) are entered under "Your own attacks", and personality and background story go in the Notes tab's "Details" form. Session notes (a "Session date" and a "Note", then "Save session note") stay on this computer and in your personal backups.
 
 ## What is still manual at the table
 
-- Hand-typed weapons (name, bonus, damage).
-- Backstory and personality text.
-
-Built and struck from this list: companions (a card on Play), Bloodied and other automatic toggles, reactions and bonus actions (grouped on Play), damage resistance and typed damage, attunement and item charges, XP tracking, and species speed (a homebrew species sets it in the studio). Later waves strike more lines as they land.
+Nothing from the earlier list. Built and struck from it: companions (a card on Play), your own attacks, backstory and personality text (Notes, "Details"), Bloodied and other automatic toggles, reactions and bonus actions (grouped on Play), damage resistance and typed damage, attunement and item charges, XP tracking, and species speed (a homebrew species sets it in the studio).
 
 Use the sheet's Report a gap for anything that blocks you; the notes shape what comes next.
