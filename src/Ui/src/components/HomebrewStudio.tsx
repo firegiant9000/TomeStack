@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState, type SubmitEvent } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type SubmitEvent } from 'react';
 import { client } from '../api/client';
 import type {
   AffectedCharacter,
@@ -19,6 +19,7 @@ import type {
   StudioEntry,
   ValidationReport,
 } from '../api/types';
+import { FormulaPreview } from './FormulaPreview';
 import { UpdateReviewPanel } from './UpdateReviewPanel';
 import { ClassBasicsEditor, classBasicElementId, isClassBasic } from './ClassBasicsEditor';
 import { BackgroundBasicsEditor } from './BackgroundBasicsEditor';
@@ -646,6 +647,14 @@ interface ClassChoice {
   text: string;
 }
 
+// A spell always carries its spell data (the form shows a level 1 spell on no list until a field changes), with its text trimmed.
+const forServer = (r: ContentRevision): ContentRevision => ({
+  ...r,
+  name: r.name.trim(),
+  summary: r.summary?.trim() || undefined,
+  effects: r.kind === 'spell' ? tidySpell(spellOf(r.effects) ? r.effects : setSpell(r.effects, {})) : r.effects,
+});
+
 function EntryEditor(props: {
   initial: ContentRevision;
   source: SourceRecord;
@@ -799,6 +808,30 @@ function EntryEditor(props: {
     };
   }, [props.initial.kind, family, onError]);
 
+  // What the formula previews (D61) are worked out against: only the draft's scale columns (the one thing a preview reads
+  // from it) with the identity fields the server requires. A preview asks again whenever this object changes, so it is
+  // memoised on a key of exactly those inputs: editing a name, a summary or any other rule asks for nothing.
+  const [previewId] = useState(() => crypto.randomUUID());
+  const previewKey = JSON.stringify({
+    kind: revision.kind,
+    schemaVersion: revision.schemaVersion,
+    scales: revision.effects.filter((e) => e.type === 'scale'),
+  });
+  const previewRevision = useMemo<ContentRevision>(() => {
+    const { kind, schemaVersion, scales } = JSON.parse(previewKey) as { kind: ContentRevision['kind']; schemaVersion?: number; scales: Effect[] };
+    return {
+      contentId: props.initial.contentId,
+      revisionId: previewId,
+      schemaVersion,
+      kind,
+      name: 'Preview',
+      rulesFamilies: [],
+      provenance: props.initial.provenance,
+      status: 'draft',
+      effects: scales,
+    };
+  }, [previewKey, previewId, props.initial.contentId, props.initial.provenance]);
+
   const update = (change: Partial<ContentRevision>) => setRevision((r) => ({ ...r, ...change }));
   const setEffect = (index: number, effect: Effect) => update({ effects: revision.effects.map((e, i) => (i === index ? effect : e)) });
   const nextId = (type: string) => {
@@ -847,14 +880,6 @@ function EntryEditor(props: {
                     : { type: 'grant', id, grant: 'content', content: grantable[0]?.latestPublished && reference(grantable[0].latestPublished), level: isClass ? 1 : 3 };
     update({ effects: [...revision.effects, effect] });
   }
-
-  // A spell always carries its spell data (the form shows a level 1 spell on no list until a field changes), with its text trimmed.
-  const forServer = (r: ContentRevision): ContentRevision => ({
-    ...r,
-    name: r.name.trim(),
-    summary: r.summary?.trim() || undefined,
-    effects: r.kind === 'spell' ? tidySpell(spellOf(r.effects) ? r.effects : setSpell(r.effects, {})) : r.effects,
-  });
 
   async function check() {
     try {
@@ -1024,6 +1049,7 @@ function EntryEditor(props: {
           resources={resources}
           toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
           grantable={grantable}
+          previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
           onProblem={reportProblem}
           onRemove={() => {
@@ -1312,7 +1338,12 @@ function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChan
  * Content v5 spellcasting, with the v9 multiclass table (ADR-010). The slot table is one line per class level, each the
  * slots of spell levels 1, 2, … separated by commas (an empty line: no slots at that level).
  */
-function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasting' }>; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
+function SpellcastingFields(props: {
+  effect: Extract<Effect, { type: 'spellcasting' }>;
+  previewRevision?: ContentRevision;
+  onChange: (effect: Effect) => void;
+  onProblem: ReportProblem;
+}) {
   const { effect, onChange } = props;
   // A new caster's 20 empty rows start as an empty box, not 19 blank lines that typed rows would follow.
   const [slotsText, setSlotsText] = useState(effect.slots.every((row) => row.length === 0) ? '' : effect.slots.map((row) => row.join(', ')).join('\n'));
@@ -1344,8 +1375,13 @@ function SpellcastingFields(props: { effect: Extract<Effect, { type: 'spellcasti
       </label>
       <label className="field">
         Prepared or known spells (optional formula, such as max(1, INT.MOD + CLASS_LEVEL))
-        <input value={effect.spellsFormula ?? ''} onChange={(e) => onChange({ ...effect, spellsFormula: e.target.value || undefined })} />
+        <input
+          value={effect.spellsFormula ?? ''}
+          aria-describedby={`rule-${effect.id}-spells-preview`}
+          onChange={(e) => onChange({ ...effect, spellsFormula: e.target.value || undefined })}
+        />
       </label>
+      <FormulaPreview id={`rule-${effect.id}-spells-preview`} formula={effect.spellsFormula ?? ''} revision={props.previewRevision} floorAtZero />
       <div className="field">
         <label>
           Spell slots: one line per class level 1 to 20, the slots of spell levels 1, 2, … separated by commas
@@ -1411,6 +1447,8 @@ function EffectEditor(props: {
   resources: Extract<Effect, { type: 'resource' }>[];
   toggles: Extract<Effect, { type: 'toggle' }>[];
   grantable: StudioEntry[];
+  /** The draft the formula previews are worked out against (D61). */
+  previewRevision?: ContentRevision;
   onChange: (effect: Effect) => void;
   onProblem: ReportProblem;
   onRemove: () => void;
@@ -1460,8 +1498,9 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             Value (a number or a formula such as PB + CON.MOD)
-            <input value={effect.value} onChange={(e) => onChange({ ...effect, value: e.target.value })} />
+            <input value={effect.value} aria-describedby={`rule-${effect.id}-value-preview`} onChange={(e) => onChange({ ...effect, value: e.target.value })} />
           </label>
+          <FormulaPreview id={`rule-${effect.id}-value-preview`} formula={effect.value} revision={props.previewRevision} />
           {/* Only for a modifier that is always on or switched by a toggle: another timing (such as onRoll, from imported
               content) is left as it is, never turned into "always" (review fix). */}
           {(effect.toggle || ((effect.timing ?? 'always') === 'always' && toggles.length > 0)) && (
@@ -1513,8 +1552,9 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             Uses (a number or a formula such as PB, CLASS_LEVEL or SCALE.column1)
-            <input value={effect.maximum} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
+            <input value={effect.maximum} aria-describedby={`rule-${effect.id}-maximum-preview`} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
           </label>
+          <FormulaPreview id={`rule-${effect.id}-maximum-preview`} formula={effect.maximum} revision={props.previewRevision} floorAtZero />
         </>
       )}
       {effect.type === 'recovery' && (
@@ -1544,8 +1584,9 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             How many (all, a number or a formula)
-            <input value={effect.amount} onChange={(e) => onChange({ ...effect, amount: e.target.value })} />
+            <input value={effect.amount} aria-describedby={`rule-${effect.id}-amount-preview`} onChange={(e) => onChange({ ...effect, amount: e.target.value })} />
           </label>
+          <FormulaPreview id={`rule-${effect.id}-amount-preview`} formula={effect.amount} revision={props.previewRevision} floorAtZero />
         </>
       )}
       {effect.type === 'roll' && (
@@ -1622,7 +1663,7 @@ function EffectEditor(props: {
         </>
       )}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
-      {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type !== 'grant' && (
         <label className="field">
           Automation

@@ -24,6 +24,17 @@ The studio authors classes (since M5, below), species, backgrounds and spells (i
 
 Every effect has an automation setting (automatic, assisted, reference only) and its own text. **Check** validates the unsaved revision (`content.validate`), **Save draft** stores it (`content.saveDraft`; drafts are insert-only, so each save is a new revision id), and **Publish** saves and publishes it (`content.publish` validates again and refuses on any error). Editing published content starts a new draft of the same content id.
 
+### Formula preview (D61)
+
+Under the four formula inputs (a modifier's Value, a resource's Uses, a recovery's How many, spellcasting's Prepared or known spells) the studio shows what the formula gives at levels 1, 5, 11, 16 and 20, as `Level 1: 2 · Level 5: 3 · …`, with the caption "Preview, not a character: ability scores 10, proficiency bonus by level."
+
+- **Hypothetical context:** every ability score is 10 (so every `.MOD` is 0); `PB` follows the level (`2 + (level - 1) / 4`); `LEVEL` and `CLASS_LEVEL` equal the level; `SCALE.<id>` reads the draft's own scale effects (the calculator's own rule: only a class or subclass's columns, Automatic, with exactly 20 values, each 0 to 10000; any other column is not used). Values below 0 show as 0 for Uses, How many and Prepared or known spells, as on the sheet; a modifier's Value is shown as it is.
+- **Read-only:** `content.previewFormula` parses the formula (with scales allowed, as validation does for drafts) and evaluates it; it writes and stores nothing, and the preview is not a character. It runs 300 ms after typing stops. A formula that is empty, `all` or a plain integer shows no preview.
+- **A level that fails** (for example a division by zero at one level) shows the problem for that level and the values for the others. A formula over the length limit shows its parse error.
+- **`SCALE` limit:** a `SCALE.<id>` that is not one of this draft's own automatic 20-value columns (for example a feature reading its class's column, which lives on the class) says it cannot be previewed here; it never shows 0.
+- **Failure:** if the request fails, the preview says "Preview unavailable." and nothing else changes.
+- **Accessibility:** the preview container is always present and is the input's `aria-describedby`, so it is read on focus; it is not a live region (accessibility checklist row 59).
+
 ## Species, backgrounds and spells (tester feedback item 12; SPEC I-04)
 
 "New species", "New background" and "New spell" open the same entry editor as "New class", with a guided section above the rule list (`SpeciesBasicsEditor`, `BackgroundBasicsEditor`, `SpellBasicsEditor` beside `ClassBasicsEditor`). Each writes ordinary effects, so nothing here needs a new field or schema version; the rule list shows only the effects the section does not cover, and a stored value the form cannot show (an unknown spell school, a grant with a level) is kept as it is. The rules family's **policy** decides what is offered (`abilityIncreaseSource`, `backgroundGrantsFeat`), never its name. An entry that targets both families shows both behaviours, each under the family's display name.

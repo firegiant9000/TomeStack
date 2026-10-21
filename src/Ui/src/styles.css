@@ -521,3 +521,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
 .ddb-text-entry textarea { resize: vertical; padding: 0.3rem 0.4rem; }
 .ddb-text-entry [aria-invalid='true'] { border: 2px solid var(--error); }
 #ddb-not-read li { overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* D61: the formula preview keeps room for its levels row and caption while the answer is on its way. */
+.formula-preview { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.formula-preview.reserved { min-height: 3rem; }
+.formula-preview > small { display: block; color: var(--muted); }
