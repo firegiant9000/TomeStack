@@ -218,6 +218,8 @@ export function createClient(transport: Transport) {
       call<CharacterView>('character.previewChoice', { draft, source, choiceId, selected }),
     /** One play-state change; `confirm` is always sent because only a deliberate button press calls this (SPEC C-05). */
     play: (characterId: string, action: PlayAction) => call<CharacterView>('character.play', { characterId, ...action, confirm: true }),
+    /** D44: puts the play state back to what the last compound change (a form switch) started from. `updatedAt` is the view's stamp. */
+    undoPlay: (characterId: string, updatedAt: string) => call<CharacterView>('character.undoPlay', { characterId, updatedAt, confirm: true }),
     /** What a rest would change; writes nothing (D01). A short rest spends `hitDice`, each with what the die shows. */
     restPreview: (characterId: string, kind: RestPeriod, hitDice: HitDieRoll[] = [], chargeRolls: ChargeRoll[] = []) =>
       call<RestPreview>('character.restPreview', { characterId, kind, hitDice, chargeRolls }),

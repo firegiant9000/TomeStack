@@ -27,7 +27,7 @@ async function openTab(user: ReturnType<typeof userEvent.setup>, sheet: HTMLElem
   if (tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
 }
 
-it('authors a form group and two forms in the studio, switches between them on Play, and refuses a switch without enough pool', async () => {
+it('authors a form group and two forms in the studio, switches forms, refuses a switch without enough pool, undoes the switch, and the pool is back', async () => {
   const user = userEvent.setup();
   const source = await client.createHomebrewSource('E2E Forms Book', ['srd-5.2.1']);
   render(<App />);
@@ -107,4 +107,12 @@ it('authors a form group and two forms in the studio, switches between them on P
   expect(form(/^E2E Ember/).getAttribute('aria-checked')).toBe('true');
   expect(form(/^E2E Tide/).getAttribute('aria-checked')).toBe('false');
   expect(within(resources()).getByRole('heading', { name: 'Focus: 1 of 7' })).toBeTruthy();
+
+  // D44: the switch to Ember is undone by the service (the refused switch wrote nothing, so the offer stands): Tide is back and the
+  // pool with it, exactly as before the switch.
+  await user.click(await screen.findByRole('button', { name: 'Undo switch to E2E Ember' }));
+  await waitFor(() => expect(form(/^E2E Tide/).getAttribute('aria-checked')).toBe('true'));
+  expect(form(/^E2E Ember/).getAttribute('aria-checked')).toBe('false');
+  expect(within(resources()).getByRole('heading', { name: 'Focus: 4 of 7' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /^Undo switch/ })).toBeNull(); // one level: nothing left to undo
 });
