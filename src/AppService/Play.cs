@@ -88,6 +88,9 @@ public enum PlayActionKind
 
     /// <summary>A companion's temporary hit points become <c>amount</c> (0 to the maximum allowed); its current hit points stay as stored, so a damage that landed first is kept.</summary>
     CompanionSetTemporaryHitPoints,
+
+    /// <summary>D43 slice 3: starts an encounter at round 0 (turns are taken in an encounter). Refused <c>encounter.already-started</c> while one is running. Compound: needs the stamp, and sets the undo slot.</summary>
+    StartEncounter,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -146,7 +149,7 @@ public sealed partial class TomeStackApp
         // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
         // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
         // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
-        if (IsCompound(command) && command.ExpectedUpdatedAt is null)
+        if (CompoundUndo(command, null).Compound && command.ExpectedUpdatedAt is null)
             throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
         if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
@@ -195,6 +198,9 @@ public sealed partial class TomeStackApp
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
             PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(character, play, sheet, command),
+            PlayActionKind.StartEncounter => play.Encounter is null
+                ? play with { Encounter = new(0) }
+                : throw new AppValidationException([new("encounter.already-started", "An encounter is already running.")]),
             PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
             PlayActionKind.EndConcentration => play.Concentration is null
                 ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
@@ -210,9 +216,7 @@ public sealed partial class TomeStackApp
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
         // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
-        (PlayState, string)? undo = IsCompound(command) && sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched
-            ? (character.Play, $"switch to {switched.Label}")
-            : null;
+        (PlayState, string)? undo = CompoundUndo(command, sheet).Label is { } label ? (character.Play, label) : null;
         var view = SaveWithPlay(character with { Play = play }, undo);
         return damage is null ? view : view with { Damage = damage };
     }
@@ -243,10 +247,19 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
-    /// D43 S2: a compound change decides several writes from one view, so it needs the current stamp (<c>play.basis-required</c>
-    /// without one). Today only the form switch is: <c>toggleOn</c> with <c>replace</c>. Later slices (S3, S7, S8) extend this list.
+    /// D43 S2/S3: the one server switch for compound play changes. A compound change decides several writes from one view, so it needs
+    /// the current stamp (<c>play.basis-required</c> without one) and keeps the play state it started from for one undo. Today:
+    /// <c>toggleOn</c> with <c>replace</c> ("switch to {toggle label}", the label only once the toggle exists on the
+    /// <paramref name="sheet"/>) and <c>startEncounter</c> ("start encounter"). Later slices (S3 task 3.5, S7, S8) extend this switch.
+    /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
     /// </summary>
-    private static bool IsCompound(PlayCommand command) => command.Action == PlayActionKind.ToggleOn && command.Replace;
+    private static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
+    {
+        PlayActionKind.ToggleOn when command.Replace => (true,
+            sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),
+        PlayActionKind.StartEncounter => (true, "start encounter"),
+        _ => (false, null),
+    };
 
     /// <summary>
     /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its

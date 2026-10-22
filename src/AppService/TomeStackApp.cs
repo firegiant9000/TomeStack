@@ -551,7 +551,7 @@ public sealed record CharacterSummary(Guid Id, string Name, string RulesFamily, 
 
 /// <param name="Campaign">SPEC P-01: the character's campaign and its warnings (allowed sources, rules family), when it has one.</param>
 /// <param name="Damage">Wave 3 item 21: set only on the view a typed or untyped <see cref="PlayActionKind.Damage"/> command returns; never stored.</param>
-public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null, string? UndoLabel = null);
+public sealed record CharacterView(Character Character, CharacterSheet Sheet, CampaignStatus? Campaign = null, DamageOutcome? Damage = null, string? UndoLabel = null, IReadOnlyList<Diagnostic>? Notices = null);
 
 public sealed record ChooseRequest(Guid CharacterId, ContentReference Source, string ChoiceId, IReadOnlyList<ContentReference>? Selected);
 
