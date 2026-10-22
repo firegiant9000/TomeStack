@@ -92,6 +92,7 @@ public enum PlayActionKind
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
 /// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
+/// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -107,7 +108,8 @@ public sealed record PlayCommand(
     int? EntryIndex = null,
     Guid? CompanionId = null,
     int? Temporary = null,
-    bool Replace = false);
+    bool Replace = false,
+    DateTimeOffset? ExpectedUpdatedAt = null);
 
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
@@ -135,6 +137,10 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.confirmation-required", "Changing hit points, resources or conditions needs an explicit confirmation.")]);
         var character = _store.FindCharacter(command.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {command.CharacterId} does not exist.")]);
+        // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
+        // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
+        if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 

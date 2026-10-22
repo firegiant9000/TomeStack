@@ -8,6 +8,19 @@ internal sealed class FixedTime(DateTimeOffset now) : TimeProvider
     public override DateTimeOffset GetUtcNow() => now;
 }
 
+/// <summary>A clock that moves 1 ms on every read, so each write gets its own <c>UpdatedAt</c> stamp (D43 S2).</summary>
+internal sealed class TickingTime(DateTimeOffset start) : TimeProvider
+{
+    private DateTimeOffset _next = start;
+
+    public override DateTimeOffset GetUtcNow()
+    {
+        var now = _next;
+        _next = _next.AddMilliseconds(1);
+        return now;
+    }
+}
+
 internal static class AppTestExtensions
 {
     /// <summary>
