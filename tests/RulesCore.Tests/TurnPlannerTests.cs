@@ -119,7 +119,7 @@ public class TurnPlannerTests
         var choices = new Dictionary<string, TurnChoiceOption> { [IronShort] = TurnChoiceOption.Keep };
         var plan = Plan(character, selection: new TurnSelection(new HashSet<string>(), choices));
 
-        Assert.Equal("Iron stance: short 1 breath, settle by hand", Assert.Single(plan.Manual).Message);
+        Assert.Equal("Iron stance: short 1 Breath, settle by hand", Assert.Single(plan.Manual).Message);
         var after = TurnPlanner.Apply(character.Play, plan);
         Assert.Equal(7, after.SpentOf(Breath, "breath"));
         Assert.True(IsOn(after, "iron"));
@@ -241,6 +241,30 @@ public class TurnPlannerTests
         Assert.Equal(["flare"], ToggleGroups.EndingWith(iron, toggles).Select(t => t.ToggleId));
         // An overlay is never "ending with" itself, and an ungrouped or overlay toggle takes nothing with it.
         Assert.Empty(ToggleGroups.EndingWith(toggles.Single(t => t.ToggleId == "flare"), toggles));
+    }
+
+    [Fact]
+    public void EndingWith_also_takes_a_stored_overlay_that_is_not_on()
+    {
+        // Bound is allowed only with Tide, so beside Ember it is stored but not on. Turning Ember off must drop it too,
+        // or it would come back on silently when Tide is switched on.
+        var ember = new ActiveToggle(Fixtures.EmberForm.ContentId, "ember");
+        var bound = new ActiveToggle(Fixtures.BoundOverlay.ContentId, "bound");
+        var toggles = ToggleGroupTests.Sheet(ToggleGroupTests.Forms(ember, bound)).Toggles!;
+        Assert.False(toggles.Single(t => t.ToggleId == "bound").On);
+
+        Assert.Empty(ToggleGroups.EndingWith(toggles.Single(t => t.ToggleId == "ember"), toggles));
+        var stored = new HashSet<(Guid, string)> { (ember.ContentId, "ember"), (bound.ContentId, "bound") };
+        Assert.Equal(["bound"], ToggleGroups.EndingWith(toggles.Single(t => t.ToggleId == "ember"), toggles, stored).Select(t => t.ToggleId));
+    }
+
+    [Fact]
+    public void Skipping_the_round_is_ignored_and_the_round_cannot_be_unticked()
+    {
+        var plan = Plan(InEncounter(round: 2), selection: new TurnSelection(new HashSet<string> { "round" }, new Dictionary<string, TurnChoiceOption>()));
+        var round = Assert.Single(plan.Changes);
+        Assert.True(round.Required);
+        Assert.Equal(3, round.To);
     }
 
     [Fact]

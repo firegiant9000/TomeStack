@@ -136,7 +136,14 @@ public static class ToggleGroups
     /// group that is still on beside <paramref name="ending"/>, if any, is the one the overlays must be allowed with; none means the
     /// base character. This is the rule the toggle command and the turn planner share.
     /// </summary>
-    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles)
+    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles) => EndingWith(ending, toggles, null);
+
+    /// <summary>
+    /// As <see cref="EndingWith(ToggleValue, IReadOnlyList{ToggleValue})"/>, and an overlay that is only stored (not on, because it was
+    /// not allowed with the form that was on) counts too, so it cannot come back on silently later. <paramref name="stored"/> holds the
+    /// (content id, toggle id) of every stored toggle.
+    /// </summary>
+    public static IReadOnlyList<ToggleValue> EndingWith(ToggleValue ending, IReadOnlyList<ToggleValue> toggles, IReadOnlySet<(Guid ContentId, string ToggleId)>? stored)
     {
         ArgumentNullException.ThrowIfNull(ending);
         ArgumentNullException.ThrowIfNull(toggles);
@@ -146,6 +153,6 @@ public static class ToggleGroups
         bool InGroup(ToggleValue t) => t.Group == ending.Group && t.GroupContent == ending.GroupContent;
         var remaining = toggles.FirstOrDefault(t => t.On && InGroup(t) && t.Layer != ToggleLayer.Overlay && !Same(t));
         (Guid, string)? primary = remaining is null ? null : (remaining.Content.ContentId, remaining.ToggleId);
-        return [.. toggles.Where(t => t.On && InGroup(t) && t.Layer == ToggleLayer.Overlay && !OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, primary))];
+        return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true) && InGroup(t) && t.Layer == ToggleLayer.Overlay &&!OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, primary))];
     }
 }

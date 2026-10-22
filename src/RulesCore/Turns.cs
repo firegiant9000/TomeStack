@@ -73,6 +73,7 @@ public static class TurnPlanner
         var original = sheet.Toggles ?? [];
         var working = original.ToList();
         var changes = new List<TurnChange>();
+        var ended = new HashSet<(Guid, string)>(); // looked up only
         var choices = new List<TurnChoicePrompt>();
         var manual = new List<Diagnostic>();
         var prompts = new List<TurnPrompt>();
@@ -97,12 +98,15 @@ public static class TurnPlanner
                 $"end:{toggle.Content.ContentId:D}:{toggle.ToggleId}", TurnChangeKind.ToggleEnd, label, 1, 0, reason, OriginOf(toggle.Content, toggle.EffectId),
                 Required: true, ContentId: toggle.Content.ContentId, ToggleId: toggle.ToggleId));
             MarkOff(toggle);
+            ended.Add((toggle.Content.ContentId, toggle.ToggleId));
         }
 
         // The toggle ends, and so do the overlays that needed it: the one rule the toggle command shares.
         void End(ToggleValue toggle, string label, string reason)
         {
-            var dependents = ToggleGroups.EndingWith(toggle, working);
+            // A stored overlay that is not on (not allowed with the form that was on) goes too, so it cannot come back on silently.
+            var stored = character.Play.Toggles.Select(s => (s.ContentId, s.ToggleId)).Where(k => !ended.Contains(k)).ToHashSet();
+            var dependents = ToggleGroups.EndingWith(toggle, working, stored);
             AddEnd(toggle, label, reason);
             foreach (var overlay in dependents)
                 AddEnd(overlay, overlay.Label, $"{overlay.Label} needs {toggle.Label}, which ends");
@@ -118,7 +122,7 @@ public static class TurnPlanner
         {
             var round = character.Play.Encounter?.Round ?? 0;
             var nextRound = Math.Min(round + 1, PlayState.MaxRounds);
-            changes.Add(new("round", TurnChangeKind.Round, "Round", round, nextRound, $"Round {nextRound} begins", rules));
+            changes.Add(new("round", TurnChangeKind.Round, "Round", round, nextRound, $"Round {nextRound} begins", rules, Required: true));
             foreach (var toggle in original)
             {
                 if (toggle.Auto == true || toggle.RoundsLeft is not { } left || !IsOn(toggle))
@@ -200,7 +204,7 @@ public static class TurnPlanner
                 changes.Add(Spend(u, pool, id, current, maximum, $"{pool.Label}: spend {remaining} of {amount}"));
                 spent[(pool.Content.ContentId, pool.ResourceId)] = maximum;
             }
-            manual.Add(new("turn.settle-by-hand", $"{toggle?.Label ?? u.Label}: short {shortBy} {pool.Label.ToLowerInvariant()}, settle by hand", u.Content, u.EffectId));
+            manual.Add(new("turn.settle-by-hand", $"{toggle?.Label ?? u.Label}: short {shortBy} {pool.Label}, settle by hand", u.Content, u.EffectId));
         }
 
         // ---- 4: regains -------------------------------------------------------------------------------------------------

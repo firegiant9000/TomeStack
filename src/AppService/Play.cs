@@ -351,7 +351,7 @@ public sealed partial class TomeStackApp
             if (!toggle.On)
                 throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
             // D43: a primary that goes off takes the overlays that need it (the rule the turn planner shares).
-            var taken = ToggleGroups.EndingWith(toggle, sheet.Toggles!).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
+            var taken = ToggleGroups.EndingWith(toggle, sheet.Toggles!, play.Toggles.Select(s => (s.ContentId, s.ToggleId)).ToHashSet()).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
             return taken.Count == 0 ? play with { Toggles = others } : play with { Toggles = [.. others.Where(t => !taken.Contains((t.ContentId, t.ToggleId)))] };
         }
         if (toggle.On)
