@@ -210,9 +210,11 @@ public sealed record FeatureEntry(
 /// Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level, or a negative
 /// Strength modifier), added to the dice. Null when the roll has none, or when it failed (a diagnostic; the roll is refused).
 /// </param>
+/// <param name="Available">Content v11 (D43): false while a form-only roll (<c>whileToggle</c>) is out of its form; the roll is still listed.</param>
+/// <param name="UnavailableReason">Why it is not available ("Available in Kindled mode"); null when it is.</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null);
 
 /// <summary>
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
@@ -685,7 +687,8 @@ public static class CharacterCalculator
             Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
                 ? Math.Max(value, 0)
                 : null;
-        var features = active.Select(item => Feature(item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses)).ToList();
+        var features = active.Select(item => Feature(
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -896,6 +899,20 @@ public static class CharacterCalculator
     private static bool ToggleIsOn(ContentRevision revision, ToggleEffect toggle, EffectiveToggles effective, bool autoOn) =>
         IsAuto(revision, toggle) ? autoOn : effective.IsOn(revision.ContentId, toggle.ToggleId);
 
+    /// <summary>
+    /// Content v11 (D43): why a form-only action (<c>whileToggle</c>) is unavailable now, or null when its toggle is on. The toggle belongs to
+    /// the named content, or to <paramref name="item"/> when none is named. A toggle that is not declared by active content is off and is
+    /// named by its id (the validator already warns about the reference).
+    /// </summary>
+    private static string? OutOfForm(List<ActiveContent> active, ActiveContent item, ToggleRef whileToggle, EffectiveToggles effective, bool autoOn)
+    {
+        var owner = active.FirstOrDefault(a => a.Revision.ContentId == (whileToggle.ContentId ?? item.Revision.ContentId));
+        var toggle = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == whileToggle.ToggleId);
+        if (owner is null || toggle is null)
+            return $"Available in {whileToggle.ToggleId}";
+        return ToggleIsOn(owner.Revision, toggle, effective, autoOn) ? null : $"Available in {toggle.Label}";
+    }
+
     /// <summary>Content v11 (D43): the label of the <c>toggleGroup</c> effect that declares the toggle's group, found on the group content among the active content; null when ungrouped or the declarer is not active.</summary>
     private static string? GroupLabelOf(List<ActiveContent> active, ActiveContent item, ToggleEffect toggle) =>
         toggle.Group is not { } group
@@ -978,7 +995,9 @@ public static class CharacterCalculator
         foreach (var item in active)
         {
             foreach (var attack in item.Revision.Effects.OfType<AttackEffect>().Where(a => a.Automation != AutomationStatus.Reference))
-                attacks.Add(FeatureAttack(active, item, attack, values, family, character, classLevels, riders, diagnostics));
+                attacks.Add(FeatureAttack(
+                    active, item, attack, values, family, character, classLevels, riders, diagnostics,
+                    attack.WhileToggle is { } form ? OutOfForm(active, item, form, effective, autoOn) : null));
             if (item.Revision.Kind != ContentKind.Item)
                 continue;
             foreach (var weapon in item.Revision.Effects.OfType<WeaponEffect>().Where(w => w.Automation != AutomationStatus.Reference))
@@ -1141,7 +1160,7 @@ public static class CharacterCalculator
     /// </summary>
     private static AttackEntry FeatureAttack(
         List<ActiveContent> active, ActiveContent item, AttackEffect attack, Dictionary<string, int> values, string family, Character character,
-        ClassLevelMap classLevels, List<ActiveRider> riders, List<Diagnostic> diagnostics)
+        ClassLevelMap classLevels, List<ActiveRider> riders, List<Diagnostic> diagnostics, string? outOfForm)
     {
         var revision = item.Revision;
         var origin = ContentOrigin(family, item, attack);
@@ -1230,8 +1249,11 @@ public static class CharacterCalculator
         }
         return new(
             revision.Reference, attack.Label, attack.Id, attack.Kind, null, ability, toHit, damage, null, attack.DamageType, [], attack.Range, null,
-            proficient, attack.Automation, trace, [], origin,
-            AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null, invalid, attack.Activation,
+            proficient,
+            // An attack that cannot be calculated is assisted (the player works it out); one that is only out of its form keeps its automation.
+            invalid is not null && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
+            trace, [], origin,
+            AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null && outOfForm is null, invalid ?? outOfForm, attack.Activation,
             attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost);
     }
 
@@ -1541,15 +1563,22 @@ public static class CharacterCalculator
     }
 
     private static FeatureEntry Feature(
-        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses)
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses,
+        Func<ToggleRef, string?> outOfForm)
     {
         var revision = item.Revision;
+        // Content v11 (D43): a roll with whileToggle is always listed; it is unavailable, with the reason, while its form is off.
+        FeatureEffect Roll(RollEffect roll)
+        {
+            var reason = roll.WhileToggle is { } form ? outOfForm(form) : null;
+            return new(
+                roll.Id, roll.Type, roll.Automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason);
+        }
         var effects = revision.Effects.Select(e => e switch
         {
-            RollEffect roll => new FeatureEffect(
-                e.Id, e.Type, e.Automation, e.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
-                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null),
+            RollEffect roll => Roll(roll),
             ResourceEffect resource => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, resource.Label, ResourceId: resource.ResourceId),
             RecoveryEffect recovery => new FeatureEffect(e.Id, e.Type, e.Automation, e.Text, ResourceId: recovery.ResourceId),
             // A damage defence that is conditional is not applied by the calculator: the player applies it (D19 amended).
@@ -1944,7 +1973,8 @@ public static class CharacterCalculator
     // ---- effects --------------------------------------------------------------------------------------------
 
     /// <param name="SkipReason">Set when the rules say this modifier does not apply now (for example, Unarmored Defense while armor is worn); it is traced as not used.</param>
-    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null);
+    /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
+    private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
 
     /// <summary>
     /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
@@ -2079,9 +2109,31 @@ public static class CharacterCalculator
             var revision = item.Revision;
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
+                string? followedToggle = null;
+                // Content v11 (D43): a whileActive modifier that names another content's toggle (toggleContent) applies while that toggle is on.
+                // Content that is not active, or that does not declare the toggle, is a broken reference the user should see: the modifier does
+                // not apply and the sheet says why. Without toggleContent the same-revision gate below is unchanged.
+                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                    && effect.ToggleContent is { } ownerId)
+                {
+                    var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
+                    var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == followed);
+                    if (owner is null || declared is null)
+                    {
+                        diagnostics.Add(new(
+                            "modifier.toggle-content-missing",
+                            $"'{revision.Name}' effect '{effect.Id}' follows toggle '{followed}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
+                            revision.Reference,
+                            effect.Id));
+                        continue;
+                    }
+                    if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
+                        continue;
+                    followedToggle = declared.Label;
+                }
                 // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
                 // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
-                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
+                else if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
                     && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
                 {
                     if (!ToggleIsOn(revision, named, effective, autoOn))
@@ -2134,7 +2186,7 @@ public static class CharacterCalculator
                     continue;
                 }
                 var reads = formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-                modifiers.Add(new(item, effect, formula, reads));
+                modifiers.Add(new(item, effect, formula, reads, null, followedToggle));
             }
         }
         return modifiers;
@@ -2452,7 +2504,7 @@ public static class CharacterCalculator
         }
 
         TraceOrigin Origin(Modifier m) => ContentOrigin(family, m.Content, m.Effect);
-        string Name(Modifier m) => Describe(m.Content);
+        string Name(Modifier m) => m.FollowedToggle is { } followed ? $"{Describe(m.Content)} while {followed} is on" : Describe(m.Content);
         IReadOnlyList<TraceInput>? Inputs(List<TraceInput> i) => i.Count > 0 ? i : null;
 
         var replacements = evaluated.Where(e => e.Modifier.Effect.Operation == ModifierOperation.Replace).ToList();

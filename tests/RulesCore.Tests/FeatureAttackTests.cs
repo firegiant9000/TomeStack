@@ -32,6 +32,15 @@ public class FeatureAttackTests
         return new([.. packs.SelectMany(p => p.Sources)], [.. revisions]);
     }
 
+    private static InMemoryContentCatalog With(params (ContentReference Reference, Func<Effect, Effect> Change)[] changes)
+    {
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack(), Fixtures.FeatureAttacksPack()];
+        var revisions = packs.SelectMany(p => p.Revisions)
+            .Select(r => changes.Where(c => c.Reference == r.Reference).Aggregate(r, (current, c) => current with { Effects = [.. current.Effects.Select(c.Change)] }))
+            .ToList();
+        return new([.. packs.SelectMany(p => p.Sources)], [.. revisions]);
+    }
+
     private static InMemoryContentCatalog WithStrike(Func<AttackEffect, AttackEffect> change) =>
         With(Fixtures.OpenHandStrike, e => e is AttackEffect { AttackId: "strike" } a ? change(a) : e);
 
@@ -253,5 +262,180 @@ public class FeatureAttackTests
         Assert.Equal((WeaponCategory.Martial, "1d8+2", true, (string?)null, (int?)null), (blade.Category, blade.Damage, blade.Available, blade.UnavailableReason, blade.Cost));
         Assert.Null(blade.Riders);
         Assert.False(blade.ReplacesAttack);
+    }
+
+    // ---- Task 4.3: form-only actions and modifiers that follow another entry's toggle ----------------------------------
+
+    private static FeatureEffect Flash(CharacterSheet sheet) =>
+        sheet.Features!.Single(f => f.Content == Fixtures.KindledMode).Effects.Single(e => e.Id == "flash");
+
+    private static readonly ToggleRef KindledRef = new(Fixtures.KindledMode.ContentId, "kindled");
+
+    [Fact]
+    public void An_action_outside_its_form_is_listed_and_unavailable()
+    {
+        var off = Flash(Sheet(Adept()));
+        Assert.Equal((false, "Available in Kindled mode"), (off.Available, off.UnavailableReason));
+
+        var on = Flash(Sheet(Adept(Kindled)));
+        Assert.Equal((true, (string?)null), (on.Available, on.UnavailableReason));
+        Assert.Equal("1d6", on.Dice);
+    }
+
+    [Fact]
+    public void A_feature_attack_outside_its_form_is_unavailable()
+    {
+        var catalog = WithStrike(a => a with { WhileToggle = KindledRef });
+
+        var off = Strike(Sheet(Adept(), catalog));
+        Assert.Equal((false, "Available in Kindled mode", AutomationStatus.Automatic), (off.Available, off.UnavailableReason, off.Automation));
+        Assert.DoesNotContain(Sheet(Adept(), catalog).Diagnostics, d => d.Code == "attack.die-invalid");
+
+        var on = Strike(Sheet(Adept(Kindled), catalog));
+        Assert.Equal((true, (string?)null), (on.Available, on.UnavailableReason));
+    }
+
+    [Fact]
+    public void A_form_gate_without_a_content_id_names_the_declaring_content_and_an_unknown_toggle_is_unavailable()
+    {
+        var own = WithStrike(a => a with { WhileToggle = new ToggleRef(null, "nonesuch") });
+        var missing = WithStrike(a => a with { WhileToggle = new ToggleRef(Guid.Parse("6f0dc000-0000-4000-8000-0000000009ff"), "kindled") });
+
+        Assert.Equal((false, "Available in nonesuch"), (Strike(Sheet(Adept(Kindled), own)).Available, Strike(Sheet(Adept(Kindled), own)).UnavailableReason));
+        var gone = Strike(Sheet(Adept(Kindled), missing));
+        Assert.Equal((false, "Available in kindled"), (gone.Available, gone.UnavailableReason));
+        Assert.DoesNotContain(Sheet(Adept(Kindled), missing).Diagnostics, d => d.Code.Contains("toggle", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_invalid_die_wins_over_the_form_and_is_assisted_while_an_out_of_form_attack_stays_automatic()
+    {
+        var invalid = Strike(Sheet(Adept(), WithStrike(a => a with { WhileToggle = KindledRef, Damage = new("1", "7") })));
+        Assert.Contains("d7", invalid.UnavailableReason, StringComparison.Ordinal);
+        Assert.Equal(AutomationStatus.Assisted, invalid.Automation);
+
+        var failing = Strike(Sheet(Adept(), WithStrike(a => a with { Damage = new("1", "SCALE.nonesuch") })));
+        Assert.Equal((false, AutomationStatus.Assisted), (failing.Available, failing.Automation));
+
+        var badBonus = Strike(Sheet(Adept(), WithStrike(a => a with { DamageBonus = "1 +" })));
+        Assert.Equal((false, AutomationStatus.Assisted), (badBonus.Available, badBonus.Automation));
+    }
+
+    [Fact]
+    public void A_form_gate_on_an_automatic_toggle_follows_its_condition()
+    {
+        var catalog = With(Fixtures.KindledMode, e => e is ToggleEffect t ? t with { AutoWhen = ToggleAutoWhen.Bloodied, Group = null, GroupContent = null } : e);
+
+        Assert.False(Flash(Sheet(Adept(Kindled), catalog)).Available); // healthy: a stored automatic toggle is ignored
+        Assert.True(Flash(Sheet(Adept() with { Play = new PlayState { CurrentHitPoints = 1 } }, catalog)).Available);
+    }
+
+    [Fact]
+    public void A_modifier_can_follow_another_entrys_toggle()
+    {
+        var off = Sheet(Adept()).Field(FieldIds.Initiative);
+        var on = Sheet(Adept(Kindled)).Field(FieldIds.Initiative);
+
+        Assert.Equal(off.Value + 2, on.Value);
+        Assert.Contains(on.Trace, t => t.Description.Contains("Fixture Keen Sense", StringComparison.Ordinal) && t.Description.Contains("Kindled mode", StringComparison.Ordinal) && t.Amount == 2);
+        Assert.DoesNotContain(off.Trace, t => t.Description.Contains("Fixture Keen Sense", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_modifier_following_missing_content_is_ignored_with_a_diagnostic()
+    {
+        var catalog = With(Fixtures.KeenSense, e => e is ModifierEffect m ? m with { ToggleContent = Guid.Parse("6f0dc000-0000-4000-8000-0000000009ff") } : e);
+        var baseline = Sheet(Adept(Kindled)).Field(FieldIds.Initiative).Value - 2;
+
+        var sheet = Sheet(Adept(Kindled), catalog);
+
+        Assert.Equal(baseline, sheet.Field(FieldIds.Initiative).Value);
+        var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "modifier.toggle-content-missing");
+        Assert.Equal((Fixtures.KeenSense, "keen-initiative"), (diagnostic.Content, diagnostic.EffectId));
+        Assert.Contains(sheet.Features!.Single(f => f.Content == Fixtures.KeenSense).Diagnostics, d => d.Code == "modifier.toggle-content-missing");
+    }
+
+    [Fact]
+    public void A_modifier_following_content_that_does_not_declare_the_toggle_is_ignored_with_a_diagnostic()
+    {
+        var catalog = With(Fixtures.KeenSense, e => e is ModifierEffect m ? m with { ToggleContent = Fixtures.BlazingMode.ContentId } : e); // blazing declares no 'kindled'
+        var baseline = Sheet(Adept(Kindled)).Field(FieldIds.Initiative).Value - 2;
+
+        var sheet = Sheet(Adept(Kindled), catalog);
+
+        Assert.Equal(baseline, sheet.Field(FieldIds.Initiative).Value);
+        Assert.Single(sheet.Diagnostics, d => d.Code == "modifier.toggle-content-missing");
+    }
+
+    [Fact]
+    public void A_modifier_without_toggleContent_keeps_the_same_revision_gate()
+    {
+        var catalog = With(Fixtures.KeenSense, e => e is ModifierEffect m ? m with { ToggleContent = null } : e); // 'kindled' is not Keen Sense's own toggle
+        var baseline = Sheet(Adept(Kindled)).Field(FieldIds.Initiative).Value - 2;
+
+        var sheet = Sheet(Adept(Kindled), catalog);
+
+        Assert.Equal(baseline, sheet.Field(FieldIds.Initiative).Value);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "modifier.toggle-content-missing");
+    }
+
+    // ---- Task 4.2 review: rider tests built in memory ------------------------------------------------------------------
+
+    [Fact]
+    public void A_stack_group_tie_goes_to_the_first_rider_in_sheet_content_order()
+    {
+        var catalog = With(Fixtures.EmberFist, e => e is AttackRiderEffect r ? r with { Dice = "3d8" } : e); // 3d8 against kindled's 3d8
+        var sheet = Sheet(Adept(Kindled, Fist), catalog);
+        var order = sheet.Features!.Select(f => f.Content).ToList();
+        var firstId = order.IndexOf(Fixtures.KindledMode) < order.IndexOf(Fixtures.EmberFist) ? "kindled-rider" : "fist-rider";
+
+        var rider = Assert.Single(Strike(sheet).Riders!);
+
+        Assert.Equal(firstId, rider.EffectId);
+        Assert.Single(Strike(sheet).Trace, t => t.Operation == "rider.not-applied");
+    }
+
+    [Fact]
+    public void The_versatile_damage_of_a_weapon_receives_rider_dice()
+    {
+        var catalog = With(
+            (Fixtures.KindledMode, e => e is AttackRiderEffect r ? r with { Tags = ["all"] } : e),
+            (Fixtures.Longblade, e => e is WeaponEffect w ? w with { Versatile = "1d10" } : e));
+
+        var blade = Sheet(Adept(Kindled) with { Equipment = [new(Fixtures.Longblade, Equipped: true)] }, catalog).Attacks!.Single(a => a.Source == AttackSource.Weapon);
+
+        Assert.Equal(("1d8+3d8+2", "1d10+3d8+2"), (blade.Damage, blade.VersatileDamage));
+    }
+
+    [Fact]
+    public void A_rider_on_an_automatic_toggle_follows_its_condition()
+    {
+        var catalog = With(Fixtures.KindledMode, e => e is ToggleEffect t ? t with { AutoWhen = ToggleAutoWhen.Bloodied, Group = null, GroupContent = null } : e);
+
+        Assert.Equal("1d8+3", Strike(Sheet(Adept(Kindled), catalog)).Damage); // healthy: the stored toggle is ignored
+        Assert.Equal("1d8+3d8+3", Strike(Sheet(Adept() with { Play = new PlayState { CurrentHitPoints = 1 } }, catalog)).Damage);
+    }
+
+    [Fact]
+    public void A_rider_whose_toggleContent_names_another_contents_toggle_applies_when_that_toggle_is_on()
+    {
+        var catalog = With(Fixtures.EmberFist, e => e is AttackRiderEffect r ? r with { Toggle = "kindled", ToggleContent = Fixtures.KindledMode.ContentId, StackGroup = null, Dice = "2d6" } : e);
+
+        Assert.Equal("fist-rider", Strike(Sheet(Adept(Kindled), catalog)).Riders!.Single(r => r.EffectId == "fist-rider").EffectId);
+        Assert.Equal("1d8+3", Strike(Sheet(Adept(), catalog)).Damage);
+    }
+
+    [Fact]
+    public void An_all_rider_in_a_stack_group_on_a_weapon_applies_the_highest_only()
+    {
+        var catalog = With(
+            (Fixtures.KindledMode, e => e is AttackRiderEffect r ? r with { Tags = ["all"] } : e),
+            (Fixtures.EmberFist, e => e is AttackRiderEffect f ? f with { Tags = ["all"] } : e));
+
+        var blade = Sheet(Adept(Kindled, Fist) with { Equipment = [new(Fixtures.Longblade, Equipped: true)] }, catalog).Attacks!.Single(a => a.Source == AttackSource.Weapon);
+
+        Assert.Equal("1d8+3d8+2", blade.Damage);
+        Assert.Equal("kindled-rider", Assert.Single(blade.Riders!).EffectId);
+        Assert.Single(blade.Trace, t => t.Operation == "rider.not-applied");
     }
 }
