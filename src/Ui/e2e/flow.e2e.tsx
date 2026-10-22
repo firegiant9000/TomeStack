@@ -1629,7 +1629,8 @@ it('starts homebrew from a template as an unsaved draft, publishes a stance, and
   await user.click(screen.getByRole('button', { name: 'Use template' }));
   await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Loose Stance');
   await user.click(within(within(editor()).getByRole('group', { name: /^Rule 3: Toggle/ })).getByRole('button', { name: 'Remove rule 3' }));
-  expect(within(editor()).queryByRole('combobox', { name: 'Applies' })).toBeNull();
+  // D43 S4: the source's other entries (E2E Stance above) offer their toggles, so the choice stays, and it reads "Always".
+  expect((within(editor()).getByRole('combobox', { name: 'Applies' }) as HTMLSelectElement).value).toBe('');
   await user.click(within(editor()).getByRole('button', { name: 'Check' }));
   await waitFor(() => expect(within(editor()).getByRole('region', { name: 'Check results' }).textContent).toMatch(/No problems found/));
 });

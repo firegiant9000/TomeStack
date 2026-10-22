@@ -712,7 +712,7 @@ function AttackItem({
     <li className="feature">
       <details>
         <summary>
-          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage} {attack.damageType}
+          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
           {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
           {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
         </summary>
@@ -744,7 +744,7 @@ function AttackItem({
         Roll {attack.name} attack
       </button>
       <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
-        Roll {attack.name} damage ({attack.damage})
+        Roll {attack.name} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
       {locked && (
         <span id={reasonId} className="hint">

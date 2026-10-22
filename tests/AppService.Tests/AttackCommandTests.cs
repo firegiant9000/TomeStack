@@ -112,6 +112,53 @@ public class AttackCommandTests
     }
 
     [Fact]
+    public void An_attack_outside_its_form_is_not_refused_and_rolls()
+    {
+        // The strike is available only while Kindled mode is on; the toggle is off, so the attack is unavailable but still calculated.
+        var kindled = new ToggleRef(Guid.Parse("6f0dc000-0000-4000-8000-000000000042"), "kindled");
+        var (temp, id) = Adept(r => r.ContentId == Strike.ContentId
+            ? r with { Effects = [.. r.Effects.Select(e => e is AttackEffect { AttackId: "strike" } a ? a with { WhileToggle = kindled } : e)] }
+            : r);
+        using var _ = temp;
+        var entry = temp.App.GetCharacter(id).Sheet.Attacks!.Single(a => a.Source == AttackSource.Feature && a.Item == Strike && a.EffectId == "strike");
+        Assert.False(entry.Available);
+
+        var hit = temp.App.Roll(new(id, Content: Strike, EffectId: "strike"));
+        var damage = temp.App.Roll(new(id, Content: Strike, EffectId: "strike", Damage: true));
+
+        Assert.Equal("1d20", hit.Formula);
+        Assert.StartsWith("1d", damage.Formula, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_attack_whose_damage_bonus_fails_is_refused()
+    {
+        var (temp, id) = Adept(r => r.ContentId == Strike.ContentId
+            ? r with { Effects = [.. r.Effects.Select(e => e is AttackEffect { AttackId: "strike" } a ? a with { DamageBonus = "1 +" } : e)] }
+            : r);
+        using var _ = temp;
+
+        var refusal = Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, Content: Strike, EffectId: "strike", Damage: true)));
+
+        Assert.Equal("effect.invalid-formula", refusal.Code);
+        Assert.Equal("effect.invalid-formula", refusal.Problems[0].Code);
+    }
+
+    [Fact]
+    public void The_to_hit_roll_of_an_attack_with_an_invalid_die_is_refused()
+    {
+        var (temp, id) = Adept(r => r.ContentId == Strike.ContentId
+            ? r with { Effects = [.. r.Effects.Select(e => e is AttackEffect { AttackId: "strike" } a ? a with { Damage = new("1", "0") } : e)] }
+            : r);
+        using var _ = temp;
+
+        var refusal = Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, Content: Strike, EffectId: "strike")));
+
+        Assert.Equal("attack.die-invalid", refusal.Code);
+        Assert.Equal("attack.die-invalid", refusal.Problems[0].Code);
+    }
+
+    [Fact]
     public void A_weapon_roll_never_picks_a_feature_attack_row_of_the_same_item()
     {
         // An item revision that declares both a weapon and a feature attack: the weapon roll must take the weapon row.

@@ -248,6 +248,19 @@ it('disables an unavailable feature attack and shows its reason as text the butt
   expect(document.getElementById(id)!.textContent).toMatch(/Available in Kindled mode/);
 });
 
+it('an unavailable attack with no damage dice says no empty dice: no double space, no empty brackets', () => {
+  const locked = featureAttack({ available: false, unavailableReason: 'Available in Kindled mode', damage: '' });
+  render(<ActionsPanel view={attacksView([locked])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Testy strike damage' })).toBeTruthy(); // no "()" in the name
+  const summary = screen.getByText('Testy strike').closest('summary')!;
+  expect(summary.textContent).toBe('Testy strike: +6 to hit, bludgeoning');
+  // An available attack still names its dice.
+  cleanup();
+  render(<ActionsPanel view={attacksView([featureAttack()])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Testy strike damage (1d8+4d8+5)' })).toBeTruthy();
+  expect(screen.getByText('Testy strike').closest('summary')!.textContent).toBe('Testy strike: +6 to hit, 1d8+4d8+5 bludgeoning');
+});
+
 it("names the pool in a feature attack's cost line, and spends the attack's cost from its roll record", async () => {
   const pool = { content: ref, contentName: 'Testy Source', effectId: 'e-focus', resourceId: 'focus', label: 'Testy focus', maximum: 5, spent: 1, current: 4, trace: [], warnings: [], automation: 'automatic', recoveries: [] };
   const bolt = featureAttack({ name: 'Testy bolt', effectId: 'bolt', resourceId: 'focus', costResourceContent: 'c1', cost: 2 });
