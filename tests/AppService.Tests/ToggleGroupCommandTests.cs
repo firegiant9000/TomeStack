@@ -15,7 +15,7 @@ public class ToggleGroupCommandTests
 
     private static (TempApp Temp, Guid Id) Forms()
     {
-        var temp = new TempApp();
+        var temp = new TempApp(time: new TickingTime(TempApp.Now)); // each write moves the stamp (D43 S2)
         var pack = temp.AddPack("fixture-pack-forms.json");
         var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json"); // PB 2 at level 3: Focus is 12
         var pins = pack.Revisions.Select(r => r.Reference).ToList();
@@ -23,8 +23,13 @@ public class ToggleGroupCommandTests
         return (temp, temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, .. pins] }).Character.Id);
     }
 
+    /// <summary>A replace switch carries the stamp of the copy the page holds (here: the stored one), as the UI does.</summary>
     private static CharacterView On(TempApp temp, Guid id, int content, string toggle, bool replace = false) =>
-        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Content(content), ToggleId: toggle, Replace: replace));
+        temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Content(content), ToggleId: toggle, Replace: replace,
+            ExpectedUpdatedAt: replace ? temp.App.GetCharacter(id).Character.UpdatedAt : null));
+
+    private static PlayCommand Switch(Guid id, DateTimeOffset? stamp) =>
+        new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Content(3), ToggleId: "tide", Replace: true, ExpectedUpdatedAt: stamp);
 
     private static CharacterView Off(TempApp temp, Guid id, int content, string toggle) =>
         temp.App.Play(new(id, PlayActionKind.ToggleOff, Confirm: true, ContentId: Content(content), ToggleId: toggle));
@@ -51,6 +56,63 @@ public class ToggleGroupCommandTests
         Assert.True(IsOn(replaced, "tide"));
         Assert.False(IsOn(replaced, "ember"));
         Assert.Equal(12 - 3 - 5, Focus(replaced));
+    }
+
+    [Fact]
+    public void A_replace_switch_without_the_stamp_is_refused_and_nothing_changes()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        On(temp, id, 2, "ember");
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Play(Switch(id, null)));
+
+        Assert.Equal("play.basis-required", refused.Problems[0].Code);
+        Assert.Equal("This change needs the character's current state. Reload it and try again.", refused.Problems[0].Message);
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void A_replace_switch_with_a_stale_stamp_is_refused_and_nothing_changes()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        On(temp, id, 2, "ember");
+        var stale = temp.App.GetCharacter(id).Character.UpdatedAt;
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 1)); // another window moved the stamp
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Play(Switch(id, stale)));
+
+        Assert.Equal("character.stale", refused.Problems[0].Code);
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void A_double_sent_replace_switch_is_refused_the_second_time()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        On(temp, id, 2, "ember");
+        var stamp = temp.App.GetCharacter(id).Character.UpdatedAt;
+
+        var first = temp.App.Play(Switch(id, stamp));
+        var focus = Focus(first);
+        var second = Assert.Throws<AppValidationException>(() => temp.App.Play(Switch(id, stamp)));
+
+        Assert.Equal("character.stale", second.Problems[0].Code);
+        Assert.Equal(focus, Focus(temp.App.GetCharacter(id))); // the cost was paid once
+    }
+
+    [Fact]
+    public void A_simple_toggle_does_not_need_the_stamp()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+
+        Assert.True(IsOn(temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true, ContentId: Content(2), ToggleId: "ember")), "ember"));
+        Assert.False(IsOn(temp.App.Play(new(id, PlayActionKind.ToggleOff, Confirm: true, ContentId: Content(2), ToggleId: "ember")), "ember"));
     }
 
     [Fact]

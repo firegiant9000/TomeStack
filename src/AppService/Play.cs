@@ -139,6 +139,9 @@ public sealed partial class TomeStackApp
             ?? throw new AppValidationException([new("character.not-found", $"Character {command.CharacterId} does not exist.")]);
         // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
         // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
+        // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
+        if (IsCompound(command) && command.ExpectedUpdatedAt is null)
+            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")]);
         if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
@@ -203,6 +206,12 @@ public sealed partial class TomeStackApp
         var view = SaveWithPlay(character with { Play = play });
         return damage is null ? view : view with { Damage = damage };
     }
+
+    /// <summary>
+    /// D43 S2: a compound change decides several writes from one view, so it needs the current stamp (<c>play.basis-required</c>
+    /// without one). Today only the form switch is: <c>toggleOn</c> with <c>replace</c>. Later slices (S3, S7, S8) extend this list.
+    /// </summary>
+    private static bool IsCompound(PlayCommand command) => command.Action == PlayActionKind.ToggleOn && command.Replace;
 
     /// <summary>
     /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
