@@ -1152,7 +1152,8 @@
             },
             "dice": {
               "type": "string",
-              "pattern": "^[0-9]+d(4|6|8|10|12)$"
+              "pattern": "^0*([1-9][0-9]?|100)d(4|6|8|10|12)$",
+              "description": "A count of 1 to 100 and a die of d4, d6, d8, d10 or d12, such as 3d8. The validator is authoritative."
             },
             "damageBonus": {
               "$ref": "#/$defs/formula"
