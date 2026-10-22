@@ -118,6 +118,7 @@ public class PlayBasisTests
             new { id = "1", command = "character.play", payload = new { characterId = id, action = "heal", confirm = true, expectedUpdatedAt = stamp.ToString("O") } }, RulesJson.Compact));
 
         Assert.Contains("character.stale", Send(old), StringComparison.Ordinal);
-        Assert.DoesNotContain("character.stale", Send(temp.App.GetCharacter(id).Character.UpdatedAt), StringComparison.Ordinal);
+        var accepted = System.Text.Json.JsonDocument.Parse(Send(temp.App.GetCharacter(id).Character.UpdatedAt)).RootElement;
+        Assert.True(accepted.GetProperty("ok").GetBoolean(), accepted.ToString());
     }
 }

@@ -111,6 +111,12 @@ public sealed record PlayCommand(
     bool Replace = false,
     DateTimeOffset? ExpectedUpdatedAt = null);
 
+/// <summary>
+/// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
+/// page holds; it must be the stored one (<c>character.stale</c> otherwise).
+/// </summary>
+public sealed record UndoPlayRequest(Guid CharacterId, DateTimeOffset UpdatedAt, bool Confirm = false);
+
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
 
@@ -203,8 +209,35 @@ public sealed partial class TomeStackApp
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
-        var view = SaveWithPlay(character with { Play = play });
+        // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
+        (PlayState, string)? undo = IsCompound(command) && sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched
+            ? (character.Play, $"switch to {switched.Label}")
+            : null;
+        var view = SaveWithPlay(character with { Play = play }, undo);
         return damage is null ? view : view with { Damage = damage };
+    }
+
+    /// <summary>
+    /// <c>character.undoPlay</c> (D43 S2, D44): puts the play state back to what the last compound change started from. One level,
+    /// in memory, and only while nothing else has written the character. Refused, writing nothing, in this order: without
+    /// <c>confirm</c> (<c>undo.confirmation-required</c>); unknown character (<c>character.not-found</c>); a page stamp that is not the
+    /// stored one (<c>character.stale</c>, as save and play); no slot (<c>undo.nothing</c>); a slot written for an earlier stamp
+    /// (<c>undo.stale</c>). The undo is itself one <c>SaveWithPlay</c> and sets no slot, so it cannot be undone again.
+    /// </summary>
+    public CharacterView UndoPlay(UndoPlayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw new AppValidationException([new("undo.confirmation-required", "Undoing a change to the play state needs an explicit confirmation.")]);
+        var character = _store.FindCharacter(request.CharacterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
+        if (request.UpdatedAt != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
+        if (!_undo.Has(character.Id))
+            throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")]);
+        if (!_undo.TryTake(character.Id, character.UpdatedAt, out var slot) || slot is null)
+            throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")]);
+        return SaveWithPlay(character with { Play = slot.Before });
     }
 
     /// <summary>
