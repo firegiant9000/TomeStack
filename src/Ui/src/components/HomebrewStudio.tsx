@@ -1509,6 +1509,8 @@ function EffectEditor(props: {
     toggleGroup: 'Form group',
     upkeep: 'Upkeep',
     item: 'Item rules',
+    attack: 'Attack',
+    attackRider: 'Attack rider',
   };
   const toggles = props.toggles;
   const legend = `Rule ${n}: ${names[effect.type]}`;
