@@ -528,6 +528,8 @@ export interface PlayAction {
   toggleId?: string;
   /** With `toggleOn` (content v11): switch the form already on in the same group off first. Without it the server refuses with `toggle.group-occupied`. */
   replace?: boolean;
+  /** D44: the character's `updatedAt` the change was decided from. Required by a compound change (`play.basis-required` without it); any stamp that is not the stored one is `character.stale`. */
+  expectedUpdatedAt?: string;
   /** With `damage`: one of the thirteen damage types (any case). Absent: untyped, so no defence applies. */
   damageType?: string;
   /** With `spendCharge` or `regainCharge`: the equipment entry, by its id, or by `entryIndex` and `contentId` while it has none. */
@@ -678,6 +680,8 @@ export interface CharacterView {
   campaign?: CampaignStatus;
   /** Set only on the view a damage command returns. */
   damage?: DamageOutcome;
+  /** D44: present only while the service holds a one-level undo for the last compound play change ("switch to Tide form"). */
+  undoLabel?: string;
 }
 
 export interface CharacterSummary {

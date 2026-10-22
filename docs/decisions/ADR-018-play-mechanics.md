@@ -32,7 +32,7 @@ The engine is built in slices. Each slice is complete and tested before the next
 - **Packages need a v11-capable build** once they carry v11 content. An older build refuses the package. Nothing changes for existing content, characters or packages.
 - **Published revisions stay insert-only.** Adding a form group to a feature is a new revision.
 - **Validation grows.** The new codes are in [play-mechanics.md](../features/play-mechanics.md). A reference to content that is not installed is a warning, so a source can be published before the source it refers to arrives.
-- **Undo is partial in slice 1.** A costed switch on can be undone from the client by regaining its cost. A form switch (and a switch off that dropped overlays) has no client undo until the basis guard of slice 2.
+- **Undo is partial in slice 1.** A costed switch on can be undone from the client by regaining its cost. A form switch (and a switch off that dropped overlays) has no client undo until the basis guard of slice 2. Slice 2 adds the service undo of a form switch (D44).
 - **Packages and import candidates follow references; the debugger follows pools.** A toggle that names other content (its group, its pool, the primaries an overlay allows) is a reference for the package check (`pack.reference-outside`) and for import candidates. The relationship tree and the resource debugger follow only the toggle's pool (`resourceContent`).
 - **The cost is that a toggle can now refuse.** The sheet lists a form that cannot be chosen with the reason, instead of hiding it.
 

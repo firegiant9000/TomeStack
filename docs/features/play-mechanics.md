@@ -81,7 +81,16 @@ Calculation diagnostics carry a code and a message, with no severity field. `tog
 
 ### Undo
 
-Undo is the client's (`src/Ui/src/undo.ts`), one level, as in [sheet-play.md](sheet-play.md). A costed `toggleOn` regains exactly its cost, from the pool it spent. A form switch with `replace`, and any change that dropped overlays, has no client undo until slice 2.
+Undo is the client's (`src/Ui/src/undo.ts`), one level, as in [sheet-play.md](sheet-play.md). A costed `toggleOn` regains exactly its cost, from the pool it spent. A form switch with `replace` is compound and has no client undo: the service undoes it (next section). A plain `toggleOn` that dropped overlays has none either.
+
+## Slice 2: stale guard and exact undo (D44, amends D23)
+
+- **What is compound:** `toggleOn` with `replace: true`. Later slices add turns, end encounter and damage with responses (`isCompound` in `src/Ui/src/undo.ts`, `IsCompound` in `Play.cs`). Simple actions are not compound and keep the client inverse.
+- **The stale guard:** `character.play` takes `expectedUpdatedAt` (ISO string, the view's `character.updatedAt`). A compound change without it is refused with `play.basis-required`. Any command whose stamp is not the stored one is refused with `character.stale`, the same code and words as `character.save`'s compare-and-set (one concurrency token per character, not a second basis; delta §5.4). A switch sends the stamp the save queue holds when the change starts; the Undo sends the stamp of the view that showed its label, so it undoes exactly the change the label names or is refused. A switch sent twice applies once: a double click runs the second press with the fresh stamp and is refused as `toggle.already-on`; only a repeated message with the same stamp is `character.stale`.
+- **The undo:** after a compound change the service keeps one slot for the character: the play state it started from, the `updatedAt` it wrote and a label ("switch to Tide form"). The view carries `undoLabel` while the stored `updatedAt` still matches the slot. `character.undoPlay { characterId, updatedAt, confirm }` puts the play state back exactly (the pool, the forms and the overlays) in one write and returns the view. It does not re-check cost or availability: it is a state restore.
+- **Refusals** (nothing is written, and the slot stays): `undo.confirmation-required` (no `confirm`), `character.not-found`, `character.stale` (the page's `updatedAt` is behind the stored one), `undo.nothing` (no slot), `undo.stale` (the slot was written for an earlier stamp, because a save, rest, restore or another play change came after). A write that fails leaves the slot, so the undo can be tried again.
+- **One level, in memory:** the next compound change replaces the slot, an undo consumes it, and closing the app forgets it. A library restore or a package import clears every slot, because it can store a character with an older `updatedAt` that would match a slot again. The studio sandbox never sets or shows one.
+- **On the sheet:** while the view has an `undoLabel`, the Undo button reads "Undo switch to Tide form" and calls `client.undoPlay` through the sheet's save queue; the client entry from before the switch is withdrawn, so there is one Undo. The button is disabled while a play change or an undo is in flight (D23). Errors take the existing path: the service's words are shown, and `character.stale`, `undo.stale` and `undo.nothing` reload the current copy, which drops the label. These codes are the top-level `code` of the error on the wire (with `play.basis-required` and `undo.confirmation-required`).
 
 ## On Play and in the studio
 
@@ -91,6 +100,5 @@ Undo is the client's (`src/Ui/src/undo.ts`), one level, as in [sheet-play.md](sh
 ## Not yet
 
 - A round counter, durations and upkeep (slice 3), damage responses, feature attacks and action details (later slices; ADR-018).
-- Undo of a form switch (slice 2).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // D23: the inverse of a play action, computed from the view before and after, through the same confirmed commands.
 import { expect, it } from 'vitest';
-import type { CharacterView } from './api/types';
-import { inverseOf } from './undo';
+import type { CharacterView, PlayAction } from './api/types';
+import { inverseOf, isCompound } from './undo';
 
 const view = (current: number, temporary: number, play: Partial<CharacterView['character']['play']> = {}): CharacterView =>
   ({
@@ -121,9 +121,14 @@ it('a cost of 0 regains nothing, and a toggle with only a pool regains the defau
   ]);
 });
 
-it('a replace switch has no client undo', () => {
+it('a compound action is marked compound and gets no client inverse (D44)', () => {
   const v = withToggles({ toggleId: 't', resourceId: 'focus', cost: 3, costResourceContent: 'pool' });
-  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't', replace: true }, v, v)).toBeUndefined();
+  const replace: PlayAction = { action: 'toggleOn', contentId: 'c', toggleId: 't', replace: true };
+  expect(isCompound(replace)).toBe(true);
+  expect(isCompound({ action: 'toggleOn', contentId: 'c', toggleId: 't' })).toBe(false);
+  expect(isCompound({ action: 'toggleOff', contentId: 'c', toggleId: 't', replace: true })).toBe(false);
+  expect(isCompound({ action: 'damage', amount: 3 })).toBe(false);
+  expect(inverseOf(replace, v, v)).toBeUndefined();
 });
 
 it('turning on a primary that dropped an overlay the new form does not allow has no client undo', () => {

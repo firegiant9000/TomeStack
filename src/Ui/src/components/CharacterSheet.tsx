@@ -36,7 +36,7 @@ import { UpdatesPanel } from './UpdatesPanel';
 import { VttExportPanel } from './VttExportPanel';
 import { TabList, TabPanel, tabId, type TabSpec } from './sheet/TabList';
 import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetTab';
-import { inverseOf, type UndoEntry } from '../undo';
+import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -252,7 +252,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const onError = useCallback(
     (error: unknown) => {
       latestProps.current.reportError(error);
-      if (error instanceof TomeStackError && error.code === 'character.stale') {
+      // D44: a refused service undo (the slot is gone or was written for an earlier stamp) reloads the stored copy too, so its label drops.
+      if (error instanceof TomeStackError && (error.code === 'character.stale' || error.code === 'undo.stale' || error.code === 'undo.nothing')) {
         client
           .getCharacter(characterId)
           .then((fresh) => {
@@ -404,6 +405,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, []);
   const started = useRef(0);
   const running = useRef(0);
+  const [inFlight, setInFlight] = useState(false); // `running > 0`, for the render: the service's Undo waits for in-flight changes
   const shownView = useRef(view);
   useEffect(() => {
     shownView.current = view;
@@ -413,8 +415,14 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     const mine = ++started.current;
     const startedWhileRunning = running.current > 0;
     running.current += 1;
+    setInFlight(true);
     try {
-      const after = await runQueued(() => client.play(character.id, action), (reply) => reply.character);
+      // D44: a compound change names the stamp of the character as the queue holds it when the change starts (after every earlier
+      // save or play change finished), not the one this render captured.
+      const after = await runQueued(
+        (latest) => client.play(character.id, isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
+        (reply) => reply.character,
+      );
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
@@ -422,12 +430,38 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       onError(error);
     } finally {
       running.current -= 1;
+      setInFlight(running.current > 0);
     }
   }
 
   // D23: the entry is offered only while the sheet still shows the state its change produced. A rest, a save, a level-up
   // or a reload shows another view, and undoing then would overwrite that change.
-  const undoable = undo && undo.after === view ? undo : undefined;
+  // D44: while the service offers an undo of a compound change (`undoLabel`), that is the one Undo; a client entry from before the
+  // switch is never offered beside it.
+  const serverUndo = view.undoLabel;
+  const undoable = !serverUndo && undo && undo.after === view ? undo : undefined;
+
+  /** D44: the service puts the play state back to what the last form switch started from; the reply is adopted like a play result. */
+  async function undoServerChange() {
+    if (!serverUndo || running.current > 0) return; // nothing is on offer, or a change is in flight (the button is disabled meanwhile)
+    setUndo(undefined);
+    // The stamp of the view that showed the label, not the queue's latest: the service then undoes exactly the change the label names,
+    // or refuses (character.stale) and the sheet reloads.
+    const shownStamp = view.character.updatedAt ?? '';
+    started.current += 1; // an Undo in flight counts as a running change, as for the client undo
+    running.current += 1;
+    setInFlight(true);
+    try {
+      const after = await runQueued(() => client.undoPlay(characterId, shownStamp), (reply) => reply.character);
+      onChanged(after);
+    } catch (error) {
+      onError(error); // character.stale, undo.stale and undo.nothing show the service's words and reload the stored copy
+    } finally {
+      running.current -= 1;
+      setInFlight(running.current > 0);
+    }
+    compactToggle.current?.focus(); // the button changes under the cursor; focus stays in the Play tools (WCAG 2.4.3)
+  }
 
   async function undoLast() {
     if (!undoable) return;
@@ -450,6 +484,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     // An Undo in flight counts as a running change, so a play change started meanwhile gets no entry.
     started.current += 1;
     running.current += 1;
+    setInFlight(true);
     try {
       // One queue entry for all the steps, so no save slips in between them. A step that fails after another succeeded still
       // leaves that step's stamp as the latest.
@@ -472,6 +507,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       onError(error);
     } finally {
       running.current -= 1;
+      setInFlight(running.current > 0);
     }
     refocus();
   }
@@ -689,9 +725,15 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             />{' '}
             Compact view: hit points, attacks, conditions and resources only
           </label>
-          <button type="button" disabled={!undoable} onClick={undoLast}>
-            Undo last change{undoable ? `: ${undoable.label}` : ''}
-          </button>
+          {serverUndo ? (
+            <button type="button" disabled={inFlight} onClick={undoServerChange}>
+              Undo {serverUndo}
+            </button>
+          ) : (
+            <button type="button" disabled={!undoable} onClick={undoLast}>
+              Undo last change{undoable ? `: ${undoable.label}` : ''}
+            </button>
+          )}
         </div>
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">

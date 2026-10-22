@@ -9,6 +9,13 @@ export interface UndoEntry {
   after: CharacterView;
 }
 
+/**
+ * D44: a compound play change decides several writes from one view (a form switch also turns the other form and its overlays off).
+ * It must name the stored `updatedAt` (`expectedUpdatedAt`) and is undone by the service, never by a client inverse.
+ * Slices 3 and 7 extend this (turns, end encounter, damage with responses).
+ */
+export const isCompound = (action: PlayAction): boolean => action.action === 'toggleOn' && !!action.replace;
+
 const hp = (view: CharacterView) => view.sheet.hitPoints;
 /**
  * D43: switching a primary on or off also drops the overlays its group no longer allows, and the client cannot restore them. True
@@ -35,6 +42,7 @@ const findToggle =(view: CharacterView, toggle: PlayAction) =>
  * by concentrating on the earlier one. A change that changed nothing (a condition already held) has no entry.
  */
 export function inverseOf(action: PlayAction, before: CharacterView, after: CharacterView): UndoEntry | undefined {
+  if (isCompound(action)) return undefined; // D44: the service undoes it (`undoLabel`), exactly
   // Wave 3 item 21: typed damage names its type and what was taken after defences ("damage 13 slashing (6 taken)"); untyped keeps "damage 12".
   const typed = action.action === 'damage' && after.damage?.type ? ` ${after.damage.type} (${after.damage.adjusted} taken)` : '';
   const label = `${action.action === 'setTemporaryHitPoints' ? 'temporary hit points' : action.action.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`)}${action.amount !== undefined ? ` ${action.amount}` : ''}${typed}${action.condition ? ` ${action.condition}` : ''}`;
@@ -85,8 +93,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'regainPactSlot':
       return entry([{ action: 'spendPactSlot' }]);
     case 'toggleOn': {
-      // D43 slice 1: a replace switch also turned another form off (and maybe its overlays), which the client cannot restore: no undo until slice 2.
-      if (action.replace || droppedOthers(action, before, after)) return undefined;
+      // A replace switch is compound (D44, handled above). A plain switch that still dropped another toggle has no client undo either.
+      if (droppedOthers(action, before, after)) return undefined;
       const t = findToggle(before, action);
       const resourceId = t?.resourceId;
       // A resource-backed toggle spent its cost when it went on (1 when it names a pool but no cost, D43), from the pool it names

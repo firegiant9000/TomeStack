@@ -92,6 +92,7 @@ public enum PlayActionKind
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
 /// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
+/// <param name="ExpectedUpdatedAt">The <c>Character.UpdatedAt</c> of the copy the page acted on (D43 S2). When sent and not the stored one, the command is refused with <c>character.stale</c> and nothing is written, as <see cref="TomeStackApp.SaveCharacter"/> does. Compound changes require it.</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -107,7 +108,14 @@ public sealed record PlayCommand(
     int? EntryIndex = null,
     Guid? CompanionId = null,
     int? Temporary = null,
-    bool Replace = false);
+    bool Replace = false,
+    DateTimeOffset? ExpectedUpdatedAt = null);
+
+/// <summary>
+/// <c>character.undoPlay</c> (D43 S2): undoes the last compound play change. <paramref name="UpdatedAt"/> is the stamp of the copy the
+/// page holds; it must be the stored one (<c>character.stale</c> otherwise).
+/// </summary>
+public sealed record UndoPlayRequest(Guid CharacterId, DateTimeOffset UpdatedAt, bool Confirm = false);
 
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
@@ -135,6 +143,13 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("play.confirmation-required", "Changing hit points, resources or conditions needs an explicit confirmation.")]);
         var character = _store.FindCharacter(command.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {command.CharacterId} does not exist.")]);
+        // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
+        // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
+        // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
+        if (IsCompound(command) && command.ExpectedUpdatedAt is null)
+            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
+        if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
             throw new AppValidationException([new("play.amount-out-of-range", $"The amount must be between 0 and {PlayState.MaxHitPoints}.")]);
 
@@ -194,9 +209,44 @@ public sealed partial class TomeStackApp
         // SRD 5.1 p. 98, SRD 5.2.1 p. 17: regaining any hit points resets death saving throws.
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
-        var view = SaveWithPlay(character with { Play = play });
+        // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
+        (PlayState, string)? undo = IsCompound(command) && sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched
+            ? (character.Play, $"switch to {switched.Label}")
+            : null;
+        var view = SaveWithPlay(character with { Play = play }, undo);
         return damage is null ? view : view with { Damage = damage };
     }
+
+    /// <summary>
+    /// <c>character.undoPlay</c> (D43 S2, D44): puts the play state back to what the last compound change started from. One level,
+    /// in memory, and only while nothing else has written the character. Refused, writing nothing, in this order: without
+    /// <c>confirm</c> (<c>undo.confirmation-required</c>); unknown character (<c>character.not-found</c>); a page stamp that is not the
+    /// stored one (<c>character.stale</c>, as save and play); no slot (<c>undo.nothing</c>); a slot written for an earlier stamp
+    /// (<c>undo.stale</c>). The undo is itself one <c>SaveWithPlay</c> and sets no slot, so it cannot be undone again.
+    /// </summary>
+    public CharacterView UndoPlay(UndoPlayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!request.Confirm)
+            throw new AppValidationException([new("undo.confirmation-required", "Undoing a change to the play state needs an explicit confirmation.")], "undo.confirmation-required");
+        var character = _store.FindCharacter(request.CharacterId)
+            ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
+        if (request.UpdatedAt != character.UpdatedAt)
+            throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
+        var slot = _undo.Find(character.Id)
+            ?? throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")], "undo.nothing");
+        if (slot.UpdatedAfter != character.UpdatedAt)
+            throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")], "undo.stale");
+        var view = SaveWithPlay(character with { Play = slot.Before });
+        _undo.Remove(character.Id); // only after the write succeeded: a failed save keeps the slot
+        return view;
+    }
+
+    /// <summary>
+    /// D43 S2: a compound change decides several writes from one view, so it needs the current stamp (<c>play.basis-required</c>
+    /// without one). Today only the form switch is: <c>toggleOn</c> with <c>replace</c>. Later slices (S3, S7, S8) extend this list.
+    /// </summary>
+    private static bool IsCompound(PlayCommand command) => command.Action == PlayActionKind.ToggleOn && command.Replace;
 
     /// <summary>
     /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
