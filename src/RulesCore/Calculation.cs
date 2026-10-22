@@ -695,7 +695,7 @@ public static class CharacterCalculator
             var isOn = ToggleIsOn(revision, t, effective, autoOn);
             // The count means something only inside an encounter and while the content still has a duration; otherwise a stored count is inert.
             var roundsLeft = isOn && character.Play.Encounter is not null && duration is not null
-                ?character.Play.Toggles.FirstOrDefault(a => a.ContentId == revision.ContentId && a.ToggleId == t.ToggleId)?.RoundsLeft
+                ? character.Play.Toggles.FirstOrDefault(a => a.ContentId == revision.ContentId && a.ToggleId == t.ToggleId)?.RoundsLeft
                 : null;
             // A toggle whose group content is not on the character is a group of one (C6): it shows as a plain toggle.
             var inGroup = t.Group is not null && active.Any(a => a.Revision.ContentId == (t.GroupContent ?? revision.ContentId));
