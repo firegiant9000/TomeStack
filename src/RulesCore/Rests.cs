@@ -1,7 +1,7 @@
 namespace TomeStack.RulesCore;
 
 /// <summary>What a proposed rest change is about.</summary>
-public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration, Charges }
+public enum RestChangeKind { HitPoints, TemporaryHitPoints, Resource, Exhaustion, HitDie, HitDice, DeathSaves, SpellSlots, PactSlots, Toggle, Concentration, Charges, Encounter }
 
 /// <summary>
 /// One proposed change of a rest preview (SPEC C-05). <paramref name="Id"/> is stable for the same character state, so
@@ -190,6 +190,14 @@ public static class RestPlanner
             changes.Add(new(
                 "concentration", RestChangeKind.Concentration, "Concentration", 1, 0,
                 $"{concentration.Name}: concentration ends after a long rest (untick to keep it)", rules, concentration.Spell.ContentId));
+        }
+
+        // Character schema v10 (D43 slice 3): a long rest ends a running encounter and the rounds left on toggles. Listed so it is seen first.
+        if (character.Play.Encounter is { } encounter)
+        {
+            changes.Add(new(
+                "encounter", RestChangeKind.Encounter, "End the encounter", encounter.Round, 0,
+                $"The encounter (round {encounter.Round}) ends after a long rest (untick to keep it)", rules));
         }
 
         if (character.Play.Exhaustion > 0)
@@ -454,6 +462,9 @@ public static class RestPlanner
                     break;
                 case RestChangeKind.Concentration:
                     play = play with { Concentration = null };
+                    break;
+                case RestChangeKind.Encounter:
+                    play = play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
                     break;
                 case RestChangeKind.DeathSaves:
                     // Only when hit points were actually regained: unticking every hit die keeps the saves.

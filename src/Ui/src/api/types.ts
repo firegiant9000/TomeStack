@@ -523,7 +523,9 @@ export type PlayActionKind =
   | 'companionDamage'
   | 'companionHeal'
   | 'companionSetHitPoints'
-  | 'companionSetTemporaryHitPoints';
+  | 'companionSetTemporaryHitPoints'
+  | 'startEncounter'
+  | 'endEncounter';
 
 export interface PlayAction {
   action: PlayActionKind;
@@ -550,7 +552,7 @@ export interface PlayAction {
 export interface RestChange {
   id: string;
   /** `hitDie`: one spent hit die of a short rest (`die`, `amount` hit points); `hitDice`: dice regained on a long rest. */
-  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges';
+  kind: 'hitPoints' | 'temporaryHitPoints' | 'resource' | 'exhaustion' | 'hitDie' | 'hitDice' | 'deathSaves' | 'spellSlots' | 'pactSlots' | 'toggle' | 'concentration' | 'charges' | 'encounter';
   slotLevel?: number;
   die?: number;
   amount?: number;

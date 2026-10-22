@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TomeStack.RulesCore;
 
 namespace TomeStack.AppService.Tests;
@@ -336,5 +337,323 @@ public class TurnCommandTests
 
         Assert.Equal(beforePlay, TempApp.Json(undone.Character.Play));
         Assert.Equal(beforePlay, TempApp.Json(temp.App.GetCharacter(id).Character.Play));
+    }
+
+    [Fact]
+    public void A_turn_and_its_undo_write_nothing_outside_the_play_state()
+    {
+        var (temp, id) = InEncounterWithIron();
+        using var _ = temp;
+        string Outside(Character c) => TempApp.Json(c with { Play = new(), UpdatedAt = default });
+        var before = Outside(temp.App.GetCharacter(id).Character);
+
+        var turned = temp.App.Turn(Request(temp, id));
+        Assert.Equal(before, Outside(turned.Character));
+        var undone = temp.App.UndoPlay(new(id, turned.Character.UpdatedAt, Confirm: true));
+
+        Assert.Equal(before, Outside(undone.Character));
+    }
+
+    // ---- the dispatcher (3.4 review) ------------------------------------------------------------------------------
+
+    private static JsonElement Dispatch(TempApp temp, string command, object payload) =>
+        JsonDocument.Parse(new CommandDispatcher(temp.App).Dispatch(JsonSerializer.Serialize(new { id = "1", command, payload }, RulesJson.Compact))).RootElement;
+
+    [Fact]
+    public void The_dispatcher_lists_and_runs_the_turn_commands_with_a_choice()
+    {
+        var (temp, id) = InEncounterWithIron();
+        using var _ = temp;
+        SpendBreath(temp, id, 3); // breath 1 left; Iron's upkeep needs 2
+        Assert.Contains("character.turnPreview", CommandDispatcher.Commands);
+        Assert.Contains("character.turn", CommandDispatcher.Commands);
+
+        var preview = Dispatch(temp, "character.turnPreview", new { characterId = id, at = "turnStart" });
+        Assert.True(preview.GetProperty("ok").GetBoolean(), preview.ToString());
+        var stamp = preview.GetProperty("result").GetProperty("updatedAt").GetString();
+
+        var without = Dispatch(temp, "character.turn", new { characterId = id, at = "turnStart", confirm = true, expectedUpdatedAt = stamp });
+        Assert.False(without.GetProperty("ok").GetBoolean());
+        Assert.Equal("turn.choice-required", without.GetProperty("error").GetProperty("code").GetString());
+
+        var with = Dispatch(temp, "character.turn", new { characterId = id, at = "turnStart", confirm = true, expectedUpdatedAt = stamp, choices = new Dictionary<string, string> { [IronShort] = "keep" } });
+        Assert.True(with.GetProperty("ok").GetBoolean(), with.ToString());
+        Assert.Equal(1, Round(temp.App.GetCharacter(id)));
+    }
+
+    // ---- the order of the checks (3.4 review) ---------------------------------------------------------------------
+
+    [Fact]
+    public void A_missing_choice_and_an_unknown_one_together_report_the_unknown_one()
+    {
+        var (temp, id) = InEncounterWithIron();
+        using var _ = temp;
+        SpendBreath(temp, id, 3); // Iron's prompt exists and has no choice
+
+        var code = Refusal(() => temp.App.Turn(Request(temp, id, choices: new Dictionary<string, TurnChoiceOption> { ["short:nobody"] = TurnChoiceOption.End })));
+
+        Assert.Equal("turn.choice-unknown", code);
+    }
+
+    [Fact]
+    public void A_stale_request_outside_an_encounter_reports_stale()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        var old = Stamp(temp, id);
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+
+        Assert.Equal("turn.preview-stale", Refusal(() => temp.App.Turn(Request(temp, id, stamp: old))));
+    }
+
+    // ---- Task 3.5: start and end the encounter --------------------------------------------------------------------
+
+    private static CharacterView EndEncounter(TempApp temp, Guid id) =>
+        temp.App.Play(new(id, PlayActionKind.EndEncounter, Confirm: true, ExpectedUpdatedAt: Stamp(temp, id)));
+
+    private static int? RoundsLeft(CharacterView view, string toggle) => view.Character.Play.Toggles.Single(t => t.ToggleId == toggle).RoundsLeft;
+
+    [Fact]
+    public void Start_encounter_sets_round_0_and_durations_of_toggles_already_on()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        On(temp, id, Iron, "iron");
+        Assert.Null(RoundsLeft(temp.App.GetCharacter(id), "iron"));
+
+        var view = StartEncounter(temp, id);
+
+        Assert.Equal(0, Round(view));
+        Assert.Equal(3, RoundsLeft(view, "iron")); // Iron stance lasts 3 rounds
+        Assert.Equal(10, view.Character.SchemaVersion);
+    }
+
+    [Fact]
+    public void Start_encounter_twice_is_refused()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        Assert.Equal("encounter.already-started", Refusal(() => StartEncounter(temp, id)));
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void End_encounter_returns_the_character_to_its_lower_version()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        Assert.Equal(8, temp.App.GetCharacter(id).Character.SchemaVersion);
+        Assert.Contains("\"schemaVersion\": 8", TempApp.Json(temp.App.GetCharacter(id).Character));
+
+        var started = StartEncounter(temp, id);
+        Assert.Equal(10, temp.App.GetCharacter(id).Character.SchemaVersion);
+        On(temp, id, Iron, "iron");
+        Assert.Equal(3, RoundsLeft(temp.App.GetCharacter(id), "iron"));
+
+        var ended = EndEncounter(temp, id);
+
+        Assert.Null(ended.Character.Play.Encounter);
+        Assert.Null(RoundsLeft(ended, "iron"));
+        Assert.Equal(8, ended.Character.SchemaVersion);
+        Assert.Equal(8, temp.App.GetCharacter(id).Character.SchemaVersion);
+        Assert.Contains("\"schemaVersion\": 8", TempApp.Json(temp.App.GetCharacter(id).Character));
+        Assert.Equal("end encounter", ended.UndoLabel);
+        Assert.NotNull(started);
+    }
+
+    [Fact]
+    public void End_encounter_without_one_or_without_the_stamp_is_refused()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+
+        Assert.Equal("encounter.not-started", Refusal(() => EndEncounter(temp, id)));
+        StartEncounter(temp, id);
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Play(new(id, PlayActionKind.EndEncounter, Confirm: true)));
+
+        Assert.Equal("play.basis-required", refused.Code);
+        Assert.Equal(before, TempApp.Json(temp.App.GetCharacter(id).Character));
+    }
+
+    [Fact]
+    public void End_encounter_names_the_toggles_that_lost_a_duration()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+        On(temp, id, Iron, "iron");
+        On(temp, id, Flare, "flare"); // no duration: nothing to lose
+
+        var ended = EndEncounter(temp, id);
+
+        var notice = Assert.Single(ended.Notices!);
+        Assert.Equal("encounter.duration-by-hand", notice.Code);
+        Assert.Contains("Iron stance", notice.Message, StringComparison.Ordinal);
+        Assert.Contains("duration: track by hand", notice.Message, StringComparison.Ordinal);
+        Assert.Null(notice.Content);
+        Assert.Null(notice.EffectId);
+        Assert.Null(temp.App.GetCharacter(id).Notices);
+    }
+
+    [Fact]
+    public void End_encounter_is_undone_exactly()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+        On(temp, id, Iron, "iron");
+        temp.App.Turn(Request(temp, id)); // round 1, iron down to 2 rounds
+        var beforePlay = TempApp.Json(temp.App.GetCharacter(id).Character.Play);
+        string Outside(Character c) => TempApp.Json(c with { Play = new(), UpdatedAt = default });
+        var beforeOutside = Outside(temp.App.GetCharacter(id).Character);
+
+        var ended = EndEncounter(temp, id);
+        Assert.NotEqual(beforePlay, TempApp.Json(ended.Character.Play));
+        Assert.Equal(beforeOutside, Outside(ended.Character));
+        var undone = temp.App.UndoPlay(new(id, ended.Character.UpdatedAt, Confirm: true));
+
+        Assert.Equal(beforePlay, TempApp.Json(undone.Character.Play));
+        Assert.Equal(beforeOutside, Outside(undone.Character));
+    }
+
+    [Fact]
+    public void A_toggle_turned_on_in_an_encounter_gets_its_duration()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+
+        var view = On(temp, id, Iron, "iron");
+
+        Assert.Equal(3, RoundsLeft(view, "iron"));
+        Assert.Equal(10, view.Character.SchemaVersion);
+    }
+
+    [Fact]
+    public void A_toggle_turned_on_outside_an_encounter_has_no_rounds_left()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+
+        var view = On(temp, id, Iron, "iron");
+
+        Assert.Null(RoundsLeft(view, "iron"));
+        Assert.Equal(8, view.Character.SchemaVersion);
+        Assert.Equal(3, view.Sheet.Toggles!.Single(t => t.ToggleId == "iron").Duration); // the sheet shows a duration with no count: track by hand
+    }
+
+    [Fact]
+    public void Spending_a_counting_up_pool_to_full_returns_its_prompt()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        On(temp, id, Iron, "iron"); // Flare is an overlay of Iron stance
+        On(temp, id, Flare, "flare");
+        Strain(temp, id, 2);
+        Assert.Null(temp.App.GetCharacter(id).Notices);
+
+        var view = Strain(temp, id, 1); // 3 of 3
+
+        var notice = Assert.Single(view.Notices!);
+        Assert.Equal("resource.full", notice.Code);
+        Assert.Equal("Flare ends; take a level of exhaustion", notice.Message);
+        Assert.Null(temp.App.GetCharacter(id).Notices);
+    }
+
+    [Fact]
+    public void Spending_a_counting_up_pool_short_of_full_has_no_notice()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+
+        Assert.Null(Strain(temp, id, 2).Notices);
+        Assert.Null(SpendBreath(temp, id, 7).Notices); // an ordinary pool never prompts
+    }
+
+    private static CharacterView Strain(TempApp temp, Guid id, int amount) =>
+        temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, Amount: amount, ContentId: Flare, ResourceId: "strain"));
+
+    [Fact]
+    public void Long_rest_proposes_ending_the_encounter()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+        On(temp, id, Iron, "iron");
+
+        var preview = temp.App.PreviewRest(id, RestPeriod.LongRest);
+        var change = Assert.Single(preview.Changes, c => c.Kind == RestChangeKind.Encounter);
+        Assert.Equal(("encounter", "End the encounter"), (change.Id, change.Label));
+
+        // Keep the stance on, so its rounds left are what the encounter's end clears.
+        var view = temp.App.Rest(new(id, Confirm: true, Basis: preview.Basis, Skip: [$"toggle:{Iron:D}:iron"]));
+
+        Assert.Null(view.Character.Play.Encounter);
+        Assert.Contains(view.Character.Play.Toggles, t => t.ToggleId == "iron");
+        Assert.Null(RoundsLeft(view, "iron"));
+        Assert.Equal(8, view.Character.SchemaVersion);
+        Assert.DoesNotContain(temp.App.PreviewRest(id, RestPeriod.LongRest).Changes, c => c.Kind == RestChangeKind.Encounter);
+    }
+
+    [Fact]
+    public void Long_rest_outside_an_encounter_does_not_propose_it()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+
+        Assert.DoesNotContain(temp.App.PreviewRest(id, RestPeriod.LongRest).Changes, c => c.Kind == RestChangeKind.Encounter);
+    }
+
+    // ---- the slice's acceptance line ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// "A cost 3 / upkeep 2 form on a pool of 7: on, then three turns (5, 3, 1)". From a full 7 the form's cost of 3 leaves 4, so the
+    /// numbers fit a pool that is at 7 after the form is on: the encounter starts, then the character is stored (the store directly:
+    /// <c>SaveCharacter</c> keeps the stored play state) with Iron on, no duration count (the stance's 3 rounds would end it on the
+    /// third turn) and no breath spent. Three turn starts give 5, 3 and 1.
+    /// </summary>
+    private static (TempApp Temp, Guid Id) AfterThreeTurnsWithBreathAt1()
+    {
+        var (temp, id) = Turns();
+        StartEncounter(temp, id);
+        var stored = temp.App.GetCharacter(id).Character;
+        temp.App.Store.SaveCharacter(stored with { Play = stored.Play with { Toggles = [new(Iron, "iron")] } });
+        Assert.Equal(7, Left(temp.App.GetCharacter(id), "breath"));
+        foreach (var expected in new[] { 5, 3, 1 })
+            Assert.Equal(expected, Left(temp.App.Turn(Request(temp, id)), "breath"));
+        return (temp, id);
+    }
+
+    [Fact]
+    public void Acceptance_cost_3_upkeep_2_form_on_a_pool_of_7()
+    {
+        // End: "Iron stance needs 2, has 1"; ending it ends its overlay (Flare, switched on just before) and leaves the breath at 1.
+        var (temp, id) = AfterThreeTurnsWithBreathAt1();
+        using var _ = temp;
+        On(temp, id, Flare, "flare");
+        var asking = temp.App.PreviewTurn(Request(temp, id, confirm: false));
+        var prompt = Assert.Single(asking.Choices);
+        Assert.Equal((IronShort, "Iron stance needs 2, has 1", 2, 1), (prompt.Id, prompt.Label, prompt.Needs, prompt.Has));
+
+        var ended = temp.App.Turn(Request(temp, id, choices: new Dictionary<string, TurnChoiceOption> { [IronShort] = TurnChoiceOption.End }));
+
+        Assert.Empty(ended.Character.Play.Toggles); // Iron and its overlay
+        Assert.Equal(1, Left(ended, "breath"));
+        Assert.Equal(4, Round(ended));
+
+        // Keep: the stance stays, the breath that is left is spent, and the rest is a line to settle by hand.
+        var (kept, keptId) = AfterThreeTurnsWithBreathAt1();
+        using var __ = kept;
+        var keep = kept.App.Turn(Request(kept, keptId, choices: new Dictionary<string, TurnChoiceOption> { [IronShort] = TurnChoiceOption.Keep }));
+
+        Assert.Equal(0, Left(keep, "breath"));
+        Assert.Contains(keep.Character.Play.Toggles, t => t.ToggleId == "iron");
+        var notice = Assert.Single(keep.Notices!);
+        Assert.Equal("turn.settle-by-hand", notice.Code);
+        Assert.EndsWith("short 1 Breath, settle by hand", notice.Message, StringComparison.Ordinal);
     }
 }

@@ -53,6 +53,28 @@ public class RestPlannerTests
     }
 
     [Fact]
+    public void Long_rest_proposes_ending_the_encounter_once()
+    {
+        var running = Tired() with { Encounter = new(3), Toggles = [new(Guid.Parse("5f3dc000-0000-4000-8000-0000000000aa"), "stance", RoundsLeft: 2)] };
+
+        var plan = Plan(RulesFamilies.Srd521, running);
+        var change = Assert.Single(plan.Changes, c => c.Kind == RestChangeKind.Encounter);
+        Assert.Equal(("encounter", "End the encounter"), (change.Id, change.Label));
+        Assert.Empty(plan.Changes.Where(c => c.Kind == RestChangeKind.Encounter).Skip(1));
+
+        var applied = RestPlanner.Apply(running, plan, new HashSet<string>());
+        Assert.Null(applied.Encounter);
+        Assert.All(applied.Toggles, t => Assert.Null(t.RoundsLeft));
+
+        var skipped = RestPlanner.Apply(running, plan, new HashSet<string> { "encounter" });
+        Assert.Equal(3, skipped.Encounter!.Round);
+        Assert.Equal(2, skipped.Toggles.Single().RoundsLeft);
+
+        Assert.DoesNotContain(Plan(RulesFamilies.Srd521, Tired()).Changes, c => c.Kind == RestChangeKind.Encounter);
+        Assert.DoesNotContain(Plan(RulesFamilies.Srd521, applied).Changes, c => c.Kind == RestChangeKind.Encounter);
+    }
+
+    [Fact]
     public void A_long_rest_proposes_no_temporary_hit_points_and_long_rest_recoveries()
     {
         // Hit points are covered by RestCommandTests (these fixtures have no class, so their maximum is 0).
