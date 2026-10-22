@@ -335,7 +335,7 @@ public sealed partial class TomeStackApp : IDisposable
     /// change passes <paramref name="undo"/> (the play state it started from and the button's words) and gets a fresh slot for the
     /// stamp it wrote, set after the single write; the returned view already carries its label. Any other write leaves an old slot
     /// where it is: the stamp moved, so it can no longer match (the view offers nothing and the undo says <c>undo.stale</c>), and the
-    /// next compound change or the undo replaces or takes it.
+    /// next compound change replaces it, or the undo removes it after its own write succeeds.
     /// </summary>
     private CharacterView SaveWithPlay(Character character, (PlayState Before, string Label)? undo = null)
     {

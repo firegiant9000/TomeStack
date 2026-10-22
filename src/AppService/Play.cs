@@ -147,7 +147,7 @@ public sealed partial class TomeStackApp
         // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
         // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
         if (IsCompound(command) && command.ExpectedUpdatedAt is null)
-            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")]);
+            throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
         if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         if (command.Amount is < 0 or > PlayState.MaxHitPoints)
@@ -228,15 +228,15 @@ public sealed partial class TomeStackApp
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!request.Confirm)
-            throw new AppValidationException([new("undo.confirmation-required", "Undoing a change to the play state needs an explicit confirmation.")]);
+            throw new AppValidationException([new("undo.confirmation-required", "Undoing a change to the play state needs an explicit confirmation.")], "undo.confirmation-required");
         var character = _store.FindCharacter(request.CharacterId)
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
         if (request.UpdatedAt != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
         var slot = _undo.Find(character.Id)
-            ?? throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")]);
+            ?? throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")], "undo.nothing");
         if (slot.UpdatedAfter != character.UpdatedAt)
-            throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")]);
+            throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")], "undo.stale");
         var view = SaveWithPlay(character with { Play = slot.Before });
         _undo.Remove(character.Id); // only after the write succeeded: a failed save keeps the slot
         return view;

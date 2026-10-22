@@ -190,6 +190,43 @@ it('when the view offers an undo label, Undo reads "Undo switch to ..." and call
   await waitFor(() => expect(onChanged).toHaveBeenCalledWith(undone));
 });
 
+it('Undo sends the stamp of the view that showed its label, not the save queue\'s latest (D44)', async () => {
+  const user = userEvent.setup();
+  const offered = formsView(true, { undoLabel: 'switch to Fixture Tide' }, '2026-10-03T00:00:09Z');
+  const hit = formsView(true, {}, '2026-10-03T00:00:12Z'); // a play change finished: the queue's latest is now 12, the page still shows 09
+  const onChanged = vi.fn();
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(hit);
+  vi.mocked(client.undoPlay).mockReset();
+  vi.mocked(client.undoPlay).mockResolvedValue(formsView(false, {}, '2026-10-03T00:00:13Z'));
+  render(<CharacterSheet view={offered} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(hit));
+  const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Undo switch to Fixture Tide' });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  await user.click(button);
+  await waitFor(() => expect(client.undoPlay).toHaveBeenCalledTimes(1));
+  expect(client.undoPlay).toHaveBeenCalledWith('fixture-2', '2026-10-03T00:00:09Z');
+});
+
+it('the service\'s Undo is disabled while a play change is in flight, so it cannot undo a newer switch (D23, D44)', async () => {
+  const user = userEvent.setup();
+  const offered = formsView(true, { undoLabel: 'switch to Fixture Tide' }, '2026-10-03T00:00:09Z');
+  let settle: (view: CharacterView) => void = noop;
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockReturnValue(new Promise<CharacterView>((resolve) => { settle = resolve; }));
+  vi.mocked(client.undoPlay).mockReset();
+  render(<CharacterSheet view={offered} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('radio', { name: /Fixture Ember/ }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Undo switch to Fixture Tide' });
+  expect(button.disabled).toBe(true);
+  await user.click(button);
+  expect(client.undoPlay).not.toHaveBeenCalled();
+  settle(formsView(false, {}, '2026-10-03T00:00:10Z'));
+  await waitFor(() => expect(button.disabled).toBe(false));
+});
+
 it('a switch withdraws the client Undo from before it, so only the service\'s Undo is offered (D44)', async () => {
   const user = userEvent.setup();
   const before = formsView(false);
@@ -209,17 +246,26 @@ it('a switch withdraws the client Undo from before it, so only the service\'s Un
   expect(screen.queryByRole('button', { name: /^Undo last change/ })).toBeNull();
 });
 
-it('a stale undo shows the service\'s message and leaves the view (D44)', async () => {
+it.each([
+  ['undo.stale', 'This character changed since that change, so it can\'t be undone.'],
+  ['undo.nothing', 'There is nothing to undo for this character.'],
+])('a refused undo (%s) shows the service\'s message and reloads the stored copy, which drops the label (D44)', async (code, message) => {
   const user = userEvent.setup();
   const offered = formsView(true, { undoLabel: 'switch to Fixture Tide' });
+  const current = formsView(true, {}, '2026-10-03T00:01:00Z'); // the stored copy offers nothing
   const onChanged = vi.fn();
   const onError = vi.fn();
-  const stale = new TomeStackError({ code: 'undo.stale', message: 'This character changed since that change, so it can\'t be undone.' });
-  vi.mocked(client.undoPlay).mockRejectedValue(stale);
+  const refusal = new TomeStackError({ code, message, diagnostics: [{ code, message }] }); // the wire shape: the top-level code is the specific one
+  vi.mocked(client.undoPlay).mockReset();
+  vi.mocked(client.undoPlay).mockRejectedValue(refusal);
+  vi.mocked(client.getCharacter).mockReset();
+  vi.mocked(client.getCharacter).mockResolvedValue(current);
   render(<CharacterSheet view={offered} onChanged={onChanged} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
   await user.click(screen.getByRole('button', { name: 'Undo switch to Fixture Tide' }));
-  await waitFor(() => expect(onError).toHaveBeenCalledWith(stale));
-  expect(onChanged).not.toHaveBeenCalled();
+  await waitFor(() => expect(onError).toHaveBeenCalledWith(refusal));
+  expect(onError.mock.calls[0]?.[0].message).toBe(message);
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(current));
+  expect(client.getCharacter).toHaveBeenCalledWith('fixture-2');
   expect(screen.getByRole('radio', { name: /Fixture Tide/ }).getAttribute('aria-checked')).toBe('true'); // the view is untouched
 });
 

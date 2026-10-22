@@ -117,6 +117,23 @@ public class PlayUndoTests
     }
 
     [Fact]
+    public void Refusals_carry_their_own_code_at_the_top_level()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        var stamp = temp.App.GetCharacter(id).Character.UpdatedAt;
+
+        Assert.Equal("undo.nothing", Assert.Throws<AppValidationException>(() => Undo(temp, id, stamp)).Code);
+        Assert.Equal("undo.confirmation-required", Assert.Throws<AppValidationException>(() => Undo(temp, id, stamp, confirm: false)).Code);
+        var switched = Switched(temp, id);
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+        Assert.Equal("undo.stale", Assert.Throws<AppValidationException>(() => Undo(temp, id, temp.App.Store.FindCharacter(id)!.UpdatedAt)).Code);
+        Assert.Equal("character.stale", Assert.Throws<AppValidationException>(() => Undo(temp, id, switched.Character.UpdatedAt)).Code);
+        Assert.Equal("play.basis-required", Assert.Throws<AppValidationException>(() => temp.App.Play(new(id, PlayActionKind.ToggleOn, Confirm: true,
+            ContentId: Content(3), ToggleId: "tide", Replace: true))).Code);
+    }
+
+    [Fact]
     public void Undo_twice_finds_nothing_the_second_time()
     {
         var (temp, id) = Forms();

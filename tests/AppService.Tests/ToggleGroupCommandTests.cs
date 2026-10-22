@@ -106,6 +106,29 @@ public class ToggleGroupCommandTests
     }
 
     [Fact]
+    public void A_second_switch_to_the_same_form_with_the_fresh_stamp_pays_nothing()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        On(temp, id, 2, "ember");
+        var first = temp.App.Play(Switch(id, temp.App.GetCharacter(id).Character.UpdatedAt));
+        var fresh = temp.App.GetCharacter(id);
+        var focus = Focus(first);
+        var label = fresh.UndoLabel;
+        var before = TempApp.Json(fresh.Character);
+
+        // The sheet's double click: the second press runs with the stamp the first one produced.
+        var second = Assert.Throws<AppValidationException>(() => temp.App.Play(Switch(id, fresh.Character.UpdatedAt)));
+
+        Assert.Equal("toggle.already-on", second.Problems[0].Code);
+        var after = temp.App.GetCharacter(id);
+        Assert.Equal(focus, Focus(after));
+        Assert.Equal(label, after.UndoLabel);
+        Assert.NotNull(label);
+        Assert.Equal(before, TempApp.Json(after.Character));
+    }
+
+    [Fact]
     public void A_simple_toggle_does_not_need_the_stamp()
     {
         var (temp, id) = Forms();
