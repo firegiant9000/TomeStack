@@ -801,7 +801,10 @@ public sealed partial class TomeStackApp
             var revision = batch.FirstOrDefault(r => r.Reference == reference) ?? _store.FindRevision(reference); // a linked feature's draft is written with the class
             dependencies.Add(revision is null ? new("missing-content", reference.RevisionId.ToString(), reference) : new("content", revision.Name, reference));
         }
-        foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Distinct())
+        var toggleContent = draft.Effects.OfType<ToggleEffect>()
+            .SelectMany(t => new[] { t.GroupContent, t.ResourceContent }.Concat((t.AllowedWith ?? []).Select(a => a.ContentId)))
+            .OfType<Guid>().Where(id => id != draft.ContentId); // a toggle naming its own content is no dependency
+        foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Concat(toggleContent).Distinct())
         {
             var revision = _store.ListRevisions(contentId).LastOrDefault();
             dependencies.Add(revision is null ? new("missing-content", contentId.ToString()) : new("content", revision.Name, revision.Reference));

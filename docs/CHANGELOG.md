@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Form groups, overlays and costs from a shared pool (D43 slice 1, ADR-018):** a feature can declare a form group (a `toggleGroup` effect), and toggles can join it as forms (primaries) or overlays. At most one form of a group is on; "Base" is no form on. An overlay lists the forms it may be on with (`allowedWith`) and whether it may be on with no form (`allowedInBase`). A toggle can cost an amount of a shared pool (`cost`, with `resourceContent` when the pool belongs to other content) and be offered from a level (`level`). A group can be declared by one content and joined by another, such as a species joining a class's group; if that content is not on the character, the toggle stands alone. Switching forms is one confirmed change: the old form goes off, overlays the new form does not allow go off, and the cost is paid, or nothing happens when the pool is short. Play shows each group under "Forms" as a picker (Base, each form with its cost, overlays as checkboxes; a form that cannot be chosen says why), and the arrow keys move focus without choosing, because a choice spends. The Homebrew studio gains the form group, kind, allowed forms, cost and level controls on a toggle, and "Add form group" and "Add toggle". Undo takes back the cost of a costed switch on; a switch between forms has no Undo yet. The sheet's toggle entries carry `group`, `groupLabel`, `layer`, `cost`, `available` and `unavailableReason`. New refusal codes: `toggle.group-occupied`, `toggle.overlay-not-allowed`. New calculation diagnostics: `toggle.group-conflict`, `toggle.overlay-not-allowed`, `toggle.group-absent`. New validation codes: `validate.requires-v11` and `validate.toggle-*` for groups, layers, allowed forms, cost and pool content, listed in [play-mechanics.md](features/play-mechanics.md). Packages and import candidates follow a toggle's references to other content; the relationship tree and the resource debugger follow its pool.
 
 ### Changed
 
@@ -10,7 +11,7 @@
 
 ### Migration
 
-- None yet.
+- Content schema v11 (`docs/schemas/content-revision.v11.schema.json`). Published content is written at v11 only when it uses a v11 field. A build without v11 support refuses such a package or revision. Nothing changes for existing content or characters. No character, package format or database change.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)
 

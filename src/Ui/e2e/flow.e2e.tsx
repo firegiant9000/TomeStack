@@ -565,6 +565,9 @@ it('authors a homebrew subclass in the studio, plays it, and reviews an update',
 
   // Republish with +3 initiative: the character keeps +2 until the reviewed update is applied.
   await user.click(screen.getByRole('button', { name: 'Homebrew studio' }));
+  // The studio opens on the first source, and the other e2e file creates its own source in the same DevHost: pick ours.
+  const ownSource = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await user.selectOptions(ownSource, within(ownSource).getByRole('option', { name: /^E2E Homebrew/ }));
   await user.click(await screen.findByRole('button', { name: 'Edit Path of the E2E Storm' }));
   const modifier = rule(/^Rule 1: Modifier/);
   await user.clear(within(modifier).getByRole('textbox', { name: /^Value/ }));

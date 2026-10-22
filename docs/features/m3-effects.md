@@ -53,7 +53,7 @@ Like `armor` (v4) and the v5 types, `toggle` is typed only in a v6 revision. In 
 ## Not yet
 
 - A toggle that lasts a set time (rounds, minutes).
-- Toggles that turn each other off.
+- ~~Toggles that turn each other off.~~ Built as form groups with overlays and pool costs (content v11, D43): see [play-mechanics.md](play-mechanics.md).
 - Toggled effects other than modifiers, such as grants or proficiencies.
 - A cost paid in something other than a resource, such as hit points or spell slots.
 

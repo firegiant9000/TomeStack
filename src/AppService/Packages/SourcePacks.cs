@@ -163,11 +163,16 @@ public sealed partial class PackageService
         _ => null,
     };
 
-    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's resource.</summary>
+    /// <summary>The other content a v11 toggle names: its group's content, its pool's content and the primaries an overlay is allowed with.</summary>
+    private static IEnumerable<Guid> ToggleReferences(ToggleEffect toggle) =>
+        new[] { toggle.GroupContent, toggle.ResourceContent }.Concat((toggle.AllowedWith ?? []).Select(a => a.ContentId)).OfType<Guid>();
+
+    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group.</summary>
     private static IEnumerable<Guid> References(ContentRevision revision) =>
         revision.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
             .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options).Select(o => o.ContentId))
             .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<ToggleEffect>().SelectMany(ToggleReferences))
             .Concat(revision.ExtendsChoice is { } extends ? new[] { extends.ContentId } : [])
             .Where(id => id != revision.ContentId);
 

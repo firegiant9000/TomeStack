@@ -10,6 +10,20 @@ export interface UndoEntry {
 }
 
 const hp = (view: CharacterView) => view.sheet.hitPoints;
+/**
+ * D43: switching a primary on or off also drops the overlays its group no longer allows, and the client cannot restore them. True
+ * when a toggle other than the one acted on was on before and is off after, so the change has no client undo.
+ */
+const droppedOthers = (action: PlayAction, before: CharacterView, after: CharacterView) =>
+  (before.sheet.toggles ?? []).some(
+    (o) =>
+      o.on &&
+      !o.auto &&
+      !(o.content.contentId === action.contentId && o.toggleId === action.toggleId) &&
+      after.sheet.toggles?.some((n) => n.content.contentId === o.content.contentId && n.toggleId === o.toggleId && !n.on),
+  );
+const findToggle =(view: CharacterView, toggle: PlayAction) =>
+  view.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId);
 
 /**
  * D23 (owner, 2026-10-06): undo is the inverse play command, computed from the view before and after, never a stored
@@ -27,8 +41,7 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
   const b = before.character.play;
   const entry = (inverse: PlayAction[]): UndoEntry => ({ label, inverse, after });
   const hadCondition = (condition?: string) => !!condition && (b?.conditions ?? []).some((c) => c.toLowerCase() === condition.toLowerCase());
-  const backing = (toggle: PlayAction) =>
-    before.sheet.toggles?.find((t) => t.content.contentId === toggle.contentId && t.toggleId === toggle.toggleId)?.resourceId;
+  const backing = (toggle: PlayAction) => findToggle(before, toggle)?.resourceId;
   switch (action.action) {
     case 'damage':
     case 'heal':
@@ -72,13 +85,21 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'regainPactSlot':
       return entry([{ action: 'spendPactSlot' }]);
     case 'toggleOn': {
-      const resourceId = backing(action);
-      // A resource-backed toggle spent a use when it went on: switching it off gives that use back.
-      return entry([{ action: 'toggleOff', contentId: action.contentId, toggleId: action.toggleId }, ...(resourceId ? [{ action: 'regain' as const, amount: 1, contentId: action.contentId, resourceId }] : [])]);
+      // D43 slice 1: a replace switch also turned another form off (and maybe its overlays), which the client cannot restore: no undo until slice 2.
+      if (action.replace || droppedOthers(action, before, after)) return undefined;
+      const t = findToggle(before, action);
+      const resourceId = t?.resourceId;
+      // A resource-backed toggle spent its cost when it went on (1 when it names a pool but no cost, D43), from the pool it names
+      // (its own content when none): switching it off gives back exactly that, to that pool. A cost of 0 spent nothing.
+      const amount = t?.cost ?? 1;
+      const regain: PlayAction[] = resourceId && amount > 0 ? [{ action: 'regain', amount, contentId: t?.costResourceContent ?? action.contentId, resourceId }] : [];
+      return entry([{ action: 'toggleOff', contentId: action.contentId, toggleId: action.toggleId }, ...regain]);
     }
-    case 'toggleOff':
+    case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
-      return backing(action) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+      if (backing(action)) return undefined;
+      return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
+    }
     case 'companionDamage':
     case 'companionHeal':
     case 'companionSetHitPoints':

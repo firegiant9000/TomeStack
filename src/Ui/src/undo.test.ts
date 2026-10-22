@@ -97,6 +97,53 @@ it('keeps the plain mirror for a toggle without a resource', () => {
   expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle(), withToggle())!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
 });
 
+const withToggles = (...toggles: Record<string, unknown>[]): CharacterView => {
+  const v = view(1, 0);
+  (v.sheet as unknown as { toggles: unknown[] }).toggles = toggles.map((t) => ({ content: { contentId: 'c' }, on: false, ...t }));
+  return v;
+};
+
+it('undo of a toggle with a cost regains the cost from its pool', () => {
+  const v = withToggles({ toggleId: 't', resourceId: 'focus', cost: 3, costResourceContent: 'pool' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, v, v)!.inverse).toEqual([
+    { action: 'toggleOff', contentId: 'c', toggleId: 't' },
+    { action: 'regain', amount: 3, contentId: 'pool', resourceId: 'focus' },
+  ]);
+});
+
+it('a cost of 0 regains nothing, and a toggle with only a pool regains the default 1 from that pool', () => {
+  const free = withToggles({ toggleId: 't', resourceId: 'focus', cost: 0, costResourceContent: 'pool' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, free, free)!.inverse).toEqual([{ action: 'toggleOff', contentId: 'c', toggleId: 't' }]);
+  const pooled = withToggles({ toggleId: 't', resourceId: 'focus', costResourceContent: 'pool' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't' }, pooled, pooled)!.inverse).toEqual([
+    { action: 'toggleOff', contentId: 'c', toggleId: 't' },
+    { action: 'regain', amount: 1, contentId: 'pool', resourceId: 'focus' },
+  ]);
+});
+
+it('a replace switch has no client undo', () => {
+  const v = withToggles({ toggleId: 't', resourceId: 'focus', cost: 3, costResourceContent: 'pool' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 't', replace: true }, v, v)).toBeUndefined();
+});
+
+it('turning on a primary that dropped an overlay the new form does not allow has no client undo', () => {
+  const before = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
+  const after = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 'p' }, before, after)).toBeUndefined();
+  const kept = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOn', contentId: 'c', toggleId: 'p' }, before, kept)!.inverse).toEqual([{ action: 'toggleOff', contentId: 'c', toggleId: 'p' }]);
+});
+
+it('turning off a primary that also dropped an overlay has no client undo, and turning off a costed toggle is not undoable', () => {
+  const before = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: true, group: 'g', layer: 'overlay' });
+  const after = withToggles({ toggleId: 'p', on: false, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 'p' }, before, after)).toBeUndefined();
+  const alone = withToggles({ toggleId: 'p', on: true, group: 'g', layer: 'primary' }, { toggleId: 'o', on: false, group: 'g', layer: 'overlay' });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 'p' }, alone, alone)!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 'p' }]);
+  const costed = withToggles({ toggleId: 'p', on: true, resourceId: 'focus', cost: 2, costResourceContent: 'pool' });
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 'p' }, costed, costed)).toBeUndefined();
+});
+
 it('undoes concentrating on another spell by concentrating on the earlier one again', () => {
   expect(inverseOf({ action: 'startConcentration', contentId: 'other-spell' }, view(1, 0, concentrating(10)), view(1, 0))!.inverse).toEqual([{ action: 'startConcentration', contentId: 'fixture-spell' }]);
   expect(inverseOf({ action: 'startConcentration', contentId: 'fixture-spell' }, view(1, 0, concentrating()), view(1, 0))).toBeUndefined();

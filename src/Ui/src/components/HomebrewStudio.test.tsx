@@ -8,7 +8,7 @@ import type { AppInfo, SourceRecord, StudioEntry } from '../api/types';
 import { HomebrewStudio } from './HomebrewStudio';
 
 vi.mock('../api/client', () => ({
-  client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn() },
+  client: { listSources: vi.fn(), contentBySource: vi.fn(), publishManyPreview: vi.fn(), createHomebrewSource: vi.fn(), previewFormula: vi.fn(), listCharacters: vi.fn(), validateRevision: vi.fn() },
 }));
 
 const info = { rulesFamilies: [{ id: 'srd-5.1', displayName: 'SRD 5.1' }] } as unknown as AppInfo;
@@ -189,4 +189,67 @@ it('an_edit_outside_the_scale_columns_does_not_ask_for_the_previews_again', asyn
   await user.type(screen.getByLabelText('Name'), ' renamed');
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(vi.mocked(client.previewFormula).mock.calls.length).toBe(asked);
+});
+
+// D43 review: what only means something with a pool or a group goes when the pool or group does.
+async function openFormDraft(user: ReturnType<typeof userEvent.setup>) {
+  const effects = [
+    { type: 'resource', id: 'resource-1', resourceId: 'focus', label: 'Testy Focus', maximum: '5' },
+    { type: 'toggleGroup', id: 'toggleGroup-1', groupId: 'one', label: 'Testy One' },
+    { type: 'toggleGroup', id: 'toggleGroup-2', groupId: 'two', label: 'Testy Two' },
+    { type: 'toggle', id: 'toggle-1', toggleId: 'form', label: 'Testy Form', group: 'one', resourceId: 'focus', cost: '3', resourceContent: 'other-content' },
+    { type: 'toggle', id: 'toggle-2', toggleId: 'glow', label: 'Testy Glow', group: 'one', layer: 'overlay', allowedWith: [{ toggleId: 'form' }] },
+  ];
+  const entry = {
+    contentId: 'id-f',
+    name: 'Testy Forms',
+    kind: 'feat',
+    revisions: [],
+    latest: { contentId: 'id-f', revisionId: 'r-f', name: 'Testy Forms', kind: 'feat', status: 'draft', rulesFamilies: ['srd-5.1'], provenance: {}, effects },
+  } as unknown as StudioEntry;
+  vi.mocked(client.contentBySource).mockImplementation((id) => Promise.resolve(id === 'a' ? [entry] : []));
+  vi.mocked(client.listCharacters).mockResolvedValue([]);
+  vi.mocked(client.previewFormula).mockResolvedValue({ formula: '3', points: [] });
+  vi.mocked(client.validateRevision).mockResolvedValue({ revision: { contentId: 'id-f', revisionId: 'x' }, errors: [], warnings: [], canPublish: true });
+  render(<HomebrewStudio info={info} onError={() => {}} onStatus={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Edit Testy Forms' }));
+  const rule = (name: RegExp) => within(screen.getByRole('group', { name }));
+  const checked = async () => {
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+    await waitFor(() => expect(vi.mocked(client.validateRevision).mock.calls.length).toBeGreaterThan(0));
+    const sent = vi.mocked(client.validateRevision).mock.calls.at(-1)![0] as unknown as { effects: Record<string, unknown>[] };
+    return (id: string) => sent.effects.find((e) => e.id === id)!;
+  };
+  return { rule, checked };
+}
+
+it('choosing Nothing for the pool also drops the cost and the pool content', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openFormDraft(user);
+  await user.selectOptions(rule(/^Rule 4: Toggle/).getByRole('combobox', { name: 'Turning it on spends' }), 'Nothing');
+  expect(rule(/^Rule 4: Toggle/).queryByRole('textbox', { name: /^Cost/ })).toBeNull();
+  const sent = await checked();
+  expect(sent('toggle-1')).toMatchObject({ toggleId: 'form' });
+  expect(sent('toggle-1').resourceId).toBeUndefined();
+  expect(sent('toggle-1').cost).toBeUndefined();
+  expect(sent('toggle-1').resourceContent).toBeUndefined();
+});
+
+it('removing the pool drops the cost of the toggles that spent it', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openFormDraft(user);
+  await user.click(rule(/^Rule 1: Resource/).getByRole('button', { name: 'Remove rule 1' }));
+  const sent = await checked();
+  expect(sent('toggle-1').resourceId).toBeUndefined();
+  expect(sent('toggle-1').cost).toBeUndefined();
+  expect(sent('toggle-1').resourceContent).toBeUndefined();
+});
+
+it('moving a toggle to another group forgets the forms it was allowed with', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openFormDraft(user);
+  await user.selectOptions(rule(/^Rule 5: Toggle/).getByRole('combobox', { name: 'Form group' }), 'Testy Two');
+  const sent = await checked();
+  expect(sent('toggle-2').group).toBe('two');
+  expect(sent('toggle-2').allowedWith).toBeUndefined();
 });

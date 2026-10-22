@@ -62,6 +62,11 @@ public static class ContentValidator
         return null;
     }
 
+    /// <summary>Whether an untyped toggle carries a content v11 key (any spelling), which decides the version its failure needs.</summary>
+    private static bool CarriesToggleV11Key(UnknownEffect toggle) =>
+        toggle.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
+        && toggle.Raw.EnumerateObject().Any(p => ToggleEffect.V11Keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -119,6 +124,7 @@ public static class ContentValidator
         var needsV8 = false;
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
+        var needsV11 = false; // content v11 (D43): toggleGroup effects and the toggle's group, layer, cost and level keys
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
@@ -144,10 +150,16 @@ public static class ContentValidator
                 // From v10 a toggle, resource or grant that stays unknown did not read (an activation, autoWhen or grant kind that
                 // is not one of the allowed names). Publishing would write it at a lower version, where it reads back as a
                 // different, typed effect, so it blocks. Below v10 it is what it always was: a warning.
-                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName } malformed
-                    when revision.SchemaVersion >= ContentRevision.PlayDetailsSchemaVersion:
-                    needsV10 = true;
-                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                // Content v11 (D43) does the same for a toggle with a layer that names no member and for a toggleGroup that does not
+                // read. The version it needs is the field's own tier: a v11 key (or a toggleGroup) needs 11, anything else 10.
+                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName } malformed
+                    when revision.SchemaVersion >= (malformed.DeclaredType == ToggleGroupEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
+                    if (malformed.DeclaredType == ToggleGroupEffect.TypeName
+                        || (malformed.DeclaredType == ToggleEffect.TypeName && revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && CarriesToggleV11Key(malformed)))
+                        needsV11 = true;
+                    else
+                        needsV10 = true;
+                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen, layer or grant kind, or a missing field); fix it before publishing.", malformed.Id);
                     break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
@@ -187,7 +199,9 @@ public static class ContentValidator
                     needsV10 |= toggleEffect.AutoWhen is not null || toggleEffect.Activation is not null;
                     if (string.IsNullOrWhiteSpace(toggleEffect.ToggleId) || string.IsNullOrWhiteSpace(toggleEffect.Label))
                         Error("validate.toggle-incomplete", $"Toggle '{toggleEffect.Id}' needs a toggleId and a label.", toggleEffect.Id);
-                    if (toggleEffect.ResourceId is { } spends && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
+                    // A v11 toggle may spend a pool another content defines (resourceContent); that is checked below.
+                    if (toggleEffect.ResourceId is { } spends && (toggleEffect.ResourceContent is null || toggleEffect.ResourceContent == revision.ContentId)
+                        && !revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == spends))
                         Error("validate.toggle-resource", $"Toggle '{toggleEffect.Id}' spends '{spends}', which this revision does not define.", toggleEffect.Id);
                     if (toggleEffect.AutoWhen is not null)
                     {
@@ -200,6 +214,12 @@ public static class ContentValidator
                             && (m.Target == FieldIds.HitPoints || m.Target.StartsWith("ability.", StringComparison.Ordinal))))
                             Error("validate.toggle-auto-target", $"Modifier '{changes.Id}' belongs to toggle '{toggleEffect.ToggleId}', which switches itself; it cannot change hit points or an ability.", changes.Id);
                     }
+                    CheckToggleV11(toggleEffect);
+                    break;
+                case ToggleGroupEffect group:
+                    needsV11 = true;
+                    if (!ScaleEffect.IsValidScaleId(group.GroupId) || string.IsNullOrWhiteSpace(group.Label))
+                        Error("validate.toggle-group-incomplete", $"Toggle group '{group.Id}' needs a label and a groupId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits.", group.Id);
                     break;
                 case GrantEffect grant:
                     needsV3 |= grant.Level is not null || grant.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
@@ -402,6 +422,8 @@ public static class ContentValidator
                     break;
             }
         }
+        foreach (var group in revision.Effects.OfType<ToggleGroupEffect>().GroupBy(g => g.GroupId).Where(g => g.Count() > 1))
+            Error("validate.toggle-group-duplicate", $"Toggle group '{group.Key}' is declared {group.Count()} times; declare each group once.", group.Skip(1).First().Id);
         if (revision.Effects.OfType<SpellcastingEffect>().Count() > 1)
             Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
         if (revision.Effects.OfType<SpellEffect>().Count() > 1)
@@ -420,6 +442,8 @@ public static class ContentValidator
             Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
+        if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs or levels) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
@@ -464,7 +488,8 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV10 ? ContentRevision.PlayDetailsSchemaVersion
+            needsV11 ? ContentRevision.PlayMechanicsSchemaVersion
+            : needsV10 ? ContentRevision.PlayDetailsSchemaVersion
             : needsV9 ? ScaleEffect.SchemaVersion
             : needsV8 ? ContentRevision.CombatDetailsSchemaVersion
             : revision.Effects.OfType<SpellcastingEffect>().Any(s => s.MulticlassCaster is not null) ? SpellcastingEffect.MulticlassSchemaVersion
@@ -533,6 +558,83 @@ public static class ContentValidator
                 foreach (var missing in usedScales.Where(u => !defined.Contains(u)).Order(StringComparer.Ordinal))
                     Warn("validate.scale-unknown", $"A formula reads SCALE.{missing}, which neither this revision nor its class defines; it is unavailable until one does.");
             }
+        }
+
+        // Content v11 (D43): a toggle's group, layer, overlay rules, pool cost and level.
+        void CheckToggleV11(ToggleEffect toggle)
+        {
+            var id = toggle.Id;
+            needsV11 |= toggle.Group is not null || toggle.GroupContent is not null || toggle.Layer is not null || toggle.AllowedWith is not null
+                || toggle.AllowedInBase is not null || toggle.Cost is not null || toggle.ResourceContent is not null || toggle.Level is not null;
+
+            if (toggle.Group is null)
+            {
+                if (toggle.Layer is not null)
+                    Error("validate.toggle-layer", $"Toggle '{id}' has a layer but joins no group; add a group, or remove the layer.", id);
+                if (toggle.GroupContent is not null)
+                    Error("validate.toggle-group-unknown", $"Toggle '{id}' names the content that declares its group but names no group; add the group, or remove groupContent.", id);
+            }
+            else
+            {
+                var holder = toggle.GroupContent ?? revision.ContentId;
+                if (holder == revision.ContentId)
+                {
+                    if (!revision.Effects.OfType<ToggleGroupEffect>().Any(g => g.GroupId == toggle.Group))
+                        Error("validate.toggle-group-unknown", $"Toggle '{id}' joins group '{toggle.Group}', which this revision does not declare; add a toggleGroup effect, or name the content that does.", id);
+                }
+                else
+                {
+                    var declarers = local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).ToList();
+                    if (declarers.Count == 0)
+                        Warn("validate.toggle-group-content-missing", $"Toggle '{id}' joins group '{toggle.Group}' of content {holder}, which is not installed; it acts alone until that content is.", id);
+                    else if (!declarers.Any(r => r.Effects.OfType<ToggleGroupEffect>().Any(g => g.GroupId == toggle.Group)))
+                        Error("validate.toggle-group-unknown", $"Toggle '{id}' joins group '{toggle.Group}', which content {holder} does not declare.", id);
+                }
+            }
+
+            if (toggle.AutoWhen is not null && toggle.Group is not null)
+                Error("validate.toggle-auto-group", $"Toggle '{id}' switches itself, so it cannot join a group; remove the group.", id);
+
+            if (toggle.Layer != ToggleLayer.Overlay)
+            {
+                if (toggle.AllowedWith is { Count: > 0 } || toggle.AllowedInBase == true)
+                    Error("validate.toggle-allowed-with", $"Toggle '{id}' is not an overlay, so it takes no allowedWith or allowedInBase; make it an overlay, or remove them.", id);
+            }
+            else
+            {
+                if (toggle.AllowedInBase != true && toggle.AllowedWith is not { Count: > 0 })
+                    Warn("validate.toggle-overlay-unreachable", $"Overlay '{id}' is allowed in no base and with no form, so it can never be on; set allowedInBase or list a form in allowedWith.", id);
+            }
+            foreach (var allowed in toggle.AllowedWith ?? [])
+            {
+                var holder = allowed.ContentId ?? revision.ContentId;
+                var declarers = holder == revision.ContentId
+                    ? new List<ContentRevision> { revision }
+                    : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).ToList();
+                if (declarers.Count == 0)
+                {
+                    Warn("validate.toggle-allowed-with-content-missing", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not installed; the pairing is unchecked until that content is.", id);
+                    continue;
+                }
+                if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == allowed.ToggleId))
+                    Error("validate.toggle-allowed-with", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not defined there.", id);
+            }
+
+            if (toggle.Cost is { } cost)
+            {
+                CheckFormula(cost, id, "cost");
+                if (toggle.ResourceId is null)
+                    Error("validate.toggle-cost", $"Toggle '{id}' has a cost but names no resource to spend.", id);
+            }
+            if (toggle.ResourceContent is { } resourceHolder && resourceHolder != revision.ContentId && toggle.ResourceId is { } shared)
+            {
+                var definers = local.OfContent(resourceHolder).Concat(catalog.RevisionsOf(resourceHolder)).Where(r => r.ContentId == resourceHolder).ToList();
+                if (definers.Count == 0)
+                    Warn("validate.toggle-resource-content-missing", $"Toggle '{id}' spends '{shared}' of content {resourceHolder}, which is not installed.", id);
+                else if (!definers.Any(d => d.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == shared)))
+                    Error("validate.toggle-resource-content", $"Toggle '{id}': content {resourceHolder} defines no resource '{shared}'.", id);
+            }
+            CheckLevel(toggle.Level, id);
         }
 
         void CheckLevel(int? level, string effectId)

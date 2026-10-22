@@ -91,6 +91,7 @@ public enum PlayActionKind
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
+/// <param name="Replace">With <c>toggleOn</c> of a primary form: switch off the primary of the same group that is on instead of refusing (D43).</param>
 /// <param name="ContentId">With <paramref name="ResourceId"/>, the resource to spend or regain (the content that defines it).</param>
 public sealed record PlayCommand(
     Guid CharacterId,
@@ -105,7 +106,8 @@ public sealed record PlayCommand(
     Guid? EntryId = null,
     int? EntryIndex = null,
     Guid? CompanionId = null,
-    int? Temporary = null);
+    int? Temporary = null,
+    bool Replace = false);
 
 /// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
 public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
@@ -177,7 +179,7 @@ public sealed partial class TomeStackApp
             PlayActionKind.RegainPactSlot => play.PactSlotsSpent > 0
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
-            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(play, sheet, command),
+            PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(character, play, sheet, command),
             PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
             PlayActionKind.EndConcentration => play.Concentration is null
                 ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
@@ -274,7 +276,18 @@ public sealed partial class TomeStackApp
         return character.Play with { Companions = entry is { Current: null, Temporary: 0 } ? others : all };
     }
 
-    private static PlayState ChangeToggle(PlayState play, CharacterSheet sheet, PlayCommand command)
+    /// <summary>
+    /// D43: drops the stored overlays the calculation says are not allowed with the primary the candidate state has on (none: only
+    /// overlays allowed in the base character stay), so a form switch or a form turned off takes its dependent overlays with it.
+    /// </summary>
+    private PlayState WithoutDisallowedOverlays(Character character, PlayState candidate)
+    {
+        var sheet = CharacterCalculator.Calculate(character with { Play = candidate }, _store);
+        var gone = (sheet.Toggles ?? []).Where(t => !t.Available).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
+        return gone.Count == 0 ? candidate : candidate with { Toggles = [.. candidate.Toggles.Where(t => !gone.Contains((t.ContentId, t.ToggleId)))] };
+    }
+
+    private PlayState ChangeToggle(Character character, PlayState play, CharacterSheet sheet, PlayCommand command)
     {
         var toggle = sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId)
             ?? throw new AppValidationException([new("toggle.not-found", $"This character has no toggle '{command.ToggleId}' from content {command.ContentId}.")]);
@@ -284,18 +297,40 @@ public sealed partial class TomeStackApp
         var others = play.Toggles.Where(t => !(t.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
         if (command.Action == PlayActionKind.ToggleOff)
         {
-            return toggle.On
-                ? play with { Toggles = others }
-                : throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+            if (!toggle.On)
+                throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
+            var off = play with { Toggles = others };
+            return toggle is { Group: not null, Layer: not ToggleLayer.Overlay } ? WithoutDisallowedOverlays(character, off) : off;
         }
         if (toggle.On)
             throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
-        if (toggle.ResourceId is { } resourceId)
+        var isPrimary = toggle is { Group: not null, Layer: not ToggleLayer.Overlay };
+        if (toggle is { Group: not null, Layer: ToggleLayer.Overlay, Available: false })
+            throw new AppValidationException([new("toggle.overlay-not-allowed", $"'{toggle.Label}' ({toggle.ToggleId}) is not allowed with the form that is on now. {toggle.UnavailableReason}".TrimEnd(), toggle.Content, toggle.EffectId)]);
+        var next = others;
+        if (isPrimary)
         {
-            // Turning it on spends one use, in the same confirmed change (a use that is not there refuses the whole change).
-            play = ChangeResource(play, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: 1, ContentId: toggle.Content.ContentId, ResourceId: resourceId));
+            // Defensive: the sheet reports no group for a group of one (C6), so a primary here always has its group's content; this only guards a sheet built otherwise.
+            var groupPresent = sheet.Features is null || sheet.Features.Any(f => f.Content.ContentId == toggle.GroupContent);
+            var occupants = !groupPresent ? [] : (sheet.Toggles ?? []).Where(t => t.On && t.Group == toggle.Group && t.GroupContent == toggle.GroupContent && t.Layer != ToggleLayer.Overlay
+                && !(t.Content.ContentId == toggle.Content.ContentId && t.ToggleId == toggle.ToggleId)).ToList();
+            if (occupants.Count > 0 && !command.Replace)
+                throw new AppValidationException([new("toggle.group-occupied", $"Group '{toggle.Group}' already has '{occupants[0].Label}' ({occupants[0].ContentName}) on; turn it off first, or switch with replace.", toggle.Content, toggle.EffectId)]);
+            next = [.. others.Where(t => !occupants.Any(o => o.Content.ContentId == t.ContentId && o.ToggleId == t.ToggleId))];
         }
-        return play with { Toggles = [.. others, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
+        // Everything is computed before anything is written: the new list, then the payment.
+        var candidate = play with { Toggles = [.. next, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
+        if (isPrimary)
+            candidate = WithoutDisallowedOverlays(character, candidate);
+        // The cost comes from the pool the toggle names (a shared pool lives in another content); a v6 toggle with a resource and no cost spends one use of its own.
+        // A declared cost that did not evaluate (the calculator left it null and warned) refuses; only a toggle with no cost spends the default 1.
+        var declaresCost = _store.FindRevision(toggle.Content)?.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.Id == toggle.EffectId)?.Cost is not null;
+        if (declaresCost && toggle.Cost is null)
+            throw new AppValidationException([new("effect.invalid-formula", $"The cost of '{toggle.Label}' ({toggle.ToggleId}) could not be calculated, so it cannot be turned on.", toggle.Content, toggle.EffectId)]);
+        var amount = toggle.Cost ?? 1;
+        if (toggle.ResourceId is { } resourceId && amount > 0)
+            candidate = ChangeResource(candidate, sheet, new(command.CharacterId, PlayActionKind.Spend, Confirm: true, Amount: amount, ContentId: toggle.CostResourceContent ?? toggle.Content.ContentId, ResourceId: resourceId));
+        return candidate;
     }
 
     private static PlayState ChangeSlot(PlayState play, CharacterSheet sheet, PlayCommand command)
