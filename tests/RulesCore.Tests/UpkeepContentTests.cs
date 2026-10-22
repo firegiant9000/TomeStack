@@ -153,8 +153,62 @@ public class UpkeepContentTests
     [InlineData("below-v11-upkeep", "validate.requires-v11")]
     [InlineData("below-v11-counts", "validate.requires-v11")]
     [InlineData("below-v11-duration", "validate.requires-v11")]
+    [InlineData("v10-duration-alone", "validate.requires-v11")]
+    [InlineData("v10-counts-alone", "validate.requires-v11")]
+    [InlineData("v10-resource-full-alone", "validate.requires-v11")]
+    [InlineData("resource-full-blank", "validate.resource-full")]
+    [InlineData("toggle-content-missing", "validate.upkeep-toggle-unknown")]
+    [InlineData("resource-content-missing", "validate.upkeep-resource")]
+    [InlineData("spend-all-padded", "validate.upkeep-amount")]
     public void Upkeep_mistakes_are_errors(string variant, string code) =>
         Assert.Contains(Validate(UpkeepVariants.Make(variant)).Errors, e => e.Code == code);
+
+    [Theory]
+    [InlineData("v10-duration-alone")]
+    [InlineData("v10-counts-alone")]
+    [InlineData("v10-resource-full-alone")]
+    public void A_single_v11_key_alone_requires_v11(string variant) =>
+        Assert.Equal(11, Validate(UpkeepVariants.Make(variant)).RequiredSchemaVersion);
+
+    [Theory]
+    [InlineData("""{"type":"upkeep","id":"u","at":"midnight","resourceId":"r","change":"spend","amount":"1"}""")]
+    [InlineData("""{"type":"resource","id":"r","resourceId":"r","label":"R","maximum":"3","counts":"sideways"}""")]
+    public void A_malformed_v11_effect_is_an_error_that_needs_v11(string json)
+    {
+        var report = Validate(Fixtures.RevisionWithEffect(json, 11));
+        Assert.Contains(report.Errors, e => e.Code == "validate.effect-malformed");
+        Assert.Equal(11, report.RequiredSchemaVersion);
+    }
+
+    [Fact]
+    public void A_padded_all_regains_everything_in_validation_and_calculation()
+    {
+        var guard = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.QuickGuard)!;
+        var padded = guard with { Effects = [.. guard.Effects.Select(e => e is UpkeepEffect u ? u with { Amount = " all " } : e)] };
+        Assert.DoesNotContain(Validate(padded).Errors, e => e.Code == "validate.upkeep-amount");
+
+        var sheet = CharacterCalculator.Calculate(Turns(Fixtures.QuickGuard), CatalogReplacing(padded));
+        var upkeep = Assert.Single(sheet.Upkeeps!);
+        Assert.True(upkeep.All);
+        Assert.Null(upkeep.Amount);
+    }
+
+    [Fact]
+    public void A_toggle_duration_is_clamped_to_the_most_rounds_a_toggle_can_have()
+    {
+        var iron = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.IronStance)!;
+        var tooLong = iron with { Effects = [.. iron.Effects.Select(e => e is ToggleEffect t ? t with { Duration = "10000 + 10000" } : e)] };
+
+        var sheet = CharacterCalculator.Calculate(Turns(Fixtures.SteadyDiscipline, Fixtures.IronStance), CatalogReplacing(tooLong));
+
+        Assert.Equal(PlayState.MaxRounds, sheet.Toggles!.Single(t => t.ToggleId == "iron").Duration);
+    }
+
+    private static InMemoryContentCatalog CatalogReplacing(ContentRevision replacement)
+    {
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack()];
+        return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions).Where(r => r.Reference != replacement.Reference), replacement]);
+    }
 
     [Fact]
     public void The_turns_pack_validates_without_errors_or_warnings()
@@ -331,6 +385,25 @@ internal static class UpkeepVariants
         "below-v11-upkeep" => Pack(Fixtures.SecondWindRhythm) with { SchemaVersion = 10 },
         "below-v11-counts" => Pack(Fixtures.FlareOverlay) with { SchemaVersion = 10, Effects = [.. Pack(Fixtures.FlareOverlay).Effects.Where(e => e is ResourceEffect)] },
         "below-v11-duration" => Pack(Fixtures.IronStance) with { SchemaVersion = 10, Effects = [.. Pack(Fixtures.IronStance).Effects.Where(e => e is ToggleEffect)] },
+        "v10-duration-alone" => Pack(Fixtures.IronStance) with
+        {
+            SchemaVersion = 10,
+            Effects = [new ToggleEffect { Id = "iron", ToggleId = "iron", Label = "Iron stance", Duration = "3" }],
+        },
+        "v10-counts-alone" => Pack(Fixtures.SteadyDiscipline) with
+        {
+            SchemaVersion = 10,
+            Effects = [new ResourceEffect { Id = "strain", ResourceId = "strain", Label = "Strain", Maximum = "3", Counts = ResourceCounting.Up }],
+        },
+        "v10-resource-full-alone" => Pack(Fixtures.SteadyDiscipline) with
+        {
+            SchemaVersion = 10,
+            Effects = [new ResourceEffect { Id = "strain", ResourceId = "strain", Label = "Strain", Maximum = "3", ResourceFull = new("Full") }],
+        },
+        "resource-full-blank" => With(Fixtures.FlareOverlay, e => e is ResourceEffect { ResourceId: "strain" } r ? r with { ResourceFull = new("  ") } : e),
+        "toggle-content-missing" => WithUpkeep(Fixtures.IronStance, "iron-upkeep", u => u with { ToggleContent = Guid.Parse("6f0dc000-0000-4000-8000-0000000000ee") }),
+        "resource-content-missing" => WithUpkeep(Fixtures.SecondWindRhythm, "rhythm", u => u with { ResourceContent = Guid.Parse("6f0dc000-0000-4000-8000-0000000000ee") }),
+        "spend-all-padded" => WithUpkeep(Fixtures.IronStance, "iron-upkeep", u => u with { Amount = " all " }),
         "cost-from-counting-up-roll" => With(Fixtures.QuickGuard, e => e is ResourceEffect r ? r with { Counts = ResourceCounting.Up } : e),
         "cost-from-counting-up-toggle" => With(Fixtures.FlareOverlay, e => e is ToggleEffect t ? t with { ResourceId = "strain" } : e),
         "allowance-no-refresh" => Pack(Fixtures.QuickGuard) with { Effects = [.. Pack(Fixtures.QuickGuard).Effects.Where(e => e is not UpkeepEffect)] },

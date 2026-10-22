@@ -127,7 +127,7 @@ public static class ContentValidator
         var needsV8 = false;
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
-        var needsV11 = false; // content v11 (D43): toggleGroup effects and the toggle's group, layer, cost and level keys
+        var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
         var upkeeps = 0;
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
@@ -328,6 +328,8 @@ public static class ContentValidator
                     CheckFormula(resource.Maximum, resource.Id, "maximum");
                     if (resource.ResourceFull is not null && resource.Counts != ResourceCounting.Up)
                         Error("validate.resource-full", $"Resource '{resource.ResourceId}' has a resourceFull prompt but does not count up; add counts: up, or remove the prompt.", resource.Id);
+                    else if (resource.ResourceFull is not null && string.IsNullOrWhiteSpace(resource.ResourceFull.Text))
+                        Error("validate.resource-full", $"Resource '{resource.ResourceId}' has a resourceFull prompt with no text; write the text, or remove the prompt.", resource.Id);
                     break;
                 case UpkeepEffect upkeep:
                     needsV11 = true;
@@ -611,21 +613,12 @@ public static class ContentValidator
                 var declarers = holder == revision.ContentId
                     ? new List<ContentRevision> { revision }
                     : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
-                if (declarers.Count == 0)
-                    Warn("validate.upkeep-toggle-unknown", $"Upkeep '{id}' belongs to toggle '{upkeep.Toggle}' of content {holder}, which is not installed; it does nothing until that content is.", id);
-                else if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == upkeep.Toggle))
-                    Error("validate.upkeep-toggle-unknown", $"Upkeep '{id}' belongs to toggle '{upkeep.Toggle}', which content {holder} does not define.", id);
+                if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == upkeep.Toggle))
+                    Error("validate.upkeep-toggle-unknown", $"Upkeep '{id}' belongs to toggle '{upkeep.Toggle}', which content {holder} does not define or is not installed.", id);
             }
-            var poolHolder = upkeep.ResourceContent ?? revision.ContentId;
             if (FindResource(upkeep.ResourceContent, upkeep.ResourceId) is null)
-            {
-                var installed = poolHolder == revision.ContentId || local.OfContent(poolHolder).Concat(catalog.RevisionsOf(poolHolder)).Any(r => r.ContentId == poolHolder);
-                if (installed)
-                    Error("validate.upkeep-resource", $"Upkeep '{id}' changes '{upkeep.ResourceId}', which content {poolHolder} does not define.", id);
-                else
-                    Warn("validate.upkeep-resource", $"Upkeep '{id}' changes '{upkeep.ResourceId}' of content {poolHolder}, which is not installed; it does nothing until that content is.", id);
-            }
-            if (string.Equals(upkeep.Amount, "all", StringComparison.Ordinal))
+                Error("validate.upkeep-resource", $"Upkeep '{id}' changes '{upkeep.ResourceId}', which content {upkeep.ResourceContent ?? revision.ContentId} does not define or is not installed.", id);
+            if (string.Equals(upkeep.Amount?.Trim(), "all", StringComparison.Ordinal))
             {
                 if (upkeep.Change == UpkeepChange.Spend)
                     Error("validate.upkeep-amount", $"Upkeep '{id}' spends 'all'; only a regain can take all. Give a formula.", id);

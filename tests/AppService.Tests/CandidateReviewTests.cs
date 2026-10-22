@@ -401,6 +401,11 @@ public class CandidateReviewTests
         temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
             new ToggleEffect { Id = "shape", ToggleId = "shape", Label = "Shape", Cost = "1", ResourceId = "pool", ResourceContent = installed.ContentId }]));
         Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        // So does an upkeep that changes a pool of installed content, or belongs to a toggle of it.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new UpkeepEffect { Id = "tick", At = TurnMoment.TurnStart, ResourceId = "pool", ResourceContent = installed.ContentId, Change = UpkeepChange.Regain, Amount = "1" }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
     }
 
     [Fact]

@@ -688,7 +688,7 @@ public static class CharacterCalculator
                     || !durationFormula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var roundCount, out durationFailure))
                     diagnostics.Add(InvalidFormula(revision, t, durationFailure!));
                 else
-                    duration = Math.Max(roundCount, 0);
+                    duration = Math.Clamp(roundCount, 0, PlayState.MaxRounds);
             }
             var isOn = ToggleIsOn(revision, t, effective, autoOn);
             var roundsLeft = isOn
