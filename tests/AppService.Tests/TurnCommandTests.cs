@@ -16,10 +16,14 @@ public class TurnCommandTests
     private static string IronUpkeep => $"upkeep:{Iron:D}:iron-upkeep";
     private static string IronShort => $"short:{Iron:D}:iron-upkeep";
 
-    private static (TempApp Temp, Guid Id) Turns()
+    /// <param name="ironDuration">False drops Iron stance's 3-round duration in memory (the fixture file is unchanged): a stance lasting until switched off.</param>
+    private static (TempApp Temp, Guid Id) Turns(bool ironDuration = true)
     {
         var temp = new TempApp(time: new TickingTime(TempApp.Now)); // each write moves the stamp
-        var pack = temp.AddPack("fixture-pack-turns.json");
+        var pack = temp.AddPack("fixture-pack-turns.json", ironDuration ? null : r => r.ContentId != Iron ? r : r with
+        {
+            Effects = [.. r.Effects.Select(e => e is ToggleEffect t ? t with { Duration = null } : e)],
+        });
         var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
         var pins = pack.Revisions.Select(r => r.Reference);
         return (temp, temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins, .. pins] }).Character.Id);
@@ -448,7 +452,7 @@ public class TurnCommandTests
         Assert.Equal(8, temp.App.GetCharacter(id).Character.SchemaVersion);
         Assert.Contains("\"schemaVersion\": 8", TempApp.Json(temp.App.GetCharacter(id).Character));
 
-        var started = StartEncounter(temp, id);
+        StartEncounter(temp, id);
         Assert.Equal(10, temp.App.GetCharacter(id).Character.SchemaVersion);
         On(temp, id, Iron, "iron");
         Assert.Equal(3, RoundsLeft(temp.App.GetCharacter(id), "iron"));
@@ -461,7 +465,6 @@ public class TurnCommandTests
         Assert.Equal(8, temp.App.GetCharacter(id).Character.SchemaVersion);
         Assert.Contains("\"schemaVersion\": 8", TempApp.Json(temp.App.GetCharacter(id).Character));
         Assert.Equal("end encounter", ended.UndoLabel);
-        Assert.NotNull(started);
     }
 
     [Fact]
@@ -612,17 +615,19 @@ public class TurnCommandTests
 
     /// <summary>
     /// "A cost 3 / upkeep 2 form on a pool of 7: on, then three turns (5, 3, 1)". From a full 7 the form's cost of 3 leaves 4, so the
-    /// numbers fit a pool that is at 7 after the form is on: the encounter starts, then the character is stored (the store directly:
-    /// <c>SaveCharacter</c> keeps the stored play state) with Iron on, no duration count (the stance's 3 rounds would end it on the
-    /// third turn) and no breath spent. Three turn starts give 5, 3 and 1.
+    /// numbers fit a pool that is at 7 after the form is on. All by commands: the encounter starts, Iron goes on (breath 4 left),
+    /// the player regains the 3 (breath 7). The pack has Iron without its 3-round duration (a stance until switched off), or the
+    /// third turn would end it. Three turn starts give 5, 3 and 1.
     /// </summary>
     private static (TempApp Temp, Guid Id) AfterThreeTurnsWithBreathAt1()
     {
-        var (temp, id) = Turns();
+        var (temp, id) = Turns(ironDuration: false);
         StartEncounter(temp, id);
-        var stored = temp.App.GetCharacter(id).Character;
-        temp.App.Store.SaveCharacter(stored with { Play = stored.Play with { Toggles = [new(Iron, "iron")] } });
+        On(temp, id, Iron, "iron");
+        Assert.Equal(4, Left(temp.App.GetCharacter(id), "breath"));
+        temp.App.Play(new(id, PlayActionKind.Regain, Confirm: true, Amount: 3, ContentId: Breath, ResourceId: "breath"));
         Assert.Equal(7, Left(temp.App.GetCharacter(id), "breath"));
+        Assert.Null(RoundsLeft(temp.App.GetCharacter(id), "iron"));
         foreach (var expected in new[] { 5, 3, 1 })
             Assert.Equal(expected, Left(temp.App.Turn(Request(temp, id)), "breath"));
         return (temp, id);
@@ -655,5 +660,28 @@ public class TurnCommandTests
         var notice = Assert.Single(keep.Notices!);
         Assert.Equal("turn.settle-by-hand", notice.Code);
         Assert.EndsWith("short 1 Breath, settle by hand", notice.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_real_three_round_stance_ends_on_its_third_turn_before_any_upkeep()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        StartEncounter(temp, id);
+        On(temp, id, Iron, "iron");
+        temp.App.Play(new(id, PlayActionKind.Regain, Confirm: true, Amount: 3, ContentId: Breath, ResourceId: "breath"));
+        Assert.Equal(7, Left(temp.App.GetCharacter(id), "breath"));
+
+        var left = new List<int>();
+        CharacterView view = temp.App.GetCharacter(id);
+        for (var turn = 0; turn < 3; turn++)
+        {
+            view = temp.App.Turn(Request(temp, id));
+            left.Add(Left(view, "breath"));
+        }
+
+        Assert.Equal([5, 3, 3], left); // the third turn spends nothing: the duration ran out first
+        Assert.Empty(view.Character.Play.Toggles);
+        Assert.Equal(3, Round(view));
     }
 }
