@@ -230,6 +230,152 @@ public class TurnPlannerTests
         Assert.Equal(3, after.Toggles.Single(t => t.ToggleId == "iron").RoundsLeft);
     }
 
+    // ---- in-memory variants of the turns pack (the fixture file stays unchanged) ---------------------------------------------
+
+    private static InMemoryContentCatalog Variant(ContentReference target, Func<Effect, Effect> change)
+    {
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack()];
+        return new(
+            [.. packs.SelectMany(p => p.Sources)],
+            [.. packs.SelectMany(p => p.Revisions).Select(r => r.Reference == target ? r with { Effects = [.. r.Effects.Select(change)] } : r)]);
+    }
+
+    private static Effect Edit(Effect effect, string id, Func<UpkeepEffect, UpkeepEffect> change) => effect is UpkeepEffect u && u.Id == id ? change(u) : effect;
+
+    private static TurnPlan PlanIn(InMemoryContentCatalog catalog, Character character, TurnMoment at = TurnMoment.TurnStart, TurnSelection? selection = null) =>
+        TurnPlanner.Plan(character, CharacterCalculator.Calculate(character, catalog), at, selection ?? TurnSelection.None);
+
+    private static void AssertByHand(TurnPlan plan, string label)
+    {
+        var line = Assert.Single(plan.Manual);
+        Assert.Equal("turn.settle-by-hand", line.Code);
+        Assert.Equal($"{label}: this cannot be calculated, settle by hand", line.Message);
+        Assert.DoesNotContain(plan.Changes, c => c.Kind is TurnChangeKind.Spend or TurnChangeKind.Regain or TurnChangeKind.ToggleEnd);
+    }
+
+    [Fact]
+    public void A_spend_from_a_pool_not_on_the_sheet_is_left_to_the_player()
+    {
+        var catalog = Variant(Fixtures.IronStance, e => Edit(e, "iron-upkeep", u => u with { ResourceId = "nonesuch" }));
+        AssertByHand(PlanIn(catalog, InEncounter(iron: true)), "Iron stance upkeep");
+    }
+
+    [Fact]
+    public void A_spend_whose_amount_cannot_be_calculated_is_left_to_the_player()
+    {
+        var catalog = Variant(Fixtures.IronStance, e => Edit(e, "iron-upkeep", u => u with { Amount = "2 +" }));
+        AssertByHand(PlanIn(catalog, InEncounter(iron: true)), "Iron stance upkeep");
+    }
+
+    [Fact]
+    public void A_regain_from_a_pool_not_on_the_sheet_or_with_no_amount_is_left_to_the_player()
+    {
+        var missing = Variant(Fixtures.SecondWindRhythm, e => Edit(e, "rhythm", u => u with { ResourceId = "nonesuch" }));
+        AssertByHand(PlanIn(missing, InEncounter(breathSpent: 3), TurnMoment.TurnEnd), "nonesuch upkeep");
+
+        var broken = Variant(Fixtures.SecondWindRhythm, e => Edit(e, "rhythm", u => u with { Amount = "1 +" }));
+        AssertByHand(PlanIn(broken, InEncounter(breathSpent: 3), TurnMoment.TurnEnd), "Breath upkeep");
+    }
+
+    [Fact]
+    public void A_spend_into_a_counting_up_pool_with_no_amount_is_left_to_the_player()
+    {
+        var catalog = Variant(Fixtures.FlareOverlay, e => Edit(e, "flare-strain", u => u with { Amount = "1 +" }));
+        var plan = PlanIn(catalog, InEncounter(iron: true, flare: true));
+
+        var line = Assert.Single(plan.Manual);
+        Assert.Equal("Flare overlay upkeep: this cannot be calculated, settle by hand", line.Message);
+        Assert.DoesNotContain(plan.Changes, c => c.ResourceId == "strain");
+    }
+
+    [Fact]
+    public void A_shortfall_with_no_toggle_spends_what_is_left_and_leaves_the_rest_without_asking()
+    {
+        // Quick Guard's refresh made into a spend of 2 from a pool of 1: no toggle to end, so nothing is asked or ended.
+        var catalog = Variant(Fixtures.QuickGuard, e => Edit(e, "guard-refresh", u => u with { Change = UpkeepChange.Spend, Amount = "2" }));
+        var plan = PlanIn(catalog, InEncounter());
+
+        Assert.Empty(plan.Choices);
+        var spend = Assert.Single(plan.Changes, c => c.Kind == TurnChangeKind.Spend);
+        Assert.Equal((Guard, "guard", 0, 1), (spend.ContentId, spend.ResourceId, spend.From, spend.To));
+        Assert.DoesNotContain(plan.Changes, c => c.Kind == TurnChangeKind.ToggleEnd);
+        Assert.Equal("Guard upkeep: short 1 Guard, settle by hand", Assert.Single(plan.Manual).Message);
+    }
+
+    [Fact]
+    public void A_shortfall_with_no_toggle_and_nothing_left_only_adds_the_line()
+    {
+        var catalog = Variant(Fixtures.QuickGuard, e => Edit(e, "guard-refresh", u => u with { Change = UpkeepChange.Spend, Amount = "2" }));
+        var plan = PlanIn(catalog, InEncounter(guardSpent: 1));
+
+        Assert.DoesNotContain(plan.Changes, c => c.ResourceId == "guard");
+        Assert.Equal("Guard upkeep: short 2 Guard, settle by hand", Assert.Single(plan.Manual).Message);
+    }
+
+    [Fact]
+    public void An_upkeep_on_an_auto_toggle_never_ends_it_whether_short_or_unticked()
+    {
+        // Iron made a toggle the sheet switches itself (bloodied): it cannot be ended here, so a short or unticked upkeep leaves it on.
+        var catalog = Variant(Fixtures.IronStance, e => e is ToggleEffect t
+            ? t with { AutoWhen = ToggleAutoWhen.Bloodied, ResourceId = null, ResourceContent = null, Cost = null, Group = null, GroupContent = null, Duration = null }
+            : e);
+        var bloodied = InEncounter(breathSpent: 7);
+        bloodied = bloodied with { Overrides = [new FieldOverride(FieldIds.HitPoints, 21, "Testy fixed maximum")], Play = bloodied.Play with { CurrentHitPoints = 1 } };
+        Assert.True(CharacterCalculator.Calculate(bloodied, catalog).Toggles!.Single(t => t.ToggleId == "iron").On);
+
+        var short_ = PlanIn(catalog, bloodied);
+        Assert.Empty(short_.Choices);
+        Assert.DoesNotContain(short_.Changes, c => c.Kind == TurnChangeKind.ToggleEnd);
+        Assert.Equal("Iron stance upkeep: short 2 Breath, settle by hand", Assert.Single(short_.Manual).Message);
+
+        var unticked = PlanIn(catalog, bloodied, selection: new TurnSelection(new HashSet<string> { IronUpkeep }, new Dictionary<string, TurnChoiceOption>()));
+        Assert.DoesNotContain(unticked.Changes, c => c.Kind == TurnChangeKind.ToggleEnd);
+    }
+
+    [Fact]
+    public void An_upkeep_amount_of_zero_changes_and_asks_nothing()
+    {
+        var spend = Variant(Fixtures.IronStance, e => Edit(e, "iron-upkeep", u => u with { Amount = "0" }));
+        var plan = PlanIn(spend, InEncounter(iron: true, breathSpent: 7));
+        Assert.Equal([TurnChangeKind.Round], plan.Changes.Select(c => c.Kind));
+        Assert.Empty(plan.Choices);
+        Assert.Empty(plan.Manual);
+
+        var countingUp = Variant(Fixtures.FlareOverlay, e => Edit(e, "flare-strain", u => u with { Amount = "0" }));
+        var up = PlanIn(countingUp, InEncounter(iron: true, flare: true));
+        Assert.DoesNotContain(up.Changes, c => c.ResourceId == "strain");
+        Assert.Empty(up.Prompts);
+    }
+
+    [Fact]
+    public void A_toggle_whose_content_lost_its_duration_is_not_ticked_or_ended_by_a_stale_count()
+    {
+        var catalog = Variant(Fixtures.IronStance, e => e is ToggleEffect t ? t with { Duration = null } : e);
+        var plan = PlanIn(catalog, InEncounter(iron: true, ironLeft: 1));
+
+        Assert.DoesNotContain(plan.Changes, c => c.Kind is TurnChangeKind.Duration or TurnChangeKind.ToggleEnd);
+    }
+
+    [Fact]
+    public void A_stored_overlay_that_was_not_on_is_removed_with_a_reason_that_says_so()
+    {
+        // Flare allowed only with a stance Iron is not: beside Iron it is stored but not on. Iron's duration runs out and takes it too.
+        var catalog = Variant(Fixtures.FlareOverlay, e => e is ToggleEffect t ? t with { AllowedWith = [new ToggleRef(Fixtures.IronStance.ContentId, "other")] } : e);
+        var plan = PlanIn(catalog, InEncounter(iron: true, flare: true, ironLeft: 1));
+
+        var flare = Assert.Single(plan.Changes, c => c.Kind == TurnChangeKind.ToggleEnd && c.ToggleId == "flare");
+        Assert.Equal("Flare overlay: not allowed with Iron stance; removed", flare.Reason);
+        var iron = Assert.Single(plan.Changes, c => c.Kind == TurnChangeKind.ToggleEnd && c.ToggleId == "iron");
+        Assert.Equal("Iron stance: its duration ran out", iron.Reason);
+    }
+
+    [Fact]
+    public void An_overlay_that_was_on_keeps_the_needs_reason()
+    {
+        var plan = Plan(InEncounter(iron: true, flare: true, ironLeft: 1));
+        Assert.Equal("Flare overlay needs Iron stance, which ends", Assert.Single(plan.Changes, c => c.ToggleId == "flare" && c.Kind == TurnChangeKind.ToggleEnd).Reason);
+    }
+
     // ---- ToggleGroups.EndingWith: the one rule for "overlays that are no longer allowed once a primary is off" ----------
 
     [Fact]

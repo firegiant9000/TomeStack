@@ -108,6 +108,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       if (backing(action)) return undefined;
+      // A timed toggle that is counting its rounds would restart at the full duration if switched back on; the server Undo restores the count.
+      if (before.character.play?.toggles?.some((t) => t.contentId === action.contentId && t.toggleId === action.toggleId && t.roundsLeft != null)) return undefined;
       return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
     }
     case 'companionDamage':

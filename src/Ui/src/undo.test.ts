@@ -127,6 +127,16 @@ it('keeps the plain mirror for a toggle without a resource', () => {
   expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, withToggle(), withToggle())!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
 });
 
+it('has no client inverse for switching off a timed toggle with rounds left, which would restart its count', () => {
+  const counting = withToggle();
+  (counting.character as unknown as { play: unknown }).play = { toggles: [{ contentId: 'c', toggleId: 't', roundsLeft: 2 }] };
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, counting, withToggle())).toBeUndefined();
+  // A stored toggle with no count (outside an encounter, or a stance that lasts until switched off) keeps the plain mirror.
+  const uncounted = withToggle();
+  (uncounted.character as unknown as { play: unknown }).play = { toggles: [{ contentId: 'c', toggleId: 't' }] };
+  expect(inverseOf({ action: 'toggleOff', contentId: 'c', toggleId: 't' }, uncounted, withToggle())!.inverse).toEqual([{ action: 'toggleOn', contentId: 'c', toggleId: 't' }]);
+});
+
 const withToggles = (...toggles: Record<string, unknown>[]): CharacterView => {
   const v = view(1, 0);
   (v.sheet as unknown as { toggles: unknown[] }).toggles = toggles.map((t) => ({ content: { contentId: 'c' }, on: false, ...t }));

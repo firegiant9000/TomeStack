@@ -163,10 +163,24 @@ it("a pool's amount box spends the chosen amount, bounded to what is left, and t
   for (const bad of ['0', '6', '2.5', '']) {
     await user.clear(box);
     if (bad) await user.type(box, bad);
-    expect(spend.disabled, `amount "${bad}"`).toBe(true);
+    // aria-disabled, never `disabled` (so focus can stay), with a plain-text reason linked by aria-describedby (WCAG 3.3.1, rows 64/65).
+    expect(spend.getAttribute('aria-disabled'), `amount "${bad}"`).toBe('true');
+    expect(spend.hasAttribute('disabled'), `amount "${bad}"`).toBe(false);
+    const reason = document.getElementById(spend.getAttribute('aria-describedby')!);
+    expect(reason?.textContent, `amount "${bad}"`).toBe(bad === '' ? 'Enter an amount first.' : 'Enter a whole number from 1 to 5.');
+    expect(box.getAttribute('aria-invalid'), `amount "${bad}"`).toBe(bad === '' ? null : 'true');
+    expect(box.getAttribute('aria-describedby'), `amount "${bad}"`).toBe(spend.getAttribute('aria-describedby'));
     await user.click(spend);
+    expect(document.activeElement, `amount "${bad}"`).toBe(spend);
   }
   expect(act).not.toHaveBeenCalled();
+
+  // A valid amount drops the hold and the reason.
+  await user.clear(box);
+  await user.type(box, '2');
+  expect(spend.hasAttribute('aria-disabled')).toBe(false);
+  expect(spend.hasAttribute('aria-describedby')).toBe(false);
+  expect(box.hasAttribute('aria-describedby')).toBe(false);
 });
 
 it('hides the amount box for a pool tracked by hand', () => {

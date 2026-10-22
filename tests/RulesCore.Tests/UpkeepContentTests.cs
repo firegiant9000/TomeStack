@@ -346,11 +346,38 @@ public class UpkeepContentTests
         Assert.Equal((3, null), (iron.Duration, iron.RoundsLeft));
 
         var on = CharacterCalculator.Calculate(
-            Turns(AllTurnPins) with { Play = new PlayState { Toggles = [new ActiveToggle(Fixtures.IronStance.ContentId, "iron", 2)] } },
+            Turns(AllTurnPins) with { Play = new PlayState { Encounter = new EncounterState(1), Toggles = [new ActiveToggle(Fixtures.IronStance.ContentId, "iron", 2)] } },
             Fixtures.PlayMechanicsCatalog());
         iron = on.Toggles!.Single(t => t.ToggleId == "iron");
         Assert.Equal((true, 3, 2), (iron.On, iron.Duration, iron.RoundsLeft));
         Assert.Null(on.Toggles!.Single(t => t.ToggleId == "flare").Duration);
+    }
+
+    [Fact]
+    public void A_stored_count_outside_an_encounter_shows_no_rounds_left()
+    {
+        // A v10 character can carry a count with no encounter (a hand-edited or imported file); the count is inert until an encounter starts.
+        var sheet = CharacterCalculator.Calculate(
+            Turns(AllTurnPins) with { Play = new PlayState { Toggles = [new ActiveToggle(Fixtures.IronStance.ContentId, "iron", 2)] } },
+            Fixtures.PlayMechanicsCatalog());
+
+        var iron = sheet.Toggles!.Single(t => t.ToggleId == "iron");
+        Assert.Equal((true, 3, (int?)null), (iron.On, iron.Duration, iron.RoundsLeft));
+    }
+
+    [Fact]
+    public void A_stored_count_on_a_toggle_whose_content_has_no_duration_shows_no_rounds_left()
+    {
+        var iron = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.IronStance)!;
+        var untimed = iron with { Effects = [.. iron.Effects.Select(e => e is ToggleEffect t ? t with { Duration = null } : e)] };
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack()];
+        var catalog = new InMemoryContentCatalog(
+            [.. packs.SelectMany(p => p.Sources)],
+            [.. packs.SelectMany(p => p.Revisions).Where(r => r.Reference != untimed.Reference), untimed]);
+        var character = Turns(AllTurnPins) with { Play = new PlayState { Encounter = new EncounterState(2), Toggles = [new ActiveToggle(Fixtures.IronStance.ContentId, "iron", 2)] } };
+
+        var toggle = CharacterCalculator.Calculate(character, catalog).Toggles!.Single(t => t.ToggleId == "iron");
+        Assert.Equal((true, (int?)null, (int?)null), (toggle.On, toggle.Duration, toggle.RoundsLeft));
     }
 }
 

@@ -153,6 +153,6 @@ public static class ToggleGroups
         bool InGroup(ToggleValue t) => t.Group == ending.Group && t.GroupContent == ending.GroupContent;
         var remaining = toggles.FirstOrDefault(t => t.On && InGroup(t) && t.Layer != ToggleLayer.Overlay && !Same(t));
         (Guid, string)? primary = remaining is null ? null : (remaining.Content.ContentId, remaining.ToggleId);
-        return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true) && InGroup(t) && t.Layer == ToggleLayer.Overlay &&!OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, primary))];
+        return [.. toggles.Where(t => (t.On || stored?.Contains((t.Content.ContentId, t.ToggleId)) == true) && InGroup(t) && t.Layer == ToggleLayer.Overlay && !OverlayAllowed(t.AllowedWith, t.AllowedInBase, t.Content.ContentId, primary))];
     }
 }

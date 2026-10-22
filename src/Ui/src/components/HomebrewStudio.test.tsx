@@ -351,6 +351,40 @@ it('an upkeep rule has no Automation choice, because calculation never reads it'
   expect(rule(/^Rule 2: Toggle/).getByRole('combobox', { name: 'Automation' })).toBeTruthy();
 });
 
+it('removing a toggle keeps an upkeep whose toggle belongs to other content, even with the same toggle id', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openUpkeepDraft(user, [
+    { type: 'upkeep', id: 'upkeep-4', toggle: 'stance', toggleContent: 'other-content', at: 'turnEnd', resourceId: 'focus', change: 'regain', amount: '1' },
+  ]);
+  await user.click(rule(/^Rule 2: Toggle/).getByRole('button', { name: 'Remove rule 2' }));
+  const sent = await checked();
+  expect(sent.effect('upkeep-3')).toBeUndefined(); // named this revision's toggle
+  expect(sent.effect('upkeep-4')).toMatchObject({ type: 'upkeep', toggle: 'stance', toggleContent: 'other-content' });
+  expect(sent.count).toBe(2);
+});
+
+it('the upkeep amount preview is linked by aria-describedby only while it applies', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openUpkeepDraft(user);
+  const upkeep = rule(/^Rule 3: Upkeep/);
+  const amount = () => upkeep.getByRole('textbox', { name: /^Amount \(a number or a formula\)/ });
+  expect(amount().getAttribute('aria-describedby')).toBe('rule-upkeep-3-amount-preview');
+  expect(document.getElementById('rule-upkeep-3-amount-preview')).toBeTruthy();
+
+  await user.clear(amount()); // empty: no preview
+  expect(amount().hasAttribute('aria-describedby')).toBe(false);
+  expect(document.getElementById('rule-upkeep-3-amount-preview')).toBeNull();
+
+  await user.selectOptions(upkeep.getByRole('combobox', { name: 'Change' }), 'regain');
+  const all = upkeep.getByRole('textbox', { name: /^Amount \(all, a number or a formula\)/ });
+  await user.type(all, 'all'); // a regain of "all" is a word, not a formula
+  expect(all.hasAttribute('aria-describedby')).toBe(false);
+  expect(document.getElementById('rule-upkeep-3-amount-preview')).toBeNull();
+  await user.clear(all);
+  await user.type(all, '2');
+  expect(all.getAttribute('aria-describedby')).toBe('rule-upkeep-3-amount-preview');
+});
+
 it('removing the pool removes the upkeeps that spent from it, and keeps the others', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openUpkeepDraft(user, [

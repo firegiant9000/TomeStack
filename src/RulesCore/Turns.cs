@@ -109,7 +109,7 @@ public static class TurnPlanner
             var dependents = ToggleGroups.EndingWith(toggle, working, stored);
             AddEnd(toggle, label, reason);
             foreach (var overlay in dependents)
-                AddEnd(overlay, overlay.Label, $"{overlay.Label} needs {toggle.Label}, which ends");
+                AddEnd(overlay, overlay.Label, overlay.On ? $"{overlay.Label} needs {toggle.Label}, which ends" : $"{overlay.Label}: not allowed with {toggle.Label}; removed");
         }
 
         ResourceValue? PoolOf(Guid content, string resourceId) =>

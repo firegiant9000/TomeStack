@@ -41,7 +41,7 @@ public sealed partial class TomeStackApp
     /// order: no <c>confirm</c> (<c>turn.confirmation-required</c>); unknown character (<c>character.not-found</c>); no stamp
     /// (<c>play.basis-required</c>); a stamp that is not the stored one (<c>turn.preview-stale</c>, which also stops a double send);
     /// not in an encounter (<c>turn.not-in-encounter</c>); a choice for a question the recomputed plan does not ask
-    /// (<c>turn.choice-unknown</c>); a question with no choice (<c>turn.choice-required</c>). The turn is one undo step ("turn start" / "turn end").
+    /// (<c>turn.choice-unknown</c>); a question with no choice (<c>turn.choice-required</c>). The turn is one undo step ("turn start" / "turn end"); a turn whose plan has no changes writes nothing (no new stamp, the undo slot is kept) and replies with the current view and the plan's notices.
     /// </summary>
     public CharacterView Turn(TurnRequest request)
     {
@@ -60,11 +60,16 @@ public sealed partial class TomeStackApp
         if (plan.Choices.Any(p => !chosen.ContainsKey(p.Id)))
             throw new AppValidationException([new("turn.choice-required", "Choose what to do about each resource that cannot pay before the turn is applied.")], "turn.choice-required");
 
+        // Content-authored text only (the plan's manual lines and a pool's resourceFull text); no character data.
+        var notices = (IReadOnlyList<Diagnostic>)[.. plan.Manual, .. plan.Prompts.Select(p => new Diagnostic("turn.resource-full", p.Text))];
+        // A turn with no changes writes nothing: no new stamp, and the undo slot keeps the step before it.
+        if (plan.Changes.Count == 0)
+            return View(character, stored: true) with { Notices = notices };
+
         var view = SaveWithPlay(
             character with { Play = TurnPlanner.Apply(character.Play, plan) },
             (character.Play, request.At == TurnMoment.TurnStart ? "turn start" : "turn end"));
-        // Content-authored text only (the plan's manual lines and a pool's resourceFull text); no character data.
-        return view with { Notices = [.. plan.Manual, .. plan.Prompts.Select(p => new Diagnostic("turn.resource-full", p.Text))] };
+        return view with { Notices = notices };
     }
 
     private Character FindForTurn(Guid characterId) =>

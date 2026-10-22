@@ -17,12 +17,15 @@ public class TurnCommandTests
     private static string IronShort => $"short:{Iron:D}:iron-upkeep";
 
     /// <param name="ironDuration">False drops Iron stance's 3-round duration in memory (the fixture file is unchanged): a stance lasting until switched off.</param>
-    private static (TempApp Temp, Guid Id) Turns(bool ironDuration = true)
+    /// <param name="change">Any further in-memory change to a revision of the pack.</param>
+    private static (TempApp Temp, Guid Id) Turns(bool ironDuration = true, Func<ContentRevision, ContentRevision>? change = null)
     {
         var temp = new TempApp(time: new TickingTime(TempApp.Now)); // each write moves the stamp
-        var pack = temp.AddPack("fixture-pack-turns.json", ironDuration ? null : r => r.ContentId != Iron ? r : r with
+        var pack = temp.AddPack("fixture-pack-turns.json", ironDuration && change is null ? null : r =>
         {
-            Effects = [.. r.Effects.Select(e => e is ToggleEffect t ? t with { Duration = null } : e)],
+            if (!ironDuration && r.ContentId == Iron)
+                r = r with { Effects = [.. r.Effects.Select(e => e is ToggleEffect t ? t with { Duration = null } : e)] };
+            return change?.Invoke(r) ?? r;
         });
         var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
         var pins = pack.Revisions.Select(r => r.Reference);
@@ -155,6 +158,45 @@ public class TurnCommandTests
         Assert.Equal(5, Left(view, "breath")); // Second Wind Rhythm regains 1; Iron's upkeep is at the start
         Assert.Equal(0, Round(view));
         Assert.Equal("turn end", view.UndoLabel);
+    }
+
+    [Fact]
+    public void A_confirmed_turn_with_no_changes_writes_nothing_and_keeps_the_undo_slot()
+    {
+        var (temp, id) = Turns();
+        using var _ = temp;
+        var started = StartEncounter(temp, id); // the undo slot holds "start encounter"; breath is full, so a turn end has nothing to regain
+        var before = TempApp.Json(started.Character);
+        Assert.Empty(temp.App.PreviewTurn(Request(temp, id, TurnMoment.TurnEnd, confirm: false)).Changes);
+
+        var view = temp.App.Turn(Request(temp, id, TurnMoment.TurnEnd));
+
+        Assert.Equal(started.Character.UpdatedAt, view.Character.UpdatedAt);
+        Assert.Equal("start encounter", view.UndoLabel);
+        Assert.Equal(before, TempApp.Json(view.Character));
+        var stored = temp.App.GetCharacter(id);
+        Assert.Equal(started.Character.UpdatedAt, stored.Character.UpdatedAt);
+        Assert.Equal("start encounter", stored.UndoLabel);
+        Assert.Empty(view.Notices!);
+    }
+
+    [Fact]
+    public void A_confirmed_turn_with_no_changes_still_carries_the_manual_line_notices()
+    {
+        // Second Wind Rhythm's amount cannot be calculated: nothing to change, one line to settle by hand.
+        var (temp, id) = Turns(change: r => r.ContentId.ToString("D").EndsWith("34", StringComparison.Ordinal)
+            ? r with { Effects = [.. r.Effects.Select(e => e is UpkeepEffect u ? u with { Amount = "1 +" } : e)] }
+            : r);
+        using var _ = temp;
+        var started = StartEncounter(temp, id);
+
+        var view = temp.App.Turn(Request(temp, id, TurnMoment.TurnEnd));
+
+        var notice = Assert.Single(view.Notices!);
+        Assert.Equal("turn.settle-by-hand", notice.Code);
+        Assert.Equal(started.Character.UpdatedAt, temp.App.GetCharacter(id).Character.UpdatedAt);
+        Assert.Equal("start encounter", temp.App.GetCharacter(id).UndoLabel);
+        Assert.Equal("start encounter", view.UndoLabel);
     }
 
     [Fact]

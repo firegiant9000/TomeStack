@@ -354,6 +354,15 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
   const [amount, setAmount] = useState('1');
   const chosen = Number(amount);
   const chosenValid = tracked && amount.trim() !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= resource.current!;
+  // An invalid amount holds the button with aria-disabled (never `disabled`) and a plain-text reason linked by aria-describedby (WCAG 3.3.1).
+  const amountReasonId = `${headingId}-amount-reason`;
+  const amountReason = chosenValid
+    ? ''
+    : amount.trim() === ''
+      ? 'Enter an amount first.'
+      : resource.current === 0
+        ? `No ${resource.label} left to spend.`
+        : `Enter a whole number from 1 to ${resource.current}.`;
   // A counting-up pool (strain) reads as what has built up, not what is left.
   const state = resource.countsUp ? `built up ${resource.spent} of ${resource.maximum}` : `${resource.current} of ${resource.maximum}`;
   return (
@@ -377,11 +386,30 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
           </button>
           <label className="field">
             Amount to spend: {resource.label}
-            <input type="number" min={1} max={resource.current} step={1} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input
+              type="number"
+              min={1}
+              max={resource.current}
+              step={1}
+              value={amount}
+              aria-invalid={amount.trim() !== '' && !chosenValid ? true : undefined}
+              aria-describedby={amountReason ? amountReasonId : undefined}
+              onChange={(e) => setAmount(e.target.value)}
+            />
           </label>
-          <button type="button" disabled={!chosenValid} onClick={() => chosenValid && act({ action: 'spend', amount: chosen, ...key })}>
+          <button
+            type="button"
+            aria-disabled={!chosenValid || undefined}
+            aria-describedby={amountReason ? amountReasonId : undefined}
+            onClick={() => chosenValid && act({ action: 'spend', amount: chosen, ...key })}
+          >
             Spend amount: {resource.label}
           </button>
+          {amountReason && (
+            <p id={amountReasonId} className="hint">
+              {amountReason}
+            </p>
+          )}
         </div>
       )}
       {resource.warnings.length > 0 && (
