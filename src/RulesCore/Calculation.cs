@@ -1491,6 +1491,7 @@ public static class CharacterCalculator
                 var spent = character.Play.SpentOf(revision.ContentId, effect.ResourceId);
                 var origin = ContentOrigin(family, item, effect);
                 int? maximum = null;
+                var bonusByHand = false;
                 var trace = new List<TraceEntry>();
                 if (effect.Automation == AutomationStatus.Reference)
                 {
@@ -1508,24 +1509,34 @@ public static class CharacterCalculator
                         maximum = Math.Max(value, 0);
                         trace.Add(new(1, "derive", $"Maximum from {Describe(item)}: {formula.Source}", value, maximum.Value, origin, null, inputs.Count > 0 ? inputs : null));
                         // Content v11: bonuses to this maximum from the same revision, in content order; each is a trace step.
+                        // The bonuses are summed and the total clamped once; a bonus the player must apply by hand, or whose formula fails, leaves the pool assisted.
+                        var total = value;
                         foreach (var bonus in bonuses.Where(b => ReferenceEquals(b.Content, item) && b.Effect.Target == ResourceTargetPrefix + effect.ResourceId))
                         {
+                            if (bonus.Manual)
+                            {
+                                bonusByHand = true;
+                                continue;
+                            }
                             var bonusInputs = new List<TraceInput>();
                             if (!Formula.TryParse(bonus.Effect.Value, AllowsScales(revision), out var bonusFormula, out var bonusError))
                             {
                                 warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                                bonusByHand = true;
                             }
                             else if (!bonusFormula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, bonusInputs), out var amount, out bonusError))
                             {
                                 warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                                bonusByHand = true;
                             }
                             else
                             {
-                                maximum = Math.Max(maximum.Value + amount, 0);
+                                total += amount;
                                 var text = bonus.FollowedToggle ?? (bonus.Effect.Toggle is { } own ? revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == own)?.Label : null);
-                                trace.Add(new(trace.Count + 1, "add", text is null ? $"{amount:+0;-0}" : $"{amount:+0;-0} while {text}", amount, maximum.Value, ContentOrigin(family, item, bonus.Effect), null, bonusInputs.Count > 0 ? bonusInputs : null));
+                                trace.Add(new(trace.Count + 1, "add", text is null ? $"{amount:+0;-0}" : $"{amount:+0;-0} while {text}", amount, Math.Max(total, 0), ContentOrigin(family, item, bonus.Effect), null, bonusInputs.Count > 0 ? bonusInputs : null));
                             }
                         }
+                        maximum = Math.Max(total, 0);
                     }
                     else
                     {
@@ -1534,7 +1545,7 @@ public static class CharacterCalculator
                 }
                 var automation = maximum is null
                     ? (effect.Automation == AutomationStatus.Reference ? AutomationStatus.Reference : AutomationStatus.Assisted)
-                    : effect.Automation;
+                    : bonusByHand && effect.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : effect.Automation;
                 resources.Add(new(
                     revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
                     maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation),
@@ -2002,11 +2013,20 @@ public static class CharacterCalculator
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
     private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
 
-    /// <summary>The target prefix of a modifier on a resource's maximum (content v11): <c>resource.&lt;resourceId&gt;</c>.</summary>
-    private const string ResourceTargetPrefix = "resource.";
+    private const string ResourceTargetPrefix = ContentValidator.ResourceTargetPrefix;
 
-    /// <summary>A bonus to a resource's maximum that applies now (its toggle gate already passed); the resource is found in the same revision.</summary>
-    private sealed record ResourceBonus(ActiveContent Content, ModifierEffect Effect, string? FollowedToggle);
+    private static bool IsResourceTarget(ContentRevision revision, ModifierEffect effect) =>
+        revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && effect.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal);
+
+    private static bool IsResourceBonus(ContentRevision revision, ModifierEffect effect) =>
+        IsResourceTarget(revision, effect) && effect.Operation == ModifierOperation.Bonus;
+
+    /// <summary>
+    /// A bonus to a resource's maximum (content v11); the resource is found in the same revision. <paramref name="Manual"/> is set when the
+    /// modifier cannot be applied automatically (assisted, or not always on), so the resource it names reads assisted. One that is only
+    /// gated off by its toggle is never listed.
+    /// </summary>
+    private sealed record ResourceBonus(ActiveContent Content, ModifierEffect Effect, string? FollowedToggle, bool Manual = false);
 
     /// <summary>
     /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
@@ -2175,11 +2195,13 @@ public static class CharacterCalculator
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
+                    else if (IsResourceBonus(revision, effect))
+                        resourceBonuses.Add(new(item, effect, null, Manual: true)); // the player adds it; the pool reads assisted
                     continue;
                 }
                 // Content v11 (D43): resource.<id> raises that resource's maximum (CollectResources applies it). It is not a field, so it never
                 // enters the field pipeline; only a bonus counts, and one naming no resource of its revision changes nothing (validation errors).
-                if (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && effect.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                if (IsResourceTarget(revision, effect))
                 {
                     if (effect.Operation == ModifierOperation.Bonus)
                         resourceBonuses.Add(new(item, effect, followedToggle));

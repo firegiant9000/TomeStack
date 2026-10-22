@@ -66,7 +66,7 @@ public static class ContentValidator
     }
 
     /// <summary>Content v11 (D43): a modifier target <c>resource.&lt;resourceId&gt;</c> raises the maximum of a pool.</summary>
-    private const string ResourceTargetPrefix = "resource.";
+    internal const string ResourceTargetPrefix = "resource.";
 
     /// <summary>Whether an untyped toggle carries a content v11 key (any spelling), which decides the version its failure needs.</summary>
     private static bool CarriesV11Key(UnknownEffect effect, string[] keys) =>

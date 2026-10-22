@@ -517,6 +517,61 @@ public class FeatureAttackTests
 
         Assert.Equal(1, reflex.Maximum);
         Assert.Contains(reflex.Warnings, w => w.Code == "effect.invalid-formula" && w.EffectId == "reflex-bonus");
+        Assert.Equal(AutomationStatus.Assisted, reflex.Automation); // the player adds the bonus by hand
+    }
+
+    [Fact]
+    public void An_assisted_resource_bonus_is_not_applied_and_leaves_the_pool_assisted()
+    {
+        var catalog = With(Fixtures.KindledMode, e => e is ModifierEffect { Target: "resource.reflex" } m ? m with { Automation = AutomationStatus.Assisted } : e);
+
+        var reflex = Reflex(Sheet(Adept(Kindled), catalog));
+
+        Assert.Equal((1, AutomationStatus.Assisted), (reflex.Maximum, reflex.Automation));
+        Assert.Single(reflex.Trace);
+    }
+
+    [Fact]
+    public void A_resource_bonus_that_its_toggle_switches_off_does_not_make_the_pool_assisted()
+    {
+        var reflex = Reflex(Sheet(Adept()));
+
+        Assert.Equal((1, AutomationStatus.Automatic), (reflex.Maximum, reflex.Automation));
+    }
+
+    private static InMemoryContentCatalog Adding(ContentReference reference, params Effect[] added)
+    {
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack(), Fixtures.FeatureAttacksPack()];
+        var revisions = packs.SelectMany(p => p.Revisions).Select(r => r.Reference == reference ? r with { Effects = [.. r.Effects, .. added] } : r).ToList();
+        return new([.. packs.SelectMany(p => p.Sources)], [.. revisions]);
+    }
+
+    [Fact]
+    public void Resource_bonuses_are_summed_and_the_total_clamped_once()
+    {
+        var catalog = Adding(Fixtures.KindledMode,
+            new ModifierEffect { Id = "reflex-minus", Timing = EffectTiming.WhileActive, Toggle = "kindled", Operation = ModifierOperation.Bonus, Target = "resource.reflex", Value = "-4" },
+            new ModifierEffect { Id = "reflex-plus", Timing = EffectTiming.WhileActive, Toggle = "kindled", Operation = ModifierOperation.Bonus, Target = "resource.reflex", Value = "2" });
+
+        var reflex = Reflex(Sheet(Adept(Kindled), catalog)); // 1 + 1 - 4 + 2
+
+        Assert.Equal((0, 0), (reflex.Maximum, reflex.Current)); // clamping each step would give 2
+        Assert.Equal(["derive", "add", "add", "add"], reflex.Trace.Select(t => t.Operation));
+    }
+
+    [Fact]
+    public void A_resource_bonus_can_follow_another_contents_toggle()
+    {
+        var catalog = Adding(Fixtures.KeenSense,
+            new ResourceEffect { Id = "pool", ResourceId = "pool", Label = "Pool", Maximum = "1" },
+            new ModifierEffect { Id = "pool-bonus", Timing = EffectTiming.WhileActive, Toggle = "kindled", ToggleContent = Fixtures.KindledMode.ContentId, Operation = ModifierOperation.Bonus, Target = "resource.pool", Value = "2" });
+        ResourceValue Pool(CharacterSheet sheet) => sheet.Resources!.Single(r => r.ResourceId == "pool");
+
+        var on = Pool(Sheet(Adept(Kindled), catalog));
+        var off = Pool(Sheet(Adept(), catalog));
+
+        Assert.Equal((3, "+2 while Kindled mode"), (on.Maximum, on.Trace[1].Description));
+        Assert.Equal((1, AutomationStatus.Automatic), (off.Maximum, off.Automation));
     }
 
     [Fact]
