@@ -22,6 +22,8 @@ Status key: ✅ verified (how) · 🔧 found and fixed in this change · ⚠️ 
   - Blockers are listed ("Blocks accepting") beside the disabled "Accept as a draft", and "Accept as reference" stays available.
   - A keyboard-only and Narrator pass of the review screen is an owner check (items 15 and 3).
 
+- Automated: axe on three components (`src/Ui/src/test/axe.ts`, axe-core in jsdom, colour contrast off because jsdom has no layout): the summary bar with a roll result, the import review's detail view with its confirm ticks, and the homebrew studio's effect editor open on a toggle. Manual rows unchanged; contrast and High Contrast stay manual checks.
+
 ## Checklist
 
 | # | Check | WCAG 2.2 | Status |

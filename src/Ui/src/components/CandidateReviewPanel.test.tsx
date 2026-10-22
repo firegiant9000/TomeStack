@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import { TomeStackError } from '../api/transport';
 import type { CandidateCheck, DraftCandidate, ImportJob, SourceRecord, StoredCandidate } from '../api/types';
+import { expectNoAxeViolations } from '../test/axe';
 import { CandidateReviewPanel } from './CandidateReviewPanel';
 
 vi.mock('../api/client', () => ({
@@ -924,6 +925,13 @@ it('offers one unticked Confirm checkbox per proposed effect, named by it, and s
   expect(accept.getAttribute('aria-disabled')).toBeNull();
   await user.click(accept);
   expect(client.acceptCandidate).toHaveBeenCalledExactlyOnceWith('cand-1', false, 'etag-1', ['hit-die', 'spellcasting', 'save-wisdom', 'armor-shield']);
+});
+
+it('has no axe violations in the detail view with its confirm ticks', async () => {
+  await openStored({ current: fullLamp() });
+  const group = await screen.findByRole('group', { name: 'Confirm what was read' });
+  expect(within(group).getAllByRole('checkbox').length).toBeGreaterThan(0);
+  await expectNoAxeViolations(document.body);
 });
 
 // Item 9.
