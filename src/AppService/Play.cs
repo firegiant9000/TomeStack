@@ -123,18 +123,6 @@ public sealed record PlayCommand(
 /// </summary>
 public sealed record UndoPlayRequest(Guid CharacterId, DateTimeOffset UpdatedAt, bool Confirm = false);
 
-/// <summary>How the character's defences changed typed damage (R169): immunity wins; otherwise resistance halves (rounding down), then vulnerability doubles.</summary>
-public enum DamageEffect { None, Immune, Halved, Doubled, HalvedThenDoubled }
-
-/// <summary>
-/// What a <see cref="PlayActionKind.Damage"/> command did, for the result line (Wave 3 item 21, D19 amended).
-/// <paramref name="Amount"/> is what was entered and <paramref name="Type"/> its canonical damage type (null: untyped, so no
-/// defence applies). <paramref name="Adjusted"/> is the amount after defences (what the concentration check uses),
-/// <paramref name="Absorbed"/> what temporary hit points took, <paramref name="Lost"/> what hit points lost.
-/// <paramref name="Warnings"/> carries codes and numbers only (<c>play.massive-damage</c>).
-/// </summary>
-public sealed record DamageOutcome(int Amount, string? Type, DamageEffect Effect, int Adjusted, int Absorbed, int Lost, IReadOnlyList<Diagnostic> Warnings);
-
 public sealed partial class TomeStackApp
 {
     /// <summary>
@@ -488,46 +476,14 @@ public sealed partial class TomeStackApp
             type = canonical;
         }
         var hp = sheet.HitPoints!;
-        var kinds = type is null
-            ? new HashSet<DamageDefenceKind>()
-            : (sheet.DamageDefences ?? []).Where(d => d.Type == type).Select(d => d.Kind).ToHashSet();
-        var halved = kinds.Contains(DamageDefenceKind.Resistance);
-        var doubled = kinds.Contains(DamageDefenceKind.Vulnerability);
-        var effect = kinds.Contains(DamageDefenceKind.Immunity) ? DamageEffect.Immune
-            : halved && doubled ? DamageEffect.HalvedThenDoubled
-            : halved ? DamageEffect.Halved
-            : doubled ? DamageEffect.Doubled
-            : DamageEffect.None;
-        var amount = effect switch
-        {
-            DamageEffect.Immune => 0,
-            DamageEffect.Halved => command.Amount / 2,
-            DamageEffect.Doubled => command.Amount * 2,
-            DamageEffect.HalvedThenDoubled => command.Amount / 2 * 2,
-            _ => command.Amount,
-        };
-        if (amount == 0)
-        {
-            outcome = new(command.Amount, type, effect, 0, 0, 0, []);
-            return play;
-        }
-
-        var absorbed = Math.Min(play.TemporaryHitPoints, amount);
-        var current = Math.Max(hp.Current - (amount - absorbed), 0);
-        // Massive damage is a warning, never an automatic death: the damage left over once hit points reach 0 equals or exceeds the maximum.
-        var leftOver = amount - absorbed - (hp.Current - current);
-        var warnings = hp.Maximum >= 1 && leftOver >= hp.Maximum
-            ? new List<Diagnostic> { new("play.massive-damage", $"{leftOver} damage was left over after reaching 0 hit points, which equals or exceeds the hit point maximum of {hp.Maximum}.") }
-            : [];
-        outcome = new(command.Amount, type, effect, amount, absorbed, hp.Current - current, warnings);
-        // D19 (SRD 5.1 p. 101, SRD 5.2.1 p. 11), amended: damage while concentrating asks for a Constitution save, DC 10 or half the
-        // damage after resistance, immunity and vulnerability (before temporary hit points), whichever is higher; at 0 hit points the
-        // spell simply ends. The family may cap the DC (SRD 5.2.1: 30); every DC stays within what PlayState validation accepts, so a
-        // huge hit is still applied.
-        var concentration = play.Concentration is { } con
-            ? current == 0 ? null : con with { PendingSaveDc = Math.Min(Math.Max(10, amount / 2), Math.Min(family.ConcentrationSaveMaximumDc ?? int.MaxValue, PlayState.MaxConcentrationSaveDc)) }
+        var result = DamagePipeline.Resolve(new(command.Amount, type), hp, sheet.DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [], play.Concentration is not null, family);
+        outcome = result.Outcome;
+        if (result.Outcome.Adjusted == 0)
+            return play; // nothing changes and no concentration check is asked for
+        var concentration = result.ConcentrationEnds ? null
+            : result.ConcentrationDc is { } dc && play.Concentration is { } con ? con with { PendingSaveDc = dc }
             : play.Concentration;
-        return play with { TemporaryHitPoints = play.TemporaryHitPoints - absorbed, CurrentHitPoints = current >= hp.Maximum ? null : current, Concentration = concentration };
+        return play with { TemporaryHitPoints = result.After.Temporary, CurrentHitPoints = result.After.Current >= hp.Maximum ? null : result.After.Current, Concentration = concentration };
     }
 
     private static PlayState StartConcentration(PlayState play, CharacterSheet sheet, PlayCommand command)
