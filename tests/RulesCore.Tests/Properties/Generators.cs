@@ -91,6 +91,8 @@ internal static class Generators
         [ItemEffect.TypeName] = ItemEffect.SchemaVersion,
         [ToggleGroupEffect.TypeName] = ToggleGroupEffect.SchemaVersion,
         [UpkeepEffect.TypeName] = UpkeepEffect.SchemaVersion,
+        [AttackEffect.TypeName] = AttackEffect.SchemaVersion,
+        [AttackRiderEffect.TypeName] = AttackRiderEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -124,10 +126,13 @@ internal static class Generators
                 from stackGroup in Optional(Keys)
                 from toggle in Optional(Keys)
                 from armored in OptionalValue(Gen.Elements(true, false))
+                // Any version: below v11 the key must stay extension data, written back where it was.
+                from toggleContent in OptionalValue(Guids)
                 select new JsonObject { ["operation"] = op, ["target"] = target, ["value"] = value }
                     .With("stacking", stackGroup is null ? null : "highestInGroup").With("stackGroup", stackGroup)
                     .With("toggle", v >= ToggleEffect.SchemaVersion ? toggle : null)
-                    .With("whileArmored", v >= ContentRevision.CombatDetailsSchemaVersion ? armored : null)),
+                    .With("whileArmored", v >= ContentRevision.CombatDetailsSchemaVersion ? armored : null)
+                    .With("toggleContent", toggleContent?.ToString())),
             Common(GrantEffect.TypeName,
                 from grant in Gen.Elements("proficiency", "expertise")
                 from target in Gen.Elements("skill.stealth", "save.dex", "skill.arcana")
@@ -169,11 +174,16 @@ internal static class Generators
                 from cost in Optional(Gen.Elements("1", "2", "PB"))
                 from variable in OptionalValue(Gen.Elements(true, false))
                 from bonus in Optional(Formulas)
+                // Any version: below v11 the key must stay extension data, written back where it was.
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileContent in OptionalValue(Guids)
+                from whileId in Keys
                 select new JsonObject { ["rollId"] = id, ["label"] = label, ["dice"] = dice }.With("resourceId", resource)
                     .With("activation", v >= SpellcastingEffect.SchemaVersion ? activation : null)
                     .With("cost", v >= ToggleEffect.SchemaVersion ? cost : null)
                     .With("variableCost", v >= ToggleEffect.SchemaVersion ? variable : null)
-                    .With("bonus", v >= ContentRevision.CombatDetailsSchemaVersion ? bonus : null)),
+                    .With("bonus", v >= ContentRevision.CombatDetailsSchemaVersion ? bonus : null)
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
             Common(RestrictionEffect.TypeName,
                 from field in Gen.Elements(FieldIds.Score(Ability.Str), FieldIds.Score(Ability.Wis))
                 from min in Gen.Choose(1, 20)
@@ -239,6 +249,49 @@ internal static class Generators
                 from ifShort in Gen.Elements<string?>(null, "ask", "end")
                 select new JsonObject { ["at"] = at, ["resourceId"] = resourceId, ["change"] = change, ["amount"] = amount }
                     .With("toggle", toggle).With("ifShort", ifShort)),
+            Common(AttackEffect.TypeName,
+                from id in Keys
+                from label in Names
+                from kind in Gen.Elements("melee", "ranged")
+                from abilities in Gen.Elements("str", "dex", "wis").ArrayOf().Select(a => a.Distinct().Take(3).ToArray())
+                from proficient in OptionalValue(Gen.Elements(true, false))
+                from count in Gen.Elements("1", "2", "PB")
+                from die in Gen.Elements("6", "8", "SCALE.k")
+                from bonus in Optional(Gen.Elements("2", "STR.MOD"))
+                from damageType in Gen.Elements("fire", "bludgeoning")
+                from range in Optional(Gen.Elements("60 ft", "10 ft"))
+                from tags in Keys.ArrayOf().Select(t => t.Distinct().Take(3).ToArray())
+                from replaces in OptionalValue(Gen.Elements(true, false))
+                from activation in Gen.Elements<string?>(null, "action", "bonusAction", "other")
+                from resource in Optional(Keys)
+                from resourceContent in OptionalValue(Guids)
+                from cost in Optional(Gen.Elements("1", "2", "PB"))
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileId in Keys
+                select new JsonObject
+                {
+                    ["attackId"] = id, ["label"] = label, ["kind"] = kind,
+                    ["abilities"] = new JsonArray([.. abilities.Select(a => (JsonNode)a)]),
+                    ["damage"] = new JsonObject { ["count"] = count, ["die"] = die },
+                    ["damageType"] = damageType,
+                }
+                .With("proficient", proficient).With("damageBonus", bonus).With("range", range)
+                .With("tags", tags.Length == 0 ? null : new JsonArray([.. tags.Select(t => (JsonNode)t)]))
+                .With("replacesAttack", replaces).With("activation", activation)
+                .With("resourceId", resource).With("resourceContent", resourceContent?.ToString()).With("cost", cost)
+                .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId } : null)),
+            Common(AttackRiderEffect.TypeName,
+                from tags in Keys.ArrayOf().Select(t => t.Distinct().Take(3).ToArray())
+                from toHit in Optional(Formulas)
+                from dice in Optional(Gen.Elements("1d8", "3d8", "2d6"))
+                from bonus in Optional(Formulas)
+                from damageType in Optional(Gen.Elements("fire", "cold"))
+                from toggle in Optional(Keys)
+                from toggleContent in OptionalValue(Guids)
+                from stackGroup in Optional(Keys)
+                select new JsonObject { ["tags"] = new JsonArray([.. tags.Select(t => (JsonNode)t)]) }
+                    .With("toHit", toHit).With("dice", dice).With("damageBonus", bonus).With("damageType", damageType)
+                    .With("toggle", toggle).With("toggleContent", toggleContent?.ToString()).With("stackGroup", stackGroup)),
             Common(ToggleGroupEffect.TypeName,
                 from groupId in Keys
                 from label in Names

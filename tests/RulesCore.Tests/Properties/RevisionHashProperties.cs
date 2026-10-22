@@ -27,6 +27,12 @@ public class RevisionHashProperties
     /// <summary>The resource keys content v11 adds (D43, slice 3). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] ResourceV11Keys = ["counts", "resourceFull", "allowance"];
 
+    /// <summary>The modifier key content v11 adds (D43, slice 4). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] ModifierV11Keys = ["toggleContent"];
+
+    /// <summary>The roll key content v11 adds (D43, slice 4). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] RollV11Keys = ["whileToggle"];
+
     public static TheoryData<int> Versions => [.. Enumerable.Range(1, ContentRevision.CurrentSchemaVersion)];
 
     [Theory]
@@ -80,10 +86,10 @@ public class RevisionHashProperties
                         return $"effect {i}'s {key} changed below v10";
                 }
             }
-            // Content v11: below v11 the toggle's keys stay extension data with the value they had, where they were.
-            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type is ToggleEffect.TypeName or ResourceEffect.TypeName)
+            // Content v11: below v11 the keys of these types stay extension data with the value they had, where they were.
+            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type is ToggleEffect.TypeName or ResourceEffect.TypeName or ModifierEffect.TypeName or RollEffect.TypeName)
             {
-                foreach (var key in type == ToggleEffect.TypeName ? ToggleV11Keys : ResourceV11Keys)
+                foreach (var key in type switch { ToggleEffect.TypeName => ToggleV11Keys, ResourceEffect.TypeName => ResourceV11Keys, ModifierEffect.TypeName => ModifierV11Keys, _ => RollV11Keys })
                 {
                     if (inputEffects[i]![key] is { } kept && !JsonNode.DeepEquals(kept, outputEffects[i]![key]))
                         return $"effect {i}'s {key} changed below v11";
@@ -174,6 +180,14 @@ public class RevisionHashProperties
                 members = [.. members ?? [], .. ToggleV11Keys];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ResourceEffect.TypeName)
                 members = [.. members ?? [], .. ResourceV11Keys];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == AttackEffect.TypeName)
+                members = ["proficient", "damageBonus", "range", "tags", "replacesAttack", "activation", "resourceId", "resourceContent", "cost", "whileToggle"];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == AttackRiderEffect.TypeName)
+                members = ["toHit", "dice", "damageBonus", "damageType", "toggle", "toggleContent", "stackGroup"];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ModifierEffect.TypeName)
+                members = [.. members ?? [], .. ModifierV11Keys];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName)
+                members = [.. members ?? [], .. RollV11Keys];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))

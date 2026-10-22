@@ -149,8 +149,14 @@ public sealed record ModifierEffect : Effect
     /// </summary>
     public bool? WhileArmored { get; init; }
 
-    /// <summary>The keys content schema v11 adds to this effect (none yet); below v11 they stay extension data.</summary>
-    internal static readonly string[] V11Keys = [];
+    /// <summary>
+    /// Content schema v11 (D43): the content that declares <see cref="Toggle"/>, when it is not this revision's (a feature whose
+    /// bonus follows another feature's mode). Null: this revision. Below v11 the key stays extension data and does nothing.
+    /// </summary>
+    public Guid? ToggleContent { get; init; }
+
+    /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
+    internal static readonly string[] V11Keys = ["toggleContent"];
 
     /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
@@ -352,6 +358,132 @@ public sealed record UpkeepEffect : Effect
             : unknown;
 }
 
+/// <summary>Content schema v11 (D43): the dice of a feature attack, both formulas (<c>1</c>, <c>SCALE.handDie</c>), so a die can follow a class column.</summary>
+public sealed record AttackDamage(string Count, string Die);
+
+/// <summary>
+/// Content schema v11 (D43): an attack a feature gives, such as an unarmed strike or a bolt: to hit = the best of the listed
+/// ability modifiers plus the proficiency bonus (unless <see cref="Proficient"/> is false); damage = <see cref="Damage"/> plus
+/// <see cref="DamageBonus"/> (default: that ability modifier). Typed only in a v11 revision: in an older revision an
+/// <c>attack</c> stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record AttackEffect : Effect
+{
+    public const string TypeName = "attack";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary>A key like a scale id (<see cref="ScaleEffect.IsValidScaleId"/>), unique within the revision; validated in the content validator.</summary>
+    public required string AttackId { get; init; }
+
+    public required string Label { get; init; }
+
+    public required WeaponAttack Kind { get; init; }
+
+    /// <summary>The abilities the attack may use; the best one counts. At least one.</summary>
+    public required IReadOnlyList<Ability> Abilities { get; init; }
+
+    /// <summary>Whether the proficiency bonus is added to the attack roll. Null: true.</summary>
+    public bool? Proficient { get; init; }
+
+    public required AttackDamage Damage { get; init; }
+
+    /// <summary>A formula added to the damage. Null: the chosen ability modifier.</summary>
+    public string? DamageBonus { get; init; }
+
+    /// <summary>One of <see cref="DamageTypes.All"/>.</summary>
+    public required string DamageType { get; init; }
+
+    public string? Range { get; init; }
+
+    /// <summary>Keys a rider (<see cref="AttackRiderEffect.Tags"/>) matches. <c>all</c> is reserved for riders.</summary>
+    public IReadOnlyList<string>? Tags { get; init; }
+
+    /// <summary>The attack can stand in for one attack of the Attack action. Null: false.</summary>
+    public bool? ReplacesAttack { get; init; }
+
+    public Activation? Activation { get; init; }
+
+    /// <summary>The pool the attack spends from; only an explicit action spends it.</summary>
+    public string? ResourceId { get; init; }
+
+    /// <summary>The content that declares <see cref="ResourceId"/>. Null: this revision.</summary>
+    public Guid? ResourceContent { get; init; }
+
+    /// <summary>Uses the attack spends (a formula; default 1 with a resource).</summary>
+    public string? Cost { get; init; }
+
+    /// <summary>The attack is available only while this toggle is on (it may be another content's). Null: always.</summary>
+    public ToggleRef? WhileToggle { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) =>
+        VersionedEffects.NamesMember<WeaponAttack>(unknown.Raw, "kind")
+        && VersionedEffects.NamesMember<Activation>(unknown.Raw, "activation")
+        && VersionedEffects.NamesEveryMember<Ability>(unknown.Raw, "abilities")
+            ? VersionedEffects.Typed<AttackEffect>(unknown)
+            : unknown;
+}
+
+/// <summary>
+/// Content schema v11 (D43): extra to-hit, damage dice or damage that applies to the attacks carrying one of its tags, while
+/// its toggle is on (always, without one). Typed only in a v11 revision: in an older revision an <c>attackRider</c> stays an
+/// <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record AttackRiderEffect : Effect
+{
+    public const string TypeName = "attackRider";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    /// <summary>The tag that matches every attack.</summary>
+    public const string AllTag = "all";
+
+    /// <summary>The die sizes a rider's dice may use.</summary>
+    internal static readonly int[] AllowedDice = [4, 6, 8, 10, 12];
+
+    public override string Type => TypeName;
+
+    /// <summary>The attack tags the rider applies to; <see cref="AllTag"/> matches every attack. At least one.</summary>
+    public required IReadOnlyList<string> Tags { get; init; }
+
+    /// <summary>A formula added to the attack roll.</summary>
+    public string? ToHit { get; init; }
+
+    /// <summary>Extra damage dice, <c>NdM</c> with M one of 4, 6, 8, 10 or 12.</summary>
+    public string? Dice { get; init; }
+
+    /// <summary>A formula added to the damage.</summary>
+    public string? DamageBonus { get; init; }
+
+    /// <summary>The type of the extra dice, one of <see cref="DamageTypes.All"/>. Null: the attack's own.</summary>
+    public string? DamageType { get; init; }
+
+    /// <summary>The toggle (of this revision, or of <see cref="ToggleContent"/>) that switches the rider on. Null: always on.</summary>
+    public string? Toggle { get; init; }
+
+    /// <summary>The content that declares <see cref="Toggle"/>. Null: this revision.</summary>
+    public Guid? ToggleContent { get; init; }
+
+    /// <summary>Riders of one stack group never add: the highest applies.</summary>
+    public string? StackGroup { get; init; }
+
+    /// <summary>Reads <c>NdM</c> exactly: a whole count from 1 to <see cref="DiceLimits.MaxDice"/>, a lowercase d, and an allowed die; no sign, space or modifier.</summary>
+    internal static bool TryParseDice(string? source, out int count, out int sides)
+    {
+        count = sides = 0;
+        var parts = source?.Split('d');
+        return parts is [{ Length: > 0 } c, { Length: > 0 } s]
+            && c.All(char.IsAsciiDigit) && s.All(char.IsAsciiDigit)
+            && int.TryParse(c, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out count)
+            && int.TryParse(s, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out sides)
+            && count is >= 1 and <= DiceLimits.MaxDice && AllowedDice.Contains(sides);
+    }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<AttackRiderEffect>(unknown);
+}
+
 /// <summary>A choice the player makes (for example, pick one of these content revisions).</summary>
 public sealed record ChoiceEffect : Effect
 {
@@ -447,8 +579,14 @@ public sealed record RollEffect : Effect
     /// </summary>
     public string? Bonus { get; init; }
 
-    /// <summary>The keys content schema v11 adds to this effect (none yet); below v11 they stay extension data.</summary>
-    internal static readonly string[] V11Keys = [];
+    /// <summary>
+    /// Content schema v11 (D43): the roll is offered only while this toggle is on (it may be another content's). Null: always.
+    /// Below v11 the key stays extension data and does nothing.
+    /// </summary>
+    public ToggleRef? WhileToggle { get; init; }
+
+    /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
+    internal static readonly string[] V11Keys = ["whileToggle"];
 
     /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
     internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
@@ -872,6 +1010,8 @@ internal static class VersionedEffects
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
             [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
+            [AttackEffect.TypeName] = (AttackEffect.SchemaVersion, (u, _) => AttackEffect.FromUnknown(u)),
+            [AttackRiderEffect.TypeName] = (AttackRiderEffect.SchemaVersion, (u, _) => AttackRiderEffect.FromUnknown(u)),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
             // gives one of them a v11 key adds it to that type's V11Keys, and nothing else.
@@ -928,6 +1068,29 @@ internal static class VersionedEffects
             if (p.Value.ValueKind != JsonValueKind.String
                 || !Enum.GetNames<TEnum>().Any(n => string.Equals(n, p.Value.GetString(), StringComparison.OrdinalIgnoreCase)))
                 return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Whether every property of <paramref name="raw"/> named <paramref name="property"/> (any case) is null or a list whose
+    /// items are all strings that are exactly the name of a <typeparamref name="TEnum"/> member, ignoring case (see
+    /// <see cref="NamesMember{TEnum}"/> for why a padded or combined name is refused).
+    /// </summary>
+    public static bool NamesEveryMember<TEnum>(JsonElement raw, string property) where TEnum : struct, Enum
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (!string.Equals(p.Name, property, StringComparison.OrdinalIgnoreCase) || p.Value.ValueKind == JsonValueKind.Null)
+                continue;
+            if (p.Value.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var item in p.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String
+                    || !Enum.GetNames<TEnum>().Any(n => string.Equals(n, item.GetString(), StringComparison.OrdinalIgnoreCase)))
+                    return false;
+            }
         }
         return true;
     }
@@ -1003,7 +1166,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
