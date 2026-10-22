@@ -358,4 +358,27 @@ public class ToggleGroupCommandTests
         Assert.Equal(12 - 5, Focus(bound));
         Assert.Equal("toggle.group-occupied", Refusal(() => On(temp, id, 9, "lineage")));
     }
+
+    [Fact]
+    public void A_form_raises_a_resource_maximum_and_current_never_goes_negative_after_it_ends()
+    {
+        var kindled = Guid.Parse("6f0dc000-0000-4000-8000-000000000042");
+        using var temp = new TempApp(time: new TickingTime(TempApp.Now));
+        temp.AddPack("fixture-pack-feature-attacks.json");
+        var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-adept-l5.json")).Character.Id;
+        CharacterView Act(PlayActionKind kind, int amount = 1) =>
+            temp.App.Play(new(id, kind, Confirm: true, Amount: amount, ContentId: kindled, ToggleId: kind is PlayActionKind.ToggleOn or PlayActionKind.ToggleOff ? "kindled" : null,
+                ResourceId: kind is PlayActionKind.Spend or PlayActionKind.Regain ? "reflex" : null));
+        (int? Maximum, int? Current, int Spent) Reflex(CharacterView view)
+        {
+            var reflex = view.Sheet.Resources!.Single(r => r.ResourceId == "reflex");
+            return (reflex.Maximum, reflex.Current, reflex.Spent);
+        }
+
+        Assert.Equal((2, 2, 0), Reflex(Act(PlayActionKind.ToggleOn)));
+        Assert.Equal((2, 0, 2), Reflex(Act(PlayActionKind.Spend, 2)));
+        Assert.Equal((1, 0, 2), Reflex(Act(PlayActionKind.ToggleOff))); // spent is kept; current stops at 0, never -1
+        Assert.Equal((1, 0, 1), Reflex(Act(PlayActionKind.Regain, 1)));
+        Assert.Equal((1, 1, 0), Reflex(Act(PlayActionKind.Regain, 1)));
+    }
 }

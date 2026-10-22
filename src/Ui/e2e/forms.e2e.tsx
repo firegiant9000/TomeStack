@@ -227,3 +227,71 @@ it('authors a stance with upkeep in the studio, starts an encounter, takes turns
   await within(combat()).findByText('No encounter running');
   expect(stance().checked).toBe(true); // the stance has no duration, so ending the encounter leaves it on
 });
+
+it('authors a feature attack and a toggled rider, rolls damage in and out of the form', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Attack Book', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Attack Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Attack Book/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Attack Book' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(within(editor()).getByRole('group', { name }));
+
+  // A mode, an attack tagged "blaze", and a rider on the attacks tagged "blaze" that applies only while the mode is on.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Blaze Feature');
+  await user.click(within(editor()).getByRole('button', { name: 'Add toggle' }));
+  await user.type(rule(/^Rule 1: Toggle/).getByRole('textbox', { name: 'Toggle name' }), 'E2E Blaze Mode');
+  await user.click(within(editor()).getByRole('button', { name: 'Add attack' }));
+  await user.type(rule(/^Rule 2: Attack/).getByRole('textbox', { name: 'Attack name' }), 'E2E Blaze Strike');
+  await user.type(rule(/^Rule 2: Attack/).getByRole('textbox', { name: /^Tags/ }), 'blaze');
+  await user.click(within(editor()).getByRole('button', { name: 'Add attack rider' }));
+  const rider = rule(/^Rule 3: Attack rider/);
+  const tags = rider.getByRole('textbox', { name: /^Tags/ });
+  await user.clear(tags);
+  await user.type(tags, 'blaze');
+  const dice = rider.getByRole('textbox', { name: /^Extra damage dice/ });
+  await user.clear(dice);
+  await user.type(dice, '2d8');
+  await user.selectOptions(rider.getByRole('combobox', { name: 'Applies' }), 'While E2E Blaze Mode is on');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Blaze Feature/);
+
+  const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Blaze Feature')?.latestPublished;
+  expect(published).toBeTruthy();
+  await client.createCharacter({
+    name: 'E2E Blaze Hero',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    pins: [published!],
+  });
+
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Blaze Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Blaze Hero' });
+  await openTab(user, sheet, 'Play');
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const mode = () => screen.getByRole<HTMLInputElement>('checkbox', { name: /^E2E Blaze Mode/ });
+
+  // Out of the form: the damage names no rider dice, and the roll shows none.
+  const off = await screen.findByRole('button', { name: /^Roll E2E Blaze Strike damage/ });
+  expect(off.textContent).not.toMatch(/2d8/);
+  await user.click(off);
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/E2E Blaze Strike damage/));
+  expect(lastRoll().textContent).not.toMatch(/2d8/);
+
+  // In the form: the rider's dice are part of the formula that is shown and rolled.
+  await user.click(mode());
+  await waitFor(() => expect(mode().checked).toBe(true));
+  const on = await screen.findByRole('button', { name: /^Roll E2E Blaze Strike damage.*2d8/ });
+  await user.click(on);
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/E2E Blaze Strike damage.*2d8/));
+});

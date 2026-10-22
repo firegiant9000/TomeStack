@@ -178,7 +178,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
           : 'Rolling never spends anything. Roll a check here; a save, skill or initiative from its field on Stats; or an attack or feature on Play.'}
       </p>
       <div className="roll-strip">
-        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} act={act} />
+        <RollResult record={lastRoll} resources={sheet.resources ?? []} features={sheet.features ?? []} attacks={sheet.attacks ?? []} act={act} />
         <RollLog rolls={rollLog} />
       </div>
     </section>

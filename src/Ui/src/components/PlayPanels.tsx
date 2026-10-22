@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type SubmitEvent } from 'react';
+import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import type {
   Activation,
   AttackEntry,
@@ -561,7 +561,8 @@ export function ActionsPanel({
   // D43 slice 1: grouped toggles are the form picker, whatever their activation; slice 3 moved the picker to the combat strip.
   const plainToggles = toggles.filter((t) => !t.group);
   // D43 slice 3: an action or switch that spends an allowance pool (reactions, say) is listed under that pool's name, not its activation group.
-  const allowances = (view.sheet.resources ?? []).filter((r) => r.allowance);
+  const resourcePools = view.sheet.resources ?? [];
+  const allowances = resourcePools.filter((r) => r.allowance);
   const allowanceOf = (resourceId: string | undefined, contentId: string) =>
     resourceId ? allowances.find((r) => r.resourceId === resourceId && r.content.contentId === contentId) : undefined;
   const rollPool = ({ feature, effect }: (typeof rolls)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
@@ -572,18 +573,34 @@ export function ActionsPanel({
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
   const ungroupedToggles = plainToggles.filter((t) => !t.activation && !togglePool(t));
-  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => (
-    <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
-      <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-        Roll {effect.label || effect.id} ({effect.dice}
-        {rollBonus(effect.bonus)})
-      </button>{' '}
-      <span className="hint">
-        {feature.name}
-        {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
-      </span>
-    </li>
-  );
+  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => {
+    // D43 slice 4: an action outside the form it needs is disabled, with the reason as text the button is described by.
+    const locked = effect.available === false;
+    const reasonId = `roll-reason-${feature.content.revisionId}-${effect.id}`;
+    return (
+      <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
+        <button
+          type="button"
+          disabled={locked}
+          aria-describedby={locked ? reasonId : undefined}
+          onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}
+        >
+          Roll {effect.label || effect.id} ({effect.dice}
+          {rollBonus(effect.bonus)})
+        </button>{' '}
+        <span className="hint">
+          {feature.name}
+          {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
+        </span>
+        {locked && (
+          <span id={reasonId} className="hint">
+            {' '}
+            · {effect.unavailableReason ?? 'Not available right now'}
+          </span>
+        )}
+      </li>
+    );
+  };
   const toggleItem = (t: ToggleValue) => (
     <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
       <ToggleRow toggle={t} act={act} />
@@ -605,7 +622,8 @@ export function ActionsPanel({
         Critical hit (double the damage dice)
       </label>
       {activationGroups.map(({ key, title }) => {
-        const groupAttacks = key === 'action' ? attacks : [];
+        // Weapons stay in 'action'; a feature attack goes where its activation says (default 'action').
+        const groupAttacks = attacks.filter((a) => (a.source === 'feature' ? (a.activation ?? 'action') : 'action') === key);
         const groupCustom = key === 'action' ? customAttacks : [];
         const groupRolls = rolls.filter((r) => (r.effect.activation ?? 'other') === key && !rollPool(r));
         const groupToggles = plainToggles.filter((t) => t.activation === key && !togglePool(t));
@@ -615,7 +633,15 @@ export function ActionsPanel({
             <h4 id={`actions-${key}`}>{title}</h4>
             <ul className="features">
               {groupAttacks.map((attack) => (
-                <AttackItem key={`${attack.item.revisionId}-${attack.effectId}`} attack={attack} critical={critical} rollMode={rollMode} roll={roll} rollDamage={rollDamage} />
+                <AttackItem
+                  key={`${attack.item.revisionId}-${attack.effectId}`}
+                  attack={attack}
+                  critical={critical}
+                  rollMode={rollMode}
+                  roll={roll}
+                  rollDamage={rollDamage}
+                  pool={attack.resourceId ? resourcePools.find((r) => r.resourceId === attack.resourceId && r.content.contentId === attack.costResourceContent) : undefined}
+                />
               ))}
               {groupCustom.map((attack) => (
                 <li key={attack.id} className="feature">
@@ -665,31 +691,43 @@ function AttackItem({
   rollMode,
   roll,
   rollDamage,
+  pool,
 }: {
   attack: AttackEntry;
   critical: boolean;
   rollMode: RollMode;
   roll: (target: RollTarget) => void;
   rollDamage: (target: RollTarget, type?: string) => void;
+  /** The pool a feature attack spends from, to name it in the cost line. */
+  pool?: ResourceValue;
 }) {
+  const reasonId = useId();
+  // D43 slice 4: a feature attack is rolled by the content that gives it and its effect id; a weapon by its item.
+  const feature = attack.source === 'feature';
+  const target: RollTarget = feature ? { content: attack.item, effectId: attack.effectId } : { weapon: attack.item };
+  // An unavailable attack is a disabled button whose reason is text beside it, not a tooltip.
+  const locked = attack.available === false;
+  const described = locked ? reasonId : undefined;
   return (
     <li className="feature">
       <details>
         <summary>
-          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage} {attack.damageType}
+          <span className="option-name">{attack.name}</span>: {signed(attack.toHit)} to hit, {attack.damage ? `${attack.damage} ` : ''}{attack.damageType}
           {attack.versatileDamage ? ` (${attack.versatileDamage} two-handed)` : ''}
           {attack.automation !== 'automatic' && <span className="warn"> {automationLabels[attack.automation]}</span>}
         </summary>
         <p className="hint">
-          {attack.category} {attack.attack} weapon
+          {feature ? `${attack.attack === 'ranged' ? 'Ranged' : 'Melee'} attack` : `${attack.category} ${attack.attack} weapon`}
           {attack.range ? ` · range ${attack.range}` : ''}
           {attack.properties.length > 0 ? ` · ${attack.properties.join(', ')}` : ''}
           {attack.mastery ? ` · mastery: ${attack.mastery}` : ''}
+          {feature && attack.resourceId ? ` · uses ${attack.cost ?? 1} ${pool?.label ?? 'of a resource'} (spend it from the roll)` : ''}
         </p>
         <ul aria-label={`How the ${attack.name} attack is calculated`}>
           {attack.trace.map((step) => (
             <li key={step.order}>
-              {step.description}: {signed(step.amount ?? 0)} = {signed(step.result)}
+              {/* A step with no amount (damage dice, a rider that lost) is the sentence alone: no invented "+0". */}
+              {typeof step.amount === 'number' ? `${step.description}: ${signed(step.amount)} = ${signed(step.result)}` : step.description}
             </li>
           ))}
         </ul>
@@ -701,12 +739,19 @@ function AttackItem({
           </ul>
         )}
       </details>
-      <button type="button" onClick={() => roll({ weapon: attack.item, mode: rollMode })}>
+      {feature && attack.replacesAttack && <p className="hint">replaces one attack of the Attack action</p>}
+      <button type="button" disabled={locked} aria-describedby={described} onClick={() => roll({ ...target, mode: rollMode })}>
         Roll {attack.name} attack
       </button>
-      <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, critical }, attack.damageType)}>
-        Roll {attack.name} damage ({attack.damage})
+      <button type="button" disabled={locked} aria-describedby={described} onClick={() => rollDamage({ ...target, damage: true, critical }, attack.damageType)}>
+        Roll {attack.name} damage{attack.damage ? ` (${attack.damage})` : ''}
       </button>
+      {locked && (
+        <span id={reasonId} className="hint">
+          {' '}
+          {attack.unavailableReason ?? 'Not available right now'}
+        </span>
+      )}
       {attack.versatileDamage && (
         <button type="button" onClick={() => rollDamage({ weapon: attack.item, damage: true, versatile: true, critical }, attack.damageType)}>
           Roll {attack.name} two-handed damage ({attack.versatileDamage})
@@ -829,11 +874,14 @@ export function RollResult({
   record,
   resources,
   features,
+  attacks = [],
   act,
 }: {
   record?: RollRecord;
   resources: ResourceValue[];
   features: FeatureEntry[];
+  /** D43 slice 4: a feature attack's cost is on its sheet row, not on a feature effect. */
+  attacks?: AttackEntry[];
   act: Act;
 }) {
   // The typed amount belongs to the roll it was typed for, so a new roll never inherits it.
@@ -852,7 +900,8 @@ export function RollResult({
       resources.find((r) => r.resourceId === p.linkedResourceId))
     : undefined;
   const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
-  const cost = effect?.cost ?? 1;
+  const featureAttack = attacks.find((a) => a.source === 'feature' && a.item.revisionId === p?.content?.revisionId && a.effectId === p?.effectId);
+  const cost = featureAttack?.cost ?? effect?.cost ?? 1;
   const most = linked?.current !== undefined ? Math.min(cost, linked.current) : 0;
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;

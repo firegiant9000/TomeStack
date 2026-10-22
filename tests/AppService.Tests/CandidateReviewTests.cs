@@ -406,6 +406,11 @@ public class CandidateReviewTests
         temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
             new UpkeepEffect { Id = "tick", At = TurnMoment.TurnStart, ResourceId = "pool", ResourceContent = installed.ContentId, Change = UpkeepChange.Regain, Amount = "1" }]));
         Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        // So does an attack that spends a pool of installed content.
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new AttackEffect { Id = "bolt", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", ResourceId = "pool", ResourceContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
     }
 
     [Fact]

@@ -223,7 +223,8 @@ public static class SheetExportBuilder
         List<SheetAttack> attacks = [];
         foreach (var attack in sheet.Attacks ?? [])
         {
-            if (Out(attack.Item, out var source))
+            // D43 S4: attacks a feature gives (an unarmed strike, a bolt) are not exported in v1; the model lists equipped weapons.
+            if (attack.Source == AttackSource.Weapon && Out(attack.Item, out var source))
                 attacks.Add(new(attack.Name, attack.ToHit, attack.Damage, attack.VersatileDamage, attack.DamageType, attack.Properties, attack.Range, attack.Proficient, attack.Item, source));
         }
         List<SheetFeature> features = [];

@@ -167,13 +167,17 @@ public sealed partial class PackageService
     private static IEnumerable<Guid> ToggleReferences(ToggleEffect toggle) =>
         new[] { toggle.GroupContent, toggle.ResourceContent }.Concat((toggle.AllowedWith ?? []).Select(a => a.ContentId)).OfType<Guid>();
 
-    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group.</summary>
+    /// <summary>The content ids a revision refers to: granted content, choice options, the choice it extends, a roll's or toggle's resource, a toggle's group, an upkeep's toggle and pool, an attack's pool and while-toggle, a rider's or modifier's toggle content, a roll's while-toggle.</summary>
     private static IEnumerable<Guid> References(ContentRevision revision) =>
         revision.Effects.OfType<GrantEffect>().Where(g => g.Content is not null).Select(g => g.Content!.ContentId)
             .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options).Select(o => o.ContentId))
             .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>())
             .Concat(revision.Effects.OfType<ToggleEffect>().SelectMany(ToggleReferences))
             .Concat(revision.Effects.OfType<UpkeepEffect>().SelectMany(u => new[] { u.ToggleContent, u.ResourceContent }.OfType<Guid>()))
+            .Concat(revision.Effects.OfType<AttackEffect>().SelectMany(a => new[] { a.ResourceContent, a.WhileToggle?.ContentId }.OfType<Guid>()))
+            .Concat(revision.Effects.OfType<AttackRiderEffect>().Select(r => r.ToggleContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<ModifierEffect>().Select(m => m.ToggleContent).OfType<Guid>())
+            .Concat(revision.Effects.OfType<RollEffect>().Select(r => r.WhileToggle?.ContentId).OfType<Guid>())
             .Concat(revision.ExtendsChoice is { } extends ? new[] { extends.ContentId } : [])
             .Where(id => id != revision.ContentId);
 

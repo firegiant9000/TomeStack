@@ -65,6 +65,9 @@ public static class ContentValidator
         return null;
     }
 
+    /// <summary>Content v11 (D43): a modifier target <c>resource.&lt;resourceId&gt;</c> raises the maximum of a pool.</summary>
+    internal const string ResourceTargetPrefix = "resource.";
+
     /// <summary>Whether an untyped toggle carries a content v11 key (any spelling), which decides the version its failure needs.</summary>
     private static bool CarriesV11Key(UnknownEffect effect, string[] keys) =>
         effect.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
@@ -156,16 +159,25 @@ public static class ContentValidator
                 // different, typed effect, so it blocks. Below v10 it is what it always was: a warning.
                 // Content v11 (D43) does the same for a toggle with a layer that names no member and for a toggleGroup that does not
                 // read. The version it needs is the field's own tier: a v11 key (or a toggleGroup) needs 11, anything else 10.
-                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName } malformed
-                    when revision.SchemaVersion >= (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
-                    if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName
+                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName } malformed
+                    when revision.SchemaVersion >= (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
+                    if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName
                         || (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
                             && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V11Keys))
                                 || (malformed.DeclaredType == ResourceEffect.TypeName && CarriesV11Key(malformed, ResourceEffect.V11Keys)))))
                         needsV11 = true;
                     else
                         needsV10 = true;
-                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen, layer or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                    Error("validate.effect-malformed", $"Effect '{malformed.Id}' has type '{malformed.DeclaredType}' but a value or field that does not read (a name that is not allowed, such as an activation, autoWhen, layer, kind, ability or grant kind, or a missing field); fix it before publishing.", malformed.Id);
+                    break;
+                // Content v11 (D43): a modifier or roll whose v11 key does not read (toggleContent that is not an id, a whileToggle
+                // without a toggleId). Published at a lower version it would read back as a modifier or roll that ignores the key and
+                // applies always, so it blocks like the other malformed effects. Without a v11 key it is what it always was: a warning.
+                case UnknownEffect { DeclaredType: ModifierEffect.TypeName or RollEffect.TypeName } unreadable
+                    when revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                        && CarriesV11Key(unreadable, unreadable.DeclaredType == ModifierEffect.TypeName ? ModifierEffect.V11Keys : RollEffect.V11Keys):
+                    needsV11 = true;
+                    Error("validate.effect-malformed", $"Effect '{unreadable.Id}' has type '{unreadable.DeclaredType}' but a value or field that does not read (its toggleContent or whileToggle, or a missing field); fix it before publishing.", unreadable.Id);
                     break;
                 case UnknownEffect unknown:
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
@@ -174,7 +186,9 @@ public static class ContentValidator
                     needsV3 |= modifier.Target is FieldIds.ArmorClass or FieldIds.HitPoints;
                     needsV8 |= modifier.Target is FieldIds.Attacks or FieldIds.CriticalRange || modifier.WhileArmored is not null;
                     spellTargets |= IsSpellField(modifier.Target);
-                    if (!CharacterCalculator.IsField(modifier.Target))
+                    if (modifier.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                        CheckResourceTarget(modifier);
+                    else if (!CharacterCalculator.IsField(modifier.Target))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which is not a calculated field.", modifier.Id);
                     else if (IsCharacterOnlyField(modifier.Target, revision))
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
@@ -196,8 +210,22 @@ public static class ContentValidator
                         needsV6 = true;
                         if (modifier.Timing != EffectTiming.WhileActive)
                             Error("validate.toggle-timing", $"Modifier '{modifier.Id}' names toggle '{toggle}', so its timing must be whileActive.", modifier.Id);
-                        if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
-                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                        // Content v11 (D43): the toggle may be another content's (toggleContent); the same lookup as a rider's.
+                        if (modifier.ToggleContent is null)
+                        {
+                            if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == toggle))
+                                Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names toggle '{toggle}', which this revision does not define.", modifier.Id);
+                        }
+                        else
+                        {
+                            CheckToggleReference(modifier.ToggleContent, toggle, modifier.Id, "validate.toggle-unknown");
+                        }
+                    }
+                    if (modifier.ToggleContent is not null)
+                    {
+                        needsV11 = true;
+                        if (modifier.Toggle is null)
+                            Error("validate.toggle-unknown", $"Modifier '{modifier.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", modifier.Id);
                     }
                     break;
                 case ToggleEffect toggleEffect:
@@ -336,6 +364,14 @@ public static class ContentValidator
                     upkeeps++;
                     CheckUpkeep(upkeep);
                     break;
+                case AttackEffect attack:
+                    needsV11 = true;
+                    CheckAttack(attack);
+                    break;
+                case AttackRiderEffect rider:
+                    needsV11 = true;
+                    CheckRider(rider);
+                    break;
                 case RecoveryEffect recovery:
                     if (!string.Equals(recovery.Amount, "all", StringComparison.Ordinal))
                         CheckFormula(recovery.Amount, recovery.Id, "amount");
@@ -353,6 +389,11 @@ public static class ContentValidator
                     {
                         needsV8 = true;
                         CheckFormula(bonus, roll.Id, "bonus");
+                    }
+                    if (roll.WhileToggle is { } whileToggle)
+                    {
+                        needsV11 = true;
+                        CheckToggleReference(whileToggle.ContentId, whileToggle.ToggleId, roll.Id, "validate.while-toggle-unknown");
                     }
                     if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
@@ -468,7 +509,7 @@ public static class ContentValidator
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
@@ -527,10 +568,10 @@ public static class ContentValidator
         // Parsed with scales allowed, so a SCALE in a revision that declares an older version is named as needing v9
         // (validate.requires-v9) rather than as an unknown value. Every formula field goes through here: modifier value,
         // resource maximum, recovery amount, roll cost and bonus, and spellsFormula (ADR-010).
-        void CheckFormula(string source, string effectId, string what)
+        void CheckFormula(string source, string effectId, string what, string code = "validate.formula-invalid")
         {
             if (!Formula.TryParse(source, allowScales: true, out var formula, out var error))
-                Error("validate.formula-invalid", $"Effect '{effectId}' {what} '{source}': {error!.Message} ({error.Code})", effectId);
+                Error(code, $"Effect '{effectId}' {what} '{source}': {error!.Message} ({error.Code})", effectId);
             else
                 usedScales.UnionWith(formula!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
         }
@@ -594,6 +635,113 @@ public static class ContentValidator
                 ? new List<ContentRevision> { revision }
                 : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
             return definers.SelectMany(r => r.Effects.OfType<ResourceEffect>()).FirstOrDefault(r => r.ResourceId == resourceId);
+        }
+
+        // Content v11 (D43): a toggle named by another entry (or by this revision when no content is named). Content that is not
+        // installed is a warning (it may arrive later); installed content that declares no such toggle is an error with the
+        // referring effect's own code.
+        void CheckToggleReference(Guid? content, string? toggleId, string effectId, string errorCode)
+        {
+            // A reference with no toggle id names nothing, whether or not its content is installed.
+            if (string.IsNullOrWhiteSpace(toggleId))
+            {
+                Error(errorCode, $"Effect '{effectId}' follows a toggle but names no toggle id.", effectId);
+                return;
+            }
+            var holder = content ?? revision.ContentId;
+            var declarers = holder == revision.ContentId
+                ? new List<ContentRevision> { revision }
+                : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+            if (declarers.Count == 0)
+                Warn("validate.toggle-content-missing", $"Effect '{effectId}' follows toggle '{toggleId}' of content {holder}, which is not installed; it is unchecked until that content is.", effectId);
+            else if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == toggleId))
+                Error(errorCode, $"Effect '{effectId}' follows toggle '{toggleId}', which content {holder} does not define.", effectId);
+        }
+
+        // Content v11 (D43): a modifier on resource.<id> adds to the maximum of a pool this revision declares, as a bonus only.
+        void CheckResourceTarget(ModifierEffect modifier)
+        {
+            if (revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+            {
+                Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayMechanicsSchemaVersion}).", modifier.Id);
+                return;
+            }
+            needsV11 = true;
+            var resourceId = modifier.Target[ResourceTargetPrefix.Length..];
+            if (!revision.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == resourceId))
+                Error("validate.resource-target", $"Effect '{modifier.Id}' targets resource '{resourceId}', which this revision does not declare; a resource target names a resource of the same revision.", modifier.Id);
+            if (modifier.Operation != ModifierOperation.Bonus)
+                Error("validate.resource-target-operation", $"Effect '{modifier.Id}' uses {modifier.Operation.ToString().ToLowerInvariant()} on a resource; only a bonus can raise a pool's maximum.", modifier.Id);
+        }
+
+        // Content v11 (D43): attack and rider tags are keys like a scale id; "all" (a rider's) matches every attack.
+        void CheckTags(IReadOnlyList<string>? tags, string effectId)
+        {
+            foreach (var tag in (tags ?? []).Where(t => t != AttackRiderEffect.AllTag && !ScaleEffect.IsValidScaleId(t)))
+                Error("validate.tag-invalid", $"Effect '{effectId}' has the tag '{tag}'; a tag is a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits (or all).", effectId);
+        }
+
+        // Content v11 (D43): a feature attack's shape, damage, pool and toggle.
+        void CheckAttack(AttackEffect attack)
+        {
+            var id = attack.Id;
+            var (count, die) = (attack.Damage?.Count, attack.Damage?.Die);
+            if (!ScaleEffect.IsValidScaleId(attack.AttackId) || string.IsNullOrWhiteSpace(attack.Label) || string.IsNullOrWhiteSpace(attack.DamageType)
+                || string.IsNullOrWhiteSpace(count) || string.IsNullOrWhiteSpace(die))
+                Error("validate.attack-incomplete", $"Attack '{id}' needs an attackId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits, a label, damage dice (a count and a die) and a damageType.", id);
+            if (attack.Abilities.Count == 0)
+                Error("validate.attack-abilities", $"Attack '{id}' lists no ability; name at least one of str, dex, con, int, wis or cha.", id);
+            if (!string.IsNullOrWhiteSpace(count))
+                CheckFormula(count, id, "damage count", "validate.attack-damage");
+            if (!string.IsNullOrWhiteSpace(die))
+                CheckFormula(die, id, "damage die", "validate.attack-damage");
+            if (attack.DamageBonus is { } damageBonus)
+                CheckFormula(damageBonus, id, "damageBonus", "validate.attack-damage");
+            if (!string.IsNullOrWhiteSpace(attack.DamageType) && !DamageTypes.TryNormalize(attack.DamageType, out _))
+                Error("validate.grant-damage-type", $"Attack '{id}' has the damageType '{attack.DamageType}'; use one of {string.Join(", ", DamageTypes.All)}.", id);
+            CheckTags(attack.Tags, id);
+            if (attack.Cost is { } cost)
+                CheckFormula(cost, id, "cost");
+            if (attack.Cost is not null && attack.ResourceId is null)
+                Error("validate.attack-resource", $"Attack '{id}' has a cost but names no resource to spend.", id);
+            if (attack.ResourceId is { } pool)
+            {
+                // Content that is not installed is an error here, unlike a roll's: an attack is calculated, so a pool nobody declares is a typo.
+                var holder = attack.ResourceContent ?? revision.ContentId;
+                var definers = holder == revision.ContentId
+                    ? new List<ContentRevision> { revision }
+                    : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+                if (!definers.Any(d => d.Effects.OfType<ResourceEffect>().Any(r => r.ResourceId == pool)))
+                    Error("validate.attack-resource", $"Attack '{id}' spends '{pool}', which content {holder} does not define or is not installed.", id);
+            }
+            if (attack.WhileToggle is { } whileToggle)
+                CheckToggleReference(whileToggle.ContentId, whileToggle.ToggleId, id, "validate.while-toggle-unknown");
+        }
+
+        // Content v11 (D43): a rider's shape, dice, formulas, damage type and toggle.
+        void CheckRider(AttackRiderEffect rider)
+        {
+            var id = rider.Id;
+            if (rider.Tags.Count == 0 || (string.IsNullOrWhiteSpace(rider.ToHit) && string.IsNullOrWhiteSpace(rider.Dice) && string.IsNullOrWhiteSpace(rider.DamageBonus)))
+                Error("validate.rider-incomplete", $"Rider '{id}' needs at least one tag and at least one of toHit, dice or damageBonus.", id);
+            CheckTags(rider.Tags, id);
+            if (rider.Dice is { } dice && !AttackRiderEffect.TryParseDice(dice, out _, out _))
+                Error("validate.rider-dice", $"Rider '{id}' dice '{dice}' must be a count and a die such as 3d8 (1 to {DiceLimits.MaxDice} dice of d4, d6, d8, d10 or d12).", id);
+            if (rider.ToHit is { } toHit)
+                CheckFormula(toHit, id, "toHit");
+            if (rider.DamageBonus is { } damageBonus)
+                CheckFormula(damageBonus, id, "damageBonus");
+            if (rider.DamageType is { } damageType && !DamageTypes.TryNormalize(damageType, out _))
+                Error("validate.grant-damage-type", $"Rider '{id}' has the damageType '{damageType}'; use one of {string.Join(", ", DamageTypes.All)}.", id);
+            if (rider.Toggle is null)
+            {
+                if (rider.ToggleContent is not null)
+                    Error("validate.rider-toggle-unknown", $"Rider '{id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", id);
+            }
+            else
+            {
+                CheckToggleReference(rider.ToggleContent, rider.Toggle, id, "validate.rider-toggle-unknown");
+            }
         }
 
         // Content v11 (D43): an upkeep's shape, its toggle and pool, and its amount.
@@ -704,8 +852,17 @@ public static class ContentValidator
                     Warn("validate.toggle-allowed-with-content-missing", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not installed; the pairing is unchecked until that content is.", id);
                     continue;
                 }
-                if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == allowed.ToggleId))
+                var named = declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Where(t => t.ToggleId == allowed.ToggleId).ToList();
+                if (named.Count == 0)
+                {
                     Error("validate.toggle-allowed-with", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not defined there.", id);
+                    continue;
+                }
+                // Only a primary of the overlay's own group is ever the form that is on beside it (ToggleGroups.Resolve): a group is a
+                // group id and the content that declares it (a toggle naming no groupContent belongs to the group of its own content).
+                var ownGroupHolder = toggle.GroupContent ?? revision.ContentId;
+                if (toggle.Layer == ToggleLayer.Overlay && !named.Any(n => n.Layer != ToggleLayer.Overlay && n.Group is not null && n.Group == toggle.Group && (n.GroupContent ?? holder) == ownGroupHolder))
+                    Warn("validate.toggle-allowed-with-not-primary", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not a primary of group '{toggle.Group}' of content {ownGroupHolder}, so the pairing can never be on.", id);
             }
 
             if (toggle.Cost is { } cost)

@@ -75,7 +75,7 @@ public sealed partial class TomeStackApp
         }
         else if (command.Weapon is { } weaponReference)
         {
-            var attack = sheet.Attacks?.FirstOrDefault(a => a.Item == weaponReference)
+            var attack = sheet.Attacks?.FirstOrDefault(a => a.Source == AttackSource.Weapon && a.Item == weaponReference)
                 ?? throw new AppValidationException([new("roll.weapon-unknown", "This character has no such weapon equipped.", weaponReference)]);
             var provenance = new RollProvenance(
                 $"weapon.{(command.Damage ? "damage" : "attack")}", command.Damage ? $"{attack.Name} damage ({attack.DamageType})" : $"{attack.Name} attack",
@@ -136,6 +136,12 @@ public sealed partial class TomeStackApp
         {
             request = new RollRequest("1d20", command.Mode, false, [], new RollProvenance("deathSave", "Death saving throw"));
         }
+        else if (command.Content is { } featureReference
+            && sheet.Attacks?.FirstOrDefault(a => a.Source == AttackSource.Feature && a.Item == featureReference && a.EffectId == command.EffectId) is { } featureAttack)
+        {
+            // D43 S4: an attack a feature gives, rolled like a weapon. Rider dice are in the formula, so a critical doubles them; the flat total does not double.
+            request = FeatureAttackRequest(featureAttack, sheet.Diagnostics, command);
+        }
         else if (command.Content is { } reference)
         {
             if (sheet.Active?.Contains(reference) != true)
@@ -175,6 +181,28 @@ public sealed partial class TomeStackApp
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
         return record!;
+    }
+
+    /// <summary>
+    /// A feature attack (D43 S4) as a roll. One that is unavailable for a reason other than its form (an invalid die or count, a failing
+    /// formula) is refused with its own calculation code, because rolling its empty damage would be wrong; one that is only out of its
+    /// form is rolled (the UI disables it, and a roll writes nothing).
+    /// </summary>
+    private static RollRequest FeatureAttackRequest(AttackEntry attack, IReadOnlyList<Diagnostic> diagnostics, RollCommand command)
+    {
+        // The calculation leaves Damage empty exactly when the attack itself cannot be calculated (a failing cost formula or the form leave it set).
+        if (!attack.Available && attack.Damage.Length == 0
+            && diagnostics.FirstOrDefault(d => d.Code is "attack.die-invalid" or "effect.invalid-formula" && d.Content == attack.Item && d.EffectId == attack.EffectId) is { } problem)
+            throw new AppValidationException([new(problem.Code, $"'{attack.Name}' cannot be rolled: {problem.Message}", attack.Item, attack.EffectId)], problem.Code);
+        var provenance = new RollProvenance(
+            $"attack.{(command.Damage ? "damage" : "attack")}", command.Damage ? $"{attack.Name} damage ({attack.DamageType})" : $"{attack.Name} attack",
+            attack.Item, attack.Name, attack.EffectId, attack.Origin.SourceId, attack.Origin.SourceTitle, attack.Origin.Page);
+        // Only the attack roll names the pool, so the record offers "Spend" once per attack, never again on its damage roll.
+        if (!command.Damage && attack.ResourceId is not null)
+            provenance = provenance with { LinkedResourceId = attack.ResourceId, LinkedResourceContent = attack.CostResourceContent };
+        return command.Damage
+            ? new RollRequest(attack.Damage, RollMode.Normal, command.Critical, [], provenance)
+            : new RollRequest("1d20", command.Mode, false, [new RollModifier($"{attack.Name} to hit", attack.ToHit, attack.Origin)], provenance);
     }
 
     /// <summary>

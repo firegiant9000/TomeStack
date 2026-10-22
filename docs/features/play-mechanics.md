@@ -1,8 +1,8 @@
-# Play mechanics: form groups, turns and upkeep (D43, slices 1 to 3)
+# Play mechanics: form groups, turns, upkeep and feature attacks (D43, slices 1 to 4)
 
-LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 3 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
+LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 4 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
 
-Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, and slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below). Later slices (damage responses, feature attacks) are listed in ADR-018 and are not built.
+Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below), and slice 4 adds attacks that features give, riders on them, actions that exist only in a form, modifiers that follow another entry's toggle and a pool whose maximum a form raises (see "Slice 4" below). The remaining slice (damage responses) is listed in ADR-018 and is not built.
 
 Rules core: `ToggleEffect`, `ToggleGroupEffect` and `ToggleLayer` in `src/RulesCore/Effects.cs`, `ToggleGroups` in `src/RulesCore/ToggleGroups.cs`, the toggle list in `src/RulesCore/Calculation.cs`, and the checks in `src/RulesCore/ContentValidation.cs`. Service: `toggleOn`/`toggleOff` in `src/AppService/Play.cs`. UI: `FormGroups.tsx` on Play, the toggle and form group controls in `HomebrewStudio.tsx`, and `undo.ts`. Acceptance: `tests/RulesCore.Tests/ToggleGroupTests.cs`, `ToggleGroupValidationTests.cs`, `tests/AppService.Tests/ToggleGroupCommandTests.cs`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixture: `tests/RulesFixtures/fixture-pack-forms.json`.
 
@@ -170,6 +170,94 @@ A confirmed turn, "Start encounter" and "End encounter" are compound: each sets 
 
 The panel follows the rest panel. Its checklist rule: each row is a checkbox that is ticked at first; a required row (the round, a toggle that must end) is checked and disabled with "(required)"; a row the player unticks is skipped. The checklist comes from the unselected preview, so unticking an upkeep's spend keeps its row to tick again. A tick or a choice fetches a new preview and Confirm waits for it. See [sheet-play.md](sheet-play.md) and [accessibility-checklist.md](accessibility-checklist.md) rows 67 to 71. A turn whose checklist has nothing to apply still confirms, but writes nothing and keeps the earlier Undo.
 
+## Slice 4: feature attacks, riders, form-only actions, cross-entry toggles (content v11 only)
+
+Rules core: `AttackEffect`, `AttackRiderEffect` and the new `ModifierEffect.ToggleContent` and `RollEffect.WhileToggle` in `src/RulesCore/Effects.cs`; `CollectAttacks`, `FeatureAttack`, `ApplyRiders`, the resource-maximum bonus and the cross-entry modifier gate in `src/RulesCore/Calculation.cs`; the checks in `src/RulesCore/ContentValidation.cs`. Service: the feature-attack branch of `src/AppService/Rolling.cs`; the export filter in `src/AppService/Exports/SheetExport.cs`. UI: the actions panel in `PlayPanels.tsx`, `AttackFields.tsx` and `attackAuthoring.ts` with `HomebrewStudio.tsx`. Acceptance: `tests/RulesCore.Tests/FeatureAttackContentTests.cs` and `FeatureAttackTests.cs`, `tests/AppService.Tests/AttackCommandTests.cs`, `ToggleGroupCommandTests.cs` and `ExportAdapterTests.cs`, `src/Ui/src/components/ActionsPanel.test.tsx` and `HomebrewStudioAttacks.test.tsx`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixtures: `tests/RulesFixtures/fixture-pack-feature-attacks.json` and `characters/pm-adept-l5.json`. There is no new character field, play action or version: everything here is content schema v11.
+
+### Content (schema v11, added)
+
+| Effect | Field | Type | Does |
+| --- | --- | --- | --- |
+| `attack` (new type, v11 only) | `attackId`, `label` | key like a scale id, text | An attack a feature gives (an unarmed strike, a bolt), calculated like a weapon. Ids should be unique in a revision (not enforced; each effect is its own row) |
+| `attack` | `kind` | `melee` or `ranged` | Which kind it is; the attack always carries the tag `melee` or `ranged` as well |
+| `attack` | `abilities` | list of `str` ... `cha` (at least one) | To hit = the best listed modifier (a tie goes to the first listed) plus the proficiency bonus |
+| `attack` | `proficient` | boolean (default true) | Whether the proficiency bonus is added |
+| `attack` | `damage` | `{ count, die }`, both formulas | The dice, such as `{ "count": "1", "die": "SCALE.handDie" }` so a die can follow a class column. The die must evaluate to 4, 6, 8, 10 or 12 and the count to 1 to 100 |
+| `attack` | `damageBonus` | formula | Added to the damage. Absent: the chosen ability modifier |
+| `attack` | `damageType` | one of the 13 damage types, any case | The type of the damage |
+| `attack` | `range`, `tags`, `replacesAttack`, `activation` | text, keys, boolean, activation | Range text; the keys a rider matches (`all` is accepted but has no effect on an attack: riders match by tag, and a rider's `all` already matches every attack); whether it can stand in for one attack of the Attack action; the action group it is listed in (default `action`) |
+| `attack` | `resourceId`, `resourceContent`, `cost` | pool key, content id, formula | The pool the attack spends from (`resourceContent` when it is not this revision) and how much (default 1 with a pool). Nothing spends it by itself: the attack roll's record offers "Spend", as a roll effect does |
+| `attack` | `whileToggle` | `{ contentId?, toggleId }` | The attack is available only while this toggle is on (it may be another entry's) |
+| `attackRider` (new type, v11 only) | `tags` | keys (at least one) | The attacks it applies to. `all` matches every attack. A weapon carries `weapon` and `melee` or `ranged`; a feature attack carries its own tags and `melee` or `ranged` |
+| `attackRider` | `toHit`, `dice`, `damageBonus` | formula, `NdM`, formula | Added to the attack roll, extra damage dice, added to the damage. At least one is needed. `dice` is a count of 1 to 100 and a d4, d6, d8, d10 or d12 |
+| `attackRider` | `damageType` | damage type | The type of the extra dice. Absent: the attack's own |
+| `attackRider` | `toggle`, `toggleContent` | toggle id, content id | The rider applies only while this toggle is on (`toggleContent`: the content that declares it, when it is not this revision). Absent: always |
+| `attackRider` | `stackGroup` | key | Riders of one group never add: the strongest applies |
+| `modifier` | `toggleContent` | content id | With `toggle`: the modifier follows that content's toggle, not one of its own revision |
+| `roll` | `whileToggle` | `{ contentId?, toggleId }` | The action is available only while this toggle is on |
+| `modifier` | `target: resource.<id>` | a pool of this revision | A `bonus` raises that pool's maximum (see below) |
+
+Below v11 the new keys stay extension data, byte for byte, and do nothing; `attack` and `attackRider` stay unknown effects; a `resource.<id>` target is `effect.unknown-target`. A revision that uses none of them keeps its version, bytes and hash.
+
+### On the sheet
+
+- **A feature attack** is a row in `sheet.attacks` with `source: feature` (a weapon is `source: weapon`), no `category`, its `tags`, `replacesAttack`, `activation`, `resourceId`, `costResourceContent` and evaluated `cost`, `available` and `unavailableReason`, and the `riders` that applied. Its trace shows the ability, the proficiency bonus, the dice (with the class column it came from) and one step for each rider part that applied. Damage reads like a weapon's: `1d8+3d8+5` is the dice, each applied rider's dice and one flat total (the ability modifier or `damageBonus`, plus the riders' flat parts).
+- **Riders** apply to weapons and feature attacks alike: a rider tagged `all` adds its dice to an equipped weapon's damage and to its versatile damage. A rider is on while its toggle is on (an automatic toggle follows its condition; a toggle nothing declares, or whose content is not on the character, is off) or, with no toggle, always. A rider whose formula fails is left out with `effect.invalid-formula`.
+- **Stack groups:** of the riders of one group that match an attack, only the strongest applies (the highest average of its dice plus its flat parts; on a tie the first in the sheet's content order). A rider that loses adds a trace note, `rider.not-applied`, naming the one that won. Riders with no group all add.
+- **An attack that cannot be worked out** (a die that is not a d4 to d12, a count outside 1 to 100, a die or count formula that fails, no ability, or a failing `damageBonus` formula) is listed unavailable with the reason, an empty damage and no riders, the feature is Assisted, and `attack.die-invalid` (or `effect.invalid-formula` for the bonus) is reported on it. A cost formula that fails leaves the attack available, Assisted, with no cost, and the usual `effect.invalid-formula`.
+- **Form-only actions:** a roll effect or an attack with `whileToggle` whose toggle is off is listed with `available: false` and `unavailableReason` "Available in <toggle label>" (the toggle id when the toggle is not declared or its content is not on the character). It keeps its numbers; only the buttons are disabled. A feature's effects carry the same `available` and `unavailableReason`.
+
+### Modifiers that follow another entry's toggle
+
+A `whileActive` modifier with `toggle` and `toggleContent` applies while that content's toggle is on. If that content is not active on the character, or does not declare the toggle, the modifier is not applied and the sheet reports `modifier.toggle-content-missing` on the modifier's content. The trace reads "Bonus from <content> while <toggle label> is on". Without `toggleContent`, a modifier's toggle is still one of its own revision's.
+
+### A form raises a pool's maximum
+
+A `bonus` modifier on `resource.<id>` (a pool of the same revision) adds to that pool's maximum, while its toggle is on if it has one. Several bonuses are summed from the formula's value and the total is clamped at 0 once. Spent is never rewritten and `current` is `max(0, maximum - spent)`, so a pool that was raised, spent from and then lowered again (the form ended) stops at 0 and never shows a negative amount, and uses spent stay spent. A bonus whose formula fails, or that is not automatic (or not always or toggled), is not applied and leaves the pool Assisted; a pool with no maximum of its own ignores its bonuses. Stacking and stack groups are not used on a `resource.*` target.
+
+### Rolling
+
+`roll` takes the same `content` and `effectId` as a roll effect: the effect id of an `attack` rolls it. Without `damage` it rolls `1d20` with the attack's to-hit as a traced modifier; with `damage: true` it rolls the damage string, and a critical hit doubles every die (rider dice included) and not the flat total. The weapon branch finds weapons only (`source: weapon`), so a feature attack never answers for a weapon of the same item. An attack that could not be worked out is refused with `attack.die-invalid` (or `effect.invalid-formula` for a failing bonus) and nothing is rolled. An attack that is only outside its form is **not** refused: the form is a hint on the sheet, not a rule the service enforces, and the player may know better. A roll writes nothing.
+
+### Exports
+
+Feature attacks are not exported in v1. The neutral sheet JSON and the Foundry actor list equipped weapons only (`SheetExport.Build` reads `source: weapon`); an unarmed strike or a bolt a feature gives stays on the TomeStack sheet. A weapon that a rider gave extra dice (`1d8+1d6+4`) is exported with its full damage string in the sheet JSON and in the Foundry description; see [export-adapters.md](export-adapters.md) for what Foundry's single base damage part keeps.
+
+### Validation (added)
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `validate.requires-v11` | error | (existing) now also for an `attack`, an `attackRider`, `toggleContent`, `whileToggle` and a `resource.<id>` target in a revision that declares an older version |
+| `validate.attack-incomplete` | error | An attack needs an `attackId` of a lowercase letter followed by up to 31 letters or digits, a label, damage dice (a count and a die) and a `damageType` |
+| `validate.attack-abilities` | error | An attack lists no ability |
+| `validate.attack-damage` | error | The damage count, die or `damageBonus` is not a formula |
+| `validate.grant-damage-type` | error | (existing) the `damageType` of an attack or a rider is not one of the 13 damage types |
+| `validate.tag-invalid` | error | A tag is not a key like a scale id (or `all`) |
+| `validate.attack-resource` | error | An attack has a `cost` and no `resourceId`, or its pool is not defined by this revision or by the `resourceContent` (a pool nobody declares is a typo, so unlike a roll's this is an error even when the content is not installed) |
+| `validate.rider-incomplete` | error | A rider needs at least one tag and at least one of `toHit`, `dice` or `damageBonus` |
+| `validate.rider-dice` | error | `dice` is not a count of 1 to 100 and a d4, d6, d8, d10 or d12, such as `3d8` |
+| `validate.toggle-content-missing` | **warning** | A toggle reference (a modifier's `toggleContent`, a roll's or attack's `whileToggle`, a rider's `toggleContent`) names content that is not installed. It is unchecked until that content is, and only a modifier reports `modifier.toggle-content-missing` while it is not on the character. A rider, attack or roll whose toggle content is missing is simply off (an attack or roll reads "Available in <toggleId>"), with no diagnostic |
+| `validate.toggle-unknown` | error | When the content **is** installed and declares no such toggle: the modifier's error. Also a `toggleContent` with no `toggle`, or a blank toggle id |
+| `validate.while-toggle-unknown` | error | The same for a roll's or an attack's `whileToggle` (also a blank toggle id) |
+| `validate.rider-toggle-unknown` | error | The same for a rider's `toggle` and `toggleContent` |
+| `validate.resource-target` | error | A `resource.<id>` target names a pool this revision does not declare |
+| `validate.resource-target-operation` | error | A `resource.<id>` target uses anything but `bonus` |
+| `validate.toggle-allowed-with-not-primary` | warning | An overlay's `allowedWith` names a toggle that is not a primary of the overlay's own group, so the pairing can never be on |
+
+A cost, a `toHit` or a `damageBonus` that does not parse is the usual `validate.formula-invalid`. An attack or rider (or a modifier or roll carrying a v11 key) that cannot be read at v11 or later is `validate.effect-malformed`.
+
+### Calculation (added)
+
+| Code | When |
+| --- | --- |
+| `attack.die-invalid` | A feature attack is unavailable because its die, count, abilities or a formula cannot be worked out (reported on the feature) |
+| `rider.not-applied` | A rider lost its stack group; a **trace** note on the attack, not a diagnostic |
+| `modifier.toggle-content-missing` | A modifier follows a toggle of content that is not active or does not declare it; the modifier is not applied |
+
+### Studio
+
+"Add attack" and "Add attack rider" add the effects with strict fields: tags (comma separated), the rider's dice, the stack group and the abilities are checked as you type, a bad value is shown with its reason and blocks Save and Publish, and the bad text is never stored. An attack and a roll gain "Available" (a toggle of this revision or of another entry), a modifier's "Applies" is the same select, and a modifier's target can be "Maximum of <pool>" (offered for a bonus). **Other entries' toggles come from those entries' newest published revision only**, so a toggle in an unpublished draft of another entry is not offered. Removing a toggle removes the riders of this revision that named it and clears `whileToggle` on attacks and rolls and the toggle of a modifier that named it (a modifier that follows another entry's toggle of the same id is kept). Removing a pool clears an attack's pool and cost (not one that names a `resourceContent`) and removes a modifier that targeted the pool's maximum. A roll effect's pool is not cleared when its pool is removed (existing behaviour, unchanged by this slice).
+
 ## On Play and in the studio
 
 - **Play** lists each group under "Forms" (in the Combat strip since slice 3) as a labelled group of radio choices: "Base" first, then each form with its cost ("5 Focus"), and the overlays as checkboxes. A choice that cannot be made is disabled and says why. See [accessibility-checklist.md](accessibility-checklist.md) row 66 for the keyboard rule: the arrow keys move focus and do not choose, because each choice spends from a pool. The strip also shows the round, the timed effects, the combat pools and the turn buttons ([sheet-play.md](sheet-play.md)).
@@ -177,7 +265,8 @@ The panel follows the rest panel. Its checklist rule: each row is a checkbox tha
 
 ## Not yet
 
-- Damage responses, feature attacks and action details (later slices; ADR-018).
+- Damage responses and action details such as a saving-throw DC, an area or a cost that scales with the amount spent (a later slice; ADR-018).
+- Feature attacks in the exports (the Foundry actor and the neutral JSON list equipped weapons only), and rolling a feature attack's cost automatically (the attack roll offers "Spend").
 - Initiative, other creatures and a DM view (out of scope, ADR-018).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.

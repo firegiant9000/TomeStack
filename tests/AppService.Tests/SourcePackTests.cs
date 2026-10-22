@@ -147,6 +147,46 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void An_attack_that_spends_a_pool_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000c1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000c1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Attack Source");
+        var attack = Feat(own.Id, "Test Attack Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000c2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000c2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new AttackEffect { Id = "bolt", AttackId = "bolt", Label = "Bolt", Kind = WeaponAttack.Ranged, Abilities = [Ability.Dex], Damage = new("1", "6"), DamageType = "force", ResourceId = "focus", ResourceContent = pool.ContentId }],
+        };
+        temp.App.Store.AddRevision(attack);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
+    public void A_rider_that_names_a_toggle_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Toggle Source");
+        var holder = Feat(other.Id, "Test Toggle Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000d1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000d1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var own = Shared(temp, "Test Rider Source");
+        var rider = Feat(own.Id, "Test Rider Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000d2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000d2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new AttackRiderEffect { Id = "edge", Tags = ["all"], ToHit = "1", Toggle = "form", ToggleContent = holder.ContentId }],
+        };
+        temp.App.Store.AddRevision(rider);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {
         using var origin = new TempApp();

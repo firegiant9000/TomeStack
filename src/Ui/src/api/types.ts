@@ -280,6 +280,9 @@ export interface FeatureEffect {
   variableCost?: boolean;
   /** Content v8: the roll's bonus formula evaluated for this character (for example the Fighter level). */
   bonus?: number;
+  /** Content v11 (D43): false when the action is outside the form it needs (`unavailableReason` says which). The server always sends it. */
+  available: boolean;
+  unavailableReason?: string;
 }
 
 /** Content v6 (M3 B2): something switched on and off at the table. */
@@ -337,13 +340,24 @@ export interface UpkeepValue {
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
 
-/** SPEC C-02, C-04: an attack with an equipped weapon. */
+/** Content v11 (D43): an attack rider that applies to an attack now, with its numbers. */
+export interface RiderValue {
+  content: ContentReference;
+  effectId: string;
+  dice?: string;
+  toHit: number;
+  damageBonus: number;
+  damageType?: string;
+}
+
+/** SPEC C-02, C-04: an attack with an equipped weapon, or (D43) an attack a feature gives. */
 export interface AttackEntry {
   item: ContentReference;
   name: string;
   effectId: string;
   attack: 'melee' | 'ranged';
-  category: 'simple' | 'martial';
+  /** Absent for a feature attack. */
+  category?: 'simple' | 'martial' | null;
   ability: Ability;
   toHit: number;
   damage: string;
@@ -357,6 +371,20 @@ export interface AttackEntry {
   trace: TraceEntry[];
   warnings: Diagnostic[];
   origin: TraceOrigin;
+  /** Content v11 (D43): where the row comes from. A feature attack is rolled by `item` + `effectId` (`content` + `effectId`), not as a weapon. */
+  source: 'weapon' | 'feature';
+  tags?: string[] | null;
+  /** The attack can stand in for one attack of the Attack action. */
+  replacesAttack: boolean;
+  riders?: RiderValue[] | null;
+  /** False when unavailable (`unavailableReason` says why); the server always sends it. An unavailable attack has no damage to roll. */
+  available: boolean;
+  unavailableReason?: string | null;
+  activation?: Activation | null;
+  /** What using the attack spends: `cost` of the pool `resourceId` in `costResourceContent`. */
+  costResourceContent?: string | null;
+  resourceId?: string | null;
+  cost?: number | null;
 }
 
 /** SPEC I-05: an active revision with its text and automation status. */
@@ -1361,7 +1389,15 @@ export type ClassEntry = 'startingClass' | 'multiclass';
 export type SpellcastingAbility = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
 export type Effect =
-  | (EffectBase & { type: 'modifier'; operation: 'bonus' | 'set' | 'replace'; target: string; value: string; toggle?: string })
+  | (EffectBase & {
+      type: 'modifier';
+      operation: 'bonus' | 'set' | 'replace';
+      target: string;
+      value: string;
+      toggle?: string;
+      /** Content v11 (D43): the content that declares `toggle`. Absent: this revision. */
+      toggleContent?: string;
+    })
   // Content v6 (M3 B2): switched on and off in play; turning it on can spend one use of a resource of this revision.
   // Content v10 (Wave 3, D42): autoWhen and activation on a toggle, activation on a resource, three damage-defence grant
   // kinds with a damageType, and the item effect. All optional; a revision below v10 never carries them.
@@ -1420,7 +1456,46 @@ export type Effect =
     })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
-  | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })
+  | (EffectBase & {
+      type: 'roll';
+      rollId: string;
+      label: string;
+      dice: string;
+      resourceId?: string;
+      /** Content v11 (D43): the roll is available only while this toggle is on (absent contentId: this revision). */
+      whileToggle?: { contentId?: string; toggleId: string };
+    })
+  // Content v11 (D43): an attack a feature gives, and a rider that adds to the attacks carrying one of its tags.
+  | (EffectBase & {
+      type: 'attack';
+      attackId: string;
+      label: string;
+      kind: 'melee' | 'ranged';
+      abilities: Ability[];
+      proficient?: boolean;
+      damage: { count: string; die: string };
+      damageBonus?: string;
+      damageType: string;
+      range?: string;
+      tags?: string[];
+      replacesAttack?: boolean;
+      activation?: Activation;
+      resourceId?: string;
+      resourceContent?: string;
+      cost?: string;
+      whileToggle?: { contentId?: string; toggleId: string };
+    })
+  | (EffectBase & {
+      type: 'attackRider';
+      tags: string[];
+      toHit?: string;
+      dice?: string;
+      damageBonus?: string;
+      damageType?: string;
+      toggle?: string;
+      toggleContent?: string;
+      stackGroup?: string;
+    })
   | (EffectBase & { type: 'armor'; category: 'light' | 'medium' | 'heavy' | 'shield'; armorClass: number; dexterityCap?: number })
   | (EffectBase & { type: 'choice'; choiceId: string; count: number; options: ContentReference[]; level?: number; onlyAs?: ClassEntry })
   // M5 slice 1b: the class editor (content v3/v5 effects, and v9 scale and multiclassCasterTable; ADR-010).
