@@ -233,11 +233,13 @@ public sealed partial class TomeStackApp
             ?? throw new AppValidationException([new("character.not-found", $"Character {request.CharacterId} does not exist.")]);
         if (request.UpdatedAt != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
-        if (!_undo.Has(character.Id))
-            throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")]);
-        if (!_undo.TryTake(character.Id, character.UpdatedAt, out var slot) || slot is null)
+        var slot = _undo.Find(character.Id)
+            ?? throw new AppValidationException([new("undo.nothing", "There is nothing to undo for this character.")]);
+        if (slot.UpdatedAfter != character.UpdatedAt)
             throw new AppValidationException([new("undo.stale", "This character changed since that change, so it can't be undone.")]);
-        return SaveWithPlay(character with { Play = slot.Before });
+        var view = SaveWithPlay(character with { Play = slot.Before });
+        _undo.Remove(character.Id); // only after the write succeeded: a failed save keeps the slot
+        return view;
     }
 
     /// <summary>

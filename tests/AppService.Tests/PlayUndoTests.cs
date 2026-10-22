@@ -217,6 +217,79 @@ public class PlayUndoTests
     }
 
     [Fact]
+    public void An_undo_whose_save_fails_keeps_its_slot()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        var switched = Switched(temp, id);
+        var stored = temp.App.Store.FindCharacter(id)!;
+        // Same stamp, but the stored character no longer validates (written behind the app's back): the undo's save is refused.
+        temp.App.Store.SaveCharacter(stored with { Name = "" });
+
+        Assert.ThrowsAny<Exception>(() => Undo(temp, id, switched.Character.UpdatedAt));
+
+        temp.App.Store.SaveCharacter(stored); // put it back, stamp untouched
+        Assert.Equal("switch to Tide form", temp.App.GetCharacter(id).UndoLabel);
+        Undo(temp, id, switched.Character.UpdatedAt); // the slot survived the failed attempt
+    }
+
+    [Fact]
+    public void A_library_restore_that_brings_the_stamp_back_clears_the_undo()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        var switched = Switched(temp, id);
+        var path = Path.Combine(Path.GetTempPath(), "tomestack-tests", $"{Guid.NewGuid():N}.tomestack.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        try
+        {
+            using (var file = File.Create(path))
+                temp.App.WriteLibraryBackup(file);
+            temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+
+            temp.App.ApplyLibraryRestore(path);
+
+            Assert.Equal(switched.Character.UpdatedAt, temp.App.Store.FindCharacter(id)!.UpdatedAt); // the stamp is back
+            Assert.Null(temp.App.GetCharacter(id).UndoLabel);
+            Assert.Equal("undo.nothing", Refusal(() => Undo(temp, id, switched.Character.UpdatedAt)));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void A_package_import_that_brings_the_stamp_back_clears_the_undo()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        var switched = Switched(temp, id);
+        var package = temp.App.ExportCharacters([id]).Content;
+        temp.App.Play(new(id, PlayActionKind.Damage, Confirm: true, Amount: 1));
+
+        temp.App.ApplyImport(package);
+
+        Assert.Equal(switched.Character.UpdatedAt, temp.App.Store.FindCharacter(id)!.UpdatedAt);
+        Assert.Null(temp.App.GetCharacter(id).UndoLabel);
+        Assert.Equal("undo.nothing", Refusal(() => Undo(temp, id, switched.Character.UpdatedAt)));
+    }
+
+    [Fact]
+    public void The_slots_clear_all_and_find_without_taking()
+    {
+        var slots = new PlayUndoSlots();
+        var a = Guid.NewGuid();
+        var stamp = TempApp.Now;
+        slots.Set(a, new(new PlayState(), stamp, "switch to X"));
+
+        Assert.NotNull(slots.Find(a));
+        Assert.NotNull(slots.Find(a)); // looking does not remove
+        slots.ClearAll();
+        Assert.Null(slots.Find(a));
+    }
+
+    [Fact]
     public void The_dispatcher_lists_and_runs_undo_play()
     {
         var (temp, id) = Forms();

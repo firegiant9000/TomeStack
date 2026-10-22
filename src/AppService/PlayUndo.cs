@@ -34,34 +34,28 @@ internal sealed class PlayUndoSlots
     }
 
     /// <summary>
-    /// Takes the character's slot out if the stamp still matches. A slot that does not match (another write happened since) is
-    /// dropped as well, since the stamp only moves forward and it can never match again; the result is then false.
+    /// The character's slot whatever its stamp, without removing it (null when there is none). The undo looks here first, writes,
+    /// and only then <see cref="Remove"/>s the slot, so a failed write keeps it.
     /// </summary>
-    public bool TryTake(Guid characterId, DateTimeOffset updatedAt, out PlayUndoSlot? slot)
+    public PlayUndoSlot? Find(Guid characterId)
     {
         lock (_lock)
-        {
-            if (!_slots.Remove(characterId, out var found))
-            {
-                slot = null;
-                return false;
-            }
-            var matches = found.UpdatedAfter == updatedAt;
-            slot = matches ? found : null;
-            return matches;
-        }
+            return _slots.GetValueOrDefault(characterId);
     }
 
-    /// <summary>Whether the character has a slot at all (matching or not); tells "nothing to undo" from "changed since".</summary>
-    public bool Has(Guid characterId)
-    {
-        lock (_lock)
-            return _slots.ContainsKey(characterId);
-    }
-
-    public void Clear(Guid characterId)
+    public void Remove(Guid characterId)
     {
         lock (_lock)
             _slots.Remove(characterId);
+    }
+
+    /// <summary>
+    /// Forgets every slot. A library restore or a package import can store a character with an older stamp again, which would make
+    /// a slot written for that stamp match a play state it no longer belongs to.
+    /// </summary>
+    public void ClearAll()
+    {
+        lock (_lock)
+            _slots.Clear();
     }
 }

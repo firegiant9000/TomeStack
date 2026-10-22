@@ -429,8 +429,17 @@ public sealed partial class TomeStackApp : IDisposable
     public PackagePreview PreviewImport(byte[] package) => _packages.Preview(package);
 
     /// <param name="campaignChoices">M6 slice 2: for a campaign pack whose campaign differs from the local one.</param>
-    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null) =>
-        _packages.Apply(package, sourceChoices, campaignChoices);
+    public ImportResult ApplyImport(byte[] package, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null, IReadOnlyDictionary<Guid, SourceChoice>? campaignChoices = null)
+    {
+        try
+        {
+            return _packages.Apply(package, sourceChoices, campaignChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: a replaced character can carry an older stamp that matches a slot again
+        }
+    }
 
     /// <summary>M2.1 "Back up everything": what it would contain (<c>library.backupPreview</c>).</summary>
     public LibraryBackupPreview PreviewLibraryBackup() => _packages.PreviewLibraryBackup();
@@ -441,8 +450,17 @@ public sealed partial class TomeStackApp : IDisposable
     /// <summary>M2.1 "Restore full backup": checks the file completely; writes nothing.</summary>
     public PackagePreview PreviewLibraryRestore(string backupPath) => _packages.PreviewLibraryRestore(backupPath);
 
-    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null) =>
-        _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+    public LibraryRestoreResult ApplyLibraryRestore(string backupPath, IReadOnlyDictionary<Guid, SourceChoice>? sourceChoices = null)
+    {
+        try
+        {
+            return _packages.ApplyLibraryRestore(backupPath, sourceChoices);
+        }
+        finally
+        {
+            _undo.ClearAll(); // D44: the restored characters can carry an older stamp that matches a slot again
+        }
+    }
 
     public void Dispose()
     {
