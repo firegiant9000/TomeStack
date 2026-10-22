@@ -4,7 +4,8 @@ import { EntryGone } from './sheetSave';
 import { pageText } from './PlayPanels';
 import { Pips } from './Pips';
 import { SpellSearch } from './sheet/SpellSearch';
-import { foldName, matchesSpell } from '../spellSearch';
+import { SpellFilters, filtersActive, noFilters, toSpellFilter, type SpellFilterState } from './sheet/SpellFilters';
+import { filterSpells, foldName } from '../spellSearch';
 import { TraceTable } from './TraceTable';
 
 const abilityNames: Record<Ability, string> = {
@@ -40,6 +41,9 @@ export function SpellsPanel({
 }) {
   // D30: the search text per caster. The sheet is keyed by character in App, so this remounts (and resets) per character.
   const [queries, setQueries] = useState<Record<string, string>>({});
+  // P09 (D70): the filter choices and whether the filter group is open, also per caster; not persisted.
+  const [filters, setFilters] = useState<Record<string, SpellFilterState>>({});
+  const [filtersOpen, setFiltersOpen] = useState<Record<string, boolean>>({});
   const casters = view.sheet.spellcasting ?? [];
   if (casters.length === 0) return null;
   const slots = view.sheet.spellSlots ?? [];
@@ -81,7 +85,9 @@ export function SpellsPanel({
       )}
       {casters.map((entry) => {
         const query = queries[entry.content.revisionId] ?? '';
-        const shown = entry.spells.filter((s) => matchesSpell(s.name, query));
+        const choice = filters[entry.content.revisionId] ?? noFilters;
+        const filtered = filtersActive(choice);
+        const shown = filterSpells(entry.spells, toSpellFilter(query, choice));
         return (
         <section key={entry.content.revisionId} aria-labelledby={`caster-${entry.content.revisionId}`}>
           <h4 id={`caster-${entry.content.revisionId}`}>
@@ -118,6 +124,18 @@ export function SpellsPanel({
               onChange={(value) => setQueries((q) => ({ ...q, [entry.content.revisionId]: value }))}
               shown={shown.length}
               total={entry.spells.length}
+              filtered={filtered}
+            />
+          )}
+          {entry.spells.length > 0 && (
+            <SpellFilters
+              id={`spell-filters-${entry.content.revisionId}`}
+              casterName={entry.name}
+              spells={entry.spells}
+              value={choice}
+              onChange={(value) => setFilters((f) => ({ ...f, [entry.content.revisionId]: value }))}
+              open={filtersOpen[entry.content.revisionId] ?? false}
+              onToggle={() => setFiltersOpen((o) => ({ ...o, [entry.content.revisionId]: !o[entry.content.revisionId] }))}
             />
           )}
           {entry.spells.length === 0 ? (
@@ -180,7 +198,8 @@ export function SpellsPanel({
             </ul>
             )
           )}
-          {shown.length === 0 && foldName(query) !== '' && (
+          {shown.length === 0 && filtered && <p className="hint">No spells match these filters. Clear filters to see all {entry.spells.length}.</p>}
+          {shown.length === 0 && !filtered && foldName(query) !== '' && (
             <p className="hint">No spells match “{query}”. Clear the search to see all {entry.spells.length}.</p>
           )}
         </section>
