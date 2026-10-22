@@ -195,13 +195,14 @@ it('authors a stance with upkeep in the studio, starts an encounter, takes turns
 
   // Two turns fit: 3 of 7 Reserve each turn, 1 built up of Strain.
   await user.click(await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn'));
-  await within(combat()).findByText('Round 1');
-  expect(within(resources()).getByRole('heading', { name: 'Reserve: 4 of 7' })).toBeTruthy();
-  expect(within(resources()).getByRole('heading', { name: 'Strain: built up 1 of 5' })).toBeTruthy();
+  // Round 0 already reads "Round 1", so wait for the pool the turn changed instead.
+  await within(resources()).findByRole('heading', { name: 'Reserve: 4 of 7' });
+  await within(resources()).findByRole('heading', { name: 'Strain: built up 1 of 5' });
+  expect(within(combat()).getByText('Round 1')).toBeTruthy();
   await user.click(await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn'));
   await within(combat()).findByText('Round 2');
-  expect(within(resources()).getByRole('heading', { name: 'Reserve: 1 of 7' })).toBeTruthy();
-  expect(within(combat()).getByText('Strain: built up 2 of 5')).toBeTruthy();
+  await within(resources()).findByRole('heading', { name: 'Reserve: 1 of 7' });
+  await within(combat()).findByText('Strain: built up 2 of 5');
 
   // 1 Reserve is left and the stance needs 3: the preview asks, with End already chosen. It is accepted without a click on it.
   const third = await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn');

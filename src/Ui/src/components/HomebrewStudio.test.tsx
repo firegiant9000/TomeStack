@@ -334,15 +334,21 @@ it('Add upkeep adds a rule that spends from the first pool at the start of the t
   expect((screen.getByRole('button', { name: 'Add upkeep' }) as HTMLButtonElement).disabled).toBe(true);
 });
 
-it('removing the toggle an upkeep named makes the upkeep forget it', async () => {
+it('removing the toggle an upkeep named removes that upkeep, and keeps the others', async () => {
   const user = userEvent.setup();
-  const { rule, checked } = await openUpkeepDraft(user);
+  const { rule, checked } = await openUpkeepDraft(user, [{ type: 'upkeep', id: 'upkeep-4', at: 'turnEnd', resourceId: 'focus', change: 'regain', amount: '1' }]);
   await user.click(rule(/^Rule 2: Toggle/).getByRole('button', { name: 'Remove rule 2' }));
   const sent = await checked();
-  expect(sent.effect('upkeep-3')).toMatchObject({ type: 'upkeep', resourceId: 'focus' });
-  expect(sent.effect('upkeep-3')!.toggle).toBeUndefined();
-  expect(sent.effect('upkeep-3')!.toggleContent).toBeUndefined();
-  expect(sent.effect('upkeep-3')!.ifShort).toBeUndefined();
+  expect(sent.effect('upkeep-3')).toBeUndefined();
+  expect(sent.effect('upkeep-4')).toMatchObject({ type: 'upkeep', resourceId: 'focus' });
+  expect(sent.count).toBe(2);
+});
+
+it('an upkeep rule has no Automation choice, because calculation never reads it', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openUpkeepDraft(user);
+  expect(rule(/^Rule 3: Upkeep/).queryByRole('combobox', { name: 'Automation' })).toBeNull();
+  expect(rule(/^Rule 2: Toggle/).getByRole('combobox', { name: 'Automation' })).toBeTruthy();
 });
 
 it('removing the pool removes the upkeeps that spent from it, and keeps the others', async () => {

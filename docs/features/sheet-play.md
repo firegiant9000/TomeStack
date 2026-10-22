@@ -83,7 +83,7 @@ Amounts are 0–10,000 (`play.amount-out-of-range`). **Regaining hit points clea
 The "Combat" region sits above the two Play columns. It appears when the sheet has a toggle with a form group or a `duration`, a resource that is an allowance, an upkeep, or an encounter in progress; otherwise Play looks as before. It holds:
 
 - the **Forms** picker (moved here from "Attacks and actions"; [play-mechanics.md](play-mechanics.md));
-- the **round**: "Round N" while an encounter runs, "No encounter running" otherwise, and "Start encounter" or, while one runs, "Start my turn", "End my turn" and "End encounter". The buttons are disabled while another change is in flight;
+- the **round**: "Round N" while an encounter runs (it reads "Round 1" at round 0, before the first turn), "No encounter running" otherwise, and "Start encounter" or, while one runs, "Start my turn", "End my turn" and "End encounter". The buttons are disabled while another change is in flight;
 - **Timed effects**: each toggle that is on and has a duration, as "N rounds left" or "duration: track by hand" when it has no count (it was switched on outside an encounter);
 - **Combat pools**: a counting-up pool as "Strain: built up 3 of 5" (and " · full: <the pool's text>" when it is full) and an allowance as "1 of 2". It is all text.
 

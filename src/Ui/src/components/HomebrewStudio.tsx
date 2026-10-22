@@ -1073,24 +1073,25 @@ function EntryEditor(props: {
             const removedResource = effect.type === 'resource' ? effect.resourceId : undefined;
             const remaining = revision.effects.filter((_, i) => i !== index);
             const resourceStillDefined = remaining.some((e) => e.type === 'resource' && e.resourceId === removedResource);
-            // D43 slice 3: an upkeep that spent from or regained a removed pool of this revision goes with it (it has nothing left to
-            // change); one that named a removed toggle of this revision is not tied to it any more, and forgets the shortfall choice.
-            const ofRemovedPool = (e: Effect) => e.type === 'upkeep' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource;
-            const kept = remaining.filter((e) => !ofRemovedPool(e));
+            // D43 slice 3: an upkeep goes with the pool it changed or the toggle it belonged to, when that is in this revision (left
+            // behind it would change a pool nothing declares, or silently apply always).
+            const goesWith = (e: Effect) =>
+              e.type === 'upkeep' &&
+              ((removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource) ||
+                (removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle));
+            const kept = remaining.filter((e) => !goesWith(e));
             update({
               effects: kept.map((e) =>
                 e.type === 'modifier' && removedToggle !== undefined && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
-                  : e.type === 'upkeep' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle
-                    ? { ...e, toggle: undefined, ifShort: undefined }
-                    : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
-                      ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
-                      : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
-                        e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
-                        ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
-                        : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
-                          ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
-                          : e,
+                  : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
+                    ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
+                    : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
+                      e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
+                      ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
+                      : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
+                        ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
+                        : e,
               ),
             });
             // Field keys start with the effect id: a removed rule's problems no longer block saving.
@@ -1901,7 +1902,8 @@ function EffectEditor(props: {
       )}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
-      {effect.type !== 'grant' && (
+      {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && (
         <label className="field">
           Automation
           <select
