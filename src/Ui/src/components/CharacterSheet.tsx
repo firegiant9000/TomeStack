@@ -12,9 +12,12 @@ import type {
   RollMode,
   RollRecord,
   RollTarget,
+  TurnMoment,
 } from '../api/types';
 import { downloadBase64 } from '../files';
 import { ArchivePanel } from './ArchivePanel';
+import { CombatStrip } from './CombatStrip';
+import { TurnPanel } from './TurnPanel';
 import { SnapshotsPanel } from './SnapshotsPanel';
 import { ActionsPanel, ClassColumnsPanel, ConcentrationPanel, ConditionsPanel, DeathSavesPanel, FeaturesPanel, HitPointsPanel, ResourcesPanel } from './PlayPanels';
 import { CompanionsPanel } from './CompanionsPanel';
@@ -253,7 +256,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     (error: unknown) => {
       latestProps.current.reportError(error);
       // D44: a refused service undo (the slot is gone or was written for an earlier stamp) reloads the stored copy too, so its label drops.
-      if (error instanceof TomeStackError && (error.code === 'character.stale' || error.code === 'undo.stale' || error.code === 'undo.nothing')) {
+      // D43 S3: a turn confirmed against a preview the character has since left (`turn.preview-stale`) reloads the stored copy too.
+      if (error instanceof TomeStackError && ['character.stale', 'undo.stale', 'undo.nothing', 'turn.preview-stale'].includes(error.code)) {
         client
           .getCharacter(characterId)
           .then((fresh) => {
@@ -283,6 +287,17 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   const [resting, setResting] = useState<RestPeriod>();
   const [compact, setCompact] = useState(compactPlay());
   const [printing, setPrinting] = useState(false);
+  // D43 S3: the open turn panel (start or end of the turn) and the opener to return focus to when it closes (WCAG 2.4.3).
+  const [turning, setTurning] = useState<TurnMoment>();
+  const turnOpener = useRef<TurnMoment>(undefined);
+  const encounterRunning = character.play?.encounter !== undefined;
+  // The encounter ended (here or by a long rest): a turn needs one, so the panel closes (adjusting state during render, guarded).
+  if (turning && !encounterRunning) setTurning(undefined);
+  useEffect(() => {
+    if (turning || !turnOpener.current) return;
+    (document.getElementById(`turn-open-${turnOpener.current}`) ?? document.getElementById('combat-heading'))?.focus();
+    turnOpener.current = undefined;
+  }, [turning]);
   const [undo, setUndo] = useState<UndoEntry>();
   // Wave 3 item 21: the Hit points damage type; a weapon's damage roll pre-fills it. '' is untyped.
   const [damageType, setDamageType] = useState('');
@@ -410,6 +425,11 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   useEffect(() => {
     shownView.current = view;
   }, [view]);
+  /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
+  function say(reply: CharacterView) {
+    const message = reply.notices?.map((n) => n.message).join(' ');
+    if (message && mounted.current) onStatus(message);
+  }
   async function act(action: PlayAction) {
     setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
     const mine = ++started.current;
@@ -419,13 +439,19 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
     try {
       // D44: a compound change names the stamp of the character as the queue holds it when the change starts (after every earlier
       // save or play change finished), not the one this render captured.
+      // D43 S3: starting or ending an encounter is decided from what the player saw (like Undo), so it names the stamp of the shown
+      // view: a change in between is refused `character.stale` and the sheet reloads, instead of the encounter being applied to it.
+      const shownStamp = view.character.updatedAt;
+      const encounter = action.action === 'startEncounter' || action.action === 'endEncounter';
       const after = await runQueued(
-        (latest) => client.play(character.id, isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
+        (latest) =>
+          client.play(character.id, encounter ? { ...action, expectedUpdatedAt: shownStamp } : isCompound(action) ? { ...action, expectedUpdatedAt: latest.updatedAt } : action),
         (reply) => reply.character,
       );
       const overlapped = startedWhileRunning || started.current !== mine || running.current > 1 || shownView.current !== view;
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
+      say(after);
     } catch (error) {
       onError(error);
     } finally {
@@ -735,6 +761,34 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             </button>
           )}
         </div>
+        {/* D43 slice 3: forms, the round, encounter and turn buttons, durations and pools; the turn panel opens under it. */}
+        <CombatStrip
+          view={view}
+          act={act}
+          busy={inFlight}
+          onTurn={(at) => {
+            turnOpener.current = at;
+            setTurning(at);
+          }}
+        />
+        {turning && encounterRunning && (
+          <TurnPanel
+            key={turning}
+            characterId={character.id}
+            at={turning}
+            version={view}
+            toggles={sheet.toggles}
+            onError={onError}
+            run={(command) => runQueued(command, (reply) => reply.character)}
+            onCancel={() => setTurning(undefined)}
+            onDone={(done) => {
+              setUndo(undefined); // the service holds the one undo of a turn (`undoLabel`); a client entry from before it is stale
+              setTurning(undefined);
+              onChanged(done);
+              say(done);
+            }}
+          />
+        )}
         {/* Investigation 2026-10-06 item 8: two plain wrappers, side by side at 60rem and up, stacked below it. Visual order is DOM order. */}
         <div className="play-column">
           <HitPointsPanel view={view} act={act} damageType={damageType} onDamageType={setDamageType} />

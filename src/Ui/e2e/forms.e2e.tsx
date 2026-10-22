@@ -81,9 +81,10 @@ it('authors a form group and two forms in the studio, switches forms, refuses a 
   await user.click(await screen.findByRole('button', { name: /^E2E Forms Hero/ }));
   const sheet = await screen.findByRole('article', { name: 'E2E Forms Hero' });
   await openTab(user, sheet, 'Play');
-  const actions = () => screen.getByRole('region', { name: 'Attacks and actions' });
+  // D43 S3: the form picker lives in the combat strip, above the Play columns.
+  const combat = () => screen.getByRole('region', { name: 'Combat' });
   // The group is named by the label authored in the studio (the sheet's groupLabel).
-  const picker = () => within(actions()).getByRole('radiogroup', { name: 'Forms' });
+  const picker = () => within(combat()).getByRole('radiogroup', { name: 'Forms' });
   const form = (name: RegExp) => within(picker()).getByRole('radio', { name });
   const resources = () => screen.getByRole('region', { name: 'Resources' });
 

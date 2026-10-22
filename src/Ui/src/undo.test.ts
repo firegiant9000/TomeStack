@@ -1,8 +1,38 @@
 // @vitest-environment jsdom
 // D23: the inverse of a play action, computed from the view before and after, through the same confirmed commands.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import type { CharacterView, PlayAction } from './api/types';
+import type { CharacterView, PlayAction, PlayActionKind } from './api/types';
 import { inverseOf, isCompound } from './undo';
+
+// D43 S3 parity: the same list the AppService test (CompoundParityTests) checks against the server's switch. `npm --prefix src/Ui` runs from src/Ui.
+const parity = JSON.parse(readFileSync(resolve(process.cwd(), '../../tests/RulesFixtures/compound-play-actions.json'), 'utf8')) as {
+  action: PlayActionKind;
+  replace?: boolean;
+  compound: boolean;
+}[];
+
+it('agrees with the server on which play actions are compound (shared fixture)', () => {
+  expect(parity.length).toBeGreaterThan(25);
+  for (const { action, replace, compound } of parity) {
+    expect(isCompound({ action, ...(replace === undefined ? {} : { replace }) }), `${action} replace=${String(replace)}`).toBe(compound);
+  }
+});
+
+it('lists every client play action kind exactly once (plus the toggleOn replace pair) in the shared fixture', () => {
+  // Compile-time list: a kind added to PlayActionKind without a fixture case fails to type-check here.
+  const all: Record<PlayActionKind, true> = {
+    spend: true, regain: true, damage: true, heal: true, setTemporaryHitPoints: true, setHitPoints: true, addCondition: true, removeCondition: true,
+    setExhaustion: true, recordDeathSave: true, addDeathSaveFailure: true, clearDeathSaves: true, setInspiration: true, spendSlot: true, regainSlot: true,
+    spendPactSlot: true, regainPactSlot: true, toggleOn: true, toggleOff: true, startConcentration: true, endConcentration: true, clearConcentrationCheck: true,
+    spendCharge: true, regainCharge: true, companionDamage: true, companionHeal: true, companionSetHitPoints: true, companionSetTemporaryHitPoints: true,
+    startEncounter: true, endEncounter: true,
+  };
+  const named = new Set(parity.map((c) => c.action));
+  expect([...named].sort()).toEqual(Object.keys(all).sort());
+  expect(parity.filter((c) => c.action === 'toggleOn').map((c) => c.replace).sort()).toEqual([false, true]);
+});
 
 const view = (current: number, temporary: number, play: Partial<CharacterView['character']['play']> = {}): CharacterView =>
   ({

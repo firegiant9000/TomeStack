@@ -19,7 +19,6 @@ import { hitDiceText, rollBonus } from '../format';
 import { diceLine } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
-import { FormGroups } from './FormGroups';
 import { Pips } from './Pips';
 
 /** The one name for the inspiration toggle and its summary line: "Heroic Inspiration" in 5.2.1, "Inspiration" otherwise. */
@@ -351,11 +350,17 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
   const tracked = resource.current !== undefined && resource.maximum !== undefined;
   const headingId = `resource-${resource.content.revisionId}-${resource.resourceId}`;
   const Heading = level === 4 ? 'h4' : 'h5';
+  // D43 slice 3: the amount box spends the chosen number in one confirmed change (1 up to what is left); "Spend 1" stays for one click.
+  const [amount, setAmount] = useState('1');
+  const chosen = Number(amount);
+  const chosenValid = tracked && amount.trim() !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= resource.current!;
+  // A counting-up pool (strain) reads as what has built up, not what is left.
+  const state = resource.countsUp ? `built up ${resource.spent} of ${resource.maximum}` : `${resource.current} of ${resource.maximum}`;
   return (
     <li className="resource">
       <Heading id={headingId}>
-        {resource.label}: {tracked ? `${resource.current} of ${resource.maximum}` : 'tracked by hand'}
-        {tracked && <Pips filled={resource.current!} total={resource.maximum!} />}
+        {resource.label}: {tracked ? state : 'tracked by hand'}
+        {tracked && <Pips filled={resource.countsUp ? resource.spent : resource.current!} total={resource.maximum!} />}
       </Heading>
       <p className="hint">
         From {resource.contentName} · {automationLabels[resource.automation]}
@@ -369,6 +374,13 @@ function ResourceCard({ resource, act, level = 4 }: { resource: ResourceValue; a
           </button>
           <button type="button" disabled={resource.spent === 0} onClick={() => act({ action: 'regain', amount: 1, ...key })}>
             Regain 1 {resource.label}
+          </button>
+          <label className="field">
+            Amount to spend: {resource.label}
+            <input type="number" min={1} max={resource.current} step={1} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </label>
+          <button type="button" disabled={!chosenValid} onClick={() => chosenValid && act({ action: 'spend', amount: chosen, ...key })}>
+            Spend amount: {resource.label}
           </button>
         </div>
       )}
@@ -518,9 +530,37 @@ export function ActionsPanel({
   const rolls = (view.sheet.features ?? []).flatMap((feature) =>
     feature.effects.filter((e) => e.type === 'roll').map((effect) => ({ feature, effect })),
   );
-  if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && toggles.length === 0) return null;
+  // D43 slice 1: grouped toggles are the form picker, whatever their activation; slice 3 moved the picker to the combat strip.
+  const plainToggles = toggles.filter((t) => !t.group);
+  // D43 slice 3: an action or switch that spends an allowance pool (reactions, say) is listed under that pool's name, not its activation group.
+  const allowances = (view.sheet.resources ?? []).filter((r) => r.allowance);
+  const allowanceOf = (resourceId: string | undefined, contentId: string) =>
+    resourceId ? allowances.find((r) => r.resourceId === resourceId && r.content.contentId === contentId) : undefined;
+  const rollPool = ({ feature, effect }: (typeof rolls)[number]) => allowanceOf(effect.resourceId, effect.resourceContent ?? feature.content.contentId);
+  const togglePool = (t: ToggleValue) => allowanceOf(t.resourceId, t.costResourceContent ?? t.content.contentId);
+  const poolGroups = allowances
+    .map((pool) => ({ pool, rolls: rolls.filter((r) => rollPool(r) === pool), toggles: plainToggles.filter((t) => togglePool(t) === pool) }))
+    .filter((g) => g.rolls.length > 0 || g.toggles.length > 0);
+  if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
-  const ungroupedToggles = toggles.filter((t) => !t.activation && !t.group);
+  const ungroupedToggles = plainToggles.filter((t) => !t.activation && !togglePool(t));
+  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => (
+    <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
+      <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
+        Roll {effect.label || effect.id} ({effect.dice}
+        {rollBonus(effect.bonus)})
+      </button>{' '}
+      <span className="hint">
+        {feature.name}
+        {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
+      </span>
+    </li>
+  );
+  const toggleItem = (t: ToggleValue) => (
+    <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
+      <ToggleRow toggle={t} act={act} />
+    </li>
+  );
   return (
     <section aria-labelledby="actions-heading" className="play-panel">
       <h3 id="actions-heading">Attacks and actions</h3>
@@ -532,13 +572,6 @@ export function ActionsPanel({
           ))}
         </fieldset>
       )}
-      {/* D43 slice 1: grouped toggles are the form picker, whatever their activation. */}
-      {toggles.some((t) => t.group) && (
-        <section aria-labelledby="forms-heading">
-          <h4 id="forms-heading">Forms (a switch is a confirmed change)</h4>
-          <FormGroups toggles={toggles} act={act} busy={false} resources={view.sheet.resources} />
-        </section>
-      )}
       <label className="choice">
         <input type="checkbox" checked={critical} onChange={(e) => setCritical(e.target.checked)} />
         Critical hit (double the damage dice)
@@ -546,8 +579,8 @@ export function ActionsPanel({
       {activationGroups.map(({ key, title }) => {
         const groupAttacks = key === 'action' ? attacks : [];
         const groupCustom = key === 'action' ? customAttacks : [];
-        const groupRolls = rolls.filter(({ effect }) => (effect.activation ?? 'other') === key);
-        const groupToggles = toggles.filter((t) => t.activation === key && !t.group);
+        const groupRolls = rolls.filter((r) => (r.effect.activation ?? 'other') === key && !rollPool(r));
+        const groupToggles = plainToggles.filter((t) => t.activation === key && !togglePool(t));
         if (groupAttacks.length === 0 && groupCustom.length === 0 && groupRolls.length === 0 && groupToggles.length === 0) return null;
         return (
           <section key={key} aria-labelledby={`actions-${key}`}>
@@ -571,23 +604,25 @@ export function ActionsPanel({
                   )}
                 </li>
               ))}
-              {groupRolls.map(({ feature, effect }) => (
-                <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
-                  <button type="button" onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}>
-                    Roll {effect.label || effect.id} ({effect.dice}
-                    {rollBonus(effect.bonus)})
-                  </button>{' '}
-                  <span className="hint">
-                    {feature.name}
-                    {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
-                  </span>
-                </li>
-              ))}
-              {groupToggles.map((t) => (
-                <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
-                  <ToggleRow toggle={t} act={act} />
-                </li>
-              ))}
+              {groupRolls.map(rollItem)}
+              {groupToggles.map(toggleItem)}
+            </ul>
+          </section>
+        );
+      })}
+      {poolGroups.map(({ pool, rolls: poolRolls, toggles: poolToggles }) => {
+        const id = `actions-pool-${pool.content.revisionId}-${pool.resourceId}`;
+        return (
+          <section key={id} aria-labelledby={id}>
+            <h4 id={id}>{pool.label}</h4>
+            {pool.maximum !== undefined && pool.current !== undefined && (
+              <p className="hint">
+                {pool.current} of {pool.maximum} left
+              </p>
+            )}
+            <ul className="features">
+              {poolRolls.map(rollItem)}
+              {poolToggles.map(toggleItem)}
             </ul>
           </section>
         );

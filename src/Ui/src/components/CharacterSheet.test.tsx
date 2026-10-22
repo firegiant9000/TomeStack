@@ -28,6 +28,8 @@ vi.mock('../api/client', () => ({
     rest: vi.fn(),
     saveCharacter: vi.fn(),
     getCharacter: vi.fn(),
+    turnPreview: vi.fn(),
+    turn: vi.fn(),
   },
 }));
 
@@ -225,6 +227,98 @@ it('the service\'s Undo is disabled while a play change is in flight, so it cann
   expect(client.undoPlay).not.toHaveBeenCalled();
   settle(formsView(false, {}, '2026-10-03T00:00:10Z'));
   await waitFor(() => expect(button.disabled).toBe(false));
+});
+
+// D43 slice 3: the combat strip's encounter and turn writes.
+const upkeepValue = { content: { contentId: 'c1', revisionId: 'r1' }, effectId: 'e-up', toggleId: 'iron', at: 'turnStart', resourceContent: 'c1', resourceId: 'breath', change: 'spend', amount: 2, all: false, ifShort: 'ask', label: 'Iron upkeep' };
+const combatView = (round?: number, over: Partial<CharacterView> = {}, stamp = '2026-10-03T00:00:00Z'): CharacterView => {
+  const v = view({ upkeeps: [upkeepValue] as never });
+  const play = round === undefined ? undefined : { temporaryHitPoints: 0, resources: [], conditions: [], exhaustion: 0, encounter: { round } };
+  return { ...v, character: { ...v.character, updatedAt: stamp, play }, ...over };
+};
+
+it('Start encounter and End encounter send the stamp of the view on screen, not the save queue\'s latest (D43 S3)', async () => {
+  const user = userEvent.setup();
+  const shown = combatView(undefined);
+  const hit = combatView(undefined, {}, '2026-10-03T00:00:05Z'); // a play change finished: the queue's latest is 05, the page still shows 00
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(hit);
+  const onChanged = vi.fn();
+  render(<CharacterSheet view={shown} onChanged={onChanged} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Lose 1 hit point' }));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(hit));
+  await user.click(screen.getByRole('button', { name: 'Start encounter' }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(client.play).mock.calls[1]?.[1]).toEqual({ action: 'startEncounter', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+
+  cleanup();
+  vi.mocked(client.play).mockClear();
+  render(<CharacterSheet view={combatView(2)} onChanged={noop} onError={noop} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(client.play).mock.calls[0]?.[1]).toEqual({ action: 'endEncounter', expectedUpdatedAt: '2026-10-03T00:00:00Z' });
+});
+
+it('says what the reply noticed after a play change (here, ending an encounter), in the status line (D43 S3)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  const ended = combatView(undefined, { notices: [{ code: 'encounter.duration-by-hand', message: 'Fixture Iron stance (iron): duration: track by hand' }] });
+  vi.mocked(client.play).mockReset();
+  vi.mocked(client.play).mockResolvedValue(ended);
+  render(<CharacterSheet view={combatView(2)} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'End encounter' }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('Fixture Iron stance (iron): duration: track by hand'));
+  expect(document.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1); // no new status region of its own
+});
+
+it('Start my turn opens the turn panel, Confirm applies it, closes the panel and reports the reply\'s notices (D43 S3)', async () => {
+  const user = userEvent.setup();
+  const onChanged = vi.fn();
+  const onStatus = vi.fn();
+  const done = combatView(3, { undoLabel: 'turn start', notices: [{ code: 'turn.resource-full', message: 'Fixture burst-out' }] });
+  vi.mocked(client.turnPreview).mockResolvedValue({
+    at: 'turnStart', changes: [{ id: 'round', kind: 'round', label: 'Round', from: 2, to: 3, reason: 'A new round', origin: {} as never }], choices: [], manual: [], prompts: [], updatedAt: '2026-10-03T00:00:00Z',
+  });
+  vi.mocked(client.turn).mockResolvedValue(done);
+  render(<CharacterSheet view={combatView(2)} onChanged={onChanged} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Start my turn' }));
+  const confirm = await screen.findByRole('button', { name: 'Confirm start of turn' });
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Start of turn' }));
+  await waitFor(() => expect(confirm.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(confirm);
+  await waitFor(() => expect(client.turn).toHaveBeenCalledWith('fixture-2', 'turnStart', '2026-10-03T00:00:00Z', [], {}));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(done));
+  await waitFor(() => expect(screen.queryByRole('heading', { name: 'Start of turn' })).toBeNull());
+  expect(onStatus).toHaveBeenCalledWith('Fixture burst-out');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Start my turn' })); // WCAG 2.4.3: back on the opener
+});
+
+it('closes an open turn panel when the encounter is no longer running (D43 S3)', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.turnPreview).mockResolvedValue({ at: 'turnEnd', changes: [], choices: [], manual: [], prompts: [], updatedAt: 'x' });
+  const { rerender } = render(sheetElement(combatView(2)));
+  await user.click(screen.getByRole('button', { name: 'End my turn' }));
+  await screen.findByRole('heading', { name: 'End of turn' });
+  rerender(sheetElement(combatView(undefined)));
+  expect(screen.queryByRole('heading', { name: 'End of turn' })).toBeNull();
+});
+
+it('a stale turn is shown through the usual error path and reloads the stored copy (D43 S3)', async () => {
+  const user = userEvent.setup();
+  const onError = vi.fn();
+  vi.mocked(client.getCharacter).mockResolvedValue(combatView(2, {}, '2026-10-03T00:00:09Z'));
+  vi.mocked(client.turnPreview).mockResolvedValue({
+    at: 'turnStart', changes: [{ id: 'round', kind: 'round', label: 'Round', from: 2, to: 3, reason: 'A new round', origin: {} as never }], choices: [], manual: [], prompts: [], updatedAt: '2026-10-03T00:00:00Z',
+  });
+  vi.mocked(client.turn).mockRejectedValue(new TomeStackError({ code: 'turn.preview-stale', message: 'The character changed since this preview.' }));
+  render(<CharacterSheet view={combatView(2)} onChanged={noop} onError={onError} onStatus={noop} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Start my turn' }));
+  const confirm = await screen.findByRole('button', { name: 'Confirm start of turn' });
+  await waitFor(() => expect(confirm.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(confirm);
+  await waitFor(() => expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: 'turn.preview-stale' })));
+  await waitFor(() => expect(client.getCharacter).toHaveBeenCalledWith('fixture-2'));
+  expect(screen.getByRole('heading', { name: 'Start of turn' })).toBeTruthy(); // stays open
 });
 
 it('a switch withdraws the client Undo from before it, so only the service\'s Undo is offered (D44)', async () => {

@@ -296,7 +296,7 @@ public sealed partial class TomeStackApp
     /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter") and <c>endEncounter</c> ("end encounter"). Later slices (S7, S8) extend this switch.
     /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
     /// </summary>
-    private static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
+    internal static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
     {
         PlayActionKind.ToggleOn when command.Replace => (true,
             sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),

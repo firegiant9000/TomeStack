@@ -255,6 +255,12 @@ export interface ResourceValue {
   text?: string;
   /** Content v10 (Wave 3 item 22): the group the resource is listed under on Play; absent below v10 and when the content names none. */
   activation?: Activation;
+  /** Content v11 (D43): the pool counts up (`spent` is what has built up toward `maximum`, e.g. strain). */
+  countsUp?: boolean;
+  /** Content v11 (D43): what the pool announces when it fills; only with `countsUp`. */
+  fullText?: string;
+  /** Content v11 (D43): the pool is a per-turn allowance (such as reactions); actions that spend it are listed under its name. */
+  allowance?: boolean;
 }
 
 export interface FeatureEffect {
@@ -303,9 +309,30 @@ export interface ToggleValue {
   /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
+  /** Content v11 (D43): rounds the toggle lasts once on in an encounter, and what is left of them (absent: not counted, track by hand). */
+  duration?: number;
+  roundsLeft?: number;
   /** An overlay's own rule as declared: the toggles it is allowed with (a missing `contentId` is its own content), and whether it is allowed with no form on. */
   allowedWith?: { contentId?: string; toggleId: string }[];
   allowedInBase?: boolean;
+}
+
+export type TurnMoment = 'turnStart' | 'turnEnd';
+
+/** Content v11 (D43): a pool change at the start or end of the turn, optionally tied to a toggle. Previewed and confirmed by a turn command. */
+export interface UpkeepValue {
+  content: ContentReference;
+  effectId: string;
+  toggleContent?: string;
+  toggleId?: string;
+  at: TurnMoment;
+  resourceContent: string;
+  resourceId: string;
+  change: 'spend' | 'regain';
+  amount?: number;
+  all: boolean;
+  ifShort: 'ask' | 'end';
+  label: string;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';
@@ -385,6 +412,8 @@ export interface CharacterSheet {
   pactSlots?: SlotValue;
   attacks?: AttackEntry[];
   toggles?: ToggleValue[];
+  /** Content v11 (D43): the upkeeps the active content declares, for the turn panel and the combat strip; absent when there are none. */
+  upkeeps?: UpkeepValue[];
   /** Content v9 (ADR-010): each class-table column at the character's level in that class. */
   scales?: ScaleValue[];
   /** D38: current hit points are at or below half the maximum (rounded down), with a maximum of at least 1. Absent when not bloodied. */
@@ -570,6 +599,55 @@ export interface RestChange {
   spentAfter?: number | null;
 }
 
+export type TurnChangeKind = 'round' | 'duration' | 'toggleEnd' | 'spend' | 'regain';
+
+/** D43 slice 3: one proposed change of a turn. `id` is stable for the same character state, so an unticked id is skipped when confirmed. */
+export interface TurnChange {
+  id: string;
+  kind: TurnChangeKind;
+  label: string;
+  /** For `spend` and `regain`, the pool's spent count before and after. */
+  from: number;
+  to: number;
+  reason: string;
+  origin: TraceOrigin;
+  /** Cannot be unticked (a toggle that ends because it cannot pay, or because of an earlier change or choice). */
+  required?: boolean;
+  contentId?: string;
+  resourceId?: string;
+  toggleId?: string;
+}
+
+/** What the player does about an upkeep the pool cannot cover: end the toggle, or keep it and settle the rest by hand. */
+export type TurnChoiceOption = 'end' | 'keep';
+
+/** A question the plan asks. `id` is `short:{content}:{effect}`; `label` is the whole line to show ("Iron stance needs 2, has 1"). */
+export interface TurnChoicePrompt {
+  id: string;
+  label: string;
+  contentId: string;
+  toggleId: string;
+  needs: number;
+  has: number;
+}
+
+/** A message to show when a counting-up pool becomes full. */
+export interface TurnPrompt {
+  id: string;
+  text: string;
+  origin: TraceOrigin;
+}
+
+/** `character.turnPreview`: the plan for the selection sent, already reflecting it. `updatedAt` is the stored stamp it was planned from; `character.turn` must send it back. */
+export interface TurnPreview {
+  at: TurnMoment;
+  changes: TurnChange[];
+  choices: TurnChoicePrompt[];
+  manual: Diagnostic[];
+  prompts: TurnPrompt[];
+  updatedAt: string;
+}
+
 /** A rest proposal (SPEC C-05, D01). `basis` must be sent back to apply exactly this proposal. */
 export interface RestPreview {
   kind: RestPeriod;
@@ -691,6 +769,8 @@ export interface CharacterView {
   damage?: DamageOutcome;
   /** D44: present only while the service holds a one-level undo for the last compound play change ("switch to Tide form"). */
   undoLabel?: string;
+  /** D43 slice 3: set only on the reply of a turn, an encounter start or end, or a spend into a full pool ("duration: track by hand", `resource.full`). Never on a later read. */
+  notices?: Diagnostic[];
 }
 
 export interface CharacterSummary {
