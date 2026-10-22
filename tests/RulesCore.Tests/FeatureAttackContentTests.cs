@@ -573,7 +573,8 @@ internal static class FeatureAttackVariants
         "attack-while-toggle-blank-not-installed" => WithAttack("strike", a => a with { WhileToggle = new(Absent, "") }),
         "rider-toggle-blank-not-installed" => WithRider(r => r with { Toggle = "", ToggleContent = Absent }),
         "modifier-toggle-blank-not-installed" => WithKeen(m => m with { Toggle = " ", ToggleContent = Absent }),
-        "overlay-with-allowed-with-not-overlay" => WithSurge(t => t with { Layer = ToggleLayer.Primary }),
+        // A primary (not an overlay) naming an overlay of its own group: the not-primary warning would fire if its overlay-only guard were removed.
+        "overlay-with-allowed-with-not-overlay" => WithSurge(t => t with { Layer = ToggleLayer.Primary, AllowedWith = [new ToggleRef(Fixtures.BoundOverlay.ContentId, "bound")] }),
         "restriction-resource-target" => Only(new RestrictionEffect { Id = "r", Field = "resource.reflex", Minimum = 1 }),
         "roll-while-toggle-not-installed" => WithFlash(r => r with { WhileToggle = new(Absent, "kindled") }),
         "modifier-own-toggle-unknown" => WithKeen(m => m with { Toggle = "nonesuch", ToggleContent = null }),
