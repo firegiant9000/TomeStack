@@ -83,6 +83,26 @@ public class PackageRoundTripTests
     }
 
     [Fact]
+    public void A_v10_character_round_trips_through_a_package()
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd521-courier-v10.json"));
+        Assert.Equal(10, saved.Character.SchemaVersion);
+        Assert.Equal(2, saved.Character.Play.Encounter!.Round);
+        var export = origin.App.ExportCharacters([saved.Character.Id]);
+
+        using var destination = new TempApp();
+        var preview = destination.App.PreviewImport(export.Content);
+        Assert.True(preview.CanApply, string.Join("; ", preview.Errors.Select(e => e.Message)));
+        destination.App.ApplyImport(export.Content);
+        var imported = destination.App.Store.FindCharacter(saved.Character.Id)!;
+
+        Assert.Equal(TempApp.Json(saved.Character.Play), TempApp.Json(imported.Play));
+        Assert.Equal(10, imported.SchemaVersion);
+        Assert.Equal(3, Assert.Single(imported.Play.Toggles).RoundsLeft);
+    }
+
+    [Fact]
     public void Manifest_carries_license_notices_hashes_and_the_attachment_policy()
     {
         using var origin = new TempApp();

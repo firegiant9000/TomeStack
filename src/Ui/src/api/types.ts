@@ -486,6 +486,10 @@ export interface PlayState {
   concentration?: { spell: ContentReference; name: string; pendingSaveDc?: number };
   /** Character schema v9 (D42): current and temporary hit points per companion. */
   companions?: CompanionPlay[];
+  /** Character schema v7 (M3 B2): the toggles switched on; v10 (D43) adds the rounds left on a timed one. */
+  toggles?: { contentId: string; toggleId: string; roundsLeft?: number }[];
+  /** Character schema v10 (D43): the encounter in progress. Round 0 means the first turn has not started; show max(1, round). */
+  encounter?: { round: number };
 }
 
 export type PlayActionKind =

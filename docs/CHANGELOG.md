@@ -13,6 +13,7 @@
 
 ### Migration
 
+- Character schema v10 (`docs/schemas/character.v10.schema.json`): `play.encounter` and `play.toggles[].roundsLeft` (D43 slice 3). A character is written at v10 only while one of them is set; otherwise it is written at v9 or v8 as before, so a character that never starts an encounter stays readable by 0.6.0. A build without v10 support refuses a package or backup that carries such a character. Nothing changes for existing characters.
 - Content schema v11 (`docs/schemas/content-revision.v11.schema.json`). Published content is written at v11 only when it uses a v11 field. A build without v11 support refuses such a package or revision. Nothing changes for existing content or characters. No character, package format or database change.
 
 ## 0.6.0 (the tester feedback: characters from any sheet or text, class import and bulk publish, play mechanics and theme colour)

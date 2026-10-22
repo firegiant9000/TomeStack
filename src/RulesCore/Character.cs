@@ -22,9 +22,18 @@ public sealed record Character
     /// v2 adds <see cref="Level"/> and <see cref="CrossFamilyExceptions"/>. Older versions are upcast on read with the new
     /// data at its default (no lists; full hit points, nothing spent, no conditions), which is exactly their meaning.
     /// </summary>
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = EncounterSchemaVersion;
 
-    /// <summary>The version written while no v9 field is set (R73): the release before v9 reads it, and the bytes are the ones it wrote.</summary>
+    /// <summary>
+    /// v10 adds <see cref="PlayState.Encounter"/> and <see cref="ActiveToggle.RoundsLeft"/> (D43 slice 3). Written only when one is set
+    /// (<see cref="UsesV10Fields"/>); otherwise the character is written at <see cref="DetailsSchemaVersion"/> or <see cref="PreviousSchemaVersion"/>.
+    /// </summary>
+    public const int EncounterSchemaVersion = 10;
+
+    /// <summary>The v9 rung (details, custom items, companions and the rest): written while no v10 field is set but a v9 field is.</summary>
+    public const int DetailsSchemaVersion = 9;
+
+    /// <summary>The version written while no v9 or v10 field is set (R73): the release before v9 reads it, and the bytes are the ones it wrote.</summary>
     public const int PreviousSchemaVersion = 8;
 
     public const int MinLevel = 1;
@@ -72,16 +81,22 @@ public sealed record Character
     public required Guid Id { get; init; }
 
     /// <summary>
-    /// The schema version this character is written in, computed from its data (R73): <see cref="CurrentSchemaVersion"/> when a v9 field
-    /// is set, otherwise <see cref="PreviousSchemaVersion"/>. Every version from 1 reads as one of the two, since older data
-    /// upcasts with the new fields at their default. A version outside 1 to <see cref="CurrentSchemaVersion"/> (data from a newer build) is
-    /// kept as read, so <see cref="Validate"/> refuses it.
+    /// The schema version this character is written in, computed from its data (R73): <see cref="EncounterSchemaVersion"/> when a v10 field
+    /// is set, otherwise <see cref="DetailsSchemaVersion"/> when a v9 field is set, otherwise <see cref="PreviousSchemaVersion"/>. Every
+    /// version from 1 reads as one of the three, since older data upcasts with the new fields at their default. A version outside 1 to
+    /// <see cref="CurrentSchemaVersion"/> (data from a newer build) is kept as read, so <see cref="Validate"/> refuses it.
     /// </summary>
     public int SchemaVersion
     {
-        get => _schemaVersion is >= 1 and <= CurrentSchemaVersion ? (UsesV9Fields ? CurrentSchemaVersion : PreviousSchemaVersion) : _schemaVersion;
+        get => _schemaVersion is >= 1 and <= CurrentSchemaVersion
+            ? (UsesV10Fields ? EncounterSchemaVersion : UsesV9Fields ? DetailsSchemaVersion : PreviousSchemaVersion)
+            : _schemaVersion;
         init => _schemaVersion = value;
     }
+
+    /// <summary>True when any field that only schema v10 has is set: an encounter, or the rounds left on a toggle.</summary>
+    [JsonIgnore]
+    public bool UsesV10Fields => Play?.Encounter is not null || (Play?.Toggles?.Any(t => t?.RoundsLeft is not null) ?? false); // a null list or entry from untrusted JSON is Validate's to report, not this getter's to throw
 
     /// <summary>True when any field that only schema v9 has is set. The lists and <see cref="Details"/> are normalised to absent when empty (R74), so null is the only "unset".</summary>
     [JsonIgnore]
