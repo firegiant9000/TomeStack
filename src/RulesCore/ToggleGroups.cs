@@ -68,7 +68,8 @@ public static class ToggleGroups
             if (activeContent is not null && !activeContent.Contains(groupContent))
             {
                 // C6: the content that declares the group is not on the character, so this toggle is exclusive with nothing.
-                diagnostics.Add(new("toggle.group-absent", $"Toggle '{item.Toggle.ToggleId}' joins group '{group}', whose content {groupContent} is not on this character; it is a group of one.", item.Reference, item.Toggle.Id));
+                // Information only: no Content or EffectId, so it stays out of the feature's own list and never downgrades its automation.
+                diagnostics.Add(new("toggle.group-absent", $"Toggle '{item.Toggle.ToggleId}' joins group '{group}', whose content is not on this character; it is a group of one."));
                 if (storedAt.ContainsKey((item.ContentId, item.Toggle.ToggleId)))
                     effective.SetOn(item.ContentId, item.Toggle.ToggleId);
                 continue;

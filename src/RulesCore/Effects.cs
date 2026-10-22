@@ -433,7 +433,7 @@ public sealed record ToggleEffect : Effect
     /// <summary>Content schema v11 (D43): the content that declares <see cref="ResourceId"/>, when it is not this revision.</summary>
     public Guid? ResourceContent { get; init; }
 
-    /// <summary>Content schema v11 (D43): the toggle is available from this level on (character level; see <see cref="GrantEffect.Level"/>).</summary>
+    /// <summary>Content schema v11 (D43): the toggle is available from this level on (class level for a class's features, otherwise character level; see <see cref="GrantEffect.Level"/>).</summary>
     public int? Level { get; init; }
 
     internal const string AutoWhenProperty = "autoWhen";

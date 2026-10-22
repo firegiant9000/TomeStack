@@ -663,10 +663,12 @@ public static class CharacterCalculator
                 else
                     cost = Math.Max(amount, 0);
             }
+            // A toggle whose group content is not on the character is a group of one (C6): it shows as a plain toggle.
+            var inGroup = t.Group is not null && active.Any(a => a.Revision.ContentId == (t.GroupContent ?? revision.ContentId));
             return new ToggleValue(
                 revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(revision, t, effective, autoOn), t.ResourceId, t.Text,
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
-                t.Group, t.Group is null ? null : t.GroupContent ?? revision.ContentId, t.Group is null ? null : t.Layer ?? ToggleLayer.Primary,
+                inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
                 cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t));
         }
         var maximum = values[FieldIds.HitPoints];
@@ -810,8 +812,16 @@ public static class CharacterCalculator
     /// <summary>Content v11 (D43): why an overlay cannot be switched on now, naming the form content it needs.</summary>
     private static string UnavailableReason(List<ActiveContent> active, ActiveContent item, ToggleEffect overlay)
     {
+        // Name the form (the toggle's label); add the content name only when the reference points at other content.
         var needed = (overlay.AllowedWith ?? [])
-            .Select(r => active.FirstOrDefault(a => a.Revision.ContentId == (r.ContentId ?? item.Revision.ContentId))?.Revision.Name ?? r.ToggleId)
+            .Select(r =>
+            {
+                var owner = active.FirstOrDefault(a => a.Revision.ContentId == (r.ContentId ?? item.Revision.ContentId));
+                var label = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == r.ToggleId)?.Label;
+                if (string.IsNullOrWhiteSpace(label))
+                    label = r.ToggleId;
+                return owner is not null && owner.Revision.ContentId != item.Revision.ContentId ? $"{label} ({owner.Revision.Name})" : label;
+            })
             .Distinct(StringComparer.Ordinal)
             .ToList();
         if (needed.Count == 0)

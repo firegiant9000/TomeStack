@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // D43 Slice 1: the form picker. One radio group per form group (Base first), overlays as checkboxes.
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ToggleValue } from '../api/types';
@@ -117,6 +117,28 @@ it('arrow keys only move focus; Space chooses the focused form, and Home and End
   await user.keyboard(' ');
   expect(act).toHaveBeenCalledTimes(1);
   expect(act).toHaveBeenLastCalledWith({ action: 'toggleOn', contentId: 'c-tide', toggleId: 'tide' });
+});
+
+it('after a refused choice the tab stop is back on the checked radio, and leaving the group resets it', async () => {
+  const act = vi.fn(() => Promise.reject(new Error('refused')));
+  const user = userEvent.setup();
+  render(
+    <>
+      <FormGroups toggles={toggles({ tide: { on: true } })} act={act} busy={false} />
+      <button type="button">After</button>
+    </>,
+  );
+  const tide = screen.getByRole('radio', { name: /Fixture Tide Form/ });
+  const ember = screen.getByRole('radio', { name: /Fixture Ember Form/ });
+  await user.click(ember);
+  expect(act).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect([tide.tabIndex, ember.tabIndex]).toEqual([0, -1]));
+  // Arrowing to another radio moves the stop; tabbing out puts it back on the checked one.
+  tide.focus();
+  await user.keyboard('{ArrowDown}');
+  expect(ember.tabIndex).toBe(0);
+  await user.click(screen.getByRole('button', { name: 'After' }));
+  expect([tide.tabIndex, ember.tabIndex]).toEqual([0, -1]);
 });
 
 it('ignores a second choice while the first is still being confirmed', async () => {

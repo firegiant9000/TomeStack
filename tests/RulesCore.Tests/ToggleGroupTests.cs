@@ -298,9 +298,58 @@ public class ToggleGroupTests
         Assert.Equal(5, sheet.Field(FieldIds.Speed).Value - plain.Field(FieldIds.Speed).Value); // lineage applies
         Assert.Equal(2, sheet.Field(FieldIds.ArmorClass).Value - plain.Field(FieldIds.ArmorClass).Value); // alongside ember (its own group is absent too)
         var absent = sheet.Diagnostics.Where(d => d.Code == "toggle.group-absent").ToList();
-        Assert.Contains(absent, d => d.Content == Fixtures.LineageForm);
+        Assert.Contains(absent, d => d.Message.Contains("'lineage'", StringComparison.Ordinal));
+        Assert.DoesNotContain(absent, d => d.Message.Contains(Fixtures.FormDiscipline.ContentId.ToString(), StringComparison.OrdinalIgnoreCase)); // no raw GUID
         Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "toggle.group-conflict");
         Assert.DoesNotContain(Sheet(Forms(Ember)).Diagnostics, d => d.Code == "toggle.group-absent");
+    }
+
+    [Fact]
+    public void A_group_absent_toggle_leaves_its_feature_automatic_with_no_problems_of_its_own()
+    {
+        var lineageOnly = Fixtures.Srd521Character() with { Pins = [.. Fixtures.Srd521Character().Pins, Fixtures.LineageForm], Play = new PlayState { Toggles = [Lineage] } };
+        var sheet = Sheet(lineageOnly);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "toggle.group-absent"); // still informative
+        var feature = sheet.Features!.Single(f => f.Content == Fixtures.LineageForm);
+        Assert.Equal(AutomationStatus.Automatic, feature.Automation);
+        Assert.Empty(feature.Diagnostics);
+        Assert.All(feature.Effects, e => Assert.NotEqual(AutomationStatus.Assisted, e.Automation));
+    }
+
+    [Fact]
+    public void A_group_of_one_toggle_reports_no_group_or_layer_on_the_sheet()
+    {
+        var lineageOnly = Fixtures.Srd521Character() with { Pins = [.. Fixtures.Srd521Character().Pins, Fixtures.LineageForm] };
+        var lineage = Sheet(lineageOnly).Toggles!.Single(t => t.ToggleId == "lineage");
+        Assert.Equal((null, null, null, null), (lineage.Group, lineage.GroupContent, lineage.Layer, lineage.GroupLabel));
+        // With the group content present it is a member as before.
+        var member = Sheet(Base() with { Pins = [.. Base().Pins, Fixtures.LineageForm] }).Toggles!.Single(t => t.ToggleId == "lineage");
+        Assert.Equal(("forms", ToggleLayer.Primary), (member.Group, member.Layer));
+    }
+
+    private static readonly Guid SameRevisionContent = Guid.Parse("6f0dc000-0000-4000-8000-0000000000f3");
+
+    [Fact]
+    public void An_overlay_reason_names_the_form_label_not_its_own_content_and_other_content_is_added_in_brackets()
+    {
+        var one = new ContentRevision
+        {
+            ContentId = SameRevisionContent, RevisionId = Guid.Parse("6f0de000-0000-4000-8000-0000000000f3"), SchemaVersion = 11, Kind = ContentKind.Feature,
+            Name = "Fixture Studio Feature", RulesFamilies = [RulesFamilies.Srd521], Status = RevisionStatus.Published,
+            Provenance = new(Fixtures.FormsPack().Sources[0].Id, new(9)),
+            Effects =
+            [
+                new ToggleGroupEffect { Id = "g", GroupId = "shapes", Label = "Shapes" },
+                new ToggleEffect { Id = "alpha", ToggleId = "alpha", Label = "Alpha shape", Group = "shapes" },
+                new ToggleEffect { Id = "halo", ToggleId = "halo", Label = "Halo", Group = "shapes", Layer = ToggleLayer.Overlay, AllowedWith = [new ToggleRef(null, "alpha")] },
+            ],
+        };
+        var packs = new[] { Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack() };
+        var catalog = new InMemoryContentCatalog([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions), one]);
+        var sheet = CharacterCalculator.Calculate(Base() with { Pins = [.. Base().Pins, one.Reference] }, catalog);
+        Assert.Equal("Needs Alpha shape.", sheet.Toggles!.Single(t => t.ToggleId == "halo").UnavailableReason);
+        // The cross-content fixture overlay names the form and its content.
+        Assert.Equal("Needs Tide form (Fixture Tide Form).", Sheet(Base()).Toggles!.Single(t => t.ToggleId == "bound").UnavailableReason);
     }
 
     // ---- Wave 3 auto toggles inside a group (V17) -----------------------------------------------------------------------

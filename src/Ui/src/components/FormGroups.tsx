@@ -30,6 +30,8 @@ export function FormGroups({
     setPending(true);
     try {
       await act(action);
+    } catch {
+      // The sheet's `act` reports a refusal itself; a rejection here only means the change did not happen.
     } finally {
       setPending(false);
     }
@@ -73,7 +75,7 @@ function FormGroup({
   resources,
 }: {
   members: ToggleValue[];
-  run: (action: PlayAction) => void;
+  run: (action: PlayAction) => Promise<void>;
   busy: boolean;
   pending: boolean;
   resources: ResourceValue[];
@@ -115,14 +117,17 @@ function FormGroup({
   const checkedKey = options.find((o) => o.checked)?.key ?? 'base';
   const tabbable = options.some((o) => o.key === roving && !o.disabled) ? roving : checkedKey;
 
+  // The roving stop follows a choice only once it has been made: when the change settles it goes back to the checked radio, which is
+  // the chosen one after a success and the old one after a refusal. Leaving the group resets it too.
+  const settle = (action: PlayAction) => void run(action).finally(() => setRoving(undefined));
+
   const choose = (option: Option) => {
     if (option.disabled || option.checked) return;
-    setRoving(option.key);
     if (!option.toggle) {
-      if (current) run({ action: 'toggleOff', ...ref(current) });
+      if (current) settle({ action: 'toggleOff', ...ref(current) });
       return;
     }
-    run(current && !same(current, option.toggle) ? { action: 'toggleOn', ...ref(option.toggle), replace: true } : { action: 'toggleOn', ...ref(option.toggle) });
+    settle(current && !same(current, option.toggle) ? { action: 'toggleOn', ...ref(option.toggle), replace: true } : { action: 'toggleOn', ...ref(option.toggle) });
   };
 
   const onKeyDown = (event: KeyboardEvent, index: number) => {
@@ -152,7 +157,13 @@ function FormGroup({
       <p id={`${id}-label`} className="option-name">
         {label}
       </p>
-      <div role="radiogroup" aria-labelledby={`${id}-label`}>
+      <div
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setRoving(undefined);
+        }}
+      >
         {options.map((option, index) => (
           <div key={option.key}>
             <div

@@ -69,6 +69,25 @@ public class ToggleGroupCommandTests
     }
 
     [Fact]
+    public void A_refused_replace_keeps_the_overlays_that_were_on()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        On(temp, id, 3, "tide");          // 5 of 12
+        On(temp, id, 5, "bound");         // free overlay that needs tide
+        temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, Amount: 5, ContentId: Discipline, ResourceId: "focus"));
+        Assert.Equal(2, Focus(temp.App.GetCharacter(id))); // ember costs 3
+        var before = TempApp.Json(temp.App.GetCharacter(id).Character);
+
+        Assert.Equal("resource.insufficient", Refusal(() => On(temp, id, 2, "ember", replace: true)));
+
+        var after = temp.App.GetCharacter(id);
+        Assert.Equal(before, TempApp.Json(after.Character));
+        Assert.Contains(after.Character.Play.Toggles, t => t.ToggleId == "bound");
+        Assert.True(IsOn(after, "tide"));
+    }
+
+    [Fact]
     public void Replacing_a_primary_turns_off_overlays_it_does_not_allow()
     {
         var (temp, id) = Forms();
@@ -192,6 +211,8 @@ public class ToggleGroupCommandTests
         Assert.True(IsOn(both, "one"));
         Assert.True(IsOn(both, "two"));
         Assert.Equal(2, both.Character.Play.Toggles.Count);
+        // They show as plain toggles, so the sheet gives the UI no group to put them in.
+        Assert.All(both.Sheet.Toggles!.Where(t => t.ToggleId is "one" or "two"), t => Assert.Null(t.Group));
     }
 
     [Fact]

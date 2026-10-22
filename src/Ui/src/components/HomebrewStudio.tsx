@@ -1646,7 +1646,7 @@ function EffectEditor(props: {
             </>
           )}
           <label className="field">
-            Available from character level
+            Available from level (class level for class features)
             <input
               type="number"
               min={1}

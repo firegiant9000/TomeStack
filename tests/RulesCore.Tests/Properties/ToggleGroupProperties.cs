@@ -31,9 +31,12 @@ public class ToggleGroupProperties
             var primaries = new[] { "ember", "tide", "deep" }.Where(id => On(sheet, id)).ToList();
             var lastPrimary = stored.LastOrDefault(t => t.ToggleId is "ember" or "tide"); // deep is below the character's level, so never listed or on
             var expected = lastPrimary?.ToggleId;
-            // The bonuses are the proof the flags are what calculation applied.
-            var armor = (On(sheet, "ember") ? 2 : 0) + (On(sheet, "surge") ? 1 : 0) + (On(sheet, "bound") ? 1 : 0);
-            var initiative = (On(sheet, "tide") ? 3 : 0) + (On(sheet, "calm") ? 1 : 0) + (On(sheet, "calm-tide") ? 2 : 0);
+            // The oracle is the model, not the sheet's flags: the kept primary is the last stored; an overlay applies when it is stored
+            // and its allowedWith holds the kept primary, or there is none and it is allowed in base (surge, calm).
+            bool Applies(string overlay, string[] with, bool inBase) =>
+                stored.Any(t => t.ToggleId == overlay) && (expected is null ? inBase : with.Contains(expected));
+            var armor = (expected == "ember" ? 2 : 0) + (Applies("surge", ["tide"], true) ? 1 : 0) + (Applies("bound", ["tide"], false) ? 1 : 0);
+            var initiative = (expected == "tide" ? 3 : 0) + (Applies("calm", [], true) ? 1 : 0) + (Applies("calm-tide", ["tide"], false) ? 2 : 0);
             return (primaries.Count <= 1
                     && primaries.SingleOrDefault() == expected
                     && sheet.Field(FieldIds.ArmorClass).Value - BaseSheet.Field(FieldIds.ArmorClass).Value == armor

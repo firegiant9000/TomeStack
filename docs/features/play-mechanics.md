@@ -18,7 +18,7 @@ Rules core: `ToggleEffect`, `ToggleGroupEffect` and `ToggleLayer` in `src/RulesC
 | `toggle` | `allowedInBase` | boolean (default false) | Overlays only: it may also be on while no primary of the group is |
 | `toggle` | `cost` | formula | The amount of the pool that turning the toggle on spends. Needs `resourceId` |
 | `toggle` | `resourceContent` | content id | The content that defines `resourceId`, when it is not this revision |
-| `toggle` | `level` | 1 to 20 | The toggle is offered from this character level on |
+| `toggle` | `level` | 1 to 20 | The toggle is offered from this level on: the class level for a class's features, otherwise the character level |
 
 Rules:
 
@@ -44,14 +44,14 @@ Errors stop a publish; warnings do not.
 | `validate.toggle-group-content-missing` | warning | `groupContent` names content that is not installed; the toggle acts alone until it is |
 | `validate.toggle-layer` | error | A `layer` with no `group` |
 | `validate.toggle-auto-group` | error | An `autoWhen` toggle has a `group` |
-| `validate.toggle-allowed-with` | error | A toggle that is not an overlay has `allowedWith` or `allowedInBase`, or `allowedWith` names a toggle the content does not define |
+| `validate.toggle-allowed-with` | error | A toggle that is not an overlay has a non-empty `allowedWith` or `allowedInBase: true`, or `allowedWith` names a toggle the content does not define |
 | `validate.toggle-allowed-with-content-missing` | warning | `allowedWith` names content that is not installed; the pairing is unchecked until it is |
 | `validate.toggle-overlay-unreachable` | warning | An overlay is allowed in no base and with no form, so it can never be on |
 | `validate.toggle-cost` | error | A `cost` with no `resourceId` |
 | `validate.toggle-resource-content` | error | `resourceContent` names content that defines no such resource |
 | `validate.toggle-resource-content-missing` | warning | `resourceContent` names content that is not installed |
 
-A cost that does not parse is the usual `validate.formula-invalid`, and a `level` outside 1 to 20 is `validate.level`. The existing `validate.toggle-resource` (the pool must be in this revision) still applies when no `resourceContent` is named. The packages check adds `pack.reference-outside` when a toggle names other content the pack does not carry, and the relationship tree and the resource debugger follow a toggle's group, pool and allowed forms to that other content.
+A cost that does not parse is the usual `validate.formula-invalid`, and a `level` outside 1 to 20 is `validate.level`. The existing `validate.toggle-resource` (the pool must be in this revision) still applies when no `resourceContent` is named. The packages check adds `pack.reference-outside` when a toggle names other content the pack does not carry, and the relationship tree and the resource debugger follow only a toggle's pool (`resourceContent`). The packages check and import candidates follow the group, the pool and the allowed forms.
 
 ## Calculation
 
@@ -63,9 +63,9 @@ Calculation diagnostics carry a code and a message, with no severity field. `tog
 | --- | --- |
 | `toggle.group-conflict` | Two primaries of one group are stored (a hand-edited or imported character). The last one stored applies |
 | `toggle.overlay-not-allowed` | A stored overlay is not allowed with the form that is on now (or with none). It is ignored. It stays stored until the next confirmed change drops it |
-| `toggle.group-absent` | The toggle's group content is not on this character, so it is a group of one. The sheet does not list it under "Content not applied" |
+| `toggle.group-absent` | The toggle's group content is not on this character, so it is a group of one. The sheet does not list it under "Content not applied", and it belongs to no feature, so it does not make the feature assisted |
 
-`sheet.toggles` carries, for each toggle, `group`, `groupContent`, `groupLabel` (the `toggleGroup` label, for the Play picker), `layer`, `cost`, `costResourceContent`, `available` and `unavailableReason`. An overlay that is not allowed now is listed with `available: false` and the reason. A toggle below its `level` is not listed. A cost that does not evaluate is `effect.invalid-formula` and the toggle cannot be turned on.
+`sheet.toggles` carries, for each toggle, `group`, `groupContent`, `groupLabel` (the `toggleGroup` label, for the Play picker), `layer`, `cost`, `costResourceContent`, `available` and `unavailableReason`. A toggle whose group content is not on the character reports no `group`, `groupContent`, `groupLabel` or `layer`: it is a plain toggle. An overlay that is not allowed now is listed with `available: false` and the reason, which names the form it needs by its toggle label ("Needs Tide form."), with the content's name added in brackets when the form is another content's ("Needs Tide form (Fixture Tide Form)."). A toggle below its `level` is not listed. A cost that does not evaluate is `effect.invalid-formula` and the toggle cannot be turned on.
 
 ## Play (no new character field)
 
