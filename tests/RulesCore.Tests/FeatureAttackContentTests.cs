@@ -202,6 +202,11 @@ public class FeatureAttackContentTests
     [InlineData("rider-toggle-unknown", "validate.rider-toggle-unknown", "fist-rider")]
     [InlineData("rider-toggle-content-without-toggle", "validate.rider-toggle-unknown", "fist-rider")]
     [InlineData("rider-toggle-content-lacks", "validate.rider-toggle-unknown", "fist-rider")]
+    [InlineData("roll-while-toggle-blank-not-installed", "validate.while-toggle-unknown", "flash")]
+    [InlineData("attack-while-toggle-blank-not-installed", "validate.while-toggle-unknown", "strike")]
+    [InlineData("rider-toggle-blank-not-installed", "validate.rider-toggle-unknown", "fist-rider")]
+    [InlineData("modifier-toggle-blank-not-installed", "validate.toggle-unknown", "keen-initiative")]
+    [InlineData("restriction-resource-target", "validate.unknown-target", "r")]
     [InlineData("roll-while-toggle-unknown", "validate.while-toggle-unknown", "flash")]
     [InlineData("roll-while-toggle-content-lacks", "validate.while-toggle-unknown", "flash")]
     [InlineData("modifier-own-toggle-unknown", "validate.toggle-unknown", "keen-initiative")]
@@ -232,6 +237,34 @@ public class FeatureAttackContentTests
         var report = Validate(revision);
 
         Assert.Contains(report.Errors, e => e.Code == "validate.while-toggle-unknown" && e.EffectId == "r");
+    }
+
+    [Fact]
+    public void A_whileToggle_without_a_toggleId_naming_uninstalled_content_is_an_error_not_a_warning()
+    {
+        var revision = Fixtures.RevisionWithEffect("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","whileToggle":{"contentId":"6f0dc000-0000-4000-8000-0000000000ee"}}""", 11);
+
+        var report = Validate(revision);
+
+        Assert.Contains(report.Errors, e => e.Code == "validate.while-toggle-unknown" && e.EffectId == "r");
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-content-missing");
+    }
+
+    [Fact]
+    public void A_blank_toggle_name_is_not_reported_as_unchecked_content()
+    {
+        var report = Validate(FeatureAttackVariants.Make("rider-toggle-blank-not-installed"));
+
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-content-missing");
+    }
+
+    [Fact]
+    public void A_non_overlay_toggle_with_allowedWith_gets_the_existing_error_and_no_not_primary_warning()
+    {
+        var report = Validate(FeatureAttackVariants.Make("overlay-with-allowed-with-not-overlay"));
+
+        Assert.Contains(report.Errors, e => e.Code == "validate.toggle-allowed-with" && e.EffectId == "surge");
+        Assert.DoesNotContain(report.Warnings, w => w.Code == "validate.toggle-allowed-with-not-primary");
     }
 
     [Fact]
@@ -536,6 +569,12 @@ internal static class FeatureAttackVariants
         "rider-toggle-content-not-installed" => WithRider(r => r with { Toggle = "kindled", ToggleContent = Absent }),
         "roll-while-toggle-unknown" => WithFlash(r => r with { WhileToggle = new(null, "nonesuch") }),
         "roll-while-toggle-content-lacks" => WithFlash(r => r with { WhileToggle = new(Fixtures.EmberFist.ContentId, "kindled") }),
+        "roll-while-toggle-blank-not-installed" => WithFlash(r => r with { WhileToggle = new(Absent, " ") }),
+        "attack-while-toggle-blank-not-installed" => WithAttack("strike", a => a with { WhileToggle = new(Absent, "") }),
+        "rider-toggle-blank-not-installed" => WithRider(r => r with { Toggle = "", ToggleContent = Absent }),
+        "modifier-toggle-blank-not-installed" => WithKeen(m => m with { Toggle = " ", ToggleContent = Absent }),
+        "overlay-with-allowed-with-not-overlay" => WithSurge(t => t with { Layer = ToggleLayer.Primary }),
+        "restriction-resource-target" => Only(new RestrictionEffect { Id = "r", Field = "resource.reflex", Minimum = 1 }),
         "roll-while-toggle-not-installed" => WithFlash(r => r with { WhileToggle = new(Absent, "kindled") }),
         "modifier-own-toggle-unknown" => WithKeen(m => m with { Toggle = "nonesuch", ToggleContent = null }),
         "modifier-toggle-content-lacks" => WithKeen(m => m with { ToggleContent = Fixtures.EmberFist.ContentId }),

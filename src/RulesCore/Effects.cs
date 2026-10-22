@@ -375,7 +375,7 @@ public sealed record AttackEffect : Effect
 
     public override string Type => TypeName;
 
-    /// <summary>A key like a scale id (<see cref="ScaleEffect.IsValidScaleId"/>), unique within the revision; validated in the content validator.</summary>
+    /// <summary>A key like a scale id (<see cref="ScaleEffect.IsValidScaleId"/>); its shape is validated in the content validator. Ids should be unique within the revision (uniqueness is not enforced).</summary>
     public required string AttackId { get; init; }
 
     public required string Label { get; init; }

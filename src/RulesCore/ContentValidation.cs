@@ -640,8 +640,14 @@ public static class ContentValidator
         // Content v11 (D43): a toggle named by another entry (or by this revision when no content is named). Content that is not
         // installed is a warning (it may arrive later); installed content that declares no such toggle is an error with the
         // referring effect's own code.
-        void CheckToggleReference(Guid? content, string toggleId, string effectId, string errorCode)
+        void CheckToggleReference(Guid? content, string? toggleId, string effectId, string errorCode)
         {
+            // A reference with no toggle id names nothing, whether or not its content is installed.
+            if (string.IsNullOrWhiteSpace(toggleId))
+            {
+                Error(errorCode, $"Effect '{effectId}' follows a toggle but names no toggle id.", effectId);
+                return;
+            }
             var holder = content ?? revision.ContentId;
             var declarers = holder == revision.ContentId
                 ? new List<ContentRevision> { revision }
@@ -855,7 +861,7 @@ public static class ContentValidator
                 // Only a primary of the overlay's own group is ever the form that is on beside it (ToggleGroups.Resolve): a group is a
                 // group id and the content that declares it (a toggle naming no groupContent belongs to the group of its own content).
                 var ownGroupHolder = toggle.GroupContent ?? revision.ContentId;
-                if (!named.Any(n => n.Layer != ToggleLayer.Overlay && n.Group is not null && n.Group == toggle.Group && (n.GroupContent ?? holder) == ownGroupHolder))
+                if (toggle.Layer == ToggleLayer.Overlay && !named.Any(n => n.Layer != ToggleLayer.Overlay && n.Group is not null && n.Group == toggle.Group && (n.GroupContent ?? holder) == ownGroupHolder))
                     Warn("validate.toggle-allowed-with-not-primary", $"Toggle '{id}' is allowed with toggle '{allowed.ToggleId}' of content {holder}, which is not a primary of group '{toggle.Group}' of content {ownGroupHolder}, so the pairing can never be on.", id);
             }
 
