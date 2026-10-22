@@ -46,6 +46,8 @@ The plan is calculated from the sheet (both SRDs):
 
 **Concentration (character schema v8, D19):** a long rest of a character who is concentrating proposes ending it (`concentration`, "Concentration", 1 → 0, naming the spell), so the end is seen before it happens; untick it to keep concentrating, as with a toggle. A short rest does not list it.
 
+**Encounter (character schema v10, D43 slice 3, [play-mechanics.md](play-mechanics.md)):** a long rest of a character who is in an encounter proposes "End the encounter" (`encounter`, the round → 0, "The encounter (round N) ends after a long rest (untick to keep it)"), once. Applying it clears the encounter and every toggle's rounds left, as "End encounter" does (the toggles themselves are the separate toggle lines above). Unticking it keeps the encounter. A short rest does not list it. A character that is not in an encounter sees no such line.
+
 **Spell slots ([spellcasting.md](spellcasting.md)):** a long rest proposes every spent slot back (`spellSlots:<level>`), and both rests propose spent Pact Magic slots back (`pactSlots`). Each is ticked and can be unticked like any change.
 
 ## Commands

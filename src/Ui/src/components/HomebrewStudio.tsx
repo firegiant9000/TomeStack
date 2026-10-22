@@ -859,8 +859,13 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting' | 'toggle' | 'toggleGroup') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep') {
     const id = nextId(type);
+    if (type === 'upkeep') {
+      // Content v11 (D43): spends one from the first pool of this revision at the start of the turn; the button needs a pool.
+      update({ effects: [...revision.effects, { type, id, at: 'turnStart', resourceId: resources[0]?.resourceId ?? '', change: 'spend', amount: '1' }] });
+      return;
+    }
     const effect: Effect =
       type === 'modifier'
         ? { type, id, operation: 'bonus', target: 'initiative', value: '1' }
@@ -1068,18 +1073,24 @@ function EntryEditor(props: {
             const removedResource = effect.type === 'resource' ? effect.resourceId : undefined;
             const remaining = revision.effects.filter((_, i) => i !== index);
             const resourceStillDefined = remaining.some((e) => e.type === 'resource' && e.resourceId === removedResource);
+            // D43 slice 3: an upkeep that spent from or regained a removed pool of this revision goes with it (it has nothing left to
+            // change); one that named a removed toggle of this revision is not tied to it any more, and forgets the shortfall choice.
+            const ofRemovedPool = (e: Effect) => e.type === 'upkeep' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource;
+            const kept = remaining.filter((e) => !ofRemovedPool(e));
             update({
-              effects: remaining.map((e) =>
+              effects: kept.map((e) =>
                 e.type === 'modifier' && removedToggle !== undefined && e.toggle === removedToggle
                   ? { ...e, toggle: undefined, timing: undefined }
-                  : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
-                    ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
-                    : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
-                      e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
-                      ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
-                      : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
-                        ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
-                        : e,
+                  : e.type === 'upkeep' && removedToggle !== undefined && !e.toggleContent && e.toggle === removedToggle
+                    ? { ...e, toggle: undefined, ifShort: undefined }
+                    : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
+                      ? { ...e, resourceId: undefined, cost: undefined, resourceContent: undefined }
+                      : // D43: a toggle leaves a removed group (it would name a group nothing declares), and an overlay forgets a removed primary.
+                        e.type === 'toggle' && removedGroup !== undefined && e.group === removedGroup && !e.groupContent
+                        ? { ...e, group: undefined, layer: undefined, allowedWith: undefined, allowedInBase: undefined }
+                        : e.type === 'toggle' && removedToggle !== undefined && e.allowedWith?.some((r) => !r.contentId && r.toggleId === removedToggle)
+                          ? { ...e, allowedWith: e.allowedWith.filter((r) => r.contentId || r.toggleId !== removedToggle) }
+                          : e,
               ),
             });
             // Field keys start with the effect id: a removed rule's problems no longer block saving.
@@ -1106,6 +1117,9 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('toggleGroup')}>
           Add form group
+        </button>
+        <button type="button" onClick={() => add('upkeep')} disabled={resources.length === 0}>
+          Add upkeep
         </button>
         {(classLike || revision.kind === 'feat') && (
           <button type="button" onClick={() => add('grant')} disabled={grantable.length === 0}>
@@ -1492,10 +1506,13 @@ function EffectEditor(props: {
     spell: 'Spell data',
     toggle: 'Toggle',
     toggleGroup: 'Form group',
+    upkeep: 'Upkeep',
     item: 'Item rules',
   };
   const toggles = props.toggles;
   const legend = `Rule ${n}: ${names[effect.type]}`;
+  // "all" is a word, not a formula, so a regain of "all" has no preview.
+  const upkeepAmountPreviewed = effect.type === 'upkeep' && effect.amount.trim() !== '' && !(effect.change === 'regain' && effect.amount.trim() === 'all');
 
   return (
     <fieldset className="effect-editor" id={ruleElementId(effect.id)} tabIndex={-1}>
@@ -1655,6 +1672,11 @@ function EffectEditor(props: {
               onChange={(e) => onChange({ ...effect, level: e.target.value ? Number(e.target.value) : undefined })}
             />
           </label>
+          <label className="field">
+            Lasts (rounds: a number or a formula; empty is until switched off)
+            <input value={effect.duration ?? ''} aria-describedby={`rule-${effect.id}-duration-preview`} onChange={(e) => onChange({ ...effect, duration: e.target.value || undefined })} />
+          </label>
+          <FormulaPreview id={`rule-${effect.id}-duration-preview`} formula={effect.duration ?? ''} revision={props.previewRevision} floorAtZero />
         </>
       )}
       {effect.type === 'toggleGroup' && (
@@ -1677,6 +1699,99 @@ function EffectEditor(props: {
             <input value={effect.maximum} aria-describedby={`rule-${effect.id}-maximum-preview`} onChange={(e) => onChange({ ...effect, maximum: e.target.value })} />
           </label>
           <FormulaPreview id={`rule-${effect.id}-maximum-preview`} formula={effect.maximum} revision={props.previewRevision} floorAtZero />
+          {/* Content v11 (D43). Words, not colour: a built-up pool reads "built up N of M" on the sheet. */}
+          <label className="choice">
+            <input
+              type="checkbox"
+              checked={effect.counts === 'up'}
+              onChange={(e) => onChange(e.target.checked ? { ...effect, counts: 'up' } : { ...effect, counts: undefined, resourceFull: undefined })}
+            />
+            Counts up (built up from 0 to the most, instead of uses left)
+          </label>
+          {effect.counts === 'up' && (
+            <label className="field">
+              When full, say (shown on the sheet and in the turn preview; empty says nothing)
+              <input value={effect.resourceFull?.text ?? ''} onChange={(e) => onChange({ ...effect, resourceFull: e.target.value ? { text: e.target.value } : undefined })} />
+            </label>
+          )}
+          <label className="choice">
+            <input type="checkbox" checked={effect.allowance ?? false} onChange={(e) => onChange({ ...effect, allowance: e.target.checked || undefined })} />
+            Allowance (a per-turn pool such as one reaction; an upkeep regain refreshes it)
+          </label>
+        </>
+      )}
+      {effect.type === 'upkeep' && (
+        <>
+          <label className="field">
+            Toggle
+            <select
+              value={effect.toggle ?? ''}
+              onChange={(e) =>
+                // Without a toggle there is nothing to end, so the shortfall choice goes too.
+                onChange(e.target.value ? { ...effect, toggle: e.target.value, toggleContent: undefined } : { ...effect, toggle: undefined, toggleContent: undefined, ifShort: undefined })
+              }
+            >
+              <option value="">Always (no toggle)</option>
+              {toggles.map((t) => (
+                <option key={t.id} value={t.toggleId}>
+                  While {t.label || t.toggleId} is on
+                </option>
+              ))}
+              {/* A toggle of other content is kept as it is, not silently moved. */}
+              {effect.toggle && (effect.toggleContent || !toggles.some((t) => t.toggleId === effect.toggle)) && <option value={effect.toggle}>{effect.toggle} (other content)</option>}
+            </select>
+          </label>
+          <label className="field">
+            When
+            <select value={effect.at} onChange={(e) => onChange({ ...effect, at: e.target.value as typeof effect.at })}>
+              <option value="turnStart">Start of my turn</option>
+              <option value="turnEnd">End of my turn</option>
+            </select>
+          </label>
+          <label className="field">
+            Pool
+            <select value={effect.resourceId} onChange={(e) => onChange({ ...effect, resourceId: e.target.value, resourceContent: undefined })}>
+              {props.resources.map((r) => (
+                <option key={r.id} value={r.resourceId}>
+                  {r.label || r.resourceId}
+                </option>
+              ))}
+              {/* A pool of other content is kept as it is, not silently moved. */}
+              {(effect.resourceContent || !props.resources.some((r) => r.resourceId === effect.resourceId)) && <option value={effect.resourceId}>{effect.resourceId} (other content)</option>}
+            </select>
+          </label>
+          <label className="field">
+            Change
+            <select
+              value={effect.change}
+              onChange={(e) => {
+                const change = e.target.value as typeof effect.change;
+                // "all" means a regain and the shortfall choice means a spend: each goes when it stops making sense.
+                onChange(change === 'spend' ? { ...effect, change, amount: effect.amount.trim() === 'all' ? '1' : effect.amount } : { ...effect, change, ifShort: undefined });
+              }}
+            >
+              <option value="spend">Spend from the pool</option>
+              <option value="regain">Regain to the pool</option>
+            </select>
+          </label>
+          <label className="field">
+            {effect.change === 'regain' ? 'Amount (all, a number or a formula)' : 'Amount (a number or a formula)'}
+            <input
+              value={effect.amount}
+              aria-describedby={upkeepAmountPreviewed ? `rule-${effect.id}-amount-preview` : undefined}
+              onChange={(e) => onChange({ ...effect, amount: e.target.value })}
+            />
+          </label>
+          {upkeepAmountPreviewed && <FormulaPreview id={`rule-${effect.id}-amount-preview`} formula={effect.amount} revision={props.previewRevision} floorAtZero />}
+          {effect.change === 'spend' && effect.toggle && (
+            <label className="field">
+              If the pool is short
+              <select value={effect.ifShort ?? 'ask'} onChange={(e) => onChange({ ...effect, ifShort: e.target.value === 'end' ? 'end' : undefined })}>
+                <option value="ask">Ask me (End the toggle is preselected)</option>
+                <option value="end">End the toggle</option>
+              </select>
+            </label>
+          )}
         </>
       )}
       {effect.type === 'recovery' && (

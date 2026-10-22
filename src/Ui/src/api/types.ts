@@ -1382,8 +1382,22 @@ export type Effect =
       cost?: string;
       resourceContent?: string;
       level?: number;
+      /** Content v11 (D43): the rounds it lasts once on, a formula; absent: until switched off. */
+      duration?: string;
     })
   | (EffectBase & { type: 'toggleGroup'; groupId: string; label: string })
+  // Content v11 (D43): a pool change at the start or end of the turn, while a toggle is on (absent: always). `amount` is a formula, or `all` for a regain.
+  | (EffectBase & {
+      type: 'upkeep';
+      toggle?: string;
+      toggleContent?: string;
+      at: 'turnStart' | 'turnEnd';
+      resourceId: string;
+      resourceContent?: string;
+      change: 'spend' | 'regain';
+      amount: string;
+      ifShort?: 'ask' | 'end';
+    })
   | (EffectBase & {
       type: 'grant';
       grant: 'proficiency' | 'expertise' | 'content' | 'damageResistance' | 'damageImmunity' | 'damageVulnerability';
@@ -1393,7 +1407,17 @@ export type Effect =
       onlyAs?: ClassEntry;
       damageType?: string;
     })
-  | (EffectBase & { type: 'resource'; resourceId: string; label: string; maximum: string; activation?: Activation })
+  | (EffectBase & {
+      type: 'resource';
+      resourceId: string;
+      label: string;
+      maximum: string;
+      activation?: Activation;
+      // Content v11 (D43): counts up from zero ("built up"), what a full pool says (only with counts), and a per-turn allowance.
+      counts?: 'up';
+      resourceFull?: { text: string };
+      allowance?: boolean;
+    })
   | (EffectBase & { type: 'item'; requiresAttunement?: boolean; charges?: { max: number; recovery?: { period: RestPeriod; regain?: string } } })
   | (EffectBase & { type: 'recovery'; resourceId: string; on: RestPeriod; amount: string })
   | (EffectBase & { type: 'roll'; rollId: string; label: string; dice: string; resourceId?: string })

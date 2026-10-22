@@ -117,3 +117,112 @@ it('authors a form group and two forms in the studio, switches forms, refuses a 
   expect(within(resources()).getByRole('heading', { name: 'Focus: 4 of 7' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: /^Undo switch/ })).toBeNull(); // one level: nothing left to undo
 });
+
+it('authors a stance with upkeep in the studio, starts an encounter, takes turns until the pool is short, chooses End in the turn preview, undoes the turn, and ends the encounter', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Upkeep Book', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Upkeep Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Upkeep Book/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Upkeep Book' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(within(editor()).getByRole('group', { name }));
+
+  // A pool of 7 Reserve that the stance spends 3 of each turn, and a pool of 5 Strain that counts up by 1 each turn, stance or not.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Stance Feature');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(rule(/^Rule 1: Resource/).getByRole('textbox', { name: 'Resource name' }), 'Reserve');
+  const reserveUses = rule(/^Rule 1: Resource/).getByRole('textbox', { name: /^Uses/ });
+  await user.clear(reserveUses);
+  await user.type(reserveUses, '7');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(rule(/^Rule 2: Resource/).getByRole('textbox', { name: 'Resource name' }), 'Strain');
+  const strainUses = rule(/^Rule 2: Resource/).getByRole('textbox', { name: /^Uses/ });
+  await user.clear(strainUses);
+  await user.type(strainUses, '5');
+  await user.click(rule(/^Rule 2: Resource/).getByRole('checkbox', { name: /^Counts up/ }));
+  await user.type(rule(/^Rule 2: Resource/).getByRole('textbox', { name: /^When full/ }), 'E2E strain is at its limit');
+  await user.click(within(editor()).getByRole('button', { name: 'Add toggle' }));
+  await user.type(rule(/^Rule 3: Toggle/).getByRole('textbox', { name: 'Toggle name' }), 'E2E Stance');
+  await user.click(within(editor()).getByRole('button', { name: 'Add upkeep' }));
+  await user.selectOptions(rule(/^Rule 4: Upkeep/).getByRole('combobox', { name: 'Toggle' }), 'While E2E Stance is on');
+  await user.selectOptions(rule(/^Rule 4: Upkeep/).getByRole('combobox', { name: 'Pool' }), 'Reserve');
+  const spend = rule(/^Rule 4: Upkeep/).getByRole('textbox', { name: /^Amount/ });
+  await user.clear(spend);
+  await user.type(spend, '3');
+  await user.click(within(editor()).getByRole('button', { name: 'Add upkeep' }));
+  await user.selectOptions(rule(/^Rule 5: Upkeep/).getByRole('combobox', { name: 'Pool' }), 'Strain');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Stance Feature/);
+
+  const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Stance Feature')?.latestPublished;
+  expect(published).toBeTruthy();
+  await client.createCharacter({
+    name: 'E2E Upkeep Hero',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    pins: [published!],
+  });
+
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Upkeep Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Upkeep Hero' });
+  await openTab(user, sheet, 'Play');
+  const combat = () => screen.getByRole('region', { name: 'Combat' });
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  const stance = () => screen.getByRole<HTMLInputElement>('checkbox', { name: /^E2E Stance/ });
+  const takeTurn = async (opens: string, panel: string, confirm: string) => {
+    await user.click(within(combat()).getByRole('button', { name: opens }));
+    await screen.findByRole('heading', { name: panel });
+    const button = await screen.findByRole('button', { name: confirm });
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).not.toBe('true')); // Confirm waits for the preview of the selection
+    return button;
+  };
+
+  expect(within(combat()).getByText('No encounter running')).toBeTruthy();
+  await user.click(stance());
+  await waitFor(() => expect(stance().checked).toBe(true));
+  await user.click(within(combat()).getByRole('button', { name: 'Start encounter' }));
+  await within(combat()).findByRole('button', { name: 'End encounter' });
+
+  // Two turns fit: 3 of 7 Reserve each turn, 1 built up of Strain.
+  await user.click(await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn'));
+  await within(combat()).findByText('Round 1');
+  expect(within(resources()).getByRole('heading', { name: 'Reserve: 4 of 7' })).toBeTruthy();
+  expect(within(resources()).getByRole('heading', { name: 'Strain: built up 1 of 5' })).toBeTruthy();
+  await user.click(await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn'));
+  await within(combat()).findByText('Round 2');
+  expect(within(resources()).getByRole('heading', { name: 'Reserve: 1 of 7' })).toBeTruthy();
+  expect(within(combat()).getByText('Strain: built up 2 of 5')).toBeTruthy();
+
+  // 1 Reserve is left and the stance needs 3: the preview asks, with End already chosen. It is accepted without a click on it.
+  const third = await takeTurn('Start my turn', 'Start of turn', 'Confirm start of turn');
+  const choice = screen.getByRole('radiogroup', { name: /^E2E Stance needs 3, has 1/ });
+  expect(within(choice).getByRole<HTMLInputElement>('radio', { name: 'End E2E Stance' }).checked).toBe(true);
+  expect(within(choice).getByRole<HTMLInputElement>('radio', { name: 'Keep it on' }).checked).toBe(false);
+  await user.click(third);
+  await within(combat()).findByText('Round 3');
+  await waitFor(() => expect(stance().checked).toBe(false));
+  expect(within(resources()).getByRole('heading', { name: 'Reserve: 1 of 7' })).toBeTruthy();
+  expect(within(resources()).getByRole('heading', { name: 'Strain: built up 3 of 5' })).toBeTruthy();
+
+  // The service undoes the whole turn: the stance is on again, the round and both pools are as they were.
+  await user.click(await screen.findByRole('button', { name: 'Undo turn start' }));
+  await waitFor(() => expect(stance().checked).toBe(true));
+  await within(combat()).findByText('Round 2');
+  expect(within(resources()).getByRole('heading', { name: 'Reserve: 1 of 7' })).toBeTruthy();
+  expect(within(resources()).getByRole('heading', { name: 'Strain: built up 2 of 5' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /^Undo turn/ })).toBeNull(); // one level: nothing left to undo
+
+  await user.click(within(combat()).getByRole('button', { name: 'End encounter' }));
+  await within(combat()).findByText('No encounter running');
+  expect(stance().checked).toBe(true); // the stance has no duration, so ending the encounter leaves it on
+});
