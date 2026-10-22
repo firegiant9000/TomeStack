@@ -96,6 +96,22 @@ public class SchemaTests
         Assert.Equal("", ErrorsWith(e => Effect(e, "ember-item")["charges"]!["max"] = 99));
     }
 
+    [Theory]
+    [InlineData("1d06", true)]
+    [InlineData("3d8", true)]
+    [InlineData("0d6", false)]
+    [InlineData("1d7", false)]
+    public void The_v11_schema_checks_a_rider_dice_pattern(string dice, bool accepted)
+    {
+        // A copy of the v10 golden revision at v11 (the golden file itself is never edited) with one rider added.
+        var copy = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "golden", "revisions.json")))!.AsArray()[9]!.DeepClone().AsObject();
+        copy["schemaVersion"] = 11;
+        copy["effects"]!.AsArray().Add(new JsonObject { ["type"] = "attackRider", ["id"] = "x", ["tags"] = new JsonArray("all"), ["dice"] = dice });
+        using var document = JsonDocument.Parse(copy.ToJsonString());
+
+        Assert.Equal(accepted, Validate("content-revision", document.RootElement) == "");
+    }
+
     [Fact]
     public void The_v9_schema_is_not_vacuous()
     {
