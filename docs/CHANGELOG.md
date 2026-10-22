@@ -5,6 +5,7 @@
 ### Added
 
 - **Spell filters on the Spells tab (P09, D70):** each caster has a "Filters" button that opens level, school, casting time, Concentration and Ritual filters and "Clear filters", beside the name search. An empty group means any, and the groups combine. Casting time reads both SRD wordings ("1 bonus action", "Bonus Action"); "Action or Ritual" counts as an action, and a time that is not an action, bonus action or reaction (or is missing) is "Longer or not stated". A spell with no school stays in the list until you tick a school. The "N of M spells shown" status now also appears while a filter is set, and when the filters hide every spell the list says so. The choices are kept per caster until the sheet is closed. The builder is unchanged. No schema, package, content or database change.
+- **What needs you by hand (P18, D69):** the Features tab ends with "TomeStack won't do these for you": Spend by hand (a roll that names a resource), Reference only (pure-text features are not listed), Partly automatic and Not understood, each row with the feature and its page, and "Everything on this sheet is calculated." when there is nothing to list. It reads the existing mechanics report while the tab is open, and shows one plain line if that fails. No schema, package or database change.
 
 ### Internal
 
