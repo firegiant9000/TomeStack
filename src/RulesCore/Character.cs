@@ -10,6 +10,7 @@ namespace TomeStack.RulesCore;
 public sealed record Character
 {
     /// <summary>
+    /// v10 adds the encounter round and the rounds left of an active toggle to <see cref="Play"/>, written only while they are used (D43 slice 3).
     /// v9 adds <see cref="Details"/>, <see cref="CustomItems"/>, <see cref="CustomAttacks"/>, <see cref="DamageDefences"/>, <see cref="Companions"/>,
     /// <see cref="Xp"/>, the id, attunement and charges of an <see cref="EquipmentEntry"/>, and <see cref="PlayState.Companions"/> (Wave 2;
     /// LIVING_SPECS D42). The version written is computed (<see cref="SchemaVersion"/>): v9 only when one of them is set, otherwise

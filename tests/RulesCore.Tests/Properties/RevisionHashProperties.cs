@@ -22,7 +22,10 @@ public class RevisionHashProperties
     internal static string Hash(string json) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
 
     /// <summary>The toggle keys content v11 adds (D43). Written out here on purpose: a key added to the build must be added here too.</summary>
-    internal static readonly string[] ToggleV11Keys = ["group", "groupContent", "layer", "allowedWith", "allowedInBase", "cost", "resourceContent", "level"];
+    internal static readonly string[] ToggleV11Keys = ["group", "groupContent", "layer", "allowedWith", "allowedInBase", "cost", "resourceContent", "level", "duration"];
+
+    /// <summary>The resource keys content v11 adds (D43, slice 3). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] ResourceV11Keys = ["counts", "resourceFull", "allowance"];
 
     public static TheoryData<int> Versions => [.. Enumerable.Range(1, ContentRevision.CurrentSchemaVersion)];
 
@@ -78,9 +81,9 @@ public class RevisionHashProperties
                 }
             }
             // Content v11: below v11 the toggle's keys stay extension data with the value they had, where they were.
-            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type == ToggleEffect.TypeName)
+            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type is ToggleEffect.TypeName or ResourceEffect.TypeName)
             {
-                foreach (var key in ToggleV11Keys)
+                foreach (var key in type == ToggleEffect.TypeName ? ToggleV11Keys : ResourceV11Keys)
                 {
                     if (inputEffects[i]![key] is { } kept && !JsonNode.DeepEquals(kept, outputEffects[i]![key]))
                         return $"effect {i}'s {key} changed below v11";
@@ -169,6 +172,8 @@ public class RevisionHashProperties
             // Content v11 members are typed only from v11, for the same reason.
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ToggleEffect.TypeName)
                 members = [.. members ?? [], .. ToggleV11Keys];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ResourceEffect.TypeName)
+                members = [.. members ?? [], .. ResourceV11Keys];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))
