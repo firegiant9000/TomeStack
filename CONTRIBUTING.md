@@ -22,7 +22,7 @@ scripts/single-instance-check.ps1 -Exe src/DesktopShell/bin/Release/net10.0-wind
 
 ## Invariants
 
-- `RulesCore` stays free of persistence, UI and Windows references.
+- `RulesCore` stays free of persistence, UI and Windows references (enforced by `RulesCoreBoundaryTests`).
 - Keep `srd-5.1` and `srd-5.2.1` separate. Encode differences as fields on `RulesFamilyPolicy`, never by name.
 - Only `published` revisions affect saved characters. The one exception is the studio sandbox (`DraftOverlayCatalog`, `content.sandbox`), which calculates one draft on an unsaved copy and writes nothing (LIVING_SPECS D14). Published revisions are insert-only; change content by adding a new revision.
 - Imported content (PDF candidates, packages) never executes code and never becomes active without review.
