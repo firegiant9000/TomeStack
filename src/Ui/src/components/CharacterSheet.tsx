@@ -427,8 +427,21 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
   }, [view]);
   /** D43 S3: what the reply noticed (an encounter's durations to track by hand, a pool that filled) goes to the sheet's one status line. */
   function say(reply: CharacterView) {
-    const message = reply.notices?.map((n) => n.message).join(' ');
+    const message = reply.notices?.map((n) => n.message).join(' · ');
     if (message && mounted.current) onStatus(message);
+  }
+  /** D43 S3: a turn confirm counts as a running change (the strip and both Undos wait for it) and withdraws a client Undo at once. */
+  async function runTurn(command: () => Promise<CharacterView>): Promise<CharacterView> {
+    setUndo(undefined);
+    started.current += 1;
+    running.current += 1;
+    setInFlight(true);
+    try {
+      return await runQueued(command, (reply) => reply.character);
+    } finally {
+      running.current -= 1;
+      setInFlight(running.current > 0);
+    }
   }
   async function act(action: PlayAction) {
     setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
@@ -779,7 +792,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
             version={view}
             toggles={sheet.toggles}
             onError={onError}
-            run={(command) => runQueued(command, (reply) => reply.character)}
+            run={runTurn}
             onCancel={() => setTurning(undefined)}
             onDone={(done) => {
               setUndo(undefined); // the service holds the one undo of a turn (`undoLabel`); a client entry from before it is stale

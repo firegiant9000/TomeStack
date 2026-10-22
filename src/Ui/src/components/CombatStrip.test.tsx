@@ -173,3 +173,8 @@ it('hides the amount box for a pool tracked by hand', () => {
   render(<ResourcesPanel view={view({ resources: [pool('hand', { maximum: undefined, current: undefined })] })} act={vi.fn()} />);
   expect(screen.queryByRole('spinbutton')).toBeNull();
 });
+
+it('renders for a sheet whose only D43 content is a toggle with a duration, so an encounter can be started', () => {
+  strip(view({ toggles: [toggle('iron', { on: false, duration: 3 })] }));
+  expect(screen.getByRole('button', { name: 'Start encounter' })).toBeTruthy();
+});

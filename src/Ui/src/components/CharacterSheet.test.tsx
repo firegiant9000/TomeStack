@@ -1418,3 +1418,23 @@ it('adopts the current copy after a stale refusal even when its stamp sorts lowe
   await waitFor(() => expect(client.saveCharacter).toHaveBeenCalledTimes(3));
   expect(vi.mocked(client.saveCharacter).mock.calls[2]![0].updatedAt).toBe('2026-10-03T00:05:00+00:00'); // not wedged on the higher stamp
 });
+
+it('keeps the strip and the Undo busy while a turn confirm is in flight, and joins notices with a separator (D43 S3)', async () => {
+  const user = userEvent.setup();
+  const onStatus = vi.fn();
+  vi.mocked(client.turnPreview).mockResolvedValue({
+    at: 'turnStart', changes: [{ id: 'round', kind: 'round', label: 'Round', from: 2, to: 3, reason: 'A new round', origin: {} as never }], choices: [], manual: [], prompts: [], updatedAt: '2026-10-03T00:00:00Z',
+  });
+  let settle: (v: CharacterView) => void = noop;
+  vi.mocked(client.turn).mockReturnValue(new Promise<CharacterView>((resolve) => { settle = resolve; }));
+  render(<CharacterSheet view={combatView(2, { undoLabel: 'switch to X' })} onChanged={noop} onError={noop} onStatus={onStatus} onLevelUp={noop} onMakeChoices={noop} onArchiveChanged={noop} />);
+  await user.click(screen.getByRole('button', { name: 'Start my turn' }));
+  const confirm = await screen.findByRole('button', { name: 'Confirm start of turn' });
+  await waitFor(() => expect(confirm.getAttribute('aria-disabled')).toBe('false'));
+  await user.click(confirm);
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'End encounter' }).disabled).toBe(true));
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Undo switch to X' }).disabled).toBe(true);
+  settle(combatView(3, { notices: [{ code: 'a', message: 'First' }, { code: 'b', message: 'Second' }] }));
+  await waitFor(() => expect(onStatus).toHaveBeenCalledWith('First · Second'));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>('button', { name: 'End encounter' }).disabled).toBe(false));
+});

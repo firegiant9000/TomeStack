@@ -176,3 +176,43 @@ it('refetches when the sheet version changes, and runs Confirm through the sheet
   const _typecheck: TurnChoiceOption = 'end'; // the wire values are lower case
   expect(_typecheck).toBe('end');
 });
+
+// Fix round 1: the default End is sent explicitly (the service refuses a prompt with no choice), by the outcome preview and the confirm alike.
+it('confirming with the untouched default End sends that choice explicitly, and the outcome preview carries it too', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.turnPreview).mockResolvedValue(preview({ changes: [round], choices: [prompt] }));
+  vi.mocked(client.turn).mockResolvedValue({} as CharacterView);
+  panel();
+  await screen.findByRole('radiogroup', { name: prompt.label });
+  const confirm = screen.getByRole('button', { name: 'Confirm start of turn' });
+  await waitFor(() => expect(vi.mocked(client.turnPreview).mock.calls.at(-1)![3]).toEqual({ [prompt.id]: 'end' }));
+  await waitFor(() => expect(confirm.getAttribute('aria-disabled')).toBe('false'));
+  expect(vi.mocked(client.turnPreview).mock.calls[0]![3]).toEqual({}); // the checklist fetch stays unselected
+  await user.click(confirm);
+  await waitFor(() => expect(client.turn).toHaveBeenCalledWith('fixture-3', 'turnStart', 'stamp-1', [], { [prompt.id]: 'end' }));
+});
+
+it('does not sit on "Working out" when only the checklist fetch fails', async () => {
+  vi.mocked(client.turnPreview).mockRejectedValueOnce(new Error('boom')).mockResolvedValue(preview({ changes: [round] }));
+  const { props } = panel();
+  await waitFor(() => expect(props.onError).toHaveBeenCalled());
+  expect(await screen.findByText(/Could not work out this turn/)).toBeTruthy();
+  expect(screen.queryByText(/Working out what this turn changes/)).toBeNull();
+});
+
+it('keeps the polite live paragraph mounted while empty and fills it while updating', async () => {
+  const user = userEvent.setup();
+  let release: (p: TurnPreview) => void = () => {};
+  vi.mocked(client.turnPreview).mockImplementation((_id, _at, skip) =>
+    skip.length === 0 ? Promise.resolve(preview({ changes: [round, upkeepSpend] })) : new Promise<TurnPreview>((resolve) => (release = resolve)),
+  );
+  const { container } = panel();
+  await screen.findByRole('checkbox', { name: /Iron upkeep/ });
+  const live = container.querySelector('[aria-live="polite"]')!;
+  await waitFor(() => expect(live.textContent).toBe(''));
+  await user.click(screen.getByRole('checkbox', { name: /Iron upkeep/ }));
+  await waitFor(() => expect(live.textContent).toMatch(/Updating the turn/));
+  expect(container.querySelector('[aria-live="polite"]')).toBe(live); // same node
+  release(preview({ changes: [round] }));
+  await waitFor(() => expect(live.textContent).toBe(''));
+});

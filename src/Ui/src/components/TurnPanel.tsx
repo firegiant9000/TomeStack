@@ -24,6 +24,8 @@ interface Fetched {
   refresh: number;
   skip: string[];
   choices: Choices;
+  /** `choices` as a key, to compare with the selection now. */
+  choicesKey: string;
 }
 
 const sameChoices = (a: Choices, b: Choices) => {
@@ -49,7 +51,8 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
   const [fetched, setFetched] = useState<Fetched>();
   const [refresh, setRefresh] = useState(0); // bumped after a refused confirm, to preview again
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(false); // the outcome preview failed
+  const [baseFailed, setBaseFailed] = useState(false); // the checklist preview failed
   const heading = useRef<HTMLHeadingElement>(null);
 
   // WCAG 2.4.3: the panel opens with focus on its heading.
@@ -61,11 +64,13 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
     client
       .turnPreview(characterId, at, [], {})
       .then((next) => {
-        if (current) setBase(next);
+        if (!current) return;
+        setBaseFailed(false);
+        setBase(next);
       })
       .catch((error) => {
         if (!current) return;
-        setFailed(true);
+        setBaseFailed(true);
         onError(error);
       });
     return () => {
@@ -85,15 +90,23 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
     if (!sameList(kept, skip)) setSkip(kept);
   }
 
+  // The choices sent: every prompt of the latest preview with End unless the player picked Keep. The service refuses a prompt with no
+  // choice, and a radio that is already checked fires no change, so the default is sent explicitly, in the outcome preview and the
+  // confirm alike. The key keeps the effect from refiring on a new object each render.
+  const prompts = fetched?.preview.choices ?? base?.choices ?? [];
+  const effective: Choices = { ...Object.fromEntries(prompts.map((p) => [p.id, 'end' as const])), ...Object.fromEntries(Object.entries(choices).filter(([id]) => prompts.some((p) => p.id === id))) };
+  const choicesKey = JSON.stringify(Object.entries(effective).sort(([a], [b]) => (a < b ? -1 : 1)));
+
   // The preview for the current selection.
   useEffect(() => {
     let current = true;
+    const selection = Object.fromEntries(JSON.parse(choicesKey) as [string, TurnChoiceOption][]);
     client
-      .turnPreview(characterId, at, skip, choices)
+      .turnPreview(characterId, at, skip, selection)
       .then((next) => {
         if (!current) return;
         setFailed(false);
-        setFetched({ preview: next, version, refresh, skip, choices });
+        setFetched({ preview: next, version, refresh, skip, choices: selection, choicesKey });
       })
       .catch((error) => {
         if (!current) return;
@@ -103,10 +116,10 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
     return () => {
       current = false;
     };
-  }, [characterId, at, version, refresh, skip, choices, onError]);
+  }, [characterId, at, version, refresh, skip, choicesKey, onError]);
 
   const preview = fetched?.preview;
-  const ready = fetched !== undefined && fetched.version === version && fetched.refresh === refresh && sameList(fetched.skip, skip) && sameChoices(fetched.choices, choices);
+  const ready = fetched !== undefined && fetched.version === version && fetched.refresh === refresh && sameList(fetched.skip, skip) && fetched.choicesKey === choicesKey;
   const name = at === 'turnStart' ? 'Start of turn' : 'End of turn';
   const confirmName = at === 'turnStart' ? 'Confirm start of turn' : 'Confirm end of turn';
   const toggleName = (prompt: TurnChoicePrompt) =>
@@ -115,7 +128,7 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
   const tick = (id: string) => setSkip((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   async function confirm() {
-    if (!fetched || !ready || busy || failed) return;
+    if (!fetched || !ready || busy || failed || baseFailed) return;
     const { preview: shown, skip: shownSkip, choices: shownChoices } = fetched;
     setBusy(true);
     try {
@@ -135,16 +148,14 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
       <h3 id="turn-heading" tabIndex={-1} ref={heading}>
         {name}
       </h3>
-      {failed && <p className="error">Could not work out this turn. Close and try again.</p>}
+      {(failed || baseFailed) && <p className="error">Could not work out this turn. Close and try again.</p>}
       {!base || !preview ? (
-        !failed && <p className="hint">Working out what this turn changes…</p>
+        !failed && !baseFailed && <p className="hint">Working out what this turn changes…</p>
       ) : (
         <>
-          {!ready && !failed && (
-            <p className="hint" aria-live="polite">
-              Updating the turn…
-            </p>
-          )}
+          <p className="hint" aria-live="polite">
+            {!ready && !failed && !baseFailed ? 'Updating the turn…' : ''}
+          </p>
           {base.changes.length > 0 && (
             <fieldset>
               <legend>These changes will be applied. Untick any that do not apply.</legend>
@@ -217,7 +228,7 @@ export function TurnPanel({ characterId, at, version, toggles = [], onDone, onCa
           </button>
         ) : (
           <>
-            <button type="button" onClick={confirm} aria-disabled={!ready || failed || busy}>
+            <button type="button" onClick={confirm} aria-disabled={!ready || failed || baseFailed || busy}>
               {busy ? 'Applying…' : confirmName}
             </button>
             <button type="button" onClick={() => !busy && onCancel()} aria-disabled={busy}>
