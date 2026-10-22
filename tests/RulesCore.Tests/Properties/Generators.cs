@@ -90,6 +90,7 @@ internal static class Generators
         [ScaleEffect.TypeName] = ScaleEffect.SchemaVersion,
         [ItemEffect.TypeName] = ItemEffect.SchemaVersion,
         [ToggleGroupEffect.TypeName] = ToggleGroupEffect.SchemaVersion,
+        [UpkeepEffect.TypeName] = UpkeepEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -148,7 +149,12 @@ internal static class Generators
                 from max in Formulas
                 // Any version: below v10 the key must stay extension data, written back where it was.
                 from activation in Gen.Elements<string?>(null, null, "action", "reaction")
-                select new JsonObject { ["resourceId"] = id, ["label"] = label, ["maximum"] = max }.With("activation", activation)),
+                // Any version: below v11 these keys must stay extension data, written back where they were.
+                from counts in Gen.Elements<string?>(null, null, "up")
+                from full in Optional(Names)
+                from allowance in OptionalValue(Gen.Elements(true, false))
+                select new JsonObject { ["resourceId"] = id, ["label"] = label, ["maximum"] = max }.With("activation", activation)
+                    .With("counts", counts).With("resourceFull", full is null ? null : new JsonObject { ["text"] = full }).With("allowance", allowance)),
             Common(RecoveryEffect.TypeName,
                 from id in Keys
                 from period in Gen.Elements("shortRest", "longRest")
@@ -217,12 +223,22 @@ internal static class Generators
                 from toggleCost in Optional(Gen.Elements("1", "2", "PB"))
                 from costContent in OptionalValue(Guids)
                 from toggleLevel in OptionalValue(Gen.Choose(1, 20))
+                from duration in Optional(Gen.Elements("1", "3", "PB"))
                 select new JsonObject { ["toggleId"] = id, ["label"] = label }.With("resourceId", resource)
                     .With("autoWhen", autoWhen).With("activation", activation)
                     .With("group", groupName).With("groupContent", groupContent?.ToString()).With("layer", layer)
                     .With("allowedWith", allowedWith ? new JsonArray(new JsonObject { ["contentId"] = partner.ToString(), ["toggleId"] = "tide" }) : null)
                     .With("allowedInBase", allowedInBase).With("cost", toggleCost).With("resourceContent", costContent?.ToString())
-                    .With("level", toggleLevel)),
+                    .With("level", toggleLevel).With("duration", duration)),
+            Common(UpkeepEffect.TypeName,
+                from toggle in Optional(Keys)
+                from at in Gen.Elements("turnStart", "turnEnd")
+                from resourceId in Keys
+                from change in Gen.Elements("spend", "regain")
+                from amount in Gen.Elements("1", "2", "PB", "all")
+                from ifShort in Gen.Elements<string?>(null, "ask", "end")
+                select new JsonObject { ["at"] = at, ["resourceId"] = resourceId, ["change"] = change, ["amount"] = amount }
+                    .With("toggle", toggle).With("ifShort", ifShort)),
             Common(ToggleGroupEffect.TypeName,
                 from groupId in Keys
                 from label in Names
@@ -403,6 +419,10 @@ internal static class Generators
         from xp in OptionalValue(Gen.Choose(0, Character.MaxXp))
         from alignment in Optional(Names)
         from attuned in OptionalValue(Gen.Elements(true, false))
+        // Schema v10 fields (D43 slice 3), sometimes set: an encounter round, and rounds left on active toggles. A character is written as v10 only then.
+        from round in OptionalValue(Gen.Choose(0, PlayState.MaxRounds))
+        from toggleIds in Gen.Choose(0, 2)
+        from roundsLeft in OptionalValue(Gen.Choose(0, PlayState.MaxRounds)).ArrayOf(2)
         // A field this build does not know: it round-trips through Character.Extensions.
         from extra in Optional(Keys)
         from extraNumber in Gen.Choose(-1000, 1000)
@@ -421,7 +441,13 @@ internal static class Generators
             Details = alignment is null ? null : new(Alignment: alignment),
             Spells = [.. spells.Select((s, i) => new KnownSpell(caster, s, i % 2 == 0))],
             CrossFamilyExceptions = exception is null || pins.Count == 0 ? [] : [new CrossFamilyException(pins[0], exception)],
-            Play = new() { Inspiration = inspiration, TemporaryHitPoints = temporary },
+            Play = new()
+            {
+                Inspiration = inspiration,
+                TemporaryHitPoints = temporary,
+                Encounter = round is { } r ? new EncounterState(r) : null,
+                Toggles = [.. Enumerable.Range(0, toggleIds).Select(i => new ActiveToggle(caster, "toggle-" + i, roundsLeft[i]))],
+            },
             UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(updated),
             ArchivedAt = archived is { } a ? new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(a) : null,
             Extensions = extra is null ? null : new()

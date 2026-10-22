@@ -122,6 +122,46 @@ it('switches a grouped toggle with the same command as an ungrouped one', async 
   expect(act).toHaveBeenCalledWith({ action: 'toggleOn', contentId: 'c1', toggleId: 'parry' });
 });
 
+// D43 slice 3: an action that spends an allowance pool is listed under the pool's name, apart from Reactions.
+it("groups actions spending an allowance under the pool's name, apart from Reactions", () => {
+  const pool = {
+    content: ref, contentName: 'Testy Source', effectId: 'e-pool', resourceId: 'react', label: 'Testy reaction pool', maximum: 2, spent: 0, current: 2,
+    trace: [], warnings: [], automation: 'automatic', recoveries: [], allowance: true,
+  };
+  const other = { ...pool, effectId: 'e-other', resourceId: 'rage', label: 'Testy rage', allowance: false };
+  const feature = {
+    content: ref, name: 'Testy Feature', kind: 'feat',
+    effects: [
+      { id: 'riposte', type: 'roll', label: 'Riposte', dice: '1d6', activation: 'reaction', resourceId: 'react' },
+      { id: 'slam', type: 'roll', label: 'Slam', dice: '1d8', activation: 'action', resourceId: 'rage' },
+      { id: 'quip', type: 'roll', label: 'Quip', dice: '1d4', activation: 'reaction' },
+    ],
+  };
+  const v = {
+    character: { id: 'fixture' },
+    sheet: { attacks: [], resources: [pool, other], features: [feature], toggles: [toggle('parry', { activation: 'reaction' }), toggle('dodge', { activation: 'reaction', resourceId: 'react' })] },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={v} roll={() => {}} act={() => {}} />);
+
+  const grouped = screen.getByRole('region', { name: 'Testy reaction pool' });
+  expect(within(grouped).getByRole('button', { name: /Roll Riposte/ })).toBeTruthy();
+  expect(within(grouped).getByRole('checkbox', { name: /Testy dodge/ })).toBeTruthy();
+  expect(grouped.textContent).toMatch(/1 of 2|2 of 2/); // the pool's state is shown beside its name, as text
+  const reactions = screen.getByRole('region', { name: 'Reactions' });
+  expect(within(reactions).getByRole('button', { name: /Roll Quip/ })).toBeTruthy();
+  expect(within(reactions).getByRole('checkbox', { name: /Testy parry/ })).toBeTruthy();
+  expect(within(reactions).queryByRole('button', { name: /Roll Riposte/ })).toBeNull();
+  expect(within(reactions).queryByRole('checkbox', { name: /Testy dodge/ })).toBeNull();
+  // A pool that is not an allowance does not move its action out of the activation group.
+  expect(within(screen.getByRole('region', { name: 'Actions' })).getByRole('button', { name: /Roll Slam/ })).toBeTruthy();
+});
+
+it('shows Attacks and actions only when something other than the moved form picker is on it', () => {
+  const forms = [toggle('tide', { group: 'forms', groupContent: 'g', groupLabel: 'Forms', layer: 'primary' })];
+  render(<ActionsPanel view={togglesView(forms)} roll={() => {}} act={() => {}} />);
+  expect(screen.queryByRole('region', { name: 'Attacks and actions' })).toBeNull(); // the form picker lives in the combat strip now
+});
+
 it('lists an explicit "other" toggle under Other like a roll, and shows the panel for grouped toggles alone', () => {
   render(<ActionsPanel view={togglesView([toggle('misc', { activation: 'other' })])} roll={() => {}} act={() => {}} />);
   expect(within(screen.getByRole('region', { name: 'Other' })).getByRole('checkbox', { name: /Testy misc/ })).toBeTruthy();

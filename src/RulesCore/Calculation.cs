@@ -104,7 +104,8 @@ public sealed record CharacterSheet(
     IReadOnlyList<DamageDefenceValue>? DamageDefences = null,
     IReadOnlyList<ItemUseValue>? ItemUses = null,
     bool? LevelUpAvailable = null,
-    int? XpForNextLevel = null)
+    int? XpForNextLevel = null,
+    IReadOnlyList<UpkeepValue>? Upkeeps = null)
 {
     public DerivedValue Field(string field) => Fields.Single(f => f.Field == field);
 }
@@ -160,7 +161,22 @@ public sealed record ResourceValue(
     AutomationStatus Automation,
     IReadOnlyList<RecoveryInfo> Recoveries,
     string? Text,
-    Activation? Activation = null);
+    Activation? Activation = null,
+    bool CountsUp = false,
+    string? FullText = null,
+    bool Allowance = false);
+
+/// <summary>
+/// Content v11 (D43): an upkeep the character's active content declares, for the turn planner. <paramref name="Content"/> and
+/// <paramref name="EffectId"/> name the effect. <paramref name="ToggleContent"/> and <paramref name="ToggleId"/> name the toggle it
+/// belongs to (both null: always); <paramref name="ResourceContent"/> and <paramref name="ResourceId"/> the pool. <paramref name="Amount"/>
+/// is the formula evaluated for the character (never negative), null with <paramref name="All"/> (regain everything) or when the
+/// formula fails (an invalid-formula warning). <paramref name="IfShort"/> is what a spend the pool cannot cover does.
+/// <paramref name="Label"/> is a short generated name for a list.
+/// </summary>
+public sealed record UpkeepValue(
+    ContentReference Content, string EffectId, Guid? ToggleContent, string? ToggleId, TurnMoment At, Guid ResourceContent, string ResourceId,
+    UpkeepChange Change, int? Amount, bool All, UpkeepShortfall IfShort, string Label);
 
 /// <summary>
 /// A <c>recovery</c> effect of the same revision for this resource. Rests preview it; calculation never applies it.
@@ -206,10 +222,13 @@ public sealed record FeatureEffect(
 /// joins (null for an ungrouped toggle); <paramref name="Cost"/> is its pool cost for this character (null when it has none, or the
 /// formula fails) spent from <paramref name="CostResourceContent"/>'s pool; <paramref name="Available"/> is false, with a reason, when
 /// an overlay may not be switched on with the form that is on now.
+/// <paramref name="AllowedWith"/> and <paramref name="AllowedInBase"/> (overlays in a group only) are the overlay's own rule as declared, so
+/// <see cref="ToggleGroups.EndingWith"/> can tell which overlays a primary that goes off takes with it.
 /// </summary>
 public sealed record ToggleValue(
     ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
-    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null);
+    string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null,
+    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -663,14 +682,31 @@ public static class CharacterCalculator
                 else
                     cost = Math.Max(amount, 0);
             }
+            int? duration = null;
+            if (t.Duration is { } rounds)
+            {
+                // Rounds: a formula that fails gives no duration and the invalid-formula warning.
+                if (!Formula.TryParse(rounds, AllowsScales(revision), out var durationFormula, out var durationFailure)
+                    || !durationFormula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var roundCount, out durationFailure))
+                    diagnostics.Add(InvalidFormula(revision, t, durationFailure!));
+                else
+                    duration = Math.Clamp(roundCount, 0, PlayState.MaxRounds);
+            }
+            var isOn = ToggleIsOn(revision, t, effective, autoOn);
+            // The count means something only inside an encounter and while the content still has a duration; otherwise a stored count is inert.
+            var roundsLeft = isOn && character.Play.Encounter is not null && duration is not null
+                ? character.Play.Toggles.FirstOrDefault(a => a.ContentId == revision.ContentId && a.ToggleId == t.ToggleId)?.RoundsLeft
+                : null;
             // A toggle whose group content is not on the character is a group of one (C6): it shows as a plain toggle.
             var inGroup = t.Group is not null && active.Any(a => a.Revision.ContentId == (t.GroupContent ?? revision.ContentId));
             return new ToggleValue(
-                revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, ToggleIsOn(revision, t, effective, autoOn), t.ResourceId, t.Text,
+                revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, isOn, t.ResourceId, t.Text,
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
-                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t));
+                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
+                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
         }
+        var upkeeps = CollectUpkeeps(active, character, resolved.ClassLevels, values, diagnostics);
         var maximum = values[FieldIds.HitPoints];
         var hitPoints = new HitPointState(maximum, Math.Clamp(character.Play.CurrentHitPoints ?? maximum, 0, Math.Max(maximum, 0)), character.Play.TemporaryHitPoints);
         // R168: bloodied = a maximum of at least 1 and current hit points at or below half of it, rounded down. Temporary hit points do not count.
@@ -721,7 +757,43 @@ public static class CharacterCalculator
             character.Id, family, fields, diagnostics, resolved.Choices, [.. active.Select(a => a.Revision.Reference)], resources, features, hitPoints, hitDice,
             spellcasting, spellSlots, pactSlots, attacks, toggles, scales.Count > 0 ? scales : null, bloodied ? true : null,
             damageDefences.Count > 0 ? damageDefences : null, null, // the item uses are added once by Calculate (WithItemUses)
-            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel), active);
+            xpForNextLevel is { } next && character.Xp >= next ? true : null, xpForNextLevel, upkeeps.Count > 0 ? upkeeps : null), active);
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the upkeeps of the active content, in active-content order and then effect order. An amount is a formula
+    /// evaluated like a resource maximum (never negative); one that fails is null with the invalid-formula warning, and the
+    /// calculation goes on. <c>all</c> is a regain of everything and has no amount. A pool that names no content is the declarer's.
+    /// </summary>
+    private static List<UpkeepValue> CollectUpkeeps(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var upkeeps = new List<UpkeepValue>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var upkeep in revision.Effects.OfType<UpkeepEffect>())
+            {
+                var all = upkeep.Change == UpkeepChange.Regain && string.Equals(upkeep.Amount.Trim(), "all", StringComparison.Ordinal);
+                int? amount = null;
+                if (!all)
+                {
+                    if (!Formula.TryParse(upkeep.Amount, AllowsScales(revision), out var formula, out var failure)
+                        || !formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
+                        diagnostics.Add(InvalidFormula(revision, upkeep, failure!));
+                    else
+                        amount = Math.Max(value, 0);
+                }
+                var poolContent = upkeep.ResourceContent ?? revision.ContentId;
+                var toggleContent = upkeep.Toggle is null ? (Guid?)null : upkeep.ToggleContent ?? revision.ContentId;
+                var label = (upkeep.Toggle is null ? null : active.FirstOrDefault(a => a.Revision.ContentId == toggleContent)?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == upkeep.Toggle)?.Label)
+                    ?? active.FirstOrDefault(a => a.Revision.ContentId == poolContent)?.Revision.Effects.OfType<ResourceEffect>().FirstOrDefault(r => r.ResourceId == upkeep.ResourceId)?.Label
+                    ?? upkeep.ResourceId;
+                upkeeps.Add(new(revision.Reference, upkeep.Id, toggleContent, upkeep.Toggle, upkeep.At, poolContent, upkeep.ResourceId, upkeep.Change, amount, all,
+                    upkeep.IfShort ?? UpkeepShortfall.Ask, $"{label} upkeep"));
+            }
+        }
+        return upkeeps;
     }
 
     /// <summary>
@@ -1172,7 +1244,8 @@ public static class CharacterCalculator
                     : effect.Automation;
                 resources.Add(new(
                     revision.Reference, revision.Name, effect.Id, effect.ResourceId, effect.Label, maximum, spent,
-                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation)));
+                    maximum is { } max ? Math.Max(max - spent, 0) : null, trace, warnings, automation, recoveries, effect.Text, ActivationOf(revision, effect.Activation),
+                    effect.Counts == ResourceCounting.Up, effect.Counts == ResourceCounting.Up ? effect.ResourceFull?.Text : null, effect.Allowance == true));
             }
         }
         return resources;

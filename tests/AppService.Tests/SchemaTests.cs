@@ -161,6 +161,50 @@ public class SchemaTests
     }
 
     [Fact]
+    public void The_v10_schema_is_not_vacuous_and_its_bounds_equal_the_play_constants()
+    {
+        var path = Path.Combine(FixtureRoot, "characters", "srd521-courier-v10.json");
+        var node = JsonNode.Parse(File.ReadAllText(path))!;
+        node["play"]!["encounter"]!["round"] = 10_001;
+        node["play"]!["toggles"]![0]!["roundsLeft"] = -3;
+        using (var document = JsonDocument.Parse(node.ToJsonString()))
+        {
+            var errors = Validate("character", document.RootElement);
+            Assert.Contains("/play/encounter/round", errors, StringComparison.Ordinal);
+            Assert.Contains("/play/toggles/0/roundsLeft", errors, StringComparison.Ordinal);
+        }
+
+        var extra = JsonNode.Parse(File.ReadAllText(path))!;
+        extra["play"]!["encounter"]!["turn"] = 1;
+        using (var document = JsonDocument.Parse(extra.ToJsonString()))
+            Assert.Contains("/play/encounter", Validate("character", document.RootElement), StringComparison.Ordinal);
+
+        var play = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "schemas", "character.v10.schema.json")))!["properties"]!["play"]!["properties"]!;
+        Assert.Equal(PlayState.MaxRounds, play["encounter"]!["properties"]!["round"]!["maximum"]!.GetValue<int>());
+        Assert.Equal(0, play["encounter"]!["properties"]!["round"]!["minimum"]!.GetValue<int>());
+        Assert.Equal(PlayState.MaxRounds, play["toggles"]!["items"]!["properties"]!["roundsLeft"]!["maximum"]!.GetValue<int>());
+        Assert.Equal(0, play["toggles"]!["items"]!["properties"]!["roundsLeft"]!["minimum"]!.GetValue<int>());
+    }
+
+    [Theory]
+    [InlineData(10, false)]
+    [InlineData(11, true)]
+    public void A_package_character_entry_at_schema_v10_is_accepted_and_v11_is_refused(int version, bool refused)
+    {
+        using var origin = new TempApp();
+        var saved = origin.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/srd51-quickfoot.json"));
+        var package = origin.App.ExportCharacters([saved.Character.Id]).Content;
+        var edited = PackageEditor.Edit(package, path => path.StartsWith("characters/", StringComparison.Ordinal), node => node["schemaVersion"] = version);
+
+        using var destination = new TempApp();
+        var errors = destination.App.PreviewImport(edited).Errors.Where(e => e.Code == "package.schema-unsupported").ToList();
+
+        Assert.Equal(refused, errors.Count > 0);
+        if (refused)
+            Assert.All(errors, e => Assert.Contains("character schema v11", e.Message, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void The_v9_schema_refuses_the_empty_id_like_the_code_does()
     {
         var node = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureRoot, "characters", "srd521-courier-v9.json")))!;

@@ -222,7 +222,7 @@ public class ExportPurposeTests
         var shared = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Share).Content, id);
         Assert.Equal(AsJson(FixtureDetails), AsJson(shared.Details)); // D36: the details travel
         Assert.Empty(shared.Notes); // D22: the journal does not
-        Assert.Equal(Character.CurrentSchemaVersion, shared.SchemaVersion);
+        Assert.Equal(Character.DetailsSchemaVersion, shared.SchemaVersion);
 
         var backup = ReadPackageCharacter(origin.App.ExportCharacters([id], ExportPurpose.Backup).Content, id);
         Assert.Equal(AsJson(FixtureDetails), AsJson(backup.Details));

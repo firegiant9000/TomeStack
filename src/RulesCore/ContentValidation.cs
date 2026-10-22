@@ -44,6 +44,9 @@ public static class ContentValidator
     /// </summary>
     public const int MaxChoiceCountWithoutOptions = 20;
 
+    /// <summary>The most upkeep effects one revision declares (content v11); each runs every turn, so a bound keeps a turn small.</summary>
+    public const int MaxUpkeepsPerRevision = 20;
+
     /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
     /// and never lower than the entry before it (a class never loses caster levels as it gains class levels).
@@ -63,9 +66,9 @@ public static class ContentValidator
     }
 
     /// <summary>Whether an untyped toggle carries a content v11 key (any spelling), which decides the version its failure needs.</summary>
-    private static bool CarriesToggleV11Key(UnknownEffect toggle) =>
-        toggle.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
-        && toggle.Raw.EnumerateObject().Any(p => ToggleEffect.V11Keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+    private static bool CarriesV11Key(UnknownEffect effect, string[] keys) =>
+        effect.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
+        && effect.Raw.EnumerateObject().Any(p => keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
 
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
@@ -124,7 +127,8 @@ public static class ContentValidator
         var needsV8 = false;
         var needsV9 = false;
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
-        var needsV11 = false; // content v11 (D43): toggleGroup effects and the toggle's group, layer, cost and level keys
+        var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
+        var upkeeps = 0;
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
@@ -152,10 +156,12 @@ public static class ContentValidator
                 // different, typed effect, so it blocks. Below v10 it is what it always was: a warning.
                 // Content v11 (D43) does the same for a toggle with a layer that names no member and for a toggleGroup that does not
                 // read. The version it needs is the field's own tier: a v11 key (or a toggleGroup) needs 11, anything else 10.
-                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName } malformed
-                    when revision.SchemaVersion >= (malformed.DeclaredType == ToggleGroupEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
-                    if (malformed.DeclaredType == ToggleGroupEffect.TypeName
-                        || (malformed.DeclaredType == ToggleEffect.TypeName && revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && CarriesToggleV11Key(malformed)))
+                case UnknownEffect { DeclaredType: ToggleEffect.TypeName or ResourceEffect.TypeName or GrantEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName } malformed
+                    when revision.SchemaVersion >= (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName ? ContentRevision.PlayMechanicsSchemaVersion : ContentRevision.PlayDetailsSchemaVersion):
+                    if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName
+                        || (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                            && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V11Keys))
+                                || (malformed.DeclaredType == ResourceEffect.TypeName && CarriesV11Key(malformed, ResourceEffect.V11Keys)))))
                         needsV11 = true;
                     else
                         needsV10 = true;
@@ -316,9 +322,19 @@ public static class ContentValidator
                     break;
                 case ResourceEffect resource:
                     needsV10 |= resource.Activation is not null;
+                    needsV11 |= resource.Counts is not null || resource.ResourceFull is not null || resource.Allowance is not null;
                     if (string.IsNullOrWhiteSpace(resource.ResourceId) || string.IsNullOrWhiteSpace(resource.Label))
                         Error("validate.resource-incomplete", $"Resource effect '{resource.Id}' needs a resourceId and a label.", resource.Id);
                     CheckFormula(resource.Maximum, resource.Id, "maximum");
+                    if (resource.ResourceFull is not null && resource.Counts != ResourceCounting.Up)
+                        Error("validate.resource-full", $"Resource '{resource.ResourceId}' has a resourceFull prompt but does not count up; add counts: up, or remove the prompt.", resource.Id);
+                    else if (resource.ResourceFull is not null && string.IsNullOrWhiteSpace(resource.ResourceFull.Text))
+                        Error("validate.resource-full", $"Resource '{resource.ResourceId}' has a resourceFull prompt with no text; write the text, or remove the prompt.", resource.Id);
+                    break;
+                case UpkeepEffect upkeep:
+                    needsV11 = true;
+                    upkeeps++;
+                    CheckUpkeep(upkeep);
                     break;
                 case RecoveryEffect recovery:
                     if (!string.Equals(recovery.Amount, "all", StringComparison.Ordinal))
@@ -340,6 +356,8 @@ public static class ContentValidator
                     }
                     if ((roll.Cost is not null || roll.VariableCost == true) && roll.ResourceId is null)
                         Error("validate.roll-cost", $"Roll '{roll.Id}' has a cost but names no resource to spend.", roll.Id);
+                    if (roll.ResourceId is { } rollPool && FindResource(roll.ResourceContent, rollPool)?.Counts == ResourceCounting.Up)
+                        Warn("validate.cost-counts-up", $"Roll '{roll.Id}' spends from '{rollPool}', a pool that counts up; a cost fills it instead of using it up.", roll.Id);
                     if (roll.ResourceContent is { } holder && holder != revision.ContentId && roll.ResourceId is { } shared)
                     {
                         var definer = local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).FirstOrDefault(r => r.ContentId == holder);
@@ -424,6 +442,13 @@ public static class ContentValidator
         }
         foreach (var group in revision.Effects.OfType<ToggleGroupEffect>().GroupBy(g => g.GroupId).Where(g => g.Count() > 1))
             Error("validate.toggle-group-duplicate", $"Toggle group '{group.Key}' is declared {group.Count()} times; declare each group once.", group.Skip(1).First().Id);
+        if (upkeeps > MaxUpkeepsPerRevision)
+            Error("validate.upkeep-too-many", $"This revision declares {upkeeps} upkeep effects; the most is {MaxUpkeepsPerRevision}.");
+        foreach (var allowance in revision.Effects.OfType<ResourceEffect>().Where(r => r.Allowance == true))
+        {
+            if (!revision.Effects.OfType<UpkeepEffect>().Any(u => u.Change == UpkeepChange.Regain && u.ResourceId == allowance.ResourceId && (u.ResourceContent is null || u.ResourceContent == revision.ContentId)))
+                Warn("validate.allowance-no-refresh", $"Resource '{allowance.ResourceId}' is an allowance but no upkeep regains it, so nothing refreshes it each turn.", allowance.Id);
+        }
         if (revision.Effects.OfType<SpellcastingEffect>().Count() > 1)
             Error("validate.spellcasting-duplicate", "A revision declares at most one spellcasting feature.");
         if (revision.Effects.OfType<SpellEffect>().Count() > 1)
@@ -443,7 +468,7 @@ public static class ContentValidator
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs or levels) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
@@ -560,12 +585,75 @@ public static class ContentValidator
             }
         }
 
-        // Content v11 (D43): a toggle's group, layer, overlay rules, pool cost and level.
+        // The resource a pool reference names: this revision's (content null or this one) or another content's, found among the
+        // revisions validated together and the catalog. Null when it is not found (checked by the caller where it matters).
+        ResourceEffect? FindResource(Guid? content, string resourceId)
+        {
+            var holder = content ?? revision.ContentId;
+            var definers = holder == revision.ContentId
+                ? new List<ContentRevision> { revision }
+                : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+            return definers.SelectMany(r => r.Effects.OfType<ResourceEffect>()).FirstOrDefault(r => r.ResourceId == resourceId);
+        }
+
+        // Content v11 (D43): an upkeep's shape, its toggle and pool, and its amount.
+        void CheckUpkeep(UpkeepEffect upkeep)
+        {
+            var id = upkeep.Id;
+            if (string.IsNullOrWhiteSpace(upkeep.ResourceId) || string.IsNullOrWhiteSpace(upkeep.Amount))
+                Error("validate.upkeep-incomplete", $"Upkeep '{id}' needs a resourceId and an amount.", id);
+            if (upkeep.Toggle is null)
+            {
+                if (upkeep.ToggleContent is not null)
+                    Error("validate.upkeep-toggle-unknown", $"Upkeep '{id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", id);
+            }
+            else
+            {
+                var holder = upkeep.ToggleContent ?? revision.ContentId;
+                var declarers = holder == revision.ContentId
+                    ? new List<ContentRevision> { revision }
+                    : local.OfContent(holder).Concat(catalog.RevisionsOf(holder)).Where(r => r.ContentId == holder).ToList();
+                if (!declarers.SelectMany(r => r.Effects.OfType<ToggleEffect>()).Any(t => t.ToggleId == upkeep.Toggle))
+                    Error("validate.upkeep-toggle-unknown", $"Upkeep '{id}' belongs to toggle '{upkeep.Toggle}', which content {holder} does not define or is not installed.", id);
+            }
+            if (FindResource(upkeep.ResourceContent, upkeep.ResourceId) is null)
+                Error("validate.upkeep-resource", $"Upkeep '{id}' changes '{upkeep.ResourceId}', which content {upkeep.ResourceContent ?? revision.ContentId} does not define or is not installed.", id);
+            if (string.Equals(upkeep.Amount?.Trim(), "all", StringComparison.Ordinal))
+            {
+                if (upkeep.Change == UpkeepChange.Spend)
+                    Error("validate.upkeep-amount", $"Upkeep '{id}' spends 'all'; only a regain can take all. Give a formula.", id);
+            }
+            else if (!Formula.TryParse(upkeep.Amount, allowScales: true, out var amount, out var amountError))
+            {
+                Error("validate.upkeep-amount", $"Upkeep '{id}' amount is not a formula ({amountError!.Code}).", id);
+            }
+            else
+            {
+                usedScales.UnionWith(amount!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+            }
+            if (upkeep.IfShort is not null && (upkeep.Change != UpkeepChange.Spend || upkeep.Toggle is null))
+                Error("validate.upkeep-if-short", $"Upkeep '{id}' has ifShort, which only a spend that belongs to a toggle takes.", id);
+        }
+
+        // Content v11 (D43): a toggle's group, layer, overlay rules, pool cost, duration and level.
         void CheckToggleV11(ToggleEffect toggle)
         {
             var id = toggle.Id;
             needsV11 |= toggle.Group is not null || toggle.GroupContent is not null || toggle.Layer is not null || toggle.AllowedWith is not null
-                || toggle.AllowedInBase is not null || toggle.Cost is not null || toggle.ResourceContent is not null || toggle.Level is not null;
+                || toggle.AllowedInBase is not null || toggle.Cost is not null || toggle.ResourceContent is not null || toggle.Level is not null
+                || toggle.Duration is not null;
+
+            if (toggle.Duration is { } duration)
+            {
+                if (!Formula.TryParse(duration, allowScales: true, out var durationFormula, out var durationError))
+                    Error("validate.toggle-duration", $"Toggle '{id}' duration is not a formula ({durationError!.Code}).", id);
+                else
+                    usedScales.UnionWith(durationFormula!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+            }
+            if (toggle.ResourceId is { } spendsFrom && FindResource(toggle.ResourceContent, spendsFrom)?.Counts == ResourceCounting.Up)
+                Warn("validate.cost-counts-up", $"Toggle '{id}' spends from '{spendsFrom}', a pool that counts up; a cost fills it instead of using it up.", id);
+            if (toggle.AutoWhen is not null && toggle.Duration is not null)
+                Error("validate.toggle-auto-group", $"Toggle '{id}' switches itself, so it cannot have a duration; remove the duration.", id);
 
             if (toggle.Group is null)
             {

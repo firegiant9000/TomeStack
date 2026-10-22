@@ -262,16 +262,94 @@ public sealed record ResourceEffect : Effect
     /// </summary>
     public Activation? Activation { get; init; }
 
-    /// <summary>
-    /// The keys content schema v11 adds to this effect (none yet). A slice that adds one also strips it below v11 in
-    /// <see cref="FromUnknown"/>, as <see cref="ToggleEffect"/> does.
-    /// </summary>
-    internal static readonly string[] V11Keys = [];
+    /// <summary>Content schema v11 (D43): <see cref="ResourceCounting.Up"/> makes the pool count up from zero to its maximum ("built up"). Null: counts down (uses left).</summary>
+    public ResourceCounting? Counts { get; init; }
 
-    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
-        revisionSchemaVersion >= ContentRevision.PlayDetailsSchemaVersion
-            ? (VersionedEffects.NamesMember<Activation>(unknown.Raw, ToggleEffect.ActivationProperty) ? VersionedEffects.Typed<ResourceEffect>(unknown) : unknown)
-            : VersionedEffects.TypedWithout<ResourceEffect>(unknown, ToggleEffect.ActivationProperty);
+    /// <summary>Content schema v11 (D43): what the sheet says when a counting-up pool is full. Only with <see cref="Counts"/>.</summary>
+    public ResourceFullPrompt? ResourceFull { get; init; }
+
+    /// <summary>Content schema v11 (D43): a per-turn allowance (for example one reaction) that an upkeep regain refreshes. Null: false.</summary>
+    public bool? Allowance { get; init; }
+
+    internal const string CountsProperty = "counts";
+
+    /// <summary>
+    /// The keys content schema v11 adds to this effect (matched in every spelling, like the serializer). Below v11 they stay
+    /// extension data and do nothing, and the revision keeps its exact bytes and hash.
+    /// </summary>
+    internal static readonly string[] V11Keys = [CountsProperty, "resourceFull", "allowance"];
+
+    /// <summary>
+    /// Typed by the revision. From v11 all keys apply (an unknown <c>counts</c> value leaves the effect untyped); v10 types
+    /// <c>activation</c> but not <see cref="V11Keys"/>; below v10 neither.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
+            return VersionedEffects.TypedWithout<ResourceEffect>(unknown, [ToggleEffect.ActivationProperty, .. V11Keys]);
+        if (!VersionedEffects.NamesMember<Activation>(unknown.Raw, ToggleEffect.ActivationProperty))
+            return unknown;
+        if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+            return VersionedEffects.TypedWithout<ResourceEffect>(unknown, V11Keys);
+        return VersionedEffects.NamesMember<ResourceCounting>(unknown.Raw, CountsProperty) ? VersionedEffects.Typed<ResourceEffect>(unknown) : unknown;
+    }
+}
+
+/// <summary>Content schema v11 (D43): how a pool counts. One value for now: up from zero to the maximum.</summary>
+public enum ResourceCounting { Up }
+
+/// <summary>Content schema v11 (D43): the text a full counting-up pool shows.</summary>
+public sealed record ResourceFullPrompt(string Text);
+
+/// <summary>Content schema v11 (D43): when in a turn an upkeep happens.</summary>
+public enum TurnMoment { TurnStart, TurnEnd }
+
+/// <summary>Content schema v11 (D43): whether an upkeep spends from a pool or regains to it.</summary>
+public enum UpkeepChange { Spend, Regain }
+
+/// <summary>Content schema v11 (D43): what an upkeep spend that the pool cannot cover does. Null in content means <see cref="Ask"/>.</summary>
+public enum UpkeepShortfall { Ask, End }
+
+/// <summary>
+/// Content schema v11 (D43): a pool change at the start or end of the turn, optionally tied to a toggle (it applies while
+/// the toggle is on). Previewed and confirmed by a turn command, never applied by calculation. Typed only in a v11 revision:
+/// in an older revision an <c>upkeep</c> stays an <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record UpkeepEffect : Effect
+{
+    public const string TypeName = "upkeep";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary>The toggle this upkeep belongs to (applies while it is on). Null: always.</summary>
+    public string? Toggle { get; init; }
+
+    /// <summary>The content that declares <see cref="Toggle"/>. Null: this revision.</summary>
+    public Guid? ToggleContent { get; init; }
+
+    public required TurnMoment At { get; init; }
+
+    public required string ResourceId { get; init; }
+
+    /// <summary>The content that declares <see cref="ResourceId"/>. Null: this revision.</summary>
+    public Guid? ResourceContent { get; init; }
+
+    public required UpkeepChange Change { get; init; }
+
+    /// <summary>A formula, or <c>all</c> (regain only).</summary>
+    public required string Amount { get; init; }
+
+    /// <summary>What a spend the pool cannot cover does. Null: <see cref="UpkeepShortfall.Ask"/>.</summary>
+    public UpkeepShortfall? IfShort { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) =>
+        VersionedEffects.NamesMember<TurnMoment>(unknown.Raw, "at")
+        && VersionedEffects.NamesMember<UpkeepChange>(unknown.Raw, "change")
+        && VersionedEffects.NamesMember<UpkeepShortfall>(unknown.Raw, "ifShort")
+            ? VersionedEffects.Typed<UpkeepEffect>(unknown)
+            : unknown;
 }
 
 /// <summary>A choice the player makes (for example, pick one of these content revisions).</summary>
@@ -436,6 +514,9 @@ public sealed record ToggleEffect : Effect
     /// <summary>Content schema v11 (D43): the toggle is available from this level on (class level for a class's features, otherwise character level; see <see cref="GrantEffect.Level"/>).</summary>
     public int? Level { get; init; }
 
+    /// <summary>Content schema v11 (D43): rounds the toggle lasts once on (a formula, evaluated for the character). Null: until switched off.</summary>
+    public string? Duration { get; init; }
+
     internal const string AutoWhenProperty = "autoWhen";
 
     internal const string ActivationProperty = "activation";
@@ -443,7 +524,7 @@ public sealed record ToggleEffect : Effect
     internal const string LayerProperty = "layer";
 
     /// <summary>The keys content schema v11 adds (matched in every spelling, like the serializer).</summary>
-    internal static readonly string[] V11Keys = ["group", "groupContent", LayerProperty, "allowedWith", "allowedInBase", "cost", "resourceContent", "level"];
+    internal static readonly string[] V11Keys = ["group", "groupContent", LayerProperty, "allowedWith", "allowedInBase", "cost", "resourceContent", "level", "duration"];
 
     /// <summary>
     /// Typed from v6, in tiers. Below v10, <c>autoWhen</c> and <c>activation</c> stay extension data; below v11, so do the
@@ -790,6 +871,7 @@ internal static class VersionedEffects
             [ScaleEffect.TypeName] = (ScaleEffect.SchemaVersion, (u, _) => ScaleEffect.FromUnknown(u)),
             [ItemEffect.TypeName] = (ItemEffect.SchemaVersion, (u, _) => ItemEffect.FromUnknown(u)),
             [ToggleGroupEffect.TypeName] = (ToggleGroupEffect.SchemaVersion, (u, _) => ToggleGroupEffect.FromUnknown(u)),
+            [UpkeepEffect.TypeName] = (UpkeepEffect.SchemaVersion, (u, _) => UpkeepEffect.FromUnknown(u)),
             // Always typed, except that the converter hands these over when they carry a key or value added after v9 (see
             // EffectJsonConverter.CarriesDetailAbove), so the revision's version decides how they read. A later slice that
             // gives one of them a v11 key adds it to that type's V11Keys, and nothing else.
@@ -921,7 +1003,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

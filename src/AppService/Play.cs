@@ -88,6 +88,12 @@ public enum PlayActionKind
 
     /// <summary>A companion's temporary hit points become <c>amount</c> (0 to the maximum allowed); its current hit points stay as stored, so a damage that landed first is kept.</summary>
     CompanionSetTemporaryHitPoints,
+
+    /// <summary>D43 slice 3: starts an encounter at round 0 (turns are taken in an encounter). Refused <c>encounter.already-started</c> while one is running. Compound: needs the stamp, and sets the undo slot.</summary>
+    StartEncounter,
+
+    /// <summary>D43 slice 3: ends the encounter and clears every toggle's rounds left (the reply names the toggles that lost a duration). Refused <c>encounter.not-started</c> outside one. Compound, like <see cref="StartEncounter"/>.</summary>
+    EndEncounter,
 }
 
 /// <param name="Confirm">Must be <c>true</c>: play state changes only by an explicit user action, never as a side effect.</param>
@@ -146,7 +152,7 @@ public sealed partial class TomeStackApp
         // D43 S2: the page's stamp is the one concurrency token every character write already uses (SaveCharacter compares the same
         // value). A stale one is refused before any action runs, so every kind of play command is covered and nothing is written.
         // A compound change (several writes decided from one view) cannot run on a guess: it must name the copy it was decided on.
-        if (IsCompound(command) && command.ExpectedUpdatedAt is null)
+        if (CompoundUndo(command, null).Compound && command.ExpectedUpdatedAt is null)
             throw new AppValidationException([new("play.basis-required", "This change needs the character's current state. Reload it and try again.")], "play.basis-required");
         if (command.ExpectedUpdatedAt is { } expected && expected != character.UpdatedAt)
             throw new AppValidationException([new("character.stale", StaleMessage)], "character.stale");
@@ -162,6 +168,7 @@ public sealed partial class TomeStackApp
         var hp = sheet.HitPoints!;
         int? AtMaximumIsNull(int value) => value >= hp.Maximum ? null : value;
         DamageOutcome? damage = null;
+        IReadOnlyList<Diagnostic>? notices = null;
 
         play = command.Action switch
         {
@@ -195,6 +202,12 @@ public sealed partial class TomeStackApp
                 ? play with { PactSlotsSpent = play.PactSlotsSpent - 1 }
                 : throw new AppValidationException([new("slots.nothing-spent", "No Pact Magic slots are spent.")]),
             PlayActionKind.ToggleOn or PlayActionKind.ToggleOff => ChangeToggle(character, play, sheet, command),
+            PlayActionKind.StartEncounter => play.Encounter is null
+                ? StartEncounter(play, sheet)
+                : throw new AppValidationException([new("encounter.already-started", "An encounter is already running.")]),
+            PlayActionKind.EndEncounter => play.Encounter is null
+                ? throw new AppValidationException([new("encounter.not-started", "No encounter is running.")])
+                : EndEncounter(play, sheet, out notices),
             PlayActionKind.StartConcentration => StartConcentration(play, sheet, command),
             PlayActionKind.EndConcentration => play.Concentration is null
                 ? throw new AppValidationException([new("play.not-concentrating", "The character is not concentrating on a spell.")])
@@ -210,11 +223,45 @@ public sealed partial class TomeStackApp
         if (hp.Current == 0 && (play.CurrentHitPoints ?? hp.Maximum) > 0 && command.Action is PlayActionKind.Heal or PlayActionKind.SetHitPoints)
             play = play with { DeathSaves = new() };
         // D43 S2: a compound change keeps the play state it started from, for one undo (the toggle exists: ChangeToggle checked it).
-        (PlayState, string)? undo = IsCompound(command) && sheet.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched
-            ? (character.Play, $"switch to {switched.Label}")
-            : null;
+        (PlayState, string)? undo = CompoundUndo(command, sheet).Label is { } label ? (character.Play, label) : null;
+        if (command.Action == PlayActionKind.Spend)
+            notices = ResourceFullNotice(sheet, command);
         var view = SaveWithPlay(character with { Play = play }, undo);
+        if (notices is not null)
+            view = view with { Notices = notices };
         return damage is null ? view : view with { Damage = damage };
+    }
+
+    /// <summary>
+    /// D43 S3: a spend that fills a counting-up pool whose content gave a <c>resourceFull</c> text answers with that text (reply-only,
+    /// code <c>resource.full</c>). Content-authored text only. Called after the spend was accepted, on the sheet it was decided on.
+    /// </summary>
+    private static IReadOnlyList<Diagnostic>? ResourceFullNotice(CharacterSheet sheet, PlayCommand command)
+    {
+        var pool = sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == command.ContentId && r.ResourceId == command.ResourceId);
+        return pool is { CountsUp: true, Maximum: > 0 } && !string.IsNullOrWhiteSpace(pool.FullText) && pool.Spent + command.Amount >= pool.Maximum
+            ? [new("resource.full", pool.FullText)]
+            : null;
+    }
+
+    /// <summary>The encounter starts at round 0, and each toggle that is on with a duration gets its rounds left (the sheet knows which are on).</summary>
+    private static PlayState StartEncounter(PlayState play, CharacterSheet sheet) => play with
+    {
+        Encounter = new(0),
+        Toggles = [.. play.Toggles.Select(t =>
+            sheet.Toggles?.FirstOrDefault(v => v.On && v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId) is { Duration: { } rounds } ? t with { RoundsLeft = rounds } : t)],
+    };
+
+    /// <summary>The encounter ends and every count of rounds left goes with it. A toggle that had one is named in <paramref name="notices"/> (no content ref: nothing is downgraded).</summary>
+    private static PlayState EndEncounter(PlayState play, CharacterSheet sheet, out IReadOnlyList<Diagnostic>? notices)
+    {
+        var lost = play.Toggles.Where(t => t.RoundsLeft is not null).Select(t =>
+        {
+            var label = sheet.Toggles?.FirstOrDefault(v => v.Content.ContentId == t.ContentId && v.ToggleId == t.ToggleId)?.Label ?? t.ToggleId;
+            return new Diagnostic("encounter.duration-by-hand", $"{label} ({t.ToggleId}): duration: track by hand");
+        }).ToList();
+        notices = lost.Count == 0 ? null : lost;
+        return play with { Encounter = null, Toggles = [.. play.Toggles.Select(t => t with { RoundsLeft = null })] };
     }
 
     /// <summary>
@@ -243,10 +290,20 @@ public sealed partial class TomeStackApp
     }
 
     /// <summary>
-    /// D43 S2: a compound change decides several writes from one view, so it needs the current stamp (<c>play.basis-required</c>
-    /// without one). Today only the form switch is: <c>toggleOn</c> with <c>replace</c>. Later slices (S3, S7, S8) extend this list.
+    /// D43 S2/S3: the one server switch for compound play changes. A compound change decides several writes from one view, so it needs
+    /// the current stamp (<c>play.basis-required</c> without one) and keeps the play state it started from for one undo. Today:
+    /// <c>toggleOn</c> with <c>replace</c> ("switch to {toggle label}", the label only once the toggle exists on the
+    /// <paramref name="sheet"/>), <c>startEncounter</c> ("start encounter") and <c>endEncounter</c> ("end encounter"). Later slices (S7, S8) extend this switch.
+    /// With no <paramref name="sheet"/> (the stamp check runs before it is calculated) only <c>Compound</c> is answered.
     /// </summary>
-    private static bool IsCompound(PlayCommand command) => command.Action == PlayActionKind.ToggleOn && command.Replace;
+    internal static (bool Compound, string? Label) CompoundUndo(PlayCommand command, CharacterSheet? sheet) => command.Action switch
+    {
+        PlayActionKind.ToggleOn when command.Replace => (true,
+            sheet?.Toggles?.FirstOrDefault(t => t.Content.ContentId == command.ContentId && t.ToggleId == command.ToggleId) is { } switched ? $"switch to {switched.Label}" : null),
+        PlayActionKind.StartEncounter => (true, "start encounter"),
+        PlayActionKind.EndEncounter => (true, "end encounter"),
+        _ => (false, null),
+    };
 
     /// <summary>
     /// Wave 3 item 25 (R158, R160): spends or regains charges of one equipment entry, named by its id or (while it has none) by its
@@ -328,7 +385,8 @@ public sealed partial class TomeStackApp
 
     /// <summary>
     /// D43: drops the stored overlays the calculation says are not allowed with the primary the candidate state has on (none: only
-    /// overlays allowed in the base character stay), so a form switch or a form turned off takes its dependent overlays with it.
+    /// overlays allowed in the base character stay), so a form switch takes its dependent overlays with it. A form turned off uses
+    /// <see cref="ToggleGroups.EndingWith"/>, the same rule as the turn planner.
     /// </summary>
     private PlayState WithoutDisallowedOverlays(Character character, PlayState candidate)
     {
@@ -349,8 +407,9 @@ public sealed partial class TomeStackApp
         {
             if (!toggle.On)
                 throw new AppValidationException([new("toggle.already-off", $"'{toggle.Label}' is already off.")]);
-            var off = play with { Toggles = others };
-            return toggle is { Group: not null, Layer: not ToggleLayer.Overlay } ? WithoutDisallowedOverlays(character, off) : off;
+            // D43: a primary that goes off takes the overlays that need it (the rule the turn planner shares).
+            var taken = ToggleGroups.EndingWith(toggle, sheet.Toggles!, play.Toggles.Select(s => (s.ContentId, s.ToggleId)).ToHashSet()).Select(t => (t.Content.ContentId, t.ToggleId)).ToHashSet();
+            return taken.Count == 0 ? play with { Toggles = others } : play with { Toggles = [.. others.Where(t => !taken.Contains((t.ContentId, t.ToggleId)))] };
         }
         if (toggle.On)
             throw new AppValidationException([new("toggle.already-on", $"'{toggle.Label}' is already on.")]);
@@ -369,7 +428,8 @@ public sealed partial class TomeStackApp
             next = [.. others.Where(t => !occupants.Any(o => o.Content.ContentId == t.ContentId && o.ToggleId == t.ToggleId))];
         }
         // Everything is computed before anything is written: the new list, then the payment.
-        var candidate = play with { Toggles = [.. next, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId)] };
+        // D43 S3: in an encounter a timed toggle starts counting its rounds; outside one it has no count (the sheet says "track by hand").
+        var candidate = play with { Toggles = [.. next, new ActiveToggle(toggle.Content.ContentId, toggle.ToggleId, play.Encounter is null ? null : toggle.Duration)] };
         if (isPrimary)
             candidate = WithoutDisallowedOverlays(character, candidate);
         // The cost comes from the pool the toggle names (a shared pool lives in another content); a v6 toggle with a resource and no cost spends one use of its own.

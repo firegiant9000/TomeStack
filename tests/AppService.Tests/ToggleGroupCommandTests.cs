@@ -205,6 +205,26 @@ public class ToggleGroupCommandTests
     }
 
     [Fact]
+    public void Turning_a_primary_off_also_drops_a_stored_overlay_that_was_not_on()
+    {
+        var (temp, id) = Forms();
+        using var _ = temp;
+        // Bound is allowed only with Tide, so beside Ember it is stored but not on.
+        var saved = temp.App.GetCharacter(id).Character;
+        temp.App.Store.SaveCharacter(saved with { Play = saved.Play with { Toggles = [new(Content(2), "ember"), new(Content(5), "bound")] } });
+        var before = temp.App.GetCharacter(id);
+        Assert.True(IsOn(before, "ember"));
+        Assert.False(IsOn(before, "bound"));
+        Assert.Contains(before.Character.Play.Toggles, t => t.ToggleId == "bound");
+
+        var off = Off(temp, id, 2, "ember");
+
+        Assert.DoesNotContain(off.Character.Play.Toggles, t => t.ToggleId is "ember" or "bound");
+        // Tide on later must not bring the dropped overlay back silently.
+        Assert.False(IsOn(On(temp, id, 3, "tide"), "bound"));
+    }
+
+    [Fact]
     public void An_overlay_not_allowed_now_is_refused()
     {
         var (temp, id) = Forms();

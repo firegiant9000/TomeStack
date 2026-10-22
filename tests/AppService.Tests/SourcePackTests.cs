@@ -127,6 +127,26 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void An_upkeep_that_names_content_in_another_source_gives_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Pool Source");
+        var pool = Feat(other.Id, "Test Pool Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000b1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000b1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(pool);
+        var own = Shared(temp, "Test Upkeep Source");
+        var upkeep = Feat(own.Id, "Test Upkeep Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000b2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000b2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new UpkeepEffect { Id = "tick", At = TurnMoment.TurnEnd, ResourceId = "focus", ResourceContent = pool.ContentId, Change = UpkeepChange.Regain, Amount = "1" }],
+        };
+        temp.App.Store.AddRevision(upkeep);
+
+        Assert.Contains(temp.App.PreviewSourcePack([own.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.DoesNotContain(temp.App.PreviewSourcePack([other.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {
         using var origin = new TempApp();

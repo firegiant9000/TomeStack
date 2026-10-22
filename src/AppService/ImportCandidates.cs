@@ -803,7 +803,9 @@ public sealed partial class TomeStackApp
         }
         var toggleContent = draft.Effects.OfType<ToggleEffect>()
             .SelectMany(t => new[] { t.GroupContent, t.ResourceContent }.Concat((t.AllowedWith ?? []).Select(a => a.ContentId)))
-            .OfType<Guid>().Where(id => id != draft.ContentId); // a toggle naming its own content is no dependency
+            .OfType<Guid>()
+            .Concat(draft.Effects.OfType<UpkeepEffect>().SelectMany(u => new[] { u.ToggleContent, u.ResourceContent }.OfType<Guid>()))
+            .Where(id => id != draft.ContentId); // a toggle or upkeep naming its own content is no dependency
         foreach (var contentId in draft.Effects.OfType<RollEffect>().Select(r => r.ResourceContent).OfType<Guid>().Concat(toggleContent).Distinct())
         {
             var revision = _store.ListRevisions(contentId).LastOrDefault();

@@ -126,9 +126,10 @@ public sealed record ContentRevision : IJsonOnDeserialized
     /// and charges). All are optional, so older revisions serialize unchanged; each is read only in a v10 revision, and below
     /// v10 a key stays extension data (an <c>item</c> or a damage grant stays an unknown effect) and does nothing.
     /// v11 (play mechanics, D43) adds the <c>toggleGroup</c> effect and the toggle fields <c>group</c>, <c>groupContent</c>,
-    /// <c>layer</c>, <c>allowedWith</c>, <c>allowedInBase</c>, <c>cost</c>, <c>resourceContent</c> and <c>level</c>. All are
+    /// <c>layer</c>, <c>allowedWith</c>, <c>allowedInBase</c>, <c>cost</c>, <c>resourceContent</c>, <c>level</c> and <c>duration</c>,
+    /// the <c>upkeep</c> effect, and the resource fields <c>counts</c>, <c>resourceFull</c> and <c>allowance</c>. All are
     /// optional, so older revisions serialize unchanged; each is read only in a v11 revision, and below v11 a key stays
-    /// extension data (a <c>toggleGroup</c> stays an unknown effect) and does nothing.
+    /// extension data (a <c>toggleGroup</c> or <c>upkeep</c> stays an unknown effect) and does nothing.
     /// </summary>
     public const int CurrentSchemaVersion = 11;
 

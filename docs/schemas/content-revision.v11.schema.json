@@ -366,6 +366,30 @@
                 "other"
               ],
               "description": "Content v10 (D42): the kind of action that spends this resource, for grouping on the sheet. Display only."
+            },
+            "counts": {
+              "enum": [
+                "up"
+              ],
+              "description": "Content v11 (D43): the pool counts up from zero to its maximum (built up) instead of down. Absent: counts down."
+            },
+            "resourceFull": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "description": "Content v11 (D43): what the sheet says when a counting-up pool is full. Only with counts up."
+            },
+            "allowance": {
+              "type": "boolean",
+              "description": "Content v11 (D43): a per-turn allowance (for example one reaction) that an upkeep regain refreshes."
             }
           },
           "required": [
@@ -877,6 +901,10 @@
             },
             "level": {
               "$ref": "#/$defs/level"
+            },
+            "duration": {
+              "$ref": "#/$defs/formula",
+              "description": "Content v11 (D43): the rounds the toggle lasts once on. Absent: until switched off."
             }
           },
           "required": [
@@ -902,6 +930,62 @@
           "required": [
             "groupId",
             "label"
+          ]
+        },
+        {
+          "description": "Content v11 (D43): a pool change at the start or end of the turn, optionally while a toggle is on. Previewed and confirmed by a turn command, never applied by calculation. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte. At most 20 per revision.",
+          "properties": {
+            "type": {
+              "const": "upkeep"
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The toggle this upkeep belongs to; it applies while that toggle is on. Absent: always."
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content that declares the toggle. Absent: this revision."
+            },
+            "at": {
+              "enum": [
+                "turnStart",
+                "turnEnd"
+              ]
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resourceContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content that declares resourceId. Absent: this revision."
+            },
+            "change": {
+              "enum": [
+                "spend",
+                "regain"
+              ]
+            },
+            "amount": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "A formula, or all (regain only)."
+            },
+            "ifShort": {
+              "enum": [
+                "ask",
+                "end"
+              ],
+              "description": "What a spend the pool cannot cover does; only with change spend and a toggle. Absent: ask."
+            }
+          },
+          "required": [
+            "at",
+            "resourceId",
+            "change",
+            "amount"
           ]
         },
         {
@@ -1000,7 +1084,8 @@
                   "toggle",
                   "scale",
                   "item",
-                  "toggleGroup"
+                  "toggleGroup",
+                  "upkeep"
                 ]
               }
             }

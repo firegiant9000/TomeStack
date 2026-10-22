@@ -140,9 +140,12 @@ internal sealed class TempApp : IDisposable
     }
 
     /// <summary>Installs a fixture pack (sources and revisions) into this data folder, as if it had been imported.</summary>
-    public ContentPack AddPack(string relativePath)
+    /// <param name="adjust">Changes each revision in memory before it is stored (the fixture file stays as it is).</param>
+    public ContentPack AddPack(string relativePath, Func<ContentRevision, ContentRevision>? adjust = null)
     {
         var pack = LoadFixture<ContentPack>(relativePath);
+        if (adjust is not null)
+            pack = pack with { Revisions = [.. pack.Revisions.Select(adjust)] };
         App.Store.InTransaction(() =>
         {
             foreach (var source in pack.Sources)

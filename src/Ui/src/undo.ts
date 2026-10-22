@@ -12,9 +12,11 @@ export interface UndoEntry {
 /**
  * D44: a compound play change decides several writes from one view (a form switch also turns the other form and its overlays off).
  * It must name the stored `updatedAt` (`expectedUpdatedAt`) and is undone by the service, never by a client inverse.
- * Slices 3 and 7 extend this (turns, end encounter, damage with responses).
+ * D43 S3 adds starting and ending an encounter; slice 7 extends it again (damage with responses). The server's switch
+ * (`CompoundUndo` in Play.cs) and this one are checked against `tests/RulesFixtures/compound-play-actions.json`.
  */
-export const isCompound = (action: PlayAction): boolean => action.action === 'toggleOn' && !!action.replace;
+export const isCompound = (action: PlayAction): boolean =>
+  (action.action === 'toggleOn' && !!action.replace) || action.action === 'startEncounter' || action.action === 'endEncounter';
 
 const hp = (view: CharacterView) => view.sheet.hitPoints;
 /**
@@ -106,6 +108,8 @@ export function inverseOf(action: PlayAction, before: CharacterView, after: Char
     case 'toggleOff': {
       // Switching a resource-backed toggle back on would spend a use the player did not spend, so it is not undoable.
       if (backing(action)) return undefined;
+      // A timed toggle that is counting its rounds would restart at the full duration if switched back on; the server Undo restores the count.
+      if (before.character.play?.toggles?.some((t) => t.contentId === action.contentId && t.toggleId === action.toggleId && t.roundsLeft != null)) return undefined;
       return droppedOthers(action, before, after) ? undefined : entry([{ action: 'toggleOn', contentId: action.contentId, toggleId: action.toggleId }]);
     }
     case 'companionDamage':
