@@ -438,4 +438,96 @@ public class FeatureAttackTests
         Assert.Equal("kindled-rider", Assert.Single(blade.Riders!).EffectId);
         Assert.Single(blade.Trace, t => t.Operation == "rider.not-applied");
     }
+
+    // ---- Task 4.4: a resource's maximum as a modifier target ----------------------------------------------------------
+
+    private static ResourceValue Reflex(CharacterSheet sheet) => sheet.Resources!.Single(r => r.ResourceId == "reflex");
+
+    [Fact]
+    public void A_form_raises_a_resource_maximum()
+    {
+        var on = Reflex(Sheet(Adept(Kindled)));
+        var off = Reflex(Sheet(Adept()));
+
+        Assert.Equal((2, 2), (on.Maximum, on.Current));
+        Assert.Equal(["derive", "add"], on.Trace.Select(t => t.Operation));
+        var step = on.Trace[1];
+        Assert.Equal(("+1 while Kindled mode", 1, 2), (step.Description, step.Amount, step.Result));
+        Assert.Equal(Fixtures.KindledMode, step.Origin.Content);
+        Assert.Equal((1, 1), (off.Maximum, off.Current));
+        Assert.Single(off.Trace);
+    }
+
+    [Fact]
+    public void A_resource_target_does_not_raise_unknown_target_or_enter_the_field_pipeline()
+    {
+        var sheet = Sheet(Adept(Kindled));
+
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.unknown-target");
+        Assert.Empty(Reflex(sheet).Warnings);
+    }
+
+    [Fact]
+    public void A_raised_maximum_never_rewrites_spent_and_current_stops_at_zero()
+    {
+        var character = Adept() with { Play = new PlayState { Resources = [new(Fixtures.KindledMode.ContentId, "reflex", 2)] } }; // spent 2 while kindled, then it ended
+
+        var reflex = Reflex(Sheet(character));
+
+        Assert.Equal((1, 2, 0), (reflex.Maximum, reflex.Spent, reflex.Current));
+    }
+
+    [Fact]
+    public void A_resource_target_in_an_older_revision_is_ignored()
+    {
+        ContentPack[] packs = [Fixtures.Pack(), Fixtures.M1Pack(), Fixtures.SpellPack(), Fixtures.CombatPack(), Fixtures.EffectsPack(), Fixtures.MulticlassPack(), Fixtures.FormsPack(), Fixtures.TurnsPack(), Fixtures.FeatureAttacksPack()];
+        var revisions = packs.SelectMany(p => p.Revisions).Select(r => r.Reference == Fixtures.KindledMode ? r with { SchemaVersion = 10 } : r).ToList();
+        var catalog = new InMemoryContentCatalog([.. packs.SelectMany(p => p.Sources)], [.. revisions]);
+
+        var sheet = Sheet(Adept(Kindled), catalog);
+
+        var reflex = Reflex(sheet);
+        Assert.Equal((1, 1), (reflex.Maximum, reflex.Current));
+        Assert.Single(reflex.Trace);
+        var diagnostic = Assert.Single(sheet.Diagnostics, d => d.Code == "effect.unknown-target");
+        Assert.Equal((Fixtures.KindledMode, "reflex-bonus"), (diagnostic.Content, diagnostic.EffectId));
+    }
+
+    [Fact]
+    public void A_resource_modifier_that_is_not_a_bonus_or_names_no_resource_is_ignored_quietly()
+    {
+        var notBonus = With(Fixtures.KindledMode, e => e is ModifierEffect { Target: "resource.reflex" } m ? m with { Operation = ModifierOperation.Set } : e);
+        var noResource = With(Fixtures.KindledMode, e => e is ModifierEffect { Target: "resource.reflex" } m ? m with { Target = "resource.nothing" } : e);
+
+        foreach (var catalog in new[] { notBonus, noResource })
+        {
+            var sheet = Sheet(Adept(Kindled), catalog);
+
+            Assert.Equal(1, Reflex(sheet).Maximum);
+            Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.unknown-target");
+        }
+    }
+
+    [Fact]
+    public void A_failing_resource_bonus_formula_warns_and_leaves_the_maximum()
+    {
+        var catalog = With(Fixtures.KindledMode, e => e is ModifierEffect { Target: "resource.reflex" } m ? m with { Value = "1 +" } : e);
+
+        var reflex = Reflex(Sheet(Adept(Kindled), catalog));
+
+        Assert.Equal(1, reflex.Maximum);
+        Assert.Contains(reflex.Warnings, w => w.Code == "effect.invalid-formula" && w.EffectId == "reflex-bonus");
+    }
+
+    [Fact]
+    public void A_failing_attack_cost_formula_makes_the_row_assisted_but_still_available()
+    {
+        var catalog = With(Fixtures.OpenHandStrike, e => e is AttackEffect { AttackId: "bolt" } a ? a with { Cost = "1 +" } : e);
+
+        var sheet = Sheet(Adept(), catalog);
+        var bolt = Bolt(sheet);
+
+        Assert.Equal((true, AutomationStatus.Assisted, (int?)null), (bolt.Available, bolt.Automation, bolt.Cost));
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.EffectId == "bolt");
+    }
 }

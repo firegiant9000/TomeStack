@@ -612,7 +612,8 @@ public static class CharacterCalculator
         // Content v11 (D43): one primary per form group and the allowed overlays, resolved in every pass.
         var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn);
+        var resourceBonuses = new List<ResourceBonus>();
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -679,7 +680,7 @@ public static class CharacterCalculator
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
         var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
-        var resources = CollectResources(active, character, resolved.ClassLevels, values, family);
+        var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         // A roll's cost is a number of uses, so never negative.
@@ -1236,12 +1237,18 @@ public static class CharacterCalculator
         }
 
         int? cost = null;
+        var costFailed = false;
         if (attack.Cost is { } costSource)
         {
             if (TryEvaluate(costSource, item, character, classLevels, values, [], out var spent, out var costFailure))
+            {
                 cost = Math.Max(spent, 0);
+            }
             else
+            {
+                costFailed = true; // the row stays available; the player works out what it costs
                 diagnostics.Add(InvalidFormula(revision, attack, costFailure!));
+            }
         }
         else if (attack.ResourceId is not null)
         {
@@ -1250,8 +1257,8 @@ public static class CharacterCalculator
         return new(
             revision.Reference, attack.Label, attack.Id, attack.Kind, null, ability, toHit, damage, null, attack.DamageType, [], attack.Range, null,
             proficient,
-            // An attack that cannot be calculated is assisted (the player works it out); one that is only out of its form keeps its automation.
-            invalid is not null && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
+            // An attack that cannot be calculated, or whose cost cannot, is assisted (the player works it out); one that is only out of its form keeps its automation.
+            (invalid is not null || costFailed) && attack.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : attack.Automation,
             trace, [], origin,
             AttackSource.Feature, attack.Tags, attack.ReplacesAttack ?? false, appliedRiders, invalid is null && outOfForm is null, invalid ?? outOfForm, attack.Activation,
             attack.ResourceId is null ? null : attack.ResourceContent ?? revision.ContentId, attack.ResourceId, cost);
@@ -1465,7 +1472,7 @@ public static class CharacterCalculator
     /// and a failing formula disables only that resource, with a warning (SPEC C-03).
     /// </summary>
     private static List<ResourceValue> CollectResources(
-        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, string family)
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, string family, List<ResourceBonus> bonuses)
     {
         var resources = new List<ResourceValue>();
         foreach (var item in active)
@@ -1500,6 +1507,25 @@ public static class CharacterCalculator
                     {
                         maximum = Math.Max(value, 0);
                         trace.Add(new(1, "derive", $"Maximum from {Describe(item)}: {formula.Source}", value, maximum.Value, origin, null, inputs.Count > 0 ? inputs : null));
+                        // Content v11: bonuses to this maximum from the same revision, in content order; each is a trace step.
+                        foreach (var bonus in bonuses.Where(b => ReferenceEquals(b.Content, item) && b.Effect.Target == ResourceTargetPrefix + effect.ResourceId))
+                        {
+                            var bonusInputs = new List<TraceInput>();
+                            if (!Formula.TryParse(bonus.Effect.Value, AllowsScales(revision), out var bonusFormula, out var bonusError))
+                            {
+                                warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                            }
+                            else if (!bonusFormula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, bonusInputs), out var amount, out bonusError))
+                            {
+                                warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
+                            }
+                            else
+                            {
+                                maximum = Math.Max(maximum.Value + amount, 0);
+                                var text = bonus.FollowedToggle ?? (bonus.Effect.Toggle is { } own ? revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == own)?.Label : null);
+                                trace.Add(new(trace.Count + 1, "add", text is null ? $"{amount:+0;-0}" : $"{amount:+0;-0} while {text}", amount, maximum.Value, ContentOrigin(family, item, bonus.Effect), null, bonusInputs.Count > 0 ? bonusInputs : null));
+                            }
+                        }
                     }
                     else
                     {
@@ -1976,6 +2002,12 @@ public static class CharacterCalculator
     /// <param name="FollowedToggle">Set when the modifier follows another entry's toggle (content v11 <c>toggleContent</c>): that toggle's label, named in the trace.</param>
     private sealed record Modifier(ActiveContent Content, ModifierEffect Effect, Formula Formula, IReadOnlyList<string> ReadsFields, string? SkipReason = null, string? FollowedToggle = null);
 
+    /// <summary>The target prefix of a modifier on a resource's maximum (content v11): <c>resource.&lt;resourceId&gt;</c>.</summary>
+    private const string ResourceTargetPrefix = "resource.";
+
+    /// <summary>A bonus to a resource's maximum that applies now (its toggle gate already passed); the resource is found in the same revision.</summary>
+    private sealed record ResourceBonus(ActiveContent Content, ModifierEffect Effect, string? FollowedToggle);
+
     /// <summary>
     /// M2 item 4: worn armor and a shield as Armor Class modifiers. Body armor is a <c>replace</c> of the base (light: AC +
     /// Dex; medium: AC + Dex up to the cap; heavy: AC), and while it is worn every other Armor Class replacement is an
@@ -2101,7 +2133,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, EffectiveToggles effective, bool autoOn)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -2143,6 +2175,14 @@ public static class CharacterCalculator
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
+                    continue;
+                }
+                // Content v11 (D43): resource.<id> raises that resource's maximum (CollectResources applies it). It is not a field, so it never
+                // enters the field pipeline; only a bonus counts, and one naming no resource of its revision changes nothing (validation errors).
+                if (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion && effect.Target.StartsWith(ResourceTargetPrefix, StringComparison.Ordinal))
+                {
+                    if (effect.Operation == ModifierOperation.Bonus)
+                        resourceBonuses.Add(new(item, effect, followedToggle));
                     continue;
                 }
                 if (!SpecIndex.ContainsKey(effect.Target))
