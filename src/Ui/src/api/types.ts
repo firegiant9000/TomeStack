@@ -303,6 +303,9 @@ export interface ToggleValue {
   /** False when the group rules currently refuse switching it on (`unavailableReason` says why). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
+  /** An overlay's own rule as declared: the toggles it is allowed with (a missing `contentId` is its own content), and whether it is allowed with no form on. */
+  allowedWith?: { contentId?: string; toggleId: string }[];
+  allowedInBase?: boolean;
 }
 
 export type Activation = 'action' | 'bonusAction' | 'reaction' | 'other';

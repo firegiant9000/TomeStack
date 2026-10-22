@@ -222,11 +222,13 @@ public sealed record FeatureEffect(
 /// joins (null for an ungrouped toggle); <paramref name="Cost"/> is its pool cost for this character (null when it has none, or the
 /// formula fails) spent from <paramref name="CostResourceContent"/>'s pool; <paramref name="Available"/> is false, with a reason, when
 /// an overlay may not be switched on with the form that is on now.
+/// <paramref name="AllowedWith"/> and <paramref name="AllowedInBase"/> (overlays in a group only) are the overlay's own rule as declared, so
+/// <see cref="ToggleGroups.EndingWith"/> can tell which overlays a primary that goes off takes with it.
 /// </summary>
 public sealed record ToggleValue(
     ContentReference Content, string ContentName, string EffectId, string ToggleId, string Label, bool On, string? ResourceId, string? Text, bool? Auto = null, Activation? Activation = null,
     string? Group = null, Guid? GroupContent = null, ToggleLayer? Layer = null, int? Cost = null, Guid? CostResourceContent = null, bool Available = true, string? UnavailableReason = null, string? GroupLabel = null,
-    int? Duration = null, int? RoundsLeft = null);
+    int? Duration = null, int? RoundsLeft = null, IReadOnlyList<ToggleRef>? AllowedWith = null, bool? AllowedInBase = null);
 
 /// <summary>Where a damage defence on the sheet comes from: the character's own list (<paramref name="Content"/> null) or a v10 damage grant.</summary>
 public sealed record DamageDefenceSource(string Name, ContentReference? Content = null, string? EffectId = null);
@@ -700,7 +702,8 @@ public static class CharacterCalculator
                 revision.Reference, revision.Name, t.Id, t.ToggleId, t.Label, isOn, t.ResourceId, t.Text,
                 IsAuto(revision, t) ? true : null, ActivationOf(revision, t.Activation),
                 inGroup ? t.Group : null, inGroup ? t.GroupContent ?? revision.ContentId : null, inGroup ? t.Layer ?? ToggleLayer.Primary : null,
-                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft);
+                cost, t.ResourceContent, allowed, allowed ? null : UnavailableReason(active, item, t), GroupLabelOf(active, item, t), duration, roundsLeft,
+                inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedWith : null, inGroup && t.Layer == ToggleLayer.Overlay ? t.AllowedInBase : null);
         }
         var upkeeps = CollectUpkeeps(active, character, resolved.ClassLevels, values, diagnostics);
         var maximum = values[FieldIds.HitPoints];
