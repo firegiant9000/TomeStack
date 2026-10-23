@@ -13,7 +13,7 @@ public sealed record RollModeReason(
     [property: System.Text.Json.Serialization.JsonIgnore] AutomationStatus Automation = AutomationStatus.Automatic)
 {
     /// <summary>True when the reason feeds <see cref="RollModeSummary.Automatic"/>: an automatic effect that needs no confirmation (no <c>against</c>).</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
+    [System.Text.Json.Serialization.JsonPropertyName("automatic")]
     public bool IsAutomatic => Automation == AutomationStatus.Automatic && Against is not { Count: > 0 };
 }
 

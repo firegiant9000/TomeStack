@@ -1111,7 +1111,7 @@ export function RollResult({
             disabled={spentAlready || !validChoice}
             onClick={() => {
               const typedAmount = amount;
-              spendOnce({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId }, () => setAmount(typedAmount));
+              spendOnce({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId }, () => setTyped((t) => (t.record === record && t.value === '' ? { record, value: typedAmount } : t)));
               setAmount('');
             }}
           >

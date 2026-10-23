@@ -237,6 +237,8 @@ export interface RollModeReason {
   source: string;
   content: ContentReference;
   against?: string[];
+  /** True when the service applies this reason by itself (an automatic effect with no `against`). */
+  automatic: boolean;
 }
 
 /** The mode the sheet calculates for a field, and every reason listed for it. */

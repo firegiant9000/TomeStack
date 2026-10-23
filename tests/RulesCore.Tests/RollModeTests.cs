@@ -40,6 +40,19 @@ public class RollModeTests
     }
 
     [Fact]
+    public void The_sheet_json_says_which_reasons_are_automatic()
+    {
+        var sheet = Sheet(Instinct());
+        var json = System.Text.Json.JsonSerializer.SerializeToNode(sheet, RulesJson.Options)!;
+        var fields = json["fields"]!.AsArray();
+        System.Text.Json.Nodes.JsonArray Reasons(string id) => fields.Single(f => (string?)f!["field"] == id)!["mode"]!["reasons"]!.AsArray();
+
+        Assert.All(Reasons("save.dex"), r => Assert.True((bool)r!["automatic"]!));
+        Assert.All(Reasons("save.con"), r => Assert.False((bool)r!["automatic"]!));
+        Assert.Null(Reasons("save.con")[0]!["automation"]);
+    }
+
+    [Fact]
     public void Any_advantage_and_any_disadvantage_cancel_to_normal()
     {
         var character = Instinct() with { Pins = [.. Instinct().Pins, Fixtures.WeightedGear] };

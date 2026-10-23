@@ -1188,7 +1188,9 @@ const rollRecord = (label: string, total: number, sides = 20): RollRecord => ({
   diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: { rollId: 'fixture', label },
 });
 
-const modeReason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[]) => ({ mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against });
+const modeReason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[], automatic = !against) => ({
+  mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against, automatic,
+});
 const statsWith = (id: string, label: string, value: number, units: string, mode?: DerivedValue['mode']): CharacterView => {
   const v = view();
   return { ...v, sheet: { ...v.sheet, fields: [...v.sheet.fields, { ...field(id, label, value, units), mode }] } };
@@ -1222,13 +1224,32 @@ it('an assisted mode is a note, and the button stays normal', async () => {
   const user = userEvent.setup();
   const mode = {
     automatic: 'normal' as const,
-    reasons: [modeReason('advantage', 'Fixture Swift Instinct', ['paralyzed', 'stunned']), modeReason('disadvantage', 'Fixture Dark Fear')],
+    reasons: [modeReason('advantage', 'Fixture Swift Instinct', ['paralyzed', 'stunned']), modeReason('disadvantage', 'Fixture Dark Fear', undefined, false)],
   };
   renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
   await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
   expect(screen.getByRole('button', { name: 'Roll Wisdom save' })).toBeTruthy();
   expect(screen.getByText('Advantage against paralyzed, stunned (Fixture Swift Instinct)')).toBeTruthy();
   expect(screen.getByText('Disadvantage (Fixture Dark Fear), not applied automatically')).toBeTruthy();
+});
+
+it('two assisted reasons that would cancel leave the button as it was and keep both notes', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'normal' as const, reasons: [modeReason('advantage', 'Fixture A', undefined, false), modeReason('disadvantage', 'Fixture B', undefined, false)] };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Wisdom save' })).toBeTruthy();
+  expect(screen.getByText('Advantage (Fixture A), not applied automatically')).toBeTruthy();
+  expect(screen.getByText('Disadvantage (Fixture B), not applied automatically')).toBeTruthy();
+});
+
+it('an assisted reason beside an automatic one of the same mode is a note, not a source', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'advantage' as const, reasons: [modeReason('advantage', 'Fixture A'), modeReason('advantage', 'Fixture B', undefined, false)] };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Wisdom save (advantage: Fixture A)' })).toBeTruthy();
+  expect(screen.getByText('Advantage (Fixture B), not applied automatically')).toBeTruthy();
 });
 
 it('fly speed shows only when above 0', () => {

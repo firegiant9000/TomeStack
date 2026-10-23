@@ -268,7 +268,9 @@ it('keeps one markup for both ability-box orders: modifier, then score, then the
   expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });
 
-const reason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[]) => ({ mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against });
+const reason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[]) => ({
+  mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against, automatic: !against,
+});
 const withMode = (id: string, mode: NonNullable<DerivedValue['mode']>): CharacterView => {
   const v = fixtureView();
   return { ...v, sheet: { ...v.sheet, fields: v.sheet.fields.map((f) => (f.field === id ? { ...f, mode } : f)) } };
