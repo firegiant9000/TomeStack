@@ -783,7 +783,7 @@ public static class CharacterCalculator
             ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
             : null;
 
-        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
+        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -871,7 +871,8 @@ public static class CharacterCalculator
     /// here. Several sources of one type and kind are one entry (R169), ordered by damage type, then kind. A damage grant in
     /// a revision below v10 is an unknown effect (Task 1) and never arrives here.
     /// </summary>
-    private static List<DamageDefenceValue> CollectDamageDefences(List<ActiveContent> active, Character character, ClassLevelMap classLevels)
+    private static List<DamageDefenceValue> CollectDamageDefences(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
         var found = new List<(string Type, DamageDefenceKind Kind, DamageDefenceSource Source)>();
         foreach (var defence in character.DamageDefences ?? [])
@@ -888,6 +889,10 @@ public static class CharacterCalculator
                 if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
                     continue;
                 if (!EntryApplies(item, grant.OnlyAs, character) || !DamageTypes.TryNormalize(grant.DamageType, out var type))
+                    continue;
+                // Content v11 (D43): a form-only defence is listed only while its toggle is on, gated like a toggled modifier.
+                if (grant.WhileToggle is { } form
+                    && GateOnToggle(active, item.Revision, grant.Id, form.ToggleId, form.ContentId ?? item.Revision.ContentId, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
                     continue;
                 var kind = grant.Grant switch
                 {

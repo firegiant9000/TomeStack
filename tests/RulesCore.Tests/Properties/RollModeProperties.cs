@@ -10,11 +10,24 @@ public class RollModeProperties
     private static Gen<RollMode[]> Modes { get; } =
         Gen.Elements(RollMode.Normal, RollMode.Advantage, RollMode.Disadvantage).ListOf().Select(l => l.ToArray());
 
+    /// <summary>A seeded Fisher-Yates permutation.</summary>
+    private static RollMode[] Shuffle(RollMode[] modes, int seed)
+    {
+        var copy = (RollMode[])modes.Clone();
+        var random = new Random(seed);
+        for (var i = copy.Length - 1; i > 0; i--)
+        {
+            var j = random.Next(i + 1);
+            (copy[i], copy[j]) = (copy[j], copy[i]);
+        }
+        return copy;
+    }
+
     [Property(MaxTest = 300)]
     public Property Combine_is_order_independent_and_cancels() =>
         Prop.ForAll(Modes.ToArbitrary(), Gen.Choose(0, 1000).ToArbitrary(), (modes, seed) =>
         {
-            var shuffled = modes.OrderBy(m => (((int)m + 1) * 7919 + seed) % 13).ThenBy(m => m).Reverse().ToArray();
+            var shuffled = Shuffle(modes, seed);
             var combined = RollModes.Combine(modes);
             var order = combined == RollModes.Combine(shuffled);
             var hasAdv = modes.Contains(RollMode.Advantage);

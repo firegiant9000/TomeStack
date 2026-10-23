@@ -64,6 +64,19 @@ public class RollModeTests
     }
 
     [Fact]
+    public void An_against_reason_never_changes_the_automatic_mode()
+    {
+        var automatic = new RollModeEffect { Id = "auto", Target = "save.wis", Mode = RollMode.Advantage };
+        var against = new RollModeEffect { Id = "cond", Target = "save.wis", Mode = RollMode.Disadvantage, Against = ["frightened"] };
+
+        var mode = Mode(Sheet(Instinct(), CatalogWith(Fixtures.LightStep, automatic, against)), "save.wis");
+
+        Assert.Equal(RollMode.Advantage, mode.Automatic);
+        Assert.Equal(2, mode.Reasons.Count);
+        Assert.Contains(mode.Reasons, r => r.Against is not null);
+    }
+
+    [Fact]
     public void An_assisted_automation_mode_is_listed_and_never_automatic()
     {
         var note = new RollModeEffect { Id = "note", Target = "save.wis", Mode = RollMode.Advantage, Automation = AutomationStatus.Assisted };
