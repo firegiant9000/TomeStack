@@ -1,8 +1,8 @@
-# Play mechanics: form groups, turns, upkeep, feature attacks and action details (D43, slices 1 to 5)
+# Play mechanics: form groups, turns, upkeep, feature attacks, action details and roll modes (D43, slices 1 to 6)
 
-LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 5 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
+LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 6 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
 
-Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below), slice 4 adds attacks that features give, riders on them, actions that exist only in a form, modifiers that follow another entry's toggle and a pool whose maximum a form raises (see "Slice 4" below), and slice 5 adds action details (a saving-throw DC, an area, a range, targets, an action that rolls nothing and extra dice for extra points spent) and named values (see "Slice 5" below). The remaining slice (damage responses) is listed in ADR-018 and is not built.
+Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below), slice 4 adds attacks that features give, riders on them, actions that exist only in a form, modifiers that follow another entry's toggle and a pool whose maximum a form raises (see "Slice 4" below), and slice 5 adds action details (a saving-throw DC, an area, a range, targets, an action that rolls nothing and extra dice for extra points spent) and named values (see "Slice 5" below), and slice 6 adds advantage and disadvantage from content, a fly speed and damage defences that apply only while a form is on (see "Slice 6" below). The remaining slice (damage responses) is listed in ADR-018 and is not built.
 
 Rules core: `ToggleEffect`, `ToggleGroupEffect` and `ToggleLayer` in `src/RulesCore/Effects.cs`, `ToggleGroups` in `src/RulesCore/ToggleGroups.cs`, the toggle list in `src/RulesCore/Calculation.cs`, and the checks in `src/RulesCore/ContentValidation.cs`. Service: `toggleOn`/`toggleOff` in `src/AppService/Play.cs`. UI: `FormGroups.tsx` on Play, the toggle and form group controls in `HomebrewStudio.tsx`, and `undo.ts`. Acceptance: `tests/RulesCore.Tests/ToggleGroupTests.cs`, `ToggleGroupValidationTests.cs`, `tests/AppService.Tests/ToggleGroupCommandTests.cs`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixture: `tests/RulesFixtures/fixture-pack-forms.json`.
 
@@ -320,7 +320,7 @@ A `value` effect gives a formula a name. Another formula reads it as `VALUE.<val
 `roll { content, effectId, amount? }` rolls a roll effect as before (see [dice-engine.md](dice-engine.md)); `amount` is the points to spend on a per-unit action.
 
 - **The rule:** the base is the evaluated `cost` (a per-unit action with no `cost` has no base to count from, which validation refuses). The formula is the roll's dice plus the per-unit dice once for each point beyond the base: `4d10` with `1d10` per point at amount 6 and base 4 is `4d10+2d10`. At the base amount the formula is the base dice. The most is the base plus `maxUnits`, or the pool's maximum when `maxUnits` is absent.
-- **Never changes the character:** rolling does not spend. The record carries `spend { contentId, resourceId, amount }`, which is exactly what the Spend button sends (`character.play` with `spend`), so the pool goes down by the amount that was rolled and no more. `spend` is set for any roll effect with a `resourceId` (the amount asked for, else the evaluated cost, else 1 when the roll declares no cost). For a `variableCost` roll it is the most the roll may spend. A roll without a pool, and every other kind of roll, has no `spend`.
+- **Never changes the character:** rolling does not spend. The record carries `spend { contentId, resourceId, amount }`, which is exactly what the Spend button sends (`character.play` with `spend`), so the pool goes down by the amount that was rolled and no more. `spend` is set for any roll effect with a `resourceId` (the amount asked for, else the evaluated cost, else 1 when the roll declares no cost), except when the cost formula fails: then there is no `spend`. For a `variableCost` roll it is the most the roll may spend. A roll without a pool, and every other kind of roll, has no `spend`.
 - **Refusals** (all before any die is rolled):
 
 | Code | When |
@@ -338,11 +338,95 @@ A roll whose bonus fails is still refused with `roll.bonus-invalid`; a cost or D
 - **Detail line:** under an action, one line of what it declares and leaves out the rest: `Save: DC 13 Dexterity · 100-ft line, 5 ft wide · Range: Self · Each creature in the line`. A DC that cannot be worked out reads `Save: Dexterity (DC unavailable)`.
 - **Per-unit action:** a number box "Points to spend (<pool>)" starts at the base cost and takes whole numbers from the base to the most (the base plus `maxUnits`, or the pool's maximum). Roll always sends the amount. An amount that is not allowed disables Roll, with the reason as text linked to the button and the box. The box starts over when the base cost changes. It does not stop at what is left in the pool: the service refuses an unaffordable amount (`roll.amount-unaffordable`). When the pool is not tracked on the sheet there is no box and Roll sends no amount: the base dice roll as before slice 5 and the record's Spend is the base cost. The box is `aria-invalid` and described by its reason while its value is not allowed.
 - **An action with no dice and a pool** is a button "Use <name> (<cost> <pool>)" that spends its cost (`character.play` with `spend`). It is disabled with a visible, linked reason when its form is off, when the pool is short or untracked ("Not enough Focus left (1)."), when the cost cannot be worked out ("Cost unavailable", and the label drops the amount), or when the cost is 0 ("Costs nothing here"). A dice-less action with no pool shows its name and its text.
-- **The roll record's Spend button** reads "Spend <amount> <pool> (<current> left)" and sends the record's `spend`. A `variableCost` roll keeps the box for the amount to spend, from 1 to the lesser of the most and what is left. A record's Spend is used once: after it is clicked (the button or the chosen amount) it is disabled for that record, and a new roll's record offers it again. When the roll effect names a pool but its record has no `spend` (the service leaves it out exactly when the cost formula failed), there is no Spend button and no amount box, and the record says "Cost unavailable"; the amount is never guessed as 1. A feature attack's record keeps its own cost.
+- **The roll record's Spend button** reads "Spend <amount> <pool> (<current> left)" and sends the record's `spend`. A `variableCost` roll keeps the box for the amount to spend, from 1 to the lesser of the most and what is left. A record's Spend is used once: after it is clicked (the button or the chosen amount) it is disabled for that record, and a new roll's record offers it again. If the service refuses the spend (or the request fails) the button is given back, so the same record's Spend can be pressed again; a refused variable amount comes back into the box only while the box is still for that record and empty, so it never overwrites a newer record's amount. When the roll effect names a pool but its record has no `spend` (the service leaves it out exactly when the cost formula failed), there is no Spend button and no amount box, and the record says "Cost unavailable"; the amount is never guessed as 1. A feature attack's record keeps its own cost.
 
 ### Studio
 
 A roll's editor has every field: Dice (clearing it makes an action that rolls nothing, and removes the per-unit dice, which would have nothing to add to), a bonus (with the formula preview), Activation (Action once, by default "Other" for a roll), the pool and its cost (with the preview, floored at 0) and "The player chooses how much to spend", the extra dice for each extra point and the most extra points, the saving throw with its DC (with the preview), the area shape, size and, for a line, width, the range and the targets. The pool select lists this revision's resources first and then pools of other entries of the source (from their newest published revision, shown with the entry's name); a pool that is in neither is kept and listed as "<id> (other content)". Choosing "The player chooses…" removes the per-unit dice, and the per-unit fields are hidden while it is on. The size, width, per-unit dice, most extra points, range and targets are checked as you type: a bad value shows its reason (`aria-invalid`, linked), blocks Save and Publish, is never stored, and a stored bad value blocks them from the moment the rule loads. The server codes above decide the rest. "Add named value" (class and subclass entries only) adds a `value` with a key (the scale-key rule) and a formula with its preview; it has no Automation choice, since a named value is always calculated. Removing a pool clears the pool, cost, variable cost and per-unit dice of the rolls of this revision that used it. See [homebrew-studio.md](homebrew-studio.md).
+
+## Slice 6: roll modes, fly speed and form-only damage defences (content v11 only)
+
+Rules core: `RollModeEffect`, `GrantEffect.WhileToggle` and `FieldIds.FlySpeed` in `src/RulesCore/Effects.cs`; `RollModes.cs` (`RollModeReason`, `RollModeSummary`, `RollModes.Combine`); `CollectRollModes`, `GateOnToggle`, `CollectDamageDefences`, `IsPlayMechanicsOnlyField` and the `speed.fly` spec in `Calculation.cs`; the checks in `ContentValidation.cs`. Service: the field branch of `src/AppService/Rolling.cs`. UI: `rollModes.ts`, `rollText.ts`, the field buttons in `CharacterSheet.tsx` and `SheetSummary.tsx`, `RollResult` and `RollModePicker` in `PlayPanels.tsx`, and `RollModeFields.tsx` with `HomebrewStudio.tsx`. Acceptance: `tests/RulesCore.Tests/RollModeContentTests.cs`, `RollModeTests.cs`, `Properties/RollModeProperties.cs`, `FormOnlyDefenceTests.cs`, `DamagePipelineTests.cs` and `AbilityCapTests.cs`, `tests/AppService.Tests/RollCommandTests.cs`, `src/Ui/src/rollText.test.ts`, `components/CharacterSheet.test.tsx`, `SheetSummary.test.tsx` and `HomebrewStudioRollModes.test.tsx`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixtures: `tests/RulesFixtures/fixture-pack-roll-modes.json` and `characters/pm-instinct-l4.json`. There is no new character field, play action or version: everything here is content schema v11.
+
+### Content (schema v11, added)
+
+| Effect | Field | Type | Does |
+| --- | --- | --- | --- |
+| `rollMode` (new type, v11 only) | `target` | text | The roll that gets the mode: `save.<ability>` (`str` ... `cha`), `skill.<skill>` (any of the 18 skills, such as `skill.stealth`) or `ability.<ability>.check`. Nothing else is a target (not `initiative`, not `ability.<ability>.mod`) |
+| `rollMode` | `mode` | `advantage` or `disadvantage` | `normal` changes nothing and is refused |
+| `rollMode` | `against` | list of condition keys | The mode applies only against a creature with one of these conditions (`blinded`, `charmed`, `deafened`, `frightened`, `grappled`, `incapacitated`, `invisible`, `paralyzed`, `petrified`, `poisoned`, `prone`, `restrained`, `stunned`, `unconscious`). Absent: always. Never an empty list |
+| `rollMode` | `toggle`, `toggleContent` | toggle id, content id | The mode applies only while that toggle is on. It is the lookup of a modifier's `toggle`: a toggle of this revision, or of another entry with `toggleContent` (which needs a `toggle`) |
+| modifier / restriction | `target` | `speed.fly` | A fly speed in feet. The sheet always has the field (0 when nothing gives a fly speed) |
+| `grant` (resistance, immunity, vulnerability) | `whileToggle` | `{ contentId?, toggleId }` | The defence applies only while that toggle is on (it may be another entry's). Read on the three damage defence kinds only; the v11 schema refuses it on any other grant |
+
+Below v11 the new keys stay extension data, byte for byte, and do nothing. A `rollMode` stays an unknown effect below v11 (a build without slice 6 cannot type it), a `mode` that names no member of the list leaves the effect unreadable and a v11 revision reports `validate.effect-malformed`, and a revision that uses none of them keeps its version, bytes and hash. A modifier or restriction on `speed.fly` makes a revision need v11; a stored revision below v11 that carries one has it skipped by the calculation (see below). **"+1, maximum 20" is the global ability-score cap** (the existing rule, ruling C1): a bonus to an ability score stops at 20 whatever the content says, a score already above 20 is neither raised nor lowered by a bonus, and a penalty or a set effect is not capped. There is therefore no `upTo` field and no per-effect cap.
+
+### Validation (added)
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `validate.requires-v11` | error | (existing) now also for a `rollMode`, a damage grant's `whileToggle`, and a modifier or restriction on `speed.fly`, in a revision that declares an older version |
+| `validate.roll-mode-target` | error | The target is not a saving throw, a skill or an ability check (see the table) |
+| `validate.roll-mode-mode` | error | The mode is `normal` |
+| `validate.roll-mode-against` | error | `against` is an empty list, or names a key that is not a condition key |
+| `validate.toggle-unknown` | error | (existing) a roll mode's `toggle` is not defined by this revision (or by the content `toggleContent` names), or it names `toggleContent` with no `toggle` |
+| `validate.while-toggle-unknown` | error | (existing) a defence grant's `whileToggle` names a toggle its content does not define |
+| `validate.toggle-content-missing` | warning | (existing) the content named by `toggleContent` or `whileToggle.contentId` is not installed |
+| `validate.effect-malformed` | error | (existing) a `rollMode` whose mode is not a member of the list, in a v11 revision |
+
+The content a roll mode's `toggleContent` or a grant's `whileToggle.contentId` names is a reference: packages follow it (`pack.reference-outside`) and so do import candidates.
+
+### Calculation (added)
+
+A sheet field that is a saving throw, a skill, an ability check or initiative carries `mode` when at least one `rollMode` reaches it:
+
+```
+mode: { automatic: "advantage" | "disadvantage" | "normal",
+        reasons: [{ mode, source, content, against?, automatic }] }
+```
+
+`reasons` lists every mode that reaches the field, in sheet content order: `source` is the content's name and `content` its reference. `automatic` on a reason says whether the roll command applies it by itself. `mode` is absent from a field with no reason.
+
+- **Which reasons are automatic:** an Automatic `rollMode` with no `against`. An `against` reason (the player confirms the condition) and a `rollMode` whose automation is Assisted or Reference are listed and are notes: they never change `automatic` and never change a roll.
+- **Cancellation by presence:** `automatic` combines the automatic reasons: any advantage together with any disadvantage is `normal`, however many there are of each; only advantages give `advantage`; only disadvantages give `disadvantage`; none gives `normal`.
+- **Which fields a target reaches:** `save.<x>` reaches that saving throw only. `skill.<x>` reaches that skill. `ability.<x>.check` reaches the ability's d20 check (`ability.<x>.mod`, the field the ability's roll button uses) and every skill of that ability, and `ability.dex.check` also reaches `initiative`, which is a Dexterity check. Saving throws are not ability checks, so an `ability.<x>.check` mode never reaches `save.<x>`.
+- **Toggles:** `toggle` gates like a modifier's: off, the reason is absent. A `toggleContent` that is not active, or does not declare the toggle, is `modifier.toggle-content-missing`, the reason is not applied and the feature is Assisted. A `toggle` that its own revision does not declare (and no `toggleContent`) is not applied; validation refuses it.
+- **Fly speed:** `speed.fly` is a sheet field ("Fly speed", feet, base 0) that modifiers and restrictions can target like `speed`. A modifier or restriction on it from a stored revision below v11 is skipped with `effect.character-only-field`, so only v11 content can give a fly speed.
+- **Form-only damage defences:** a defence grant with `whileToggle` is listed in the sheet's damage defences, and so reaches the damage rules, only while its toggle is on (the same gate as a modifier's). With the form off it is not listed. If it follows content that is not active, it is not listed, the feature is Assisted and `modifier.toggle-content-missing` is reported. A defence without `whileToggle` is unchanged.
+
+### Rolling a field with an automatic mode
+
+`roll { field }` for a saving throw, a skill, an ability check or initiative combines the player's choice (the "d20 rolls" picker, `mode`) with **every** automatic reason of the field. Advantage and disadvantage cancel by presence, so the player's choice and an automatic mode combine like this:
+
+| Player's choice | Automatic mode | Rolled |
+| --- | --- | --- |
+| Normal | Normal | Normal |
+| Normal | Advantage | Advantage |
+| Normal | Disadvantage | Disadvantage |
+| Advantage | Normal | Advantage |
+| Advantage | Advantage | Advantage |
+| Advantage | Disadvantage | Normal |
+| Disadvantage | Normal | Disadvantage |
+| Disadvantage | Advantage | Normal |
+| Disadvantage | Disadvantage | Disadvantage |
+
+- **Automatic cancellation beats the player's choice:** the service combines the player's choice with each automatic reason, not with the already combined `automatic`. Once an advantage and a disadvantage are both present the roll is Normal however many sources there are: a field whose automatic reasons cancel to Normal does not roll Advantage when the player chooses Advantage, it rolls Normal. (Combining the choice with the single cancelled value would give Advantage.)
+- **The record says what applied:** `automaticMode` (the sheet's `automatic`, even when it cancelled to Normal) and `modeSources` (the automatic reasons' sources, in sheet order) are set only when the field has at least one automatic reason. Otherwise both are absent and the record is as before slice 6.
+- **Assisted modes never change the roll:** `against` reasons and non-automatic ones are not combined.
+- **Critical is unchanged:** the existing refusal `dice.critical-with-advantage` applies to the mode that is rolled, so a request that is critical and ends up with advantage, including one that gets it from an automatic mode, is refused. The UI never sends `critical` on a field roll.
+
+### On Play
+
+- **Field roll buttons:** a field with an automatic mode names it on its roll button: "Roll Wisdom saving throw (advantage: <source>, <source>)" or, when the reasons cancel, "Roll Wisdom saving throw (normal: advantage and disadvantage cancel)". The summary's ability-check button reads "Roll (advantage: ...)" with the rest of its name ("Dexterity check (+2)") kept in its accessible name. A field with no automatic reason is unchanged.
+- **Notes:** the Stats card of a field lists the other reasons as text: "Advantage against paralyzed, stunned (Source)" for an `against` reason and "Disadvantage (Source), not applied automatically" for a non-automatic one.
+- **The picker:** the "d20 rolls" group says, in text linked to the group, "Automatic modes from the sheet are combined with this choice; advantage and disadvantage cancel."
+- **The roll record:** the headline names the sources, such as ", advantage from <source>", ", automatic mode normal: advantage and disadvantage cancel (<sources>)" when they cancelled, or ", automatic advantage from <source>" appended to a rolled mode that differs.
+- **Fly speed:** the Combat group of Stats shows "Fly speed: 30 ft." and the summary's Speed reads "30 ft., Fly 30 ft."; both are hidden at 0.
+- **Form-only defences** are in the sheet's damage defences, and so applied to damage, only while the form is on.
+
+### Studio
+
+"Add roll mode" adds a `rollMode` with a target select (grouped as Saving throws, Skills and Ability checks), a mode (Advantage or Disadvantage), the conditions it applies against (a group of 14 checkboxes; none checked means always, and no empty list is ever stored) and "Only while" (a toggle of this revision or another entry's). "Add damage defence" adds a resistance, immunity or vulnerability grant with its kind, damage type and "Only while". A stored value the editor cannot offer (an unknown target, mode, condition or kind) is shown as it is and blocks Save and Publish; the studio target list is not filtered by version, so `speed.fly` is offered on every draft and the validator decides (`validate.requires-v11`). See [homebrew-studio.md](homebrew-studio.md).
 
 ## On Play and in the studio
 
@@ -359,3 +443,5 @@ A roll's editor has every field: Dice (clearing it makes an action that rolls no
 - Initiative, other creatures and a DM view (out of scope, ADR-018).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.
+- Roll modes: a target for initiative alone (a Dexterity check mode reaches initiative with the Dexterity skills), a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on attack rolls, death saves or concentration (the concentration save is rolled with the picker's choice only).
+- `whileToggle` on a grant that is not one of the three damage defences (the schema refuses it there, and the calculation ignores it).
