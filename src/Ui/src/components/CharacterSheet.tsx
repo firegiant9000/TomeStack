@@ -453,7 +453,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       setInFlight(running.current > 0);
     }
   }
-  /** Resolves true when the play change was applied and false when it was refused or failed (the error has gone to `onError`). */
+  /** Resolves true when the play change was applied or timed out (outcome unknown), and false when it was refused or failed (the error has gone to `onError`). */
   async function act(action: PlayAction): Promise<boolean> {
     setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
     const mine = ++started.current;

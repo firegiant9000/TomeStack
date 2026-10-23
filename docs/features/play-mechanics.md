@@ -421,7 +421,7 @@ mode: { automatic: "advantage" | "disadvantage" | "normal",
 - **Notes:** the Stats card of a field lists the other reasons as text: "Advantage against paralyzed, stunned (Source)" for an `against` reason and "Disadvantage (Source), not applied automatically" for a non-automatic one.
 - **The picker:** the "d20 rolls" group says, in text linked to the group, "Automatic modes from the sheet are combined with this choice; advantage and disadvantage cancel."
 - **The roll record:** the headline names the sources, such as ", advantage from <source>", ", automatic mode normal: advantage and disadvantage cancel (<sources>)" when they cancelled, or ", automatic advantage from <source>" appended to a rolled mode that differs.
-- **Fly speed:** the Combat group of Stats shows "Fly speed: 30 ft." and the summary's Speed reads "30 ft., Fly 30 ft."; both are hidden at 0.
+- **Fly speed:** the Combat group of Stats shows "Fly speed: 30 ft." and the summary's Speed reads "30 ft., Fly 30 ft."; both are hidden at 0 unless an override is set.
 - **Form-only defences** are in the sheet's damage defences, and so applied to damage, only while the form is on.
 
 ### Studio

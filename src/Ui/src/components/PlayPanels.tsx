@@ -84,7 +84,7 @@ export const pageText =(page?: PageRef) =>
   page ? (page.end && page.end !== page.start ? `pp. ${page.start}-${page.end}` : `p. ${page.start}`) : '';
 
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
-/** `act` resolves true when the change was applied and false when it was refused; a caller that does not wait may ignore it. */
+/** `act` resolves true when the change was applied or timed out (outcome unknown) and false when it was refused; a caller that does not wait may ignore it. */
 type Act = (action: PlayAction) => void | Promise<boolean>;
 
 const effectWords: Record<DamageOutcome['effect'], string> = {
