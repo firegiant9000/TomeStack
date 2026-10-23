@@ -1905,6 +1905,13 @@ public static class CharacterCalculator
                 classLevels.ValueCycles.Add(member);
             result = null;
         }
+        else if (classLevels.ValueStack.Count >= MaxValueDepth)
+        {
+            // Nested too deep (bounds the recursion): the read fails, and the formula that made it reports itself through the usual path.
+            // Kept as the value's result for this pass, so the outcome never depends on how often it is read.
+            result = null;
+            classLevels.ValueResults[key] = result;
+        }
         else
         {
             classLevels.ValueStack.Add(key);
@@ -1920,6 +1927,10 @@ public static class CharacterCalculator
                 else
                 {
                     result = null;
+                    // A value that fails because a value it reads is on a cycle is disabled with it, so its readers hear value.cycle too.
+                    if (formula is not null && formula.Identifiers.Any(i => FormulaIdentifiers.IsValue(i)
+                        && declared.Content.ClassRoot is { } declaredRoot && classLevels.ValueCycles.Contains((declaredRoot, FormulaIdentifiers.ValueId(i)))))
+                        classLevels.ValueCycles.Add(key);
                     if (!classLevels.ValueCycles.Contains(key))
                         ReportValue(classLevels, InvalidFormula(revision, declared.Effect, failure!));
                 }
@@ -1941,6 +1952,9 @@ public static class CharacterCalculator
         return result;
     }
 
+    /// <summary>How many named values may be read inside one another; a deeper chain fails (content is validated far below this).</summary>
+    private const int MaxValueDepth = 32;
+
     private static void ReportValue(ClassLevelMap classLevels, Diagnostic diagnostic)
     {
         if (classLevels.Diagnostics is { } diagnostics)
@@ -1955,7 +1969,7 @@ public static class CharacterCalculator
     {
         var fields = new List<string>();
         var followed = new HashSet<(ContentReference, string)>();
-        void Collect(Formula source, ActiveContent context)
+        void Collect(Formula source, ActiveContent context, int depth)
         {
             foreach (var identifier in source.Identifiers)
             {
@@ -1964,16 +1978,16 @@ public static class CharacterCalculator
                     if (!fields.Contains(field, StringComparer.Ordinal))
                         fields.Add(field);
                 }
-                else if (FormulaIdentifiers.IsValue(identifier) && context.ClassRoot is { } root
+                else if (depth < MaxValueDepth && FormulaIdentifiers.IsValue(identifier) && context.ClassRoot is { } root
                     && classLevels.NamedValues.TryGetValue((root, FormulaIdentifiers.ValueId(identifier)), out var declared)
                     && followed.Add((root, declared.Effect.ValueId))
                     && Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(declared.Content.Revision), out var inner, out _))
                 {
-                    Collect(inner!, declared.Content);
+                    Collect(inner!, declared.Content, depth + 1);
                 }
             }
         }
-        Collect(formula, reader);
+        Collect(formula, reader, 0);
         return fields;
     }
 

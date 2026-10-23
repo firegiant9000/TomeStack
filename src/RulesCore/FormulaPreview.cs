@@ -50,16 +50,27 @@ public static class FormulaPreview
 
     /// <summary>The value of an identifier at a class level in the hypothetical context, or null when it cannot be previewed.</summary>
     public static int? Resolve(string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues = null) =>
-        Resolve(identifier, level, scales, namedValues, []);
+        Resolve(identifier, level, scales, namedValues, new());
+
+    /// <summary>How many named values may be read inside one another in a preview; a deeper chain is not previewable.</summary>
+    private const int MaxValueDepth = 32;
+
+    /// <summary>The values being evaluated (outermost first, for the cycle and depth checks) and what each came to, null results included.</summary>
+    private sealed class ValueState
+    {
+        public HashSet<string> InProgress { get; } = new(StringComparer.Ordinal);
+
+        public Dictionary<string, int?> Done { get; } = new(StringComparer.Ordinal);
+    }
 
     private static int? Resolve(
-        string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, HashSet<string> inProgress) => identifier switch
+        string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, ValueState state) => identifier switch
     {
         FormulaIdentifiers.ProficiencyBonus => DesignFeedback.ProficiencyBonus(level),
         FormulaIdentifiers.Level or FormulaIdentifiers.ClassLevel => level,
         _ when FormulaIdentifiers.IsScale(identifier) =>
             level is >= Character.MinLevel and <= Character.MaxLevel && scales.TryGetValue(FormulaIdentifiers.ScaleId(identifier), out var values) ? values[level - 1] : null,
-        _ when FormulaIdentifiers.IsValue(identifier) => NamedValue(FormulaIdentifiers.ValueId(identifier), level, scales, namedValues, inProgress),
+        _ when FormulaIdentifiers.IsValue(identifier) => NamedValue(FormulaIdentifiers.ValueId(identifier), level, scales, namedValues, state),
         _ when identifier.EndsWith(".MOD", StringComparison.Ordinal) => 0,
         _ when identifier.EndsWith(".SCORE", StringComparison.Ordinal) => SampleScore,
         _ => null,
@@ -67,21 +78,28 @@ public static class FormulaPreview
 
     /// <summary>A named value the revision declares, evaluated in the same context; a value reading itself (directly or through others) has no value.</summary>
     private static int? NamedValue(
-        string valueId, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, HashSet<string> inProgress)
+        string valueId, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, ValueState state)
     {
-        if (namedValues is null || !namedValues.TryGetValue(valueId, out var source) || !inProgress.Add(valueId))
+        if (namedValues is null || !namedValues.TryGetValue(valueId, out var source))
             return null;
+        if (state.Done.TryGetValue(valueId, out var done))
+            return done;
+        if (state.InProgress.Count >= MaxValueDepth || !state.InProgress.Add(valueId))
+            return null;
+        int? result;
         try
         {
-            return Formula.TryParse(source, FormulaFeatures.Scales | FormulaFeatures.Values, out var formula, out _)
-                && formula!.TryEvaluate(id => Resolve(id, level, scales, namedValues, inProgress), out var value, out _)
+            result = Formula.TryParse(source, FormulaFeatures.Scales | FormulaFeatures.Values, out var formula, out _)
+                && formula!.TryEvaluate(id => Resolve(id, level, scales, namedValues, state), out var value, out _)
                 ? value
                 : null;
         }
         finally
         {
-            inProgress.Remove(valueId);
+            state.InProgress.Remove(valueId);
         }
+        state.Done[valueId] = result;
+        return result;
     }
 
     /// <summary>

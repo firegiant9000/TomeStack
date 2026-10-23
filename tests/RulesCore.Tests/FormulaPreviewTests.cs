@@ -75,6 +75,30 @@ public class FormulaPreviewTests
         Assert.NotNull(FormulaPreview.Preview("VALUE.bump", revision with { SchemaVersion = 10 }).Error);
     }
 
+    private static ContentRevision ValueChain(int links, string read)
+    {
+        var effects = new List<Effect>();
+        for (var i = 0; i < links; i++)
+            effects.Add(new ValueEffect { Id = $"c{i}", ValueId = $"c{i}", Formula = i == links - 1 ? "PB" : string.Format(System.Globalization.CultureInfo.InvariantCulture, read, $"VALUE.c{i + 1}") });
+        return Revision(ContentKind.Class, [.. effects]) with { SchemaVersion = 11 };
+    }
+
+    [Fact]
+    public void A_long_chain_of_values_each_read_several_times_previews_promptly()
+    {
+        var result = FormulaPreview.Preview("VALUE.c0", ValueChain(30, "{0} - {0} + {0}"));
+
+        Assert.Null(result.Unavailable);
+        Assert.Equal<int?>([2, 3, 4, 5, 6], Values(result)); // the last link is PB
+    }
+
+    [Fact]
+    public void A_chain_of_values_nested_deeper_than_the_limit_is_not_previewable()
+    {
+        Assert.NotNull(FormulaPreview.Preview("VALUE.c0", ValueChain(3000, "{0}")).Unavailable);
+        Assert.Null(FormulaPreview.Preview("VALUE.c0", ValueChain(25, "{0}")).Unavailable);
+    }
+
     [Fact]
     public void Only_automatic_scales_with_20_values_are_used()
     {

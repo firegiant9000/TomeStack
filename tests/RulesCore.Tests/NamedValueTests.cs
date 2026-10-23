@@ -68,7 +68,55 @@ public class NamedValueTests
         Assert.Null(wave.SaveDc);
         Assert.Equal(AutomationStatus.Assisted, wave.Automation);
         Assert.Contains(sheet.Diagnostics, d => d.Code == "value.cycle");
+        // focusMod reads the cycle, so it is disabled with it and its reader (the wave) hears value.cycle too.
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "value.cycle" && d.Content == Fixtures.TideWave);
         Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.Content == Fixtures.TideWave && d.EffectId == "wave");
+    }
+
+    /// <summary>A chain of <paramref name="links"/> values c0 to c{links-1}: each reads the next with <paramref name="read"/> (the next value's name is {0}), the last is PB; focusMod reads c0.</summary>
+    private static Effect[] Chain(int links, string read)
+    {
+        var effects = new List<Effect> { Value("focus-mod", "focusMod", "VALUE.c0") };
+        for (var i = 0; i < links; i++)
+            effects.Add(Value($"c{i}", $"c{i}", i == links - 1 ? "PB" : string.Format(System.Globalization.CultureInfo.InvariantCulture, read, $"VALUE.c{i + 1}")));
+        return [.. effects];
+    }
+
+    [Fact]
+    public void A_long_chain_of_values_that_each_read_the_next_twice_is_evaluated_once_each()
+    {
+        // Each link reads the next three times: unmemoised that is 3^29 evaluations.
+        var catalog = Catalog(r => WithEffects(r, Fixtures.FocusOfMind, _ => Chain(30, "{0} - {0} + {0}")));
+
+        var sheet = Sheet(Adept(), catalog);
+
+        Assert.Equal(8 + 3 + 3, Wave(sheet, Fixtures.TideWave).SaveDc);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.invalid-formula");
+    }
+
+    [Fact]
+    public void A_chain_of_values_nested_deeper_than_the_limit_is_disabled_with_the_formula_warning()
+    {
+        var catalog = Catalog(r => WithEffects(r, Fixtures.FocusOfMind, _ => Chain(40, "{0}")));
+
+        var sheet = Sheet(Adept(), catalog);
+
+        Assert.Null(Wave(sheet, Fixtures.TideWave).SaveDc);
+        Assert.Contains(sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.Content == Fixtures.TideWave && d.EffectId == "wave");
+        // Within the limit the same shape works.
+        Assert.Equal(8 + 3 + 3, Wave(Sheet(Adept(), Catalog(r => WithEffects(r, Fixtures.FocusOfMind, _ => Chain(25, "{0}")))), Fixtures.TideWave).SaveDc);
+    }
+
+    [Fact]
+    public void A_modifier_reading_a_chain_deeper_than_the_limit_does_not_overflow_the_stack()
+    {
+        var catalog = Catalog(r => WithEffects(r, Fixtures.WaveAdept, effects =>
+            [.. effects, .. Chain(3000, "{0}").Skip(1), new ModifierEffect { Id = "bump", Operation = ModifierOperation.Bonus, Target = FieldIds.Score(Ability.Str), Value = "VALUE.c0" }]));
+
+        var sheet = Sheet(Adept(), catalog);
+
+        Assert.Equal(14, sheet.Field(FieldIds.Score(Ability.Str)).Value); // the bonus is disabled, with a warning
+        Assert.Contains(sheet.Field(FieldIds.Score(Ability.Str)).Warnings, w => w.Code == "effect.invalid-formula" && w.EffectId == "bump");
     }
 
     [Fact]
@@ -152,20 +200,20 @@ public class NamedValueTests
     [Fact]
     public void A_modifier_reading_a_value_is_computed_after_the_fields_the_value_reads()
     {
-        // Initiative gains the Wisdom value; Wisdom score gains +2 from another modifier. Initiative must see the raised modifier (+3).
-        var wisdom = FieldIds.Score(Ability.Wis);
+        // Strength gains a value that reads the proficiency bonus. Strength sorts before PB on its own, so without the value's field
+        // reads in the ordering the bonus would be read before PB is calculated and fail.
+        var strength = FieldIds.Score(Ability.Str);
         var catalog = Catalog(r => WithEffects(r, Fixtures.WaveAdept, effects =>
         [
             .. effects,
-            new ModifierEffect { Id = "init", Operation = ModifierOperation.Bonus, Target = FieldIds.Initiative, Value = "VALUE.focusMod" },
-            new ModifierEffect { Id = "wis", Operation = ModifierOperation.Bonus, Target = wisdom, Value = "2" },
+            Value("x-value", "x", "PB"),
+            new ModifierEffect { Id = "bump", Operation = ModifierOperation.Bonus, Target = strength, Value = "VALUE.x" },
         ]));
 
         var sheet = Sheet(Adept(), catalog);
 
-        Assert.Equal(16, sheet.Field(wisdom).Value);
-        Assert.Equal(2 + 3, sheet.Field(FieldIds.Initiative).Value); // Dex +2, plus the Wisdom modifier 3
-        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.dependency-cycle");
+        Assert.Equal(14 + 3, sheet.Field(strength).Value);
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code is "effect.dependency-cycle" or "effect.invalid-formula" || d.Code.StartsWith("value.", StringComparison.Ordinal));
     }
 
     [Fact]
