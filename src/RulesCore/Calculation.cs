@@ -2488,7 +2488,7 @@ public static class CharacterCalculator
     private static Dictionary<string, RollModeSummary> CollectRollModes(
         List<ActiveContent> active, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
-        var byField = new Dictionary<string, List<(RollModeReason Reason, bool Automatic)>>(StringComparer.Ordinal);
+        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
         foreach (var item in active)
         {
             var revision = item.Revision;
@@ -2497,12 +2497,12 @@ public static class CharacterCalculator
                 if (effect.Toggle is { } toggle
                     && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
                     continue;
-                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against);
+                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against, effect.Automation);
                 foreach (var field in RollModeFields(effect.Target))
                 {
                     if (!byField.TryGetValue(field, out var reasons))
                         byField[field] = reasons = [];
-                    reasons.Add((reason, effect.Automation == AutomationStatus.Automatic));
+                    reasons.Add(reason);
                 }
             }
         }
@@ -2510,8 +2510,8 @@ public static class CharacterCalculator
         return byField.ToDictionary(
             p => p.Key,
             p => new RollModeSummary(
-                RollModes.Combine(p.Value.Where(r => r.Automatic && r.Reason.Against is not { Count: > 0 }).Select(r => r.Reason.Mode)),
-                [.. p.Value.Select(r => r.Reason)]),
+                RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
+                [.. p.Value]),
             StringComparer.Ordinal);
     }
 

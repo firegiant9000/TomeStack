@@ -5,7 +5,17 @@ namespace TomeStack.RulesCore;
 /// A reason with <paramref name="Against"/> (condition keys) applies only against such a creature, which the player confirms, so it
 /// is listed and never changes <see cref="RollModeSummary.Automatic"/>.
 /// </summary>
-public sealed record RollModeReason(RollMode Mode, string Source, ContentReference Content, IReadOnlyList<string>? Against);
+public sealed record RollModeReason(
+    RollMode Mode,
+    string Source,
+    ContentReference Content,
+    IReadOnlyList<string>? Against,
+    [property: System.Text.Json.Serialization.JsonIgnore] AutomationStatus Automation = AutomationStatus.Automatic)
+{
+    /// <summary>True when the reason feeds <see cref="RollModeSummary.Automatic"/>: an automatic effect that needs no confirmation (no <c>against</c>).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsAutomatic => Automation == AutomationStatus.Automatic && Against is not { Count: > 0 };
+}
 
 /// <summary>The roll mode the sheet calculates for a field, and every reason listed for it (sheet content order).</summary>
 public sealed record RollModeSummary(RollMode Automatic, IReadOnlyList<RollModeReason> Reasons);

@@ -224,7 +224,9 @@ public sealed record RollRecord(
     IReadOnlyList<RollModifier> Modifiers,
     int Total,
     RollProvenance? Provenance,
-    RollSpend? Spend = null);
+    RollSpend? Spend = null,
+    RollMode? AutomaticMode = null,
+    IReadOnlyList<string>? ModeSources = null);
 
 /// <summary>
 /// D43 S5: the uses a roll implies spending from a pool (informational: rolling never spends; the Spend button sends
