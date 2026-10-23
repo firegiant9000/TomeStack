@@ -233,7 +233,7 @@ public class ActionDetailContentTests
     [Fact]
     public void A_value_read_that_nothing_declares_is_a_warning_and_a_declaration_clears_it()
     {
-        var reader = Fixtures.RevisionWithEffect("""{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.focusMod"}""", 11);
+        var reader = Fixtures.RevisionWithEffect("""{"type":"modifier","id":"m","operation":"bonus","target":"initiative","value":"VALUE.focusMod"}""", 11) with { Kind = ContentKind.Class };
 
         var alone = Validate(reader);
         Assert.Contains(alone.Warnings, w => w.Code == "validate.value-unknown");
@@ -244,6 +244,14 @@ public class ActionDetailContentTests
 
         var own = reader with { Effects = [.. reader.Effects, new ValueEffect { Id = "v", ValueId = "focusMod", Formula = "1" }] };
         Assert.DoesNotContain(Validate(own).Warnings, w => w.Code == "validate.value-unknown");
+    }
+
+    [Fact]
+    public void A_feature_reading_a_value_gets_no_value_unknown_warning()
+    {
+        var tide = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.TideWave)!;
+
+        Assert.DoesNotContain(Validate(tide).Warnings, w => w.Code == "validate.value-unknown");
     }
 
     // ---- the fixture pack ----------------------------------------------------------------------------------------------

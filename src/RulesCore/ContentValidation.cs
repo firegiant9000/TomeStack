@@ -663,10 +663,17 @@ public static class ContentValidator
         // content this revision grants or offers as a choice (the catalog cannot be listed whole).
         void CheckValues()
         {
-            if (usedValues.Count == 0)
+            // The same scope as validate.scale-unknown: only a class, or a subclass, knows what its class declares; any other
+            // content is guarded by the calculator.
+            if (usedValues.Count == 0 || revision.Kind is not (ContentKind.Class or ContentKind.Subclass))
                 return;
             var seen = new List<ContentRevision> { revision };
             seen.AddRange(local.All);
+            if (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent)
+            {
+                seen.AddRange(local.OfContent(parent.ContentId).Where(r => r.Kind == ContentKind.Class));
+                seen.AddRange(catalog.RevisionsOf(parent.ContentId).Where(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Class).TakeLast(1));
+            }
             var references = revision.Effects.OfType<GrantEffect>().Select(g => g.Content).OfType<ContentReference>()
                 .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options));
             foreach (var reference in references)
