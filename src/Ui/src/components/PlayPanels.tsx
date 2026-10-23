@@ -718,7 +718,11 @@ function RollItem({
   const baseCost = effect.cost ?? 0;
   const perUnit = effect.dice ? effect.perUnit : undefined;
   const maxAmount = perUnit ? (perUnit.maxUnits !== undefined ? baseCost + perUnit.maxUnits : pool?.maximum) : undefined;
-  const [amount, setAmount] = useState(String(baseCost));
+  // The amount starts at the base cost and starts over when the base cost, or the action itself, changes.
+  const amountKey = `${baseId}:${baseCost}`;
+  const [typed, setTyped] = useState({ key: amountKey, text: String(baseCost) });
+  const amount = typed.key === amountKey ? typed.text : String(baseCost);
+  const setAmount = (text: string) => setTyped({ key: amountKey, text });
   const chosen = Number(amount);
   const amountOk = amount.trim() !== '' && /^\d+$/.test(amount.trim()) && chosen >= baseCost && (maxAmount === undefined || chosen <= maxAmount);
   const amountReason = `Enter a whole number ${maxAmount === undefined ? `of at least ${baseCost}` : `from ${baseCost} to ${maxAmount}`}.`;
@@ -729,16 +733,26 @@ function RollItem({
   const details = actionDetails(effect);
   const label = effect.label || effect.id;
   const diceless = !effect.dice;
+  // An absent cost means one use only when the action declares no cost. A declared cost that failed leaves `cost` absent and
+  // puts an effect.invalid-formula diagnostic on the effect (the sheet does not say which formula); never guess one use then.
+  const costFailed =
+    effect.cost === undefined &&
+    effect.resourceId !== undefined &&
+    (feature.diagnostics ?? []).some((d) => d.code === 'effect.invalid-formula' && d.effectId === effect.id);
   const useCost = effect.cost ?? 1;
-  const unaffordable = diceless && effect.resourceId !== undefined && (pool?.current === undefined || pool.current < useCost || useCost < 1);
+  const unaffordable = diceless && effect.resourceId !== undefined && (pool?.current === undefined || pool.current < useCost);
   const poolName = pool?.label ?? effect.resourceId;
   const useReason = locked
     ? (effect.unavailableReason ?? 'Not available right now')
-    : unaffordable
-      ? pool?.current === undefined
-        ? `${poolName} is not tracked on this sheet.`
-        : `Not enough ${poolName} left (${pool.current}).`
-      : undefined;
+    : costFailed
+      ? 'Cost unavailable'
+      : useCost < 1
+        ? 'Costs nothing here'
+        : unaffordable
+          ? pool?.current === undefined
+            ? `${poolName} is not tracked on this sheet.`
+            : `Not enough ${poolName} left (${pool.current}).`
+          : undefined;
   const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <li className="feature">
@@ -752,7 +766,8 @@ function RollItem({
               act({ action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! })
             }
           >
-            Use {label} ({useCost} {poolName})
+            Use {label}
+            {costFailed ? '' : ` (${useCost} ${poolName})`}
           </button>
         ) : (
           <span className="option-name">{label}</span>

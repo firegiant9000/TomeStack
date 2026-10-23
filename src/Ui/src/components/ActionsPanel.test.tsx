@@ -431,3 +431,37 @@ it('a dice-less action is a Use button that spends its cost', async () => {
   expect(screen.queryByRole('button')).toBeNull();
   expect(screen.getByText(/You stand firm\./)).toBeTruthy();
 });
+
+it('a dice-less action whose cost formula failed is disabled as "Cost unavailable", never offered as a one-use spend', () => {
+  const act = vi.fn();
+  // The sheet leaves `cost` absent and adds an effect.invalid-formula diagnostic for that effect.
+  const rally = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', automation: 'assisted', available: true };
+  const base = actionsView([rally]);
+  const failed = {
+    ...base,
+    sheet: { ...base.sheet, features: [{ ...base.sheet.features![0]!, diagnostics: [{ code: 'effect.invalid-formula', message: 'Bad cost', effectId: 'rally' }] }] },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={failed} roll={() => {}} act={act} />);
+  const use = screen.getByRole('button', { name: /^Use Rally/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(use.textContent).not.toMatch(/\(1 /);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Cost unavailable/);
+});
+
+it('a dice-less action that costs nothing here says so instead of "not enough"', () => {
+  const free = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', cost: 0, available: true };
+  render(<ActionsPanel view={actionsView([free])} roll={() => {}} act={() => {}} />);
+  const use = screen.getByRole('button', { name: /^Use Rally/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  const reason = document.getElementById(use.getAttribute('aria-describedby')!)!.textContent!;
+  expect(reason).toMatch(/Costs nothing here/);
+  expect(reason).not.toMatch(/Not enough/);
+});
+
+it('the points to spend start over when the base cost changes', () => {
+  const view = (cost: number) => actionsView([{ ...surge, cost }]);
+  const { rerender } = render(<ActionsPanel view={view(2)} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement).value).toBe('2');
+  rerender(<ActionsPanel view={view(3)} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement).value).toBe('3');
+});
