@@ -212,9 +212,19 @@ public sealed record FeatureEntry(
 /// </param>
 /// <param name="Available">Content v11 (D43): false while a form-only roll (<c>whileToggle</c>) is out of its form; the roll is still listed.</param>
 /// <param name="UnavailableReason">Why it is not available ("Available in Kindled mode"); null when it is.</param>
+/// <param name="SaveAbility">Content v11 (D43): the ability of the save the roll forces; set whenever the roll has a save.</param>
+/// <param name="SaveDc">The save DC evaluated for this character; null when the roll has no save or the formula failed (a diagnostic; the row is assisted).</param>
+/// <param name="SaveTrace">How <paramref name="SaveDc"/> was worked out; null when it has no DC.</param>
+/// <param name="Area">The area the roll covers, as written. Shown, never automated.</param>
+/// <param name="Range">The roll's range, as written. Shown, never automated.</param>
+/// <param name="Targets">Who the roll affects, as written. Shown, never automated.</param>
+/// <param name="PerUnit">Extra dice per unit spent, as written; the roll command applies it (Task 5.3).</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
+    Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
+    RollArea? Area = null, string? Range = null, string? Targets = null,
+    RollPerUnit? PerUnit = null);
 
 /// <summary>
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
@@ -682,14 +692,10 @@ public static class CharacterCalculator
         var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
+        var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        // A roll's cost is a number of uses, so never negative.
-        int? Cost(ActiveContent item, string source) =>
-            Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
-                ? Math.Max(value, 0)
-                : null;
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -1599,8 +1605,88 @@ public static class CharacterCalculator
         return bonuses;
     }
 
+    /// <summary>What a roll's cost and save DC came to for this character (<see cref="RollDetailsOf"/>).</summary>
+    private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed);
+
+    /// <summary>
+    /// Each roll's <c>cost</c> (a number of uses, never negative; one when it has a resource and no formula) and, from content v11
+    /// (D43), its save DC with the trace of how it was reached. A formula that fails gives null and the <c>effect.invalid-formula</c>
+    /// diagnostic, and the row is assisted (<see cref="RollDetail.Failed"/>); it stays available, like a feature attack's cost.
+    /// </summary>
+    private static Dictionary<(ContentReference, string), RollDetail> RollDetailsOf(
+        List<ActiveContent> active, string family, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var details = new Dictionary<(ContentReference, string), RollDetail>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var roll in revision.Effects.OfType<RollEffect>())
+            {
+                var failed = false;
+                int? cost = null;
+                if (roll.Cost is { } costSource)
+                {
+                    if (TryEvaluate(costSource, item, character, classLevels, values, [], out var spent, out var costFailure))
+                    {
+                        cost = Math.Max(spent, 0);
+                    }
+                    else
+                    {
+                        failed = true;
+                        diagnostics.Add(InvalidFormula(revision, roll, costFailure!));
+                    }
+                }
+                else if (roll.ResourceId is not null)
+                {
+                    cost = 1;
+                }
+
+                int? saveDc = null;
+                List<TraceEntry>? saveTrace = null;
+                if (roll.Save is { } save)
+                {
+                    var inputs = new List<TraceInput>();
+                    if (TryEvaluate(save.Dc, item, character, classLevels, values, inputs, out var dc, out var dcFailure))
+                    {
+                        saveDc = dc;
+                        var read = inputs.DistinctBy(i => i.Name, StringComparer.Ordinal).ToList();
+                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name)} {i.Value}"))}";
+                        saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC {save.Dc}{from}", dc, dc, ContentOrigin(family, item, roll), null, read)];
+                    }
+                    else
+                    {
+                        failed = true;
+                        diagnostics.Add(InvalidFormula(revision, roll, dcFailure!));
+                    }
+                }
+                details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed);
+            }
+        }
+        return details;
+    }
+
+    /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score"; any other identifier stays as written.</summary>
+    private static string InputLabel(string identifier)
+    {
+        if (identifier == FormulaIdentifiers.ProficiencyBonus)
+            return "Proficiency bonus";
+        if (identifier == FormulaIdentifiers.Level)
+            return "Character level";
+        if (identifier == FormulaIdentifiers.ClassLevel)
+            return "Class level";
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var name = ability.ToString().ToUpperInvariant();
+            if (identifier == $"{name}.MOD")
+                return $"{AbilityNames[ability]} modifier";
+            if (identifier == $"{name}.SCORE")
+                return $"{AbilityNames[ability]} score";
+        }
+        return identifier;
+    }
+
     private static FeatureEntry Feature(
-        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses,
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
         Func<ToggleRef, string?> outOfForm)
     {
         var revision = item.Revision;
@@ -1608,10 +1694,14 @@ public static class CharacterCalculator
         FeatureEffect Roll(RollEffect roll)
         {
             var reason = roll.WhileToggle is { } form ? outOfForm(form) : null;
+            var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
+            // A cost or save DC that cannot be calculated: the row stays available and the player works it out.
+            var automation = detail is { Failed: true } && roll.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : roll.Automation;
             return new(
-                roll.Id, roll.Type, roll.Automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
-                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason);
+                roll.Id, roll.Type, automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
+                roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit);
         }
         var effects = revision.Effects.Select(e => e switch
         {
