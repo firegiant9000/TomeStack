@@ -42,6 +42,8 @@ import { rememberSheetTab, rememberedSheetTab, type SheetTabId } from '../sheetT
 import { inverseOf, isCompound, type UndoEntry } from '../undo';
 import { applyPreferences, compactPlay, setCompactPlay } from '../settings';
 
+import { assistedNotes, rollButtonSuffix } from '../rollModes';
+
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 const display = (value: DerivedValue, n: number) =>
   value.units === 'modifier' || value.units === 'bonus' ? signed(n) : value.units === 'feet' ? `${n} ft.` : `${n}`;
@@ -52,7 +54,7 @@ const statGroups: { title: string; match: (field: string) => boolean }[] = [
   { title: 'Proficiency', match: (f) => f === 'proficiencyBonus' },
   { title: 'Saving throws', match: (f) => f.startsWith('save.') },
   { title: 'Skills', match: (f) => f.startsWith('skill.') || f.startsWith('passive.') },
-  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
+  { title: 'Combat', match: (f) => f === 'initiative' || f === 'speed' || f === 'speed.fly' || f === 'armorClass' || f === 'hitPoints' || f === 'attacks' || f === 'criticalRange' },
 ];
 // D04: the caster numbers, with traces and overrides, on the Spells tab (ADR-014). Slots combine on the multiclass table
 // (M3 C3); an override is the manual step only for class revisions that do not say how they combine.
@@ -105,7 +107,15 @@ function FieldCard({ value, labels, onOverride, onRoll, onReportGap }: FieldProp
         {isD20(value.field) && (
           <button type="button" onClick={() => onRoll(value.field)}>
             Roll {value.label}
+            {rollButtonSuffix(value)}
           </button>
+        )}
+        {isD20(value.field) && assistedNotes(value).length > 0 && (
+          <ul className="hint mode-notes" aria-label={`${value.label} roll modes`}>
+            {assistedNotes(value).map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
         )}
         <TraceTable label={value.label} trace={value.trace} labels={labels} />
         {value.warnings.length > 0 && (
@@ -443,7 +453,8 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       setInFlight(running.current > 0);
     }
   }
-  async function act(action: PlayAction) {
+  /** Resolves true when the play change was applied and false when it was refused or failed (the error has gone to `onError`). */
+  async function act(action: PlayAction): Promise<boolean> {
     setUndo(undefined); // an offered Undo is withdrawn at once, so it cannot run in between this change and its reply
     const mine = ++started.current;
     const startedWhileRunning = running.current > 0;
@@ -465,8 +476,10 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       setUndo(overlapped ? undefined : inverseOf(action, view, after)); // D23: one level, session-only
       onChanged(after);
       say(after);
+      return true;
     } catch (error) {
       onError(error);
+      return false;
     } finally {
       running.current -= 1;
       setInFlight(running.current > 0);
@@ -850,7 +863,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         {statGroups.map((group) =>
           fieldGroup(
             group.title,
-            sheet.fields.filter((f) => group.match(f.field)),
+            sheet.fields.filter((f) => group.match(f.field) && !(f.field === 'speed.fly' && f.value <= 0)), // fly speed is hidden at 0
           ),
         )}
         <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />

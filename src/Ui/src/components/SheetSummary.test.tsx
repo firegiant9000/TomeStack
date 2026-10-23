@@ -268,6 +268,47 @@ it('keeps one markup for both ability-box orders: modifier, then score, then the
   expect(strength.textContent!.replace(/\s+/g, ' ').trim()).toBe('+3 16 Roll Strength check (+3)');
 });
 
+const reason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[]) => ({ mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against });
+const withMode = (id: string, mode: NonNullable<DerivedValue['mode']>): CharacterView => {
+  const v = fixtureView();
+  return { ...v, sheet: { ...v.sheet, fields: v.sheet.fields.map((f) => (f.field === id ? { ...f, mode } : f)) } };
+};
+const plain = { rollMode: 'normal' as const, onRollMode: () => {}, rollLog: [], act: () => {}, onRoll: () => {}, onRollDice: async () => {} };
+
+it('a check with automatic advantage says so on its button and in its accessible name', async () => {
+  const user = userEvent.setup();
+  const onRoll = vi.fn();
+  const mode = { automatic: 'advantage' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('advantage', 'Fixture Light Step')] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} onRoll={onRoll} />);
+  const button = screen.getByRole('button', { name: 'Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)' });
+  expect(button.textContent!.replace(/\s+/g, ' ').trim()).toBe('Roll (advantage: Fixture Swift Instinct, Fixture Light Step) Dexterity check (+2)');
+  expect(button.querySelector('.visually-hidden')?.textContent).toBe(' Dexterity check (+2)');
+  await user.click(button);
+  expect(onRoll).toHaveBeenCalledWith('ability.dex.mod');
+  expect(screen.getByRole('button', { name: 'Roll Strength check (+3)' })).toBeTruthy(); // the others are unchanged
+});
+
+it('advantage and disadvantage together read as normal with the reason, on the summary button', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct'), reason('disadvantage', 'Fixture Heavy Armor')] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  expect(screen.getByRole('button', { name: /^Roll \(normal: advantage and disadvantage cancel\) Dexterity check/ })).toBeTruthy();
+});
+
+it('an assisted mode leaves the summary button as it was', () => {
+  const mode = { automatic: 'normal' as const, reasons: [reason('advantage', 'Fixture Swift Instinct', ['paralyzed'])] };
+  render(<SheetSummary view={withMode('ability.dex.mod', mode)} {...plain} />);
+  expect(screen.getByRole('button', { name: 'Roll Dexterity check (+2)' })).toBeTruthy();
+});
+
+it('fly speed shows only when above 0', () => {
+  const base = fixtureView();
+  const flying = (n: number): CharacterView => ({ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, field('speed.fly', 'Fly speed', n, 'feet')] } });
+  const { rerender } = render(<SheetSummary view={flying(0)} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft.');
+  rerender(<SheetSummary view={flying(30)} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Fly 30 ft.');
+});
+
 it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit points box, with no live region (D38)', () => {
   const base = fixtureView();
   const summary = (bloodied?: boolean) => (

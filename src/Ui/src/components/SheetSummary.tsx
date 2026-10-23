@@ -1,6 +1,7 @@
 import type { CharacterView, DerivedValue, PlayAction, RollMode, RollRecord } from '../api/types';
 import { hitDiceText } from '../format';
 import { DiceBox } from './DiceBox';
+import { rollButtonSuffix } from '../rollModes';
 import { inspirationLabel, RollModePicker, RollResult } from './PlayPanels';
 import { RollLog, type LoggedRoll } from './RollLog';
 
@@ -23,7 +24,7 @@ interface Props {
   lastRoll?: RollRecord;
   /** D28: the previous rolls of this sheet session, newest first. */
   rollLog: LoggedRoll[];
-  act: (action: PlayAction) => void;
+  act: (action: PlayAction) => void | Promise<boolean>;
   /** Rolls a d20 test for a field id (for example `ability.str.mod`) in the current mode. */
   onRoll: (field: string) => void;
   /** Rolls typed dice (item 8); rejects with the engine's refusal, which the box shows. */
@@ -75,7 +76,7 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
                 </span>{' '}
                 {/* D28 (owner, 2026-10-07): a compact control. The visible word starts the accessible name (WCAG 2.5.3). */}
                 <button type="button" className="roll" onClick={() => onRoll(mod.field)}>
-                  Roll{' '}
+                  Roll{rollButtonSuffix(mod)}{' '}
                   <span className="visually-hidden"> {abilityNames[a]} check ({signed(mod.value)})</span>
                 </button>
                 {mod.override && <span className="override-label"> (modifier overridden)</span>}
@@ -99,7 +100,10 @@ export function SheetSummary({ view, rollMode, onRollMode, lastRoll, rollLog, ac
         </div>
         <div>
           <dt>Speed</dt>
-          <dd>{show('speed')}</dd>
+          <dd>
+            {show('speed')}
+            {(field('speed.fly')?.value ?? 0) > 0 && `, Fly ${field('speed.fly')!.value} ft.`}
+          </dd>
         </div>
         {hp && (
           <div>
