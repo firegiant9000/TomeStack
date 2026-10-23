@@ -314,4 +314,118 @@ public class RollCommandTests
         Assert.Equal(("roll.bonus-invalid", feat, "swing"), (problem.Code, problem.Content, problem.EffectId));
         Assert.Contains(temp.App.GetCharacter(id).Sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.Content == feat && d.EffectId == "swing");
     }
+
+    // D43 S5 (Task 5.3): per-unit amounts and the spend a roll implies (fixture-pack-action-details.json).
+    private static readonly Guid AdeptClass = Guid.Parse("6f0dc000-0000-4000-8000-000000000050");
+    private static readonly ContentReference TideWave = new(Guid.Parse("6f0dc000-0000-4000-8000-000000000053"), Guid.Parse("6f0de000-0000-4000-8000-000000000053"));
+
+    private static (TempApp Temp, Guid Id) WaveAdept(int spentFocus = 0, Func<ContentRevision, ContentRevision>? adjust = null)
+    {
+        var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(9);
+        temp.AddPack("fixture-pack-action-details.json", adjust);
+        var id = temp.App.SaveCharacter(TempApp.LoadFixture<Character>("characters/pm-wave-adept-l5.json")).Character.Id;
+        if (spentFocus > 0)
+            temp.App.Play(new(id, PlayActionKind.Spend, Confirm: true, ContentId: AdeptClass, ResourceId: "focus", Amount: spentFocus));
+        return (temp, id);
+    }
+
+    private static string Code(TempApp temp, RollCommand command) => Assert.Throws<AppValidationException>(() => temp.App.Roll(command)).Code;
+
+    [Fact]
+    public void PerUnit_dice_match_the_amount_spent()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave", Amount: 4));
+
+        Assert.Equal("4d10+2d10", record.Formula);
+        Assert.Equal(6, record.Dice.Count);
+        Assert.Equal(new RollSpend(AdeptClass, "focus", 4), record.Spend);
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id))); // rolling spends nothing
+    }
+
+    [Fact]
+    public void A_per_unit_roll_without_amount_rolls_the_base()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave"));
+
+        Assert.Equal("4d10", record.Formula);
+        Assert.Equal(2, record.Spend!.Amount);
+        Assert.Equal("focus", record.Provenance!.LinkedResourceId);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    public void PerUnit_amount_out_of_range_is_refused(int amount)
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-out-of-range", Code(temp, new RollCommand(id, TideWave, "wave", Amount: amount)));
+    }
+
+    [Fact]
+    public void A_per_unit_roll_the_pool_cannot_pay_is_refused()
+    {
+        var (temp, id) = WaveAdept(spentFocus: 6); // focus 9, 3 left
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-unaffordable", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 4)));
+        Assert.Equal("4d10", temp.App.Roll(new RollCommand(id, TideWave, "wave")).Formula); // no amount: the base rolls, unchecked
+    }
+
+    [Fact]
+    public void Rolling_a_dice_less_action_is_refused()
+    {
+        var (temp, id) = WaveAdept();
+        using var _ = temp;
+
+        Assert.Equal("roll.no-dice", Code(temp, new RollCommand(id, TideWave, "brace")));
+        Assert.Equal("roll.no-dice", Code(temp, new RollCommand(id, TideWave, "brace", Amount: 2)));
+    }
+
+    [Fact]
+    public void An_amount_on_a_roll_without_per_unit_is_not_allowed()
+    {
+        var (temp, id) = WaveAdept(adjust: r => r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "wave" } w ? w with { PerUnit = null } : e)] });
+        using var _ = temp;
+
+        Assert.Equal("roll.amount-not-allowed", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 3)));
+    }
+
+    [Fact]
+    public void A_failing_cost_refuses_an_amount_and_rolls_without_one()
+    {
+        var (temp, id) = WaveAdept(adjust: r => r with { Effects = [.. r.Effects.Select(e => e is RollEffect { Id: "wave" } w ? w with { Cost = "NOPE.X" } : e)] });
+        using var _ = temp;
+
+        Assert.Equal("effect.invalid-formula", Code(temp, new RollCommand(id, TideWave, "wave", Amount: 3)));
+        var record = temp.App.Roll(new RollCommand(id, TideWave, "wave"));
+        Assert.Equal("4d10", record.Formula);
+        Assert.Null(record.Spend);
+    }
+
+    [Fact]
+    public void A_costed_roll_without_per_unit_reports_its_spend()
+    {
+        using var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(3);
+        temp.AddPack("fixture-pack-m3-effects.json");
+        var stance = new ContentReference(Guid.Parse("5f8dc000-0000-4000-8000-000000000001"), Guid.Parse("5f8de000-0000-4000-8000-000000000001"));
+        var brenna = TempApp.LoadFixture<Character>("characters/m1-acceptance-srd521-brenna.json");
+        var id = temp.App.SaveCharacter(brenna with { Pins = [.. brenna.Pins ?? [], stance] }).Character.Id;
+
+        var surge = temp.App.Roll(new RollCommand(id, stance, "surge"));
+        var flare = temp.App.Roll(new RollCommand(id, stance, "flare"));
+
+        Assert.Equal(new RollSpend(stance.ContentId, "radiance", 2), surge.Spend); // variable cost: the most it may spend (PB)
+        Assert.Equal(new RollSpend(stance.ContentId, "radiance", 1), flare.Spend);
+    }
 }

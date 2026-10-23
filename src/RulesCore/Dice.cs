@@ -223,7 +223,14 @@ public sealed record RollRecord(
     int ExpressionConstant,
     IReadOnlyList<RollModifier> Modifiers,
     int Total,
-    RollProvenance? Provenance);
+    RollProvenance? Provenance,
+    RollSpend? Spend = null);
+
+/// <summary>
+/// D43 S5: the uses a roll implies spending from a pool (informational: rolling never spends; the Spend button sends
+/// <c>character.play</c>). <see cref="ContentId"/> is the content that defines the pool.
+/// </summary>
+public sealed record RollSpend(Guid ContentId, string ResourceId, int Amount);
 
 /// <summary>Rolls dice. Pure apart from the injected <see cref="IRandomSource"/>; takes no character or resource state.</summary>
 public static class DiceRoller
@@ -314,6 +321,20 @@ public static class DiceRoller
         var total = diceTotal + constant + modifiers.Sum(m => m.Amount);
         record = new RollRecord(request.Formula, request.Mode, request.Critical, dice, diceTotal, constant, modifiers, total, request.Provenance);
         return true;
+    }
+
+    /// <summary>
+    /// The formula of a per-unit roll: the base <paramref name="dice"/> plus <c>(amount − baseCost)</c> groups of
+    /// <paramref name="perUnitDice"/> (<c>NdM</c>), summed into one term (<c>4d10</c> + 2 × <c>1d10</c> → <c>4d10+2d10</c>).
+    /// At the base cost the formula is just <paramref name="dice"/>. A malformed per-unit die returns the base dice alone;
+    /// validation already guarantees its shape and bounds.
+    /// </summary>
+    public static string PerUnitFormula(string dice, string perUnitDice, int baseCost, int amount)
+    {
+        var units = amount - baseCost;
+        if (units <= 0 || !DiceExpression.TryParse(perUnitDice, out var parsed, out _) || parsed!.Terms is not [{ IsDice: true, Sign: 1 } term])
+            return dice;
+        return $"{dice}+{term.Count * units}d{term.Sides}";
     }
 
     /// <summary>
