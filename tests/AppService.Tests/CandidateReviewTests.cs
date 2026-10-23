@@ -414,6 +414,23 @@ public class CandidateReviewTests
     }
 
     [Fact]
+    public void Dependencies_list_the_content_a_roll_mode_or_a_defence_follows_while_on()
+    {
+        var (temp, _, jobId) = Imported();
+        using var _t = temp;
+        var feat = Named(temp, jobId, "Fixture Keen Watcher");
+        var installed = temp.App.Store.ListRevisions().First(r => r.Status == RevisionStatus.Published && r.Kind == ContentKind.Feature && r.RulesFamilies.Contains(RulesFamilies.Srd521));
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new RollModeEffect { Id = "stealthy", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = installed.ContentId }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+
+        temp.App.EditCandidate(new(feat.Id, Expected: temp.EtagOf(feat.Id), Effects: [.. feat.Current.ProposedEffects,
+            new GrantEffect { Id = "ward", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(installed.ContentId, "form") }]));
+        Assert.Contains(temp.App.CheckCandidate(feat.Id).Dependencies, d => d.Kind == "content" && d.Name == installed.Name);
+    }
+
+    [Fact]
     public void An_ignored_candidate_creates_nothing_and_cannot_be_accepted()
     {
         var (temp, _, jobId) = Imported();

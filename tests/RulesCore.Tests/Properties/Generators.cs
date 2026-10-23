@@ -142,9 +142,14 @@ internal static class Generators
                 from onlyAs in Gen.Elements<string?>(null, "startingClass", "multiclass")
                 // Any version: below v10 the key must stay extension data, written back where it was.
                 from damageType in Gen.Elements<string?>(null, null, "fire", "Cold")
+                // Any version: below v11 the key must stay extension data, written back where it was.
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileContent in OptionalValue(Guids)
+                from whileId in Keys
                 select new JsonObject { ["grant"] = grant, ["target"] = target }
                     .With("level", v >= 3 ? level : null).With("onlyAs", v >= SpellcastingEffect.SchemaVersion ? onlyAs : null)
-                    .With("damageType", damageType)),
+                    .With("damageType", damageType)
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
             // The damage defences: below v10 the whole effect stays unknown and unchanged (a v9 build cannot read the kind).
             Common(GrantEffect.TypeName,
                 from grant in Gen.Elements("damageResistance", "damageImmunity", "DamageVulnerability")

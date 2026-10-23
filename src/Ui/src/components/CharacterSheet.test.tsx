@@ -1260,6 +1260,22 @@ it('fly speed shows only when above 0', () => {
   expect(screen.getByRole('heading', { name: 'Fly speed: 30 ft.' })).toBeTruthy();
 });
 
+it('an override of 0 keeps the fly speed card and its Remove override button', async () => {
+  const user = userEvent.setup();
+  const v = statsWith('speed.fly', 'Fly speed', 0, 'feet');
+  const overridden: CharacterView = {
+    ...v,
+    sheet: {
+      ...v.sheet,
+      fields: v.sheet.fields.map((f) =>
+        f.field === 'speed.fly' ? { ...f, value: 0, computedValue: 30, override: { field: 'speed.fly', value: 0, reason: 'Fixture grounded' } } : f),
+    },
+  };
+  renderSheet(overridden, 'stats');
+  await user.click(screen.getByRole('heading', { name: /Fly speed/ }));
+  expect(screen.getByRole('button', { name: /Remove override/ })).toBeTruthy();
+});
+
 it('the player picker says that automatic modes are combined with its choice', () => {
   renderSheet(view());
   const group = screen.getByRole('group', { name: 'd20 rolls' });
@@ -1303,6 +1319,38 @@ describe('a roll record Spend', () => {
     const record: RollRecord = { ...rollRecord('Wisdom save', 14), mode: 'advantage', automaticMode: 'advantage', modeSources: ['Fixture Swift Instinct', 'Fixture Light Step'] };
     render(<RollResult record={record} resources={[]} features={[]} act={() => {}} />);
     expect(screen.getByText(/Wisdom save: 14/).closest('p')!.textContent).toBe('Wisdom save: 14 (1d20, advantage from Fixture Swift Instinct, Fixture Light Step)');
+  });
+});
+
+describe('a record Spend after a failed play change', () => {
+  const pool = {
+    content: { contentId: 'c1', revisionId: 'r1' }, contentName: 'Fixture', effectId: 'e1', resourceId: 'pool', label: 'Fixture pool',
+    maximum: 3, spent: 0, current: 3, trace: [], warnings: [], automation: 'automatic' as const, recoveries: [],
+  };
+  async function pressSpend(failure: Error) {
+    const user = userEvent.setup();
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.roll).mockResolvedValue({ ...rollRecord('Dexterity check', 9), spend: { contentId: 'c1', resourceId: 'pool', amount: 1 } });
+    vi.mocked(client.play).mockReset();
+    vi.mocked(client.play).mockRejectedValue(failure);
+    const v = view();
+    renderSheet({ ...v, sheet: { ...v.sheet, resources: [pool] } });
+    await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+    const spend = await screen.findByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
+    await user.click(spend);
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    return spend;
+  }
+
+  it('a timeout (outcome unknown) keeps the record Spend used', async () => {
+    const spend = await pressSpend(new TomeStackError({ code: 'timeout', message: 'No response to play.' }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(spend.disabled).toBe(true);
+  });
+
+  it('a service refusal gives the record Spend back', async () => {
+    const spend = await pressSpend(new TomeStackError({ code: 'character.stale', message: 'stale' }));
+    await waitFor(() => expect(spend.disabled).toBe(false));
   });
 });
 

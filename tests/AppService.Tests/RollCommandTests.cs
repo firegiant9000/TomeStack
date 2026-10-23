@@ -610,6 +610,17 @@ public class RollCommandTests
     }
 
     [Fact]
+    public void A_critical_field_roll_with_an_automatic_advantage_is_refused()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, Field: "save.dex", Critical: true)));
+
+        Assert.Equal("dice.critical-with-advantage", Assert.Single(refused.Problems).Code);
+    }
+
+    [Fact]
     public void An_assisted_mode_never_changes_the_roll()
     {
         var (temp, id) = Instinct();

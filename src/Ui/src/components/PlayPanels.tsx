@@ -18,6 +18,7 @@ import type {
   ToggleValue,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
+import { rollButtonSuffix } from '../rollModes';
 import { diceLine, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
@@ -286,6 +287,8 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
     wasPending.current = pending;
   }, [con, pending]);
   if (!con) return null;
+  // The roll applies every automatic save.con reason, so the button names them (as the Stats card does).
+  const saveCon = view.sheet.fields.find((f) => f.field === 'save.con');
   return (
     <section aria-labelledby="concentration-heading" className="play-panel">
       <h3 id="concentration-heading" tabIndex={-1} ref={heading}>
@@ -297,6 +300,7 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
           <>
             <button type="button" onClick={() => roll({ field: 'save.con' })}>
               Roll Constitution saving throw
+              {saveCon ? rollButtonSuffix(saveCon) : ''}
             </button>
             <button type="button" onClick={() => act({ action: 'clearConcentrationCheck' })}>
               Kept concentration

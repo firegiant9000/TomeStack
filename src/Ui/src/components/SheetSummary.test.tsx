@@ -309,6 +309,9 @@ it('fly speed shows only when above 0', () => {
   expect(dd('Speed')).toBe('30 ft.');
   rerender(<SheetSummary view={flying(30)} {...plain} />);
   expect(dd('Speed')).toBe('30 ft., Fly 30 ft.');
+  const overridden = { ...field('speed.fly', 'Fly speed', 0, 'feet'), computedValue: 30, override: { field: 'speed.fly', value: 0 } };
+  rerender(<SheetSummary view={{ ...base, sheet: { ...base.sheet, fields: [...base.sheet.fields, overridden] } }} {...plain} />);
+  expect(dd('Speed')).toBe('30 ft., Fly 0 ft.'); // an override of 0 stays visible
 });
 
 it('shows a "Bloodied" chip as text when the sheet says bloodied, in the hit points box, with no live region (D38)', () => {

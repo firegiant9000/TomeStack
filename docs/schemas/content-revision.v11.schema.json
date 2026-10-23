@@ -1421,7 +1421,7 @@
                   "unconscious"
                 ]
               },
-              "description": "Condition keys: the mode applies only against a creature with one of them, which the player confirms (assisted). Absent: always."
+              "description": "Condition keys: the mode applies only against these conditions (for a save, the condition being imposed); the player applies it (assisted). Absent: always."
             },
             "toggle": {
               "type": "string",

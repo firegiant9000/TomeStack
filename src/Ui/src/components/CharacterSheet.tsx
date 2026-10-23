@@ -479,7 +479,9 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
       return true;
     } catch (error) {
       onError(error);
-      return false;
+      // A transport timeout leaves the outcome unknown (the change may have been applied): report it as applied, so a record's
+      // Spend stays used and a second press cannot spend twice. A service refusal is certain, so it gives the button back.
+      return error instanceof TomeStackError && error.code === 'timeout';
     } finally {
       running.current -= 1;
       setInFlight(running.current > 0);
@@ -863,7 +865,7 @@ export function CharacterSheet({ view, onChanged, onError: reportError, onStatus
         {statGroups.map((group) =>
           fieldGroup(
             group.title,
-            sheet.fields.filter((f) => group.match(f.field) && !(f.field === 'speed.fly' && f.value <= 0)), // fly speed is hidden at 0
+            sheet.fields.filter((f) => group.match(f.field) && !(f.field === 'speed.fly' && f.computedValue <= 0 && !f.override)), // fly speed is hidden at 0, unless an override is set (its card holds Remove override)
           ),
         )}
         <DefencesPanel view={view} onChanged={onChanged} onError={onError} saveCharacter={saveCharacter} />

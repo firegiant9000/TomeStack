@@ -713,7 +713,7 @@ public sealed record RollModeEffect : Effect
     /// <summary>Advantage or disadvantage. <see cref="RollMode.Normal"/> reads but is refused by the validator.</summary>
     public required RollMode Mode { get; init; }
 
-    /// <summary>Condition keys (<see cref="ConditionKeys.All"/>): the mode then only applies against a creature with one of them, which the player confirms; it is assisted, never automatic. Null: always.</summary>
+    /// <summary>Condition keys (<see cref="ConditionKeys.All"/>): the mode then only applies against these conditions (for a save, the condition being imposed); the player applies it; it is assisted, never automatic. Null: always.</summary>
     public IReadOnlyList<string>? Against { get; init; }
 
     /// <summary>The <c>toggle</c> that must be on for the mode to apply (of this revision, or of <see cref="ToggleContent"/>). Null: always.</summary>

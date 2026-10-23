@@ -354,7 +354,7 @@ Rules core: `RollModeEffect`, `GrantEffect.WhileToggle` and `FieldIds.FlySpeed` 
 | --- | --- | --- | --- |
 | `rollMode` (new type, v11 only) | `target` | text | The roll that gets the mode: `save.<ability>` (`str` ... `cha`), `skill.<skill>` (any of the 18 skills, such as `skill.stealth`) or `ability.<ability>.check`. Nothing else is a target (not `initiative`, not `ability.<ability>.mod`) |
 | `rollMode` | `mode` | `advantage` or `disadvantage` | `normal` changes nothing and is refused |
-| `rollMode` | `against` | list of condition keys | The mode applies only against a creature with one of these conditions (`blinded`, `charmed`, `deafened`, `frightened`, `grappled`, `incapacitated`, `invisible`, `paralyzed`, `petrified`, `poisoned`, `prone`, `restrained`, `stunned`, `unconscious`). Absent: always. Never an empty list |
+| `rollMode` | `against` | list of condition keys | The mode applies only against these conditions (for a save, the condition being imposed); the player applies it (`blinded`, `charmed`, `deafened`, `frightened`, `grappled`, `incapacitated`, `invisible`, `paralyzed`, `petrified`, `poisoned`, `prone`, `restrained`, `stunned`, `unconscious`). Absent: always. Never an empty list |
 | `rollMode` | `toggle`, `toggleContent` | toggle id, content id | The mode applies only while that toggle is on. It is the lookup of a modifier's `toggle`: a toggle of this revision, or of another entry with `toggleContent` (which needs a `toggle`) |
 | modifier / restriction | `target` | `speed.fly` | A fly speed in feet. The sheet always has the field (0 when nothing gives a fly speed) |
 | `grant` (resistance, immunity, vulnerability) | `whileToggle` | `{ contentId?, toggleId }` | The defence applies only while that toggle is on (it may be another entry's). Read on the three damage defence kinds only; the v11 schema refuses it on any other grant |
@@ -426,7 +426,7 @@ mode: { automatic: "advantage" | "disadvantage" | "normal",
 
 ### Studio
 
-"Add roll mode" adds a `rollMode` with a target select (grouped as Saving throws, Skills and Ability checks), a mode (Advantage or Disadvantage), the conditions it applies against (a group of 14 checkboxes; none checked means always, and no empty list is ever stored) and "Only while" (a toggle of this revision or another entry's). "Add damage defence" adds a resistance, immunity or vulnerability grant with its kind, damage type and "Only while". A stored value the editor cannot offer (an unknown target, mode, condition or kind) is shown as it is and blocks Save and Publish; the studio target list is not filtered by version, so `speed.fly` is offered on every draft and the validator decides (`validate.requires-v11`). See [homebrew-studio.md](homebrew-studio.md).
+"Add roll mode" adds a `rollMode` with a target select (grouped as Saving throws, Skills and Ability checks), a mode (Advantage or Disadvantage), the conditions it applies against (a group of 14 checkboxes; none checked means always, and no empty list is ever stored) and "Only while" (a toggle of this revision or another entry's). "Add damage defence" adds a resistance, immunity or vulnerability grant with its kind, damage type and "Only while". A stored value the editor cannot offer (an unknown target, mode or condition) is shown as it is and blocks Save and Publish; the studio target list is not filtered by version, so `speed.fly` is offered on every draft and the validator decides (`validate.requires-v11`). See [homebrew-studio.md](homebrew-studio.md).
 
 ## On Play and in the studio
 
@@ -443,5 +443,5 @@ mode: { automatic: "advantage" | "disadvantage" | "normal",
 - Initiative, other creatures and a DM view (out of scope, ADR-018).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.
-- Roll modes: a target for initiative alone (a Dexterity check mode reaches initiative with the Dexterity skills), a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on attack rolls, death saves or concentration (the concentration save is rolled with the picker's choice only).
+- Roll modes: a target for initiative alone (a Dexterity check mode reaches initiative with the Dexterity skills), a per-effect cap on an ability bonus (`upTo`; the global cap of 20 applies), a mode that applies automatically against a condition (an `against` mode is a note the player confirms), and modes on attack rolls or death saves. The concentration save applies the `save.con` automatic modes and names them on its button; it does not send the d20 picker's choice. An automatic advantage on Perception (or on Wisdom checks) does not add +5 to passive Perception.
 - `whileToggle` on a grant that is not one of the three damage defences (the schema refuses it there, and the calculation ignores it).
