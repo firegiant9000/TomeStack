@@ -59,7 +59,8 @@ public sealed record DerivedValue(
     AutomationStatus Automation,
     FieldOverride? Override,
     string Units = "",
-    ProficiencyMark Mark = ProficiencyMark.None);
+    ProficiencyMark Mark = ProficiencyMark.None,
+    RollModeSummary? Mode = null);
 
 /// <summary>
 /// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
@@ -632,6 +633,7 @@ public static class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
+        var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -693,7 +695,8 @@ public static class CharacterCalculator
                 closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
                 spec.Units,
-                MarkOf(spec.Id, proficiencies));
+                MarkOf(spec.Id, proficiencies),
+                rollModes.GetValueOrDefault(spec.Id));
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
@@ -2433,6 +2436,101 @@ public static class CharacterCalculator
         return new(content, effect, formula, [.. formula.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]);
     }
 
+    /// <summary>How an effect's toggle gate came out: it applies now, it does not apply now, or the effect names no toggle the gate can resolve.</summary>
+    private enum ToggleGate { Applies, Skips, Unresolved }
+
+    /// <summary>
+    /// The toggle gate modifiers and roll modes share. Content v11 (D43): an effect that names another content's toggle (<paramref name="toggleContent"/>)
+    /// applies while that toggle is on. Content that is not active, or that does not declare the toggle, is a broken reference the user should see:
+    /// the effect does not apply and the sheet says why (<see cref="ToggleGate.Skips"/> plus a diagnostic). Without toggleContent (content v6, M3 B2),
+    /// an effect that names a toggle of its revision applies while that toggle is on and simply does not apply while it is off (the rules say so;
+    /// nothing is left to the player). A toggle the revision does not declare is <see cref="ToggleGate.Unresolved"/>. <paramref name="followedLabel"/>
+    /// is the other content's toggle label when the gate follows one.
+    /// </summary>
+    private static ToggleGate GateOnToggle(
+        List<ActiveContent> active, ContentRevision revision, string effectId, string toggleId, Guid? toggleContent,
+        EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics, out string? followedLabel)
+    {
+        followedLabel = null;
+        if (toggleContent is { } ownerId)
+        {
+            var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
+            var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId);
+            if (owner is null || declared is null)
+            {
+                diagnostics.Add(new(
+                    "modifier.toggle-content-missing",
+                    $"'{revision.Name}' effect '{effectId}' follows toggle '{toggleId}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
+                    revision.Reference,
+                    effectId));
+                return ToggleGate.Skips;
+            }
+            if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
+                return ToggleGate.Skips;
+            followedLabel = declared.Label;
+            return ToggleGate.Applies;
+        }
+        if (revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId) is { } named)
+            return ToggleIsOn(revision, named, effective, autoOn) ? ToggleGate.Applies : ToggleGate.Skips;
+        return ToggleGate.Unresolved;
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the roll modes of the active content, by the sheet fields they reach (<c>save.&lt;x&gt;</c>, <c>skill.&lt;s&gt;</c>;
+    /// <c>ability.&lt;x&gt;.check</c> reaches <c>ability.&lt;x&gt;.mod</c> and every skill of that ability, and Dexterity also initiative).
+    /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
+    /// </summary>
+    private static Dictionary<string, RollModeSummary> CollectRollModes(
+        List<ActiveContent> active, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var byField = new Dictionary<string, List<(RollModeReason Reason, bool Automatic)>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<RollModeEffect>())
+            {
+                if (effect.Toggle is { } toggle
+                    && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
+                    continue;
+                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against);
+                foreach (var field in RollModeFields(effect.Target))
+                {
+                    if (!byField.TryGetValue(field, out var reasons))
+                        byField[field] = reasons = [];
+                    reasons.Add((reason, effect.Automation == AutomationStatus.Automatic));
+                }
+            }
+        }
+        // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
+        return byField.ToDictionary(
+            p => p.Key,
+            p => new RollModeSummary(
+                RollModes.Combine(p.Value.Where(r => r.Automatic && r.Reason.Against is not { Count: > 0 }).Select(r => r.Reason.Mode)),
+                [.. p.Value.Select(r => r.Reason)]),
+            StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> RollModeFields(string target)
+    {
+        if (target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            if (SpecIndex.ContainsKey(target))
+                yield return target;
+            yield break;
+        }
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var mod = FieldIds.Modifier(ability);
+            if (target != string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check"))
+                continue;
+            yield return mod;
+            foreach (var skill in Skills.Where(s => s.Ability == ability))
+                yield return FieldIds.Skill(skill.Key);
+            if (ability == Ability.Dex)
+                yield return FieldIds.Initiative;
+        }
+    }
+
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
         HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
@@ -2444,36 +2542,12 @@ public static class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
                 string? followedToggle = null;
-                // Content v11 (D43): a whileActive modifier that names another content's toggle (toggleContent) applies while that toggle is on.
-                // Content that is not active, or that does not declare the toggle, is a broken reference the user should see: the modifier does
-                // not apply and the sheet says why. Without toggleContent the same-revision gate below is unchanged.
-                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
-                    && effect.ToggleContent is { } ownerId)
-                {
-                    var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
-                    var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == followed);
-                    if (owner is null || declared is null)
-                    {
-                        diagnostics.Add(new(
-                            "modifier.toggle-content-missing",
-                            $"'{revision.Name}' effect '{effect.Id}' follows toggle '{followed}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
-                            revision.Reference,
-                            effect.Id));
-                        continue;
-                    }
-                    if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
-                        continue;
-                    followedToggle = declared.Label;
-                }
-                // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
-                // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
-                else if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
-                    && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
-                {
-                    if (!ToggleIsOn(revision, named, effective, autoOn))
-                        continue;
-                }
-                else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                var gate = effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                    ? GateOnToggle(active, revision, effect.Id, followed, effect.ToggleContent, effective, autoOn, diagnostics, out followedToggle)
+                    : ToggleGate.Unresolved;
+                if (gate == ToggleGate.Skips)
+                    continue;
+                if (gate == ToggleGate.Unresolved && (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always))
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
