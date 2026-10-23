@@ -504,7 +504,8 @@
             },
             "dice": {
               "type": "string",
-              "maxLength": 40
+              "maxLength": 40,
+              "description": "Optional from v11 (D43): a roll with no dice is an action that only spends from its pool, and then needs a cost (validate.roll-dice-or-cost)."
             },
             "resourceId": {
               "type": "string"
@@ -523,7 +524,7 @@
             },
             "cost": {
               "$ref": "#/$defs/formula",
-              "description": "Content v6: uses spent (default 1), or the most with variableCost."
+              "description": "Content v6: uses spent (default 1), or the most with variableCost. With perUnit, the base cost the extra dice count from."
             },
             "variableCost": {
               "type": "boolean"
