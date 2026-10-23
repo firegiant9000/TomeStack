@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState, type SubmitEvent } from 'react';
 import type {
+  Ability,
   Activation,
   AttackEntry,
   AutomationStatus,
   CharacterView,
   ContentKind,
   DamageOutcome,
+  FeatureEffect,
   FeatureEntry,
   PageRef,
   PlayAction,
@@ -573,34 +575,17 @@ export function ActionsPanel({
   if (attacks.length === 0 && customAttacks.length === 0 && rolls.length === 0 && plainToggles.length === 0) return null;
   // Wave 3 item 22 (R157): a toggle with an activation is listed in that group; one without stays in "Active effects".
   const ungroupedToggles = plainToggles.filter((t) => !t.activation && !togglePool(t));
-  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => {
-    // D43 slice 4: an action outside the form it needs is disabled, with the reason as text the button is described by.
-    const locked = effect.available === false;
-    const reasonId = `roll-reason-${feature.content.revisionId}-${effect.id}`;
-    return (
-      <li key={`${feature.content.revisionId}-${effect.id}`} className="feature">
-        <button
-          type="button"
-          disabled={locked}
-          aria-describedby={locked ? reasonId : undefined}
-          onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}
-        >
-          Roll {effect.label || effect.id}
-          {effect.dice ? ` (${effect.dice}${rollBonus(effect.bonus)})` : ''}
-        </button>{' '}
-        <span className="hint">
-          {feature.name}
-          {effect.resourceId ? ' · uses a resource (spend it separately)' : ''}
-        </span>
-        {locked && (
-          <span id={reasonId} className="hint">
-            {' '}
-            · {effect.unavailableReason ?? 'Not available right now'}
-          </span>
-        )}
-      </li>
-    );
-  };
+  const rollItem = ({ feature, effect }: (typeof rolls)[number]) => (
+    <RollItem
+      key={`${feature.content.revisionId}-${effect.id}`}
+      feature={feature}
+      effect={effect}
+      pool={effect.resourceId ? resourcePools.find((r) => r.resourceId === effect.resourceId && r.content.contentId === (effect.resourceContent ?? feature.content.contentId)) : undefined}
+      critical={critical}
+      roll={roll}
+      act={act}
+    />
+  );
   const toggleItem = (t: ToggleValue) => (
     <li key={`${t.content.revisionId}-${t.toggleId}`} className="feature">
       <ToggleRow toggle={t} act={act} />
@@ -682,6 +667,140 @@ export function ActionsPanel({
         );
       })}
     </section>
+  );
+}
+
+const saveAbilityNames: Record<Ability, string> = {
+  str: 'Strength',
+  dex: 'Dexterity',
+  con: 'Constitution',
+  int: 'Intelligence',
+  wis: 'Wisdom',
+  cha: 'Charisma',
+};
+
+/** D43 S5: "Save: DC 13 Dexterity · 100-ft line, 5 ft wide · Range: Self · Each creature in the line"; absent parts are left out. */
+export function actionDetails(effect: FeatureEffect): string {
+  const parts: string[] = [];
+  if (effect.saveAbility) {
+    const name = saveAbilityNames[effect.saveAbility] ?? effect.saveAbility;
+    parts.push(effect.saveDc !== undefined ? `Save: DC ${effect.saveDc} ${name}` : `Save: ${name} (DC unavailable)`);
+  }
+  if (effect.area) {
+    const { shape, size, width } = effect.area;
+    parts.push(`${size}-ft ${shape}${shape === 'line' && width ? `, ${width} ft wide` : ''}`);
+  }
+  if (effect.range) parts.push(`Range: ${effect.range}`);
+  if (effect.targets) parts.push(effect.targets);
+  return parts.join(' · ');
+}
+
+/**
+ * D43 S5: one roll or action of a feature. A roll with dice is a Roll button (a per-unit action also has a "Points to spend" box
+ * whose value is always sent as the roll's amount); an action with no dice and a pool is a "Use" button that spends its cost.
+ */
+function RollItem({
+  feature,
+  effect,
+  pool,
+  critical,
+  roll,
+  act,
+}: {
+  feature: FeatureEntry;
+  effect: FeatureEffect;
+  pool?: ResourceValue;
+  critical: boolean;
+  roll: (target: RollTarget) => void;
+  act: Act;
+}) {
+  const baseId = `${feature.content.revisionId}-${effect.id}`;
+  const baseCost = effect.cost ?? 0;
+  const perUnit = effect.dice ? effect.perUnit : undefined;
+  const maxAmount = perUnit ? (perUnit.maxUnits !== undefined ? baseCost + perUnit.maxUnits : pool?.maximum) : undefined;
+  const [amount, setAmount] = useState(String(baseCost));
+  const chosen = Number(amount);
+  const amountOk = amount.trim() !== '' && /^\d+$/.test(amount.trim()) && chosen >= baseCost && (maxAmount === undefined || chosen <= maxAmount);
+  const amountReason = `Enter a whole number ${maxAmount === undefined ? `of at least ${baseCost}` : `from ${baseCost} to ${maxAmount}`}.`;
+  // D43 slice 4: an action outside the form it needs is disabled, with the reason as text the button is described by.
+  const locked = effect.available === false;
+  const reasonId = `roll-reason-${baseId}`;
+  const amountReasonId = `roll-amount-reason-${baseId}`;
+  const details = actionDetails(effect);
+  const label = effect.label || effect.id;
+  const diceless = !effect.dice;
+  const useCost = effect.cost ?? 1;
+  const unaffordable = diceless && effect.resourceId !== undefined && (pool?.current === undefined || pool.current < useCost || useCost < 1);
+  const poolName = pool?.label ?? effect.resourceId;
+  const useReason = locked
+    ? (effect.unavailableReason ?? 'Not available right now')
+    : unaffordable
+      ? pool?.current === undefined
+        ? `${poolName} is not tracked on this sheet.`
+        : `Not enough ${poolName} left (${pool.current}).`
+      : undefined;
+  const rollDescribedBy = [locked ? reasonId : undefined, perUnit && !amountOk ? amountReasonId : undefined].filter(Boolean).join(' ') || undefined;
+  return (
+    <li className="feature">
+      {diceless ? (
+        effect.resourceId ? (
+          <button
+            type="button"
+            disabled={useReason !== undefined}
+            aria-describedby={useReason !== undefined ? reasonId : undefined}
+            onClick={() =>
+              act({ action: 'spend', amount: useCost, contentId: effect.resourceContent ?? feature.content.contentId, resourceId: effect.resourceId! })
+            }
+          >
+            Use {label} ({useCost} {poolName})
+          </button>
+        ) : (
+          <span className="option-name">{label}</span>
+        )
+      ) : (
+        <button
+          type="button"
+          disabled={locked || (perUnit !== undefined && !amountOk)}
+          aria-describedby={rollDescribedBy}
+          onClick={() => roll({ content: feature.content, effectId: effect.id, critical, ...(perUnit ? { amount: chosen } : {}) })}
+        >
+          Roll {label}
+          {` (${effect.dice}${rollBonus(effect.bonus)})`}
+        </button>
+      )}{' '}
+      <span className="hint">
+        {feature.name}
+        {effect.resourceId && !diceless ? ' · uses a resource (spend it separately)' : ''}
+      </span>
+      {(locked || (diceless && useReason !== undefined)) && (
+        <span id={reasonId} className="hint">
+          {' '}
+          · {locked ? (effect.unavailableReason ?? 'Not available right now') : useReason}
+        </span>
+      )}
+      {diceless && !effect.resourceId && effect.text && <span className="hint"> · {effect.text}</span>}
+      {details && <p className="hint">{details}</p>}
+      {perUnit && (
+        <div className="inline-form">
+          <label className="field">
+            Points to spend{pool ? ` (${pool.label})` : ''}
+            <input
+              type="number"
+              min={baseCost}
+              max={maxAmount}
+              value={amount}
+              aria-describedby={amountOk ? undefined : amountReasonId}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </label>
+          {!amountOk && (
+            <span id={amountReasonId} className="hint">
+              {amountReason}
+            </span>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -894,14 +1013,16 @@ export function RollResult({
   const p = record.provenance;
   // A roll may name a resource its action spends; spending is a separate, explicit button (never automatic). A shared
   // resource (content v6) is found through the content that defines it.
-  const holder = p?.linkedResourceContent ?? p?.content?.contentId;
-  const linked = p?.linkedResourceId
-    ? (resources.find((r) => r.resourceId === p.linkedResourceId && r.content.contentId === holder) ??
-      resources.find((r) => r.resourceId === p.linkedResourceId))
+  // D43 S5: `record.spend` (set by the service for a roll effect that names a pool) says exactly which pool and how much.
+  const spend = record.spend;
+  const holder = spend?.contentId ?? p?.linkedResourceContent ?? p?.content?.contentId;
+  const linkedId = spend?.resourceId ?? p?.linkedResourceId;
+  const linked = linkedId
+    ? (resources.find((r) => r.resourceId === linkedId && r.content.contentId === holder) ?? (spend ? undefined : resources.find((r) => r.resourceId === linkedId)))
     : undefined;
   const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
   const featureAttack = attacks.find((a) => a.source === 'feature' && a.item.revisionId === p?.content?.revisionId && a.effectId === p?.effectId);
-  const cost = featureAttack?.cost ?? effect?.cost ?? 1;
+  const cost = spend?.amount ?? featureAttack?.cost ?? effect?.cost ?? 1;
   const most = linked?.current !== undefined ? Math.min(cost, linked.current) : 0;
   const chosen = Number(amount);
   const validChoice = amount !== '' && Number.isInteger(chosen) && chosen >= 1 && chosen <= most;
@@ -938,7 +1059,9 @@ export function RollResult({
         <button
           type="button"
           disabled={cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
-          onClick={() => act({ action: 'spend', amount: cost, contentId: linked.content.contentId, resourceId: linked.resourceId })}
+          onClick={() =>
+            act({ action: 'spend', amount: cost, contentId: spend?.contentId ?? linked.content.contentId, resourceId: spend?.resourceId ?? linked.resourceId })
+          }
         >
           Spend {cost} {linked.label} ({linked.current} left)
         </button>

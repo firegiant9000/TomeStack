@@ -283,6 +283,29 @@ export interface FeatureEffect {
   /** Content v11 (D43): false when the action is outside the form it needs (`unavailableReason` says which). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
+  /** Content v11 (D43): the save the action asks for, with its DC evaluated for this character (`saveDc` is absent when it could not be). */
+  saveAbility?: Ability;
+  saveDc?: number;
+  saveTrace?: TraceEntry[];
+  area?: RollArea;
+  range?: string;
+  targets?: string;
+  /** Content v11 (D43): extra dice for each unit spent beyond the base cost. */
+  perUnit?: RollPerUnit;
+}
+
+export type AreaShape = 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation';
+
+/** Content v11 (D43): an area in feet; `width` applies to a line only. */
+export interface RollArea {
+  shape: AreaShape;
+  size: number;
+  width?: number;
+}
+
+export interface RollPerUnit {
+  dice: string;
+  maxUnits?: number;
 }
 
 /** Content v6 (M3 B2): something switched on and off at the table. */
@@ -725,6 +748,14 @@ export interface RollRecord {
   modifiers: RollModifier[];
   total: number;
   provenance?: RollProvenance;
+  /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
+  spend?: RollSpend;
+}
+
+export interface RollSpend {
+  contentId: string;
+  resourceId: string;
+  amount: number;
 }
 
 /** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
@@ -736,6 +767,8 @@ export interface RollTarget {
   critical?: boolean;
   /** One of the character's hit dice (d6–d12), the die alone. */
   hitDie?: number;
+  /** D43 S5: the points a per-unit action spends (its base cost plus the extra units); the server checks the range. */
+  amount?: number;
   /** A death saving throw: a d20 with no modifier. */
   deathSave?: boolean;
   /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
