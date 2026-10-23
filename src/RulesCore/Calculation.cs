@@ -421,6 +421,14 @@ public static class CharacterCalculator
     public static bool IsCharacterOnlyField(string field, int schemaVersion) =>
         IsSpeedOrPassive(field) && schemaVersion < ContentRevision.PlayDetailsSchemaVersion;
 
+    /// <summary>
+    /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
+    /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
+    /// revision never moves it, whatever it says.
+    /// </summary>
+    public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
+        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
         field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
@@ -442,7 +450,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -539,7 +547,7 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
-                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion))
+                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion) || IsPlayMechanicsOnlyField(restriction.Field, revision.SchemaVersion))
                 {
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
@@ -2486,7 +2494,7 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion))
+                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
                     diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
@@ -3029,6 +3037,13 @@ public static class CharacterCalculator
         {
             steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
+        }));
+        // Content v11 (D43): a flying speed. None by default; a form or species sets it with a v11 modifier (the validator and
+        // the calculator refuse it below v11, IsPlayMechanicsOnlyField).
+        specs.Add(new(FieldIds.FlySpeed, "Fly speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.FlySpeed, "base", "No flying speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {

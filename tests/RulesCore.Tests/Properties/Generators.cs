@@ -94,6 +94,7 @@ internal static class Generators
         [AttackEffect.TypeName] = AttackEffect.SchemaVersion,
         [AttackRiderEffect.TypeName] = AttackRiderEffect.SchemaVersion,
         [ValueEffect.TypeName] = ValueEffect.SchemaVersion,
+        [RollModeEffect.TypeName] = RollModeEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -148,7 +149,12 @@ internal static class Generators
             Common(GrantEffect.TypeName,
                 from grant in Gen.Elements("damageResistance", "damageImmunity", "DamageVulnerability")
                 from damageType in Gen.Elements("fire", "Cold", "thunder")
-                select new JsonObject { ["grant"] = grant, ["damageType"] = damageType }),
+                // Any version: below v11 the key must stay extension data (below v10, with the whole effect), written back where it was.
+                from whileToggle in Gen.Elements(false, false, true)
+                from whileContent in OptionalValue(Guids)
+                from whileId in Keys
+                select new JsonObject { ["grant"] = grant, ["damageType"] = damageType }
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
             Common(ResourceEffect.TypeName,
                 from id in Keys
                 from label in Names
@@ -316,6 +322,15 @@ internal static class Generators
                 from valueId in Keys
                 from formula in Formulas
                 select new JsonObject { ["valueId"] = valueId, ["formula"] = formula }),
+            Common(RollModeEffect.TypeName,
+                from target in Gen.Elements("save.dex", "save.con", "skill.stealth", "skill.sleightOfHand", "ability.str.check")
+                from mode in Gen.Elements("advantage", "disadvantage")
+                from against in Gen.Elements(0, 0, 1, 2)
+                from toggle in Optional(Keys)
+                from toggleContent in OptionalValue(Guids)
+                select new JsonObject { ["target"] = target, ["mode"] = mode }
+                    .With("against", against == 0 ? null : new JsonArray([.. ConditionKeys.All.Take(against).Select(k => (JsonNode)k)]))
+                    .With("toggle", toggle).With("toggleContent", toggleContent?.ToString())),
             Common(ToggleGroupEffect.TypeName,
                 from groupId in Keys
                 from label in Names

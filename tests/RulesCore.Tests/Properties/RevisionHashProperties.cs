@@ -33,6 +33,9 @@ public class RevisionHashProperties
     /// <summary>The roll key content v11 adds (D43, slice 4). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
     internal static readonly string[] RollV11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
 
+    /// <summary>The grant key content v11 adds (D43, slice 6). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
+    internal static readonly string[] GrantV11Keys = ["whileToggle"];
+
     /// <summary>Content v11 (slice 5): a roll may omit its dice; below v11 a roll with no dice stays an unknown effect, byte for byte.</summary>
     private static bool IsDiceLessRollBelowV11(string type, int version, JsonNode? effect) =>
         type == RollEffect.TypeName && version < ContentRevision.PlayMechanicsSchemaVersion && effect?["dice"] is null;
@@ -92,9 +95,9 @@ public class RevisionHashProperties
                 }
             }
             // Content v11: below v11 the keys of these types stay extension data with the value they had, where they were.
-            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type is ToggleEffect.TypeName or ResourceEffect.TypeName or ModifierEffect.TypeName or RollEffect.TypeName)
+            if (version < ContentRevision.PlayMechanicsSchemaVersion && !unknown && type is ToggleEffect.TypeName or ResourceEffect.TypeName or ModifierEffect.TypeName or RollEffect.TypeName or GrantEffect.TypeName)
             {
-                foreach (var key in type switch { ToggleEffect.TypeName => ToggleV11Keys, ResourceEffect.TypeName => ResourceV11Keys, ModifierEffect.TypeName => ModifierV11Keys, _ => RollV11Keys })
+                foreach (var key in type switch { ToggleEffect.TypeName => ToggleV11Keys, ResourceEffect.TypeName => ResourceV11Keys, ModifierEffect.TypeName => ModifierV11Keys, GrantEffect.TypeName => GrantV11Keys, _ => RollV11Keys })
                 {
                     if (inputEffects[i]![key] is { } kept && !JsonNode.DeepEquals(kept, outputEffects[i]![key]))
                         return $"effect {i}'s {key} changed below v11";
@@ -194,6 +197,10 @@ public class RevisionHashProperties
                 members = ["toHit", "dice", "damageBonus", "damageType", "toggle", "toggleContent", "stackGroup"];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ModifierEffect.TypeName)
                 members = [.. members ?? [], .. ModifierV11Keys];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == GrantEffect.TypeName)
+                members = [.. members ?? [], .. GrantV11Keys];
+            if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollModeEffect.TypeName)
+                members = ["against", "toggle", "toggleContent"];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName)
                 members = [.. members ?? [], .. RollV11Keys, "dice"];
             if (members is null)
