@@ -91,5 +91,8 @@ public class FormOnlyDefenceTests
 
         Assert.Null(sheet.DamageDefences);
         Assert.Contains(sheet.Diagnostics, d => d.Code == "modifier.toggle-content-missing" && d.EffectId == "far");
+        var feature = sheet.Features!.Single(f => f.Content == Fixtures.SkyForm);
+        Assert.Equal(AutomationStatus.Assisted, feature.Automation);
+        Assert.Contains(feature.Diagnostics, d => d.Code == "modifier.toggle-content-missing" && d.EffectId == "far");
     }
 }
