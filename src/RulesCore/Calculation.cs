@@ -623,7 +623,7 @@ public static class CharacterCalculator
         var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -1651,7 +1651,10 @@ public static class CharacterCalculator
                         saveDc = dc;
                         var read = inputs.DistinctBy(i => i.Name, StringComparer.Ordinal).ToList();
                         var classRoot = item.ClassRoot is { } root ? active.FirstOrDefault(a => a.Revision.Reference == root)?.Revision.Name : null;
-                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name, classRoot)} {i.Value}"))}";
+                        // A named value is traced under the content that declares it.
+                        string? ValueOwner(string name) =>
+                            item.ClassRoot is { } ownerRoot && classLevels.NamedValues.TryGetValue((ownerRoot, FormulaIdentifiers.ValueId(name)), out var ownerValue) ? ownerValue.Content.Revision.Name : null;
+                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name, classRoot, FormulaIdentifiers.IsValue(i.Name) ? ValueOwner(i.Name) : null)} {i.Value}"))}";
                         saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC{from}", null, dc, ContentOrigin(family, item, roll), null, read)];
                     }
                     else
@@ -1674,10 +1677,12 @@ public static class CharacterCalculator
     }
 
     /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score", a scale as "{class} {scaleId}"; any other identifier stays as written.</summary>
-    private static string InputLabel(string identifier, string? classRoot)
+    private static string InputLabel(string identifier, string? classRoot, string? valueOwner)
     {
         if (FormulaIdentifiers.IsScale(identifier))
             return $"{classRoot} {FormulaIdentifiers.ScaleId(identifier)}".Trim();
+        if (FormulaIdentifiers.IsValue(identifier))
+            return $"{valueOwner} {FormulaIdentifiers.ValueId(identifier)}".Trim();
         if (identifier == FormulaIdentifiers.ProficiencyBonus)
             return "Proficiency bonus";
         if (identifier == FormulaIdentifiers.Level)
@@ -1750,6 +1755,8 @@ public static class CharacterCalculator
                 && classLevels.Scales.TryGetValue((scaleRoot, FormulaIdentifiers.ScaleId(identifier)), out var scale)
                 ? scale.Effect.Values[Math.Clamp(scaleLevel, 1, scale.Effect.Values.Count) - 1]
                 : null,
+            // Content v11 (D43): a named value its class declares, evaluated where it is declared (ResolveValue).
+            _ when FormulaIdentifiers.IsValue(identifier) => ResolveValue(identifier, content, character, classLevels, values),
             _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
             _ => null,
         };
@@ -1789,6 +1796,21 @@ public static class CharacterCalculator
     private sealed class ClassLevelMap : Dictionary<ContentReference, int>
     {
         public Dictionary<(ContentReference Class, string ScaleId), (ActiveContent Content, ScaleEffect Effect)> Scales { get; } = [];
+
+        /// <summary>Content v11 (D43): the named values of each class root, keyed by the class and the value id (<see cref="CollectValues"/>).</summary>
+        public Dictionary<(ContentReference Class, string ValueId), (ActiveContent Content, ValueEffect Effect)> NamedValues { get; } = [];
+
+        /// <summary>What each value came to in this pass (null: it is disabled). Values are evaluated lazily, once.</summary>
+        public Dictionary<(ContentReference Class, string ValueId), int?> ValueResults { get; } = [];
+
+        /// <summary>The values being evaluated right now, outermost first; a read of one of them again is a cycle.</summary>
+        public List<(ContentReference Class, string ValueId)> ValueStack { get; } = [];
+
+        /// <summary>The values that lie on a cycle; they stay disabled for the whole pass.</summary>
+        public HashSet<(ContentReference Class, string ValueId)> ValueCycles { get; } = [];
+
+        /// <summary>The pass's diagnostics, where a value read that fails says why (set by <see cref="CollectValues"/>).</summary>
+        public List<Diagnostic>? Diagnostics { get; set; }
     }
 
     /// <summary>
@@ -1818,6 +1840,141 @@ public static class CharacterCalculator
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the named values of every class root, from all active content of that root (any kind) in sheet order.
+    /// When two declare one value id, the later applies and <c>value.duplicate</c> says so (informational: it carries the content
+    /// but no effect id, so it does not downgrade the content's automation). A value on content with no class root can never be
+    /// read, so it is ignored; so is one that is not automatic or has no usable id (validation refuses both on publish and import).
+    /// </summary>
+    private static void CollectValues(List<ActiveContent> active, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
+    {
+        classLevels.Diagnostics = diagnostics;
+        foreach (var owner in active.Where(a => a.ClassRoot is not null && a.Revision.SchemaVersion >= ValueEffect.SchemaVersion))
+        {
+            foreach (var value in owner.Revision.Effects.OfType<ValueEffect>().Where(v => v.Automation == AutomationStatus.Automatic))
+            {
+                if (!ScaleEffect.IsValidScaleId(value.ValueId) || string.IsNullOrWhiteSpace(value.Formula))
+                    continue;
+                var key = (owner.ClassRoot!, value.ValueId);
+                if (classLevels.NamedValues.TryGetValue(key, out var earlier))
+                {
+                    diagnostics.Add(new(
+                        "value.duplicate",
+                        $"'{owner.Revision.Name}' declares value '{value.ValueId}', which '{earlier.Content.Revision.Name}' also declares for this class; the later one, from '{owner.Revision.Name}', is used.",
+                        owner.Revision.Reference));
+                }
+                classLevels.NamedValues[key] = (owner, value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>VALUE.&lt;id&gt;</c> read by <paramref name="reader"/>: the named value its class root declares, evaluated in the context of
+    /// the content that declares it (its class level, scales, and the fields calculated so far), once per pass. Null when the read
+    /// is outside a class (<c>value.no-class</c>), nothing declares the value (<c>value.unknown</c>), the value is disabled because
+    /// it lies on a cycle or reads one (<c>value.cycle</c>), or its own formula fails (<c>effect.invalid-formula</c> on the
+    /// declaring content). It never reads as 0; the caller's formula fails like any unresolved identifier.
+    /// </summary>
+    private static int? ResolveValue(string identifier, ActiveContent reader, Character character, ClassLevelMap classLevels, Dictionary<string, int> values)
+    {
+        var valueId = FormulaIdentifiers.ValueId(identifier);
+        var readerRevision = reader.Revision;
+        if (reader.ClassRoot is not { } root)
+        {
+            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+        var key = (root, valueId);
+        if (!classLevels.NamedValues.TryGetValue(key, out var declared))
+        {
+            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+
+        int? result;
+        if (classLevels.ValueResults.TryGetValue(key, out var done))
+        {
+            result = done;
+        }
+        else if (classLevels.ValueStack.Contains(key))
+        {
+            // Re-entry: every value from the first read of this one to the top of the stack is on the cycle.
+            foreach (var member in classLevels.ValueStack.Skip(classLevels.ValueStack.IndexOf(key)))
+                classLevels.ValueCycles.Add(member);
+            result = null;
+        }
+        else
+        {
+            classLevels.ValueStack.Add(key);
+            try
+            {
+                var revision = declared.Content.Revision;
+                FormulaError? failure;
+                if (Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(revision), out var formula, out failure)
+                    && formula!.TryEvaluate(id => Resolve(id, declared.Content, character, classLevels, values, []), out var value, out failure))
+                {
+                    result = value;
+                }
+                else
+                {
+                    result = null;
+                    if (!classLevels.ValueCycles.Contains(key))
+                        ReportValue(classLevels, InvalidFormula(revision, declared.Effect, failure!));
+                }
+            }
+            finally
+            {
+                classLevels.ValueStack.RemoveAt(classLevels.ValueStack.Count - 1);
+            }
+            classLevels.ValueResults[key] = result;
+        }
+
+        if (result is null && classLevels.ValueCycles.Contains(key))
+        {
+            ReportValue(classLevels, new(
+                "value.cycle",
+                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it are disabled.",
+                readerRevision.Reference));
+        }
+        return result;
+    }
+
+    private static void ReportValue(ClassLevelMap classLevels, Diagnostic diagnostic)
+    {
+        if (classLevels.Diagnostics is { } diagnostics)
+            AddOnce(diagnostics, diagnostic);
+    }
+
+    /// <summary>
+    /// The fields a formula of <paramref name="reader"/> reads, including (content v11) those read by the value formulas it names,
+    /// transitively; a value met again is not followed, so a cycle among values ends here (the value resolution disables it).
+    /// </summary>
+    private static List<string> FieldReads(Formula formula, ActiveContent reader, ClassLevelMap classLevels)
+    {
+        var fields = new List<string>();
+        var followed = new HashSet<(ContentReference, string)>();
+        void Collect(Formula source, ActiveContent context)
+        {
+            foreach (var identifier in source.Identifiers)
+            {
+                if (FormulaIdentifiers.FieldFor(identifier) is { } field)
+                {
+                    if (!fields.Contains(field, StringComparer.Ordinal))
+                        fields.Add(field);
+                }
+                else if (FormulaIdentifiers.IsValue(identifier) && context.ClassRoot is { } root
+                    && classLevels.NamedValues.TryGetValue((root, FormulaIdentifiers.ValueId(identifier)), out var declared)
+                    && followed.Add((root, declared.Effect.ValueId))
+                    && Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(declared.Content.Revision), out var inner, out _))
+                {
+                    Collect(inner!, declared.Content);
+                }
+            }
+        }
+        Collect(formula, reader);
+        return fields;
     }
 
     private sealed record ResolvedContent(
@@ -2088,6 +2245,7 @@ public static class CharacterCalculator
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
+        CollectValues(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices);
     }
 
@@ -2253,7 +2411,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -2347,8 +2505,9 @@ public static class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                var reads = formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-                modifiers.Add(new(item, effect, formula, reads, null, followedToggle));
+                // A named value this formula reads counts as the fields that value reads (content v11), so the order and the cycle check see them.
+                var reads = FieldReads(formula!, item, classLevels);
+                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle));
             }
         }
         return modifiers;

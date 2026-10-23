@@ -22,17 +22,30 @@ public class PerUnitProperties
         {
             const int baseCount = 4;
             const int perUnitCount = 2;
-            var formula = DiceRoller.PerUnitFormula($"{baseCount}d10", $"{perUnitCount}d6", spend.Base, spend.Amount);
+            var built = DiceRoller.TryPerUnitFormula($"{baseCount}d10", $"{perUnitCount}d6", spend.Base, spend.Amount, out var formula);
             var request = new RollRequest(formula);
             var rolled = DiceRoller.TryRoll(request, new SeededRandomSource(1), out var record, out _);
-            return (rolled && record!.Dice.Count == baseCount + (spend.Amount - spend.Base) * perUnitCount)
+            return (built && rolled && record!.Dice.Count == baseCount + (spend.Amount - spend.Base) * perUnitCount)
                 .Label($"{formula}: {record?.Dice.Count}");
         });
 
     [Fact]
     public void The_extra_dice_are_summed_into_one_term_and_nothing_is_added_at_the_base()
     {
-        Assert.Equal("4d10+2d10", DiceRoller.PerUnitFormula("4d10", "1d10", 2, 4));
-        Assert.Equal("4d10", DiceRoller.PerUnitFormula("4d10", "1d10", 2, 2));
+        Assert.True(DiceRoller.TryPerUnitFormula("4d10", "1d10", 2, 4, out var extra));
+        Assert.Equal("4d10+2d10", extra);
+        Assert.True(DiceRoller.TryPerUnitFormula("4d10", "1d10", 2, 2, out var atBase));
+        Assert.Equal("4d10", atBase);
+    }
+
+    [Theory]
+    [InlineData("1d10+1")]
+    [InlineData("1d10+1d6")]
+    [InlineData("-1d10")]
+    [InlineData("5")]
+    [InlineData("nonsense")]
+    public void A_per_unit_die_that_is_not_one_plain_die_term_fails(string perUnitDice)
+    {
+        Assert.False(DiceRoller.TryPerUnitFormula("4d10", perUnitDice, 2, 4, out _));
     }
 }

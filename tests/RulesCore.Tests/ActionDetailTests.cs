@@ -37,7 +37,7 @@ public class ActionDetailTests
     [Fact]
     public void A_save_dc_is_calculated_and_traced()
     {
-        // VALUE is Task 5.4, so the variant reads the Wisdom modifier directly: 8 + PB 3 + WIS.MOD 2.
+        // The variant reads the Wisdom modifier directly: 8 + PB 3 + WIS.MOD 2 (NamedValueTests covers VALUE).
         var catalog = WithWave(r => r with { Save = new RollSave(Ability.Dex, "8 + PB + WIS.MOD") });
 
         var wave = Effect(Sheet(Adept(), catalog), "wave");
@@ -59,8 +59,8 @@ public class ActionDetailTests
     [Fact]
     public void A_save_dc_that_cannot_be_calculated_is_null_with_a_warning_and_the_row_is_assisted()
     {
-        // The pack's own dc reads VALUE, which resolves only after Task 5.4: it fails like any unresolved identifier.
-        var sheet = Sheet(Adept());
+        // A dc reading a value nothing declares fails like any unresolved identifier (Task 5.4 resolves the pack's own VALUE.focusMod).
+        var sheet = Sheet(Adept(), WithWave(r => r with { Save = new RollSave(Ability.Dex, "8 + VALUE.nonesuch") }));
         var wave = Effect(sheet, "wave");
 
         Assert.Equal(Ability.Dex, wave.SaveAbility);

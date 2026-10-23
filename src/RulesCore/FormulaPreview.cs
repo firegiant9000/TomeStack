@@ -36,17 +36,53 @@ public static class FormulaPreview
                 .GroupBy(s => s.ScaleId)
                 .ToDictionary(g => g.Key, g => g.First().Values, StringComparer.Ordinal);
 
+    /// <summary>
+    /// The revision's own automatic named values (content v11, <c>VALUE.&lt;id&gt;</c>) with their formulas, the first per id, when it
+    /// is a v11 revision; empty otherwise and when there is no revision. A value of any other entry is not previewable here.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> NamedValues(ContentRevision? revision) =>
+        revision is null || revision.SchemaVersion < ValueEffect.SchemaVersion
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : revision.Effects.OfType<ValueEffect>()
+                .Where(v => v.Automation == AutomationStatus.Automatic && ScaleEffect.IsValidScaleId(v.ValueId) && !string.IsNullOrWhiteSpace(v.Formula))
+                .GroupBy(v => v.ValueId)
+                .ToDictionary(g => g.Key, g => g.First().Formula, StringComparer.Ordinal);
+
     /// <summary>The value of an identifier at a class level in the hypothetical context, or null when it cannot be previewed.</summary>
-    public static int? Resolve(string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales) => identifier switch
+    public static int? Resolve(string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues = null) =>
+        Resolve(identifier, level, scales, namedValues, []);
+
+    private static int? Resolve(
+        string identifier, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, HashSet<string> inProgress) => identifier switch
     {
         FormulaIdentifiers.ProficiencyBonus => DesignFeedback.ProficiencyBonus(level),
         FormulaIdentifiers.Level or FormulaIdentifiers.ClassLevel => level,
         _ when FormulaIdentifiers.IsScale(identifier) =>
             level is >= Character.MinLevel and <= Character.MaxLevel && scales.TryGetValue(FormulaIdentifiers.ScaleId(identifier), out var values) ? values[level - 1] : null,
+        _ when FormulaIdentifiers.IsValue(identifier) => NamedValue(FormulaIdentifiers.ValueId(identifier), level, scales, namedValues, inProgress),
         _ when identifier.EndsWith(".MOD", StringComparison.Ordinal) => 0,
         _ when identifier.EndsWith(".SCORE", StringComparison.Ordinal) => SampleScore,
         _ => null,
     };
+
+    /// <summary>A named value the revision declares, evaluated in the same context; a value reading itself (directly or through others) has no value.</summary>
+    private static int? NamedValue(
+        string valueId, int level, IReadOnlyDictionary<string, IReadOnlyList<int>> scales, IReadOnlyDictionary<string, string>? namedValues, HashSet<string> inProgress)
+    {
+        if (namedValues is null || !namedValues.TryGetValue(valueId, out var source) || !inProgress.Add(valueId))
+            return null;
+        try
+        {
+            return Formula.TryParse(source, FormulaFeatures.Scales | FormulaFeatures.Values, out var formula, out _)
+                && formula!.TryEvaluate(id => Resolve(id, level, scales, namedValues, inProgress), out var value, out _)
+                ? value
+                : null;
+        }
+        finally
+        {
+            inProgress.Remove(valueId);
+        }
+    }
 
     /// <summary>
     /// Evaluates <paramref name="formula"/> at <paramref name="levels"/> (default <see cref="SampleLevels"/>) against <paramref name="revision"/>'s columns.
@@ -54,21 +90,26 @@ public static class FormulaPreview
     /// </summary>
     public static FormulaPreviewResult Preview(string formula, ContentRevision? revision, IReadOnlyList<int>? levels = null, bool floorAtZero = false)
     {
-        if (!Formula.TryParse(formula, allowScales: true, out var parsed, out var error))
+        // VALUE parses in a v11 revision (a draft that is v11 too); a value this revision does not declare reads as unresolved, like an unknown SCALE.
+        var features = FormulaFeatures.Scales | (revision is { SchemaVersion: >= ValueEffect.SchemaVersion } ? FormulaFeatures.Values : FormulaFeatures.None);
+        if (!Formula.TryParse(formula, features, out var parsed, out var error))
             return new(formula, error, null, []);
         var scales = Scales(revision);
+        var namedValues = NamedValues(revision);
         foreach (var id in parsed!.Identifiers.Order(StringComparer.Ordinal))
         {
-            if (Resolve(id, Character.MinLevel, scales) is null)
+            if (Resolve(id, Character.MinLevel, scales, namedValues) is null)
             {
                 var message = FormulaIdentifiers.IsScale(id)
                     ? $"{id} is not a column of this entry, so it can't be previewed here."
-                    : $"{id} can't be previewed here.";
+                    : FormulaIdentifiers.IsValue(id)
+                        ? $"{id} is not a value this entry declares, so it can't be previewed here."
+                        : $"{id} can't be previewed here.";
                 return new(formula, null, message, []);
             }
         }
         var points = (levels ?? SampleLevels)
-            .Select(level => parsed.TryEvaluate(id => Resolve(id, level, scales), out var value, out var problem)
+            .Select(level => parsed.TryEvaluate(id => Resolve(id, level, scales, namedValues), out var value, out var problem)
                 ? new FormulaPreviewPoint(level, floorAtZero ? Math.Max(value, 0) : value, null)
                 : new FormulaPreviewPoint(level, null, problem!.Message))
             .ToList();

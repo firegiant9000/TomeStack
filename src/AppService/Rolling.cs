@@ -157,6 +157,7 @@ public sealed partial class TomeStackApp
             if (effect.Dice is null)
                 throw new AppValidationException([new("roll.no-dice", $"'{effect.Label}' has no dice to roll.", reference, effect.Id)], "roll.no-dice");
             var calculated = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id);
+            // The calculation reports a roll's bonus before its cost and save DC, so the first diagnostic is the bonus's own when the bonus fails.
             var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effect.Id);
             // A failing cost (calculation leaves Cost null while the effect declares one) or save DC is not a bonus problem: a failing
             // cost refuses only an amount, and a failing DC refuses nothing here.
@@ -222,7 +223,10 @@ public sealed partial class TomeStackApp
                 if (amount > current)
                     throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
             }
-            request = request with { Formula = DiceRoller.PerUnitFormula(request.Formula, perUnit.Dice, baseCost, amount) };
+            // Unreachable for validated content; stored content with a per-unit die this cannot add is refused, never rolled as the base dice.
+            if (!DiceRoller.TryPerUnitFormula(request.Formula, perUnit.Dice, baseCost, amount, out var formula))
+                throw new AppValidationException([new("roll.amount-out-of-range", $"'{effect.Id}' has a per-unit die that cannot be added to its dice, so no amount can be rolled.", reference, effect.Id)], "roll.amount-out-of-range");
+            request = request with { Formula = formula };
         }
         if (effect.ResourceId is null)
             return null;

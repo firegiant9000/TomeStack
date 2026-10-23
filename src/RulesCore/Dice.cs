@@ -326,15 +326,19 @@ public static class DiceRoller
     /// <summary>
     /// The formula of a per-unit roll: the base <paramref name="dice"/> plus <c>(amount − baseCost)</c> groups of
     /// <paramref name="perUnitDice"/> (<c>NdM</c>), summed into one term (<c>4d10</c> + 2 × <c>1d10</c> → <c>4d10+2d10</c>).
-    /// At the base cost the formula is just <paramref name="dice"/>. A malformed per-unit die returns the base dice alone;
-    /// validation already guarantees its shape and bounds.
+    /// At the base cost the formula is just <paramref name="dice"/>. A per-unit die that is not one plain, positive <c>NdM</c> term
+    /// (malformed, several terms, a constant, negative) fails, so the dice never disagree with the amount spent; validation already
+    /// guarantees the shape and bounds of published content, so this is a defence for stored content from elsewhere.
     /// </summary>
-    public static string PerUnitFormula(string dice, string perUnitDice, int baseCost, int amount)
+    public static bool TryPerUnitFormula(string dice, string perUnitDice, int baseCost, int amount, out string formula)
     {
+        formula = dice;
+        if (!DiceExpression.TryParse(perUnitDice, out var parsed, out _) || parsed!.Terms is not [{ IsDice: true, Sign: 1 } term])
+            return false;
         var units = amount - baseCost;
-        if (units <= 0 || !DiceExpression.TryParse(perUnitDice, out var parsed, out _) || parsed!.Terms is not [{ IsDice: true, Sign: 1 } term])
-            return dice;
-        return $"{dice}+{term.Count * units}d{term.Sides}";
+        if (units > 0)
+            formula = $"{dice}+{term.Count * units}d{term.Sides}";
+        return true;
     }
 
     /// <summary>
