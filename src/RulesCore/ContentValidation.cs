@@ -22,6 +22,9 @@ internal sealed class ValidationBatch(IReadOnlyDictionary<ContentReference, Cont
 
     /// <summary>The batch's revisions of one content, in batch order.</summary>
     public IEnumerable<ContentRevision> OfContent(Guid contentId) => (_byContent ??= byReference.Values.ToLookup(r => r.ContentId))[contentId];
+
+    /// <summary>Every revision of the batch.</summary>
+    public IEnumerable<ContentRevision> All => byReference.Values;
 }
 
 /// <summary>
@@ -46,6 +49,15 @@ public static class ContentValidator
 
     /// <summary>The most upkeep effects one revision declares (content v11); each runs every turn, so a bound keeps a turn small.</summary>
     public const int MaxUpkeepsPerRevision = 20;
+
+    /// <summary>The largest area size or line width a roll declares, in feet (content v11).</summary>
+    private const int MaxAreaFeet = 1_000;
+
+    /// <summary>The most units a per-unit roll may count (content v11).</summary>
+    private const int MaxPerUnitUnits = 100;
+
+    /// <summary>Every formula identifier family, so a feature used in a revision that is too old is named, not called unknown.</summary>
+    private const FormulaFeatures AllFormulaFeatures = FormulaFeatures.Scales | FormulaFeatures.Values;
 
     /// <summary>
     /// A <see cref="SpellcastingEffect.MulticlassCasterTable"/> has 20 entries, each 0 to 20 and at most the class level,
@@ -132,7 +144,9 @@ public static class ContentValidator
         var needsV10 = false; // content v10 (Wave 3, D42): speed/passive targets, autoWhen, activation, damage grants, item
         var needsV11 = false; // content v11 (D43): toggleGroup and upkeep effects, the toggle's group, layer, cost, level and duration keys, and the resource's counts, resourceFull and allowance keys
         var upkeeps = 0;
+        var diceLessRoll = false; // an untyped roll with no dice: publishing it needs v11, where a roll may omit them
         var usedScales = new HashSet<string>(StringComparer.Ordinal); // SCALE.<id> in any formula (content v9)
+        var usedValues = new HashSet<string>(StringComparer.Ordinal); // VALUE.<id> in any formula (content v11)
         var spellTargets = false; // raises the written version only; older revisions with them were never refused
         foreach (var effect in revision.Effects)
         {
@@ -179,7 +193,16 @@ public static class ContentValidator
                     needsV11 = true;
                     Error("validate.effect-malformed", $"Effect '{unreadable.Id}' has type '{unreadable.DeclaredType}' but a value or field that does not read (its toggleContent or whileToggle, or a missing field); fix it before publishing.", unreadable.Id);
                     break;
+                // Content v11 (D43): from v11 a value is typed; one that stays unknown did not match the shape (no formula, a valueId
+                // that is not a string), so the name would silently not exist.
+                case UnknownEffect { DeclaredType: ValueEffect.TypeName } unknownValue when revision.SchemaVersion >= ValueEffect.SchemaVersion:
+                    needsV11 = true;
+                    Error("validate.value-incomplete", $"Value '{unknownValue.Id}' does not match the value shape: it needs a valueId and a formula.", unknownValue.Id);
+                    break;
                 case UnknownEffect unknown:
+                    // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
+                    // always did, but publishing it needs v11.
+                    diceLessRoll |= unknown.DeclaredType == RollEffect.TypeName && RollEffect.LacksDice(unknown.Raw);
                     Warn("validate.effect-unsupported", $"Effect '{unknown.Id}' is of a type this version does not automate; it stays reference-only.", unknown.Id);
                     break;
                 case ModifierEffect modifier:
@@ -372,6 +395,13 @@ public static class ContentValidator
                     needsV11 = true;
                     CheckRider(rider);
                     break;
+                case ValueEffect value:
+                    needsV11 = true;
+                    if (!ScaleEffect.IsValidScaleId(value.ValueId) || string.IsNullOrWhiteSpace(value.Formula))
+                        Error("validate.value-incomplete", $"Value '{value.Id}' needs a formula and a valueId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits.", value.Id);
+                    if (!string.IsNullOrWhiteSpace(value.Formula))
+                        CheckFormula(value.Formula, value.Id, "formula");
+                    break;
                 case RecoveryEffect recovery:
                     if (!string.Equals(recovery.Amount, "all", StringComparison.Ordinal))
                         CheckFormula(recovery.Amount, recovery.Id, "amount");
@@ -379,8 +409,19 @@ public static class ContentValidator
                         Warn("validate.recovery-resource", $"Recovery '{recovery.Id}' restores '{recovery.ResourceId}', which this revision does not define (fine if another revision does).", recovery.Id);
                     break;
                 case RollEffect roll:
-                    if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
+                    // Content v11 (D43): a roll may have no dice at all (an action that only spends a cost); it then needs a cost.
+                    if (roll.Dice is null)
+                    {
+                        needsV11 = true;
+                        if (roll.Cost is null)
+                            Error("validate.roll-dice-or-cost", $"Roll '{roll.Id}' has neither dice nor a cost, so it does nothing; add dice or a cost.", roll.Id);
+                    }
+                    else if (!DiceExpression.TryParse(roll.Dice, out _, out var diceError))
+                    {
                         Error("validate.dice-invalid", $"Roll '{roll.Id}' dice '{roll.Dice}': {diceError!.Message} ({diceError.Code})", roll.Id);
+                    }
+                    needsV11 |= roll.Save is not null || roll.Area is not null || roll.Range is not null || roll.Targets is not null || roll.PerUnit is not null;
+                    CheckRollDetails(roll);
                     needsV5 |= roll.Activation is not null;
                     needsV6 |= roll.ResourceContent is not null || roll.Cost is not null || roll.VariableCost is not null;
                     if (roll.Cost is { } cost)
@@ -483,6 +524,8 @@ public static class ContentValidator
         }
         foreach (var group in revision.Effects.OfType<ToggleGroupEffect>().GroupBy(g => g.GroupId).Where(g => g.Count() > 1))
             Error("validate.toggle-group-duplicate", $"Toggle group '{group.Key}' is declared {group.Count()} times; declare each group once.", group.Skip(1).First().Id);
+        foreach (var group in revision.Effects.OfType<ValueEffect>().GroupBy(v => v.ValueId).Where(g => g.Count() > 1))
+            Error("validate.value-duplicate", $"Value id '{group.Key}' is declared {group.Count()} times in this revision; declare each value once.", group.Skip(1).First().Id);
         if (upkeeps > MaxUpkeepsPerRevision)
             Error("validate.upkeep-too-many", $"This revision declares {upkeeps} upkeep effects; the most is {MaxUpkeepsPerRevision}.");
         foreach (var allowance in revision.Effects.OfType<ResourceEffect>().Where(r => r.Allowance == true))
@@ -508,15 +551,17 @@ public static class ContentValidator
             Error("validate.requires-v8", $"This revision uses content schema v8 fields (attacks, criticalRange, armor training, armor strength or stealth, whileArmored, roll bonus) but declares v{revision.SchemaVersion}; an older build would ignore or misread them.");
         // Typed v10 details exist only in a v10 revision when read from JSON (below v10 the keys stay extension data); a
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
+        needsV11 |= usedValues.Count > 0;
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;
         if (needsV9 && revision.SchemaVersion < ScaleEffect.SchemaVersion)
             Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable, a choice with no options of its own) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         CheckScales();
-        if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
+        CheckValues();
+        if (needsV5&& revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
             Error("validate.armor-duplicate", "An item is at most one armor and one shield.");
@@ -554,7 +599,7 @@ public static class ContentValidator
         // The same features as the requires-vN checks above, highest first. Typed effects are covered too: armor (v4),
         // spellcasting, spell and weapon (v5) and toggle (v6) are read as typed only from their version.
         var required =
-            needsV11 ? ContentRevision.PlayMechanicsSchemaVersion
+            needsV11 || diceLessRoll ? ContentRevision.PlayMechanicsSchemaVersion
             : needsV10 ? ContentRevision.PlayDetailsSchemaVersion
             : needsV9 ? ScaleEffect.SchemaVersion
             : needsV8 ? ContentRevision.CombatDetailsSchemaVersion
@@ -568,12 +613,67 @@ public static class ContentValidator
         // Parsed with scales allowed, so a SCALE in a revision that declares an older version is named as needing v9
         // (validate.requires-v9) rather than as an unknown value. Every formula field goes through here: modifier value,
         // resource maximum, recovery amount, roll cost and bonus, and spellsFormula (ADR-010).
+        // Likewise VALUE (content v11) is parsed as known, so a VALUE in an older revision is named as needing v11.
         void CheckFormula(string source, string effectId, string what, string code = "validate.formula-invalid")
         {
-            if (!Formula.TryParse(source, allowScales: true, out var formula, out var error))
+            if (!Formula.TryParse(source, AllFormulaFeatures, out var formula, out var error))
                 Error(code, $"Effect '{effectId}' {what} '{source}': {error!.Message} ({error.Code})", effectId);
             else
-                usedScales.UnionWith(formula!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+                NoteUsed(formula!);
+        }
+
+        void NoteUsed(Formula formula)
+        {
+            usedScales.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+            usedValues.UnionWith(formula.Identifiers.Where(FormulaIdentifiers.IsValue).Select(FormulaIdentifiers.ValueId));
+        }
+
+        // Content v11 (D43): a roll's save, area, range, targets and per-unit dice.
+        void CheckRollDetails(RollEffect roll)
+        {
+            var id = roll.Id;
+            if (roll.Save is { } save)
+                CheckFormula(save.Dc ?? "", id, "save dc", "validate.roll-save");
+            if (roll.Area is { } area)
+            {
+                if (area.Size is < 1 or > MaxAreaFeet)
+                    Error("validate.roll-area", $"Roll '{id}' area size {area.Size} must be 1 to {MaxAreaFeet} feet.", id);
+                if (area.Width is { } width && (area.Shape != AreaShape.Line || width is < 1 or > MaxAreaFeet))
+                    Error("validate.roll-area", $"Roll '{id}' area width {width} applies only to a line, and must be 1 to {MaxAreaFeet} feet.", id);
+            }
+            if (roll.Range is { Length: > RollEffect.MaxTextLength })
+                Error("validate.roll-text-too-long", $"Roll '{id}' range is {roll.Range.Length} characters; the limit is {RollEffect.MaxTextLength}.", id);
+            if (roll.Targets is { Length: > RollEffect.MaxTextLength })
+                Error("validate.roll-text-too-long", $"Roll '{id}' targets is {roll.Targets.Length} characters; the limit is {RollEffect.MaxTextLength}.", id);
+            if (roll.PerUnit is { } perUnit)
+            {
+                if (!AttackRiderEffect.TryParseDice(perUnit.Dice, out _, out _))
+                    Error("validate.roll-per-unit", $"Roll '{id}' per-unit dice '{perUnit.Dice}' must be a count and a die such as 1d6 (1 to {DiceLimits.MaxDice} dice of d4, d6, d8, d10 or d12).", id);
+                if (roll.Cost is null || roll.ResourceId is null)
+                    Error("validate.roll-per-unit", $"Roll '{id}' has per-unit dice but no cost and resource to count units of; add both.", id);
+                if (perUnit.MaxUnits is < 1 or > MaxPerUnitUnits)
+                    Error("validate.roll-per-unit", $"Roll '{id}' maxUnits {perUnit.MaxUnits} must be 1 to {MaxPerUnitUnits}.", id);
+                if (roll.VariableCost == true)
+                    Error("validate.roll-per-unit", $"Roll '{id}' has both per-unit dice and a variable cost; they contradict each other. Use one.", id);
+            }
+        }
+
+        // Content v11 (D43): a VALUE.<id> the revision reads that nothing it can see declares is a warning, not an error: whether
+        // it resolves depends on the class a character has (the calculator guards that). Seen: this revision, the batch, and the
+        // content this revision grants or offers as a choice (the catalog cannot be listed whole).
+        void CheckValues()
+        {
+            if (usedValues.Count == 0)
+                return;
+            var seen = new List<ContentRevision> { revision };
+            seen.AddRange(local.All);
+            var references = revision.Effects.OfType<GrantEffect>().Select(g => g.Content).OfType<ContentReference>()
+                .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options));
+            foreach (var reference in references)
+                seen.AddRange(catalog.RevisionsOf(reference.ContentId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1));
+            var declared = seen.SelectMany(r => r.Effects.OfType<ValueEffect>().Select(v => v.ValueId)).ToHashSet(StringComparer.Ordinal);
+            foreach (var missing in usedValues.Where(u => !declared.Contains(u)).Order(StringComparer.Ordinal))
+                Warn("validate.value-unknown", $"A formula reads VALUE.{missing}, which this revision and the content it grants or offers do not declare; it is unavailable until a feature of the character's class does.");
         }
 
         // Scale ids are unique within a class and its subclasses. The catalog check is best-effort (a class revision
@@ -771,13 +871,13 @@ public static class ContentValidator
                 if (upkeep.Change == UpkeepChange.Spend)
                     Error("validate.upkeep-amount", $"Upkeep '{id}' spends 'all'; only a regain can take all. Give a formula.", id);
             }
-            else if (!Formula.TryParse(upkeep.Amount, allowScales: true, out var amount, out var amountError))
+            else if (!Formula.TryParse(upkeep.Amount, AllFormulaFeatures, out var amount, out var amountError))
             {
                 Error("validate.upkeep-amount", $"Upkeep '{id}' amount is not a formula ({amountError!.Code}).", id);
             }
             else
             {
-                usedScales.UnionWith(amount!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+                NoteUsed(amount!);
             }
             if (upkeep.IfShort is not null && (upkeep.Change != UpkeepChange.Spend || upkeep.Toggle is null))
                 Error("validate.upkeep-if-short", $"Upkeep '{id}' has ifShort, which only a spend that belongs to a toggle takes.", id);
@@ -793,10 +893,10 @@ public static class ContentValidator
 
             if (toggle.Duration is { } duration)
             {
-                if (!Formula.TryParse(duration, allowScales: true, out var durationFormula, out var durationError))
+                if (!Formula.TryParse(duration, AllFormulaFeatures, out var durationFormula, out var durationError))
                     Error("validate.toggle-duration", $"Toggle '{id}' duration is not a formula ({durationError!.Code}).", id);
                 else
-                    usedScales.UnionWith(durationFormula!.Identifiers.Where(FormulaIdentifiers.IsScale).Select(FormulaIdentifiers.ScaleId));
+                    NoteUsed(durationFormula!);
             }
             if (toggle.ResourceId is { } spendsFrom && FindResource(toggle.ResourceContent, spendsFrom)?.Counts == ResourceCounting.Up)
                 Warn("validate.cost-counts-up", $"Toggle '{id}' spends from '{spendsFrom}', a pool that counts up; a cost fills it instead of using it up.", id);

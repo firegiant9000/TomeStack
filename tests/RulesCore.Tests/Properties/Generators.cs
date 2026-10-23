@@ -93,6 +93,7 @@ internal static class Generators
         [UpkeepEffect.TypeName] = UpkeepEffect.SchemaVersion,
         [AttackEffect.TypeName] = AttackEffect.SchemaVersion,
         [AttackRiderEffect.TypeName] = AttackRiderEffect.SchemaVersion,
+        [ValueEffect.TypeName] = ValueEffect.SchemaVersion,
     };
 
     /// <summary>
@@ -178,12 +179,31 @@ internal static class Generators
                 from whileToggle in Gen.Elements(false, false, true)
                 from whileContent in OptionalValue(Guids)
                 from whileId in Keys
-                select new JsonObject { ["rollId"] = id, ["label"] = label, ["dice"] = dice }.With("resourceId", resource)
+                // Content v11 (slice 5), any version: below v11 the keys must stay extension data, written back where they were,
+                // and a roll with no dice must stay an unknown effect, byte for byte.
+                from noDice in Gen.Elements(false, false, true)
+                from save in Gen.Elements(false, false, true)
+                from saveAbility in Gen.Elements("str", "dex", "wis")
+                from saveDc in Formulas
+                from area in Gen.Elements(false, false, true)
+                from shape in Gen.Elements("line", "cone", "sphere", "cube", "cylinder", "emanation")
+                from size in Gen.Choose(1, 120)
+                from width in OptionalValue(Gen.Choose(1, 10))
+                from range in Optional(Gen.Elements("Self", "60 ft"))
+                from targets in Optional(Names)
+                from perUnit in Gen.Elements(false, false, true)
+                from perUnitDice in Gen.Elements("1d6", "2d8")
+                from maxUnits in OptionalValue(Gen.Choose(1, 100))
+                select new JsonObject { ["rollId"] = id, ["label"] = label }.With("dice", noDice ? null : dice).With("resourceId", noDice ? "pool" : resource)
                     .With("activation", v >= SpellcastingEffect.SchemaVersion ? activation : null)
-                    .With("cost", v >= ToggleEffect.SchemaVersion ? cost : null)
+                    .With("cost", noDice ? "1" : v >= ToggleEffect.SchemaVersion ? cost : null)
                     .With("variableCost", v >= ToggleEffect.SchemaVersion ? variable : null)
                     .With("bonus", v >= ContentRevision.CombatDetailsSchemaVersion ? bonus : null)
-                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)),
+                    .With("whileToggle", whileToggle ? new JsonObject { ["toggleId"] = whileId }.With("contentId", whileContent?.ToString()) : null)
+                    .With("save", save ? new JsonObject { ["ability"] = saveAbility, ["dc"] = saveDc } : null)
+                    .With("area", area ? new JsonObject { ["shape"] = shape, ["size"] = size }.With("width", shape == "line" ? width : null) : null)
+                    .With("range", range).With("targets", targets)
+                    .With("perUnit", perUnit ? new JsonObject { ["dice"] = perUnitDice }.With("maxUnits", maxUnits) : null)),
             Common(RestrictionEffect.TypeName,
                 from field in Gen.Elements(FieldIds.Score(Ability.Str), FieldIds.Score(Ability.Wis))
                 from min in Gen.Choose(1, 20)
@@ -292,6 +312,10 @@ internal static class Generators
                 select new JsonObject { ["tags"] = new JsonArray([.. tags.Select(t => (JsonNode)t)]) }
                     .With("toHit", toHit).With("dice", dice).With("damageBonus", bonus).With("damageType", damageType)
                     .With("toggle", toggle).With("toggleContent", toggleContent?.ToString()).With("stackGroup", stackGroup)),
+            Common(ValueEffect.TypeName,
+                from valueId in Keys
+                from formula in Formulas
+                select new JsonObject { ["valueId"] = valueId, ["formula"] = formula }),
             Common(ToggleGroupEffect.TypeName,
                 from groupId in Keys
                 from label in Names

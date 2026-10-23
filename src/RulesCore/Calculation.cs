@@ -432,7 +432,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -685,7 +685,7 @@ public static class CharacterCalculator
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         // A roll's cost is a number of uses, so never negative.
         int? Cost(ActiveContent item, string source) =>
-            Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
+            Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
                 ? Math.Max(value, 0)
                 : null;
         var features = active.Select(item => Feature(
@@ -703,7 +703,7 @@ public static class CharacterCalculator
             if (t.Cost is { } source)
             {
                 // Like a resource maximum: a formula that fails gives no cost and the invalid-formula warning.
-                if (!Formula.TryParse(source, AllowsScales(revision), out var formula, out var failure)
+                if (!Formula.TryParse(source, Formula.FeaturesFor(revision), out var formula, out var failure)
                     || !formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var amount, out failure))
                     diagnostics.Add(InvalidFormula(revision, t, failure!));
                 else
@@ -713,7 +713,7 @@ public static class CharacterCalculator
             if (t.Duration is { } rounds)
             {
                 // Rounds: a formula that fails gives no duration and the invalid-formula warning.
-                if (!Formula.TryParse(rounds, AllowsScales(revision), out var durationFormula, out var durationFailure)
+                if (!Formula.TryParse(rounds, Formula.FeaturesFor(revision), out var durationFormula, out var durationFailure)
                     || !durationFormula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var roundCount, out durationFailure))
                     diagnostics.Add(InvalidFormula(revision, t, durationFailure!));
                 else
@@ -804,7 +804,7 @@ public static class CharacterCalculator
                 int? amount = null;
                 if (!all)
                 {
-                    if (!Formula.TryParse(upkeep.Amount, AllowsScales(revision), out var formula, out var failure)
+                    if (!Formula.TryParse(upkeep.Amount, Formula.FeaturesFor(revision), out var formula, out var failure)
                         || !formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                         diagnostics.Add(InvalidFormula(revision, upkeep, failure!));
                     else
@@ -1147,7 +1147,7 @@ public static class CharacterCalculator
         out int value, out FormulaError? failure)
     {
         value = 0;
-        if (!Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure))
+        if (!Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure))
             return false;
         return formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, inputs), out value, out failure);
     }
@@ -1382,7 +1382,7 @@ public static class CharacterCalculator
             int? allowed = effect.SpellsTable?[level - 1];
             if (effect.SpellsFormula is { } source)
             {
-                if (Formula.TryParse(source, AllowsScales(content.Revision), out var formula, out var failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(content.Revision), out var formula, out var failure)
                     && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
                 {
                     allowed = Math.Max(value, 0);
@@ -1497,7 +1497,7 @@ public static class CharacterCalculator
                 {
                     trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
                 }
-                else if (!Formula.TryParse(effect.Maximum, AllowsScales(revision), out var formula, out var parseError))
+                else if (!Formula.TryParse(effect.Maximum, Formula.FeaturesFor(revision), out var formula, out var parseError))
                 {
                     warnings.Add(InvalidFormula(revision, effect, parseError!));
                 }
@@ -1519,7 +1519,7 @@ public static class CharacterCalculator
                                 continue;
                             }
                             var bonusInputs = new List<TraceInput>();
-                            if (!Formula.TryParse(bonus.Effect.Value, AllowsScales(revision), out var bonusFormula, out var bonusError))
+                            if (!Formula.TryParse(bonus.Effect.Value, Formula.FeaturesFor(revision), out var bonusFormula, out var bonusError))
                             {
                                 warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
                                 bonusByHand = true;
@@ -1564,7 +1564,7 @@ public static class CharacterCalculator
         if (recovery.Automation != AutomationStatus.Automatic)
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
         FormulaError? failure;
-        if (Formula.TryParse(recovery.Amount, AllowsScales(item.Revision), out var formula, out failure)
+        if (Formula.TryParse(recovery.Amount, Formula.FeaturesFor(item.Revision), out var formula, out failure)
             && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
         {
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
@@ -1589,7 +1589,7 @@ public static class CharacterCalculator
                 if (roll.Bonus is not { } source)
                     continue;
                 FormulaError? failure;
-                if (Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure)
                     && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                     bonuses[(item.Revision.Reference, roll.Id)] = value;
                 else
@@ -2241,7 +2241,7 @@ public static class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);
@@ -2308,12 +2308,6 @@ public static class CharacterCalculator
     /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
     /// </summary>
     private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
-
-    /// <summary>
-    /// Content v9 (ADR-010): <c>SCALE.&lt;id&gt;</c> is a known identifier only in a v9 revision. Below v9 it is an unknown
-    /// identifier, as in builds before v9, so a stored revision never calculates differently on this build.
-    /// </summary>
-    private static bool AllowsScales(ContentRevision revision) => revision.SchemaVersion >= ScaleEffect.SchemaVersion;
 
     /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;

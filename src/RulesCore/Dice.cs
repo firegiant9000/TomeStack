@@ -316,7 +316,10 @@ public static class DiceRoller
         return true;
     }
 
-    /// <summary>Builds a request for a content <see cref="RollEffect"/>, citing its revision and source.</summary>
+    /// <summary>
+    /// Builds a request for a content <see cref="RollEffect"/>, citing its revision and source. A roll with no dice (content
+    /// v11) has nothing to roll: its request has an empty formula, which <see cref="TryRoll"/> refuses with a dice error.
+    /// </summary>
     public static RollRequest FromEffect(
         RollEffect effect, ContentRevision revision, SourceRecord? source, RollMode mode = RollMode.Normal, bool critical = false,
         IReadOnlyList<RollModifier>? modifiers = null)
@@ -324,7 +327,7 @@ public static class DiceRoller
         ArgumentNullException.ThrowIfNull(effect);
         ArgumentNullException.ThrowIfNull(revision);
         return new RollRequest(
-            effect.Dice,
+            effect.Dice ?? "",
             mode,
             critical,
             modifiers,

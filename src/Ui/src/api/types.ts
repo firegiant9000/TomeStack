@@ -1460,11 +1460,22 @@ export type Effect =
       type: 'roll';
       rollId: string;
       label: string;
-      dice: string;
+      /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
+      dice?: string;
       resourceId?: string;
       /** Content v11 (D43): the roll is available only while this toggle is on (absent contentId: this revision). */
       whileToggle?: { contentId?: string; toggleId: string };
+      /** Content v11 (D43, slice 5): the saving throw the action asks of its targets. */
+      save?: { ability: Ability; dc: string };
+      /** Content v11: the area, in feet; width is for a line only. */
+      area?: { shape: 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation'; size: number; width?: number };
+      range?: string;
+      targets?: string;
+      /** Content v11: extra dice for each unit spent beyond the base cost. */
+      perUnit?: { dice: string; maxUnits?: number };
     })
+  // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
+  | (EffectBase & { type: 'value'; valueId: string; formula: string })
   // Content v11 (D43): an attack a feature gives, and a rider that adds to the attacks carrying one of its tags.
   | (EffectBase & {
       type: 'attack';

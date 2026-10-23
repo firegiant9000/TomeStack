@@ -585,8 +585,8 @@ export function ActionsPanel({
           aria-describedby={locked ? reasonId : undefined}
           onClick={() => roll({ content: feature.content, effectId: effect.id, critical })}
         >
-          Roll {effect.label || effect.id} ({effect.dice}
-          {rollBonus(effect.bonus)})
+          Roll {effect.label || effect.id}
+          {effect.dice ? ` (${effect.dice}${rollBonus(effect.bonus)})` : ''}
         </button>{' '}
         <span className="hint">
           {feature.name}

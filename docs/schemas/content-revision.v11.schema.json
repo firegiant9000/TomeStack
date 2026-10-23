@@ -546,12 +546,93 @@
                 }
               },
               "description": "Content v11 (D43): the roll is offered only while this toggle is on (it may be another content's)."
+            },
+            "save": {
+              "type": "object",
+              "required": [
+                "ability",
+                "dc"
+              ],
+              "properties": {
+                "ability": {
+                  "enum": [
+                    "str",
+                    "dex",
+                    "con",
+                    "int",
+                    "wis",
+                    "cha"
+                  ]
+                },
+                "dc": {
+                  "$ref": "#/$defs/formula"
+                }
+              },
+              "description": "Content v11 (D43): the saving throw the action asks of its targets, with its DC formula."
+            },
+            "area": {
+              "type": "object",
+              "required": [
+                "shape",
+                "size"
+              ],
+              "properties": {
+                "shape": {
+                  "enum": [
+                    "line",
+                    "cone",
+                    "sphere",
+                    "cube",
+                    "cylinder",
+                    "emanation"
+                  ]
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "description": "A line only."
+                }
+              },
+              "description": "Content v11 (D43): the area the action covers, in feet."
+            },
+            "range": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Content v11 (D43): the range, as text."
+            },
+            "targets": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "Content v11 (D43): who the action affects, as text."
+            },
+            "perUnit": {
+              "type": "object",
+              "required": [
+                "dice"
+              ],
+              "properties": {
+                "dice": {
+                  "type": "string",
+                  "pattern": "^0*([1-9][0-9]?|100)d0*(4|6|8|10|12)$"
+                },
+                "maxUnits": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              },
+              "description": "Content v11 (D43): extra dice for each unit spent beyond the base cost. Needs cost and resourceId; not with variableCost."
             }
           },
           "required": [
             "rollId",
-            "label",
-            "dice"
+            "label"
           ]
         },
         {
@@ -1257,6 +1338,25 @@
           "description": "Content v9 (ADR-010): a per-level column of a class or subclass, read as SCALE.<scaleId> at the level of the class the content belongs to."
         },
         {
+          "properties": {
+            "type": {
+              "const": "value"
+            },
+            "valueId": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]{0,31}$"
+            },
+            "formula": {
+              "$ref": "#/$defs/formula"
+            }
+          },
+          "required": [
+            "valueId",
+            "formula"
+          ],
+          "description": "Content v11 (D43): a named formula, read as VALUE.<valueId> by formulas of the content of the same class."
+        },
+        {
           "description": "Unknown effect type: kept, reference-only.",
           "properties": {
             "type": {
@@ -1280,7 +1380,8 @@
                   "toggleGroup",
                   "upkeep",
                   "attack",
-                  "attackRider"
+                  "attackRider",
+                  "value"
                 ]
               }
             }

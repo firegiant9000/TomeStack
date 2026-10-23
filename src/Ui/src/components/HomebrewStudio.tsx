@@ -1542,6 +1542,7 @@ function EffectEditor(props: {
     hitDie: 'Hit die',
     restriction: 'Prerequisite',
     scale: 'Class column',
+    value: 'Named value',
     spellcasting: 'Spellcasting',
     spell: 'Spell data',
     toggle: 'Toggle',
@@ -1886,7 +1887,7 @@ function EffectEditor(props: {
           </label>
           <label className="field">
             Dice (such as 1d8 + 2)
-            <input value={effect.dice} onChange={(e) => onChange({ ...effect, dice: e.target.value })} />
+            <input value={effect.dice ?? ''} onChange={(e) => onChange({ ...effect, dice: e.target.value })} />
           </label>
           <label className="field">
             Uses a resource (a limited-use action)

@@ -147,7 +147,7 @@ public static class DesignFeedback
         var growths = new List<(ResourceEffect, int, int)>();
         foreach (var resource in revision.Effects.OfType<ResourceEffect>().Where(r => r.Automation != AutomationStatus.Reference))
         {
-            if (!Formula.TryParse(resource.Maximum, allowScales, out var formula, out _))
+            if (!Formula.TryParse(resource.Maximum, Formula.FeaturesFor(revision), out var formula, out _))
                 continue; // validation reports it
             int? At(int level) => formula!.TryEvaluate(id => FormulaPreview.Resolve(id, level, scales), out var value, out _) ? value : null;
             if (At(Character.MinLevel) is { } first && At(Character.MaxLevel) is { } last)
