@@ -1633,7 +1633,7 @@ public static class CharacterCalculator
                     else
                     {
                         failed = true;
-                        diagnostics.Add(InvalidFormula(revision, roll, costFailure!));
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, costFailure!));
                     }
                 }
                 else if (roll.ResourceId is not null)
@@ -1650,13 +1650,14 @@ public static class CharacterCalculator
                     {
                         saveDc = dc;
                         var read = inputs.DistinctBy(i => i.Name, StringComparer.Ordinal).ToList();
-                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name)} {i.Value}"))}";
-                        saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC {save.Dc}{from}", dc, dc, ContentOrigin(family, item, roll), null, read)];
+                        var classRoot = item.ClassRoot is { } root ? active.FirstOrDefault(a => a.Revision.Reference == root)?.Revision.Name : null;
+                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name, classRoot)} {i.Value}"))}";
+                        saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC{from}", null, dc, ContentOrigin(family, item, roll), null, read)];
                     }
                     else
                     {
                         failed = true;
-                        diagnostics.Add(InvalidFormula(revision, roll, dcFailure!));
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, dcFailure!));
                     }
                 }
                 details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed);
@@ -1665,9 +1666,18 @@ public static class CharacterCalculator
         return details;
     }
 
-    /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score"; any other identifier stays as written.</summary>
-    private static string InputLabel(string identifier)
+    /// <summary>Adds a diagnostic unless an identical one (same code, content, effect and message) is already there.</summary>
+    private static void AddOnce(List<Diagnostic> diagnostics, Diagnostic diagnostic)
     {
+        if (!diagnostics.Contains(diagnostic))
+            diagnostics.Add(diagnostic);
+    }
+
+    /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score", a scale as "{class} {scaleId}"; any other identifier stays as written.</summary>
+    private static string InputLabel(string identifier, string? classRoot)
+    {
+        if (FormulaIdentifiers.IsScale(identifier))
+            return $"{classRoot} {FormulaIdentifiers.ScaleId(identifier)}".Trim();
         if (identifier == FormulaIdentifiers.ProficiencyBonus)
             return "Proficiency bonus";
         if (identifier == FormulaIdentifiers.Level)

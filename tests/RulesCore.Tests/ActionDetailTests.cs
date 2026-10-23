@@ -47,6 +47,8 @@ public class ActionDetailTests
         Assert.NotNull(wave.SaveTrace);
         var step = Assert.Single(wave.SaveTrace!);
         Assert.Equal(13, step.Result);
+        Assert.Null(step.Amount);
+        Assert.DoesNotContain("8 + PB", step.Description, StringComparison.Ordinal);
         Assert.Contains("Proficiency bonus", step.Description, StringComparison.Ordinal);
         Assert.Contains("Wisdom modifier", step.Description, StringComparison.Ordinal);
         Assert.Contains(step.Inputs!, i => i.Name == "PB" && i.Value == 3);
@@ -117,6 +119,36 @@ public class ActionDetailTests
         Assert.Null(brace.SaveDc);
         Assert.Null(brace.Area);
         Assert.Equal(Activation.Reaction, brace.Activation);
+    }
+
+    private static int WaveWarnings(CharacterSheet sheet) =>
+        sheet.Diagnostics.Count(d => d.Code == "effect.invalid-formula" && d.Content == Fixtures.TideWave && d.EffectId == "wave");
+
+    [Fact]
+    public void A_cost_and_a_dc_failing_the_same_way_give_one_warning()
+    {
+        var sheet = Sheet(Adept(), WithWave(r => r with { Cost = "SCALE.nonesuch", Save = new RollSave(Ability.Dex, "8 + SCALE.nonesuch") }));
+
+        Assert.Equal(1, WaveWarnings(sheet));
+        Assert.Equal(AutomationStatus.Assisted, Effect(sheet, "wave").Automation);
+    }
+
+    [Fact]
+    public void A_cost_and_a_dc_failing_differently_each_keep_their_warning()
+    {
+        var sheet = Sheet(Adept(), WithWave(r => r with { Cost = "SCALE.nonesuch", Save = new RollSave(Ability.Dex, "8 + SCALE.other") }));
+
+        Assert.Equal(2, WaveWarnings(sheet));
+    }
+
+    [Fact]
+    public void A_valid_cost_raises_no_warning_and_the_default_cost_is_one_or_none()
+    {
+        var sheet = Sheet(Adept());
+        Assert.DoesNotContain(sheet.Diagnostics, d => d.Code == "effect.invalid-formula" && d.EffectId == "brace");
+
+        Assert.Equal(1, Effect(Sheet(Adept(), WithWave(r => r with { Cost = null })), "wave").Cost);
+        Assert.Null(Effect(Sheet(Adept(), WithWave(r => r with { Cost = null, ResourceId = null, ResourceContent = null })), "wave").Cost);
     }
 
     [Fact]
