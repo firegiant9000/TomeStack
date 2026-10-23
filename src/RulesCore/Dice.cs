@@ -337,7 +337,12 @@ public static class DiceRoller
             return false;
         var units = amount - baseCost;
         if (units > 0)
+        {
+            // More per-unit dice than one roll may throw can never be rolled; refusing also keeps the product from wrapping an int.
+            if ((long)term.Count * units > DiceLimits.MaxDice)
+                return false;
             formula = $"{dice}+{term.Count * units}d{term.Sides}";
+        }
         return true;
     }
 

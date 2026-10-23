@@ -22,9 +22,6 @@ internal sealed class ValidationBatch(IReadOnlyDictionary<ContentReference, Cont
 
     /// <summary>The batch's revisions of one content, in batch order.</summary>
     public IEnumerable<ContentRevision> OfContent(Guid contentId) => (_byContent ??= byReference.Values.ToLookup(r => r.ContentId))[contentId];
-
-    /// <summary>Every revision of the batch.</summary>
-    public IEnumerable<ContentRevision> All => byReference.Values;
 }
 
 /// <summary>
@@ -399,6 +396,8 @@ public static class ContentValidator
                     needsV11 = true;
                     if (!ScaleEffect.IsValidScaleId(value.ValueId) || string.IsNullOrWhiteSpace(value.Formula))
                         Error("validate.value-incomplete", $"Value '{value.Id}' needs a formula and a valueId of a lowercase letter followed by up to {ScaleEffect.MaxScaleIdLength - 1} letters or digits.", value.Id);
+                    if (value.Automation != AutomationStatus.Automatic)
+                        Error("validate.value-incomplete", $"Value '{value.Id}' must be automatic; a named value is always calculated.", value.Id);
                     if (!string.IsNullOrWhiteSpace(value.Formula))
                         CheckFormula(value.Formula, value.Id, "formula");
                     break;
@@ -654,10 +653,22 @@ public static class ContentValidator
                 if (perUnit.MaxUnits is < 1 or > MaxPerUnitUnits)
                     Error("validate.roll-per-unit", $"Roll '{id}' maxUnits {perUnit.MaxUnits} must be 1 to {MaxPerUnitUnits}.", id);
                 // The most dice one roll can throw: the base dice plus the per-unit dice for every unit. Only when both are known.
+                if (roll.Dice is null)
+                    Error("validate.roll-per-unit", $"Roll '{id}' has per-unit dice but no dice to add them to.", id);
+                var unitsKnown = perUnit.MaxUnits is null or (>= 1 and <= MaxPerUnitUnits);
+                var tooManyDice = false;
                 if (perUnit.MaxUnits is >= 1 and <= MaxPerUnitUnits && roll.Dice is not null && DiceExpression.TryParse(roll.Dice, out var baseDice, out _)
                     && AttackRiderEffect.TryParseDice(perUnit.Dice, out var unitCount, out _)
                     && baseDice!.Terms.Where(t => t.IsDice).Sum(t => t.Count) + (long)unitCount * perUnit.MaxUnits > DiceLimits.MaxDice)
+                {
+                    tooManyDice = true;
                     Error("validate.roll-per-unit", $"Roll '{id}' could throw more than {DiceLimits.MaxDice} dice with {perUnit.MaxUnits} units; lower maxUnits or the dice.", id);
+                }
+                // The formula the roll would use at its most units must itself be rollable (term count and length), not only the dice count.
+                if (!tooManyDice && unitsKnown && roll.Dice is not null && DiceExpression.TryParse(roll.Dice, out _, out _)
+                    && AttackRiderEffect.TryParseDice(perUnit.Dice, out _, out _)
+                    && !(DiceRoller.TryPerUnitFormula(roll.Dice, perUnit.Dice, 0, perUnit.MaxUnits ?? 1, out var widest) && DiceExpression.TryParse(widest, out _, out _)))
+                    Error("validate.roll-per-unit", $"Roll '{id}' cannot add its per-unit dice: too many terms or too long.", id);
                 if (roll.VariableCost == true)
                     Error("validate.roll-per-unit", $"Roll '{id}' has both per-unit dice and a variable cost; they contradict each other. Use one.", id);
             }

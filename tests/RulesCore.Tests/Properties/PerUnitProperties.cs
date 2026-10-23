@@ -38,6 +38,14 @@ public class PerUnitProperties
         Assert.Equal("4d10", atBase);
     }
 
+    [Fact]
+    public void Per_unit_dice_that_pass_the_dice_limit_fail_instead_of_overflowing()
+    {
+        Assert.True(DiceRoller.TryPerUnitFormula("1d6", "50d6", 0, 2, out _)); // exactly the limit of per-unit dice
+        Assert.False(DiceRoller.TryPerUnitFormula("1d6", "50d6", 0, 3, out _));
+        Assert.False(DiceRoller.TryPerUnitFormula("1d6", "100d6", 0, int.MaxValue, out _)); // would wrap an int
+    }
+
     [Theory]
     [InlineData("1d10+1")]
     [InlineData("1d10+1d6")]

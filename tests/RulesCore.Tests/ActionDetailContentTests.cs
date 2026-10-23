@@ -104,6 +104,7 @@ public class ActionDetailContentTests
     [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","area":{"shape":" line","size":10}}""")]
     [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","area":{"shape":"line"}}""")]
     [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","perUnit":"1d6"}""")]
+    [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","dice":"1d6","perUnit":{"maxUnits":2}}""")]
     [InlineData("""{"type":"roll","id":"r","rollId":"r","label":"R","resourceId":"p","cost":"1","save":{"ability":"luck","dc":"10"}}""")]
     public void A_roll_with_an_unreadable_v11_key_stays_untyped_reports_malformed_and_requires_v11(string json)
     {
@@ -193,6 +194,8 @@ public class ActionDetailContentTests
     [InlineData("per-unit-max-too-big", "validate.roll-per-unit", "wave")]
     [InlineData("per-unit-variable-cost", "validate.roll-per-unit", "wave")]
     [InlineData("per-unit-too-many-dice", "validate.roll-per-unit", "wave")]
+    [InlineData("per-unit-no-dice", "validate.roll-per-unit", "wave")]
+    [InlineData("per-unit-unrollable-formula", "validate.roll-per-unit", "wave")]
     [InlineData("neither-dice-nor-cost", "validate.roll-dice-or-cost", "brace")]
     [InlineData("detail-below-v11", "validate.requires-v11", null)]
     [InlineData("dice-less-typed-below-v11", "validate.requires-v11", null)]
@@ -202,6 +205,8 @@ public class ActionDetailContentTests
     [InlineData("value-duplicate", "validate.value-duplicate", null)]
     [InlineData("value-formula-invalid", "validate.formula-invalid", "focus-mod")]
     [InlineData("value-below-v11", "validate.requires-v11", null)]
+    [InlineData("value-assisted", "validate.value-incomplete", "focus-mod")]
+    [InlineData("value-reference", "validate.value-incomplete", "focus-mod")]
     public void Roll_and_value_mistakes_are_errors(string variant, string code, string? effectId)
     {
         var errors = Validate(ActionDetailVariants.Make(variant)).Errors.Where(e => e.Code == code).ToList();
@@ -209,6 +214,33 @@ public class ActionDetailContentTests
         Assert.NotEmpty(errors);
         if (effectId is not null)
             Assert.Contains(errors, e => e.EffectId == effectId);
+    }
+
+    [Fact]
+    public void The_most_dice_a_per_unit_roll_can_throw_is_100_and_101_is_refused()
+    {
+        // The wave rolls 4d10; one per-unit die for each of 96 units makes exactly 100 dice, and 97 units make 101.
+        var at100 = Validate(ActionDetailVariants.WaveWith(r => r with { PerUnit = new("1d10", 96) })).Errors;
+        var at101 = Validate(ActionDetailVariants.WaveWith(r => r with { PerUnit = new("1d10", 97) })).Errors;
+
+        Assert.DoesNotContain(at100, e => e.Code == "validate.roll-per-unit");
+        Assert.Contains(at101, e => e.Code == "validate.roll-per-unit" && e.EffectId == "wave");
+    }
+
+    [Fact]
+    public void A_per_unit_formula_that_cannot_be_rolled_says_why()
+    {
+        var errors = Validate(ActionDetailVariants.Make("per-unit-unrollable-formula")).Errors.Where(e => e.Code == "validate.roll-per-unit").ToList();
+
+        Assert.Contains(errors, e => e.Message.Contains("too many terms or too long", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_non_automatic_value_says_a_named_value_is_always_calculated()
+    {
+        var errors = Validate(ActionDetailVariants.Make("value-assisted")).Errors;
+
+        Assert.Contains(errors, e => e.Code == "validate.value-incomplete" && e.Message.Contains("must be automatic", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -354,6 +386,8 @@ internal static class ActionDetailVariants
         return revision with { Effects = [.. revision.Effects.Select(e => e is ValueEffect v ? change(v) : e)] };
     }
 
+    public static ContentRevision WaveWith(Func<RollEffect, RollEffect> change) => WithWave(change);
+
     public static ContentRevision Make(string variant) => variant switch
     {
         "save-dc-invalid" => WithWave(r => r with { Save = new(Ability.Dex, "8 +") }),
@@ -376,6 +410,9 @@ internal static class ActionDetailVariants
         "per-unit-max-too-big" => WithWave(r => r with { PerUnit = new("1d10", 101) }),
         "per-unit-too-many-dice" => WithWave(r => r with { PerUnit = new("1d10", 100) }),
         "per-unit-variable-cost" =>WithWave(r => r with { VariableCost = true }),
+        "per-unit-no-dice" => WithWave(r => r with { Dice = null }),
+        // Eight terms already: one more per-unit term would be a ninth, which the dice parser refuses.
+        "per-unit-unrollable-formula" => WithWave(r => r with { Dice = "1d4+1d4+1d4+1d4+1d4+1d4+1d4+1d4", PerUnit = new("1d10", 4) }),
         "neither-dice-nor-cost" => WithBrace(r => r with { Cost = null }),
         "detail-below-v11" => WithWave(r => r) with { SchemaVersion = 10 },
         "dice-less-typed-below-v11" => WithBrace(r => r) with { SchemaVersion = 10 },
@@ -385,6 +422,8 @@ internal static class ActionDetailVariants
         "value-duplicate" => AddValue(WithValue(v => v)),
         "value-formula-invalid" => WithValue(v => v with { Formula = "CON.MOD +" }),
         "value-below-v11" => WithValue(v => v) with { SchemaVersion = 10 },
+        "value-assisted" => WithValue(v => v with { Automation = AutomationStatus.Assisted }),
+        "value-reference" => WithValue(v => v with { Automation = AutomationStatus.Reference }),
         _ => throw new ArgumentOutOfRangeException(nameof(variant), variant, null),
     };
 

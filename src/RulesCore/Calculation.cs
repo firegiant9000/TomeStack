@@ -1846,7 +1846,8 @@ public static class CharacterCalculator
     /// Content v11 (D43): the named values of every class root, from all active content of that root (any kind) in sheet order.
     /// When two declare one value id, the later applies and <c>value.duplicate</c> says so (informational: it carries the content
     /// but no effect id, so it does not downgrade the content's automation). A value on content with no class root can never be
-    /// read, so it is ignored; so is one that is not automatic or has no usable id (validation refuses both on publish and import).
+    /// read, so it is ignored; so is one that is not automatic or has no usable id (validation refuses both with
+    /// <c>validate.value-incomplete</c> on publish and import, so this is a defence for stored content from elsewhere).
     /// </summary>
     private static void CollectValues(List<ActiveContent> active, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
     {
@@ -1908,7 +1909,8 @@ public static class CharacterCalculator
         else if (classLevels.ValueStack.Count >= MaxValueDepth)
         {
             // Nested too deep (bounds the recursion): the read fails, and the formula that made it reports itself through the usual path.
-            // Kept as the value's result for this pass, so the outcome never depends on how often it is read.
+            // The cut value is cached as null for this sheet pass, and so is every value waiting on it up the stack (each fails and caches
+            // null in turn), so the outcome never depends on how often or from where a value is read.
             result = null;
             classLevels.ValueResults[key] = result;
         }

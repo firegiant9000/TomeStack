@@ -716,7 +716,8 @@ function RollItem({
 }) {
   const baseId = `${feature.content.revisionId}-${effect.id}`;
   const baseCost = effect.cost ?? 0;
-  const perUnit = effect.dice ? effect.perUnit : undefined;
+  // An untracked pool has no points to choose from: the roll goes without an amount and the service charges the base cost.
+  const perUnit = effect.dice && pool?.current !== undefined ? effect.perUnit : undefined;
   const maxAmount = perUnit ? (perUnit.maxUnits !== undefined ? baseCost + perUnit.maxUnits : pool?.maximum) : undefined;
   // The amount starts at the base cost and starts over when the base cost, or the action itself, changes.
   const amountKey = `${baseId}:${baseCost}`;
@@ -804,6 +805,7 @@ function RollItem({
               min={baseCost}
               max={maxAmount}
               value={amount}
+              aria-invalid={amountOk ? undefined : true}
               aria-describedby={amountOk ? undefined : amountReasonId}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -1022,6 +1024,9 @@ export function RollResult({
   const [typed, setTyped] = useState<{ record?: RollRecord; value: string }>({ value: '' });
   const amount = typed.record === record ? typed.value : '';
   const setAmount = (value: string) => setTyped({ record, value });
+  // A record's Spend is used once: the record it was used for stays spent, and a new record starts fresh.
+  const [spentFor, setSpentFor] = useState<RollRecord>();
+  const spentAlready = record !== undefined && spentFor === record;
   // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
   // full effect on the next sheet open, which the Settings hint says.
   if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
@@ -1037,6 +1042,8 @@ export function RollResult({
     : undefined;
   const effect = features.find((f) => f.content.revisionId === p?.content?.revisionId)?.effects.find((e) => e.id === p?.effectId);
   const featureAttack = attacks.find((a) => a.source === 'feature' && a.item.revisionId === p?.content?.revisionId && a.effectId === p?.effectId);
+  // The service leaves `spend` out of a content roll effect's record exactly when its cost formula failed: never guess 1 then.
+  const costUnavailable = effect !== undefined && featureAttack === undefined && spend === undefined && linkedId !== undefined;
   const cost = spend?.amount ?? featureAttack?.cost ?? effect?.cost ?? 1;
   const most = linked?.current !== undefined ? Math.min(cost, linked.current) : 0;
   const chosen = Number(amount);
@@ -1070,18 +1077,20 @@ export function RollResult({
         {diceLine(record)}
         {p?.sourceTitle ? ` · ${p.contentName ?? ''} (${p.sourceTitle}${p.page ? `, ${pageText(p.page)}` : ''})` : ''}
       </p>
-      {linked && linked.current !== undefined && !effect?.variableCost && (
+      {costUnavailable && <p className="hint">Cost unavailable</p>}
+      {!costUnavailable && linked && linked.current !== undefined && !effect?.variableCost && (
         <button
           type="button"
-          disabled={cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
-          onClick={() =>
-            act({ action: 'spend', amount: cost, contentId: spend?.contentId ?? linked.content.contentId, resourceId: spend?.resourceId ?? linked.resourceId })
-          }
+          disabled={spentAlready || cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
+          onClick={() => {
+            act({ action: 'spend', amount: cost, contentId: spend?.contentId ?? linked.content.contentId, resourceId: spend?.resourceId ?? linked.resourceId });
+            setSpentFor(record);
+          }}
         >
           Spend {cost} {linked.label} ({linked.current} left)
         </button>
       )}
-      {linked && linked.current !== undefined && effect?.variableCost && (
+      {!costUnavailable && linked && linked.current !== undefined && effect?.variableCost && (
         <div className="inline-form">
           <label className="field">
             {linked.label} to spend (1 to {most})
@@ -1089,9 +1098,10 @@ export function RollResult({
           </label>
           <button
             type="button"
-            disabled={!validChoice}
+            disabled={spentAlready || !validChoice}
             onClick={() => {
               act({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId });
+              setSpentFor(record);
               setAmount('');
             }}
           >

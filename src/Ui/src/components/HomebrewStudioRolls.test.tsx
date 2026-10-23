@@ -126,6 +126,17 @@ it('clearing the dice removes the key; it is never an empty string', async () =>
   expect(JSON.stringify(sent)).not.toContain('"dice"');
 });
 
+it('clearing the dice also removes the per-unit dice, since they have nothing to add to', async () => {
+  const user = userEvent.setup();
+  const { rule, checked } = await openDraft(user, [focus, { ...burst, resourceId: 'focus', cost: '1', perUnit: { dice: '1d6', maxUnits: 2 } }]);
+  const r = rule(/^Rule 2: Roll or action/);
+  await user.clear(r.getByRole('textbox', { name: /^Dice/ }));
+  const sent = (await checked()).effect('roll-2') as Raw;
+  expect(sent.dice).toBeUndefined();
+  expect(sent.perUnit).toBeUndefined();
+  expect((r.getByRole('textbox', { name: /^Extra dice/ }) as HTMLInputElement).value).toBe('');
+});
+
 it('pool options are keyed content::id so one id in two entries never collides, and the other entry keeps its content', async () => {
   const user = userEvent.setup();
   const { rule, checked } = await openDraft(user, [focus, burst], [otherPool]);
@@ -210,4 +221,11 @@ it('a named value is offered on a class-like entry only, with a key and a formul
   await user.clear(key);
   await user.type(key, 'lives');
   expect(blocked('Save draft')).toBe(false);
+});
+
+it('a named value has no Automation choice: it is always calculated', async () => {
+  const user = userEvent.setup();
+  const { rule } = await openDraft(user, [{ type: 'value', id: 'value-1', valueId: 'surgeDice', formula: '1' }, { ...burst, id: 'roll-2' }], [], 'subclass');
+  expect(rule(/^Rule 1: Named value/).queryByRole('combobox', { name: 'Automation' })).toBeNull();
+  expect(rule(/^Rule 2: Roll or action/).getByRole('combobox', { name: 'Automation' })).toBeTruthy();
 });

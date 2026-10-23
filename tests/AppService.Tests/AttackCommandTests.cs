@@ -56,6 +56,18 @@ public class AttackCommandTests
     }
 
     [Fact]
+    public void An_amount_is_refused_on_any_roll_that_is_not_a_content_roll_effect()
+    {
+        var (temp, id) = Adept();
+        using var _ = temp;
+
+        var problem = Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, Content: Strike, EffectId: "strike", Amount: 2)));
+
+        Assert.Equal("roll.amount-not-allowed", problem.Problems[0].Code);
+        Assert.Equal("roll.amount-not-allowed", Assert.Throws<AppValidationException>(() => temp.App.Roll(new(id, Field: "initiative", Amount: 1))).Problems[0].Code);
+    }
+
+    [Fact]
     public void A_feature_attack_rolls_to_hit_with_its_traced_bonus()
     {
         var (temp, id) = Adept();

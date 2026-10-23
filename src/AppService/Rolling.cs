@@ -54,6 +54,8 @@ public sealed partial class TomeStackApp
 
         RollRequest request;
         RollSpend? spend = null;
+        // An amount means something only on a content roll effect (a per-unit amount); on any other roll it is refused, not ignored.
+        var amountMeansSomething = false;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
             + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
             + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0) + (command.CompanionAttack is not null ? 1 : 0);
@@ -169,6 +171,7 @@ public sealed partial class TomeStackApp
                 ? [new RollModifier($"{effect.Label} bonus", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
                 : null;
             request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical, modifiers);
+            amountMeansSomething = true;
             spend = EffectSpend(command, effect, revision, sheet, calculated?.Cost, costFailed, failure, ref request);
         }
         else if (command.Field is { } field)
@@ -190,6 +193,8 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("roll.target-required", "Name a content roll effect or a field to roll.")]);
         }
 
+        if (command.Amount is not null && !amountMeansSomething)
+            throw new AppValidationException([new("roll.amount-not-allowed", "An amount applies only to a roll effect with per-unit dice.", command.Content, command.EffectId)], "roll.amount-not-allowed");
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
         return spend is null ? record! : record! with { Spend = spend };

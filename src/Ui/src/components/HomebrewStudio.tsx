@@ -2019,7 +2019,8 @@ function EffectEditor(props: {
       {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
-      {effect.type !== 'grant' && effect.type !== 'upkeep' && (
+      {/* A named value is always calculated (the validator refuses any other automation), so it has none to choose either. */}
+      {effect.type !== 'grant' && effect.type !== 'upkeep' && effect.type !== 'value' && (
         <label className="field">
           Automation
           <select

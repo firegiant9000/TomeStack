@@ -102,7 +102,8 @@ export function RollFields(props: {
     <>
       <label className="field">
         Dice (such as 1d8 + 2; empty for an action that rolls nothing)
-        <input value={effect.dice ?? ''} onChange={(e) => onChange({ ...effect, dice: e.target.value || undefined })} />
+        <input value={effect.dice ?? ''} onChange={(e) => onChange(e.target.value ? { ...effect, dice: e.target.value } : { ...effect, dice: undefined, perUnit: undefined })}
+        />
       </label>
       <FormulaField
         effectId={effect.id}
@@ -159,7 +160,8 @@ export function RollFields(props: {
             />
             The player chooses how much to spend (up to the cost)
           </label>
-          {effect.variableCost !== true && <PerUnitFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+          {/* Keyed on the dice being there, so its texts start over when clearing the dice removes the per-unit dice. */}
+          {effect.variableCost !== true && <PerUnitFields key={effect.dice ? 'dice' : 'no-dice'} effect={effect} onChange={onChange} onProblem={onProblem} />}
         </>
       )}
       <label className="field">
