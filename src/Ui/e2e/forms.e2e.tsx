@@ -370,3 +370,79 @@ it('authors a scaling technique with a save in the studio, rolls it with extra p
   await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'E2E Charge: 2 of 6' })).toBeTruthy());
 });
 
+it('a feat with automatic advantage rolls two dice on a Dex save, and turning on a disadvantage form cancels it', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Mode Book', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Mode Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Mode Book/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Mode Book' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(within(editor()).getByRole('group', { name }));
+
+  // A feat with advantage on Dexterity saves.
+  await user.click(screen.getByRole('button', { name: 'New feat' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Swift Feat');
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll mode' }));
+  await user.selectOptions(rule(/^Rule 1: Roll mode/).getByRole('combobox', { name: 'Applies to' }), 'save.dex');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Swift Feat/);
+
+  // A feature with a form that gives disadvantage on Dexterity saves while it is on. (ability.dex.check would not reach
+  // save.dex, so the cancelling form targets the save itself.)
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Heavy Feature');
+  await user.click(within(editor()).getByRole('button', { name: 'Add toggle' }));
+  await user.type(rule(/^Rule 1: Toggle/).getByRole('textbox', { name: 'Toggle name' }), 'E2E Heavy Form');
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll mode' }));
+  const heavy = rule(/^Rule 2: Roll mode/);
+  await user.selectOptions(heavy.getByRole('combobox', { name: 'Applies to' }), 'save.dex');
+  await user.selectOptions(heavy.getByRole('combobox', { name: 'Mode' }), 'disadvantage');
+  await user.selectOptions(heavy.getByRole('combobox', { name: 'Only while' }), 'While E2E Heavy Form is on');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Heavy Feature/);
+
+  const entries = await client.contentBySource(source.id);
+  const pins = ['E2E Swift Feat', 'E2E Heavy Feature'].map((name) => entries.find((e) => e.name === name)?.latestPublished);
+  expect(pins.every(Boolean)).toBe(true);
+  await client.createCharacter({
+    name: 'E2E Mode Hero',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    pins: pins.map((p) => p!),
+  });
+
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Mode Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Mode Hero' });
+  await openTab(user, sheet, 'Stats');
+  await user.click(await screen.findByRole('heading', { name: /^Dexterity saving throw: / })); // the card's body is a closed <details>
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  const diceRolled = () => (lastRoll().textContent!.match(/d20 \d+/g) ?? []).length;
+
+  // Automatic advantage from the feat: the button names it, and the roll uses two d20.
+  const advantage = await screen.findByRole('button', { name: /^Roll Dexterity saving throw \(advantage: .*E2E Swift Feat/ });
+  await user.click(advantage);
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/Dexterity saving throw/));
+  expect(diceRolled()).toBe(2);
+
+  // Turn the form on: advantage and disadvantage cancel, and the roll uses one d20.
+  await openTab(user, sheet, 'Play');
+  const form = await screen.findByRole<HTMLInputElement>('checkbox', { name: /^E2E Heavy Form/ });
+  await user.click(form);
+  await waitFor(() => expect(form.checked).toBe(true));
+  await openTab(user, sheet, 'Stats');
+  const cancelled = await screen.findByRole('button', { name: 'Roll Dexterity saving throw (normal: advantage and disadvantage cancel)' });
+  await user.click(cancelled);
+  await waitFor(() => expect(diceRolled()).toBe(1));
+});
+

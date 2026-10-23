@@ -39,7 +39,7 @@ export function CombatStrip({
 }: {
   view: CharacterView;
   /** May return a promise (the sheet's does). */
-  act: (action: PlayAction) => void | Promise<void>;
+  act: (action: PlayAction) => void | Promise<unknown>;
   busy: boolean;
   onTurn: (at: TurnMoment) => void;
 }) {

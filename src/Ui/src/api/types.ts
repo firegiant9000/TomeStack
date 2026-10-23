@@ -227,6 +227,24 @@ export interface DerivedValue {
   units: 'score' | 'modifier' | 'bonus' | 'feet' | string;
   /** D24: on saves and skills, from a grant. */
   mark?: 'none' | 'proficient' | 'expertise';
+  /** Content v11 (D43 S6): on saves, skills, ability modifiers and initiative, the advantage or disadvantage the sheet found; absent when none. */
+  mode?: RollModeSummary;
+}
+
+/** One reason a d20 roll has advantage or disadvantage; `against` (condition keys) means the player confirms it, so it is only a note. */
+export interface RollModeReason {
+  mode: 'advantage' | 'disadvantage';
+  source: string;
+  content: ContentReference;
+  against?: string[];
+  /** True when the service applies this reason by itself (an automatic effect with no `against`). */
+  automatic: boolean;
+}
+
+/** The mode the sheet calculates for a field, and every reason listed for it. */
+export interface RollModeSummary {
+  automatic: RollMode;
+  reasons: RollModeReason[];
 }
 
 export type RestPeriod = 'shortRest' | 'longRest';
@@ -750,6 +768,9 @@ export interface RollRecord {
   provenance?: RollProvenance;
   /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
   spend?: RollSpend;
+  /** D43 S6: the mode the sheet applied to a field roll, with the content that gave it (absent when the sheet applied none). */
+  automaticMode?: RollMode;
+  modeSources?: string[];
 }
 
 export interface RollSpend {
@@ -1475,6 +1496,17 @@ export type Effect =
       level?: number;
       onlyAs?: ClassEntry;
       damageType?: string;
+      /** Content v11 (D43, slice 6): a defence that applies only while this toggle is on (absent contentId: this revision). */
+      whileToggle?: { contentId?: string; toggleId: string };
+    })
+  // Content v11 (D43, slice 6): automatic advantage or disadvantage on a save, skill check or ability check.
+  | (EffectBase & {
+      type: 'rollMode';
+      target: string;
+      mode: 'advantage' | 'disadvantage';
+      against?: string[];
+      toggle?: string;
+      toggleContent?: string;
     })
   | (EffectBase & {
       type: 'resource';

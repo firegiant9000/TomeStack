@@ -19,7 +19,7 @@ const shapes: { value: Area['shape']; label: string }[] = [
 ];
 
 /** Reports a problem while it holds (also for a stored value, on load) and clears it when the field goes away. */
-function useReportedProblem(id: string, problem: string | undefined, onProblem: ReportProblem) {
+export function useReportedProblem(id: string, problem: string | undefined, onProblem: ReportProblem) {
   useEffect(() => {
     onProblem(id, problem);
     return () => onProblem(id, undefined);

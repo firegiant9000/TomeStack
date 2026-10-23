@@ -49,6 +49,12 @@ public static class FieldIds
     /// <summary>D24: walking speed in feet. Base 30 by rules policy unless a species sets it (a v10 replace modifier); override it on Stats.</summary>
     public const string Speed = "speed";
 
+    /// <summary>
+    /// Content schema v11 (D43): flying speed in feet, base 0 (no flying speed). Content may target it only from v11: below v11 the
+    /// validator refuses it and the calculator ignores such a modifier (<see cref="CharacterCalculator.IsPlayMechanicsOnlyField"/>).
+    /// </summary>
+    public const string FlySpeed = "speed.fly";
+
     public static string Key(Ability ability) => ability.ToString().ToLowerInvariant();
 }
 
@@ -195,6 +201,13 @@ public sealed record GrantEffect : Effect
     /// </summary>
     public string? DamageType { get; init; }
 
+    /// <summary>
+    /// Content schema v11 (D43): with a damage defence, the toggle that must be on for the defence to apply (a form-only
+    /// resistance). Null: always. The v11 schema refuses it on any other grant kind. Below v11 the key stays extension data
+    /// and does nothing.
+    /// </summary>
+    public ToggleRef? WhileToggle { get; init; }
+
     /// <summary>The content schema version that adds the damage-defence kinds and <see cref="DamageType"/>.</summary>
     public const int DamageSchemaVersion = ContentRevision.PlayDetailsSchemaVersion;
 
@@ -217,20 +230,27 @@ public sealed record GrantEffect : Effect
     {
         // From v10 the kind must be written as a name (any case): the serializer would also bind padded names, lists of names
         // (read as combined bits) and, in an enum with more members, a different value than a v9 build read; those stay unknown.
+        // Content v11 (D43) adds whileToggle: a v10 revision keeps it as extension data, byte for byte, and it does nothing.
         if (revisionSchemaVersion >= DamageSchemaVersion)
-            return VersionedEffects.NamesMember<GrantKind>(unknown.Raw, "grant") ? VersionedEffects.Typed<GrantEffect>(unknown) : unknown;
+        {
+            if (!VersionedEffects.NamesMember<GrantKind>(unknown.Raw, "grant"))
+                return unknown;
+            return revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
+                ? VersionedEffects.Typed<GrantEffect>(unknown)
+                : VersionedEffects.TypedWithout<GrantEffect>(unknown, V11Keys);
+        }
         // Below v10 any value outside the v9 names (Proficiency, Expertise, Content) is one a v9 build either refused (it stays
         // unknown) or could only bind by naming a member this build has since added (a damage kind, a padded or listed
         // spelling): this build must not bind it, whatever number it would give.
-        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, DamageTypeProperty);
+        var typed = VersionedEffects.TypedWithout<GrantEffect>(unknown, [DamageTypeProperty, .. V11Keys]);
         return typed is GrantEffect { Grant: var kind } && (int)kind > (int)GrantKind.Content ? unknown : typed;
     }
 
     /// <summary>
-    /// The keys content schema v11 adds to this effect (none yet). A slice that adds one also strips it below v11 in
+    /// The keys content schema v11 adds to this effect. A slice that adds one also strips it below v11 in
     /// <see cref="FromUnknown"/>, as <see cref="ToggleEffect"/> does.
     /// </summary>
-    internal static readonly string[] V11Keys = [];
+    internal static readonly string[] V11Keys = ["whileToggle"];
 
     /// <summary>The names a v9 build could read (the converter hands over any grant whose kind is not exactly one of them).</summary>
     internal static bool IsPreV10Name(string? name) =>
@@ -675,6 +695,38 @@ public sealed record ValueEffect : Effect
 }
 
 /// <summary>
+/// Content schema v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check. Typed only in a v11
+/// revision: in an older revision a <c>rollMode</c> stays an <see cref="UnknownEffect"/>, byte for byte. A mode that names no
+/// <see cref="RollMode"/> member stays untyped here too, and the validator reports it.
+/// </summary>
+public sealed record RollModeEffect : Effect
+{
+    public const string TypeName = "rollMode";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary><c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or <c>ability.&lt;ability&gt;.check</c> (the last is a roll target only, not a field); validated in the content validator.</summary>
+    public required string Target { get; init; }
+
+    /// <summary>Advantage or disadvantage. <see cref="RollMode.Normal"/> reads but is refused by the validator.</summary>
+    public required RollMode Mode { get; init; }
+
+    /// <summary>Condition keys (<see cref="ConditionKeys.All"/>): the mode then only applies against these conditions (for a save, the condition being imposed); the player applies it; it is assisted, never automatic. Null: always.</summary>
+    public IReadOnlyList<string>? Against { get; init; }
+
+    /// <summary>The <c>toggle</c> that must be on for the mode to apply (of this revision, or of <see cref="ToggleContent"/>). Null: always.</summary>
+    public string? Toggle { get; init; }
+
+    /// <summary>The content that declares <see cref="Toggle"/>, when it is not this revision's. Null: this revision.</summary>
+    public Guid? ToggleContent { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) =>
+        VersionedEffects.NamesMember<RollMode>(unknown.Raw, "mode") ? VersionedEffects.Typed<RollModeEffect>(unknown) : unknown;
+}
+
+/// <summary>
 /// Content schema v6 (M3 B2, SPEC I-05 "assisted actions"): something the player switches on and off at the table, such
 /// as a stance or an aura. While it is on (play state, character schema v7), the revision's modifiers that name it apply.
 /// Turning it on can spend one use of a resource. Turning it on or off is a confirmed play action, and the long rest
@@ -1099,6 +1151,7 @@ internal static class VersionedEffects
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
             [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
+            [RollModeEffect.TypeName] = (RollModeEffect.SchemaVersion, (u, _) => RollModeEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1246,7 +1299,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName or RollModeEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);

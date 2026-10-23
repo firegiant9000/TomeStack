@@ -82,6 +82,26 @@ public static class ContentValidator
         effect.Raw.ValueKind == System.Text.Json.JsonValueKind.Object
         && effect.Raw.EnumerateObject().Any(p => keys.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Content v11 (D43): the targets of a <c>rollMode</c>, exactly <c>save.&lt;ability&gt;</c>, <c>skill.&lt;skill&gt;</c> or
+    /// <c>ability.&lt;ability&gt;.check</c> (the ability check is a roll target only, not a sheet field).
+    /// </summary>
+    internal static bool IsRollModeTarget(string? target)
+    {
+        if (target is null)
+            return false;
+        var abilities = Enum.GetValues<Ability>().Select(FieldIds.Key).ToList();
+        if (target.StartsWith("save.", StringComparison.Ordinal))
+            return abilities.Contains(target["save.".Length..], StringComparer.Ordinal);
+        if (target.StartsWith("skill.", StringComparison.Ordinal))
+            return CharacterCalculator.Skills.Any(s => s.Key == target["skill.".Length..]);
+        const string abilityPrefix = "ability.";
+        const string checkSuffix = ".check";
+        return target.StartsWith(abilityPrefix, StringComparison.Ordinal) && target.EndsWith(checkSuffix, StringComparison.Ordinal)
+            && target.Length > abilityPrefix.Length + checkSuffix.Length
+            && abilities.Contains(target[abilityPrefix.Length..^checkSuffix.Length], StringComparer.Ordinal);
+    }
+
     private static bool IsCharacterOnlyField(string field, ContentRevision revision) =>
         CharacterCalculator.IsCharacterOnlyField(field, revision.SchemaVersion);
 
@@ -175,7 +195,8 @@ public static class ContentValidator
                     if (malformed.DeclaredType is ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName
                         || (revision.SchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
                             && ((malformed.DeclaredType == ToggleEffect.TypeName && CarriesV11Key(malformed, ToggleEffect.V11Keys))
-                                || (malformed.DeclaredType == ResourceEffect.TypeName && CarriesV11Key(malformed, ResourceEffect.V11Keys)))))
+                                || (malformed.DeclaredType == ResourceEffect.TypeName && CarriesV11Key(malformed, ResourceEffect.V11Keys))
+                                || (malformed.DeclaredType == GrantEffect.TypeName && CarriesV11Key(malformed, GrantEffect.V11Keys)))))
                         needsV11 = true;
                     else
                         needsV10 = true;
@@ -196,6 +217,13 @@ public static class ContentValidator
                     needsV11 = true;
                     Error("validate.value-incomplete", $"Value '{unknownValue.Id}' does not match the value shape: it needs a valueId and a formula.", unknownValue.Id);
                     break;
+                // Content v11 (D43): from v11 a rollMode is typed; one that stays unknown did not match the shape (a mode that names no
+                // member, no target, a list that is not a list), so the rule would silently not exist. Published at a lower version it
+                // would be an unsupported effect, so it blocks.
+                case UnknownEffect { DeclaredType: RollModeEffect.TypeName } unknownMode when revision.SchemaVersion >= RollModeEffect.SchemaVersion:
+                    needsV11 = true;
+                    Error("validate.effect-malformed", $"Effect '{unknownMode.Id}' has type '{unknownMode.DeclaredType}' but a value or field that does not read (its mode must be advantage or disadvantage; it needs a target; against is a list of condition keys; toggleContent is an id); fix it before publishing.", unknownMode.Id);
+                    break;
                 case UnknownEffect unknown:
                     // Content v11 (D43): a roll with no dice is typed only from v11, so below it the roll stays reference-only as it
                     // always did, but publishing it needs v11.
@@ -214,6 +242,8 @@ public static class ContentValidator
                         Error("validate.unknown-target", $"Effect '{modifier.Id}' targets '{modifier.Target}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", modifier.Id);
                     else
                         needsV10 |= CharacterCalculator.IsSpeedOrPassive(modifier.Target); // allowed: this revision is v10
+                    // Content v11 (D43): fly speed. Below v11 the revision gets validate.requires-v11 (and the calculator ignores it).
+                    needsV11 |= modifier.Target == FieldIds.FlySpeed;
                     // Content v8: a lower critical range is better, but set and replace keep the highest value, so only a
                     // bonus (such as -1 for Improved Critical) can lower it.
                     if (modifier.Target == FieldIds.CriticalRange && modifier.Operation != ModifierOperation.Bonus)
@@ -316,6 +346,13 @@ public static class ContentValidator
                         Error("validate.unknown-target", $"Effect '{grant.Id}' grants {grant.Grant.ToString().ToLowerInvariant()} in '{grant.Target}', which is not a saving throw, skill or weapon.", grant.Id);
                     }
                     needsV5 |= grant.OnlyAs is not null;
+                    // Content v11 (D43): a damage defence that applies only while a toggle is on (a form-only resistance). The v11 schema
+                    // refuses the key on any other grant kind; here it is checked the way a roll's whileToggle is.
+                    if (grant.WhileToggle is { } defenceToggle)
+                    {
+                        needsV11 = true;
+                        CheckToggleReference(defenceToggle.ContentId, defenceToggle.ToggleId, grant.Id, "validate.while-toggle-unknown");
+                    }
                     break;
                 case ChoiceEffect choice:
                     needsV3 |= choice.Level is not null;
@@ -353,6 +390,7 @@ public static class ContentValidator
                         Error("validate.unknown-target", $"Restriction '{restriction.Id}' checks '{restriction.Field}', which cannot be targeted by content yet (needs content schema v{ContentRevision.PlayDetailsSchemaVersion}).", restriction.Id);
                     else
                         needsV10 |= CharacterCalculator.IsSpeedOrPassive(restriction.Field);
+                    needsV11 |= restriction.Field == FieldIds.FlySpeed;
                     if (Math.Abs(restriction.Minimum) > FormulaLimits.MaxLiteral)
                         Error("validate.restriction-minimum", $"Restriction '{restriction.Id}' minimum {restriction.Minimum} is outside ±{FormulaLimits.MaxLiteral}.", restriction.Id);
                     break;
@@ -400,6 +438,37 @@ public static class ContentValidator
                         Error("validate.value-incomplete", $"Value '{value.Id}' must be automatic; a named value is always calculated.", value.Id);
                     if (!string.IsNullOrWhiteSpace(value.Formula))
                         CheckFormula(value.Formula, value.Id, "formula");
+                    break;
+                case RollModeEffect rollMode:
+                    needsV11 = true;
+                    if (!IsRollModeTarget(rollMode.Target))
+                        Error("validate.roll-mode-target", $"Roll mode '{rollMode.Id}' targets '{rollMode.Target}'; use save.<ability> (such as save.dex), skill.<skill> (such as skill.stealth) or ability.<ability>.check (such as ability.str.check).", rollMode.Id);
+                    if (rollMode.Mode == RollMode.Normal)
+                        Error("validate.roll-mode-mode", $"Roll mode '{rollMode.Id}' has mode normal, which changes nothing; use advantage or disadvantage.", rollMode.Id);
+                    if (rollMode.Against is { } against)
+                    {
+                        if (against.Count == 0)
+                            Error("validate.roll-mode-against", $"Roll mode '{rollMode.Id}' has an empty against list; name at least one condition, or remove it.", rollMode.Id);
+                        foreach (var key in against.Where(k => !ConditionKeys.All.Contains(k)).Distinct())
+                            Error("validate.roll-mode-against", $"Roll mode '{rollMode.Id}' is against '{key}', which is not a condition key ({string.Join(", ", ConditionKeys.All)}).", rollMode.Id);
+                    }
+                    if (rollMode.Toggle is { } modeToggle)
+                    {
+                        // The same lookup as a modifier's toggle (this revision's, or another content's with toggleContent).
+                        if (rollMode.ToggleContent is null)
+                        {
+                            if (!revision.Effects.OfType<ToggleEffect>().Any(t => t.ToggleId == modeToggle))
+                                Error("validate.toggle-unknown", $"Roll mode '{rollMode.Id}' names toggle '{modeToggle}', which this revision does not define.", rollMode.Id);
+                        }
+                        else
+                        {
+                            CheckToggleReference(rollMode.ToggleContent, modeToggle, rollMode.Id, "validate.toggle-unknown");
+                        }
+                    }
+                    else if (rollMode.ToggleContent is not null)
+                    {
+                        Error("validate.toggle-unknown", $"Roll mode '{rollMode.Id}' names the content that declares its toggle but names no toggle; add the toggle, or remove toggleContent.", rollMode.Id);
+                    }
                     break;
                 case RecoveryEffect recovery:
                     if (!string.Equals(recovery.Amount, "all", StringComparison.Ordinal))
@@ -552,7 +621,7 @@ public static class ContentValidator
         // revision built in code can still declare an older version, and an older build would ignore or refuse them.
         needsV11 |= usedValues.Count > 0;
         if (needsV11 && revision.SchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
-            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
+            Error("validate.requires-v11", $"This revision uses content schema v11 features (toggle groups, toggle layers, costs, levels or durations, upkeeps, counting-up pools or allowances, attacks, attack riders, a toggle of another content or a resource target, roll saves, areas, ranges, targets or per-unit dice, a roll with no dice, named values or VALUE in a formula, roll modes, fly speed, form-only defences) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         if (needsV10 && revision.SchemaVersion < ContentRevision.PlayDetailsSchemaVersion)
             Error("validate.requires-v10", $"This revision uses content schema v10 features (passive or speed targets, autoWhen, activation, damage defence grants, an item effect) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         needsV9 |= usedScales.Count > 0;

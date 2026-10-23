@@ -78,7 +78,7 @@ public static class MechanicsInventory
         {
             ModifierEffect.TypeName, GrantEffect.TypeName, ResourceEffect.TypeName, ChoiceEffect.TypeName, RestrictionEffect.TypeName,
             RecoveryEffect.TypeName, RollEffect.TypeName, HitDieEffect.TypeName, ArmorEffect.TypeName, SpellcastingEffect.TypeName,
-            SpellEffect.TypeName, WeaponEffect.TypeName, ToggleEffect.TypeName, ToggleGroupEffect.TypeName, UpkeepEffect.TypeName, AttackEffect.TypeName, AttackRiderEffect.TypeName, ItemEffect.TypeName, ScaleEffect.TypeName, ValueEffect.TypeName, "text",
+            SpellEffect.TypeName, WeaponEffect.TypeName, ToggleEffect.TypeName, ToggleGroupEffect.TypeName, UpkeepEffect.TypeName, AttackEffect.TypeName, AttackRiderEffect.TypeName, ItemEffect.TypeName, ScaleEffect.TypeName, ValueEffect.TypeName, RollModeEffect.TypeName, "text",
         };
         return new(mechanics, [.. mechanics.Where(m => !known.Contains(m.EffectType))])
         {

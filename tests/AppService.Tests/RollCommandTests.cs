@@ -528,4 +528,149 @@ public class RollCommandTests
         Assert.Equal(new RollSpend(stance.ContentId, "radiance", 2), surge.Spend); // variable cost: the most it may spend (PB)
         Assert.Equal(new RollSpend(stance.ContentId, "radiance", 1), flare.Spend);
     }
+
+    // D43 S6 (Task 6.4): field rolls combine the player's choice with the sheet's automatic roll mode (fixture-pack-roll-modes.json).
+    private static ContentReference Mode(int n) => new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
+    private static readonly ContentReference SwiftInstinct = Mode(0x60);
+    private static readonly ContentReference HeavyStance = Mode(0x61);
+    private static readonly ContentReference LightStep = Mode(0x63);
+    private static readonly ContentReference WeightedGear = Mode(0x64);
+
+    /// <summary>Testy Instinct (level 4) with the roll-modes pack; <paramref name="edit"/> changes the stored character before it is saved.</summary>
+    private static (TempApp Temp, Guid Id) Instinct(Func<Character, Character>? edit = null)
+    {
+        var temp = new TempApp();
+        temp.App.Random = new SeededRandomSource(5);
+        temp.AddPack("fixture-pack-roll-modes.json");
+        var character = TempApp.LoadFixture<Character>("characters/pm-instinct-l4.json");
+        return (temp, temp.App.SaveCharacter(edit is null ? character : edit(character)).Character.Id);
+    }
+
+    private static Character Pinned(Character character, params ContentReference[] pins) => character with { Pins = [.. pins] };
+
+    private static Character WithoutSaveDexMode(Character character) =>
+        Pinned(character, HeavyStance, Mode(0x62));
+
+    private static Character HeavyOn(Character character) =>
+        character with { Play = character.Play with { Toggles = [new ActiveToggle(HeavyStance.ContentId, "heavy")] } };
+
+    private static Character AutomaticState(Character character, RollMode automatic) => automatic switch
+    {
+        RollMode.Normal => WithoutSaveDexMode(character),
+        RollMode.Advantage => character,
+        _ => Pinned(character, HeavyStance, Mode(0x62), WeightedGear),
+    };
+
+    [Theory]
+    [InlineData(RollMode.Normal, RollMode.Normal, RollMode.Normal)]
+    [InlineData(RollMode.Normal, RollMode.Advantage, RollMode.Advantage)]
+    [InlineData(RollMode.Normal, RollMode.Disadvantage, RollMode.Disadvantage)]
+    [InlineData(RollMode.Advantage, RollMode.Normal, RollMode.Advantage)]
+    [InlineData(RollMode.Advantage, RollMode.Advantage, RollMode.Advantage)]
+    [InlineData(RollMode.Advantage, RollMode.Disadvantage, RollMode.Normal)]
+    [InlineData(RollMode.Disadvantage, RollMode.Normal, RollMode.Disadvantage)]
+    [InlineData(RollMode.Disadvantage, RollMode.Advantage, RollMode.Normal)]
+    [InlineData(RollMode.Disadvantage, RollMode.Disadvantage, RollMode.Disadvantage)]
+    public void The_players_choice_combines_with_the_automatic_mode(RollMode request, RollMode automatic, RollMode expected)
+    {
+        var (temp, id) = Instinct(c => AutomaticState(c, automatic));
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: request));
+
+        Assert.Equal(expected, record.Mode);
+        Assert.Equal(expected == RollMode.Normal ? 1 : 2, record.Dice.Count);
+        if (automatic == RollMode.Normal)
+        {
+            // No automatic reason on save.dex at all: the record says nothing about an automatic mode.
+            Assert.Null(record.AutomaticMode);
+            Assert.Null(record.ModeSources);
+        }
+        else
+        {
+            Assert.Equal(automatic, record.AutomaticMode);
+            string[] sources = automatic == RollMode.Advantage ? ["Fixture Swift Instinct", "Fixture Light Step"] : ["Fixture Weighted Gear"];
+            Assert.Equal(sources, record.ModeSources);
+        }
+    }
+
+    [Fact]
+    public void Automatic_cancellation_beats_the_players_choice()
+    {
+        var (temp, id) = Instinct(c => Pinned(c, SwiftInstinct, HeavyStance, Mode(0x62), LightStep, WeightedGear));
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: RollMode.Advantage));
+
+        Assert.Equal(RollMode.Normal, record.Mode);
+        Assert.Single(record.Dice);
+        Assert.Equal(RollMode.Normal, record.AutomaticMode);
+        Assert.Equal(["Fixture Swift Instinct", "Fixture Light Step", "Fixture Weighted Gear"], record.ModeSources);
+    }
+
+    [Fact]
+    public void A_critical_field_roll_with_an_automatic_advantage_is_refused()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var refused = Assert.Throws<AppValidationException>(() => temp.App.Roll(new RollCommand(id, Field: "save.dex", Critical: true)));
+
+        Assert.Equal("dice.critical-with-advantage", Assert.Single(refused.Problems).Code);
+    }
+
+    [Fact]
+    public void An_assisted_mode_never_changes_the_roll()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var record = temp.App.Roll(new RollCommand(id, Field: "save.con"));
+
+        Assert.Equal(RollMode.Normal, record.Mode);
+        Assert.Single(record.Dice);
+        Assert.Null(record.AutomaticMode);
+        Assert.Null(record.ModeSources);
+    }
+
+    [Fact]
+    public void A_skill_takes_its_ability_check_mode()
+    {
+        var (temp, id) = Instinct(HeavyOn);
+        using var _ = temp;
+
+        var athletics = temp.App.Roll(new RollCommand(id, Field: "skill.athletics"));
+        var stealth = temp.App.Roll(new RollCommand(id, Field: "skill.stealth"));
+
+        Assert.Equal((RollMode.Advantage, 2), (athletics.Mode, athletics.Dice.Count));
+        Assert.Equal(["Fixture Heavy Stance"], athletics.ModeSources);
+        Assert.Equal((RollMode.Disadvantage, 2), (stealth.Mode, stealth.Dice.Count));
+        Assert.Equal(RollMode.Disadvantage, stealth.AutomaticMode);
+    }
+
+    [Fact]
+    public void Rolling_never_changes_the_character_with_a_roll_mode()
+    {
+        var (temp, id) = Instinct(HeavyOn);
+        using var _ = temp;
+        var before = TempApp.Json(temp.App.Store.FindCharacter(id));
+
+        temp.App.Roll(new RollCommand(id, Field: "save.dex", Mode: RollMode.Disadvantage));
+        temp.App.Roll(new RollCommand(id, Field: "skill.stealth"));
+
+        Assert.Equal(before, TempApp.Json(temp.App.Store.FindCharacter(id)));
+    }
+
+    [Fact]
+    public void A_roll_without_automatic_modes_serialises_as_before()
+    {
+        var (temp, id) = Instinct();
+        using var _ = temp;
+
+        var json = TempApp.Json(temp.App.Roll(new RollCommand(id, Field: "save.str")));
+
+        Assert.DoesNotContain("automaticMode", json);
+        Assert.DoesNotContain("modeSources", json);
+    }
 }

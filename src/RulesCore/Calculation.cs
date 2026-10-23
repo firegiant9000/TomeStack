@@ -59,7 +59,8 @@ public sealed record DerivedValue(
     AutomationStatus Automation,
     FieldOverride? Override,
     string Units = "",
-    ProficiencyMark Mark = ProficiencyMark.None);
+    ProficiencyMark Mark = ProficiencyMark.None,
+    RollModeSummary? Mode = null);
 
 /// <summary>
 /// SPEC C-01: one choice an active revision offers (and whose level is reached), what was selected for it, and whether
@@ -421,6 +422,14 @@ public static class CharacterCalculator
     public static bool IsCharacterOnlyField(string field, int schemaVersion) =>
         IsSpeedOrPassive(field) && schemaVersion < ContentRevision.PlayDetailsSchemaVersion;
 
+    /// <summary>
+    /// Content schema v11 (D43): fly speed is a content target only from v11. Below it the validator refuses it and the
+    /// calculator ignores such a modifier with the same diagnostic as <see cref="IsCharacterOnlyField"/>, so a stored older
+    /// revision never moves it, whatever it says.
+    /// </summary>
+    public static bool IsPlayMechanicsOnlyField(string field, int schemaVersion) =>
+        field == FieldIds.FlySpeed && schemaVersion < ContentRevision.PlayMechanicsSchemaVersion;
+
     /// <summary>Speed and the passive scores: the fields content may target only from schema v10.</summary>
     public static bool IsSpeedOrPassive(string field) =>
         field == FieldIds.Speed || field.StartsWith("passive.", StringComparison.Ordinal);
@@ -442,7 +451,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && !IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -539,7 +548,7 @@ public static class CharacterCalculator
                         revision.Reference, restriction.Id);
                     continue;
                 }
-                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion))
+                if (IsCharacterOnlyField(restriction.Field, revision.SchemaVersion) || IsPlayMechanicsOnlyField(restriction.Field, revision.SchemaVersion))
                 {
                     // As in an older build, where the field is not a content target: the content is not applied.
                     yield return new(
@@ -624,6 +633,7 @@ public static class CharacterCalculator
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
         var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
+        var rollModes = CollectRollModes(active, effective, autoOn, diagnostics);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -685,7 +695,8 @@ public static class CharacterCalculator
                 closure.Any(manual.Contains) ? AutomationStatus.Assisted : AutomationStatus.Automatic,
                 results[spec.Id].Override,
                 spec.Units,
-                MarkOf(spec.Id, proficiencies));
+                MarkOf(spec.Id, proficiencies),
+                rollModes.GetValueOrDefault(spec.Id));
         }).ToList();
 
         // Before the feature list: an attack whose die is invalid reports on its feature (attack.die-invalid).
@@ -693,6 +704,8 @@ public static class CharacterCalculator
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
         var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
+        // Before the feature list: a form-only defence of absent content reports on its feature (modifier.toggle-content-missing).
+        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
         var features = active.Select(item => Feature(
             item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
@@ -771,8 +784,6 @@ public static class CharacterCalculator
         var pactSlots = values[FieldIds.PactSlots] > 0 || character.Play.PactSlotsSpent > 0
             ? Slot(pactCaster is null ? 0 : PactSlotLevel(Row(pactCaster.Effect.Slots, pactCaster.ClassLevel)), FieldIds.PactSlots, character.Play.PactSlotsSpent)
             : null;
-
-        var damageDefences = CollectDamageDefences(active, character, resolved.ClassLevels);
 
         var scales = resolved.ClassLevels.Scales
             .Where(s => resolved.ClassLevels.ContainsKey(s.Key.Class))
@@ -860,7 +871,8 @@ public static class CharacterCalculator
     /// here. Several sources of one type and kind are one entry (R169), ordered by damage type, then kind. A damage grant in
     /// a revision below v10 is an unknown effect (Task 1) and never arrives here.
     /// </summary>
-    private static List<DamageDefenceValue> CollectDamageDefences(List<ActiveContent> active, Character character, ClassLevelMap classLevels)
+    private static List<DamageDefenceValue> CollectDamageDefences(
+        List<ActiveContent> active, Character character, ClassLevelMap classLevels, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
     {
         var found = new List<(string Type, DamageDefenceKind Kind, DamageDefenceSource Source)>();
         foreach (var defence in character.DamageDefences ?? [])
@@ -877,6 +889,10 @@ public static class CharacterCalculator
                 if (grant.Level is { } needed && GateLevel(item, character, classLevels) < needed)
                     continue;
                 if (!EntryApplies(item, grant.OnlyAs, character) || !DamageTypes.TryNormalize(grant.DamageType, out var type))
+                    continue;
+                // Content v11 (D43): a form-only defence is listed only while its toggle is on, gated like a toggled modifier.
+                if (grant.WhileToggle is { } form
+                    && GateOnToggle(active, item.Revision, grant.Id, form.ToggleId, form.ContentId ?? item.Revision.ContentId, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
                     continue;
                 var kind = grant.Grant switch
                 {
@@ -2425,6 +2441,101 @@ public static class CharacterCalculator
         return new(content, effect, formula, [.. formula.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]);
     }
 
+    /// <summary>How an effect's toggle gate came out: it applies now, it does not apply now, or the effect names no toggle the gate can resolve.</summary>
+    private enum ToggleGate { Applies, Skips, Unresolved }
+
+    /// <summary>
+    /// The toggle gate modifiers and roll modes share. Content v11 (D43): an effect that names another content's toggle (<paramref name="toggleContent"/>)
+    /// applies while that toggle is on. Content that is not active, or that does not declare the toggle, is a broken reference the user should see:
+    /// the effect does not apply and the sheet says why (<see cref="ToggleGate.Skips"/> plus a diagnostic). Without toggleContent (content v6, M3 B2),
+    /// an effect that names a toggle of its revision applies while that toggle is on and simply does not apply while it is off (the rules say so;
+    /// nothing is left to the player). A toggle the revision does not declare is <see cref="ToggleGate.Unresolved"/>. <paramref name="followedLabel"/>
+    /// is the other content's toggle label when the gate follows one.
+    /// </summary>
+    private static ToggleGate GateOnToggle(
+        List<ActiveContent> active, ContentRevision revision, string effectId, string toggleId, Guid? toggleContent,
+        EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics, out string? followedLabel)
+    {
+        followedLabel = null;
+        if (toggleContent is { } ownerId)
+        {
+            var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
+            var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId);
+            if (owner is null || declared is null)
+            {
+                diagnostics.Add(new(
+                    "modifier.toggle-content-missing",
+                    $"'{revision.Name}' effect '{effectId}' follows toggle '{toggleId}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
+                    revision.Reference,
+                    effectId));
+                return ToggleGate.Skips;
+            }
+            if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
+                return ToggleGate.Skips;
+            followedLabel = declared.Label;
+            return ToggleGate.Applies;
+        }
+        if (revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggleId) is { } named)
+            return ToggleIsOn(revision, named, effective, autoOn) ? ToggleGate.Applies : ToggleGate.Skips;
+        return ToggleGate.Unresolved;
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the roll modes of the active content, by the sheet fields they reach (<c>save.&lt;x&gt;</c>, <c>skill.&lt;s&gt;</c>;
+    /// <c>ability.&lt;x&gt;.check</c> reaches <c>ability.&lt;x&gt;.mod</c> and every skill of that ability, and Dexterity also initiative).
+    /// Toggled entries are gated like modifiers. A rollMode has no timing, so only its toggle gates it. Order is sheet content order.
+    /// </summary>
+    private static Dictionary<string, RollModeSummary> CollectRollModes(
+        List<ActiveContent> active, EffectiveToggles effective, bool autoOn, List<Diagnostic> diagnostics)
+    {
+        var byField = new Dictionary<string, List<RollModeReason>>(StringComparer.Ordinal);
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var effect in revision.Effects.OfType<RollModeEffect>())
+            {
+                if (effect.Toggle is { } toggle
+                    && GateOnToggle(active, revision, effect.Id, toggle, effect.ToggleContent, effective, autoOn, diagnostics, out _) != ToggleGate.Applies)
+                    continue;
+                var reason = new RollModeReason(effect.Mode, revision.Name, revision.Reference, effect.Against, effect.Automation);
+                foreach (var field in RollModeFields(effect.Target))
+                {
+                    if (!byField.TryGetValue(field, out var reasons))
+                        byField[field] = reasons = [];
+                    reasons.Add(reason);
+                }
+            }
+        }
+        // Automatic combines only the reasons that need no confirmation (no against) from an automatic effect; the rest are listed notes.
+        return byField.ToDictionary(
+            p => p.Key,
+            p => new RollModeSummary(
+                RollModes.Combine(p.Value.Where(r => r.IsAutomatic).Select(r => r.Mode)),
+                [.. p.Value]),
+            StringComparer.Ordinal);
+    }
+
+    private static IEnumerable<string> RollModeFields(string target)
+    {
+        if (target.StartsWith("save.", StringComparison.Ordinal) || target.StartsWith("skill.", StringComparison.Ordinal))
+        {
+            if (SpecIndex.ContainsKey(target))
+                yield return target;
+            yield break;
+        }
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var mod = FieldIds.Modifier(ability);
+            if (target != string.Concat(mod.AsSpan(0, mod.Length - ".mod".Length), ".check"))
+                continue;
+            yield return mod;
+            foreach (var skill in Skills.Where(s => s.Ability == ability))
+                yield return FieldIds.Skill(skill.Key);
+            if (ability == Ability.Dex)
+                yield return FieldIds.Initiative;
+        }
+    }
+
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
         HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
@@ -2436,36 +2547,12 @@ public static class CharacterCalculator
             foreach (var effect in revision.Effects.OfType<ModifierEffect>())
             {
                 string? followedToggle = null;
-                // Content v11 (D43): a whileActive modifier that names another content's toggle (toggleContent) applies while that toggle is on.
-                // Content that is not active, or that does not declare the toggle, is a broken reference the user should see: the modifier does
-                // not apply and the sheet says why. Without toggleContent the same-revision gate below is unchanged.
-                if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
-                    && effect.ToggleContent is { } ownerId)
-                {
-                    var owner = active.FirstOrDefault(a => a.Revision.ContentId == ownerId);
-                    var declared = owner?.Revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == followed);
-                    if (owner is null || declared is null)
-                    {
-                        diagnostics.Add(new(
-                            "modifier.toggle-content-missing",
-                            $"'{revision.Name}' effect '{effect.Id}' follows toggle '{followed}' of content {ownerId}, which is not active or does not declare it; the effect is not applied.",
-                            revision.Reference,
-                            effect.Id));
-                        continue;
-                    }
-                    if (!ToggleIsOn(owner.Revision, declared, effective, autoOn))
-                        continue;
-                    followedToggle = declared.Label;
-                }
-                // Content v6 (M3 B2): a whileActive modifier that names a toggle of its revision applies while that toggle
-                // is on, and simply does not apply while it is off (the rules say so; nothing is left to the player).
-                else if (effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } toggle
-                    && revision.Effects.OfType<ToggleEffect>().FirstOrDefault(t => t.ToggleId == toggle) is { } named)
-                {
-                    if (!ToggleIsOn(revision, named, effective, autoOn))
-                        continue;
-                }
-                else if (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always)
+                var gate = effect.Automation == AutomationStatus.Automatic && effect.Timing == EffectTiming.WhileActive && effect.Toggle is { } followed
+                    ? GateOnToggle(active, revision, effect.Id, followed, effect.ToggleContent, effective, autoOn, diagnostics, out followedToggle)
+                    : ToggleGate.Unresolved;
+                if (gate == ToggleGate.Skips)
+                    continue;
+                if (gate == ToggleGate.Unresolved && (effect.Automation != AutomationStatus.Automatic || effect.Timing != EffectTiming.Always))
                 {
                     if (SpecIndex.ContainsKey(effect.Target))
                         manual.Add(effect.Target);
@@ -2486,7 +2573,7 @@ public static class CharacterCalculator
                     diagnostics.Add(new("effect.unknown-target", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which is not a calculated field; it is ignored.", revision.Reference, effect.Id));
                     continue;
                 }
-                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion))
+                if (IsCharacterOnlyField(effect.Target, revision.SchemaVersion) || IsPlayMechanicsOnlyField(effect.Target, revision.SchemaVersion))
                 {
                     diagnostics.Add(new("effect.character-only-field", $"'{revision.Name}' effect '{effect.Id}' targets '{effect.Target}', which content may not target yet; it is ignored.", revision.Reference, effect.Id));
                     continue;
@@ -3029,6 +3116,13 @@ public static class CharacterCalculator
         {
             steps.Add(new(FieldIds.Speed, "base", "Speed starts at 30 feet (rules policy, unless the species sets it; override it if yours differs)", 30, 30, new(TraceOriginKind.RulesPolicy, c.Family)));
             return 30;
+        }));
+        // Content v11 (D43): a flying speed. None by default; a form or species sets it with a v11 modifier (the validator and
+        // the calculator refuse it below v11, IsPlayMechanicsOnlyField).
+        specs.Add(new(FieldIds.FlySpeed, "Fly speed", "feet", [], (c, steps) =>
+        {
+            steps.Add(new(FieldIds.FlySpeed, "base", "No flying speed unless content gives one", 0, 0, new(TraceOriginKind.RulesPolicy, c.Family)));
+            return 0;
         }));
         specs.Add(new(FieldIds.Initiative, "Initiative", "modifier", [FieldIds.Modifier(Ability.Dex)], (c, steps) =>
         {

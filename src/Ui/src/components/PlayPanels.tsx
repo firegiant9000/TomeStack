@@ -18,7 +18,8 @@ import type {
   ToggleValue,
 } from '../api/types';
 import { hitDiceText, rollBonus } from '../format';
-import { diceLine } from '../rollText';
+import { rollButtonSuffix } from '../rollModes';
+import { diceLine, rollModeText } from '../rollText';
 import { announceRollsOn, diceAnimationOn } from '../settings';
 import { damageTypeLabel, damageTypes, normalizeDamageType } from './customModel';
 import { Pips } from './Pips';
@@ -83,7 +84,8 @@ export const pageText =(page?: PageRef) =>
   page ? (page.end && page.end !== page.start ? `pp. ${page.start}-${page.end}` : `p. ${page.start}`) : '';
 
 /** Every change here is one deliberate button press, sent as a confirmed `character.play` (SPEC C-05). */
-type Act = (action: PlayAction) => void;
+/** `act` resolves true when the change was applied or timed out (outcome unknown) and false when it was refused; a caller that does not wait may ignore it. */
+type Act = (action: PlayAction) => void | Promise<boolean>;
 
 const effectWords: Record<DamageOutcome['effect'], string> = {
   none: 'no defence',
@@ -285,6 +287,8 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
     wasPending.current = pending;
   }, [con, pending]);
   if (!con) return null;
+  // The roll applies every automatic save.con reason, so the button names them (as the Stats card does).
+  const saveCon = view.sheet.fields.find((f) => f.field === 'save.con');
   return (
     <section aria-labelledby="concentration-heading" className="play-panel">
       <h3 id="concentration-heading" tabIndex={-1} ref={heading}>
@@ -296,6 +300,7 @@ export function ConcentrationPanel({ view, act, roll }: { view: CharacterView; a
           <>
             <button type="button" onClick={() => roll({ field: 'save.con' })}>
               Roll Constitution saving throw
+              {saveCon ? rollButtonSuffix(saveCon) : ''}
             </button>
             <button type="button" onClick={() => act({ action: 'clearConcentrationCheck' })}>
               Kept concentration
@@ -1027,6 +1032,18 @@ export function RollResult({
   // A record's Spend is used once: the record it was used for stays spent, and a new record starts fresh.
   const [spentFor, setSpentFor] = useState<RollRecord>();
   const spentAlready = record !== undefined && spentFor === record;
+  /** Holds the button while the change is under way, and gives it back when the change is refused so it can be retried. */
+  function spendOnce(action: PlayAction, refused?: () => void) {
+    setSpentFor(record);
+    void Promise.resolve(act(action))
+      .then((applied) => applied !== false) // a caller that returns nothing is taken to have applied it
+      .catch(() => false)
+      .then((applied) => {
+        if (applied) return;
+        setSpentFor((current) => (current === record ? undefined : current));
+        refused?.();
+      });
+  }
   // Toggling aria-live on a mounted region is unreliable in some screen readers; the "Announce each roll" setting takes
   // full effect on the next sheet open, which the Settings hint says.
   if (!record) return <div role="region" aria-label="Last roll" aria-live={announceRollsOn() ? 'polite' : undefined} className="roll-result" />;
@@ -1070,7 +1087,7 @@ export function RollResult({
           {p?.label || 'Roll'}: {record.total}
         </strong>{' '}
         ({record.formula}
-        {record.mode !== 'normal' ? `, ${record.mode}` : ''}
+        {rollModeText(record)}
         {record.critical ? ', critical' : ''})
       </p>
       <p className="hint">
@@ -1082,10 +1099,7 @@ export function RollResult({
         <button
           type="button"
           disabled={spentAlready || cost < 1 /* a cost formula can evaluate to 0 at some levels */ || linked.current < cost}
-          onClick={() => {
-            act({ action: 'spend', amount: cost, contentId: spend?.contentId ?? linked.content.contentId, resourceId: spend?.resourceId ?? linked.resourceId });
-            setSpentFor(record);
-          }}
+          onClick={() => spendOnce({ action: 'spend', amount: cost, contentId: spend?.contentId ?? linked.content.contentId, resourceId: spend?.resourceId ?? linked.resourceId })}
         >
           Spend {cost} {linked.label} ({linked.current} left)
         </button>
@@ -1100,8 +1114,8 @@ export function RollResult({
             type="button"
             disabled={spentAlready || !validChoice}
             onClick={() => {
-              act({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId });
-              setSpentFor(record);
+              const typedAmount = amount;
+              spendOnce({ action: 'spend', amount: chosen, contentId: linked.content.contentId, resourceId: linked.resourceId }, () => setTyped((t) => (t.record === record && t.value === '' ? { record, value: typedAmount } : t)));
               setAmount('');
             }}
           >
@@ -1115,8 +1129,11 @@ export function RollResult({
 
 export function RollModePicker({ mode, onChange }: { mode: RollMode; onChange: (mode: RollMode) => void }) {
   return (
-    <fieldset className="roll-mode">
+    <fieldset className="roll-mode" aria-describedby="roll-mode-hint">
       <legend>d20 rolls</legend>
+      <span id="roll-mode-hint" className="visually-hidden">
+        Automatic modes from the sheet are combined with this choice; advantage and disadvantage cancel.
+      </span>
       {(['normal', 'advantage', 'disadvantage'] as const).map((m) => (
         <label key={m} className="choice">
           <input type="radio" name="roll-mode" checked={mode === m} onChange={() => onChange(m)} />

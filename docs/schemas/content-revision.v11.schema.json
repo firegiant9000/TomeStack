@@ -154,8 +154,8 @@
     },
     "fieldId": {
       "type": "string",
-      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
-      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere)."
+      "pattern": "^(initiative|attacks|criticalRange|proficiencyBonus|armorClass|hitPoints|spellAttack|spellSaveDc|pactSlots|speed|speed\\.fly|passive\\.(perception|insight|investigation)|spellSlots\\.[1-9]|ability\\.(str|dex|con|int|wis|cha)\\.(score|mod)|save\\.(str|dex|con|int|wis|cha)|skill\\.[a-z][a-zA-Z]*|resource\\.[^\\s.]+)$",
+      "description": "Content v11 (D43): resource.<id> names a resource of the same revision; only a modifier uses it (the validator refuses it elsewhere). speed.fly is a fly speed in feet."
     },
     "grantFieldId": {
       "type": "string",
@@ -324,6 +324,24 @@
             "required": [
               "damageType"
             ],
+            "properties": {
+              "whileToggle": {
+                "type": "object",
+                "required": [
+                  "toggleId"
+                ],
+                "properties": {
+                  "contentId": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "toggleId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "description": "Content v11 (D43): the defence applies only while this toggle is on (it may be another content's). Damage defence kinds only."
+              }
+            },
             "not": {
               "anyOf": [
                 {
@@ -341,8 +359,17 @@
           },
           "else": {
             "not": {
-              "required": [
-                "damageType"
+              "anyOf": [
+                {
+                  "required": [
+                    "damageType"
+                  ]
+                },
+                {
+                  "required": [
+                    "whileToggle"
+                  ]
+                }
               ]
             }
           }
@@ -1358,6 +1385,66 @@
           "description": "Content v11 (D43): a named formula, read as VALUE.<valueId> by formulas of the content of the same class."
         },
         {
+          "properties": {
+            "type": {
+              "const": "rollMode"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^(save\\.(str|dex|con|int|wis|cha)|skill\\.(acrobatics|animalHandling|arcana|athletics|deception|history|insight|intimidation|investigation|medicine|nature|perception|performance|persuasion|religion|sleightOfHand|stealth|survival)|ability\\.(str|dex|con|int|wis|cha)\\.check)$",
+              "description": "The roll that gets the mode: a saving throw, a skill check or an ability check. The ability check is a roll target only, not a field."
+            },
+            "mode": {
+              "enum": [
+                "advantage",
+                "disadvantage"
+              ]
+            },
+            "against": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "blinded",
+                  "charmed",
+                  "deafened",
+                  "frightened",
+                  "grappled",
+                  "incapacitated",
+                  "invisible",
+                  "paralyzed",
+                  "petrified",
+                  "poisoned",
+                  "prone",
+                  "restrained",
+                  "stunned",
+                  "unconscious"
+                ]
+              },
+              "description": "Condition keys: the mode applies only against these conditions (for a save, the condition being imposed); the player applies it (assisted). Absent: always."
+            },
+            "toggle": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The toggle (of this revision, or of toggleContent) that must be on for the mode to apply."
+            },
+            "toggleContent": {
+              "$ref": "#/$defs/uuid",
+              "description": "The content entry that declares the toggle; absent means this revision. Needs a toggle."
+            }
+          },
+          "required": [
+            "target",
+            "mode"
+          ],
+          "dependentRequired": {
+            "toggleContent": [
+              "toggle"
+            ]
+          },
+          "description": "Content v11 (D43): advantage or disadvantage on a saving throw, skill check or ability check, optionally while a toggle is on or against some conditions. Typed only in a v11 revision: in an older one it is an unknown effect, kept byte for byte."
+        },
+        {
           "description": "Unknown effect type: kept, reference-only.",
           "properties": {
             "type": {
@@ -1382,7 +1469,8 @@
                   "upkeep",
                   "attack",
                   "attackRider",
-                  "value"
+                  "value",
+                  "rollMode"
                 ]
               }
             }

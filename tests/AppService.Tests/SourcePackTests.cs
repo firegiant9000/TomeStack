@@ -187,6 +187,32 @@ public class SourcePackTests
     }
 
     [Fact]
+    public void A_roll_mode_and_a_defence_grant_that_follow_a_toggle_in_another_source_give_a_reference_outside_warning()
+    {
+        using var temp = new TempApp();
+        var other = Shared(temp, "Test Form Source");
+        var holder = Feat(other.Id, "Test Form Holder", Guid.Parse("6e510000-0000-4000-8000-0000000000e1"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e1")) with { Status = RevisionStatus.Published };
+        temp.App.Store.AddRevision(holder);
+        var mode = Shared(temp, "Test Roll Mode Source");
+        temp.App.Store.AddRevision(Feat(mode.Id, "Test Roll Mode Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000e2"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e2")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new RollModeEffect { Id = "stealthy", Target = "skill.stealth", Mode = RollMode.Disadvantage, Toggle = "form", ToggleContent = holder.ContentId }],
+        });
+        var defence = Shared(temp, "Test Defence Source");
+        temp.App.Store.AddRevision(Feat(defence.Id, "Test Defence Taker", Guid.Parse("6e510000-0000-4000-8000-0000000000e3"), Guid.Parse("6e51e000-0000-4000-8000-0000000000e3")) with
+        {
+            Status = RevisionStatus.Published,
+            SchemaVersion = 11,
+            Effects = [new GrantEffect { Id = "ward", Grant = GrantKind.DamageResistance, DamageType = "Fire", WhileToggle = new(holder.ContentId, "form") }],
+        });
+
+        Assert.Contains(temp.App.PreviewSourcePack([mode.Id]).Warnings, w => w.Code == "pack.reference-outside");
+        Assert.Contains(temp.App.PreviewSourcePack([defence.Id]).Warnings, w => w.Code == "pack.reference-outside");
+    }
+
+    [Fact]
     public void A_source_pack_carries_no_machine_local_field_and_matches_the_v7_schemas()
     {
         using var origin = new TempApp();

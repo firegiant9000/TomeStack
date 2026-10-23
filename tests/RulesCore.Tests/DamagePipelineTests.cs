@@ -69,6 +69,24 @@ public class DamagePipelineTests
     }
 
     [Fact]
+    public void A_form_only_resistance_halves_damage_only_in_the_form()
+    {
+        var family = RulesFamilies.Get(RulesFamilies.Srd521);
+        var catalog = Fixtures.PlayMechanicsCatalog();
+        var character = Fixtures.Load("pm-instinct-l4.json");
+        var inForm = character with { Play = character.Play with { Toggles = [new(Fixtures.SkyForm.ContentId, "sky")] } };
+
+        IReadOnlyList<DamageDefence> Map(Character c) =>
+            CharacterCalculator.Calculate(c, catalog).DamageDefences?.Select(d => new DamageDefence(d.Type, d.Kind)).ToList() ?? [];
+
+        var on = DamagePipeline.Resolve(new(10, "fire"), new(35, 35, 0), Map(inForm), false, family);
+        var off = DamagePipeline.Resolve(new(10, "fire"), new(35, 35, 0), Map(character), false, family);
+
+        Assert.Equal(5, on.Outcome.Adjusted);
+        Assert.Equal(10, off.Outcome.Adjusted);
+    }
+
+    [Fact]
     public void A_massive_hit_carries_the_warning_code_and_the_left_over_number()
     {
         var result = DamagePipeline.Resolve(new(70, "fire"), new(35, 35, 0), [], false, RulesFamilies.Get(RulesFamilies.Srd521));

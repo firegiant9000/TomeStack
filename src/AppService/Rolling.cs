@@ -54,6 +54,7 @@ public sealed partial class TomeStackApp
 
         RollRequest request;
         RollSpend? spend = null;
+        (RollMode Automatic, IReadOnlyList<string> Sources)? modeNote = null;
         // An amount means something only on a content roll effect (a per-unit amount); on any other roll it is refused, not ignored.
         var amountMeansSomething = false;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
@@ -186,7 +187,12 @@ public sealed partial class TomeStackApp
             var label = field.StartsWith("ability.", StringComparison.Ordinal) && field.EndsWith(".mod", StringComparison.Ordinal)
                 ? $"{(value.Label.EndsWith(" modifier", StringComparison.Ordinal) ? value.Label[..^" modifier".Length] : value.Label)} check"
                 : $"{value.Label} (d20 test)";
-            request = new RollRequest("1d20", command.Mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
+            // D43 S6: the player's choice and the sheet's automatic mode combine (advantage and disadvantage cancel); the record says which.
+            var automatic = value.Mode?.Reasons.Where(r => r.IsAutomatic).ToList();
+            var mode = automatic is { Count: > 0 } ? RollModes.Combine([command.Mode, .. automatic.Select(r => r.Mode)]) : command.Mode;
+            request = new RollRequest("1d20", mode, command.Critical, [new RollModifier(value.Label, value.Value, origin)], new RollProvenance(field, label));
+            if (automatic is { Count: > 0 })
+                modeNote = (value.Mode!.Automatic, [.. automatic.Select(r => r.Source)]);
         }
         else
         {
@@ -197,6 +203,8 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("roll.amount-not-allowed", "An amount applies only to a roll effect with per-unit dice.", command.Content, command.EffectId)], "roll.amount-not-allowed");
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
+        if (modeNote is { } note)
+            record = record! with { AutomaticMode = note.Automatic, ModeSources = note.Sources };
         return spend is null ? record! : record! with { Spend = spend };
     }
 

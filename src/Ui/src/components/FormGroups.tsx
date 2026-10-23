@@ -19,7 +19,7 @@ export function FormGroups({
 }: {
   toggles: ToggleValue[];
   /** May return a promise (the sheet's does): further choices are ignored until it settles. */
-  act: (action: PlayAction) => void | Promise<void>;
+  act: (action: PlayAction) => void | Promise<unknown>;
   busy: boolean;
   /** The sheet's resources, to name the pool a cost is paid from. */
   resources?: ResourceValue[];

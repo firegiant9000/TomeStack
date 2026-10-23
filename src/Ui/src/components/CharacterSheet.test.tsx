@@ -5,11 +5,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '../api/client';
 import type { Character, CharacterSheet as SheetModel, CharacterView, DerivedValue, FeatureEntry, RollRecord } from '../api/types';
 import { TomeStackError } from '../api/transport';
 import { CharacterSheet } from './CharacterSheet';
+import { RollResult } from './PlayPanels';
 
 vi.mock('../api/client', () => ({
   client: {
@@ -1185,6 +1186,172 @@ it('returns focus to the opener and reports the result when a rest finishes (D29
 const rollRecord = (label: string, total: number, sides = 20): RollRecord => ({
   formula: `1d${sides}`, mode: 'normal', critical: false, dice: [{ term: 0, sides, value: total, kept: true, fromCritical: false }],
   diceTotal: total, expressionConstant: 0, modifiers: [], total, provenance: { rollId: 'fixture', label },
+});
+
+const modeReason = (mode: 'advantage' | 'disadvantage', source: string, against?: string[], automatic = !against) => ({
+  mode, source, content: { contentId: 'c1', revisionId: 'r1' }, against, automatic,
+});
+const statsWith = (id: string, label: string, value: number, units: string, mode?: DerivedValue['mode']): CharacterView => {
+  const v = view();
+  return { ...v, sheet: { ...v.sheet, fields: [...v.sheet.fields, { ...field(id, label, value, units), mode }] } };
+};
+
+it('a save with automatic advantage says so on its button and in its accessible name', async () => {
+  const user = userEvent.setup();
+  vi.mocked(client.roll).mockReset();
+  vi.mocked(client.roll).mockResolvedValue(rollRecord('Wisdom save', 12));
+  const mode = { automatic: 'advantage' as const, reasons: [modeReason('advantage', 'Fixture Swift Instinct'), modeReason('advantage', 'Fixture Light Step')] };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' })); // the card's body is a closed <details>
+  await user.click(screen.getByRole('heading', { name: 'Initiative: +1' }));
+  const name = 'Roll Wisdom save (advantage: Fixture Swift Instinct, Fixture Light Step)';
+  const button = screen.getByRole('button', { name });
+  expect(button.textContent).toBe(name);
+  await user.click(button);
+  expect(vi.mocked(client.roll)).toHaveBeenCalledWith('fixture-2', { field: 'save.wis', mode: 'normal' });
+  expect(screen.getByRole('button', { name: 'Roll Initiative' })).toBeTruthy(); // a field with no reason is unchanged
+});
+
+it('advantage and disadvantage together read as normal with the reason', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'normal' as const, reasons: [modeReason('advantage', 'Fixture Swift Instinct'), modeReason('disadvantage', 'Fixture Heavy Armor')] };
+  renderSheet(statsWith('save.dex', 'Dexterity save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Dexterity save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Dexterity save (normal: advantage and disadvantage cancel)' })).toBeTruthy();
+});
+
+it('an assisted mode is a note, and the button stays normal', async () => {
+  const user = userEvent.setup();
+  const mode = {
+    automatic: 'normal' as const,
+    reasons: [modeReason('advantage', 'Fixture Swift Instinct', ['paralyzed', 'stunned']), modeReason('disadvantage', 'Fixture Dark Fear', undefined, false)],
+  };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Wisdom save' })).toBeTruthy();
+  expect(screen.getByText('Advantage against paralyzed, stunned (Fixture Swift Instinct)')).toBeTruthy();
+  expect(screen.getByText('Disadvantage (Fixture Dark Fear), not applied automatically')).toBeTruthy();
+});
+
+it('two assisted reasons that would cancel leave the button as it was and keep both notes', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'normal' as const, reasons: [modeReason('advantage', 'Fixture A', undefined, false), modeReason('disadvantage', 'Fixture B', undefined, false)] };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Wisdom save' })).toBeTruthy();
+  expect(screen.getByText('Advantage (Fixture A), not applied automatically')).toBeTruthy();
+  expect(screen.getByText('Disadvantage (Fixture B), not applied automatically')).toBeTruthy();
+});
+
+it('an assisted reason beside an automatic one of the same mode is a note, not a source', async () => {
+  const user = userEvent.setup();
+  const mode = { automatic: 'advantage' as const, reasons: [modeReason('advantage', 'Fixture A'), modeReason('advantage', 'Fixture B', undefined, false)] };
+  renderSheet(statsWith('save.wis', 'Wisdom save', 1, 'modifier', mode), 'stats');
+  await user.click(screen.getByRole('heading', { name: 'Wisdom save: +1' }));
+  expect(screen.getByRole('button', { name: 'Roll Wisdom save (advantage: Fixture A)' })).toBeTruthy();
+  expect(screen.getByText('Advantage (Fixture B), not applied automatically')).toBeTruthy();
+});
+
+it('fly speed shows only when above 0', () => {
+  renderSheet(statsWith('speed.fly', 'Fly speed', 0, 'feet'), 'stats');
+  expect(screen.queryByRole('heading', { name: /Fly speed/ })).toBeNull();
+  cleanup();
+  renderSheet(statsWith('speed.fly', 'Fly speed', 30, 'feet'), 'stats');
+  expect(screen.getByRole('heading', { name: 'Fly speed: 30 ft.' })).toBeTruthy();
+});
+
+it('an override of 0 keeps the fly speed card and its Remove override button', async () => {
+  const user = userEvent.setup();
+  const v = statsWith('speed.fly', 'Fly speed', 0, 'feet');
+  const overridden: CharacterView = {
+    ...v,
+    sheet: {
+      ...v.sheet,
+      fields: v.sheet.fields.map((f) =>
+        f.field === 'speed.fly' ? { ...f, value: 0, computedValue: 30, override: { field: 'speed.fly', value: 0, reason: 'Fixture grounded' } } : f),
+    },
+  };
+  renderSheet(overridden, 'stats');
+  await user.click(screen.getByRole('heading', { name: /Fly speed/ }));
+  expect(screen.getByRole('button', { name: /Remove override/ })).toBeTruthy();
+});
+
+it('the player picker says that automatic modes are combined with its choice', () => {
+  renderSheet(view());
+  const group = screen.getByRole('group', { name: 'd20 rolls' });
+  const described = document.getElementById(group.getAttribute('aria-describedby')!);
+  expect(described?.textContent).toBe('Automatic modes from the sheet are combined with this choice; advantage and disadvantage cancel.');
+});
+
+describe('a roll record Spend', () => {
+  const spendRecord: RollRecord = { ...rollRecord('Fixture Strike', 12), spend: { contentId: 'c1', resourceId: 'pool', amount: 1 } };
+  const pool = [
+    {
+      content: { contentId: 'c1', revisionId: 'r1' }, contentName: 'Fixture', effectId: 'e1', resourceId: 'pool', label: 'Fixture pool',
+      maximum: 3, spent: 0, current: 3, trace: [], warnings: [], automation: 'automatic' as const, recoveries: [],
+    },
+  ];
+
+  it('a refused record Spend can be retried', async () => {
+    const user = userEvent.setup();
+    const act = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(<RollResult record={spendRecord} resources={pool} features={[]} act={act} />);
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
+    await user.click(button);
+    await waitFor(() => expect(act).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(button.disabled).toBe(false));
+    await user.click(button);
+    await waitFor(() => expect(act).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(button.disabled).toBe(true)); // spent for good once it worked
+  });
+
+  it('a rejecting act also leaves the record Spend usable', async () => {
+    const user = userEvent.setup();
+    const act = vi.fn().mockRejectedValue(new Error('fixture refusal'));
+    render(<RollResult record={spendRecord} resources={pool} features={[]} act={act} />);
+    const button = screen.getByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
+    await user.click(button);
+    await waitFor(() => expect(act).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(button.disabled).toBe(false));
+  });
+
+  it('a roll record names its automatic mode', () => {
+    const record: RollRecord = { ...rollRecord('Wisdom save', 14), mode: 'advantage', automaticMode: 'advantage', modeSources: ['Fixture Swift Instinct', 'Fixture Light Step'] };
+    render(<RollResult record={record} resources={[]} features={[]} act={() => {}} />);
+    expect(screen.getByText(/Wisdom save: 14/).closest('p')!.textContent).toBe('Wisdom save: 14 (1d20, advantage from Fixture Swift Instinct, Fixture Light Step)');
+  });
+});
+
+describe('a record Spend after a failed play change', () => {
+  const pool = {
+    content: { contentId: 'c1', revisionId: 'r1' }, contentName: 'Fixture', effectId: 'e1', resourceId: 'pool', label: 'Fixture pool',
+    maximum: 3, spent: 0, current: 3, trace: [], warnings: [], automation: 'automatic' as const, recoveries: [],
+  };
+  async function pressSpend(failure: Error) {
+    const user = userEvent.setup();
+    vi.mocked(client.roll).mockReset();
+    vi.mocked(client.roll).mockResolvedValue({ ...rollRecord('Dexterity check', 9), spend: { contentId: 'c1', resourceId: 'pool', amount: 1 } });
+    vi.mocked(client.play).mockReset();
+    vi.mocked(client.play).mockRejectedValue(failure);
+    const v = view();
+    renderSheet({ ...v, sheet: { ...v.sheet, resources: [pool] } });
+    await user.click(screen.getByRole('button', { name: 'Roll Dexterity check (+1)' }));
+    const spend = await screen.findByRole<HTMLButtonElement>('button', { name: 'Spend 1 Fixture pool (3 left)' });
+    await user.click(spend);
+    await waitFor(() => expect(client.play).toHaveBeenCalledTimes(1));
+    return spend;
+  }
+
+  it('a timeout (outcome unknown) keeps the record Spend used', async () => {
+    const spend = await pressSpend(new TomeStackError({ code: 'timeout', message: 'No response to play.' }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(spend.disabled).toBe(true);
+  });
+
+  it('a service refusal gives the record Spend back', async () => {
+    const spend = await pressSpend(new TomeStackError({ code: 'character.stale', message: 'stale' }));
+    await waitFor(() => expect(spend.disabled).toBe(false));
+  });
 });
 
 it('moves the replaced Last roll into Previous rolls (D28)', async () => {

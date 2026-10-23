@@ -41,6 +41,21 @@ it('names the spell, and after damage offers the save roll and the two confirmed
   expect(act).toHaveBeenCalledWith({ action: 'endConcentration' });
 });
 
+it('names the automatic mode of the Constitution save on the roll button', async () => {
+  const user = userEvent.setup();
+  const roll = vi.fn();
+  const v = view({ concentration: { spell, name: 'Fixture Ward', pendingSaveDc: 12 } });
+  v.sheet.fields = [
+    {
+      field: 'save.con', label: 'Constitution saving throw', value: 1, computedValue: 1, trace: [], warnings: [], automation: 'automatic', units: 'modifier',
+      mode: { automatic: 'advantage', reasons: [{ mode: 'advantage', source: 'Fixture Steady Ward', content: { contentId: spell.contentId, revisionId: spell.revisionId }, automatic: true }] },
+    } as CharacterView['sheet']['fields'][number],
+  ];
+  render(<ConcentrationPanel view={v} act={() => {}} roll={roll} />);
+  await user.click(screen.getByRole('button', { name: 'Roll Constitution saving throw (advantage: Fixture Steady Ward)' }));
+  expect(roll).toHaveBeenCalledWith({ field: 'save.con' });
+});
+
 // Focus (WCAG 2.4.3): each confirmed outcome removes the focused button. A stateful harness applies the change like the sheet does,
 // with the Hit points panel beside it as the stable target that survives "End concentration".
 function Harness() {
