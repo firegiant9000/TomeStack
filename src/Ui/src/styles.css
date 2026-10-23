@@ -513,10 +513,30 @@ dl.review-list dd { overflow-wrap: anywhere; }
 .print-title { font-size: var(--text-xl); margin: var(--space-2) 0 0; }
 .print-feature p { margin: 0.2rem 0; }
 .print-notice { font-size: var(--text-sm); color: var(--muted); }
+/* P14 (D71): the combat card. On screen its page block (header, card, footer) is laid out at the printed width (A4 less
+   0.5in margins, 7.27in) and size so that PrintView can measure it as one; the font size is set inline from the print size,
+   header and footer sizes are in em so they follow it, and printing takes the size from the root instead. */
+.combat-scroll { overflow-x: auto; }
+.combat-page { width: 7.27in; display: flow-root; }
+.combat-page .print-title { font-size: 1.5em; }
+.combat-page .print-notice { font-size: 0.875em; }
+.combat-card table { margin: 0; width: 100%; }
+.combat-card th, .combat-card td { text-align: left; vertical-align: middle; padding: 0.15em 0.4em; }
+.combat-card caption { text-align: left; font-weight: 700; }
+.combat-card .card-block { padding: 0.25em 0; }
+.combat-card .card-block[hidden] { display: none; }
+.combat-card h4 { margin: 0; }
+.combat-card ul { margin: 0; padding: 0; list-style: none; }
+.combat-card .tick { display: inline-block; margin-right: 0.15em; }
+.combat-card .blank-box { min-width: 4em; border: 1px solid currentcolor; height: 1.8em; }
+.combat-card .blank-line { display: block; border-bottom: 1px solid currentcolor; height: 1.6em; }
+.combat-card td .blank-line { min-width: 6em; }
+.combat-card .card-continued { margin: 0.25em 0 0; font-style: italic; }
 @media print {
   /* html[data-*] rules are (0,1,1) and would beat a bare :root (0,1,0): list them, or a dark appearance prints dark (verified).
-     Canvas for --bg, --surface and --header-bg: the tinted light tokens would print a tinted page (D27). */
-  :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: 100%; --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
+     Canvas for --bg, --surface and --header-bg: the tinted light tokens would print a tinted page (D27).
+     P14: PrintView sets --print-font-size (150% to 200%) on the root while Large print is on; otherwise the print stays 100%. */
+  :root, html[data-appearance], html[data-text-size], html[data-theme] { color-scheme: light; font-size: var(--print-font-size, 100%); --bg: Canvas; --surface: Canvas; --header-bg: Canvas; }
   .app { display: block; min-height: 0; }
   .content, article.sheet { display: block; }
   article.sheet > .print-sheet, article.sheet > .sheet-body { margin-right: 0; }
@@ -530,6 +550,8 @@ dl.review-list dd { overflow-wrap: anywhere; }
   .sheet-summary { display: block; }
   .sheet-summary dl > div { border: none; padding: 0; }
   .print-feature, tr { break-inside: avoid; }
+  .combat-page { width: auto; font-size: inherit !important; }
+  .combat-scroll { overflow: visible; }
 }
 
 /* M5 slice 4: text diff (the words added/removed are also in the text for screen readers; colour is not the only cue) */
