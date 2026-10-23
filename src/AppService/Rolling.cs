@@ -29,7 +29,8 @@ public sealed record RollCommand(
     bool Versatile = false,
     Guid? CustomAttack = null,
     string? ChargeEntry = null,
-    CompanionAttackTarget? CompanionAttack = null);
+    CompanionAttackTarget? CompanionAttack = null,
+    int? Amount = null);
 
 /// <summary>Wave 3 item 23: one attack line of one of the character's companions (<see cref="Companion.Attacks"/>).</summary>
 public sealed record CompanionAttackTarget(Guid CompanionId, Guid AttackId);
@@ -52,6 +53,9 @@ public sealed partial class TomeStackApp
         var sheet = CharacterCalculator.Calculate(character, _store);
 
         RollRequest request;
+        RollSpend? spend = null;
+        // An amount means something only on a content roll effect (a per-unit amount); on any other roll it is refused, not ignored.
+        var amountMeansSomething = false;
         var targets = (command.Content is not null ? 1 : 0) + (command.Field is not null ? 1 : 0) + (command.HitDie is not null ? 1 : 0)
             + (command.DeathSave ? 1 : 0) + (command.Spell is not null ? 1 : 0) + (command.Weapon is not null ? 1 : 0)
             + (command.CustomAttack is not null ? 1 : 0) + (command.ChargeEntry is not null ? 1 : 0) + (command.CompanionAttack is not null ? 1 : 0);
@@ -151,13 +155,24 @@ public sealed partial class TomeStackApp
                 ?? throw new AppValidationException([new("roll.effect-not-found", $"'{revision.Name}' has no roll effect '{command.EffectId}'.", reference, command.EffectId)]);
             // Content v8 (M2.2): the roll's bonus formula, as the sheet evaluated it for this character (a flat modifier,
             // with its sign). A bonus that could not be evaluated refuses the roll: rolling without it would be wrong.
-            if (sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effect.Id) is { } failed)
-                throw new AppValidationException([new("roll.bonus-invalid", $"'{effect.Label}' cannot be rolled: its bonus could not be calculated. {failed.Message}", reference, effect.Id)]);
-            var bonus = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id)?.Bonus;
+            // D43 S5: a roll with no dice has nothing to roll, with or without an amount.
+            if (effect.Dice is null)
+                throw new AppValidationException([new("roll.no-dice", $"'{effect.Label}' has no dice to roll.", reference, effect.Id)], "roll.no-dice");
+            var calculated = sheet.Features?.FirstOrDefault(f => f.Content == reference)?.Effects.FirstOrDefault(e => e.Id == effect.Id);
+            // The calculation reports a roll's bonus before its cost and save DC, so the first diagnostic is the bonus's own when the bonus fails.
+            var failure = sheet.Diagnostics.FirstOrDefault(d => d.Code == "effect.invalid-formula" && d.Content == reference && d.EffectId == effect.Id);
+            // A failing cost (calculation leaves Cost null while the effect declares one) or save DC is not a bonus problem: a failing
+            // cost refuses only an amount, and a failing DC refuses nothing here.
+            var costFailed = failure is not null && effect.Cost is not null && calculated?.Cost is null;
+            if (failure is not null && effect.Bonus is not null && calculated?.Bonus is null)
+                throw new AppValidationException([new("roll.bonus-invalid", $"'{effect.Label}' cannot be rolled: its bonus could not be calculated. {failure.Message}", reference, effect.Id)]);
+            var bonus = calculated?.Bonus;
             IReadOnlyList<RollModifier>? modifiers = bonus is { } amount && amount != 0
                 ? [new RollModifier($"{effect.Label} bonus", amount, new TraceOrigin(TraceOriginKind.Content, character.RulesFamily, reference, revision.Name, effect.Id, revision.Provenance.SourceId, null, revision.Provenance.Page))]
                 : null;
             request = DiceRoller.FromEffect(effect, revision, _store.FindSource(revision.Provenance.SourceId), command.Mode, command.Critical, modifiers);
+            amountMeansSomething = true;
+            spend = EffectSpend(command, effect, revision, sheet, calculated?.Cost, costFailed, failure, ref request);
         }
         else if (command.Field is { } field)
         {
@@ -178,9 +193,50 @@ public sealed partial class TomeStackApp
             throw new AppValidationException([new("roll.target-required", "Name a content roll effect or a field to roll.")]);
         }
 
+        if (command.Amount is not null && !amountMeansSomething)
+            throw new AppValidationException([new("roll.amount-not-allowed", "An amount applies only to a roll effect with per-unit dice.", command.Content, command.EffectId)], "roll.amount-not-allowed");
         if (!DiceRoller.TryRoll(request, Random, out var record, out var error))
             throw new AppValidationException([new(error!.Code, error.Message, command.Content, command.EffectId)]);
-        return record!;
+        return spend is null ? record! : record! with { Spend = spend };
+    }
+
+    /// <summary>
+    /// D43 S5: the amount of a roll effect's pool the roll implies spending (the request's amount, else the evaluated cost; informational,
+    /// the Spend button sends it later), and, for a per-unit amount, the formula with the extra dice. Every check runs before any die is rolled.
+    /// Messages name ids and numbers only.
+    /// </summary>
+    private static RollSpend? EffectSpend(
+        RollCommand command, RollEffect effect, ContentRevision revision, CharacterSheet sheet, int? cost, bool costFailed, Diagnostic? failure, ref RollRequest request)
+    {
+        var poolContent = effect.ResourceContent ?? revision.ContentId;
+        var reference = revision.Reference;
+        if (command.Amount is { } amount)
+        {
+            if (effect.PerUnit is not { } perUnit)
+                throw new AppValidationException([new("roll.amount-not-allowed", $"'{effect.Id}' spends a fixed amount; it takes no per-unit amount.", reference, effect.Id)], "roll.amount-not-allowed");
+            if (costFailed)
+                throw new AppValidationException([new(failure!.Code, $"'{effect.Id}' cannot be rolled with an amount: {failure.Message}", reference, effect.Id)], failure.Code);
+            var baseCost = cost ?? 0;
+            var pool = effect.ResourceId is null ? null : sheet.Resources?.FirstOrDefault(r => r.Content.ContentId == poolContent && r.ResourceId == effect.ResourceId);
+            var cap = perUnit.MaxUnits is { } units ? baseCost + units : pool?.Maximum;
+            if (amount < baseCost || (cap is { } limit && amount > limit))
+                throw new AppValidationException([new("roll.amount-out-of-range", $"'{effect.Id}' takes an amount from {baseCost} to {cap?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "the pool's maximum"}, not {amount}.", reference, effect.Id)], "roll.amount-out-of-range");
+            if (effect.ResourceId is not null)
+            {
+                if (pool?.Current is not { } current)
+                    throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' is untracked, so {amount} cannot be paid from it.", reference, effect.Id)], "roll.amount-unaffordable");
+                if (amount > current)
+                    throw new AppValidationException([new("roll.amount-unaffordable", $"Pool '{effect.ResourceId}' has {current} left; {amount} cannot be paid.", reference, effect.Id)], "roll.amount-unaffordable");
+            }
+            // Unreachable for validated content; stored content with a per-unit die this cannot add is refused, never rolled as the base dice.
+            if (!DiceRoller.TryPerUnitFormula(request.Formula, perUnit.Dice, baseCost, amount, out var formula))
+                throw new AppValidationException([new("roll.amount-out-of-range", $"'{effect.Id}' has a per-unit die that cannot be added to its dice, so no amount can be rolled.", reference, effect.Id)], "roll.amount-out-of-range");
+            request = request with { Formula = formula };
+        }
+        if (effect.ResourceId is null)
+            return null;
+        var spent = command.Amount ?? cost ?? (effect.Cost is null ? 1 : null);
+        return spent is { } uses ? new RollSpend(poolContent, effect.ResourceId, uses) : null;
     }
 
     /// <summary>

@@ -212,9 +212,19 @@ public sealed record FeatureEntry(
 /// </param>
 /// <param name="Available">Content v11 (D43): false while a form-only roll (<c>whileToggle</c>) is out of its form; the roll is still listed.</param>
 /// <param name="UnavailableReason">Why it is not available ("Available in Kindled mode"); null when it is.</param>
+/// <param name="SaveAbility">Content v11 (D43): the ability of the save the roll forces; set whenever the roll has a save.</param>
+/// <param name="SaveDc">The save DC evaluated for this character; null when the roll has no save or the formula failed (a diagnostic; the row is assisted).</param>
+/// <param name="SaveTrace">How <paramref name="SaveDc"/> was worked out; null when it has no DC.</param>
+/// <param name="Area">The area the roll covers, as written. Shown, never automated.</param>
+/// <param name="Range">The roll's range, as written. Shown, never automated.</param>
+/// <param name="Targets">Who the roll affects, as written. Shown, never automated.</param>
+/// <param name="PerUnit">Extra dice per unit spent, as written; the roll command applies it (Task 5.3).</param>
 public sealed record FeatureEffect(
     string Id, string Type, AutomationStatus Automation, string? Text, string? Label = null, string? Dice = null, string? ResourceId = null, Activation? Activation = null,
-    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null);
+    Guid? ResourceContent = null, int? Cost = null, bool VariableCost = false, int? Bonus = null, bool Available = true, string? UnavailableReason = null,
+    Ability? SaveAbility = null, int? SaveDc = null, IReadOnlyList<TraceEntry>? SaveTrace = null,
+    RollArea? Area = null, string? Range = null, string? Targets = null,
+    RollPerUnit? PerUnit = null);
 
 /// <summary>
 /// Content v6 (M3 B2): a toggle the player switches on and off, and whether it is on now. <paramref name="Auto"/> (content v10,
@@ -432,7 +442,7 @@ public static class CharacterCalculator
         var modifiers = new List<Modifier>();
         foreach (var effect in revision.Effects.OfType<ModifierEffect>())
         {
-            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out _))
+            if (SpecIndex.ContainsKey(effect.Target) && !IsCharacterOnlyField(effect.Target, revision.SchemaVersion) && Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out _))
                 modifiers.Add(new(content, effect, formula!, [.. formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal)]));
         }
         var diagnostics = new List<Diagnostic>();
@@ -613,7 +623,7 @@ public static class CharacterCalculator
         var declaredToggles = DeclaredToggles(active, character, resolved.ClassLevels);
         var effective = ToggleGroups.Resolve(character.Play, declaredToggles, diagnostics, active.Select(a => a.Revision.ContentId).ToHashSet());
         var resourceBonuses = new List<ResourceBonus>();
-        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses);
+        var modifiers = CollectModifiers(active, character, policy, diagnostics, warnings, manual, effective, autoOn, resourceBonuses, resolved.ClassLevels);
         var weaponProficiencies = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var armorTraining = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
         var unseenArmor = new Dictionary<string, Proficiency>(StringComparer.Ordinal);
@@ -682,14 +692,10 @@ public static class CharacterCalculator
         var attacks = CollectAttacks(active, values, family, weaponProficiencies, character, resolved.ClassLevels, effective, autoOn, diagnostics);
         var resources = CollectResources(active, character, resolved.ClassLevels, values, family, resourceBonuses);
         var rollBonuses = RollBonuses(active, character, resolved.ClassLevels, values, diagnostics);
+        var rollDetails = RollDetailsOf(active, family, character, resolved.ClassLevels, values, diagnostics);
         var scoped = diagnostics.Concat(warnings.Values.SelectMany(w => w)).Concat(resources.SelectMany(r => r.Warnings)).Where(d => d.Content is not null).Distinct().ToList();
-        // A roll's cost is a number of uses, so never negative.
-        int? Cost(ActiveContent item, string source) =>
-            Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out _) && formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var value, out _)
-                ? Math.Max(value, 0)
-                : null;
         var features = active.Select(item => Feature(
-            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], Cost, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
+            item, family, [.. scoped.Where(d => d.Content == item.Revision.Reference)], rollDetails, rollBonuses, form => OutOfForm(active, item, form, effective, autoOn))).ToList();
         var toggles = active
             .SelectMany(item => item.Revision.Effects.OfType<ToggleEffect>()
                 .Where(t => t.Automation != AutomationStatus.Reference && LevelReached(item, t, character, resolved.ClassLevels))
@@ -703,7 +709,7 @@ public static class CharacterCalculator
             if (t.Cost is { } source)
             {
                 // Like a resource maximum: a formula that fails gives no cost and the invalid-formula warning.
-                if (!Formula.TryParse(source, AllowsScales(revision), out var formula, out var failure)
+                if (!Formula.TryParse(source, Formula.FeaturesFor(revision), out var formula, out var failure)
                     || !formula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var amount, out failure))
                     diagnostics.Add(InvalidFormula(revision, t, failure!));
                 else
@@ -713,7 +719,7 @@ public static class CharacterCalculator
             if (t.Duration is { } rounds)
             {
                 // Rounds: a formula that fails gives no duration and the invalid-formula warning.
-                if (!Formula.TryParse(rounds, AllowsScales(revision), out var durationFormula, out var durationFailure)
+                if (!Formula.TryParse(rounds, Formula.FeaturesFor(revision), out var durationFormula, out var durationFailure)
                     || !durationFormula!.TryEvaluate(id => Resolve(id, item, character, resolved.ClassLevels, values, []), out var roundCount, out durationFailure))
                     diagnostics.Add(InvalidFormula(revision, t, durationFailure!));
                 else
@@ -804,7 +810,7 @@ public static class CharacterCalculator
                 int? amount = null;
                 if (!all)
                 {
-                    if (!Formula.TryParse(upkeep.Amount, AllowsScales(revision), out var formula, out var failure)
+                    if (!Formula.TryParse(upkeep.Amount, Formula.FeaturesFor(revision), out var formula, out var failure)
                         || !formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                         diagnostics.Add(InvalidFormula(revision, upkeep, failure!));
                     else
@@ -1147,7 +1153,7 @@ public static class CharacterCalculator
         out int value, out FormulaError? failure)
     {
         value = 0;
-        if (!Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure))
+        if (!Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure))
             return false;
         return formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, inputs), out value, out failure);
     }
@@ -1382,7 +1388,7 @@ public static class CharacterCalculator
             int? allowed = effect.SpellsTable?[level - 1];
             if (effect.SpellsFormula is { } source)
             {
-                if (Formula.TryParse(source, AllowsScales(content.Revision), out var formula, out var failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(content.Revision), out var formula, out var failure)
                     && formula!.TryEvaluate(id => Resolve(id, content, character, classLevels, values, []), out var value, out failure))
                 {
                     allowed = Math.Max(value, 0);
@@ -1497,7 +1503,7 @@ public static class CharacterCalculator
                 {
                     trace.Add(new(1, "base", $"Reference only: {Describe(item)} does not track this resource; track it by hand", null, 0, origin));
                 }
-                else if (!Formula.TryParse(effect.Maximum, AllowsScales(revision), out var formula, out var parseError))
+                else if (!Formula.TryParse(effect.Maximum, Formula.FeaturesFor(revision), out var formula, out var parseError))
                 {
                     warnings.Add(InvalidFormula(revision, effect, parseError!));
                 }
@@ -1519,7 +1525,7 @@ public static class CharacterCalculator
                                 continue;
                             }
                             var bonusInputs = new List<TraceInput>();
-                            if (!Formula.TryParse(bonus.Effect.Value, AllowsScales(revision), out var bonusFormula, out var bonusError))
+                            if (!Formula.TryParse(bonus.Effect.Value, Formula.FeaturesFor(revision), out var bonusFormula, out var bonusError))
                             {
                                 warnings.Add(InvalidFormula(revision, bonus.Effect, bonusError!));
                                 bonusByHand = true;
@@ -1564,7 +1570,7 @@ public static class CharacterCalculator
         if (recovery.Automation != AutomationStatus.Automatic)
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text); // the player applies it
         FormulaError? failure;
-        if (Formula.TryParse(recovery.Amount, AllowsScales(item.Revision), out var formula, out failure)
+        if (Formula.TryParse(recovery.Amount, Formula.FeaturesFor(item.Revision), out var formula, out failure)
             && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
         {
             return new(recovery.Id, recovery.On, recovery.Amount, recovery.Text, Math.Max(value, 0));
@@ -1589,7 +1595,7 @@ public static class CharacterCalculator
                 if (roll.Bonus is not { } source)
                     continue;
                 FormulaError? failure;
-                if (Formula.TryParse(source, AllowsScales(item.Revision), out var formula, out failure)
+                if (Formula.TryParse(source, Formula.FeaturesFor(item.Revision), out var formula, out failure)
                     && formula!.TryEvaluate(id => Resolve(id, item, character, classLevels, values, []), out var value, out failure))
                     bonuses[(item.Revision.Reference, roll.Id)] = value;
                 else
@@ -1599,8 +1605,103 @@ public static class CharacterCalculator
         return bonuses;
     }
 
+    /// <summary>What a roll's cost and save DC came to for this character (<see cref="RollDetailsOf"/>).</summary>
+    private sealed record RollDetail(int? Cost, int? SaveDc, IReadOnlyList<TraceEntry>? SaveTrace, bool Failed);
+
+    /// <summary>
+    /// Each roll's <c>cost</c> (a number of uses, never negative; one when it has a resource and no formula) and, from content v11
+    /// (D43), its save DC with the trace of how it was reached. A formula that fails gives null and the <c>effect.invalid-formula</c>
+    /// diagnostic, and the row is assisted (<see cref="RollDetail.Failed"/>); it stays available, like a feature attack's cost.
+    /// </summary>
+    private static Dictionary<(ContentReference, string), RollDetail> RollDetailsOf(
+        List<ActiveContent> active, string family, Character character, ClassLevelMap classLevels, Dictionary<string, int> values, List<Diagnostic> diagnostics)
+    {
+        var details = new Dictionary<(ContentReference, string), RollDetail>();
+        foreach (var item in active)
+        {
+            var revision = item.Revision;
+            foreach (var roll in revision.Effects.OfType<RollEffect>())
+            {
+                var failed = false;
+                int? cost = null;
+                if (roll.Cost is { } costSource)
+                {
+                    if (TryEvaluate(costSource, item, character, classLevels, values, [], out var spent, out var costFailure))
+                    {
+                        cost = Math.Max(spent, 0);
+                    }
+                    else
+                    {
+                        failed = true;
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, costFailure!));
+                    }
+                }
+                else if (roll.ResourceId is not null)
+                {
+                    cost = 1;
+                }
+
+                int? saveDc = null;
+                List<TraceEntry>? saveTrace = null;
+                if (roll.Save is { } save)
+                {
+                    var inputs = new List<TraceInput>();
+                    if (TryEvaluate(save.Dc, item, character, classLevels, values, inputs, out var dc, out var dcFailure))
+                    {
+                        saveDc = dc;
+                        var read = inputs.DistinctBy(i => i.Name, StringComparer.Ordinal).ToList();
+                        var classRoot = item.ClassRoot is { } root ? active.FirstOrDefault(a => a.Revision.Reference == root)?.Revision.Name : null;
+                        // A named value is traced under the content that declares it.
+                        string? ValueOwner(string name) =>
+                            item.ClassRoot is { } ownerRoot && classLevels.NamedValues.TryGetValue((ownerRoot, FormulaIdentifiers.ValueId(name)), out var ownerValue) ? ownerValue.Content.Revision.Name : null;
+                        var from = read.Count == 0 ? "" : $", from {string.Join(" and ", read.Select(i => $"{InputLabel(i.Name, classRoot, FormulaIdentifiers.IsValue(i.Name) ? ValueOwner(i.Name) : null)} {i.Value}"))}";
+                        saveTrace = [new(1, "set", $"{AbilityNames[save.Ability]} save DC{from}", null, dc, ContentOrigin(family, item, roll), null, read)];
+                    }
+                    else
+                    {
+                        failed = true;
+                        AddOnce(diagnostics, InvalidFormula(revision, roll, dcFailure!));
+                    }
+                }
+                details[(revision.Reference, roll.Id)] = new(cost, saveDc, saveTrace, failed);
+            }
+        }
+        return details;
+    }
+
+    /// <summary>Adds a diagnostic unless an identical one (same code, content, effect and message) is already there.</summary>
+    private static void AddOnce(List<Diagnostic> diagnostics, Diagnostic diagnostic)
+    {
+        if (!diagnostics.Contains(diagnostic))
+            diagnostics.Add(diagnostic);
+    }
+
+    /// <summary>A formula identifier in words for a trace: "Proficiency bonus", "Wisdom modifier", "Strength score", a scale as "{class} {scaleId}"; any other identifier stays as written.</summary>
+    private static string InputLabel(string identifier, string? classRoot, string? valueOwner)
+    {
+        if (FormulaIdentifiers.IsScale(identifier))
+            return $"{classRoot} {FormulaIdentifiers.ScaleId(identifier)}".Trim();
+        if (FormulaIdentifiers.IsValue(identifier))
+            return $"{valueOwner} {FormulaIdentifiers.ValueId(identifier)}".Trim();
+        if (identifier == FormulaIdentifiers.ProficiencyBonus)
+            return "Proficiency bonus";
+        if (identifier == FormulaIdentifiers.Level)
+            return "Character level";
+        if (identifier == FormulaIdentifiers.ClassLevel)
+            return "Class level";
+        foreach (var ability in Enum.GetValues<Ability>())
+        {
+            var name = ability.ToString().ToUpperInvariant();
+            if (identifier == $"{name}.MOD")
+                return $"{AbilityNames[ability]} modifier";
+            if (identifier == $"{name}.SCORE")
+                return $"{AbilityNames[ability]} score";
+        }
+        return identifier;
+    }
+
     private static FeatureEntry Feature(
-        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Func<ActiveContent, string, int?> cost, Dictionary<(ContentReference, string), int> bonuses,
+        ActiveContent item, string family, IReadOnlyList<Diagnostic> diagnostics, Dictionary<(ContentReference, string), RollDetail> rollDetails, Dictionary<(ContentReference, string), int> bonuses,
         Func<ToggleRef, string?> outOfForm)
     {
         var revision = item.Revision;
@@ -1608,10 +1709,14 @@ public static class CharacterCalculator
         FeatureEffect Roll(RollEffect roll)
         {
             var reason = roll.WhileToggle is { } form ? outOfForm(form) : null;
+            var detail = rollDetails.GetValueOrDefault((revision.Reference, roll.Id));
+            // A cost or save DC that cannot be calculated: the row stays available and the player works it out.
+            var automation = detail is { Failed: true } && roll.Automation == AutomationStatus.Automatic ? AutomationStatus.Assisted : roll.Automation;
             return new(
-                roll.Id, roll.Type, roll.Automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
-                roll.ResourceContent, roll.Cost is { } spend ? cost(item, spend) : roll.ResourceId is null ? null : 1, roll.VariableCost == true,
-                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason);
+                roll.Id, roll.Type, automation, roll.Text, roll.Label, roll.Dice, roll.ResourceId, roll.Activation,
+                roll.ResourceContent, detail?.Cost, roll.VariableCost == true,
+                bonuses.TryGetValue((revision.Reference, roll.Id), out var bonus) ? bonus : null, reason is null, reason,
+                roll.Save?.Ability, detail?.SaveDc, detail?.SaveTrace, roll.Area, roll.Range, roll.Targets, roll.PerUnit);
         }
         var effects = revision.Effects.Select(e => e switch
         {
@@ -1650,6 +1755,8 @@ public static class CharacterCalculator
                 && classLevels.Scales.TryGetValue((scaleRoot, FormulaIdentifiers.ScaleId(identifier)), out var scale)
                 ? scale.Effect.Values[Math.Clamp(scaleLevel, 1, scale.Effect.Values.Count) - 1]
                 : null,
+            // Content v11 (D43): a named value its class declares, evaluated where it is declared (ResolveValue).
+            _ when FormulaIdentifiers.IsValue(identifier) => ResolveValue(identifier, content, character, classLevels, values),
             _ when FormulaIdentifiers.FieldFor(identifier) is { } read && values.TryGetValue(read, out var v) => v,
             _ => null,
         };
@@ -1689,6 +1796,21 @@ public static class CharacterCalculator
     private sealed class ClassLevelMap : Dictionary<ContentReference, int>
     {
         public Dictionary<(ContentReference Class, string ScaleId), (ActiveContent Content, ScaleEffect Effect)> Scales { get; } = [];
+
+        /// <summary>Content v11 (D43): the named values of each class root, keyed by the class and the value id (<see cref="CollectValues"/>).</summary>
+        public Dictionary<(ContentReference Class, string ValueId), (ActiveContent Content, ValueEffect Effect)> NamedValues { get; } = [];
+
+        /// <summary>What each value came to in this pass (null: it is disabled). Values are evaluated lazily, once.</summary>
+        public Dictionary<(ContentReference Class, string ValueId), int?> ValueResults { get; } = [];
+
+        /// <summary>The values being evaluated right now, outermost first; a read of one of them again is a cycle.</summary>
+        public List<(ContentReference Class, string ValueId)> ValueStack { get; } = [];
+
+        /// <summary>The values that lie on a cycle; they stay disabled for the whole pass.</summary>
+        public HashSet<(ContentReference Class, string ValueId)> ValueCycles { get; } = [];
+
+        /// <summary>The pass's diagnostics, where a value read that fails says why (set by <see cref="CollectValues"/>).</summary>
+        public List<Diagnostic>? Diagnostics { get; set; }
     }
 
     /// <summary>
@@ -1718,6 +1840,157 @@ public static class CharacterCalculator
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Content v11 (D43): the named values of every class root, from all active content of that root (any kind) in sheet order.
+    /// When two declare one value id, the later applies and <c>value.duplicate</c> says so (informational: it carries the content
+    /// but no effect id, so it does not downgrade the content's automation). A value on content with no class root can never be
+    /// read, so it is ignored; so is one that is not automatic or has no usable id (validation refuses both with
+    /// <c>validate.value-incomplete</c> on publish and import, so this is a defence for stored content from elsewhere).
+    /// </summary>
+    private static void CollectValues(List<ActiveContent> active, ClassLevelMap classLevels, List<Diagnostic> diagnostics)
+    {
+        classLevels.Diagnostics = diagnostics;
+        foreach (var owner in active.Where(a => a.ClassRoot is not null && a.Revision.SchemaVersion >= ValueEffect.SchemaVersion))
+        {
+            foreach (var value in owner.Revision.Effects.OfType<ValueEffect>().Where(v => v.Automation == AutomationStatus.Automatic))
+            {
+                if (!ScaleEffect.IsValidScaleId(value.ValueId) || string.IsNullOrWhiteSpace(value.Formula))
+                    continue;
+                var key = (owner.ClassRoot!, value.ValueId);
+                if (classLevels.NamedValues.TryGetValue(key, out var earlier))
+                {
+                    diagnostics.Add(new(
+                        "value.duplicate",
+                        $"'{owner.Revision.Name}' declares value '{value.ValueId}', which '{earlier.Content.Revision.Name}' also declares for this class; the later one, from '{owner.Revision.Name}', is used.",
+                        owner.Revision.Reference));
+                }
+                classLevels.NamedValues[key] = (owner, value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>VALUE.&lt;id&gt;</c> read by <paramref name="reader"/>: the named value its class root declares, evaluated in the context of
+    /// the content that declares it (its class level, scales, and the fields calculated so far), once per pass. Null when the read
+    /// is outside a class (<c>value.no-class</c>), nothing declares the value (<c>value.unknown</c>), the value is disabled because
+    /// it lies on a cycle or reads one (<c>value.cycle</c>), or its own formula fails (<c>effect.invalid-formula</c> on the
+    /// declaring content). It never reads as 0; the caller's formula fails like any unresolved identifier.
+    /// </summary>
+    private static int? ResolveValue(string identifier, ActiveContent reader, Character character, ClassLevelMap classLevels, Dictionary<string, int> values)
+    {
+        var valueId = FormulaIdentifiers.ValueId(identifier);
+        var readerRevision = reader.Revision;
+        if (reader.ClassRoot is not { } root)
+        {
+            ReportValue(classLevels, new("value.no-class", $"'{readerRevision.Name}' reads {identifier}, but it is not part of a class; named values are read within a class, so the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+        var key = (root, valueId);
+        if (!classLevels.NamedValues.TryGetValue(key, out var declared))
+        {
+            ReportValue(classLevels, new("value.unknown", $"'{readerRevision.Name}' reads {identifier}, which no content of this class declares; the formula is disabled.", readerRevision.Reference));
+            return null;
+        }
+
+        int? result;
+        if (classLevels.ValueResults.TryGetValue(key, out var done))
+        {
+            result = done;
+        }
+        else if (classLevels.ValueStack.Contains(key))
+        {
+            // Re-entry: every value from the first read of this one to the top of the stack is on the cycle.
+            foreach (var member in classLevels.ValueStack.Skip(classLevels.ValueStack.IndexOf(key)))
+                classLevels.ValueCycles.Add(member);
+            result = null;
+        }
+        else if (classLevels.ValueStack.Count >= MaxValueDepth)
+        {
+            // Nested too deep (bounds the recursion): the read fails, and the formula that made it reports itself through the usual path.
+            // The cut value is cached as null for this sheet pass, and so is every value waiting on it up the stack (each fails and caches
+            // null in turn), so the outcome never depends on how often or from where a value is read.
+            result = null;
+            classLevels.ValueResults[key] = result;
+        }
+        else
+        {
+            classLevels.ValueStack.Add(key);
+            try
+            {
+                var revision = declared.Content.Revision;
+                FormulaError? failure;
+                if (Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(revision), out var formula, out failure)
+                    && formula!.TryEvaluate(id => Resolve(id, declared.Content, character, classLevels, values, []), out var value, out failure))
+                {
+                    result = value;
+                }
+                else
+                {
+                    result = null;
+                    // A value that fails because a value it reads is on a cycle is disabled with it, so its readers hear value.cycle too.
+                    if (formula is not null && formula.Identifiers.Any(i => FormulaIdentifiers.IsValue(i)
+                        && declared.Content.ClassRoot is { } declaredRoot && classLevels.ValueCycles.Contains((declaredRoot, FormulaIdentifiers.ValueId(i)))))
+                        classLevels.ValueCycles.Add(key);
+                    if (!classLevels.ValueCycles.Contains(key))
+                        ReportValue(classLevels, InvalidFormula(revision, declared.Effect, failure!));
+                }
+            }
+            finally
+            {
+                classLevels.ValueStack.RemoveAt(classLevels.ValueStack.Count - 1);
+            }
+            classLevels.ValueResults[key] = result;
+        }
+
+        if (result is null && classLevels.ValueCycles.Contains(key))
+        {
+            ReportValue(classLevels, new(
+                "value.cycle",
+                $"'{readerRevision.Name}' reads {identifier}, which depends on itself through '{declared.Content.Revision.Name}'; the value and every formula reading it are disabled.",
+                readerRevision.Reference));
+        }
+        return result;
+    }
+
+    /// <summary>How many named values may be read inside one another; a deeper chain fails (content is validated far below this).</summary>
+    private const int MaxValueDepth = 32;
+
+    private static void ReportValue(ClassLevelMap classLevels, Diagnostic diagnostic)
+    {
+        if (classLevels.Diagnostics is { } diagnostics)
+            AddOnce(diagnostics, diagnostic);
+    }
+
+    /// <summary>
+    /// The fields a formula of <paramref name="reader"/> reads, including (content v11) those read by the value formulas it names,
+    /// transitively; a value met again is not followed, so a cycle among values ends here (the value resolution disables it).
+    /// </summary>
+    private static List<string> FieldReads(Formula formula, ActiveContent reader, ClassLevelMap classLevels)
+    {
+        var fields = new List<string>();
+        var followed = new HashSet<(ContentReference, string)>();
+        void Collect(Formula source, ActiveContent context, int depth)
+        {
+            foreach (var identifier in source.Identifiers)
+            {
+                if (FormulaIdentifiers.FieldFor(identifier) is { } field)
+                {
+                    if (!fields.Contains(field, StringComparer.Ordinal))
+                        fields.Add(field);
+                }
+                else if (depth < MaxValueDepth && FormulaIdentifiers.IsValue(identifier) && context.ClassRoot is { } root
+                    && classLevels.NamedValues.TryGetValue((root, FormulaIdentifiers.ValueId(identifier)), out var declared)
+                    && followed.Add((root, declared.Effect.ValueId))
+                    && Formula.TryParse(declared.Effect.Formula, Formula.FeaturesFor(declared.Content.Revision), out var inner, out _))
+                {
+                    Collect(inner!, declared.Content, depth + 1);
+                }
+            }
+        }
+        Collect(formula, reader, 0);
+        return fields;
     }
 
     private sealed record ResolvedContent(
@@ -1988,6 +2261,7 @@ public static class CharacterCalculator
         foreach (var orphan in character.Choices.Where(c => !answered.Contains((c.Source, c.ChoiceId))))
             diagnostics.Add(new("choice.orphaned", $"A selection is recorded for choice '{orphan.ChoiceId}' of revision {orphan.Source.RevisionId}, which is not active or does not offer that choice (yet); it is not applied.", orphan.Source));
         CollectScales(active, classLevels, diagnostics);
+        CollectValues(active, classLevels, diagnostics);
         return new(active, classes, classLevels, choices);
     }
 
@@ -2153,7 +2427,7 @@ public static class CharacterCalculator
 
     private static List<Modifier> CollectModifiers(
         List<ActiveContent> active, Character character, RulesFamilyPolicy policy, List<Diagnostic> diagnostics, Dictionary<string, List<Diagnostic>> warnings,
-        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses)
+        HashSet<string> manual, EffectiveToggles effective, bool autoOn, List<ResourceBonus> resourceBonuses, ClassLevelMap classLevels)
     {
         var modifiers = new List<Modifier>();
         foreach (var item in active)
@@ -2241,14 +2515,15 @@ public static class CharacterCalculator
                     manual.Add(effect.Target);
                     continue;
                 }
-                if (!Formula.TryParse(effect.Value, AllowsScales(revision), out var formula, out var error))
+                if (!Formula.TryParse(effect.Value, Formula.FeaturesFor(revision), out var formula, out var error))
                 {
                     warnings[effect.Target].Add(InvalidFormula(revision, effect, error!));
                     manual.Add(effect.Target);
                     continue;
                 }
-                var reads = formula!.Identifiers.Select(FormulaIdentifiers.FieldFor).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
-                modifiers.Add(new(item, effect, formula, reads, null, followedToggle));
+                // A named value this formula reads counts as the fields that value reads (content v11), so the order and the cycle check see them.
+                var reads = FieldReads(formula!, item, classLevels);
+                modifiers.Add(new(item, effect, formula!, reads, null, followedToggle));
             }
         }
         return modifiers;
@@ -2308,12 +2583,6 @@ public static class CharacterCalculator
     /// imported or hand-edited revision can carry it; the calculator ignores the field, as an older build would.
     /// </summary>
     private static bool IgnoresV8(ContentRevision revision) => revision.SchemaVersion < ContentRevision.CombatDetailsSchemaVersion;
-
-    /// <summary>
-    /// Content v9 (ADR-010): <c>SCALE.&lt;id&gt;</c> is a known identifier only in a v9 revision. Below v9 it is an unknown
-    /// identifier, as in builds before v9, so a stored revision never calculates differently on this build.
-    /// </summary>
-    private static bool AllowsScales(ContentRevision revision) => revision.SchemaVersion >= ScaleEffect.SchemaVersion;
 
     /// <summary>The fields content v8 adds (<see cref="FieldIds.Attacks"/>, <see cref="FieldIds.CriticalRange"/>); older builds do not know them.</summary>
     private static bool IsV8Field(string field) => field is FieldIds.Attacks or FieldIds.CriticalRange;

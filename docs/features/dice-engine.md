@@ -19,7 +19,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 
 ## Roll record
 
-`{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance }`. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
+`{ formula, mode, critical, dice[{term, sides, value, kept, fromCritical}], diceTotal, expressionConstant, modifiers[{label, amount, origin}], total, provenance, spend? }`. Provenance cites the roll effect's revision, effect id, source and page, plus `linkedResourceId`.
 
 **Rolling never spends anything.** `DiceRoller` takes no character or resource state, so it cannot change one. `linkedResourceId` only says which resource an *action* would spend. Spending is a separate, confirmed command: `character.play` with `spend` (M2 item 2).
 
@@ -34,6 +34,7 @@ SPEC C-04 · ARCHITECTURE "commands vs calculation" · status: rules-core engine
 - Advantage and disadvantage apply only to a d20 test, and critical doubling only to damage dice. Dice errors come back with their `dice.*` code.
 - **It never changes the character.** Nothing is saved, and a roll linked to a resource does not spend it. The test compares the stored character before and after.
 - Dice come from the OS CSPRNG. Tests replace the source with `SeededRandomSource`.
+- **Extra dice for extra points (D43 slice 5):** a roll effect with `perUnit` takes `amount`, the points to spend. The formula is the roll's dice plus the per-unit dice once for each point beyond the base cost (`DiceRoller.TryPerUnitFormula`): `4d10` with `1d10` per point at amount 6 and base 4 is `4d10+2d10`, and the base dice at the base amount. The amount must be from the base cost to the base plus `maxUnits` (or the pool's maximum) and within what the pool has left; otherwise `roll.amount-out-of-range` or `roll.amount-unaffordable`, `roll.amount-not-allowed` for an amount on a roll with no `perUnit`, and `roll.no-dice` for a roll with no dice. The record carries `spend { contentId, resourceId, amount }` for a roll effect that has a pool: exactly what the Spend button sends. Rolling still changes nothing; the dice limits above apply to the built formula. See [play-mechanics.md](play-mechanics.md) "Slice 5".
 
 ## Rolling from the summary
 

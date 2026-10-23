@@ -134,13 +134,24 @@ internal static class Fixtures
     private static ContentReference FeatureAttacksRef(int n) =>
         new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
 
+    // Play mechanics slice 5 fixtures (fixture-pack-action-details.json, content v11, D43): saves, areas, per-unit dice, a dice-less action, named values.
+    public static readonly ContentReference WaveAdept = ActionDetailsRef(0x50);
+    public static readonly ContentReference FocusOfBody = ActionDetailsRef(0x51);
+    public static readonly ContentReference FocusOfMind = ActionDetailsRef(0x52);
+    public static readonly ContentReference TideWave = ActionDetailsRef(0x53);
+
+    public static ContentPack ActionDetailsPack() => Load<ContentPack>("fixture-pack-action-details.json");
+
+    private static ContentReference ActionDetailsRef(int n) =>
+        new(Guid.Parse($"6f0dc000-0000-4000-8000-{n:X12}"), Guid.Parse($"6f0de000-0000-4000-8000-{n:X12}"));
+
     /// <summary>
     /// The packs of <see cref="AllCatalog"/> plus every play-mechanics pack (D43). Each slice appends its pack here;
     /// <see cref="AllCatalog"/> is left alone so existing tests keep their counts.
     /// </summary>
     public static InMemoryContentCatalog PlayMechanicsCatalog()
     {
-        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack()];
+        ContentPack[] packs = [Pack(), M1Pack(), SpellPack(), CombatPack(), EffectsPack(), MulticlassPack(), FormsPack(), TurnsPack(), FeatureAttacksPack(), ActionDetailsPack()];
         return new([.. packs.SelectMany(p => p.Sources)], [.. packs.SelectMany(p => p.Revisions)]);
     }
 

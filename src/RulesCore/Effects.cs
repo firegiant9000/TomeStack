@@ -552,8 +552,11 @@ public sealed record RollEffect : Effect
 
     public required string Label { get; init; }
 
-    /// <summary>Dice expression, e.g. <c>1d8+2</c>.</summary>
-    public required string Dice { get; init; }
+    /// <summary>
+    /// Dice expression, e.g. <c>1d8+2</c>. Content schema v11 (D43): optional, for an action that rolls nothing (it needs a
+    /// <see cref="Cost"/> then). Below v11 a roll with no <c>dice</c> key is never typed (see <see cref="FromUnknown"/>).
+    /// </summary>
+    public string? Dice { get; init; }
 
     /// <summary>Optional resource the associated action spends; only an explicit action command spends it.</summary>
     public string? ResourceId { get; init; }
@@ -585,14 +588,90 @@ public sealed record RollEffect : Effect
     /// </summary>
     public ToggleRef? WhileToggle { get; init; }
 
-    /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
-    internal static readonly string[] V11Keys = ["whileToggle"];
+    /// <summary>Content schema v11 (D43): the saving throw the action asks of its targets. Below v11 the key stays extension data and does nothing.</summary>
+    public RollSave? Save { get; init; }
 
-    /// <summary>Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys only from v11.</summary>
-    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion) =>
-        revisionSchemaVersion >= ContentRevision.PlayMechanicsSchemaVersion
-            ? VersionedEffects.Typed<RollEffect>(unknown)
-            : VersionedEffects.TypedWithout<RollEffect>(unknown, V11Keys);
+    /// <summary>Content schema v11 (D43): the area the action covers. Below v11 the key stays extension data and does nothing.</summary>
+    public RollArea? Area { get; init; }
+
+    /// <summary>Content schema v11 (D43): the range, as text (for example <c>Self</c> or <c>60 ft</c>), at most <see cref="MaxTextLength"/> characters.</summary>
+    public string? Range { get; init; }
+
+    /// <summary>Content schema v11 (D43): who the action affects, as text, at most <see cref="MaxTextLength"/> characters.</summary>
+    public string? Targets { get; init; }
+
+    /// <summary>Content schema v11 (D43): extra dice per additional unit of the resource spent. Needs a <see cref="Cost"/> and a <see cref="ResourceId"/>.</summary>
+    public RollPerUnit? PerUnit { get; init; }
+
+    /// <summary>The longest <see cref="Range"/> or <see cref="Targets"/>.</summary>
+    public const int MaxTextLength = 200;
+
+    /// <summary>The keys content schema v11 adds to this effect; below v11 they stay extension data.</summary>
+    internal static readonly string[] V11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
+
+    /// <summary>
+    /// Typed by the revision when the converter hands it over (see <see cref="EffectJsonConverter"/>): v11 keys, and a roll with
+    /// no <c>dice</c>, only from v11. Below v11 a dice-less roll stays untyped, as it did when dice were required.
+    /// </summary>
+    internal static Effect FromUnknown(UnknownEffect unknown, int revisionSchemaVersion)
+    {
+        if (revisionSchemaVersion < ContentRevision.PlayMechanicsSchemaVersion)
+            return LacksDice(unknown.Raw) ? unknown : VersionedEffects.TypedWithout<RollEffect>(unknown, V11Keys);
+        return ReadsEnums(unknown.Raw) ? VersionedEffects.Typed<RollEffect>(unknown) : unknown;
+    }
+
+    /// <summary>Whether the JSON has no <c>dice</c> (no key in any spelling, or a null): what an older build, where it was required, could not type.</summary>
+    internal static bool LacksDice(JsonElement raw) =>
+        raw.ValueKind == JsonValueKind.Object
+        && !raw.EnumerateObject().Any(p => string.Equals(p.Name, "dice", StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind != JsonValueKind.Null);
+
+    /// <summary>The save ability and area shape must be exactly a member name (the serializer also binds padded or combined names, which no schema allows).</summary>
+    private static bool ReadsEnums(JsonElement raw)
+    {
+        foreach (var p in raw.EnumerateObject())
+        {
+            if (p.Value.ValueKind != JsonValueKind.Object)
+                continue;
+            if (string.Equals(p.Name, "save", StringComparison.OrdinalIgnoreCase) && !VersionedEffects.NamesMember<Ability>(p.Value, "ability"))
+                return false;
+            if (string.Equals(p.Name, "area", StringComparison.OrdinalIgnoreCase) && !VersionedEffects.NamesMember<AreaShape>(p.Value, "shape"))
+                return false;
+        }
+        return true;
+    }
+}
+
+/// <summary>Content schema v11 (D43): a saving throw an action asks of its targets: the ability, and a DC formula (for example <c>8 + PB + WIS.MOD</c>).</summary>
+public sealed record RollSave([property: JsonRequired] Ability Ability, [property: JsonRequired] string Dc);
+
+/// <summary>Content schema v11 (D43): the shape of an area.</summary>
+public enum AreaShape { Line, Cone, Sphere, Cube, Cylinder, Emanation }
+
+/// <summary>Content schema v11 (D43): an area in feet. <see cref="Width"/> applies to a line only.</summary>
+public sealed record RollArea([property: JsonRequired] AreaShape Shape, [property: JsonRequired] int Size, int? Width);
+
+/// <summary>Content schema v11 (D43): extra dice (<c>NdM</c>) for each unit spent beyond the base cost, up to <see cref="MaxUnits"/> units.</summary>
+public sealed record RollPerUnit([property: JsonRequired] string Dice, int? MaxUnits);
+
+/// <summary>
+/// Content schema v11 (D43): a named formula a feature declares, read as <c>VALUE.&lt;valueId&gt;</c> by other formulas of the
+/// content of the same class. Typed only in a v11 revision: in an older revision a <c>value</c> stays an
+/// <see cref="UnknownEffect"/>, byte for byte.
+/// </summary>
+public sealed record ValueEffect : Effect
+{
+    public const string TypeName = "value";
+
+    public const int SchemaVersion = ContentRevision.PlayMechanicsSchemaVersion;
+
+    public override string Type => TypeName;
+
+    /// <summary>A key like a scale id (<see cref="ScaleEffect.IsValidScaleId"/>); validated in the content validator.</summary>
+    public required string ValueId { get; init; }
+
+    public required string Formula { get; init; }
+
+    internal static Effect FromUnknown(UnknownEffect unknown) => VersionedEffects.Typed<ValueEffect>(unknown);
 }
 
 /// <summary>
@@ -1019,6 +1098,7 @@ internal static class VersionedEffects
             [GrantEffect.TypeName] = (1, GrantEffect.FromUnknown),
             [ResourceEffect.TypeName] = (1, ResourceEffect.FromUnknown),
             [RollEffect.TypeName] = (1, RollEffect.FromUnknown),
+            [ValueEffect.TypeName] = (ValueEffect.SchemaVersion, (u, _) => ValueEffect.FromUnknown(u)),
         };
 
     /// <summary>
@@ -1166,7 +1246,7 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
                 RollEffect.TypeName => element.Deserialize<RollEffect>(options),
                 HitDieEffect.TypeName => element.Deserialize<HitDieEffect>(options),
                 // Typed only in revisions of their schema version (ContentRevision.OnDeserialized); older ones keep them as written.
-                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName => UnknownEffect.From(element),
+                ArmorEffect.TypeName or SpellcastingEffect.TypeName or SpellEffect.TypeName or WeaponEffect.TypeName or ToggleEffect.TypeName or ScaleEffect.TypeName or ItemEffect.TypeName or ToggleGroupEffect.TypeName or UpkeepEffect.TypeName or AttackEffect.TypeName or AttackRiderEffect.TypeName or ValueEffect.TypeName => UnknownEffect.From(element),
                 LegacyAbilityScoreIncrease or LegacyInitiativeBonus => FromSchemaVersion1(element, type, options),
                 _ => UnknownEffect.From(element),
             } ?? UnknownEffect.From(element);
@@ -1200,6 +1280,9 @@ public sealed class EffectJsonConverter : JsonConverter<Effect>
             RollEffect.TypeName => RollEffect.V11Keys,
             _ => [],
         };
+        // Content v11: a roll may omit its dice; below v11 it must stay untyped, and only the revision knows its version.
+        if (version < ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName && RollEffect.LacksDice(element))
+            return true;
         foreach (var property in element.EnumerateObject())
         {
             if (version < ContentRevision.PlayMechanicsSchemaVersion && newest.Any(k => string.Equals(property.Name, k, StringComparison.OrdinalIgnoreCase)))

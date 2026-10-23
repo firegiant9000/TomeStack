@@ -31,7 +31,11 @@ public class RevisionHashProperties
     internal static readonly string[] ModifierV11Keys = ["toggleContent"];
 
     /// <summary>The roll key content v11 adds (D43, slice 4). Written out here on purpose, like <see cref="ToggleV11Keys"/>.</summary>
-    internal static readonly string[] RollV11Keys = ["whileToggle"];
+    internal static readonly string[] RollV11Keys = ["whileToggle", "save", "area", "range", "targets", "perUnit"];
+
+    /// <summary>Content v11 (slice 5): a roll may omit its dice; below v11 a roll with no dice stays an unknown effect, byte for byte.</summary>
+    private static bool IsDiceLessRollBelowV11(string type, int version, JsonNode? effect) =>
+        type == RollEffect.TypeName && version < ContentRevision.PlayMechanicsSchemaVersion && effect?["dice"] is null;
 
     public static TheoryData<int> Versions => [.. Enumerable.Range(1, ContentRevision.CurrentSchemaVersion)];
 
@@ -71,6 +75,7 @@ public class RevisionHashProperties
             var type = (string)inputEffects[i]!["type"]!;
             // Content v10: a damage-defence grant is a value a v9 build cannot read, so below v10 the effect stays unknown.
             var unknown = Generators.StaysUnknown(type, version)
+                || IsDiceLessRollBelowV11(type, version, inputEffects[i])
                 || (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion
                     && ((string?)inputEffects[i]!["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true);
             if (read.Effects[i] is UnknownEffect != unknown)
@@ -159,6 +164,9 @@ public class RevisionHashProperties
             // A damage-defence grant below v10 stays an unknown effect, kept exactly as written (nothing to add).
             if (type == GrantEffect.TypeName && version < ContentRevision.PlayDetailsSchemaVersion && ((string?)effect["grant"])?.StartsWith("damage", StringComparison.OrdinalIgnoreCase) == true)
                 continue;
+            // A roll with no dice below v11 stays an unknown effect, kept exactly as written (nothing to add).
+            if (IsDiceLessRollBelowV11(type, version, effect))
+                continue;
             var members = NullableMembers.GetValueOrDefault(type)
                 ?? (type == ToggleEffect.TypeName && version >= ToggleEffect.SchemaVersion ? ["resourceId"]
                 : type == ArmorEffect.TypeName && version >= ArmorEffect.SchemaVersion ? ["dexterityCap"]
@@ -187,7 +195,7 @@ public class RevisionHashProperties
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == ModifierEffect.TypeName)
                 members = [.. members ?? [], .. ModifierV11Keys];
             if (version >= ContentRevision.PlayMechanicsSchemaVersion && type == RollEffect.TypeName)
-                members = [.. members ?? [], .. RollV11Keys];
+                members = [.. members ?? [], .. RollV11Keys, "dice"];
             if (members is null)
                 continue;
             foreach (var name in members.Append("text"))

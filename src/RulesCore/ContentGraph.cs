@@ -242,6 +242,11 @@ public sealed class ContentGraph
                         yield return (roll.Id, cost);
                     if (roll.Bonus is { } bonus)
                         yield return (roll.Id, bonus);
+                    if (roll.Save is { } save)
+                        yield return (roll.Id, save.Dc);
+                    break;
+                case ValueEffect value:
+                    yield return (value.Id, value.Formula);
                     break;
                 case SpellcastingEffect { SpellsFormula: { } spells } spellcasting:
                     yield return (spellcasting.Id, spells);
@@ -253,5 +258,5 @@ public sealed class ContentGraph
     /// <summary>The identifiers each formula of a revision reads, by effect id. Formulas that do not parse read nothing (validation reports them).</summary>
     public static IEnumerable<(string EffectId, string Identifier)> Identifiers(ContentRevision revision) =>
         Formulas(revision).SelectMany(f =>
-            Formula.TryParse(f.Source, allowScales: revision.SchemaVersion >= ScaleEffect.SchemaVersion, out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : []);
+            Formula.TryParse(f.Source, Formula.FeaturesFor(revision), out var formula, out _) ? formula!.Identifiers.Select(i => (f.EffectId, i)) : []);
 }

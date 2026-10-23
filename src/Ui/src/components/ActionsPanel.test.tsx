@@ -299,3 +299,249 @@ it("an action outside its form is disabled and says 'Available in Kindled mode'"
   expect(sprint.disabled).toBe(false);
   expect(sprint.getAttribute('aria-describedby')).toBeNull();
 });
+
+// D43 S5 Task 5.5a: action details, per-unit amounts, the record's Spend and dice-less "Use".
+const focusPool = (current = 4) => ({
+  content: ref, contentName: 'Testy Source', effectId: 'e-focus', resourceId: 'focus', label: 'Testy focus', maximum: 5, spent: 5 - current, current,
+  trace: [], warnings: [], automation: 'automatic', recoveries: [],
+});
+const actionsView = (effects: object[], pool: object = focusPool()) =>
+  ({ character: { id: 'fixture' }, sheet: { attacks: [], toggles: [], resources: [pool], features: [{ content: ref, name: 'Testy Source', kind: 'feature', effects }] } }) as unknown as CharacterView;
+const surge = { id: 'surge', type: 'roll', label: 'Surge', dice: '2d6', activation: 'action', resourceId: 'focus', cost: 2, available: true, perUnit: { dice: '1d6', maxUnits: 2 } };
+
+it('an action shows its save DC, area, range and targets as text', () => {
+  const beam = {
+    id: 'beam', type: 'roll', label: 'Beam', dice: '4d6', activation: 'action', available: true,
+    saveAbility: 'dex', saveDc: 13, area: { shape: 'line', size: 100, width: 5 }, range: 'Self', targets: 'Each creature in the line',
+  };
+  render(<ActionsPanel view={actionsView([beam])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Beam (4d6)' }).closest('li')!.textContent).toContain(
+    'Save: DC 13 Dexterity · 100-ft line, 5 ft wide · Range: Self · Each creature in the line',
+  );
+  cleanup();
+  const ball = { id: 'ball', type: 'roll', label: 'Ball', dice: '2d6', available: true, saveAbility: 'wis', area: { shape: 'sphere', size: 20 }, targets: 'Each creature' };
+  render(<ActionsPanel view={actionsView([ball])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Ball (2d6)' }).closest('li')!.textContent).toContain(
+    'Save: Wisdom (DC unavailable) · 20-ft sphere · Each creature',
+  );
+  cleanup();
+  render(<ActionsPanel view={actionsView([{ id: 'plain', type: 'roll', label: 'Plain', dice: '1d4', available: true }])} roll={() => {}} act={() => {}} />);
+  expect(screen.getByRole('button', { name: 'Roll Plain (1d4)' }).closest('li')!.textContent).not.toMatch(/Save|Range|undefined|\(\)/);
+});
+
+it("the per-unit amount box rolls with that amount and the record's Spend spends exactly it", async () => {
+  const roll = vi.fn();
+  render(<ActionsPanel view={actionsView([surge])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement;
+  expect(box.min).toBe('2');
+  expect(box.max).toBe('4');
+  expect(box.value).toBe('2');
+  await userEvent.click(screen.getByRole('button', { name: 'Roll Surge (2d6)' }));
+  expect(roll).toHaveBeenLastCalledWith({ content: ref, effectId: 'surge', critical: false, amount: 2 });
+  await userEvent.clear(box);
+  await userEvent.type(box, '4');
+  await userEvent.click(screen.getByRole('button', { name: 'Roll Surge (2d6)' }));
+  expect(roll).toHaveBeenLastCalledWith({ content: ref, effectId: 'surge', critical: false, amount: 4 });
+  cleanup();
+
+  const act = vi.fn();
+  const record = {
+    formula: '2d6+1d6+1d6', mode: 'normal', critical: false, dice: [], diceTotal: 11, expressionConstant: 0, modifiers: [], total: 11,
+    provenance: { rollId: 'surge', label: 'Surge', content: ref, effectId: 'surge', linkedResourceId: 'focus', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'focus', amount: 4 },
+  } as unknown as Parameters<typeof RollResult>[0]['record'];
+  render(<RollResult record={record} resources={[focusPool(4)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [surge] }] as never} act={act} />);
+  expect(screen.queryByRole('spinbutton')).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Spend 4 Testy focus (4 left)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'spend', amount: 4, contentId: 'c1', resourceId: 'focus' });
+  cleanup();
+  render(<RollResult record={record} resources={[focusPool(3)] as never} features={[]} act={act} />);
+  expect((screen.getByRole('button', { name: 'Spend 4 Testy focus (3 left)' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('without maxUnits the per-unit box tops out at the pool maximum', () => {
+  const open = { ...surge, perUnit: { dice: '1d6' } };
+  render(<ActionsPanel view={actionsView([open])} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement).max).toBe('5');
+});
+
+it('an empty, fractional or out-of-range amount disables Roll and says why', async () => {
+  const roll = vi.fn();
+  render(<ActionsPanel view={actionsView([surge])} roll={roll} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ });
+  const button = () => screen.getByRole('button', { name: 'Roll Surge (2d6)' }) as HTMLButtonElement;
+  for (const bad of ['', '1', '5', '2.5']) {
+    await userEvent.clear(box);
+    if (bad) await userEvent.type(box, bad);
+    expect(button().disabled).toBe(true);
+    expect(document.getElementById(button().getAttribute('aria-describedby')!)!.textContent).toMatch(/whole number from 2 to 4/);
+  }
+  await userEvent.click(button());
+  expect(roll).not.toHaveBeenCalled();
+  await userEvent.clear(box);
+  await userEvent.type(box, '3');
+  expect(button().disabled).toBe(false);
+  expect(button().getAttribute('aria-describedby')).toBeNull();
+});
+
+it('a variable-cost record with a Spend keeps the chosen-amount box, capped by the amount and the pool', async () => {
+  const act = vi.fn();
+  const flare = { id: 'flare', type: 'roll', label: 'Flare', dice: '1d6', resourceId: 'focus', cost: 3, variableCost: true, available: true };
+  const record = {
+    formula: '1d6', mode: 'normal', critical: false, dice: [], diceTotal: 3, expressionConstant: 0, modifiers: [], total: 3,
+    provenance: { rollId: 'flare', label: 'Flare', content: ref, effectId: 'flare', linkedResourceId: 'focus', linkedResourceContent: 'c1' },
+    spend: { contentId: 'c1', resourceId: 'focus', amount: 3 },
+  } as unknown as Parameters<typeof RollResult>[0]['record'];
+  render(<RollResult record={record} resources={[focusPool(2)] as never} features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [flare] }] as never} act={act} />);
+  const box = screen.getByRole('spinbutton', { name: 'Testy focus to spend (1 to 2)' });
+  await userEvent.type(box, '2');
+  await userEvent.click(screen.getByRole('button', { name: /^Spend 2 Testy focus/ }));
+  expect(act).toHaveBeenCalledWith({ action: 'spend', amount: 2, contentId: 'c1', resourceId: 'focus' });
+});
+
+it('a dice-less action is a Use button that spends its cost', async () => {
+  const roll = vi.fn();
+  const act = vi.fn();
+  const rally = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', cost: 2, available: true };
+  render(<ActionsPanel view={actionsView([rally])} roll={roll} act={act} />);
+  expect(screen.queryByRole('button', { name: /^Roll Rally/ })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Use Rally (2 Testy focus)' }));
+  expect(act).toHaveBeenCalledWith({ action: 'spend', amount: 2, contentId: 'c1', resourceId: 'focus' });
+  expect(roll).not.toHaveBeenCalled();
+  cleanup();
+
+  // The pool cannot pay: disabled with a reason.
+  render(<ActionsPanel view={actionsView([rally], focusPool(1))} roll={roll} act={act} />);
+  const use = screen.getByRole('button', { name: 'Use Rally (2 Testy focus)' }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Testy focus/);
+  cleanup();
+
+  // Outside its form: disabled with the form's reason.
+  const locked = { ...rally, available: false, unavailableReason: 'Available in Kindled mode' };
+  render(<ActionsPanel view={actionsView([locked])} roll={roll} act={act} />);
+  const form = screen.getByRole('button', { name: 'Use Rally (2 Testy focus)' }) as HTMLButtonElement;
+  expect(form.disabled).toBe(true);
+  expect(document.getElementById(form.getAttribute('aria-describedby')!)!.textContent).toMatch(/Available in Kindled mode/);
+  cleanup();
+
+  // No pool: its text only, no button.
+  const note = { id: 'note', type: 'roll', label: 'Steady', text: 'You stand firm.', activation: 'action', available: true };
+  render(<ActionsPanel view={actionsView([note])} roll={roll} act={act} />);
+  expect(screen.queryByRole('button')).toBeNull();
+  expect(screen.getByText(/You stand firm\./)).toBeTruthy();
+});
+
+it('a dice-less action whose cost formula failed is disabled as "Cost unavailable", never offered as a one-use spend', () => {
+  const act = vi.fn();
+  // The sheet leaves `cost` absent and adds an effect.invalid-formula diagnostic for that effect.
+  const rally = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', automation: 'assisted', available: true };
+  const base = actionsView([rally]);
+  const failed = {
+    ...base,
+    sheet: { ...base.sheet, features: [{ ...base.sheet.features![0]!, diagnostics: [{ code: 'effect.invalid-formula', message: 'Bad cost', effectId: 'rally' }] }] },
+  } as unknown as CharacterView;
+  render(<ActionsPanel view={failed} roll={() => {}} act={act} />);
+  const use = screen.getByRole('button', { name: /^Use Rally/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  expect(use.textContent).not.toMatch(/\(1 /);
+  expect(document.getElementById(use.getAttribute('aria-describedby')!)!.textContent).toMatch(/Cost unavailable/);
+});
+
+it('a dice-less action that costs nothing here says so instead of "not enough"', () => {
+  const free = { id: 'rally', type: 'roll', label: 'Rally', activation: 'bonusAction', resourceId: 'focus', cost: 0, available: true };
+  render(<ActionsPanel view={actionsView([free])} roll={() => {}} act={() => {}} />);
+  const use = screen.getByRole('button', { name: /^Use Rally/ }) as HTMLButtonElement;
+  expect(use.disabled).toBe(true);
+  const reason = document.getElementById(use.getAttribute('aria-describedby')!)!.textContent!;
+  expect(reason).toMatch(/Costs nothing here/);
+  expect(reason).not.toMatch(/Not enough/);
+});
+
+it('the points to spend start over when the base cost changes', () => {
+  const view = (cost: number) => actionsView([{ ...surge, cost }]);
+  const { rerender } = render(<ActionsPanel view={view(2)} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement).value).toBe('2');
+  rerender(<ActionsPanel view={view(3)} roll={() => {}} act={() => {}} />);
+  expect((screen.getByRole('spinbutton', { name: /Points to spend/ }) as HTMLInputElement).value).toBe('3');
+});
+
+// D43 S5 slice review fixes.
+type Rec = Parameters<typeof RollResult>[0]['record'];
+const recordFor = (extra: object = {}) =>
+  ({
+    formula: '1d6', mode: 'normal', critical: false, dice: [], diceTotal: 3, expressionConstant: 0, modifiers: [], total: 3,
+    provenance: { rollId: 'flare', label: 'Flare', content: ref, effectId: 'flare', linkedResourceId: 'focus', linkedResourceContent: 'c1' },
+    ...extra,
+  }) as unknown as Rec;
+const failedCost = [{ code: 'effect.invalid-formula', message: 'Bad cost', effectId: 'flare' }];
+
+it("a record with no Spend (the cost formula failed) offers no Spend button and says 'Cost unavailable', never a guessed 1", () => {
+  const flare = { id: 'flare', type: 'roll', label: 'Flare', dice: '1d6', resourceId: 'focus', available: true };
+  const feature = (effect: object) => [{ content: ref, name: 'Testy Source', kind: 'feature', effects: [effect], diagnostics: failedCost }] as never;
+  render(<RollResult record={recordFor()} resources={[focusPool(4)] as never} features={feature(flare)} act={() => {}} />);
+  expect(screen.queryByRole('button', { name: /^Spend/ })).toBeNull();
+  expect(screen.getByText('Cost unavailable')).toBeTruthy();
+  cleanup();
+
+  render(<RollResult record={recordFor()} resources={[focusPool(4)] as never} features={feature({ ...flare, variableCost: true })} act={() => {}} />);
+  expect(screen.queryByRole('spinbutton')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Spend/ })).toBeNull();
+  expect(screen.getByText('Cost unavailable')).toBeTruthy();
+});
+
+it('an untracked pool shows no Points to spend box and rolls without an amount', async () => {
+  const roll = vi.fn();
+  render(<ActionsPanel view={actionsView([surge], { ...focusPool(), current: undefined })} roll={roll} act={() => {}} />);
+  expect(screen.queryByRole('spinbutton', { name: /Points to spend/ })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Roll Surge (2d6)' }));
+  expect(roll).toHaveBeenLastCalledWith({ content: ref, effectId: 'surge', critical: false });
+});
+
+it("the record's Spend can be used once per record, and a new record enables it again", async () => {
+  const act = vi.fn();
+  const first = recordFor({ spend: { contentId: 'c1', resourceId: 'focus', amount: 2 } });
+  const flare = { id: 'flare', type: 'roll', label: 'Flare', dice: '1d6', resourceId: 'focus', cost: 2, available: true };
+  const features = [{ content: ref, name: 'Testy Source', kind: 'feature', effects: [flare] }] as never;
+  const { rerender } = render(<RollResult record={first} resources={[focusPool(4)] as never} features={features} act={act} />);
+  const spend = () => screen.getByRole('button', { name: /^Spend 2 Testy focus/ }) as HTMLButtonElement;
+  await userEvent.click(spend());
+  expect(spend().disabled).toBe(true);
+  await userEvent.click(spend());
+  expect(act).toHaveBeenCalledTimes(1);
+  rerender(<RollResult record={recordFor({ spend: { contentId: 'c1', resourceId: 'focus', amount: 2 } })} resources={[focusPool(4)] as never} features={features} act={act} />);
+  expect(spend().disabled).toBe(false);
+});
+
+it('a chosen-amount Spend is also once per record', async () => {
+  const act = vi.fn();
+  const flare = { id: 'flare', type: 'roll', label: 'Flare', dice: '1d6', resourceId: 'focus', cost: 3, variableCost: true, available: true };
+  render(
+    <RollResult
+      record={recordFor({ spend: { contentId: 'c1', resourceId: 'focus', amount: 3 } })}
+      resources={[focusPool(4)] as never}
+      features={[{ content: ref, name: 'Testy Source', kind: 'feature', effects: [flare] }] as never}
+      act={act}
+    />,
+  );
+  await userEvent.type(screen.getByRole('spinbutton'), '2');
+  await userEvent.click(screen.getByRole('button', { name: /^Spend 2 Testy focus/ }));
+  expect(act).toHaveBeenCalledTimes(1);
+  await userEvent.type(screen.getByRole('spinbutton'), '2');
+  expect((screen.getByRole('button', { name: /^Spend 2 Testy focus/ }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('the Points to spend box is aria-invalid and described by its reason only while its value is invalid', async () => {
+  render(<ActionsPanel view={actionsView([surge])} roll={() => {}} act={() => {}} />);
+  const box = screen.getByRole('spinbutton', { name: /Points to spend/ });
+  expect(box.getAttribute('aria-invalid')).toBeNull();
+  expect(box.getAttribute('aria-describedby')).toBeNull();
+  await userEvent.clear(box);
+  await userEvent.type(box, '5');
+  expect(box.getAttribute('aria-invalid')).toBe('true');
+  expect(document.getElementById(box.getAttribute('aria-describedby')!)!.textContent).toMatch(/whole number from 2 to 4/);
+  await userEvent.clear(box);
+  await userEvent.type(box, '3');
+  expect(box.getAttribute('aria-invalid')).toBeNull();
+  expect(box.getAttribute('aria-describedby')).toBeNull();
+});

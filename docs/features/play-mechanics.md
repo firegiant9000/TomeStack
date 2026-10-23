@@ -1,8 +1,8 @@
-# Play mechanics: form groups, turns, upkeep and feature attacks (D43, slices 1 to 4)
+# Play mechanics: form groups, turns, upkeep, feature attacks and action details (D43, slices 1 to 5)
 
-LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 4 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
+LIVING_SPECS D43 · [ADR-018](../decisions/ADR-018-play-mechanics.md) · ADR-003 content schema v11 · character schema v10 · status: **slices 1 to 5 implemented** (built on `play-mechanics`; ships in the release after 0.6.0).
 
-Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below), and slice 4 adds attacks that features give, riders on them, actions that exist only in a form, modifiers that follow another entry's toggle and a pool whose maximum a form raises (see "Slice 4" below). The remaining slice (damage responses) is listed in ADR-018 and is not built.
+Slice 1 lets content declare forms: toggles of one group, of which at most one is on, with overlays that sit on top of a form and a cost paid from a shared pool. It builds on the toggles of [m3-effects.md](m3-effects.md). Slice 2 adds a stale guard and an exact undo, slice 3 adds a round counter, durations, upkeep, counting-up pools and allowances (see "Slice 3" below), slice 4 adds attacks that features give, riders on them, actions that exist only in a form, modifiers that follow another entry's toggle and a pool whose maximum a form raises (see "Slice 4" below), and slice 5 adds action details (a saving-throw DC, an area, a range, targets, an action that rolls nothing and extra dice for extra points spent) and named values (see "Slice 5" below). The remaining slice (damage responses) is listed in ADR-018 and is not built.
 
 Rules core: `ToggleEffect`, `ToggleGroupEffect` and `ToggleLayer` in `src/RulesCore/Effects.cs`, `ToggleGroups` in `src/RulesCore/ToggleGroups.cs`, the toggle list in `src/RulesCore/Calculation.cs`, and the checks in `src/RulesCore/ContentValidation.cs`. Service: `toggleOn`/`toggleOff` in `src/AppService/Play.cs`. UI: `FormGroups.tsx` on Play, the toggle and form group controls in `HomebrewStudio.tsx`, and `undo.ts`. Acceptance: `tests/RulesCore.Tests/ToggleGroupTests.cs`, `ToggleGroupValidationTests.cs`, `tests/AppService.Tests/ToggleGroupCommandTests.cs`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixture: `tests/RulesFixtures/fixture-pack-forms.json`.
 
@@ -256,7 +256,93 @@ A cost, a `toHit` or a `damageBonus` that does not parse is the usual `validate.
 
 ### Studio
 
-"Add attack" and "Add attack rider" add the effects with strict fields: tags (comma separated), the rider's dice, the stack group and the abilities are checked as you type, a bad value is shown with its reason and blocks Save and Publish, and the bad text is never stored. An attack and a roll gain "Available" (a toggle of this revision or of another entry), a modifier's "Applies" is the same select, and a modifier's target can be "Maximum of <pool>" (offered for a bonus). **Other entries' toggles come from those entries' newest published revision only**, so a toggle in an unpublished draft of another entry is not offered. Removing a toggle removes the riders of this revision that named it and clears `whileToggle` on attacks and rolls and the toggle of a modifier that named it (a modifier that follows another entry's toggle of the same id is kept). Removing a pool clears an attack's pool and cost (not one that names a `resourceContent`) and removes a modifier that targeted the pool's maximum. A roll effect's pool is not cleared when its pool is removed (existing behaviour, unchanged by this slice).
+"Add attack" and "Add attack rider" add the effects with strict fields: tags (comma separated), the rider's dice, the stack group and the abilities are checked as you type, a bad value is shown with its reason and blocks Save and Publish, and the bad text is never stored. An attack and a roll gain "Available" (a toggle of this revision or of another entry), a modifier's "Applies" is the same select, and a modifier's target can be "Maximum of <pool>" (offered for a bonus). **Other entries' toggles come from those entries' newest published revision only**, so a toggle in an unpublished draft of another entry is not offered. Removing a toggle removes the riders of this revision that named it and clears `whileToggle` on attacks and rolls and the toggle of a modifier that named it (a modifier that follows another entry's toggle of the same id is kept). Removing a pool clears an attack's pool and cost (not one that names a `resourceContent`) and removes a modifier that targeted the pool's maximum. Slice 5 changed one thing here: removing a pool now also clears the pool, cost, variable cost and per-unit dice of a roll that used it (not one that names another entry's pool through `resourceContent`; see "Slice 5").
+
+## Slice 5: action details and named values (content v11 only)
+
+Rules core: `RollEffect` (new fields), `RollSave`, `RollArea`, `RollPerUnit`, `ValueEffect` and `DiceRoller.TryPerUnitFormula` in `src/RulesCore/Effects.cs` and `Dice.cs`; `FormulaFeatures` and the `VALUE.` identifier in `Formulas.cs`; `RollDetailsOf`, `CollectValues`, `ResolveValue` and `FieldReads` in `Calculation.cs`; `FormulaPreview.cs`; the checks in `ContentValidation.cs`. Service: the roll-effect branch of `src/AppService/Rolling.cs`. UI: the actions panel and the roll record in `PlayPanels.tsx`; `RollFields.tsx`, `rollAuthoring.ts` and `HomebrewStudio.tsx`. Acceptance: `tests/RulesCore.Tests/ActionDetailContentTests.cs`, `ActionDetailTests.cs`, `NamedValueTests.cs` and `Properties/PerUnitProperties.cs`, `tests/AppService.Tests/RollCommandTests.cs` (including `The_acceptance_technique_rolls_and_spends_the_same_amount`), `src/Ui/src/components/ActionsPanel.test.tsx`, `HomebrewStudioRolls.test.tsx` and `rollAuthoring.test.ts`, and the e2e flow in `src/Ui/e2e/forms.e2e.tsx`. Fixtures: `tests/RulesFixtures/fixture-pack-action-details.json` and `characters/pm-wave-adept-l5.json`. There is no new character field, play action or version: everything here is content schema v11.
+
+### Content (schema v11, added)
+
+| Effect | Field | Type | Does |
+| --- | --- | --- | --- |
+| `roll` | `dice` | dice text (now optional) | A roll with no `dice` is an action that rolls nothing and only spends from its pool ("Use"). It needs a `cost`. Typed at v11 only (see below) |
+| `roll` | `save` | `{ ability, dc }` | The saving throw the action asks of its targets: `str` ... `cha`, and the DC as a formula (`8 + PB + WIS.MOD`). The sheet shows the evaluated DC and its trace; nothing rolls or applies it |
+| `roll` | `area` | `{ shape, size, width? }` | `line`, `cone`, `sphere`, `cube`, `cylinder` or `emanation`; `size` in feet (1 to 1000); `width` (1 to 1000) for a line only. Shown as text, never automated |
+| `roll` | `range`, `targets` | text, at most 200 characters each | Shown as text |
+| `roll` | `perUnit` | `{ dice, maxUnits? }` | Extra dice for each point spent beyond the base `cost`: one plain `NdM` term (a count of 1 to 100, a d4, d6, d8, d10 or d12) and the most extra points (1 to 100). Needs `dice` to add them to, and `cost` and `resourceId`; not with `variableCost` |
+| `value` (new type, v11 only) | `valueId`, `formula` | key like a scale id, formula | A named formula, read as `VALUE.<valueId>` by other formulas (see "Named values") |
+
+Below v11 the new roll keys stay extension data, byte for byte, and do nothing. A roll with no `dice` stays an unknown effect below v11 (a build without slice 5 cannot type it), and a `value` stays an unknown effect. A revision that uses none of them keeps its version, bytes and hash. A `save`, `area` or `perUnit` that does not read (an ability or shape that is not in the list, or a missing `dc`, `size` or per-unit `dice`) leaves the whole roll unreadable, and a v11 revision reports `validate.effect-malformed`.
+
+### Validation (added)
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `validate.requires-v11` | error | (existing) now also for a `save`, `area`, `range`, `targets` or `perUnit`, a roll with no dice and a `value`, in a revision that declares an older version |
+| `validate.roll-save` | error | The save DC is not a formula (an empty DC, or one that does not parse) |
+| `validate.roll-area` | error | The area `size` is not 1 to 1000, or a `width` is set on a shape that is not a line or is not 1 to 1000 |
+| `validate.roll-text-too-long` | error | `range` or `targets` is over 200 characters |
+| `validate.roll-per-unit` | error | The per-unit `dice` is not a count of 1 to 100 and a d4 to d12 such as `1d6`; there is no `cost` or no `resourceId` to count points of; the roll has no `dice` to add them to; `maxUnits` is not 1 to 100; the base dice plus the per-unit dice for every unit (`maxUnits`, else one unit) could throw more than 100 dice (exactly 100 passes, 101 fails); the formula that results cannot be rolled (more than 8 terms or longer than 40 characters); or the roll is also `variableCost` (the amount box replaces the variable spend, so one of them has to go) |
+| `validate.roll-dice-or-cost` | error | A roll has neither dice nor a cost, so it does nothing |
+| `validate.value-incomplete` | error | A `value` needs a formula and a `valueId` of a lowercase letter followed by up to 31 letters or digits (also when it cannot be read as a value at v11). A value whose automation is not automatic is refused too ("a named value is always calculated"): a value that is not automatic would be ignored by the calculation |
+| `validate.value-duplicate` | error | The revision declares the same `valueId` more than once |
+| `validate.value-unknown` | **warning** | A formula reads `VALUE.<id>` and the revision, its parent class (for a subclass) and the content it grants or offers declare no such value. Only class and subclass revisions are checked: a feature cannot know its class when it is validated, so it gets no warning |
+
+A cost, a bonus or a DC that does not parse is the usual `validate.formula-invalid` (the DC uses `validate.roll-save`). `VALUE.` in a revision older than v11 is `validate.requires-v11`. The existing `validate.dice-invalid` still applies to a roll that has dice. The relationship tree shows a dice-less roll without parentheses ("Roll: Surge"), and a dice-less roll or a value is a known mechanic, not an unsupported one. A `value` carries no reference to other content, so packages and import candidates follow nothing new.
+
+### Calculation (added)
+
+A feature's roll effect on the sheet carries `saveAbility`, `saveDc`, `saveTrace`, `area`, `range`, `targets` and `perUnit` beside the earlier fields. The trace of a DC reads like "Dexterity save DC, from Proficiency bonus 3 and Wisdom modifier 2" (one step, with the inputs named; it does not repeat the formula). When the DC cannot be worked out, `saveDc` is absent, the row says "Save: Dexterity (DC unavailable)", the feature is Assisted and `effect.invalid-formula` is reported; the numbers that did work are still shown.
+
+| Code | When |
+| --- | --- |
+| `value.no-class` | A formula reads `VALUE.<id>` from content that belongs to no class (a feature pinned directly, a species). The read fails |
+| `value.unknown` | A formula reads a value that no entry of the character's class declares. The read fails |
+| `value.cycle` | A value reads itself, directly or through other values (or reads a value that does). Every value of the loop is unavailable and its readers get this code |
+| `value.duplicate` | Two entries of one class declare the same `valueId`; the later in sheet order applies. Informational: it does not make the feature Assisted |
+| `effect.invalid-formula` | (existing) now also for a roll `cost` or `save.dc` that fails, and for a value whose own formula fails or that is nested more than 32 values deep |
+
+A failing roll `cost` used to be silent (the roll just showed no cost). It now reports `effect.invalid-formula`, makes the feature Assisted and leaves the row available, as an attack's does in slice 4. This applies to a roll in a revision of any version, so a malformed older roll cost now warns. The same code is never reported twice for one roll when a cost and a DC fail the same way; different failures each keep their warning.
+
+### Named values
+
+A `value` effect gives a formula a name. Another formula reads it as `VALUE.<valueId>`: in a cost, a bonus, a save DC, a modifier, a resource's uses and so on (v11 revisions only). `VALUE.<id>` is an identifier, not new grammar, so the formula language is unchanged.
+
+- **Scope:** the class. A value is found among the entries of the character's class: the class itself, its subclass and everything they grant or offer, with the class as the root. Content outside a class has no values (`value.no-class`), and a value on such content is ignored. Of two entries that declare the same `valueId` in one class, the later in sheet order applies (`value.duplicate`).
+- **Context:** the value is worked out where it is declared, so `CLASS_LEVEL` and `SCALE.<id>` inside it mean that class and level, whoever reads it. It is worked out once per sheet pass.
+- **Cycles:** values may read other values. A loop is `value.cycle` and nothing reads it as 0: the reader's formula fails. A value read through a modifier's formula counts as the fields that value reads, so `effect.dependency-cycle` also catches a modifier that ends up depending on its own target through a value. Reading is bounded at 32 values deep; past it the read fails with `effect.invalid-formula`.
+- **Trace:** a value input is named after its declaring entry, such as "Fixture Focus of Mind focusMod 2".
+- **Studio preview:** the formula preview (D61) resolves a `VALUE.<id>` that the same revision declares, in a v11 draft. A value the draft does not declare, or a loop, reads "not a value this entry declares" and shows no number.
+
+### Rolling an action with an amount
+
+`roll { content, effectId, amount? }` rolls a roll effect as before (see [dice-engine.md](dice-engine.md)); `amount` is the points to spend on a per-unit action.
+
+- **The rule:** the base is the evaluated `cost` (a per-unit action with no `cost` has no base to count from, which validation refuses). The formula is the roll's dice plus the per-unit dice once for each point beyond the base: `4d10` with `1d10` per point at amount 6 and base 4 is `4d10+2d10`. At the base amount the formula is the base dice. The most is the base plus `maxUnits`, or the pool's maximum when `maxUnits` is absent.
+- **Never changes the character:** rolling does not spend. The record carries `spend { contentId, resourceId, amount }`, which is exactly what the Spend button sends (`character.play` with `spend`), so the pool goes down by the amount that was rolled and no more. `spend` is set for any roll effect with a `resourceId` (the amount asked for, else the evaluated cost, else 1 when the roll declares no cost). For a `variableCost` roll it is the most the roll may spend. A roll without a pool, and every other kind of roll, has no `spend`.
+- **Refusals** (all before any die is rolled):
+
+| Code | When |
+| --- | --- |
+| `roll.no-dice` | The roll effect has no dice, with or without an amount |
+| `roll.amount-not-allowed` | An `amount` on a roll effect that has no `perUnit`, or on any roll that is not a content roll effect (a feature attack, a field, a spell or a weapon) |
+| `roll.amount-out-of-range` | The amount is below the base or above the most, or the per-unit die cannot be added to the dice (stored content only) |
+| `roll.amount-unaffordable` | The pool has fewer than the amount left, or is not tracked on this sheet |
+| `effect.invalid-formula` | An amount on a roll whose cost fails: the base is never guessed. The same roll without an amount still rolls, with no `spend` |
+
+A roll whose bonus fails is still refused with `roll.bonus-invalid`; a cost or DC failure alone does not refuse a roll that has no amount. A roll outside its form (`whileToggle`) is not refused, as in slice 4.
+
+### On Play
+
+- **Detail line:** under an action, one line of what it declares and leaves out the rest: `Save: DC 13 Dexterity · 100-ft line, 5 ft wide · Range: Self · Each creature in the line`. A DC that cannot be worked out reads `Save: Dexterity (DC unavailable)`.
+- **Per-unit action:** a number box "Points to spend (<pool>)" starts at the base cost and takes whole numbers from the base to the most (the base plus `maxUnits`, or the pool's maximum). Roll always sends the amount. An amount that is not allowed disables Roll, with the reason as text linked to the button and the box. The box starts over when the base cost changes. It does not stop at what is left in the pool: the service refuses an unaffordable amount (`roll.amount-unaffordable`). When the pool is not tracked on the sheet there is no box and Roll sends no amount: the base dice roll as before slice 5 and the record's Spend is the base cost. The box is `aria-invalid` and described by its reason while its value is not allowed.
+- **An action with no dice and a pool** is a button "Use <name> (<cost> <pool>)" that spends its cost (`character.play` with `spend`). It is disabled with a visible, linked reason when its form is off, when the pool is short or untracked ("Not enough Focus left (1)."), when the cost cannot be worked out ("Cost unavailable", and the label drops the amount), or when the cost is 0 ("Costs nothing here"). A dice-less action with no pool shows its name and its text.
+- **The roll record's Spend button** reads "Spend <amount> <pool> (<current> left)" and sends the record's `spend`. A `variableCost` roll keeps the box for the amount to spend, from 1 to the lesser of the most and what is left. A record's Spend is used once: after it is clicked (the button or the chosen amount) it is disabled for that record, and a new roll's record offers it again. When the roll effect names a pool but its record has no `spend` (the service leaves it out exactly when the cost formula failed), there is no Spend button and no amount box, and the record says "Cost unavailable"; the amount is never guessed as 1. A feature attack's record keeps its own cost.
+
+### Studio
+
+A roll's editor has every field: Dice (clearing it makes an action that rolls nothing, and removes the per-unit dice, which would have nothing to add to), a bonus (with the formula preview), Activation (Action once, by default "Other" for a roll), the pool and its cost (with the preview, floored at 0) and "The player chooses how much to spend", the extra dice for each extra point and the most extra points, the saving throw with its DC (with the preview), the area shape, size and, for a line, width, the range and the targets. The pool select lists this revision's resources first and then pools of other entries of the source (from their newest published revision, shown with the entry's name); a pool that is in neither is kept and listed as "<id> (other content)". Choosing "The player chooses…" removes the per-unit dice, and the per-unit fields are hidden while it is on. The size, width, per-unit dice, most extra points, range and targets are checked as you type: a bad value shows its reason (`aria-invalid`, linked), blocks Save and Publish, is never stored, and a stored bad value blocks them from the moment the rule loads. The server codes above decide the rest. "Add named value" (class and subclass entries only) adds a `value` with a key (the scale-key rule) and a formula with its preview; it has no Automation choice, since a named value is always calculated. Removing a pool clears the pool, cost, variable cost and per-unit dice of the rolls of this revision that used it. See [homebrew-studio.md](homebrew-studio.md).
 
 ## On Play and in the studio
 
@@ -265,8 +351,11 @@ A cost, a `toHit` or a `damageBonus` that does not parse is the usual `validate.
 
 ## Not yet
 
-- Damage responses and action details such as a saving-throw DC, an area or a cost that scales with the amount spent (a later slice; ADR-018).
+- Damage responses (a later slice; ADR-018).
 - Feature attacks in the exports (the Foundry actor and the neutral JSON list equipped weapons only), and rolling a feature attack's cost automatically (the attack roll offers "Spend").
+- Applying a saving throw, an area or a range: they are shown as text. Nothing rolls a target's save or places the area. A feature attack has no per-unit amount (only a roll effect does; an `amount` on anything else is `roll.amount-not-allowed`). A dice-less `variableCost` action spends its full cost through Use: there is no box to choose a smaller amount.
+- Named values outside a class (a species or a feat pinned on its own has none), a value that takes arguments, and a catalog-wide `validate.value-unknown` for features.
+- A trace view of a save DC on the sheet (the trace is on the data; Play shows the number).
 - Initiative, other creatures and a DM view (out of scope, ADR-018).
 - A general overlay-to-overlay exclusion.
 - A toggle that gives back what it spent when turned off.

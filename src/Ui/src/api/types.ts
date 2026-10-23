@@ -283,6 +283,29 @@ export interface FeatureEffect {
   /** Content v11 (D43): false when the action is outside the form it needs (`unavailableReason` says which). The server always sends it. */
   available: boolean;
   unavailableReason?: string;
+  /** Content v11 (D43): the save the action asks for, with its DC evaluated for this character (`saveDc` is absent when it could not be). */
+  saveAbility?: Ability;
+  saveDc?: number;
+  saveTrace?: TraceEntry[];
+  area?: RollArea;
+  range?: string;
+  targets?: string;
+  /** Content v11 (D43): extra dice for each unit spent beyond the base cost. */
+  perUnit?: RollPerUnit;
+}
+
+export type AreaShape = 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation';
+
+/** Content v11 (D43): an area in feet; `width` applies to a line only. */
+export interface RollArea {
+  shape: AreaShape;
+  size: number;
+  width?: number;
+}
+
+export interface RollPerUnit {
+  dice: string;
+  maxUnits?: number;
 }
 
 /** Content v6 (M3 B2): something switched on and off at the table. */
@@ -725,6 +748,14 @@ export interface RollRecord {
   modifiers: RollModifier[];
   total: number;
   provenance?: RollProvenance;
+  /** D43 S5: the uses this roll implies spending from a pool (informational; the Spend button sends `character.play`). */
+  spend?: RollSpend;
+}
+
+export interface RollSpend {
+  contentId: string;
+  resourceId: string;
+  amount: number;
 }
 
 /** A content roll effect (`content` + `effectId`) or a sheet field as a d20 test (`field`). */
@@ -736,6 +767,8 @@ export interface RollTarget {
   critical?: boolean;
   /** One of the character's hit dice (d6–d12), the die alone. */
   hitDie?: number;
+  /** D43 S5: the points a per-unit action spends (its base cost plus the extra units); the server checks the range. */
+  amount?: number;
   /** A death saving throw: a d20 with no modifier. */
   deathSave?: boolean;
   /** One of the character's spells: its attack roll (`spellAttack`) or its dice. */
@@ -1460,11 +1493,30 @@ export type Effect =
       type: 'roll';
       rollId: string;
       label: string;
-      dice: string;
+      /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
+      dice?: string;
       resourceId?: string;
+      /** Content v5: where the action is listed; absent: "Other". */
+      activation?: Activation;
+      /** Content v6: the content that defines the pool (absent: this revision), the uses spent (a formula) and whether the player picks how many. */
+      resourceContent?: string;
+      cost?: string;
+      variableCost?: boolean;
+      /** Content v8: a formula added to the dice. */
+      bonus?: string;
       /** Content v11 (D43): the roll is available only while this toggle is on (absent contentId: this revision). */
       whileToggle?: { contentId?: string; toggleId: string };
+      /** Content v11 (D43, slice 5): the saving throw the action asks of its targets. */
+      save?: { ability: Ability; dc: string };
+      /** Content v11: the area, in feet; width is for a line only. */
+      area?: { shape: 'line' | 'cone' | 'sphere' | 'cube' | 'cylinder' | 'emanation'; size: number; width?: number };
+      range?: string;
+      targets?: string;
+      /** Content v11: extra dice for each unit spent beyond the base cost. */
+      perUnit?: { dice: string; maxUnits?: number };
     })
+  // Content v11 (D43, slice 5): a named formula, read as VALUE.<valueId>.
+  | (EffectBase & { type: 'value'; valueId: string; formula: string })
   // Content v11 (D43): an attack a feature gives, and a rider that adds to the attacks carrying one of its tags.
   | (EffectBase & {
       type: 'attack';
