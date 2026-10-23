@@ -37,6 +37,7 @@ import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
 import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
+import { DefenceFields, RollModeFields, isDamageDefence } from './RollModeFields';
 import { RollFields } from './RollFields';
 import { isValueKey, nextValueKey, type PoolChoice } from '../rollAuthoring';
 import {
@@ -878,8 +879,17 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider') {
-    const id = nextId(type);
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider' | 'rollMode' | 'damageDefence') {
+    const id = nextId(type === 'damageDefence' ? 'grant' : type);
+    if (type === 'rollMode') {
+      // Content v11 (D43 slice 6): a valid start (advantage on a Dexterity save).
+      update({ effects: [...revision.effects, { type, id, target: 'save.dex', mode: 'advantage' }] });
+      return;
+    }
+    if (type === 'damageDefence') {
+      update({ effects: [...revision.effects, { type: 'grant', id, grant: 'damageResistance', damageType: 'fire' }] });
+      return;
+    }
     if (type === 'attack') {
       // Content v11 (D43): a valid start (one ability, 1d6 bludgeoning); the key is set once, like a resource's.
       update({
@@ -1167,6 +1177,12 @@ function EntryEditor(props: {
         </button>
         <button type="button" onClick={() => add('attackRider')}>
           Add attack rider
+        </button>
+        <button type="button" onClick={() => add('rollMode')}>
+          Add roll mode
+        </button>
+        <button type="button" onClick={() => add('damageDefence')}>
+          Add damage defence
         </button>
         <button type="button" onClick={() => add('toggle')}>
           Add toggle
@@ -1596,7 +1612,8 @@ function EffectEditor(props: {
   const n = props.index + 1;
   const names: Record<Effect['type'], string> = {
     modifier: 'Modifier',
-    grant: 'Granted feature',
+    rollMode: 'Roll mode',
+    grant: isDamageDefence(effect) ? 'Damage defence' : 'Granted feature',
     resource: 'Resource',
     recovery: 'Recovery',
     roll: 'Roll or action',
@@ -1965,6 +1982,10 @@ function EffectEditor(props: {
         <AttackFields effect={effect} resources={props.resources} toggles={toggleChoices} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
       )}
       {effect.type === 'attackRider' && <RiderFields effect={effect} toggles={toggleChoices} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'rollMode' && (
+        <RollModeFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} onProblem={onProblem} />
+      )}
+      {isDamageDefence(effect) && <DefenceFields effect={effect} toggles={toggleChoices} showToggle={toggles.length > 0 || props.otherToggles.length > 0} onChange={onChange} />}
       {effect.type === 'grant' && effect.grant === 'content' && (
         <>
           <label className="field">

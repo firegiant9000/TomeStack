@@ -1496,6 +1496,17 @@ export type Effect =
       level?: number;
       onlyAs?: ClassEntry;
       damageType?: string;
+      /** Content v11 (D43, slice 6): a defence that applies only while this toggle is on (absent contentId: this revision). */
+      whileToggle?: { contentId?: string; toggleId: string };
+    })
+  // Content v11 (D43, slice 6): automatic advantage or disadvantage on a save, skill check or ability check.
+  | (EffectBase & {
+      type: 'rollMode';
+      target: string;
+      mode: 'advantage' | 'disadvantage';
+      against?: string[];
+      toggle?: string;
+      toggleContent?: string;
     })
   | (EffectBase & {
       type: 'resource';
