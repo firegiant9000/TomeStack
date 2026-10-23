@@ -37,6 +37,8 @@ import { designFeedbackOn, setDesignFeedback } from '../designFeedback';
 import { abilities, nextGroupKey, nextScaleKey, parseSlotRows, parseTwenty } from '../classBasics';
 import { nextAttackKey, type ToggleChoice } from '../attackAuthoring';
 import { AttackFields, RiderFields, ToggleSelect } from './AttackFields';
+import { RollFields } from './RollFields';
+import { isValueKey, nextValueKey, type PoolChoice } from '../rollAuthoring';
 import {
   grantOfKind,
   isBackgroundBasic,
@@ -818,7 +820,8 @@ function EntryEditor(props: {
   const previewKey = JSON.stringify({
     kind: revision.kind,
     schemaVersion: revision.schemaVersion,
-    scales: revision.effects.filter((e) => e.type === 'scale'),
+    // Class columns and named values: the two things a preview reads from the draft (VALUE.<key> in a formula of the same class).
+    scales: revision.effects.filter((e) => e.type === 'scale' || e.type === 'value'),
   });
   const previewRevision = useMemo<ContentRevision>(() => {
     const { kind, schemaVersion, scales } = JSON.parse(previewKey) as { kind: ContentRevision['kind']; schemaVersion?: number; scales: Effect[] };
@@ -851,6 +854,13 @@ function EntryEditor(props: {
     .flatMap((e) =>
       e.latestPublished!.effects.flatMap((t) => (t.type === 'toggle' ? [{ contentId: e.contentId, toggleId: t.toggleId, label: t.label, entryName: e.name }] : [])),
     );
+  // Content v11 (D43 slice 5): the pools of the source's other entries (newest published revision), which a roll can spend. Keyed
+  // by content and id, so one id in two entries never collides.
+  const otherPools: PoolChoice[] = props.entries
+    .filter((e) => e.contentId !== revision.contentId && e.latestPublished)
+    .flatMap((e) =>
+      e.latestPublished!.effects.flatMap((r) => (r.type === 'resource' ? [{ contentId: e.contentId, resourceId: r.resourceId, label: r.label, entryName: e.name }] : [])),
+    );
   const isClass = revision.kind === 'class';
   const classLike = isClass || revision.kind === 'subclass';
   const hasSpellcasting = revision.effects.some((e) => e.type === 'spellcasting');
@@ -868,7 +878,7 @@ function EntryEditor(props: {
             : false;
   const listed = revision.effects.map((effect, index) => ({ effect, index })).filter(({ effect }) => !shownByEditor(effect));
 
-  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider') {
+  function add(type: 'modifier' | 'resource' | 'recovery' | 'roll' | 'armor' | 'grant' | 'scale' | 'value' | 'spellcasting' | 'toggle' | 'toggleGroup' | 'upkeep' | 'attack' | 'attackRider') {
     const id = nextId(type);
     if (type === 'attack') {
       // Content v11 (D43): a valid start (one ability, 1d6 bludgeoning); the key is set once, like a resource's.
@@ -882,6 +892,11 @@ function EntryEditor(props: {
     }
     if (type === 'attackRider') {
       update({ effects: [...revision.effects, { type, id, tags: ['all'], dice: '1d6' }] });
+      return;
+    }
+    if (type === 'value') {
+      // Content v11 (D43 slice 5): a key like a scale's, set to a fresh one; the formula starts as 1 (a valid one).
+      update({ effects: [...revision.effects, { type, id, valueId: nextValueKey(revision.effects), formula: '1' }] });
       return;
     }
     if (type === 'upkeep') {
@@ -1085,6 +1100,7 @@ function EntryEditor(props: {
           toggles={revision.effects.filter((e): e is Extract<Effect, { type: 'toggle' }> => e.type === 'toggle')}
           groups={revision.effects.filter((e): e is Extract<Effect, { type: 'toggleGroup' }> => e.type === 'toggleGroup')}
           otherToggles={otherToggles}
+          otherPools={otherPools}
           grantable={grantable}
           previewRevision={previewRevision}
           onChange={(e) => setEffect(index, e)}
@@ -1113,6 +1129,8 @@ function EntryEditor(props: {
                   ? { ...e, toggle: undefined, timing: undefined }
                   : (e.type === 'attack' || e.type === 'roll') && removedToggle !== undefined && !e.whileToggle?.contentId && e.whileToggle?.toggleId === removedToggle
                     ? { ...e, whileToggle: undefined }
+                    : e.type === 'roll' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
+                      ? { ...e, resourceId: undefined, resourceContent: undefined, cost: undefined, variableCost: undefined, perUnit: undefined }
                     : e.type === 'attack' && removedResource !== undefined && !resourceStillDefined && !e.resourceContent && e.resourceId === removedResource
                       ? { ...e, resourceId: undefined, cost: undefined }
                       : e.type === 'toggle' && removedResource !== undefined && !resourceStillDefined && e.resourceId === removedResource
@@ -1167,6 +1185,11 @@ function EntryEditor(props: {
         {classLike && (
           <button type="button" onClick={() => add('scale')}>
             Add class column
+          </button>
+        )}
+        {classLike && (
+          <button type="button" onClick={() => add('value')}>
+            Add named value
           </button>
         )}
         {classLike && (
@@ -1406,6 +1429,44 @@ function ScaleFields(props: { effect: Extract<Effect, { type: 'scale' }>; onChan
   );
 }
 
+/** Content v11 (D43 slice 5): a named formula of a class, read as VALUE.<key> by the other formulas of the same class. */
+function ValueFields(props: { effect: Extract<Effect, { type: 'value' }>; previewRevision?: ContentRevision; onChange: (effect: Effect) => void; onProblem: ReportProblem }) {
+  const { effect, onChange, onProblem } = props;
+  const keyProblem = isValueKey(effect.valueId) ? undefined : 'Key: use a lowercase letter, then up to 31 letters or digits.';
+  const keyId = `${effect.id}-key`;
+  // Reported when the rule appears too, so a stored bad key blocks saving on load.
+  useEffect(() => {
+    onProblem(keyId, keyProblem);
+    return () => onProblem(keyId, undefined);
+  }, [keyId, keyProblem, onProblem]);
+  const formulaId = `rule-${effect.id}-formula-preview`;
+  return (
+    <>
+      <div className="field">
+        <label>
+          Key (formulas read it as VALUE.key; a lowercase letter, then letters or digits)
+          <input
+            value={effect.valueId}
+            aria-invalid={keyProblem ? true : undefined}
+            aria-describedby={keyProblem ? `${keyId}-error` : undefined}
+            onChange={(e) => onChange({ ...effect, valueId: e.target.value.trim() })}
+          />
+        </label>
+        {keyProblem && (
+          <p id={`${keyId}-error`} className="error">
+            {keyProblem}
+          </p>
+        )}
+      </div>
+      <label className="field">
+        Formula (a number or a formula, such as CLASS_LEVEL / 2)
+        <input value={effect.formula} aria-describedby={formulaId} onChange={(e) => onChange({ ...effect, formula: e.target.value })} />
+      </label>
+      <FormulaPreview id={formulaId} formula={effect.formula} revision={props.previewRevision} />
+    </>
+  );
+}
+
 /**
  * Content v5 spellcasting, with the v9 multiclass table (ADR-010). The slot table is one line per class level, each the
  * slots of spell levels 1, 2, … separated by commas (an empty line: no slots at that level).
@@ -1522,6 +1583,8 @@ function EffectEditor(props: {
   groups: Extract<Effect, { type: 'toggleGroup' }>[];
   /** Content v11 (D43): the toggles of the source's other entries. */
   otherToggles: ToggleChoice[];
+  /** Content v11 (D43 slice 5): the pools of the source's other entries, which a roll can spend. */
+  otherPools: PoolChoice[];
   grantable: StudioEntry[];
   /** The draft the formula previews are worked out against (D61). */
   previewRevision?: ContentRevision;
@@ -1885,21 +1948,7 @@ function EffectEditor(props: {
             Roll name
             <input value={effect.label} onChange={(e) => onChange({ ...effect, label: e.target.value })} />
           </label>
-          <label className="field">
-            Dice (such as 1d8 + 2)
-            <input value={effect.dice ?? ''} onChange={(e) => onChange({ ...effect, dice: e.target.value })} />
-          </label>
-          <label className="field">
-            Uses a resource (a limited-use action)
-            <select value={effect.resourceId ?? ''} onChange={(e) => onChange({ ...effect, resourceId: e.target.value || undefined })}>
-              <option value="">No resource</option>
-              {props.resources.map((r) => (
-                <option key={r.id} value={r.resourceId}>
-                  {r.label || r.resourceId}
-                </option>
-              ))}
-            </select>
-          </label>
+          <RollFields effect={effect} resources={props.resources} otherPools={props.otherPools} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />
           {/* Content v11 (D43): a roll that is available only in a form (a toggle of this revision or of another entry). */}
           {(effect.whileToggle || toggles.length > 0 || props.otherToggles.length > 0) && (
             <ToggleSelect
@@ -1967,6 +2016,7 @@ function EffectEditor(props: {
         </>
       )}
       {effect.type === 'scale' && <ScaleFields effect={effect} onChange={onChange} onProblem={onProblem} />}
+      {effect.type === 'value' && <ValueFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {effect.type === 'spellcasting' && <SpellcastingFields effect={effect} previewRevision={props.previewRevision} onChange={onChange} onProblem={onProblem} />}
       {/* An upkeep is previewed and confirmed by a turn, never applied by calculation, so it has no automation to choose. */}
       {effect.type !== 'grant' && effect.type !== 'upkeep' && (

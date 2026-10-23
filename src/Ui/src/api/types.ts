@@ -1496,6 +1496,14 @@ export type Effect =
       /** Content v11: a roll may have no dice (an action that only spends a cost); every earlier version requires them. */
       dice?: string;
       resourceId?: string;
+      /** Content v5: where the action is listed; absent: "Other". */
+      activation?: Activation;
+      /** Content v6: the content that defines the pool (absent: this revision), the uses spent (a formula) and whether the player picks how many. */
+      resourceContent?: string;
+      cost?: string;
+      variableCost?: boolean;
+      /** Content v8: a formula added to the dice. */
+      bonus?: string;
       /** Content v11 (D43): the roll is available only while this toggle is on (absent contentId: this revision). */
       whileToggle?: { contentId?: string; toggleId: string };
       /** Content v11 (D43, slice 5): the saving throw the action asks of its targets. */

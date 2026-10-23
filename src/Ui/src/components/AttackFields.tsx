@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { abilities } from '../classBasics';
 import { parseRiderDice, parseStackGroup, parseTags, toggleValue, type ToggleChoice } from '../attackAuthoring';
 import type { Activation, ContentRevision, Effect } from '../api/types';
@@ -23,6 +23,25 @@ const activations: { value: Activation; label: string }[] = [
   { value: 'reaction', label: 'Reaction' },
   { value: 'other', label: 'Other' },
 ];
+
+/**
+ * Where an action is listed. Each activation is one option; `unset` is the one an absent activation means (an attack's is
+ * Action, a roll's is Other), and choosing it stores nothing.
+ */
+export function ActivationSelect(props: { value?: Activation; unset: Activation; onPick: (activation: Activation | undefined) => void }) {
+  return (
+    <label className="field">
+      Activation
+      <select value={props.value ?? props.unset} onChange={(e) => props.onPick(e.target.value === props.unset ? undefined : (e.target.value as Activation))}>
+        {activations.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /**
  * A select over the toggles a rule can follow (D43). `current` is the toggle the rule names now (no content: this revision);
@@ -78,7 +97,7 @@ export function ToggleSelect(props: {
  * A text field read strictly: only a valid reading is handed up, and a problem is shown next to the field (linked by
  * aria-describedby) and reported so that saving is blocked until it is fixed.
  */
-function StrictField<T>(props: {
+export function StrictField<T>(props: {
   id: string;
   label: string;
   initial: string;
@@ -89,6 +108,14 @@ function StrictField<T>(props: {
   const [text, setText] = useState(props.initial);
   const parsed = props.parse(text);
   const errorId = `${props.id}-error`;
+  const problem = parsed.problem && `${props.label}: ${parsed.problem}.`;
+  const { id, onProblem } = props;
+  // Reported when the field appears (a stored value that does not parse blocks saving on load), whenever the text changes, and
+  // cleared when the field goes away.
+  useEffect(() => {
+    onProblem(id, problem);
+    return () => onProblem(id, undefined);
+  }, [id, problem, onProblem]);
   return (
     <div className="field">
       <label>
@@ -100,7 +127,6 @@ function StrictField<T>(props: {
           onChange={(e) => {
             setText(e.target.value);
             const next = props.parse(e.target.value);
-            props.onProblem(props.id, next.problem && `${props.label}: ${next.problem}.`);
             if (!next.problem) props.onValue(next.value);
           }}
         />
@@ -114,7 +140,7 @@ function StrictField<T>(props: {
   );
 }
 
-function FormulaField(props: { effectId: string; part: string; label: string; value: string; previewRevision?: ContentRevision; floorAtZero?: boolean; onChange: (value: string) => void }) {
+export function FormulaField(props: { effectId: string; part: string; label: string; value: string; previewRevision?: ContentRevision; floorAtZero?: boolean; onChange: (value: string) => void }) {
   const previewId = `rule-${props.effectId}-${props.part}-preview`;
   return (
     <>
@@ -234,17 +260,7 @@ export function AttackFields(props: {
         <input type="checkbox" checked={effect.replacesAttack ?? false} onChange={(e) => onChange({ ...effect, replacesAttack: e.target.checked || undefined })} />
         Can replace one attack of the Attack action
       </label>
-      <label className="field">
-        Activation
-        <select value={effect.activation ?? ''} onChange={(e) => onChange({ ...effect, activation: (e.target.value || undefined) as Activation | undefined })}>
-          <option value="">Action (the default)</option>
-          {activations.map((a) => (
-            <option key={a.value} value={a.value}>
-              {a.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <ActivationSelect value={effect.activation} unset="action" onPick={(activation) => onChange({ ...effect, activation })} />
       <label className="field">
         Spends from
         <select

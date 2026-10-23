@@ -295,3 +295,78 @@ it('authors a feature attack and a toggled rider, rolls damage in and out of the
   await user.click(on);
   await waitFor(() => expect(lastRoll().textContent).toMatch(/E2E Blaze Strike damage.*2d8/));
 });
+
+it('authors a scaling technique with a save in the studio, rolls it with extra points, and the pool goes down by exactly that amount', async () => {
+  const user = userEvent.setup();
+  const source = await client.createHomebrewSource('E2E Surge Book', ['srd-5.2.1']);
+  render(<App />);
+  const studioButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Homebrew studio' });
+  await waitFor(() => expect(studioButton.disabled).toBe(false));
+  await user.click(studioButton);
+  const sourceSelect = await screen.findByRole('combobox', { name: 'Homebrew source' });
+  await waitFor(() => expect(within(sourceSelect).getByRole('option', { name: /^E2E Surge Book/ })).toBeTruthy());
+  await user.selectOptions(sourceSelect, within(sourceSelect).getByRole('option', { name: /^E2E Surge Book/ }));
+  await screen.findByRole('heading', { name: 'Content in E2E Surge Book' });
+  const editor = () => screen.getByRole('region', { name: /^New |^Edit / });
+  const rule = (name: RegExp) => within(within(editor()).getByRole('group', { name }));
+
+  // A pool of 6, and a technique that costs 2, adds 1d6 for each extra point (up to 3 more) and asks a Dexterity save.
+  await user.click(screen.getByRole('button', { name: 'New feature' }));
+  await user.type(within(editor()).getByRole('textbox', { name: 'Name' }), 'E2E Surge Feature');
+  await user.click(within(editor()).getByRole('button', { name: 'Add resource' }));
+  await user.type(rule(/^Rule 1: Resource/).getByRole('textbox', { name: 'Resource name' }), 'E2E Charge');
+  const uses = rule(/^Rule 1: Resource/).getByRole('textbox', { name: /^Uses/ });
+  await user.clear(uses);
+  await user.type(uses, '6');
+  await user.click(within(editor()).getByRole('button', { name: 'Add roll or action' }));
+  const technique = rule(/^Rule 2: Roll or action/);
+  await user.type(technique.getByRole('textbox', { name: 'Roll name' }), 'E2E Surge');
+  const dice = technique.getByRole('textbox', { name: /^Dice/ });
+  await user.clear(dice);
+  await user.type(dice, '2d6');
+  await user.selectOptions(technique.getByRole('combobox', { name: 'Uses a resource (a limited-use action)' }), 'E2E Charge');
+  await user.type(technique.getByRole('textbox', { name: /^Cost/ }), '2');
+  await user.type(technique.getByRole('textbox', { name: /^Extra dice for each extra point/ }), '1d6');
+  await user.type(technique.getByRole('textbox', { name: /^Most extra points/ }), '3');
+  await user.selectOptions(technique.getByRole('combobox', { name: 'Saving throw' }), 'Dexterity');
+  await user.selectOptions(technique.getByRole('combobox', { name: 'Area shape' }), 'Cone');
+  await user.click(within(editor()).getByRole('button', { name: 'Check' }));
+  expect((await within(editor()).findByRole('region', { name: 'Check results' })).textContent).toMatch(/No problems found/);
+  await user.click(within(editor()).getByRole('button', { name: 'Publish' }));
+  await expectStatus(/Published E2E Surge Feature/);
+
+  const published = (await client.contentBySource(source.id)).find((e) => e.name === 'E2E Surge Feature')?.latestPublished;
+  expect(published).toBeTruthy();
+  await client.createCharacter({
+    name: 'E2E Surge Hero',
+    rulesFamily: 'srd-5.2.1',
+    baseAbilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    pins: [published!],
+  });
+
+  cleanup();
+  render(<App />);
+  await user.click(await screen.findByRole('button', { name: /^E2E Surge Hero/ }));
+  const sheet = await screen.findByRole('article', { name: 'E2E Surge Hero' });
+  await openTab(user, sheet, 'Play');
+  const resources = () => screen.getByRole('region', { name: 'Resources' });
+  const lastRoll = () => screen.getByRole('region', { name: 'Last roll' });
+  expect(within(resources()).getByRole('heading', { name: 'E2E Charge: 6 of 6' })).toBeTruthy();
+
+  // The action shows its save, and its points box starts at the cost and stops at the cost plus three.
+  const roll = await screen.findByRole('button', { name: 'Roll E2E Surge (2d6)' });
+  expect(roll.closest('li')!.textContent).toMatch(/Save: DC \d+ Dexterity/);
+  const points = screen.getByRole<HTMLInputElement>('spinbutton', { name: /^Points to spend/ });
+  expect(points.min).toBe('2');
+  expect(points.max).toBe('5');
+  await user.clear(points);
+  await user.type(points, '4');
+  await user.click(roll);
+  await waitFor(() => expect(lastRoll().textContent).toMatch(/E2E Surge/));
+
+  // Rolling spends nothing; the record's Spend takes exactly the rolled amount.
+  expect(within(resources()).getByRole('heading', { name: 'E2E Charge: 6 of 6' })).toBeTruthy();
+  await user.click(await within(lastRoll()).findByRole('button', { name: /^Spend 4 E2E Charge/ }));
+  await waitFor(() => expect(within(resources()).getByRole('heading', { name: 'E2E Charge: 2 of 6' })).toBeTruthy());
+});
+
