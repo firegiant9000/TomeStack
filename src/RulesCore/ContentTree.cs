@@ -136,7 +136,7 @@ public static class ContentTree
                     {
                         if (!Room(depth + 2))
                             break;
-                        uses.Add(Node($"{resourceId}.{uses.Count}", TreeNodeKind.Roll, $"Roll: {Named(roll.Label, roll.Id)} ({Named(roll.Dice, "")}), spends it", revision.Reference, roll.Id, [], owner: revision.Reference));
+                        uses.Add(Node($"{resourceId}.{uses.Count}", TreeNodeKind.Roll, $"Roll: {Named(roll.Label, roll.Id)}{DiceNote(roll)}, spends it", revision.Reference, roll.Id, [], owner: revision.Reference));
                     }
                     foreach (var toggle in p.TogglesOf(resource.ResourceId))
                     {
@@ -166,7 +166,7 @@ public static class ContentTree
                     var spends = roll.ResourceId is null ? "" : roll.ResourceContent is { } holder && holder != revision.ContentId
                         ? $", spends '{Named(roll.ResourceId, "")}' of {Named(graph.Current.GetValueOrDefault(holder)?.Name, "content that is not installed")}"
                         : $", spends '{Named(roll.ResourceId, "")}', which this content does not define";
-                    children.Add(Node(Next(), TreeNodeKind.Roll, $"Roll: {Named(roll.Label, roll.Id)} ({Named(roll.Dice, "")}){spends}", revision.Reference, roll.Id, [], owner: revision.Reference));
+                    children.Add(Node(Next(), TreeNodeKind.Roll, $"Roll: {Named(roll.Label, roll.Id)}{DiceNote(roll)}{spends}", revision.Reference, roll.Id, [], owner: revision.Reference));
                 }
                 foreach (var toggle in p.LooseToggles)
                 {
@@ -293,6 +293,8 @@ public static class ContentTree
 
     private static string Named(string? text, string fallback) =>
         string.IsNullOrWhiteSpace(text) ? fallback : text.Length > 80 ? text[..80].TrimEnd() + "…" : text;
+
+    private static string DiceNote(RollEffect roll) => roll.Dice is null ? "" : $" ({Named(roll.Dice, "")})";
 
     private static string Cut(string text) => text.Length > MaxLabel ? text[..MaxLabel].TrimEnd() + "…" : text;
 }

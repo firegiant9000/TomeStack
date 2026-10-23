@@ -192,6 +192,7 @@ public class ActionDetailContentTests
     [InlineData("per-unit-max-zero", "validate.roll-per-unit", "wave")]
     [InlineData("per-unit-max-too-big", "validate.roll-per-unit", "wave")]
     [InlineData("per-unit-variable-cost", "validate.roll-per-unit", "wave")]
+    [InlineData("per-unit-too-many-dice", "validate.roll-per-unit", "wave")]
     [InlineData("neither-dice-nor-cost", "validate.roll-dice-or-cost", "brace")]
     [InlineData("detail-below-v11", "validate.requires-v11", null)]
     [InlineData("dice-less-typed-below-v11", "validate.requires-v11", null)]
@@ -239,11 +240,39 @@ public class ActionDetailContentTests
         Assert.Contains(alone.Warnings, w => w.Code == "validate.value-unknown");
         Assert.DoesNotContain(alone.Errors, e => e.Code == "validate.value-unknown");
 
-        var declared = Validate(reader, [Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.FocusOfMind)!]);
-        Assert.DoesNotContain(declared.Warnings, w => w.Code == "validate.value-unknown");
+        var focus = Fixtures.PlayMechanicsCatalog().FindRevision(Fixtures.FocusOfMind)!;
+        var granting = reader with { Effects = [.. reader.Effects, new GrantEffect { Id = "g", Grant = GrantKind.Content, Content = Fixtures.FocusOfMind }] };
+        Assert.DoesNotContain(Validate(granting, [focus]).Warnings, w => w.Code == "validate.value-unknown");
+
+        // A declaration in the batch that the class neither grants nor offers does not count.
+        Assert.Contains(Validate(reader, [focus]).Warnings, w => w.Code == "validate.value-unknown");
 
         var own = reader with { Effects = [.. reader.Effects, new ValueEffect { Id = "v", ValueId = "focusMod", Formula = "1" }] };
         Assert.DoesNotContain(Validate(own).Warnings, w => w.Code == "validate.value-unknown");
+    }
+
+    [Fact]
+    public void A_dice_less_roll_renders_in_the_content_tree_without_empty_parentheses()
+    {
+        var pack = Fixtures.ActionDetailsPack();
+        var tree = ContentTree.Build(ContentGraph.Build(pack.Revisions), Fixtures.WaveAdept.ContentId);
+        static IEnumerable<TreeNode> All(TreeNode n) => n.Children.SelectMany(All).Prepend(n);
+
+        var labels = All(tree.Root).Select(n => n.Label).Where(l => l.StartsWith("Roll:", StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(labels);
+        Assert.DoesNotContain(labels, l => l.Contains("()", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_value_feature_is_a_known_mechanic_not_an_unsupported_one()
+    {
+        var sheet = CharacterCalculator.Calculate(Fixtures.Load("pm-wave-adept-l5.json"), Fixtures.PlayMechanicsCatalog());
+
+        var report = MechanicsInventory.Of(sheet, new HashSet<Guid> { Fixtures.ActionDetailsPack().Sources.Single().Id });
+
+        Assert.Contains(report.Mechanics, m => m.EffectType == ValueEffect.TypeName);
+        Assert.Empty(report.Unsupported);
     }
 
     [Fact]
@@ -345,7 +374,8 @@ internal static class ActionDetailVariants
         "per-unit-no-resource" => WithWave(r => r with { ResourceId = null, ResourceContent = null }),
         "per-unit-max-zero" => WithWave(r => r with { PerUnit = new("1d10", 0) }),
         "per-unit-max-too-big" => WithWave(r => r with { PerUnit = new("1d10", 101) }),
-        "per-unit-variable-cost" => WithWave(r => r with { VariableCost = true }),
+        "per-unit-too-many-dice" => WithWave(r => r with { PerUnit = new("1d10", 100) }),
+        "per-unit-variable-cost" =>WithWave(r => r with { VariableCost = true }),
         "neither-dice-nor-cost" => WithBrace(r => r with { Cost = null }),
         "detail-below-v11" => WithWave(r => r) with { SchemaVersion = 10 },
         "dice-less-typed-below-v11" => WithBrace(r => r) with { SchemaVersion = 10 },

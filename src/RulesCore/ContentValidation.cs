@@ -561,7 +561,7 @@ public static class ContentValidator
             Error("validate.requires-v9", $"This revision uses content schema v9 features (scales, SCALE in a formula, multiclassCasterTable, a choice with no options of its own) but declares v{revision.SchemaVersion}; an older build would ignore, misread or refuse them.");
         CheckScales();
         CheckValues();
-        if (needsV5&& revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
+        if (needsV5 && revision.SchemaVersion < SpellcastingEffect.SchemaVersion)
             Error("validate.requires-v5", $"This revision uses content schema v5 fields (onlyAs, multiclass or group restrictions, weapon proficiencies, roll activation) but declares v{revision.SchemaVersion}; an older build would ignore them.");
         if (revision.Effects.OfType<ArmorEffect>().Count(a => a.Category != ArmorCategory.Shield) > 1 || revision.Effects.OfType<ArmorEffect>().Count(a => a.Category == ArmorCategory.Shield) > 1)
             Error("validate.armor-duplicate", "An item is at most one armor and one shield.");
@@ -653,14 +653,19 @@ public static class ContentValidator
                     Error("validate.roll-per-unit", $"Roll '{id}' has per-unit dice but no cost and resource to count units of; add both.", id);
                 if (perUnit.MaxUnits is < 1 or > MaxPerUnitUnits)
                     Error("validate.roll-per-unit", $"Roll '{id}' maxUnits {perUnit.MaxUnits} must be 1 to {MaxPerUnitUnits}.", id);
+                // The most dice one roll can throw: the base dice plus the per-unit dice for every unit. Only when both are known.
+                if (perUnit.MaxUnits is >= 1 and <= MaxPerUnitUnits && roll.Dice is not null && DiceExpression.TryParse(roll.Dice, out var baseDice, out _)
+                    && AttackRiderEffect.TryParseDice(perUnit.Dice, out var unitCount, out _)
+                    && baseDice!.Terms.Where(t => t.IsDice).Sum(t => t.Count) + (long)unitCount * perUnit.MaxUnits > DiceLimits.MaxDice)
+                    Error("validate.roll-per-unit", $"Roll '{id}' could throw more than {DiceLimits.MaxDice} dice with {perUnit.MaxUnits} units; lower maxUnits or the dice.", id);
                 if (roll.VariableCost == true)
                     Error("validate.roll-per-unit", $"Roll '{id}' has both per-unit dice and a variable cost; they contradict each other. Use one.", id);
             }
         }
 
         // Content v11 (D43): a VALUE.<id> the revision reads that nothing it can see declares is a warning, not an error: whether
-        // it resolves depends on the class a character has (the calculator guards that). Seen: this revision, the batch, and the
-        // content this revision grants or offers as a choice (the catalog cannot be listed whole).
+        // it resolves depends on the class a character has (the calculator guards that). Seen: this revision, its class (a subclass),
+        // and the revisions this revision grants or offers as a choice (the catalog cannot be listed whole).
         void CheckValues()
         {
             // The same scope as validate.scale-unknown: only a class, or a subclass, knows what its class declares; any other
@@ -668,7 +673,6 @@ public static class ContentValidator
             if (usedValues.Count == 0 || revision.Kind is not (ContentKind.Class or ContentKind.Subclass))
                 return;
             var seen = new List<ContentRevision> { revision };
-            seen.AddRange(local.All);
             if (revision.Kind == ContentKind.Subclass && revision.ExtendsChoice is { } parent)
             {
                 seen.AddRange(local.OfContent(parent.ContentId).Where(r => r.Kind == ContentKind.Class));
@@ -676,8 +680,15 @@ public static class ContentValidator
             }
             var references = revision.Effects.OfType<GrantEffect>().Select(g => g.Content).OfType<ContentReference>()
                 .Concat(revision.Effects.OfType<ChoiceEffect>().SelectMany(c => c.Options));
+            // The revision a grant or option pins; only when that one is not found, the newest published revision of the content.
             foreach (var reference in references)
-                seen.AddRange(catalog.RevisionsOf(reference.ContentId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1));
+            {
+                var pinned = local.GetValueOrDefault(reference) ?? catalog.FindRevision(reference);
+                if (pinned is not null)
+                    seen.Add(pinned);
+                else
+                    seen.AddRange(local.OfContent(reference.ContentId).Concat(catalog.RevisionsOf(reference.ContentId).Where(r => r.Status == RevisionStatus.Published).TakeLast(1)));
+            }
             var declared = seen.SelectMany(r => r.Effects.OfType<ValueEffect>().Select(v => v.ValueId)).ToHashSet(StringComparer.Ordinal);
             foreach (var missing in usedValues.Where(u => !declared.Contains(u)).Order(StringComparer.Ordinal))
                 Warn("validate.value-unknown", $"A formula reads VALUE.{missing}, which this revision and the content it grants or offers do not declare; it is unavailable until a feature of the character's class does.");
